@@ -149,29 +149,25 @@ async function handleModelsList(
     };
   }
 
-  // mirrors extractModelIds: returns null when shape is unrecognised
+  // mirrors extractIds/extractModelIds: any item missing a string id rejects entirely
+  function extractIds(items: unknown[]): string[] | null {
+    const ids: string[] = [];
+    for (const item of items) {
+      if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
+        ids.push((item as { id: string }).id);
+      } else {
+        return null;
+      }
+    }
+    return ids;
+  }
+
   function extractModelIds(b: unknown): string[] | null {
     if (b === null || typeof b !== 'object') return null;
     const data = (b as { data?: unknown }).data;
-    if (Array.isArray(data)) {
-      return data
-        .map((i) =>
-          i && typeof i === 'object' && typeof (i as { id?: unknown }).id === 'string'
-            ? (i as { id: string }).id
-            : null,
-        )
-        .filter((id): id is string => id !== null);
-    }
+    if (Array.isArray(data)) return extractIds(data);
     const models = (b as { models?: unknown }).models;
-    if (Array.isArray(models)) {
-      return models
-        .map((i) =>
-          i && typeof i === 'object' && typeof (i as { id?: unknown }).id === 'string'
-            ? (i as { id: string }).id
-            : null,
-        )
-        .filter((id): id is string => id !== null);
-    }
+    if (Array.isArray(models)) return extractIds(models);
     return null;
   }
 
@@ -335,7 +331,7 @@ describe('models:v1:list error union', () => {
     }
   });
 
-  it('mixed data array (one valid, one without id) → ok=true, only valid id returned', async () => {
+  it('mixed data array (one valid, one without id) → ok=false, code=PARSE', async () => {
     const result = await handleModelsList(
       { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' },
       async () => ({
@@ -344,9 +340,24 @@ describe('models:v1:list error union', () => {
         json: async () => ({ data: [{ id: 'gpt-4o' }, { foo: 'bar' }] }),
       }),
     );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.models).toEqual(['gpt-4o']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('PARSE');
+    }
+  });
+
+  it('data array with non-string id (number) → ok=false, code=PARSE', async () => {
+    const result = await handleModelsList(
+      { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' },
+      async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ id: 'gpt-4o' }, { id: 123 }] }),
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('PARSE');
     }
   });
 

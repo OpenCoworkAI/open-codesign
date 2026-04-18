@@ -163,34 +163,29 @@ function classifyNetworkError(err: unknown): { code: ConnectionTestError['code']
   };
 }
 
+function extractIds(items: unknown[]): string[] | null {
+  const ids: string[] = [];
+  for (const item of items) {
+    if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
+      ids.push((item as { id: string }).id);
+    } else {
+      // Any item missing a string id field means the shape is unexpected — reject entirely.
+      return null;
+    }
+  }
+  return ids;
+}
+
 function extractModelIds(body: unknown): string[] | null {
   if (body === null || typeof body !== 'object') return null;
 
   // OpenAI / OpenAI-compat: { data: [{ id: string }, ...] }
   const data = (body as { data?: unknown }).data;
-  if (Array.isArray(data)) {
-    const ids = data
-      .map((item) =>
-        item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string'
-          ? (item as { id: string }).id
-          : null,
-      )
-      .filter((id): id is string => id !== null);
-    return ids;
-  }
+  if (Array.isArray(data)) return extractIds(data);
 
   // Anthropic: { models: [{ id: string }, ...] }
   const models = (body as { models?: unknown }).models;
-  if (Array.isArray(models)) {
-    const ids = models
-      .map((item) =>
-        item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string'
-          ? (item as { id: string }).id
-          : null,
-      )
-      .filter((id): id is string => id !== null);
-    return ids;
-  }
+  if (Array.isArray(models)) return extractIds(models);
 
   return null;
 }
