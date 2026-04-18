@@ -103,6 +103,21 @@ export function registerSnapshotsIpc(db: Database): void {
 
   ipcMain.handle('snapshots:v1:create', (_e: unknown, raw: unknown): DesignSnapshot => {
     const input = parseSnapshotCreateInput(raw);
+    if (input.parentId !== null) {
+      const parent = getSnapshot(db, input.parentId);
+      if (parent === null) {
+        throw new CodesignError(
+          'parentId references a snapshot that does not exist',
+          'IPC_BAD_INPUT',
+        );
+      }
+      if (parent.designId !== input.designId) {
+        throw new CodesignError(
+          'parentId must reference a snapshot in the same design',
+          'IPC_BAD_INPUT',
+        );
+      }
+    }
     const snapshot = createSnapshot(db, input);
     logger.info('snapshot.created', {
       id: snapshot.id,

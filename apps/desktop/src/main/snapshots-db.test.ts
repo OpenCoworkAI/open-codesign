@@ -220,10 +220,8 @@ describe('deleteSnapshot', () => {
 // ---------------------------------------------------------------------------
 
 describe('FK cascade on design delete', () => {
-  it('removes snapshots when parent design is deleted', () => {
+  it('removes snapshots when parent design is deleted (foreign_keys ON by default)', () => {
     const db = makeDb();
-    // PRAGMA foreign_keys must be ON for cascade to fire.
-    db.pragma('foreign_keys = ON');
 
     const design = createDesign(db);
     createSnapshot(db, {
@@ -238,5 +236,62 @@ describe('FK cascade on design delete', () => {
 
     db.prepare('DELETE FROM designs WHERE id = ?').run(design.id);
     expect(listSnapshots(db, design.id)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Parent FK SET NULL: deleting a middle snapshot nulls its children's parent_id
+// ---------------------------------------------------------------------------
+
+describe('parent FK SET NULL on snapshot delete', () => {
+  it('nulls child parent_id when the parent snapshot is deleted', () => {
+    const db = makeDb();
+    const design = createDesign(db);
+    const s1 = createSnapshot(db, {
+      designId: design.id,
+      parentId: null,
+      type: 'initial',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<html>v1</html>',
+    });
+    const s2 = createSnapshot(db, {
+      designId: design.id,
+      parentId: s1.id,
+      type: 'edit',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<html>v2</html>',
+    });
+
+    deleteSnapshot(db, s1.id);
+    const reloaded = getSnapshot(db, s2.id);
+    expect(reloaded).not.toBeNull();
+    expect(reloaded?.parentId).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listDesigns sort order: most recently active first
+// ---------------------------------------------------------------------------
+
+describe('listDesigns activity sort', () => {
+  it('surfaces a design whose updated_at is newer than another design created later', () => {
+    const db = makeDb();
+    db.prepare(
+      'INSERT INTO designs (id, schema_version, name, created_at, updated_at) VALUES (?, 1, ?, ?, ?)',
+    ).run('older', 'A', '2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z');
+    db.prepare(
+      'INSERT INTO designs (id, schema_version, name, created_at, updated_at) VALUES (?, 1, ?, ?, ?)',
+    ).run('newer', 'B', '2024-01-02T00:00:00.000Z', '2024-01-02T00:00:00.000Z');
+
+    // Bump the older design's activity past the newer one.
+    db.prepare('UPDATE designs SET updated_at = ? WHERE id = ?').run(
+      '2024-01-03T00:00:00.000Z',
+      'older',
+    );
+
+    const ids = listDesigns(db).map((d) => d.id);
+    expect(ids.indexOf('older')).toBeLessThan(ids.indexOf('newer'));
   });
 });

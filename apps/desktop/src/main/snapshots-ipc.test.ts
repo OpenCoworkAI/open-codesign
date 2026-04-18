@@ -178,6 +178,51 @@ describe('snapshots:v1:create', () => {
       expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
     }
   });
+
+  it('rejects a parentId that does not exist with IPC_BAD_INPUT', () => {
+    const design = createDesign(db);
+    const bad = {
+      designId: design.id,
+      parentId: 'no-such-snapshot',
+      type: 'edit',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<html/>',
+    };
+    expect(() => call('snapshots:v1:create', bad)).toThrow(CodesignError);
+    try {
+      call('snapshots:v1:create', bad);
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+    }
+  });
+
+  it('rejects a parentId from a different design with IPC_BAD_INPUT', () => {
+    const designA = createDesign(db);
+    const designB = createDesign(db);
+    const parentInA = createSnapshot(db, {
+      designId: designA.id,
+      parentId: null,
+      type: 'initial',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<html/>',
+    });
+    const bad = {
+      designId: designB.id,
+      parentId: parentInA.id,
+      type: 'edit',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<html/>',
+    };
+    expect(() => call('snapshots:v1:create', bad)).toThrow(CodesignError);
+    try {
+      call('snapshots:v1:create', bad);
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

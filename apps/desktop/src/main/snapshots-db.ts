@@ -25,6 +25,9 @@ function openDatabase(path: string, options?: BetterSqlite3.Options): Database {
 }
 
 function applySchema(db: Database): void {
+  // foreign_keys is a per-connection pragma and defaults to OFF; enabling it
+  // here is what makes the ON DELETE CASCADE / SET NULL clauses below actually fire.
+  db.pragma('foreign_keys = ON');
   db.pragma('journal_mode = WAL');
   db.exec(`
     CREATE TABLE IF NOT EXISTS designs (
@@ -39,7 +42,7 @@ function applySchema(db: Database): void {
       id             TEXT PRIMARY KEY,
       schema_version INTEGER NOT NULL DEFAULT 1,
       design_id      TEXT NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
-      parent_id      TEXT,
+      parent_id      TEXT REFERENCES design_snapshots(id) ON DELETE SET NULL,
       type           TEXT NOT NULL CHECK(type IN ('initial','edit','fork')),
       prompt         TEXT,
       artifact_type  TEXT NOT NULL CHECK(artifact_type IN ('html','react','svg')),
@@ -137,9 +140,13 @@ export function createDesign(db: Database, name = 'Untitled design'): Design {
 }
 
 export function listDesigns(db: Database): Design[] {
-  return (db.prepare('SELECT * FROM designs ORDER BY created_at DESC').all() as DesignRow[]).map(
-    rowToDesign,
-  );
+  // updated_at bumps on each new snapshot, so recently edited designs surface first;
+  // created_at is the tiebreaker for designs that have never been edited.
+  return (
+    db
+      .prepare('SELECT * FROM designs ORDER BY updated_at DESC, created_at DESC')
+      .all() as DesignRow[]
+  ).map(rowToDesign);
 }
 
 export function createSnapshot(db: Database, input: SnapshotCreateInput): DesignSnapshot {
