@@ -327,3 +327,97 @@ describe('snapshots:v1:delete', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// SQLite error translation
+//
+// Stubs better-sqlite3's prepare() to throw an Error carrying the SqliteError
+// .code property and asserts each known code maps to the documented IPC code.
+// Renderer must never see the raw "SqliteError: SQLITE_..." string.
+// ---------------------------------------------------------------------------
+
+describe('SQLite error translation', () => {
+  function withDbThrowing(code: string, fn: () => unknown): unknown {
+    const original = db.prepare.bind(db);
+    const err = Object.assign(new Error(`${code}: synthetic`), { code });
+    // Throw on the INSERT used by createSnapshot; pass through every other prepare.
+    (db as unknown as { prepare: (sql: string) => unknown }).prepare = (sql: string) => {
+      if (sql.trim().startsWith('INSERT INTO design_snapshots')) {
+        throw err;
+      }
+      return original(sql);
+    };
+    try {
+      return fn();
+    } finally {
+      (db as unknown as { prepare: typeof original }).prepare = original;
+    }
+  }
+
+  function attemptCreate(): unknown {
+    const design = createDesign(db);
+    return call('snapshots:v1:create', {
+      designId: design.id,
+      parentId: null,
+      type: 'initial',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<html/>',
+    });
+  }
+
+  it('translates SQLITE_CONSTRAINT_FOREIGNKEY to IPC_BAD_INPUT', () => {
+    try {
+      withDbThrowing('SQLITE_CONSTRAINT_FOREIGNKEY', attemptCreate);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CodesignError);
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+      expect((err as Error).message).toBe('Parent snapshot does not exist');
+      expect((err as Error).message).not.toMatch(/SQLITE_/);
+    }
+  });
+
+  it('translates SQLITE_BUSY to IPC_DB_BUSY', () => {
+    try {
+      withDbThrowing('SQLITE_BUSY', attemptCreate);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CodesignError);
+      expect((err as CodesignError).code).toBe('IPC_DB_BUSY');
+      expect((err as Error).message).toBe('Database is locked, retry shortly');
+    }
+  });
+
+  it('translates SQLITE_LOCKED to IPC_DB_BUSY', () => {
+    try {
+      withDbThrowing('SQLITE_LOCKED', attemptCreate);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_DB_BUSY');
+    }
+  });
+
+  it('translates SQLITE_FULL to IPC_DB_FULL', () => {
+    try {
+      withDbThrowing('SQLITE_FULL', attemptCreate);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_DB_FULL');
+      expect((err as Error).message).toBe('Disk is full');
+    }
+  });
+
+  it('translates unknown SQLite errors to IPC_DB_ERROR with no leak', () => {
+    try {
+      withDbThrowing('SQLITE_CORRUPT', attemptCreate);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CodesignError);
+      expect((err as CodesignError).code).toBe('IPC_DB_ERROR');
+      expect((err as Error).message).not.toMatch(/SQLITE_/);
+      // Original error preserved for server-side logging only.
+      expect((err as Error).cause).toBeDefined();
+    }
+  });
+});

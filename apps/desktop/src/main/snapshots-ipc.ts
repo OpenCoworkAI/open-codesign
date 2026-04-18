@@ -27,6 +27,42 @@ type Database = BetterSqlite3.Database;
 
 const logger = getLogger('snapshots-ipc');
 
+/**
+ * Translate a raw better-sqlite3 SqliteError into a typed CodesignError so the
+ * renderer never sees provider-specific error strings. Unrecognised errors fall
+ * through as IPC_DB_ERROR with the original cause attached for server-side logs.
+ */
+function translateSqliteError(err: unknown, context: string): CodesignError {
+  const code = (err as { code?: unknown })?.code;
+  if (typeof code === 'string') {
+    if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY' || code === 'SQLITE_CONSTRAINT') {
+      return new CodesignError('Parent snapshot does not exist', 'IPC_BAD_INPUT', { cause: err });
+    }
+    if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') {
+      return new CodesignError('Database is locked, retry shortly', 'IPC_DB_BUSY', { cause: err });
+    }
+    if (code === 'SQLITE_FULL') {
+      return new CodesignError('Disk is full', 'IPC_DB_FULL', { cause: err });
+    }
+  }
+  logger.error('snapshot.db_error', {
+    context,
+    code: typeof code === 'string' ? code : 'unknown',
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  });
+  return new CodesignError(`Snapshot database error (${context})`, 'IPC_DB_ERROR', { cause: err });
+}
+
+function runDb<T>(context: string, fn: () => T): T {
+  try {
+    return fn();
+  } catch (err) {
+    if (err instanceof CodesignError) throw err;
+    throw translateSqliteError(err, context);
+  }
+}
+
 function parseSnapshotCreateInput(raw: unknown): SnapshotCreateInput {
   if (typeof raw !== 'object' || raw === null) {
     throw new CodesignError('snapshots:v1:create expects an object payload', 'IPC_BAD_INPUT');
@@ -76,7 +112,7 @@ function parseSnapshotCreateInput(raw: unknown): SnapshotCreateInput {
 
 export function registerSnapshotsIpc(db: Database): void {
   ipcMain.handle('snapshots:v1:list-designs', (): Design[] => {
-    return listDesigns(db);
+    return runDb('list-designs', () => listDesigns(db));
   });
 
   ipcMain.handle('snapshots:v1:list', (_e: unknown, raw: unknown): DesignSnapshot[] => {
@@ -87,7 +123,7 @@ export function registerSnapshotsIpc(db: Database): void {
     if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
       throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
     }
-    return listSnapshots(db, r['designId'] as string);
+    return runDb('list', () => listSnapshots(db, r['designId'] as string));
   });
 
   ipcMain.handle('snapshots:v1:get', (_e: unknown, raw: unknown): DesignSnapshot | null => {
@@ -98,13 +134,13 @@ export function registerSnapshotsIpc(db: Database): void {
     if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
       throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
     }
-    return getSnapshot(db, r['id'] as string);
+    return runDb('get', () => getSnapshot(db, r['id'] as string));
   });
 
   ipcMain.handle('snapshots:v1:create', (_e: unknown, raw: unknown): DesignSnapshot => {
     const input = parseSnapshotCreateInput(raw);
     if (input.parentId !== null) {
-      const parent = getSnapshot(db, input.parentId);
+      const parent = runDb('create.lookup-parent', () => getSnapshot(db, input.parentId as string));
       if (parent === null) {
         throw new CodesignError(
           'parentId references a snapshot that does not exist',
@@ -118,7 +154,7 @@ export function registerSnapshotsIpc(db: Database): void {
         );
       }
     }
-    const snapshot = createSnapshot(db, input);
+    const snapshot = runDb('create', () => createSnapshot(db, input));
     logger.info('snapshot.created', {
       id: snapshot.id,
       type: input.type,
@@ -135,7 +171,7 @@ export function registerSnapshotsIpc(db: Database): void {
     if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
       throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
     }
-    deleteSnapshot(db, r['id'] as string);
+    runDb('delete', () => deleteSnapshot(db, r['id'] as string));
     logger.info('snapshot.deleted', { id: r['id'] });
   });
 
@@ -143,6 +179,6 @@ export function registerSnapshotsIpc(db: Database): void {
     if (typeof raw !== 'string' || raw.trim().length === 0) {
       throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
     }
-    return createDesign(db, raw.trim());
+    return runDb('create-design', () => createDesign(db, raw.trim()));
   });
 }
