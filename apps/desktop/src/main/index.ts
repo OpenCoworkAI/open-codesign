@@ -1,6 +1,5 @@
 import { stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { type CoreLogger, applyComment, generate } from '@open-codesign/core';
 import { detectProviderFromKey } from '@open-codesign/providers';
 import {
