@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { type ReactNode, isValidElement, useId } from 'react';
 
 export interface TooltipProps {
   label: string | undefined;
@@ -14,14 +14,18 @@ const sideClass: Record<NonNullable<TooltipProps['side']>, string> = {
 export function Tooltip({ label, side = 'bottom', children }: TooltipProps) {
   const tooltipId = useId();
   if (!label) return <>{children}</>;
-  // Wrapper is focusable so keyboard users can land on it even when the
-  // wrapped control is disabled (disabled buttons cannot receive focus).
-  // aria-describedby points at the visible tooltip text so screen readers
-  // announce the reason on focus.
+  // Only the wrapper needs to be keyboard-focusable when the wrapped control
+  // is disabled (disabled buttons cannot receive focus). For enabled controls
+  // the inner element is already in the tab order, so making the wrapper
+  // focusable would create a redundant extra tab stop. aria-describedby stays
+  // on the wrapper either way so screen readers announce the reason whether
+  // focus lands on the wrapper or on the inner control.
+  const childDisabled =
+    isValidElement<{ disabled?: boolean }>(children) && Boolean(children.props.disabled);
   return (
     <span
       className="relative inline-flex group focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] rounded-[var(--radius-sm)]"
-      tabIndex={0}
+      tabIndex={childDisabled ? 0 : undefined}
       aria-describedby={tooltipId}
     >
       {children}

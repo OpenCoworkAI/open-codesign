@@ -78,9 +78,49 @@ describe('Tooltip', () => {
     expect(tooltip.className).toContain('top-full');
   });
 
-  it('exposes a focusable wrapper so keyboard users can reach disabled controls', async () => {
-    const user = userEvent.setup();
+  it('makes wrapper focusable (tabindex=0) only when the wrapped child is disabled', () => {
     render(
+      <Tooltip label="Disabled because no API key">
+        <button type="button" disabled>
+          Send
+        </button>
+      </Tooltip>,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    const wrapper = tooltip.parentElement as HTMLElement;
+    expect(wrapper.getAttribute('tabindex')).toBe('0');
+  });
+
+  it('omits tabindex on the wrapper when the wrapped child is enabled', () => {
+    render(
+      <Tooltip label="Hint">
+        <button type="button">Send</button>
+      </Tooltip>,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    const wrapper = tooltip.parentElement as HTMLElement;
+    expect(wrapper.getAttribute('tabindex')).toBeNull();
+  });
+
+  it('tab lands on inner button when enabled, on wrapper when disabled', async () => {
+    const user = userEvent.setup();
+
+    const enabled = render(
+      <>
+        <button type="button">Before</button>
+        <Tooltip label="Hint">
+          <button type="button">Send</button>
+        </Tooltip>
+      </>,
+    );
+    enabled.getByRole('button', { name: 'Before' }).focus();
+    await user.tab();
+    expect(document.activeElement).toBe(enabled.getByRole('button', { name: 'Send' }));
+    enabled.unmount();
+
+    const disabled = render(
       <>
         <button type="button">Before</button>
         <Tooltip label="Disabled because no API key">
@@ -90,12 +130,9 @@ describe('Tooltip', () => {
         </Tooltip>
       </>,
     );
-
-    const tooltip = screen.getByRole('tooltip');
+    const tooltip = disabled.getByRole('tooltip');
     const wrapper = tooltip.parentElement as HTMLElement;
-    expect(wrapper.getAttribute('tabindex')).toBe('0');
-
-    screen.getByRole('button', { name: 'Before' }).focus();
+    disabled.getByRole('button', { name: 'Before' }).focus();
     await user.tab();
     expect(document.activeElement).toBe(wrapper);
   });
