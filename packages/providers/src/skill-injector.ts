@@ -44,10 +44,8 @@ const SOURCE_RANK: Record<LoadedSkill['source'], number> = {
  * return them. Order: source precedence (project > user > builtin), then
  * alphabetical by frontmatter name within each source.
  *
- * Determinism here is load-bearing: it stabilises the scope chosen for mixed
- * `system`/`prefix` skills (highest-precedence skill wins) and makes the
- * concatenated body block byte-identical across runs, which keeps prompt
- * caching and snapshot tests reliable.
+ * Determinism here makes the concatenated body block byte-identical across
+ * runs, which keeps prompt caching and snapshot tests reliable.
  */
 function sortCanonical(skills: LoadedSkill[]): LoadedSkill[] {
   return [...skills].sort((a, b) => {
@@ -91,6 +89,11 @@ function prependUserContent(messages: ChatMessage[], block: string): ChatMessage
  * - `prefix`: skill block is prepended to the first user message. Useful for
  *   providers that do not accept a system role.
  *
+ * Mixed-scope skill sets are split by `trigger.scope` and injected into both
+ * channels independently, so each skill lands in the channel it declared. The
+ * canonical sort (project > user > builtin, then alphabetical) is preserved
+ * within each channel.
+ *
  * The function is pure (no mutation) and returns the original array unchanged
  * when no active skills match `providerId`.
  */
@@ -102,16 +105,17 @@ export function injectSkillsIntoMessages(
   const active = sortCanonical(filterActive(enabledSkills, provider));
   if (active.length === 0) return baseMessages;
 
-  const block = buildSkillBlock(active);
+  const systemSkills = active.filter(
+    (s) => (s.frontmatter.trigger?.scope ?? 'system') === 'system',
+  );
+  const prefixSkills = active.filter((s) => s.frontmatter.trigger?.scope === 'prefix');
 
-  // Mixed `system`/`prefix` scopes resolve to the highest-precedence skill
-  // (project > user > builtin, then alphabetical), so the chosen channel is a
-  // function of the skill set rather than caller array order.
-  const scope = active[0]?.frontmatter.trigger?.scope ?? 'system';
-
-  if (scope === 'prefix') {
-    return prependUserContent(baseMessages, block);
+  let out = baseMessages;
+  if (systemSkills.length > 0) {
+    out = prependSystemContent(out, buildSkillBlock(systemSkills));
   }
-
-  return prependSystemContent(baseMessages, block);
+  if (prefixSkills.length > 0) {
+    out = prependUserContent(out, buildSkillBlock(prefixSkills));
+  }
+  return out;
 }

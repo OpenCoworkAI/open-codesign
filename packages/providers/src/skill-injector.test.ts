@@ -191,7 +191,7 @@ describe('injectSkillsIntoMessages()', () => {
     }
   });
 
-  it('resolves mixed scope deterministically using highest-precedence skill', () => {
+  it('splits mixed-scope skills into separate channels', () => {
     const projectPrefix = makeSkill('proj', {
       source: 'project',
       frontmatter: {
@@ -219,12 +219,98 @@ describe('injectSkillsIntoMessages()', () => {
 
     const a = injectSkillsIntoMessages(BASE_MESSAGES, [projectPrefix, userSystem], 'anthropic');
     const b = injectSkillsIntoMessages(BASE_MESSAGES, [userSystem, projectPrefix], 'anthropic');
+    // Order-independent: same active skill set yields the same messages.
     expect(a).toEqual(b);
-    // Project skill (higher precedence) chose 'prefix' scope, so user message
-    // gets the block and the system message stays untouched.
-    expect(a[0]?.content).toBe('You are a helpful assistant.');
+
+    // System-scope skill lands in the system message.
+    expect(a[0]?.role).toBe('system');
+    expect(a[0]?.content).toContain('User system body.');
+    expect(a[0]?.content).toContain('You are a helpful assistant.');
+    expect(a[0]?.content).not.toContain('Project prefix body.');
+
+    // Prefix-scope skill lands in the user message, untouched by system block.
     expect(a[1]?.role).toBe('user');
     expect(a[1]?.content).toContain('Project prefix body.');
-    expect(a[1]?.content).toContain('User system body.');
+    expect(a[1]?.content).toContain('Design a landing page.');
+    expect(a[1]?.content).not.toContain('User system body.');
+  });
+
+  it('injects three-source mixed-scope set into both channels with canonical order', () => {
+    const projectSystem = makeSkill('p-sys', {
+      source: 'project',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'p-sys',
+        description: 'Project system skill.',
+        trigger: { providers: ['*'], scope: 'system' },
+        disable_model_invocation: false,
+        user_invocable: true,
+      },
+      body: 'Project system body.',
+    });
+    const userPrefix = makeSkill('u-pre', {
+      source: 'user',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'u-pre',
+        description: 'User prefix skill.',
+        trigger: { providers: ['*'], scope: 'prefix' },
+        disable_model_invocation: false,
+        user_invocable: true,
+      },
+      body: 'User prefix body.',
+    });
+    const builtinSystem = makeSkill('b-sys', {
+      source: 'builtin',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'b-sys',
+        description: 'Builtin system skill.',
+        trigger: { providers: ['*'], scope: 'system' },
+        disable_model_invocation: false,
+        user_invocable: true,
+      },
+      body: 'Builtin system body.',
+    });
+    const builtinPrefix = makeSkill('b-pre', {
+      source: 'builtin',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'b-pre',
+        description: 'Builtin prefix skill.',
+        trigger: { providers: ['*'], scope: 'prefix' },
+        disable_model_invocation: false,
+        user_invocable: true,
+      },
+      body: 'Builtin prefix body.',
+    });
+
+    const result = injectSkillsIntoMessages(
+      BASE_MESSAGES,
+      [builtinPrefix, builtinSystem, userPrefix, projectSystem],
+      'anthropic',
+    );
+
+    // Same message count — both blocks merged into existing system + user.
+    expect(result).toHaveLength(BASE_MESSAGES.length);
+
+    const systemContent = result[0]?.content ?? '';
+    const userContent = result[1]?.content ?? '';
+
+    // System block contains only system-scope skills, project before builtin.
+    const projSysIdx = systemContent.indexOf('Project system body.');
+    const builtinSysIdx = systemContent.indexOf('Builtin system body.');
+    expect(projSysIdx).toBeGreaterThanOrEqual(0);
+    expect(builtinSysIdx).toBeGreaterThan(projSysIdx);
+    expect(systemContent).not.toContain('User prefix body.');
+    expect(systemContent).not.toContain('Builtin prefix body.');
+
+    // Prefix block contains only prefix-scope skills, user before builtin.
+    const userPreIdx = userContent.indexOf('User prefix body.');
+    const builtinPreIdx = userContent.indexOf('Builtin prefix body.');
+    expect(userPreIdx).toBeGreaterThanOrEqual(0);
+    expect(builtinPreIdx).toBeGreaterThan(userPreIdx);
+    expect(userContent).not.toContain('Project system body.');
+    expect(userContent).not.toContain('Builtin system body.');
   });
 });
