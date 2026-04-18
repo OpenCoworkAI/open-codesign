@@ -226,6 +226,45 @@ describe('snapshots:v1:create', () => {
 });
 
 // ---------------------------------------------------------------------------
+// snapshots:v1:create-design
+// ---------------------------------------------------------------------------
+
+describe('snapshots:v1:create-design', () => {
+  it('creates a design with the trimmed name', () => {
+    const result = call('snapshots:v1:create-design', '  My design  ') as Record<string, unknown>;
+    expect(result['name']).toBe('My design');
+    expect(typeof result['id']).toBe('string');
+  });
+
+  it('rejects undefined with IPC_BAD_INPUT (no silent default)', () => {
+    expect(() => call('snapshots:v1:create-design', undefined)).toThrow(CodesignError);
+    try {
+      call('snapshots:v1:create-design', undefined);
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+    }
+  });
+
+  it('rejects an empty / whitespace-only string with IPC_BAD_INPUT', () => {
+    expect(() => call('snapshots:v1:create-design', '   ')).toThrow(CodesignError);
+    try {
+      call('snapshots:v1:create-design', '');
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+    }
+  });
+
+  it('rejects a non-string payload with IPC_BAD_INPUT', () => {
+    expect(() => call('snapshots:v1:create-design', { name: 'x' })).toThrow(CodesignError);
+    try {
+      call('snapshots:v1:create-design', 42);
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // snapshots:v1:get
 // ---------------------------------------------------------------------------
 

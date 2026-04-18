@@ -140,7 +140,9 @@ export function registerSnapshotsIpc(db: Database): void {
   });
 
   ipcMain.handle('snapshots:v1:create-design', (_e: unknown, raw: unknown): Design => {
-    const name = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : 'Untitled design';
-    return createDesign(db, name);
+    if (typeof raw !== 'string' || raw.trim().length === 0) {
+      throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    return createDesign(db, raw.trim());
   });
 }

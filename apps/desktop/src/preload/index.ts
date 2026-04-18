@@ -187,11 +187,8 @@ const api = {
   },
   snapshots: {
     listDesigns: () => ipcRenderer.invoke('snapshots:v1:list-designs') as Promise<Design[]>,
-    createDesign: (name?: string) =>
-      ipcRenderer.invoke(
-        'snapshots:v1:create-design',
-        name ?? 'Untitled design',
-      ) as Promise<Design>,
+    createDesign: (name: string) =>
+      ipcRenderer.invoke('snapshots:v1:create-design', name) as Promise<Design>,
     list: (designId: string) =>
       ipcRenderer.invoke('snapshots:v1:list', { designId }) as Promise<DesignSnapshot[]>,
     get: (id: string) =>
