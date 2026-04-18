@@ -45,7 +45,7 @@ export function ExampleCard({ example, onUsePrompt }: ExampleCardProps) {
             className="
               shrink-0 rounded-full border border-[var(--color-border)]
               px-[var(--space-2)] py-[var(--space-0_5)]
-              text-[10px] uppercase tracking-wide
+              text-[var(--font-size-body-xs)] uppercase tracking-wide
               text-[var(--color-text-muted)]
             "
           >
