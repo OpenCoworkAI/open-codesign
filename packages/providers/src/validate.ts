@@ -13,26 +13,43 @@ interface ProviderEndpoint {
   headers: (apiKey: string) => Record<string, string>;
 }
 
+/**
+ * Normalize a user-supplied baseUrl so that appending /v1/models never
+ * produces a double /v1/ segment.
+ *
+ * - openai / openrouter: strip trailing /v1 — we append /v1/models below
+ * - anthropic: strip trailing /v1 — we append /v1/models below
+ */
+function normalizeValidateBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+}
+
 function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): ProviderEndpoint {
   switch (provider) {
-    case 'anthropic':
+    case 'anthropic': {
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://api.anthropic.com';
       return {
-        url: `${baseUrl ?? 'https://api.anthropic.com'}/v1/models`,
+        url: `${root}/v1/models`,
         headers: (apiKey) => ({
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
         }),
       };
-    case 'openai':
+    }
+    case 'openai': {
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://api.openai.com';
       return {
-        url: `${baseUrl ?? 'https://api.openai.com'}/v1/models`,
+        url: `${root}/v1/models`,
         headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
       };
-    case 'openrouter':
+    }
+    case 'openrouter': {
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://openrouter.ai/api';
       return {
-        url: `${baseUrl ?? 'https://openrouter.ai/api'}/v1/models`,
+        url: `${root}/v1/models`,
         headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
       };
+    }
   }
 }
 

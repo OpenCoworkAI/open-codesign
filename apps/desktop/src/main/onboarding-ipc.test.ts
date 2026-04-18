@@ -11,10 +11,14 @@ import { describe, expect, it, vi } from 'vitest';
 // Collect registered channel names via a mock ipcMain.
 const registeredChannels: string[] = [];
 
+// Track handler implementations so we can call them directly.
+const handlers = new Map<string, (...args: unknown[]) => unknown>();
+
 vi.mock('./electron-runtime', () => ({
   ipcMain: {
-    handle: (channel: string) => {
+    handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
       registeredChannels.push(channel);
+      handlers.set(channel, fn);
     },
   },
   shell: { openPath: vi.fn() },
@@ -107,5 +111,36 @@ describe('registerOnboardingIpc — channel versioning', () => {
     for (const ch of legacyChannels) {
       expect(registeredChannels).toContain(ch);
     }
+  });
+});
+
+describe('registerOnboardingIpc — validate-key passes baseUrl to pingProvider', () => {
+  it('forwards baseUrl to pingProvider when provided', async () => {
+    const { pingProvider } = await import('@open-codesign/providers');
+    const handler = handlers.get('onboarding:validate-key');
+    expect(handler).toBeDefined();
+
+    await handler?.({} as unknown, {
+      provider: 'openai',
+      apiKey: 'sk-test',
+      baseUrl: 'https://custom.proxy.example/v1',
+    });
+
+    expect(pingProvider).toHaveBeenCalledWith(
+      'openai',
+      'sk-test',
+      'https://custom.proxy.example/v1',
+    );
+  });
+
+  it('calls pingProvider without baseUrl when not provided', async () => {
+    const { pingProvider } = await import('@open-codesign/providers');
+    vi.mocked(pingProvider).mockClear();
+    const handler = handlers.get('onboarding:validate-key');
+    expect(handler).toBeDefined();
+
+    await handler?.({} as unknown, { provider: 'anthropic', apiKey: 'sk-ant-test' });
+
+    expect(pingProvider).toHaveBeenCalledWith('anthropic', 'sk-ant-test', undefined);
   });
 });

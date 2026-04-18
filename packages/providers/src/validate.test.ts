@@ -86,12 +86,31 @@ describe('pingProvider', () => {
     expect(result).toEqual({ ok: true, modelCount: 0 });
   });
 
-  it('respects custom baseUrl', async () => {
+  it('respects custom baseUrl without /v1 suffix', async () => {
     mockFetch(async (url) => {
       expect(url).toBe('https://proxy.example/v1/models');
       return new Response(JSON.stringify({ data: [{ id: 'x' }] }), { status: 200 });
     });
     const result = await pingProvider('openrouter', 'sk-or-test', 'https://proxy.example');
+    expect(result).toEqual({ ok: true, modelCount: 1 });
+  });
+
+  it('normalizes baseUrl with /v1 suffix — no double /v1/v1/ in URL', async () => {
+    mockFetch(async (url) => {
+      // Must hit /v1/models exactly once, not /v1/v1/models
+      expect(url).toBe('https://proxy.duckcoding.com/v1/models');
+      return new Response(JSON.stringify({ data: [{ id: 'gpt-4o' }] }), { status: 200 });
+    });
+    const result = await pingProvider('openai', 'sk-test', 'https://proxy.duckcoding.com/v1');
+    expect(result).toEqual({ ok: true, modelCount: 1 });
+  });
+
+  it('normalizes baseUrl with trailing slash — no double /v1/ in URL', async () => {
+    mockFetch(async (url) => {
+      expect(url).toBe('https://proxy.duckcoding.com/v1/models');
+      return new Response(JSON.stringify({ data: [{ id: 'gpt-4o' }] }), { status: 200 });
+    });
+    const result = await pingProvider('openai', 'sk-test', 'https://proxy.duckcoding.com/v1/');
     expect(result).toEqual({ ok: true, modelCount: 1 });
   });
 });
