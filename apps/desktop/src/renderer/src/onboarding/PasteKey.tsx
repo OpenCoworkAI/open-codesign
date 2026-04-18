@@ -49,8 +49,10 @@ function getErrorHint(code: ConnectionTestError['code']): string {
       return 'Cannot reach base URL. Check domain/port/network.';
     case 'NETWORK':
       return 'Network error. Check your connection.';
-    default:
+    case 'PARSE':
       return 'Unexpected response. View logs at ~/Library/Logs/open-codesign/main.log';
+    case 'IPC_BAD_INPUT':
+      return 'Invalid input sent to connection test. Check provider / API key / base URL fields.';
   }
 }
 

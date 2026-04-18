@@ -9,6 +9,13 @@ import type {
   SupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
+import type {
+  ConnectionTestError,
+  ConnectionTestResult,
+  ModelsListResponse,
+} from '../main/connection-ipc';
+
+export type { ConnectionTestError, ConnectionTestResult, ModelsListResponse };
 
 export interface ValidateKeyResult {
   ok: true;
@@ -19,25 +26,6 @@ export interface ValidateKeyError {
   code: '401' | '402' | '429' | 'network';
   message: string;
 }
-
-export interface ConnectionTestResult {
-  ok: true;
-}
-export interface ConnectionTestError {
-  ok: false;
-  code: '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE';
-  message: string;
-  hint: string;
-}
-
-export type ModelsListResponse =
-  | { ok: true; models: string[] }
-  | {
-      ok: false;
-      code: 'IPC_BAD_INPUT' | 'NETWORK' | 'HTTP' | 'PARSE';
-      message: string;
-      hint: string;
-    };
 
 export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip';
 export interface ExportInvokeResponse {
