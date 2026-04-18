@@ -30,6 +30,8 @@ import {
 import { registerPreferencesIpc } from './preferences-ipc';
 import { preparePromptContext } from './prompt-context';
 import { resolveActiveModel } from './provider-settings';
+import { initSnapshotsDb } from './snapshots-db';
+import { registerSnapshotsIpc } from './snapshots-ipc';
 
 let mainWindow: ElectronBrowserWindow | null = null;
 
@@ -437,12 +439,14 @@ function setupAutoUpdater(): void {
 void app.whenReady().then(async () => {
   initLogger();
   await loadConfigOnBoot();
+  const snapshotsDb = initSnapshotsDb(join(app.getPath('userData'), 'designs.db'));
   registerIpcHandlers();
   registerLocaleIpc();
   registerConnectionIpc();
   registerOnboardingIpc();
   registerPreferencesIpc();
   registerExporterIpc(() => mainWindow);
+  registerSnapshotsIpc(snapshotsDb);
   setupAutoUpdater();
   createWindow();
 

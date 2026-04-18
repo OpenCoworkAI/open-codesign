@@ -1,11 +1,14 @@
 import type {
   CancelGenerationPayloadV1,
   ChatMessage,
+  Design,
+  DesignSnapshot,
   GeneratePayloadV1,
   LocalInputFile,
   ModelRef,
   OnboardingState,
   SelectedElement,
+  SnapshotCreateInput,
   SupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
@@ -181,6 +184,21 @@ const api = {
       apiKey: string;
       baseUrl: string;
     }) => ipcRenderer.invoke('models:v1:list', input) as Promise<ModelsListResponse>,
+  },
+  snapshots: {
+    listDesigns: () => ipcRenderer.invoke('snapshots:v1:list-designs') as Promise<Design[]>,
+    createDesign: (name?: string) =>
+      ipcRenderer.invoke(
+        'snapshots:v1:create-design',
+        name ?? 'Untitled design',
+      ) as Promise<Design>,
+    list: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:list', { designId }) as Promise<DesignSnapshot[]>,
+    get: (id: string) =>
+      ipcRenderer.invoke('snapshots:v1:get', { id }) as Promise<DesignSnapshot | null>,
+    create: (input: SnapshotCreateInput) =>
+      ipcRenderer.invoke('snapshots:v1:create', input) as Promise<DesignSnapshot>,
+    delete: (id: string) => ipcRenderer.invoke('snapshots:v1:delete', { id }) as Promise<void>,
   },
 };
 

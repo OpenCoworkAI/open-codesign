@@ -23,6 +23,7 @@
     "@open-codesign/shared": "workspace:*",
     "@open-codesign/templates": "workspace:*",
     "@open-codesign/ui": "workspace:*",
+    "better-sqlite3": "^11.0.0",
     "electron-log": "^5",
     "electron-updater": "^6.3.9",
     "lucide-react": "^0.460.0",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
