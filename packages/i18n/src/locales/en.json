@@ -413,7 +413,8 @@
     "modelListFailed": "Could not load model list.",
     "unknown": "Unknown error",
     "localePersistFailed": "Failed to save language preference",
-    "projectStorageFailed": "Couldn't read or write projects on this device. Your changes may not persist."
+    "projectStorageFailed": "Couldn't read or write projects on this device. Your changes may not persist.",
+    "storageFailed": "Failed to save to local storage"
   },
   "projects": {
     "untitled": "Untitled design",

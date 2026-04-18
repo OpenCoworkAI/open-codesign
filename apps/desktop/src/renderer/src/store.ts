@@ -275,12 +275,13 @@ function readStoredWeekUsage(now: Date): WeekUsage {
   }
 }
 
-function persistWeekUsage(usage: WeekUsage): void {
-  if (typeof window === 'undefined') return;
+function persistWeekUsage(usage: WeekUsage): string | null {
+  if (typeof window === 'undefined') return null;
   try {
     window.localStorage.setItem(WEEK_USAGE_STORAGE_KEY, JSON.stringify(usage));
-  } catch {
-    // localStorage unavailable
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : 'Failed to persist weekly usage';
   }
 }
 
@@ -522,9 +523,12 @@ function applyGenerateSuccess(
     outputTokens: typeof result.outputTokens === 'number' ? result.outputTokens : 0,
     costUsd: typeof result.costUsd === 'number' ? result.costUsd : 0,
   };
+  let persistError: string | null = null;
+  let didApply = false;
   finishIfCurrent(set, generationId, (state) => {
     const nextWeek = accumulateWeekUsage(state.weekUsage, usage, new Date());
-    persistWeekUsage(nextWeek);
+    persistError = persistWeekUsage(nextWeek);
+    didApply = true;
     return {
       messages: [...state.messages, { role: 'assistant', content: assistantMessage }],
       previewHtml: firstArtifact?.content ?? state.previewHtml,
@@ -536,10 +540,20 @@ function applyGenerateSuccess(
       weekUsage: nextWeek,
     };
   });
-  const designId = get().currentDesignId;
-  if (designId) {
-    const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
-    void persistDesignState(get, designId, get().messages, get().previewHtml, artifact);
+  if (didApply) {
+    const designId = get().currentDesignId;
+    if (designId) {
+      const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
+      void persistDesignState(get, designId, get().messages, get().previewHtml, artifact);
+    }
+    if (persistError) {
+      console.warn('[open-codesign] failed to persist weekly usage:', persistError);
+      get().pushToast({
+        variant: 'error',
+        title: tr('errors.storageFailed'),
+        description: persistError,
+      });
+    }
   }
 }
 
@@ -593,6 +607,7 @@ async function runGenerate(
   advanceStageIfCurrent(get, set, generationId, 'parsing');
   advanceStageIfCurrent(get, set, generationId, 'rendering');
   applyGenerateSuccess(
+    get,
     set,
     get,
     generationId,
@@ -913,9 +928,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         outputTokens: typeof result.outputTokens === 'number' ? result.outputTokens : 0,
         costUsd: typeof result.costUsd === 'number' ? result.costUsd : 0,
       };
+      let persistError: string | null = null;
       set((s) => {
         const nextWeek = accumulateWeekUsage(s.weekUsage, usage, new Date());
-        persistWeekUsage(nextWeek);
+        persistError = persistWeekUsage(nextWeek);
         return {
           messages: [...s.messages, { role: 'assistant', content: assistantText }],
           previewHtml: firstArtifact?.content ?? s.previewHtml,
@@ -929,6 +945,14 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       if (designId) {
         const artifact = artifactFromResult(firstArtifact, userMessage.content, assistantText);
         void persistDesignState(get, designId, get().messages, get().previewHtml, artifact);
+      }
+      if (persistError) {
+        console.warn('[open-codesign] failed to persist weekly usage:', persistError);
+        get().pushToast({
+          variant: 'error',
+          title: tr('errors.storageFailed'),
+          description: persistError,
+        });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');

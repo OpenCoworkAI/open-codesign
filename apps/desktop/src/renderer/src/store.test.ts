@@ -311,6 +311,55 @@ describe('useCodesignStore token usage tracking', () => {
     const state = useCodesignStore.getState();
     expect(state.lastUsage).toEqual({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
   });
+
+  it('surfaces a toast and preserves in-memory weekUsage when localStorage write throws', async () => {
+    const generate = vi.fn(() =>
+      Promise.resolve({
+        artifacts: [{ content: '<html>ok</html>' }],
+        message: 'Done.',
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 0.01,
+      }),
+    );
+
+    const setItem = vi.fn(() => {
+      throw new Error('QuotaExceeded');
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    vi.stubGlobal('window', {
+      codesign: { generate },
+      setTimeout,
+      localStorage: { getItem: () => null, setItem },
+    });
+
+    useCodesignStore.setState({
+      weekUsage: {
+        isoWeek: isoWeekKey(new Date()),
+        inputTokens: 7,
+        outputTokens: 3,
+        costUsd: 0.02,
+      },
+      lastUsage: null,
+    });
+
+    await useCodesignStore.getState().sendPrompt({ prompt: 'persist failure' });
+
+    const state = useCodesignStore.getState();
+    expect(setItem).toHaveBeenCalled();
+    expect(state.weekUsage.inputTokens).toBe(107);
+    expect(state.weekUsage.outputTokens).toBe(53);
+    expect(state.weekUsage.costUsd).toBeCloseTo(0.03, 6);
+    expect(state.lastUsage).toEqual({ inputTokens: 100, outputTokens: 50, costUsd: 0.01 });
+    expect(state.toasts.at(-1)).toMatchObject({
+      variant: 'error',
+      description: 'QuotaExceeded',
+    });
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
 });
 
 describe('accumulateWeekUsage', () => {
