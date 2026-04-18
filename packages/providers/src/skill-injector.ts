@@ -21,8 +21,6 @@ function matchesProvider(providers: string[] | undefined, providerId: string): b
 
 /**
  * Filter to skills that are relevant to `providerId` and not disabled.
- * Priority order is assumed to already be encoded in the `skills` array
- * by the loader (project > user > builtin).
  */
 function filterActive(skills: LoadedSkill[], providerId: string): LoadedSkill[] {
   return skills.filter(
@@ -30,6 +28,33 @@ function filterActive(skills: LoadedSkill[], providerId: string): LoadedSkill[] 
       !s.frontmatter.disable_model_invocation &&
       matchesProvider(s.frontmatter.trigger?.providers, providerId),
   );
+}
+
+// Source precedence: project overrides user, user overrides builtin. Encoded
+// as a numeric rank so a stable sort can place higher-priority skills first.
+const SOURCE_RANK: Record<LoadedSkill['source'], number> = {
+  project: 0,
+  user: 1,
+  builtin: 2,
+};
+
+/**
+ * Sort skills into a canonical order so the injected prompt blob is purely a
+ * function of the active skill set, never of how `loadSkills*` happened to
+ * return them. Order: source precedence (project > user > builtin), then
+ * alphabetical by frontmatter name within each source.
+ *
+ * Determinism here is load-bearing: it stabilises the scope chosen for mixed
+ * `system`/`prefix` skills (highest-precedence skill wins) and makes the
+ * concatenated body block byte-identical across runs, which keeps prompt
+ * caching and snapshot tests reliable.
+ */
+function sortCanonical(skills: LoadedSkill[]): LoadedSkill[] {
+  return [...skills].sort((a, b) => {
+    const rankDelta = SOURCE_RANK[a.source] - SOURCE_RANK[b.source];
+    if (rankDelta !== 0) return rankDelta;
+    return a.frontmatter.name.localeCompare(b.frontmatter.name, 'en');
+  });
 }
 
 function prependSystemContent(messages: ChatMessage[], block: string): ChatMessage[] {
@@ -74,14 +99,14 @@ export function injectSkillsIntoMessages(
   enabledSkills: LoadedSkill[],
   provider: string,
 ): ChatMessage[] {
-  const active = filterActive(enabledSkills, provider);
+  const active = sortCanonical(filterActive(enabledSkills, provider));
   if (active.length === 0) return baseMessages;
 
   const block = buildSkillBlock(active);
 
-  // Use the scope of the first active skill as the injection strategy.
-  // All skills in a single generation share one scope; mixing scopes is not
-  // supported — the system setting wins.
+  // Mixed `system`/`prefix` scopes resolve to the highest-precedence skill
+  // (project > user > builtin, then alphabetical), so the chosen channel is a
+  // function of the skill set rather than caller array order.
   const scope = active[0]?.frontmatter.trigger?.scope ?? 'system';
 
   if (scope === 'prefix') {

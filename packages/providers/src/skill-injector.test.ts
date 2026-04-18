@@ -159,4 +159,72 @@ describe('injectSkillsIntoMessages()', () => {
     expect(original[0]?.content).toBe(originalSnapshot[0]?.content);
     expect(original[1]?.content).toBe(originalSnapshot[1]?.content);
   });
+
+  it('produces a byte-identical prompt regardless of input skill order', () => {
+    const skills: LoadedSkill[] = [
+      makeSkill('zeta', { source: 'builtin', body: 'Zeta body.' }),
+      makeSkill('alpha', { source: 'user', body: 'Alpha body.' }),
+      makeSkill('mango', { source: 'project', body: 'Mango body.' }),
+      makeSkill('beta', { source: 'project', body: 'Beta body.' }),
+      makeSkill('gamma', { source: 'user', body: 'Gamma body.' }),
+    ];
+
+    const canonical = injectSkillsIntoMessages(BASE_MESSAGES, skills, 'anthropic');
+    const canonicalContent = canonical[0]?.content ?? '';
+
+    // Project skills (alphabetical) come first, then user, then builtin.
+    const expectedOrder = ['Beta body.', 'Mango body.', 'Alpha body.', 'Gamma body.', 'Zeta body.'];
+    const indices = expectedOrder.map((needle) => canonicalContent.indexOf(needle));
+    expect(indices.every((i) => i >= 0)).toBe(true);
+    for (let i = 1; i < indices.length; i++) {
+      expect(indices[i - 1]).toBeLessThan(indices[i] as number);
+    }
+
+    const permutations: LoadedSkill[][] = [
+      [skills[1], skills[0], skills[2], skills[4], skills[3]] as LoadedSkill[],
+      [skills[4], skills[3], skills[2], skills[1], skills[0]] as LoadedSkill[],
+      [skills[2], skills[4], skills[0], skills[3], skills[1]] as LoadedSkill[],
+    ];
+    for (const perm of permutations) {
+      const result = injectSkillsIntoMessages(BASE_MESSAGES, perm, 'anthropic');
+      expect(result[0]?.content).toBe(canonicalContent);
+    }
+  });
+
+  it('resolves mixed scope deterministically using highest-precedence skill', () => {
+    const projectPrefix = makeSkill('proj', {
+      source: 'project',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'proj',
+        description: 'Project prefix skill.',
+        trigger: { providers: ['*'], scope: 'prefix' },
+        disable_model_invocation: false,
+        user_invocable: true,
+      },
+      body: 'Project prefix body.',
+    });
+    const userSystem = makeSkill('user', {
+      source: 'user',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'user',
+        description: 'User system skill.',
+        trigger: { providers: ['*'], scope: 'system' },
+        disable_model_invocation: false,
+        user_invocable: true,
+      },
+      body: 'User system body.',
+    });
+
+    const a = injectSkillsIntoMessages(BASE_MESSAGES, [projectPrefix, userSystem], 'anthropic');
+    const b = injectSkillsIntoMessages(BASE_MESSAGES, [userSystem, projectPrefix], 'anthropic');
+    expect(a).toEqual(b);
+    // Project skill (higher precedence) chose 'prefix' scope, so user message
+    // gets the block and the system message stays untouched.
+    expect(a[0]?.content).toBe('You are a helpful assistant.');
+    expect(a[1]?.role).toBe('user');
+    expect(a[1]?.content).toContain('Project prefix body.');
+    expect(a[1]?.content).toContain('User system body.');
+  });
 });
