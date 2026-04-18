@@ -88,7 +88,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     body = (
       <div className="h-full p-6">
         <div className="relative h-full">
-          <div className="absolute left-5 top-5 z-10 rounded-full border border-[var(--color-border)] bg-[rgba(255,255,255,0.88)] px-3 py-1 text-[11px] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur">
+          <div className="absolute left-5 top-5 z-10 rounded-full border border-[var(--color-border)] bg-[rgba(255,255,255,0.88)] px-3 py-1 text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur">
             {t('preview.clickToComment')}
           </div>
           <iframe

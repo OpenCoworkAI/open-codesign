@@ -31,12 +31,12 @@ function InlineCommentComposerCard({ selectedElement }: InlineCommentComposerCar
     <div className="absolute bottom-10 right-10 z-10 w-[min(420px,calc(100%-3rem))] overflow-hidden rounded-[var(--radius-2xl)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)]">
       <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border-muted)] px-4 py-3">
         <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 text-[12px] font-medium text-[var(--color-text-primary)]">
+          <div className="inline-flex items-center gap-2 text-[var(--text-xs)] font-medium text-[var(--color-text-primary)]">
             <MessageSquareText className="h-4 w-4 text-[var(--color-accent)]" />
-            {t('inlineComment.title')} <code className="text-[11px]">{selectedElement.tag}</code>
+            {t('inlineComment.title')} <code className="text-[var(--text-xs)]">{selectedElement.tag}</code>
           </div>
           <p
-            className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]"
+            className="mt-1 truncate text-[var(--text-xs)] text-[var(--color-text-muted)]"
             title={selectedElement.selector}
           >
             {selectedElement.selector}
@@ -53,7 +53,7 @@ function InlineCommentComposerCard({ selectedElement }: InlineCommentComposerCar
       </div>
 
       <div className="space-y-3 p-4">
-        <p className="text-[12px] leading-[1.5] text-[var(--color-text-secondary)]">
+        <p className="text-[var(--text-xs)] leading-[1.5] text-[var(--color-text-secondary)]">
           {t('inlineComment.description')}
         </p>
         <textarea
@@ -62,13 +62,13 @@ function InlineCommentComposerCard({ selectedElement }: InlineCommentComposerCar
           placeholder={t('inlineComment.placeholder')}
           rows={4}
           disabled={isGenerating}
-          className="w-full resize-none rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-[13px] leading-[1.5] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] transition-[box-shadow,border-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] focus:outline-none"
+          className="w-full resize-none rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-[var(--text-sm)] leading-[1.5] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] transition-[box-shadow,border-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] focus:outline-none"
         />
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={clearCanvasElement}
-            className="text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+            className="text-[var(--text-xs)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
           >
             {t('common.cancel')}
           </button>
@@ -80,7 +80,7 @@ function InlineCommentComposerCard({ selectedElement }: InlineCommentComposerCar
               type="button"
               disabled={!draft.trim() || isGenerating}
               onClick={() => void applyInlineComment(draft)}
-              className="inline-flex items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-accent)] px-3 py-2 text-[12px] font-medium text-white shadow-[var(--shadow-soft)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:pointer-events-none disabled:opacity-40"
+              className="inline-flex items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-accent)] px-3 py-2 text-[var(--text-xs)] font-medium text-white shadow-[var(--shadow-soft)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:pointer-events-none disabled:opacity-40"
             >
               {isGenerating ? t('inlineComment.applying') : t('inlineComment.applyChange')}
             </button>

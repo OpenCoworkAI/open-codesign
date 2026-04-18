@@ -67,7 +67,7 @@ export function PreviewToolbar(): ReactElement {
   return (
     <div className="flex items-center justify-end gap-2 px-6 py-2 border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)]">
       {toastMessage && (
-        <output className="mr-auto text-[12px] text-[var(--color-text-secondary)] truncate max-w-[60%]">
+        <output className="mr-auto text-[var(--text-xs)] text-[var(--color-text-secondary)] truncate max-w-[60%]">
           {toastMessage}
         </output>
       )}
@@ -78,7 +78,7 @@ export function PreviewToolbar(): ReactElement {
             type="button"
             disabled={disabled}
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-[var(--radius-md)] text-[13px] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
             aria-haspopup="menu"
             aria-expanded={open}
           >
@@ -103,11 +103,11 @@ export function PreviewToolbar(): ReactElement {
                   setOpen(false);
                   void exportActive(item.format);
                 }}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2 text-[13px] text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors duration-100"
+                className="w-full flex items-center justify-between gap-3 px-3 py-2 text-[var(--text-sm)] text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors duration-100"
               >
                 <span>{item.label}</span>
                 {item.hint && (
-                  <span className="text-[11px] text-[var(--color-text-muted)] truncate max-w-[60%]">
+                  <span className="text-[var(--text-xs)] text-[var(--color-text-muted)] truncate max-w-[60%]">
                     {item.hint}
                   </span>
                 )}
