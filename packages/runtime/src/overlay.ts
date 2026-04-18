@@ -19,6 +19,12 @@
 export const OVERLAY_SCRIPT = `(function() {
   'use strict';
   var hovered = null;
+  var warned = Object.create(null);
+  function warnOnce(key, err) {
+    if (warned[key]) return;
+    warned[key] = true;
+    try { console.warn('[overlay] ' + key, err); } catch (_) { /* noop */ }
+  }
 
   function getXPath(el) {
     if (el.dataset && el.dataset.codesignId) return '[data-codesign-id="' + el.dataset.codesignId + '"]';
@@ -100,14 +106,14 @@ export const OVERLAY_SCRIPT = `(function() {
   function reattach() {
     for (var i = 0; i < installs.length; i++) {
       var spec = installs[i];
-      try { document.removeEventListener(spec.evt, spec.fn, true); } catch (err) { console.warn('[overlay] removeEventListener failed for ' + spec.evt + ':', err); }
-      try { document.addEventListener(spec.evt, spec.fn, true); } catch (err) { console.warn('[overlay] addEventListener failed for ' + spec.evt + ':', err); }
+      try { document.removeEventListener(spec.evt, spec.fn, true); } catch (err) { warnOnce('removeEventListener failed for ' + spec.evt, err); }
+      try { document.addEventListener(spec.evt, spec.fn, true); } catch (err) { warnOnce('addEventListener failed for ' + spec.evt, err); }
     }
     if (!window.__cs_err) {
-      try { window.addEventListener('error', onError, true); window.__cs_err = true; } catch (err) { console.warn('[overlay] attach window error listener failed:', err); }
+      try { window.addEventListener('error', onError, true); window.__cs_err = true; } catch (err) { warnOnce('attach window error listener failed', err); }
     }
     if (!window.__cs_rej) {
-      try { window.addEventListener('unhandledrejection', onRejection, true); window.__cs_rej = true; } catch (err) { console.warn('[overlay] attach unhandledrejection listener failed:', err); }
+      try { window.addEventListener('unhandledrejection', onRejection, true); window.__cs_rej = true; } catch (err) { warnOnce('attach unhandledrejection listener failed', err); }
     }
   }
   reattach();
