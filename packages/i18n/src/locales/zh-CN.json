@@ -28,7 +28,8 @@
       "parsing": "解析中...",
       "rendering": "渲染预览...",
       "done": "完成"
-    }
+    },
+    "tokens": "{{count}} 个 token"
   },
   "preview": {
     "empty": {

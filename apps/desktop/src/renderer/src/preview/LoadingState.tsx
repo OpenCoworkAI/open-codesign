@@ -94,7 +94,7 @@ export function LoadingState({ stage: stageProp, tokenCount: tokenProp }: Loadin
             <span className="stage-label">{t(`loading.stage.${activeStage}`)}</span>
             {activeStage === 'streaming' && tokenCount > 0 && (
               <span className="font-mono text-xs text-[var(--color-text-tertiary)]">
-                {tokenCount} tokens
+                {t('loading.tokens', { count: tokenCount })}
               </span>
             )}
           </div>

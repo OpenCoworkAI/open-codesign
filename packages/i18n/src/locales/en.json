@@ -28,7 +28,9 @@
       "parsing": "Parsing artifact...",
       "rendering": "Rendering preview...",
       "done": "Done"
-    }
+    },
+    "tokens_one": "{{count}} token",
+    "tokens_other": "{{count}} tokens"
   },
   "preview": {
     "empty": {
