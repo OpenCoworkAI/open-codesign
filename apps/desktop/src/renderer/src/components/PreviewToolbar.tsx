@@ -82,7 +82,10 @@ export function PreviewToolbar(): ReactElement {
             aria-haspopup="menu"
             aria-expanded={open}
           >
-            <Download className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" aria-hidden="true" />
+            <Download
+              className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]"
+              aria-hidden="true"
+            />
             {t('export.button')}
           </button>
         </Tooltip>
