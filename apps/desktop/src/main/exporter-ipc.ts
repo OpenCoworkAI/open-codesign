@@ -22,7 +22,7 @@ export interface ExportResponse {
   bytes?: number;
 }
 
-function parseRequest(raw: unknown): ExportRequest {
+export function parseRequest(raw: unknown): ExportRequest {
   if (raw === null || typeof raw !== 'object') {
     throw new CodesignError('export expects an object payload', 'IPC_BAD_INPUT');
   }

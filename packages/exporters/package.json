@@ -19,19 +19,11 @@
   "dependencies": {
     "@open-codesign/shared": "workspace:*",
     "pptxgenjs": "^3.12.0",
+    "puppeteer-core": "^24.10.0",
     "zip-lib": "^1.0.4"
-  },
-  "peerDependencies": {
-    "puppeteer-core": "^23.0.0"
-  },
-  "peerDependenciesMeta": {
-    "puppeteer-core": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "puppeteer-core": "^24.10.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }
