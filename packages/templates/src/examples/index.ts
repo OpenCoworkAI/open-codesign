@@ -127,13 +127,14 @@ function getRegistry(locale: string | undefined): Record<string, ExampleContent>
 }
 
 export function getExamples(locale?: string): LocalizedExample[] {
+  const target = normalizeLocale(locale);
   const reg = getRegistry(locale);
   return EXAMPLES.map((ex) => {
     const content = reg[ex.id] ?? enExamples[ex.id];
     if (!content) {
-      // Should be unreachable — every EXAMPLES.id has matching en content. If a
-      // future contributor forgets, surface the id rather than render blank.
-      return { ...ex, title: ex.id, description: '' };
+      throw new Error(
+        `[templates/examples] missing localized content for example id "${ex.id}" (locale: "${target}")`,
+      );
     }
     return { ...ex, ...content };
   });

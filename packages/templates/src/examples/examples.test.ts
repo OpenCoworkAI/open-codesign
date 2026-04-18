@@ -57,4 +57,18 @@ describe('examples gallery', () => {
     expect(ex?.category).toBe('dashboard');
     expect(getExample('does-not-exist')).toBeUndefined();
   });
+
+  it('getExamples throws when a locale entry is missing in every registry', () => {
+    const id = EXAMPLES[0]?.id ?? 'cosmic-animation';
+    const enBackup = enExamples[id];
+    const zhBackup = zhCNExamples[id];
+    delete enExamples[id];
+    delete zhCNExamples[id];
+    try {
+      expect(() => getExamples('zh-CN')).toThrow(/missing localized content/);
+    } finally {
+      if (enBackup) enExamples[id] = enBackup;
+      if (zhBackup) zhCNExamples[id] = zhBackup;
+    }
+  });
 });
