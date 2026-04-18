@@ -70,6 +70,14 @@ describe('loadSkillsFromDir()', () => {
     expect(skills).toHaveLength(0);
   });
 
+  it('propagates non-ENOENT readdir errors (e.g. ENOTDIR)', async () => {
+    const filePath = join(testDir, 'not-a-dir.md');
+    await writeFile(filePath, '---\nname: x\n---\n');
+    await expect(loadSkillsFromDir(filePath, 'user')).rejects.toMatchObject({
+      code: 'ENOTDIR',
+    });
+  });
+
   it('parses minimal frontmatter and body correctly', async () => {
     await writeSkill(testDir, 'my-skill.md', MINIMAL_SKILL);
     const skills = await loadSkillsFromDir(testDir, 'user');

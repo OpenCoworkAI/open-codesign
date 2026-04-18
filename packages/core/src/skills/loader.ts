@@ -187,9 +187,9 @@ export async function loadSkillsFromDir(
   let entries: string[];
   try {
     entries = await readdir(dir);
-  } catch {
-    // Directory does not exist or is not readable — not an error, just empty.
-    return [];
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
   }
 
   const skills: LoadedSkill[] = [];
