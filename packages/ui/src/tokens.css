@@ -37,6 +37,11 @@
   --color-error: #b04030;
   --color-mcp: #4a6b8a;
 
+  /* Feedback */
+  --color-toast-success: #4f7a52;
+  --color-toast-error: #b04030;
+  --color-overlay: rgba(31, 29, 24, 0.45);
+
   /* Shadow — warm-tinted, three discrete levels */
   --shadow-soft: 0 1px 2px rgba(57, 41, 24, 0.04);
   --shadow-card: 0 1px 2px rgba(57, 41, 24, 0.04), 0 4px 16px rgba(57, 41, 24, 0.06);
@@ -122,6 +127,10 @@
   --color-warning: #d4a04a;
   --color-error: #d96050;
   --color-mcp: #6a8aab;
+
+  --color-toast-success: #6b9c6e;
+  --color-toast-error: #d96050;
+  --color-overlay: rgba(0, 0, 0, 0.6);
 
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 4px 16px rgba(0, 0, 0, 0.35);
