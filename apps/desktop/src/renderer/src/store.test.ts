@@ -9,6 +9,7 @@ const READY_CONFIG: OnboardingState = {
   modelPrimary: 'claude-sonnet-4-6',
   modelFast: 'claude-haiku-3',
   baseUrl: null,
+  designSystem: null,
 };
 
 const initialState = useCodesignStore.getState();
@@ -66,7 +67,7 @@ describe('useCodesignStore iframe error handling', () => {
 
     useCodesignStore.setState({ iframeErrors: ['old iframe error'] });
 
-    const sendPromise = useCodesignStore.getState().sendPrompt('make a landing page');
+    const sendPromise = useCodesignStore.getState().sendPrompt({ prompt: 'make a landing page' });
 
     expect(useCodesignStore.getState().iframeErrors).toEqual([]);
     expect(useCodesignStore.getState().isGenerating).toBe(true);

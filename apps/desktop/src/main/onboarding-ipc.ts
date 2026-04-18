@@ -3,6 +3,8 @@ import {
   CodesignError,
   type Config,
   type OnboardingState,
+  StoredDesignSystem,
+  type StoredDesignSystem as StoredDesignSystemValue,
   type SupportedOnboardingProvider,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
@@ -76,10 +78,24 @@ export function getBaseUrlForProvider(provider: string): string | undefined {
 
 function toState(cfg: Config | null): OnboardingState {
   if (cfg === null) {
-    return { hasKey: false, provider: null, modelPrimary: null, modelFast: null, baseUrl: null };
+    return {
+      hasKey: false,
+      provider: null,
+      modelPrimary: null,
+      modelFast: null,
+      baseUrl: null,
+      designSystem: null,
+    };
   }
   if (!isSupportedOnboardingProvider(cfg.provider)) {
-    return { hasKey: false, provider: null, modelPrimary: null, modelFast: null, baseUrl: null };
+    return {
+      hasKey: false,
+      provider: null,
+      modelPrimary: null,
+      modelFast: null,
+      baseUrl: null,
+      designSystem: cfg.designSystem ?? null,
+    };
   }
   const ref = cfg.secrets[cfg.provider];
   if (ref === undefined) {
@@ -89,6 +105,7 @@ function toState(cfg: Config | null): OnboardingState {
       modelPrimary: null,
       modelFast: null,
       baseUrl: null,
+      designSystem: cfg.designSystem ?? null,
     };
   }
   return {
@@ -97,7 +114,35 @@ function toState(cfg: Config | null): OnboardingState {
     modelPrimary: cfg.modelPrimary,
     modelFast: cfg.modelFast,
     baseUrl: cfg.baseUrls?.[cfg.provider]?.baseUrl ?? null,
+    designSystem: cfg.designSystem ?? null,
   };
+}
+
+export function getOnboardingState(): OnboardingState {
+  return toState(getCachedConfig());
+}
+
+export async function setDesignSystem(
+  designSystem: StoredDesignSystemValue | null,
+): Promise<OnboardingState> {
+  const cfg = getCachedConfig();
+  if (cfg === null) {
+    throw new CodesignError(
+      'Cannot save a design system before onboarding has completed.',
+      'CONFIG_MISSING',
+    );
+  }
+  const next: Config = {
+    ...cfg,
+    ...(designSystem ? { designSystem: StoredDesignSystem.parse(designSystem) } : {}),
+  };
+  if (designSystem === null) {
+    next.designSystem = undefined;
+  }
+  await writeConfig(next);
+  cachedConfig = next;
+  configLoaded = true;
+  return toState(cachedConfig);
 }
 
 function parseSaveKey(raw: unknown): SaveKeyInput {

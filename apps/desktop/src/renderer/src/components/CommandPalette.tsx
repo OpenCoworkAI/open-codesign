@@ -1,3 +1,4 @@
+import { useT } from '@open-codesign/i18n';
 import { Download, Moon, Plus, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useCodesignStore } from '../store';
@@ -11,6 +12,7 @@ interface PaletteAction {
 }
 
 export function CommandPalette() {
+  const t = useT();
   const open = useCodesignStore((s) => s.commandPaletteOpen);
   const close = useCodesignStore((s) => s.closeCommandPalette);
   const openSettings = useCodesignStore((s) => s.openSettings);
@@ -24,53 +26,55 @@ export function CommandPalette() {
     () => [
       {
         id: 'new-design',
-        label: 'New Design',
-        hint: 'Clear chat and start fresh',
+        label: t('commands.items.newDesign'),
+        hint: t('commands.hints.newDesign'),
         icon: Plus,
         run: () => {
           useCodesignStore.setState({
             messages: [],
             previewHtml: null,
             errorMessage: null,
+            iframeErrors: [],
+            selectedElement: null,
           });
-          pushToast({ variant: 'info', title: 'Workspace cleared' });
+          pushToast({ variant: 'info', title: t('commands.cleared') });
         },
       },
       {
         id: 'toggle-theme',
-        label: 'Toggle Theme',
-        hint: 'Switch between light and dark',
+        label: t('commands.items.toggleTheme'),
+        hint: t('commands.hints.toggleTheme'),
         icon: Moon,
         run: toggleTheme,
       },
       {
         id: 'open-settings',
-        label: 'Open Settings',
-        hint: 'Models, appearance, storage',
+        label: t('commands.items.openSettings'),
+        hint: t('commands.hints.openSettings'),
         icon: SettingsIcon,
         run: openSettings,
       },
       {
         id: 'export',
-        label: 'Export',
-        hint: 'PDF and PPTX coming soon',
+        label: t('commands.items.export'),
+        hint: t('commands.hints.export'),
         icon: Download,
         run: () =>
           pushToast({
             variant: 'info',
-            title: 'Export not available yet',
-            description: 'PDF and PPTX exporters land in v0.2. HTML export is in the toolbar.',
+            title: t('commands.exportUseToolbarTitle'),
+            description: t('commands.exportUseToolbarBody'),
           }),
       },
     ],
-    [openSettings, toggleTheme, pushToast],
+    [openSettings, pushToast, t, toggleTheme],
   );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return actions;
     return actions.filter(
-      (a) => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q),
+      (action) => action.label.toLowerCase().includes(q) || action.hint.toLowerCase().includes(q),
     );
   }, [actions, query]);
 
@@ -87,8 +91,8 @@ export function CommandPalette() {
 
   if (!open) return null;
 
-  function runAt(i: number) {
-    const action = filtered[i];
+  function runAt(index: number) {
+    const action = filtered[index];
     if (!action) return;
     action.run();
     close();
@@ -99,7 +103,7 @@ export function CommandPalette() {
       // biome-ignore lint/a11y/useSemanticElements: native <dialog> top-layer rendering interferes with our overlay stack
       role="dialog"
       aria-modal="true"
-      aria-label="Command palette"
+      aria-label={t('commands.title')}
       className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-6 bg-[var(--color-overlay)] animate-[overlay-in_120ms_ease-out]"
       onClick={close}
       onKeyDown={(e) => {
@@ -112,10 +116,10 @@ export function CommandPalette() {
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') {
             e.preventDefault();
-            setCursor((c) => Math.min(c + 1, filtered.length - 1));
+            setCursor((current) => Math.min(current + 1, filtered.length - 1));
           } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            setCursor((c) => Math.max(c - 1, 0));
+            setCursor((current) => Math.max(current - 1, 0));
           } else if (e.key === 'Enter') {
             e.preventDefault();
             runAt(cursor);
@@ -134,24 +138,24 @@ export function CommandPalette() {
             setQuery(e.target.value);
             setCursor(0);
           }}
-          placeholder="Type a command…"
+          placeholder={t('commands.placeholder')}
           className="w-full px-5 h-12 bg-transparent border-b border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none"
         />
         <ul className="max-h-72 overflow-y-auto py-2">
           {filtered.length === 0 ? (
             <li className="px-5 py-3 text-[var(--text-sm)] text-[var(--color-text-muted)]">
-              No matches.
+              {t('commands.noMatches')}
             </li>
           ) : (
-            filtered.map((a, i) => {
-              const Icon = a.icon;
-              const active = i === cursor;
+            filtered.map((action, index) => {
+              const Icon = action.icon;
+              const active = index === cursor;
               return (
-                <li key={a.id}>
+                <li key={action.id}>
                   <button
                     type="button"
-                    onMouseEnter={() => setCursor(i)}
-                    onClick={() => runAt(i)}
+                    onMouseEnter={() => setCursor(index)}
+                    onClick={() => runAt(index)}
                     className={`w-full flex items-center gap-3 px-5 py-2.5 text-left transition-colors ${
                       active
                         ? 'bg-[var(--color-surface-active)]'
@@ -161,10 +165,10 @@ export function CommandPalette() {
                     <Icon className="w-4 h-4 text-[var(--color-text-secondary)] shrink-0" />
                     <span className="flex-1 min-w-0">
                       <span className="block text-[var(--text-sm)] text-[var(--color-text-primary)]">
-                        {a.label}
+                        {action.label}
                       </span>
                       <span className="block text-[var(--text-xs)] text-[var(--color-text-muted)]">
-                        {a.hint}
+                        {action.hint}
                       </span>
                     </span>
                   </button>

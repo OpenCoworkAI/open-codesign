@@ -1,6 +1,7 @@
 import { PROVIDER_SHORTLIST, type SupportedOnboardingProvider } from '@open-codesign/shared';
 import { Wordmark } from '@open-codesign/ui';
 import { useState } from 'react';
+import { LanguageToggle } from '../components/LanguageToggle';
 import { useCodesignStore } from '../store';
 import { ChooseModel } from './ChooseModel';
 import { PasteKey } from './PasteKey';
@@ -12,6 +13,7 @@ export function Onboarding() {
   const completeOnboarding = useCodesignStore((s) => s.completeOnboarding);
   const [step, setStep] = useState<Step>('welcome');
   const [provider, setProvider] = useState<SupportedOnboardingProvider | null>(null);
+  const [preferFreeTier, setPreferFreeTier] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -19,6 +21,7 @@ export function Onboarding() {
 
   function handleValidated(p: SupportedOnboardingProvider, key: string, url: string | null) {
     setProvider(p);
+    setPreferFreeTier((current) => (p === 'openrouter' ? current : false));
     setApiKey(key);
     setBaseUrl(url);
     setStep('model');
@@ -63,13 +66,20 @@ export function Onboarding() {
       <div className="relative w-full max-w-[480px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] p-8 flex flex-col gap-6">
         <header className="flex items-center justify-between">
           <Wordmark badge="pre-alpha" />
-          <Stepper current={idx} total={3} />
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <Stepper current={idx} total={3} />
+          </div>
         </header>
 
         {step === 'welcome' ? (
           <Welcome
-            onPickKey={() => setStep('paste')}
+            onPickKey={() => {
+              setPreferFreeTier(false);
+              setStep('paste');
+            }}
             onPickFreeTier={() => {
+              setPreferFreeTier(true);
               setProvider('openrouter');
               setStep('paste');
             }}
@@ -82,6 +92,8 @@ export function Onboarding() {
         {step === 'model' && provider !== null ? (
           <ChooseModel
             provider={provider}
+            preferFreeTier={preferFreeTier}
+            baseUrl={baseUrl}
             saving={saving}
             errorMessage={errorMessage}
             onConfirm={handleConfirm}

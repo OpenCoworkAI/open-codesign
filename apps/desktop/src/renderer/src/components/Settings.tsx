@@ -1020,7 +1020,6 @@ function AdvancedTab() {
       });
   }, [pushToast]);
 
-
   async function updatePref(patch: Partial<Preferences>) {
     if (!window.codesign) return;
     try {

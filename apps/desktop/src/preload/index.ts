@@ -5,6 +5,7 @@ import type {
   LocalInputFile,
   ModelRef,
   OnboardingState,
+  SelectedElement,
   SupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';

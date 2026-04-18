@@ -32,6 +32,8 @@ function resizeTextarea(el: HTMLTextAreaElement): void {
 }
 
 export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
+  const t = useT();
+  const config = useCodesignStore((s) => s.config);
   const messages = useCodesignStore((s) => s.messages);
   const isGenerating = useCodesignStore((s) => s.isGenerating);
   const cancelGeneration = useCodesignStore((s) => s.cancelGeneration);
@@ -43,6 +45,8 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   const pickDesignSystemDirectory = useCodesignStore((s) => s.pickDesignSystemDirectory);
   const clearDesignSystem = useCodesignStore((s) => s.clearDesignSystem);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const designSystem = config?.designSystem ?? null;
 
   useEffect(() => {
     if (taRef.current) resizeTextarea(taRef.current);
@@ -167,7 +171,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
       <div className="flex-1 overflow-y-auto px-5 py-6 space-y-3">
         {messages.length === 0 ? (
           <p className="text-[var(--text-sm)] text-[var(--color-text-muted)] leading-[var(--leading-body)]">
-            Start a conversation. Pick a starter from the preview pane, or type your brief.
+            {t('sidebar.startHint')}
           </p>
         ) : (
           messages.map((m, i) => (
@@ -195,7 +199,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
               resizeTextarea(e.currentTarget);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Describe what to design…"
+            placeholder={t('chat.placeholder')}
             disabled={isGenerating}
             rows={1}
             className="block w-full resize-none bg-transparent px-[var(--space-3)] pt-[var(--space-3)] pb-[calc(var(--space-6)+var(--space-4))] text-[var(--text-sm)] leading-[var(--leading-body)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none min-h-[var(--space-6)] overflow-y-auto"

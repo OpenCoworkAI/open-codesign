@@ -23,7 +23,7 @@ export function Welcome({ onPickKey, onPickFreeTier, ollamaDetected }: WelcomePr
         <PathButton
           icon={<Rocket className="w-[18px] h-[18px]" />}
           title="Try free now"
-          subtitle="OpenRouter free tier — paste an OpenRouter key, then pick a free model."
+          subtitle="OpenRouter free tier - paste an OpenRouter key, then start with openrouter/free or type any model ID."
           onClick={onPickFreeTier}
         />
         <PathButton
@@ -36,7 +36,7 @@ export function Welcome({ onPickKey, onPickFreeTier, ollamaDetected }: WelcomePr
           <PathButton
             icon={<Server className="w-[18px] h-[18px]" />}
             title="Use local model (Ollama detected)"
-            subtitle="Coming in v0.2 — Ollama integration is on the roadmap."
+            subtitle="Coming in v0.2 - Ollama integration is on the roadmap."
             disabled
           />
         ) : null}

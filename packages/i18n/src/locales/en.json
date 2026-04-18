@@ -13,9 +13,12 @@
     "copy": "Copy",
     "copied": "Copied",
     "comingSoon": "Coming soon",
-    "loading": "Loading…",
+    "loading": "Loading\u2026",
     "preAlpha": "pre-alpha",
-    "tagline": "BYOK · local-first · multi-model"
+    "tagline": "BYOK · local-first · multi-model",
+    "done": "Done.",
+    "applied": "Applied.",
+    "working": "Working"
   },
   "preview": {
     "empty": {
@@ -24,7 +27,7 @@
       "starterChip": "Try a starter prompt:"
     },
     "loading": {
-      "title": "Generating your design…"
+      "title": "Generating your design\u2026"
     },
     "error": {
       "title": "Generation failed",
@@ -32,10 +35,13 @@
       "copyError": "Copy error details"
     },
     "ready": "Preview",
-    "noDesign": "No design yet"
+    "noDesign": "No design yet",
+    "clickToComment": "Click any element in the preview to leave an inline comment.",
+    "runtimeError": "Preview runtime error",
+    "dismissErrors": "Dismiss preview errors"
   },
   "chat": {
-    "placeholder": "Describe what to design…",
+    "placeholder": "Describe what to design\u2026",
     "sendShortcut": "Send (Enter)",
     "emptyHint": "Start with a starter prompt or your own idea.",
     "sendAction": "send",
@@ -85,7 +91,7 @@
     },
     "paste": {
       "title": "Paste your API key",
-      "placeholder": "sk-…",
+      "placeholder": "sk-\u2026",
       "recognized": "Detected provider: {{provider}}",
       "connected_one": "Connected {{count}} model",
       "connected_other": "Connected {{count}} models",
@@ -111,12 +117,48 @@
   },
   "commands": {
     "title": "Commands",
-    "placeholder": "Type a command or search…",
+    "placeholder": "Type a command or search\u2026",
+    "noMatches": "No matches.",
+    "openPalette": "Open command palette",
     "items": {
       "newDesign": "New design",
       "toggleTheme": "Toggle theme",
       "openSettings": "Open settings",
       "export": "Export current design"
+    },
+    "hints": {
+      "newDesign": "Clear chat and start fresh",
+      "toggleTheme": "Switch between light and dark",
+      "openSettings": "Models, appearance, storage",
+      "export": "Use the export button in the toolbar"
+    },
+    "tooltips": {
+      "commandPalette": "Command palette  Ctrl/Cmd+K",
+      "settings": "Settings  Ctrl/Cmd+,"
+    },
+    "cleared": "Workspace cleared",
+    "exportUseToolbarTitle": "Use toolbar export",
+    "exportUseToolbarBody": "Use the Export button in the toolbar."
+  },
+  "export": {
+    "button": "Export",
+    "items": {
+      "html": {
+        "label": "HTML",
+        "hint": "Single self-contained .html file"
+      },
+      "pdf": {
+        "label": "PDF",
+        "hint": "Rendered via your installed Chrome"
+      },
+      "pptx": {
+        "label": "PPTX",
+        "hint": "Editable slides; one per <section>"
+      },
+      "zip": {
+        "label": "ZIP bundle",
+        "hint": "index.html + assets + README.md"
+      }
     }
   },
   "notifications": {
@@ -143,7 +185,10 @@
     "providerAuthMissing": "No API key configured. Open Settings to add one.",
     "providerError": "Provider error: {{message}}",
     "ipcBadInput": "Invalid input passed to the main process.",
-    "exporterNotReady": "Exporter is still loading. Try again in a moment."
+    "exporterNotReady": "Exporter is still loading. Try again in a moment.",
+    "rendererDisconnected": "Renderer is not connected to the main process.",
+    "onboardingIncomplete": "Onboarding is not complete.",
+    "unknown": "Unknown error"
   },
   "demos": {
     "meditationApp": {

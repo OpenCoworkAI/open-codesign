@@ -183,6 +183,8 @@ export {
   PROVIDER_SHORTLIST,
   SUPPORTED_ONBOARDING_PROVIDERS,
   SecretRef,
+  STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
+  StoredDesignSystem,
   isSupportedOnboardingProvider,
 } from './config';
 export type {

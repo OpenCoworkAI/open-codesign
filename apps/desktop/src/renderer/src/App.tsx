@@ -1,3 +1,4 @@
+import { useT } from '@open-codesign/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { CommandPalette } from './components/CommandPalette';
 import { PreviewPane } from './components/PreviewPane';
@@ -10,6 +11,7 @@ import { Onboarding } from './onboarding';
 import { useCodesignStore } from './store';
 
 export function App() {
+  const t = useT();
   const config = useCodesignStore((s) => s.config);
   const configLoaded = useCodesignStore((s) => s.configLoaded);
   const loadConfig = useCodesignStore((s) => s.loadConfig);
@@ -90,7 +92,7 @@ export function App() {
   if (!configLoaded) {
     return (
       <div className="h-full flex items-center justify-center bg-[var(--color-background)] text-[var(--text-sm)] text-[var(--color-text-muted)]">
-        Loading…
+        {t('common.loading')}
       </div>
     );
   }
