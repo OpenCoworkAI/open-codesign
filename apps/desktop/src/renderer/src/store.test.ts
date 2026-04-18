@@ -231,7 +231,6 @@ describe('useCodesignStore generation cancellation', () => {
   });
 });
 
-
 describe('useCodesignStore view navigation', () => {
   it('starts on hub view', () => {
     expect(useCodesignStore.getState().view).toBe('hub');
