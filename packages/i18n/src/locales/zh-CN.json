@@ -449,5 +449,78 @@
     "pitch": "为一家金融科技创业公司生成演讲稿前 3 页：标题页、问题页、解决方案页。",
     "mobile": "设计一个 3 屏的移动端引导流程：欢迎、权限请求、第一个动作。",
     "dashboard": "做一个数据看板，含 3 张图：条形图（销量）、折线图（留存）、饼图（细分）。深色主题。"
+  },
+  "hub": {
+    "newDesign": "新建设计",
+    "backToHub": "全部设计",
+    "tabs": {
+      "recent": "最近",
+      "your": "我的设计",
+      "examples": "示例",
+      "designSystems": "设计系统"
+    },
+    "recent": {
+      "title": "最近",
+      "empty": "还没有最近项目——新建一个设计后会出现在这里。"
+    },
+    "your": {
+      "title": "我的设计",
+      "empty": "还没有保存的设计。点击「新建设计」开始第一个项目。",
+      "openAria": "打开 {{name}}"
+    },
+    "examples": {
+      "title": "示例",
+      "comingSoon": "策划中的范例提示词画廊即将上线。"
+    },
+    "designSystems": {
+      "title": "设计系统",
+      "comingSoon": "可复用的品牌系统与模板正在路上。"
+    },
+    "card": {
+      "type": {
+        "prototype": "原型",
+        "slideDeck": "演示稿",
+        "template": "模板",
+        "other": "其他"
+      },
+      "createdAt": "创建于 {{date}}"
+    }
+  },
+  "create": {
+    "title": "新建设计",
+    "subtitle": "选择类型后，我们会按需调整首条提示词。",
+    "close": "关闭",
+    "types": {
+      "prototype": "原型",
+      "slideDeck": "演示稿",
+      "template": "套用模板",
+      "other": "其他"
+    },
+    "typeDescriptions": {
+      "prototype": "带手机或浏览器外框的可点击 UI 原型。",
+      "slideDeck": "用于演讲、路演或总结的多页演示稿。",
+      "template": "从内置范例提示词出发。",
+      "other": "空白画布 — 任何其他想法都可以。"
+    },
+    "fields": {
+      "name": "项目名称",
+      "namePlaceholder": "未命名设计",
+      "fidelity": "保真度",
+      "fidelityWireframe": "线框图",
+      "fidelityWireframeHint": "灰阶方块、无图片 — 适合快速探索。",
+      "fidelityHigh": "高保真",
+      "fidelityHighHint": "完整配色与真实感内容。",
+      "fidelityComingSoon": "线框 / 高保真选择将在后续版本上线。",
+      "speakerNotes": "包含演讲备注",
+      "speakerNotesHint": "为每页幻灯片附加备注，便于现场讲解。",
+      "template": "模板",
+      "templateHint": "选一个起点 — 首条提示词会自动填好。"
+    },
+    "cta": "创建",
+    "disabledHint": "请先填写项目名称。",
+    "help": {
+      "share": "设计仅保存在本机。需要分享时通过打包导出，无需云端账号。",
+      "templates": "更多模板会陆续加入，列表会不断扩展。"
+    }
   }
 }

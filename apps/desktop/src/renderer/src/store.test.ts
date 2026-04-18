@@ -231,8 +231,8 @@ describe('useCodesignStore generation cancellation', () => {
 });
 
 describe('useCodesignStore view navigation', () => {
-  it('starts on workspace view', () => {
-    expect(useCodesignStore.getState().view).toBe('workspace');
+  it('starts on hub view', () => {
+    expect(useCodesignStore.getState().view).toBe('hub');
   });
 
   it('setView("settings") switches to settings and closes command palette', () => {

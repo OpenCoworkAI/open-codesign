@@ -1,11 +1,14 @@
 import { i18n } from '@open-codesign/i18n';
-import type {
-  ChatMessage,
-  LocalInputFile,
-  ModelRef,
-  OnboardingState,
-  SelectedElement,
-  SupportedOnboardingProvider,
+import {
+  type ChatMessage,
+  type LocalInputFile,
+  type ModelRef,
+  type OnboardingState,
+  PROJECT_SCHEMA_VERSION,
+  type Project,
+  type ProjectDraft,
+  type SelectedElement,
+  type SupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
@@ -45,7 +48,8 @@ export interface ConnectionStatus {
 }
 
 export type Theme = 'light' | 'dark';
-export type AppView = 'workspace' | 'settings';
+export type AppView = 'hub' | 'workspace' | 'settings';
+export type HubTab = 'recent' | 'your' | 'examples' | 'designSystems';
 
 interface PromptRequest {
   prompt: string;
@@ -69,6 +73,10 @@ interface CodesignState {
 
   theme: Theme;
   view: AppView;
+  hubTab: HubTab;
+  projects: Project[];
+  currentProjectId: string | null;
+  createProjectModalOpen: boolean;
   commandPaletteOpen: boolean;
   toasts: Toast[];
   iframeErrors: string[];
@@ -108,6 +116,11 @@ interface CodesignState {
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setView: (view: AppView) => void;
+  setHubTab: (tab: HubTab) => void;
+  openCreateProjectModal: () => void;
+  closeCreateProjectModal: () => void;
+  createProject: (draft: ProjectDraft) => Project;
+  openProject: (id: string) => void;
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
 
@@ -116,6 +129,34 @@ interface CodesignState {
 }
 
 const THEME_STORAGE_KEY = 'open-codesign:theme';
+const PROJECTS_STORAGE_KEY = 'open-codesign:projects:v1';
+
+function readStoredProjects(): Project[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p): p is Project =>
+        typeof p === 'object' &&
+        p !== null &&
+        (p as { schemaVersion?: unknown }).schemaVersion === PROJECT_SCHEMA_VERSION,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function persistProjects(projects: Project[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+  } catch {
+    // localStorage unavailable
+  }
+}
 
 function readInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'light';
@@ -292,7 +333,11 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   connectionStatus: { state: 'no_provider', lastTestedAt: null, lastError: null },
 
   theme: readInitialTheme(),
-  view: 'workspace' as AppView,
+  view: 'hub' as AppView,
+  hubTab: 'recent' as HubTab,
+  projects: readStoredProjects(),
+  currentProjectId: null,
+  createProjectModalOpen: false,
   commandPaletteOpen: false,
   toasts: [],
   iframeErrors: [],
@@ -611,6 +656,51 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   setView(view) {
     set({ view, commandPaletteOpen: false });
+  },
+
+  setHubTab(tab) {
+    set({ hubTab: tab });
+  },
+
+  openCreateProjectModal() {
+    set({ createProjectModalOpen: true });
+  },
+
+  closeCreateProjectModal() {
+    set({ createProjectModalOpen: false });
+  },
+
+  createProject(draft) {
+    const now = new Date().toISOString();
+    const project: Project = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: newId(),
+      name: draft.name.trim(),
+      type: draft.type,
+      createdAt: now,
+      updatedAt: now,
+      ...(draft.fidelity ? { fidelity: draft.fidelity } : {}),
+      ...(draft.speakerNotes !== undefined ? { speakerNotes: draft.speakerNotes } : {}),
+      ...(draft.templateId ? { templateId: draft.templateId } : {}),
+    };
+    const next = [project, ...get().projects];
+    persistProjects(next);
+    set({
+      projects: next,
+      currentProjectId: project.id,
+      view: 'workspace',
+      createProjectModalOpen: false,
+      messages: [],
+      previewHtml: null,
+      generationStage: 'idle' as GenerationStage,
+    });
+    return project;
+  },
+
+  openProject(id) {
+    const project = get().projects.find((p) => p.id === id);
+    if (!project) return;
+    set({ currentProjectId: id, view: 'workspace' });
   },
 
   openCommandPalette() {
