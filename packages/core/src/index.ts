@@ -1,5 +1,5 @@
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
-import { complete } from '@open-codesign/providers';
+import { type RetryReason, complete, completeWithRetry } from '@open-codesign/providers';
 import type { Artifact, ChatMessage, ModelRef } from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
 import { SYSTEM_PROMPTS } from '@open-codesign/templates';
@@ -11,6 +11,10 @@ export interface GenerateInput {
   apiKey: string;
   baseUrl?: string;
   systemPrompt?: string;
+  /** Optional cancellation. Threaded through to pi-ai. */
+  signal?: AbortSignal;
+  /** Surfaced for every retry attempt — never silent (PRINCIPLES §10). */
+  onRetry?: (info: RetryReason) => void;
 }
 
 export interface GenerateOutput {
@@ -46,7 +50,9 @@ function collect(events: Iterable<ArtifactEvent>, into: Collected): void {
 /**
  * Generate one design artifact in response to a user prompt.
  * Tier 1: blocking call, returns the parsed artifact list at the end.
- * Tier 2 will switch to streaming with intermediate events.
+ * Wraps the provider call in `completeWithRetry` so transient 5xx/429/network
+ * failures retry with backoff. Caller passes `signal` to cancel and `onRetry`
+ * to surface retry attempts in the UI.
  */
 export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   if (!input.prompt.trim()) {
@@ -59,10 +65,19 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     { role: 'user', content: input.prompt },
   ];
 
-  const result = await complete(input.model, messages, {
-    apiKey: input.apiKey,
-    ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
-  });
+  const result = await completeWithRetry(
+    input.model,
+    messages,
+    {
+      apiKey: input.apiKey,
+      ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+      ...(input.signal !== undefined ? { signal: input.signal } : {}),
+    },
+    {
+      ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
+    },
+    complete,
+  );
 
   const parser = createArtifactParser();
   const collected: Collected = { text: '', artifacts: [] };

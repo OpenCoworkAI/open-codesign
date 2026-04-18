@@ -88,6 +88,24 @@ export const GeneratePayload = z.object({
 });
 export type GeneratePayload = z.infer<typeof GeneratePayload>;
 
+/**
+ * Iframe runtime error event — schema for the postMessage payload sent by
+ * the sandbox overlay (see packages/runtime/src/overlay.ts) when JS inside
+ * the preview throws or rejects unhandled.
+ */
+export const IframeErrorEvent = z.object({
+  __codesign: z.literal(true),
+  type: z.literal('IFRAME_ERROR'),
+  kind: z.enum(['error', 'unhandledrejection']),
+  message: z.string(),
+  source: z.string().optional(),
+  lineno: z.number().optional(),
+  colno: z.number().optional(),
+  stack: z.string().optional(),
+  timestamp: z.number(),
+});
+export type IframeErrorEvent = z.infer<typeof IframeErrorEvent>;
+
 export const BRAND = {
   backgroundColor: '#faf8f3',
 } as const;

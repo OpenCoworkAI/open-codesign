@@ -2,6 +2,8 @@ import { OVERLAY_SCRIPT } from './overlay';
 
 export { OVERLAY_SCRIPT, isOverlayMessage } from './overlay';
 export type { OverlayMessage } from './overlay';
+export { isIframeErrorMessage } from './iframe-errors';
+export type { IframeErrorMessage } from './iframe-errors';
 
 /**
  * Build a complete srcdoc HTML string for the preview iframe.

@@ -6,6 +6,13 @@ const completeMock = vi.fn();
 
 vi.mock('@open-codesign/providers', () => ({
   complete: (...args: unknown[]) => completeMock(...args),
+  completeWithRetry: (
+    _model: unknown,
+    _messages: unknown,
+    _opts: unknown,
+    _retryOpts: unknown,
+    impl: (...args: unknown[]) => unknown,
+  ) => impl(_model, _messages, _opts),
 }));
 
 import { generate } from './index';
