@@ -11,8 +11,6 @@ export interface SidebarProps {
 }
 
 const MAX_TEXTAREA_ROWS = 6;
-const FALLBACK_FONT_SIZE = 13;
-const FALLBACK_LINE_HEIGHT_MULTIPLIER = 1.6;
 
 export function getTextareaLineHeight(el: HTMLTextAreaElement): number {
   const styles = getComputedStyle(el);
@@ -21,12 +19,10 @@ export function getTextareaLineHeight(el: HTMLTextAreaElement): number {
 
   const fontSize = Number.parseFloat(styles.fontSize);
   const leading = Number.parseFloat(styles.getPropertyValue('--leading-body'));
-  const resolvedFontSize =
-    Number.isFinite(fontSize) && fontSize > 0 ? fontSize : FALLBACK_FONT_SIZE;
-  const resolvedLeading =
-    Number.isFinite(leading) && leading > 0 ? leading : FALLBACK_LINE_HEIGHT_MULTIPLIER;
-
-  return resolvedFontSize * resolvedLeading;
+  if (!Number.isFinite(fontSize) || fontSize <= 0 || !Number.isFinite(leading) || leading <= 0) {
+    throw new Error('Textarea sizing tokens (--leading-body / fontSize) are missing or invalid');
+  }
+  return fontSize * leading;
 }
 
 function resizeTextarea(el: HTMLTextAreaElement): void {

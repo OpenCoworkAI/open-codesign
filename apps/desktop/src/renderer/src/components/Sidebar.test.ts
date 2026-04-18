@@ -15,7 +15,7 @@ describe('getTextareaLineHeight', () => {
     expect(getTextareaLineHeight({} as HTMLTextAreaElement)).toBe(24);
   });
 
-  it('falls back to font size and leading-body when line-height is not numeric', () => {
+  it('returns fontSize * leading when line-height is not numeric but tokens are present', () => {
     vi.stubGlobal(
       'getComputedStyle',
       vi.fn(
@@ -29,5 +29,21 @@ describe('getTextareaLineHeight', () => {
     );
 
     expect(getTextareaLineHeight({} as HTMLTextAreaElement)).toBeCloseTo(20.8);
+  });
+
+  it('throws when sizing tokens are missing or invalid', () => {
+    vi.stubGlobal(
+      'getComputedStyle',
+      vi.fn(
+        () =>
+          ({
+            lineHeight: 'normal',
+            fontSize: 'normal',
+            getPropertyValue: vi.fn(() => ''),
+          }) as unknown as CSSStyleDeclaration,
+      ),
+    );
+
+    expect(() => getTextareaLineHeight({} as HTMLTextAreaElement)).toThrow(/missing or invalid/);
   });
 });
