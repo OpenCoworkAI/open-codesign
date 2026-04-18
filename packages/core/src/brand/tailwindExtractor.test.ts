@@ -1,4 +1,6 @@
-import { dirname, resolve } from 'node:path';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { extractFromTailwindConfig } from './tailwindExtractor.js';
@@ -87,5 +89,30 @@ describe('extractFromTailwindConfig()', () => {
     expect(names).toContain('color-accent');
     expect(names).toContain('radius-md');
     expect(names).toContain('shadow-lg');
+  });
+
+  it('does not terminate @theme block on `}` inside a string literal (v4)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tw-extract-'));
+    const file = join(dir, 'tailwind.css');
+    await writeFile(
+      file,
+      '@theme {\n  --font-family-display: "Inter, fallback }";\n  --color-brand-primary: #ff0000;\n}\n',
+    );
+    const tokens = await extractFromTailwindConfig(file);
+    const names = tokens.map((t) => t.name);
+    expect(names).toContain('font-family-display');
+    expect(names).toContain('color-brand-primary');
+  });
+
+  it('ignores `}` inside a CSS comment (v4)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tw-extract-'));
+    const file = join(dir, 'tailwind.css');
+    await writeFile(
+      file,
+      '@theme {\n  /* close brace } in a comment */\n  --color-brand-secondary: #00ff00;\n}\n',
+    );
+    const tokens = await extractFromTailwindConfig(file);
+    const names = tokens.map((t) => t.name);
+    expect(names).toContain('color-brand-secondary');
   });
 });

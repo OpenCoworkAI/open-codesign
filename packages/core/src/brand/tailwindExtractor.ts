@@ -54,17 +54,66 @@ function extractAllSectionBodies(source: string, sectionKey: string): string[] {
 }
 
 // Extract the body of a `{` brace at position `bracePos` in `text`.
+// Quote- and comment-aware so braces inside strings or comments do not
+// terminate blocks early.
 function extractBodyAt(text: string, bracePos: number): string | null {
   if (text[bracePos] !== '{') return null;
+
   let depth = 0;
-  let i = bracePos;
-  while (i < text.length) {
-    if (text[i] === '{') depth++;
-    else if (text[i] === '}') {
+  let quote: '"' | "'" | '`' | null = null;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = bracePos; i < text.length; i++) {
+    const ch = text[i]!;
+    const next = text[i + 1];
+
+    if (inLineComment) {
+      if (ch === '\n') inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch === quote) quote = null;
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+      continue;
+    }
+    if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
       depth--;
       if (depth === 0) return text.slice(bracePos + 1, i);
     }
-    i++;
   }
   return null;
 }
@@ -85,6 +134,15 @@ function stripNestedBlocks(body: string): string {
   return result;
 }
 
+function leafValueFromMatch(m: RegExpMatchArray): string | undefined {
+  const strValue = m[2] ?? m[3];
+  if (strValue !== undefined) return strValue;
+  const arrRaw = m[4];
+  if (arrRaw === undefined) return undefined;
+  const firstEl = arrRaw.match(/['"]?([^'",]+)['"]?/);
+  return firstEl?.[1]?.trim();
+}
+
 // Walk object literal text and collect leaf key→value pairs.
 // Only extracts simple string literals and string arrays; skips functions and spreads.
 function collectLeafPairs(body: string, prefix: string): Array<{ name: string; value: string }> {
@@ -94,35 +152,18 @@ function collectLeafPairs(body: string, prefix: string): Array<{ name: string; v
 
   // Match  key: 'value'  or  key: "value"  or  key: ['a', 'b']  or  key: ["a", "b"]
   const leafRe = /['"]?([\w-]+)['"]?\s*:\s*(?:'([^']+)'|"([^"]+)"|\[(['"]?[^[\]]+['"]?)\])/g;
-  const leafMatches = [...flat.matchAll(leafRe)];
-
-  for (const m of leafMatches) {
+  for (const m of flat.matchAll(leafRe)) {
     const key = m[1];
-    const strValue = m[2] ?? m[3];
-    const arrRaw = m[4];
-
     if (key === undefined) continue;
     if (['DEFAULT', 'screens', 'container'].includes(key)) continue;
-
-    let value: string | undefined;
-    if (strValue !== undefined) {
-      value = strValue;
-    } else if (arrRaw !== undefined) {
-      // Extract first element of the array as the primary value
-      const firstEl = arrRaw.match(/['"]?([^'",]+)['"]?/);
-      value = firstEl?.[1]?.trim();
-    }
-
+    const value = leafValueFromMatch(m);
     if (!value) continue;
-    const name = prefix ? `${prefix}.${key}` : key;
-    results.push({ name, value });
+    results.push({ name: prefix ? `${prefix}.${key}` : key, value });
   }
 
   // Recurse into nested blocks
   const nestedRe = /['"]?([\w-]+)['"]?\s*:\s*\{/g;
-  const nestedMatches = [...body.matchAll(nestedRe)];
-
-  for (const nm of nestedMatches) {
+  for (const nm of body.matchAll(nestedRe)) {
     const subKey = nm[1];
     if (subKey === undefined) continue;
     const subStart = (nm.index ?? 0) + nm[0].length - 1;
@@ -152,65 +193,70 @@ function inferTypeFromCssProp(prop: string, value: string): TokenType | null {
   return null;
 }
 
+function collectV4Declarations(body: string, seen: Set<string>): DesignToken[] {
+  const out: DesignToken[] = [];
+  const declRe = /--([\w-]+)\s*:\s*([^;]+);/g;
+  for (const dm of body.matchAll(declRe)) {
+    const prop = dm[1];
+    const rawValue = dm[2]?.trim();
+    if (!prop || !rawValue) continue;
+    if (seen.has(prop)) continue;
+
+    const tokenType = inferTypeFromCssProp(prop, rawValue);
+    if (!tokenType) continue;
+
+    seen.add(prop);
+    out.push({
+      schemaVersion: 1,
+      type: tokenType,
+      name: prop,
+      value: rawValue,
+      origin: 'tailwind-config',
+      group: prop.split('-').slice(0, 2).join('.'),
+    });
+  }
+  return out;
+}
+
 function extractFromV4Theme(source: string): DesignToken[] {
   const results: DesignToken[] = [];
-
-  const themeBlockRe = /@theme\b[^{]*\{/g;
   const seen = new Set<string>();
+  const themeBlockRe = /@theme\b[^{]*\{/g;
 
   for (const m of source.matchAll(themeBlockRe)) {
     const blockStart = (m.index ?? 0) + m[0].length - 1;
     const body = extractBodyAt(source, blockStart);
     if (!body) continue;
-
-    const declRe = /--([\w-]+)\s*:\s*([^;]+);/g;
-    for (const dm of body.matchAll(declRe)) {
-      const prop = dm[1];
-      const rawValue = dm[2]?.trim();
-      if (!prop || !rawValue) continue;
-      if (seen.has(prop)) continue;
-
-      const tokenType = inferTypeFromCssProp(prop, rawValue);
-      if (!tokenType) continue;
-
-      seen.add(prop);
-      results.push({
-        schemaVersion: 1,
-        type: tokenType,
-        name: prop,
-        value: rawValue,
-        origin: 'tailwind-config',
-        group: prop.split('-').slice(0, 2).join('.'),
-      });
-    }
+    results.push(...collectV4Declarations(body, seen));
   }
 
   return results;
 }
 
+function collectV3SectionTokens(section: TailwindThemeSection, source: string): DesignToken[] {
+  const out: DesignToken[] = [];
+  for (const body of extractAllSectionBodies(source, section.key)) {
+    for (const { name, value } of collectLeafPairs(body, section.key)) {
+      if (!value) continue;
+      // Skip values that look like JS function calls (but allow CSS color functions)
+      if (value.includes('(') && !looksLikeColor(value)) continue;
+      out.push({
+        schemaVersion: 1,
+        type: section.tokenType,
+        name,
+        value,
+        origin: 'tailwind-config',
+        group: name.split('.').slice(0, 2).join('.'),
+      });
+    }
+  }
+  return out;
+}
+
 function extractFromV3Config(source: string): DesignToken[] {
   const results: DesignToken[] = [];
-
   for (const section of THEME_SECTIONS) {
-    const bodies = extractAllSectionBodies(source, section.key);
-
-    for (const body of bodies) {
-      const pairs = collectLeafPairs(body, section.key);
-      for (const { name, value } of pairs) {
-        if (!value) continue;
-        // Skip values that look like JS function calls (but allow CSS color functions)
-        if (value.includes('(') && !looksLikeColor(value)) continue;
-
-        results.push({
-          schemaVersion: 1,
-          type: section.tokenType,
-          name,
-          value,
-          origin: 'tailwind-config',
-          group: name.split('.').slice(0, 2).join('.'),
-        });
-      }
-    }
+    results.push(...collectV3SectionTokens(section, source));
   }
 
   // Deduplicate by name (first occurrence wins — theme.extend listed first usually)
