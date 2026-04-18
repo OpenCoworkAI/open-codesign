@@ -25,6 +25,7 @@
   --color-accent-muted: #f3d9cf;
   --color-accent-soft: rgba(201, 100, 66, 0.08);
   --color-focus-ring: rgba(201, 100, 66, 0.3);
+  --color-on-accent: #ffffff;
 
   /* Text */
   --color-text-primary: #1f1d18;
@@ -118,6 +119,7 @@
   --color-accent-muted: #4a2b22;
   --color-accent-soft: rgba(217, 119, 87, 0.1);
   --color-focus-ring: rgba(217, 119, 87, 0.35);
+  --color-on-accent: #ffffff;
 
   --color-text-primary: #f5f1e8;
   --color-text-secondary: #b8b3a6;

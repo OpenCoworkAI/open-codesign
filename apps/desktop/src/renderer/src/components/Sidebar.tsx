@@ -104,7 +104,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
                 size="sm"
                 label="Stop generation"
                 onClick={cancelGeneration}
-                className="bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] hover:text-white hover:scale-[1.04] active:scale-[0.96] transition-[transform,background-color,color] duration-150 ease-[var(--ease-out)]"
+                className="bg-[var(--color-accent)] text-[var(--color-on-accent)] hover:bg-[var(--color-accent-hover)] hover:text-[var(--color-on-accent)] hover:scale-[1.04] active:scale-[0.96] transition-[transform,background-color,color] duration-150 ease-[var(--ease-out)]"
               >
                 <Square className="w-4 h-4" strokeWidth={0} fill="currentColor" />
               </IconButton>
@@ -114,7 +114,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
                 type="submit"
                 label="Send prompt"
                 disabled={!canSend}
-                className="bg-[var(--color-accent)] text-white shadow-[var(--shadow-soft)] hover:bg-[var(--color-accent-hover)] hover:text-white hover:scale-[1.04] active:scale-[0.96] disabled:opacity-30 disabled:hover:scale-100 transition-[transform,background-color,opacity,color] duration-150 ease-[var(--ease-out)]"
+                className="bg-[var(--color-accent)] text-[var(--color-on-accent)] shadow-[var(--shadow-soft)] hover:bg-[var(--color-accent-hover)] hover:text-[var(--color-on-accent)] hover:scale-[1.04] active:scale-[0.96] disabled:opacity-30 disabled:hover:scale-100 transition-[transform,background-color,opacity,color] duration-150 ease-[var(--ease-out)]"
               >
                 <ArrowUp className="w-4 h-4" strokeWidth={2.4} />
               </IconButton>
