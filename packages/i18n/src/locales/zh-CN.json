@@ -405,6 +405,26 @@
       "prompt": "为一款 AI 效率工具设计现代风格的营销落地页。包含 Hero 区、三个特性卡片、社会证明和行动召唤。整体使用暖色调中性配色。"
     }
   },
+  "examples": {
+    "tab": "范例",
+    "title": "范例",
+    "subtitle": "精选的起点。悬停预览，再把提示词带回输入框。",
+    "empty": "没有匹配该分类的范例。",
+    "useThisPrompt": "使用此提示",
+    "categories": {
+      "all": "全部",
+      "animation": "动画",
+      "ui": "UI",
+      "marketing": "营销",
+      "document": "文档",
+      "dashboard": "看板",
+      "presentation": "演示",
+      "email": "邮件",
+      "mobile": "移动端"
+    },
+    "thumbnailAlt": "{{title}} 预览",
+    "promptUsedToast": "提示词已载入——编辑后即可发送。"
+  },
   "emptyState": {
     "heading": "用心设计。",
     "subline": "描述你想要的。用评论迭代。",

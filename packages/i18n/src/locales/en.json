@@ -406,6 +406,26 @@
       "prompt": "Design a modern marketing landing page for an AI productivity tool. Include a hero section, three feature cards, social proof, and a call to action. Use a warm neutral palette."
     }
   },
+  "examples": {
+    "tab": "Examples",
+    "title": "Examples",
+    "subtitle": "Hand-picked starting points. Hover to preview, then drop the prompt into the composer.",
+    "empty": "No examples match your filter.",
+    "useThisPrompt": "Use this prompt",
+    "categories": {
+      "all": "All",
+      "animation": "Animation",
+      "ui": "UI",
+      "marketing": "Marketing",
+      "document": "Document",
+      "dashboard": "Dashboard",
+      "presentation": "Presentation",
+      "email": "Email",
+      "mobile": "Mobile"
+    },
+    "thumbnailAlt": "{{title}} preview",
+    "promptUsedToast": "Prompt loaded — edit and send when ready."
+  },
   "emptyState": {
     "heading": "Design with intent.",
     "subline": "Describe what you want. Iterate with comments.",
