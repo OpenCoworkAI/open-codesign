@@ -1,4 +1,4 @@
-import { setLocale as applyLocale } from '@open-codesign/i18n';
+import { setLocale as applyLocale, useT } from '@open-codesign/i18n';
 import type {
   OnboardingState,
   PROVIDER_SHORTLIST,
@@ -786,6 +786,7 @@ function AppearanceTab() {
   const theme = useCodesignStore((s) => s.theme);
   const setTheme = useCodesignStore((s) => s.setTheme);
   const pushToast = useCodesignStore((s) => s.pushToast);
+  const t = useT();
   const [locale, setLocale] = useState<string>('en');
 
   useEffect(() => {
@@ -806,8 +807,8 @@ function AppearanceTab() {
     if (!window.codesign?.locale) {
       pushToast({
         variant: 'error',
-        title: 'Failed to save language preference',
-        description: 'Renderer is not connected to the main process.',
+        title: t('errors.localePersistFailed'),
+        description: t('errors.rendererDisconnected'),
       });
       return;
     }
@@ -817,8 +818,8 @@ function AppearanceTab() {
     } catch (err) {
       pushToast({
         variant: 'error',
-        title: 'Failed to save language preference',
-        description: err instanceof Error ? err.message : 'Unknown error',
+        title: t('errors.localePersistFailed'),
+        description: err instanceof Error ? err.message : t('errors.unknown'),
       });
     }
   }
