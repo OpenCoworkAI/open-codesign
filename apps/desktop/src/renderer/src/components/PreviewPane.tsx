@@ -128,6 +128,12 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       </div>
 =======
     const isMobile = previewViewport === 'mobile';
+    const viewportStyle: React.CSSProperties | undefined = isMobile
+      ? {
+          width: 'var(--size-preview-mobile-width)',
+          height: 'var(--size-preview-mobile-height)',
+        }
+      : undefined;
     const iframe = (
       <iframe
         ref={iframeRef}
@@ -140,7 +146,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             ? 'w-full h-full bg-white'
             : 'w-full h-full bg-white rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]'
         }
-        style={isMobile ? { width: '375px', height: '812px' } : undefined}
+        style={viewportStyle}
       />
 >>>>>>> 117e6ee (feat(desktop): mobile/tablet/desktop viewport preview with phone bezel)
     );
@@ -157,10 +163,14 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       );
     } else if (previewViewport === 'tablet') {
       body = (
-        <div className="flex justify-center h-full" style={{ width: '100%' }}>
+        <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
           <div
-            className="relative h-full"
-            style={{ width: 'var(--size-preview-tablet-width)', flexShrink: 0 }}
+            className="relative"
+            style={{
+              width: 'var(--size-preview-tablet-width)',
+              height: 'var(--size-preview-tablet-height)',
+              flexShrink: 0,
+            }}
           >
             <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
             {iframe}
@@ -170,8 +180,15 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       );
     } else {
       body = (
-        <div className="h-full p-6">
-          <div className="relative h-full">
+        <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
+          <div
+            className="relative"
+            style={{
+              width: 'min(100%, var(--size-preview-desktop-width))',
+              height: 'min(100%, var(--size-preview-desktop-height))',
+              flexShrink: 0,
+            }}
+          >
             <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
             {iframe}
             <InlineCommentComposer />

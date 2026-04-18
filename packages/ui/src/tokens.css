@@ -165,6 +165,9 @@
   --size-preview-mobile-notch-width: 120px;
   --size-preview-mobile-notch-height: 30px;
   --size-preview-tablet-width: 768px;
+  --size-preview-tablet-height: 1024px;
+  --size-preview-desktop-width: 1440px;
+  --size-preview-desktop-height: 900px;
 
   /* Motion — subtle, editorial */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
