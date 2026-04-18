@@ -1,6 +1,7 @@
 import {
   CodesignError,
   type Config,
+  PROVIDER_SHORTLIST,
   type SupportedOnboardingProvider,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
@@ -92,4 +93,46 @@ export function toProviderRows(
   }
 
   return rows;
+}
+
+export interface DeleteProviderResult {
+  /** null means tombstone: all providers removed, onboarding should re-run. */
+  nextActive: SupportedOnboardingProvider | null;
+  modelPrimary: string;
+  modelFast: string;
+}
+
+/**
+ * Pure helper: given the current config and the provider to remove, computes
+ * what the next active provider and model values should be.
+ * Extracted for unit-testability without Electron IPC.
+ */
+export function computeDeleteProviderResult(
+  cfg: Config,
+  toDelete: SupportedOnboardingProvider,
+): DeleteProviderResult {
+  const remaining = Object.keys(cfg.secrets)
+    .filter((p) => p !== toDelete)
+    .filter(isSupportedOnboardingProvider);
+
+  if (remaining.length === 0) {
+    return { nextActive: null, modelPrimary: '', modelFast: '' };
+  }
+
+  const keepCurrent = cfg.provider !== toDelete && isSupportedOnboardingProvider(cfg.provider);
+  const nextActive: SupportedOnboardingProvider = keepCurrent
+    ? (cfg.provider as SupportedOnboardingProvider)
+    : (remaining[0] as SupportedOnboardingProvider);
+
+  // Only reset models when the active provider is the one being deleted.
+  if (cfg.provider === toDelete) {
+    const defaults = PROVIDER_SHORTLIST[nextActive];
+    return {
+      nextActive,
+      modelPrimary: defaults.defaultPrimary,
+      modelFast: defaults.defaultFast,
+    };
+  }
+
+  return { nextActive, modelPrimary: cfg.modelPrimary, modelFast: cfg.modelFast };
 }

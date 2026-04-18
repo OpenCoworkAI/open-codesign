@@ -2,6 +2,7 @@ import { CodesignError, type Config } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import {
   assertProviderHasStoredSecret,
+  computeDeleteProviderResult,
   getAddProviderDefaults,
   toProviderRows,
 } from './provider-settings';
@@ -90,5 +91,66 @@ describe('assertProviderHasStoredSecret', () => {
     };
 
     expect(() => assertProviderHasStoredSecret(cfg, 'anthropic')).toThrow(CodesignError);
+  });
+});
+
+describe('computeDeleteProviderResult', () => {
+  it('switches to the next provider default models when the active provider is deleted', () => {
+    const cfg: Config = {
+      version: 1,
+      provider: 'anthropic',
+      modelPrimary: 'claude-sonnet-4-6',
+      modelFast: 'claude-haiku-3',
+      secrets: {
+        anthropic: { ciphertext: 'enc-ant' },
+        openai: { ciphertext: 'enc-oai' },
+      },
+      baseUrls: {},
+    };
+
+    const result = computeDeleteProviderResult(cfg, 'anthropic');
+
+    expect(result.nextActive).toBe('openai');
+    expect(result.modelPrimary).toBe('gpt-4o');
+    expect(result.modelFast).toBe('gpt-4o-mini');
+  });
+
+  it('keeps existing models when a non-active provider is deleted', () => {
+    const cfg: Config = {
+      version: 1,
+      provider: 'anthropic',
+      modelPrimary: 'claude-sonnet-4-6',
+      modelFast: 'claude-haiku-3',
+      secrets: {
+        anthropic: { ciphertext: 'enc-ant' },
+        openai: { ciphertext: 'enc-oai' },
+      },
+      baseUrls: {},
+    };
+
+    const result = computeDeleteProviderResult(cfg, 'openai');
+
+    expect(result.nextActive).toBe('anthropic');
+    expect(result.modelPrimary).toBe('claude-sonnet-4-6');
+    expect(result.modelFast).toBe('claude-haiku-3');
+  });
+
+  it('returns nextActive null and empty models when the last provider is deleted', () => {
+    const cfg: Config = {
+      version: 1,
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      modelFast: 'gpt-4o-mini',
+      secrets: {
+        openai: { ciphertext: 'enc-oai' },
+      },
+      baseUrls: {},
+    };
+
+    const result = computeDeleteProviderResult(cfg, 'openai');
+
+    expect(result.nextActive).toBeNull();
+    expect(result.modelPrimary).toBe('');
+    expect(result.modelFast).toBe('');
   });
 });

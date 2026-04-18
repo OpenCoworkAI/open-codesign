@@ -201,6 +201,37 @@ export function canSaveProvider(
   return form.apiKey.trim().length > 0 && form.validated && !form.validating;
 }
 
+interface ValidateSnapshot {
+  provider: SupportedOnboardingProvider;
+  apiKey: string;
+  baseUrl: string;
+}
+
+/**
+ * Pure reducer used by handleValidate — applies the validation result only when
+ * the current form still matches the snapshot taken before the async call.
+ * Exported for unit testing without a DOM.
+ */
+export function applyValidateResult(
+  current: AddProviderFormState,
+  snapshot: ValidateSnapshot,
+  ok: boolean,
+  message: string | undefined,
+): AddProviderFormState {
+  if (
+    current.provider !== snapshot.provider ||
+    current.apiKey.trim() !== snapshot.apiKey ||
+    current.baseUrl.trim() !== snapshot.baseUrl
+  ) {
+    // Form changed while we were waiting — discard the stale result.
+    return current;
+  }
+  if (ok) {
+    return { ...current, validating: false, validated: true };
+  }
+  return { ...current, validating: false, error: message ?? 'Validation failed' };
+}
+
 function AddProviderModal({
   onSave,
   onClose,
@@ -227,17 +258,25 @@ function AddProviderModal({
 
   async function handleValidate() {
     if (!window.codesign) return;
-    setForm((prev) => ({ ...prev, validating: true, error: null, validated: false }));
-    const trimmedUrl = form.baseUrl.trim();
-    const res = await window.codesign.settings.validateKey({
+    const snapshot = {
       provider: form.provider,
       apiKey: form.apiKey.trim(),
-      ...(trimmedUrl.length > 0 ? { baseUrl: trimmedUrl } : {}),
-    });
-    if (res.ok) {
-      setForm((prev) => ({ ...prev, validating: false, validated: true }));
-    } else {
-      setForm((prev) => ({ ...prev, validating: false, error: res.message }));
+      baseUrl: form.baseUrl.trim(),
+    };
+    setForm((prev) => ({ ...prev, validating: true, error: null, validated: false }));
+    try {
+      const res = await window.codesign.settings.validateKey({
+        provider: snapshot.provider,
+        apiKey: snapshot.apiKey,
+        ...(snapshot.baseUrl.length > 0 ? { baseUrl: snapshot.baseUrl } : {}),
+      });
+      // Discard result if the user changed provider/key/baseUrl while we were waiting.
+      setForm((current) =>
+        applyValidateResult(current, snapshot, res.ok, res.ok ? undefined : res.message),
+      );
+    } finally {
+      // Ensure validating spinner clears even if we discarded the result.
+      setForm((current) => (current.validating ? { ...current, validating: false } : current));
     }
   }
 

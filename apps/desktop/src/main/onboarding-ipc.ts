@@ -13,6 +13,7 @@ import { getLogPath } from './logger';
 import {
   type ProviderRow,
   assertProviderHasStoredSecret,
+  computeDeleteProviderResult,
   getAddProviderDefaults,
   toProviderRows,
 } from './provider-settings';
@@ -239,25 +240,16 @@ export function registerOnboardingIpc(): void {
     delete nextSecrets[raw];
     const nextBaseUrls = { ...(cfg.baseUrls ?? {}) };
     delete nextBaseUrls[raw];
-    // If we deleted the active provider, pick the first remaining one with a secret.
-    // If nothing remains, write a tombstone config so onboarding triggers again.
-    const remaining = Object.keys(nextSecrets).filter(isSupportedOnboardingProvider);
-    // Determine the next active provider: keep current if untouched and valid,
-    // otherwise fall back to the first remaining supported provider.
-    const currentIsSupported = isSupportedOnboardingProvider(cfg.provider);
-    const keepCurrent = cfg.provider !== raw && currentIsSupported;
-    let nextActive: SupportedOnboardingProvider;
-    if (keepCurrent) {
-      nextActive = cfg.provider as SupportedOnboardingProvider;
-    } else if (remaining.length > 0) {
-      nextActive = remaining[0] as SupportedOnboardingProvider;
-    } else {
+
+    const { nextActive, modelPrimary, modelFast } = computeDeleteProviderResult(cfg, raw);
+
+    if (nextActive === null) {
       // No providers left — write a tombstone config so onboarding triggers again.
       const emptyNext: Config = {
         version: 1,
         provider: cfg.provider,
-        modelPrimary: cfg.modelPrimary,
-        modelFast: cfg.modelFast,
+        modelPrimary: '',
+        modelFast: '',
         secrets: {},
         baseUrls: {},
       };
@@ -265,11 +257,12 @@ export function registerOnboardingIpc(): void {
       cachedConfig = emptyNext;
       return toProviderRows(cachedConfig, decryptSecret);
     }
+
     const next: Config = {
       version: 1,
       provider: nextActive,
-      modelPrimary: cfg.modelPrimary,
-      modelFast: cfg.modelFast,
+      modelPrimary,
+      modelFast,
       secrets: nextSecrets,
       baseUrls: nextBaseUrls,
     };
