@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { htmlToMarkdown } from './markdown';
+import { htmlToMarkdown, sanitizeUrl } from './markdown';
 
 const META = { title: 'Demo', schemaVersion: 1 as const };
 
@@ -122,5 +122,57 @@ describe('htmlToMarkdown', () => {
     expect(out).not.toContain('file:');
     expect(out).toContain('v');
     expect(out).toContain('f');
+  });
+});
+
+describe('sanitizeUrl encoded-scheme bypass guard', () => {
+  it('rejects HTML hex-entity encoded javascript scheme', () => {
+    expect(sanitizeUrl('&#x6A;avascript:alert(1)', 'link')).toBeNull();
+  });
+
+  it('rejects HTML decimal-entity encoded javascript scheme', () => {
+    expect(sanitizeUrl('&#106;avascript:alert(1)', 'link')).toBeNull();
+  });
+
+  it('rejects entity-encoded colon javascript scheme', () => {
+    expect(sanitizeUrl('javascript&#58;alert(1)', 'link')).toBeNull();
+  });
+
+  it('rejects URL percent-encoded javascript scheme', () => {
+    expect(sanitizeUrl('%6Aavascript:alert(1)', 'link')).toBeNull();
+  });
+
+  it('rejects javascript scheme with leading whitespace', () => {
+    expect(sanitizeUrl(' javascript:alert(1)', 'link')).toBeNull();
+  });
+
+  it('rejects javascript scheme with leading tab', () => {
+    expect(sanitizeUrl('\tjavascript:alert(1)', 'link')).toBeNull();
+  });
+
+  it('rejects javascript scheme with embedded tab/newline before colon', () => {
+    expect(sanitizeUrl('java\tscript:alert(1)', 'link')).toBeNull();
+    expect(sanitizeUrl('java\nscript:alert(1)', 'link')).toBeNull();
+  });
+
+  it('rejects mixed-case javascript scheme', () => {
+    expect(sanitizeUrl('JavaScript:alert(1)', 'link')).toBeNull();
+  });
+
+  it('still permits safe http/mailto/relative URLs after decoding', () => {
+    expect(sanitizeUrl('https://x.test', 'link')).toBe('https://x.test');
+    expect(sanitizeUrl('mailto:a@b.test', 'link')).toBe('mailto:a@b.test');
+    expect(sanitizeUrl('/foo/bar', 'link')).toBe('/foo/bar');
+    expect(sanitizeUrl('#anchor', 'link')).toBe('#anchor');
+  });
+
+  it('strips entity-encoded javascript when used inside markdown link conversion', () => {
+    const out = htmlToMarkdown('<p><a href="&#x6A;avascript:alert(1)">x</a></p>', {
+      title: 'Demo',
+      schemaVersion: 1,
+    });
+    expect(out).toContain('x');
+    expect(out).not.toContain('javascript:');
+    expect(out).not.toContain('](');
   });
 });

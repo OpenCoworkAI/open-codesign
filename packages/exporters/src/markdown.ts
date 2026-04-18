@@ -151,7 +151,18 @@ function stripTags(input: string): string {
  * drop the link wrapper. Inline `data:image/*` is permitted for images only.
  */
 export function sanitizeUrl(raw: string, kind: 'link' | 'image'): string | null {
-  const value = raw.trim();
+  let value = raw;
+  for (let i = 0; i < 3; i += 1) {
+    const next = decodeEntities(value);
+    if (next === value) break;
+    value = next;
+  }
+  try {
+    value = decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+  value = stripControlChars(value).trim();
   if (!value) return null;
   if (/^(https?:|mailto:)/i.test(value)) return value;
   if (kind === 'image' && /^data:image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp);/i.test(value)) {
@@ -163,10 +174,31 @@ export function sanitizeUrl(raw: string, kind: 'link' | 'image'): string | null 
 
 function decodeEntities(input: string): string {
   return input
+    .replace(/&#x([0-9a-f]+);/gi, (_m, hex: string) => safeFromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_m, dec: string) => safeFromCodePoint(Number.parseInt(dec, 10)))
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'");
+}
+
+function safeFromCodePoint(code: number): string {
+  if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return '';
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return '';
+  }
+}
+
+function stripControlChars(input: string): string {
+  let out = '';
+  for (let i = 0; i < input.length; i += 1) {
+    const code = input.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) continue;
+    out += input[i];
+  }
+  return out;
 }
