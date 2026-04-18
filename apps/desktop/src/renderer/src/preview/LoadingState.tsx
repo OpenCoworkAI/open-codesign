@@ -74,26 +74,26 @@ export function LoadingState({ stage: stageProp, tokenCount: tokenProp }: Loadin
   const progress = STAGE_PROGRESS[stage];
 
   return (
-    <div className="h-full p-6">
+    <div className="h-full p-[var(--space-6)]">
       <div className="h-full w-full rounded-[var(--radius-2xl)] border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden flex flex-col">
         {/* Skeleton header */}
-        <div className="px-6 py-5 border-b border-[var(--color-border-subtle)] space-y-3">
+        <div className="px-[var(--space-6)] py-[var(--space-5)] border-b border-[var(--color-border-subtle)] space-y-3">
           <div className="shimmer h-4 w-40 rounded-[var(--radius-sm)]" />
           <div className="shimmer h-3 w-64 rounded-[var(--radius-sm)]" />
         </div>
         {/* Skeleton body */}
-        <div className="flex-1 grid grid-cols-3 gap-4 p-6">
+        <div className="flex-1 grid grid-cols-3 gap-[var(--space-4)] p-[var(--space-6)]">
           <div className="shimmer rounded-[var(--radius-lg)]" />
           <div className="shimmer rounded-[var(--radius-lg)]" />
           <div className="shimmer rounded-[var(--radius-lg)]" />
         </div>
         {/* Stage feedback bar */}
-        <div className="px-6 py-4 border-t border-[var(--color-border-subtle)] flex flex-col gap-2">
-          <div className="loading-stages flex items-center gap-2 text-[var(--color-text-secondary)] text-sm">
+        <div className="px-[var(--space-6)] py-[var(--space-4)] border-t border-[var(--color-border-subtle)] flex flex-col gap-[var(--space-2)]">
+          <div className="loading-stages flex items-center gap-[var(--space-2)] text-[var(--color-text-secondary)] text-[var(--text-sm)]">
             <StageIcon stage={activeStage} />
             <span className="stage-label">{t(`loading.stage.${activeStage}`)}</span>
             {activeStage === 'streaming' && tokenCount > 0 && (
-              <span className="font-mono text-xs text-[var(--color-text-tertiary)]">
+              <span className="font-mono text-[var(--text-xs)] text-[var(--color-text-tertiary)]">
                 {t('loading.tokens', { count: tokenCount })}
               </span>
             )}
