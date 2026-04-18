@@ -95,6 +95,7 @@
   --size-control-sm: 32px;
   --size-control-md: 40px;
   --size-control-lg: 48px;
+  --size-accent-stripe: 3px;
 
   /* Spacing — strict 4-px scale */
   --space-0_5: 2px;
