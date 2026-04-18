@@ -13,7 +13,7 @@
     "copy": "复制",
     "copied": "已复制",
     "comingSoon": "即将推出",
-    "loading": "加载中\u2026",
+    "loading": "加载中…",
     "preAlpha": "预览版",
     "tagline": "自带密钥 · 本地优先 · 多模型",
     "done": "完成。",
@@ -38,7 +38,7 @@
       "starterChip": "试试这些范例提示词："
     },
     "loading": {
-      "title": "正在生成你的设计\u2026"
+      "title": "正在生成你的设计…"
     },
     "error": {
       "title": "生成失败",
@@ -58,7 +58,8 @@
     "sendAction": "发送",
     "sendAnywhere": "任意位置发送",
     "send": "发送提示词",
-    "stop": "停止生成"
+    "stop": "停止生成",
+    "placeholderRich": "描述你想要的设计… 试试「AI 创业公司的落地页」"
   },
   "sidebar": {
     "localContext": "本地上下文",
@@ -107,7 +108,7 @@
     "paste": {
       "title": "粘贴你的 API Key",
       "description": "自动识别提供商。点击\"测试连通\"验证 Key 与端点后再继续。你的 Key 会使用系统钥匙串加密存储。",
-      "placeholder": "sk-\u2026",
+      "placeholder": "sk-…",
       "recognized": "已识别提供商：{{provider}}",
       "connected_one": "已连接 {{count}} 个模型",
       "connected_other": "已连接 {{count}} 个模型",
@@ -197,7 +198,7 @@
   },
   "commands": {
     "title": "命令面板",
-    "placeholder": "输入命令或搜索\u2026",
+    "placeholder": "输入命令或搜索…",
     "noMatches": "没有匹配项。",
     "openPalette": "打开命令面板",
     "items": {
@@ -256,8 +257,8 @@
     "title": "评论",
     "closeComposer": "关闭局部评论面板",
     "description": "被点击的元素会在画布中保持选中。描述你想调整的视觉或内容变化，open-codesign 会围绕该目标重写产物。",
-    "placeholder": "让这个区块更紧凑、标题更有冲击力，并与已关联的设计系统对齐\u2026",
-    "applying": "应用中\u2026",
+    "placeholder": "让这个区块更紧凑、标题更有冲击力，并与已关联的设计系统对齐…",
+    "applying": "应用中…",
     "applyChange": "应用修改"
   },
   "errors": {
@@ -292,5 +293,18 @@
       "description": "Hero + 特性 + 行动召唤，主色可调。",
       "prompt": "为一款 AI 效率工具设计现代风格的营销落地页。包含 Hero 区、三个特性卡片、社会证明和行动召唤。整体使用暖色调中性配色。"
     }
+  },
+  "emptyState": {
+    "heading": "用心设计。",
+    "subline": "描述你想要的。用评论迭代。",
+    "starters": {
+      "landing": "AI 创业公司的落地页",
+      "pitch": "演讲稿 — 前 3 页",
+      "mobile": "移动端引导（3 屏）",
+      "dashboard": "带 3 张图的数据看板"
+    }
+  },
+  "topbar": {
+    "spendThisWeek": "本周"
   }
 }

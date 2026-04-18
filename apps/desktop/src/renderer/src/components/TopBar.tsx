@@ -12,6 +12,7 @@ const noDragStyle = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
 // Shell badge — mock data. Full cost accounting tracked separately.
 function ByokBadge() {
+  const t = useT();
   const config = useCodesignStore((s) => s.config);
 
   const provider = config?.provider ?? null;
@@ -57,7 +58,7 @@ function ByokBadge() {
             className="ml-1 text-[var(--color-text-muted)]"
             style={{ fontFamily: 'var(--font-sans)' }}
           >
-            this week
+            {t('topbar.spendThisWeek')}
           </span>
         </span>
       </Tooltip>

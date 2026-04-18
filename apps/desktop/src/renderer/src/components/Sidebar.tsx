@@ -199,7 +199,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
               resizeTextarea(e.currentTarget);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Describe a design… try 'Pitch deck for a fintech startup'"
+            placeholder={t('chat.placeholderRich')}
             disabled={isGenerating}
             rows={1}
             className="block w-full resize-none bg-transparent px-[var(--space-3)] pt-[var(--space-3)] pb-[calc(var(--space-6)+var(--space-4))] text-[var(--text-sm)] leading-[var(--leading-body)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none min-h-[var(--space-6)] overflow-y-auto"

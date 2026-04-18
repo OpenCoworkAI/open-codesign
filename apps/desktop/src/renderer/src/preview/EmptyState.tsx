@@ -1,36 +1,40 @@
+import { useT } from '@open-codesign/i18n';
+
 export interface EmptyStateProps {
   onPickStarter: (prompt: string) => void;
 }
 
 interface StarterCard {
-  label: string;
+  labelKey: string;
   prompt: string;
 }
 
 const STARTER_CARDS: StarterCard[] = [
   {
-    label: 'Landing page for an AI startup',
+    labelKey: 'emptyState.starters.landing',
     prompt:
       'Design a modern marketing landing page for an AI startup. Include a bold hero section with tagline, three feature cards, social proof section, and a primary CTA. Use a warm neutral palette with confident typography.',
   },
   {
-    label: 'Pitch deck — first 3 slides',
+    labelKey: 'emptyState.starters.pitch',
     prompt:
       'Design the first 3 slides of a startup pitch deck: (1) cover with company name and tagline, (2) problem slide with headline stat, (3) solution overview with product screenshot placeholder. Clean, investor-ready.',
   },
   {
-    label: 'Mobile app onboarding (3 screens)',
+    labelKey: 'emptyState.starters.mobile',
     prompt:
       'Design 3 mobile onboarding screens shown in a phone frame: welcome splash, key benefit highlight, and permission request. Soft palette, generous white space, progress dots at bottom.',
   },
   {
-    label: 'Data dashboard with 3 charts',
+    labelKey: 'emptyState.starters.dashboard',
     prompt:
       'Design a data analytics dashboard with a top KPI strip (4 metrics) and 3 charts: a line chart for trend, a bar chart for comparison, and a donut chart for composition. Dark mode, dense but readable.',
   },
 ];
 
 export function EmptyState({ onPickStarter }: EmptyStateProps) {
+  const t = useT();
+
   return (
     <div className="h-full flex items-center justify-center px-8 py-12">
       <div className="w-full max-w-xl flex flex-col items-center gap-8">
@@ -40,10 +44,10 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
             className="text-[var(--font-size-display-xl)] leading-[var(--leading-heading)] tracking-[var(--tracking-heading)] text-[var(--color-text-primary)]"
             style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}
           >
-            Design with intent.
+            {t('emptyState.heading')}
           </h1>
           <p className="text-[var(--font-size-body-lg)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
-            Describe what you want. Iterate with comments.
+            {t('emptyState.subline')}
           </p>
         </div>
 
@@ -51,7 +55,7 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
         <div className="w-full grid grid-cols-2 gap-3">
           {STARTER_CARDS.map((card) => (
             <button
-              key={card.label}
+              key={card.labelKey}
               type="button"
               onClick={() => onPickStarter(card.prompt)}
               className="
@@ -70,7 +74,7 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
                 className="block text-[var(--font-size-body-sm)] font-medium leading-[var(--leading-ui)] text-[var(--color-text-primary)] group-hover:text-[var(--color-accent)]"
                 style={{ transition: 'color var(--duration-fast) var(--ease-out)' }}
               >
-                {card.label}
+                {t(card.labelKey)}
               </span>
             </button>
           ))}

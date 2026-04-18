@@ -13,7 +13,7 @@
     "copy": "Copy",
     "copied": "Copied",
     "comingSoon": "Coming soon",
-    "loading": "Loading\u2026",
+    "loading": "Loading…",
     "preAlpha": "pre-alpha",
     "tagline": "BYOK · local-first · multi-model",
     "done": "Done.",
@@ -39,7 +39,7 @@
       "starterChip": "Try a starter prompt:"
     },
     "loading": {
-      "title": "Generating your design\u2026"
+      "title": "Generating your design…"
     },
     "error": {
       "title": "Generation failed",
@@ -53,13 +53,14 @@
     "dismissErrors": "Dismiss preview errors"
   },
   "chat": {
-    "placeholder": "Describe what to design\u2026",
+    "placeholder": "Describe what to design…",
     "sendShortcut": "Send (Enter)",
     "emptyHint": "Start with a starter prompt or your own idea.",
     "sendAction": "send",
     "sendAnywhere": "anywhere",
     "send": "Send prompt",
-    "stop": "Stop generation"
+    "stop": "Stop generation",
+    "placeholderRich": "Describe a design… try 'Pitch deck for a fintech startup'"
   },
   "sidebar": {
     "localContext": "Local context",
@@ -108,7 +109,7 @@
     "paste": {
       "title": "Paste your API key",
       "description": "Auto-detects your provider. Click Test to verify the key and endpoint before continuing. Your key is encrypted with the OS keychain.",
-      "placeholder": "sk-\u2026",
+      "placeholder": "sk-…",
       "recognized": "Detected provider: {{provider}}",
       "connected_one": "Connected {{count}} model",
       "connected_other": "Connected {{count}} models",
@@ -198,7 +199,7 @@
   },
   "commands": {
     "title": "Commands",
-    "placeholder": "Type a command or search\u2026",
+    "placeholder": "Type a command or search…",
     "noMatches": "No matches.",
     "openPalette": "Open command palette",
     "items": {
@@ -257,8 +258,8 @@
     "title": "Comment on",
     "closeComposer": "Close inline comment composer",
     "description": "Clicked elements stay selected in the canvas. Describe the visual or content change you want, and open-codesign will rewrite the artifact around that target.",
-    "placeholder": "Make this section more compact, sharpen the headline, and align it with the linked design system\u2026",
-    "applying": "Applying\u2026",
+    "placeholder": "Make this section more compact, sharpen the headline, and align it with the linked design system…",
+    "applying": "Applying…",
     "applyChange": "Apply change"
   },
   "errors": {
@@ -293,5 +294,18 @@
       "description": "Hero + features + CTA, tunable accent color.",
       "prompt": "Design a modern marketing landing page for an AI productivity tool. Include a hero section, three feature cards, social proof, and a call to action. Use a warm neutral palette."
     }
+  },
+  "emptyState": {
+    "heading": "Design with intent.",
+    "subline": "Describe what you want. Iterate with comments.",
+    "starters": {
+      "landing": "Landing page for an AI startup",
+      "pitch": "Pitch deck — first 3 slides",
+      "mobile": "Mobile app onboarding (3 screens)",
+      "dashboard": "Data dashboard with 3 charts"
+    }
+  },
+  "topbar": {
+    "spendThisWeek": "this week"
   }
 }
