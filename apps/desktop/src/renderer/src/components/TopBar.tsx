@@ -32,19 +32,33 @@ function ByokBadge() {
 
   // Truncate model slug to the key qualifier (e.g. "claude-sonnet-4-5" → "sonnet-4-5")
   const modelLabel = model.replace(/^(claude-|gpt-|gemini-)/, '');
+  // Short label drops a leading provider segment (e.g. "openrouter/elephant-alpha" → "elephant-alpha")
+  const shortModelLabel = modelLabel.includes('/')
+    ? (modelLabel.split('/').pop() ?? modelLabel)
+    : modelLabel;
+  const hasFullForm = shortModelLabel !== modelLabel;
 
   return (
     <div
       className="group flex items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2)] py-[var(--space-1)] select-none"
-      title={t('topbar.byokTitle')}
+      title={`${t('topbar.byokTitle')} — ${providerLabel} · ${modelLabel}`}
     >
-      {/* Provider + model chip — model hidden until hover to keep TopBar uncluttered */}
+      {/* Provider + model chip — short slug always visible; full form expands on hover */}
       <span className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-none">
         {providerLabel}
-        <span className="hidden group-hover:inline">
-          <span className="mx-[var(--space-1)] text-[var(--color-border-strong)]">·</span>
+        <span className="mx-[var(--space-1)] text-[var(--color-border-strong)]">·</span>
+        {hasFullForm ? (
+          <>
+            <span className="text-[var(--color-text-muted)] group-hover:hidden">
+              {shortModelLabel}
+            </span>
+            <span className="hidden text-[var(--color-text-muted)] group-hover:inline">
+              {modelLabel}
+            </span>
+          </>
+        ) : (
           <span className="text-[var(--color-text-muted)]">{modelLabel}</span>
-        </span>
+        )}
       </span>
 
       <span className="w-px h-[var(--size-icon-xs)] bg-[var(--color-border)]" aria-hidden="true" />
