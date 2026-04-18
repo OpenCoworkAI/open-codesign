@@ -1,15 +1,15 @@
 name: Release
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main]
-    paths:
-      - '.changeset/**'
-      - 'packages/**'
-      - 'apps/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: 'Create as draft release'
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,8 +20,13 @@ permissions:
   id-token: write
 
 jobs:
-  release:
-    name: Version PR
+  # ------------------------------------------------------------------
+  # Gate: lint / typecheck / test on ubuntu only (fast, cheap).
+  # Full matrix is already covered by ci.yml on PRs; we just need a
+  # quick sanity pass before we spend runner-minutes on packaging.
+  # ------------------------------------------------------------------
+  gate:
+    name: Gate (lint · typecheck · test)
     runs-on: ubuntu-latest
     if: github.repository == 'OpenCoworkAI/open-codesign'
     steps:
@@ -41,14 +46,144 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # Versioning only. Publishing (npm + GitHub release artifacts) is
-      # intentionally NOT wired up yet — packaging needs code-signing
-      # (Mac notarization, Windows Authenticode) which we do not have.
-      - name: Create Version Pull Request
-        uses: changesets/action@v1
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+  # ------------------------------------------------------------------
+  # Changelog: build release notes from conventional commits.
+  # Runs in parallel with the gate; the build matrix waits for both.
+  # ------------------------------------------------------------------
+  changelog:
+    name: Build changelog
+    runs-on: ubuntu-latest
+    if: github.repository == 'OpenCoworkAI/open-codesign'
+    outputs:
+      changelog: ${{ steps.build.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v4
         with:
-          version: pnpm version-packages
-          commit: 'chore(release): version packages'
-          title: 'chore(release): version packages'
+          fetch-depth: 0
+
+      - name: Build changelog
+        id: build
+        uses: mikepenz/release-changelog-builder-action@v5
+        with:
+          configurationJson: |
+            {
+              "categories": [
+                {
+                  "title": "### Features",
+                  "labels": ["feat"],
+                  "rules": [{ "pattern": "^feat", "on_property": "title" }]
+                },
+                {
+                  "title": "### Bug Fixes",
+                  "labels": ["fix"],
+                  "rules": [{ "pattern": "^fix", "on_property": "title" }]
+                },
+                {
+                  "title": "### Documentation",
+                  "labels": ["docs"],
+                  "rules": [{ "pattern": "^docs", "on_property": "title" }]
+                },
+                {
+                  "title": "### Other Changes",
+                  "rules": [{ "pattern": "^(chore|refactor|perf|test|ci)", "on_property": "title" }]
+                }
+              ],
+              "ignore_labels": ["skip-changelog"],
+              "sort": { "order": "DESC", "on_property": "mergedAt" },
+              "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}"
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ------------------------------------------------------------------
+  # Build: native packaging per platform.
+  # electron-builder reads publish config from electron-builder.yml.
+  # We do NOT sign in v0.1 — notarization deferred to Stage 2.
+  # ------------------------------------------------------------------
+  build:
+    name: Build (${{ matrix.os }})
+    needs: [gate, changelog]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact_glob: 'apps/desktop/release/*.dmg'
+          - os: windows-latest
+            artifact_glob: 'apps/desktop/release/*.exe'
+          - os: ubuntu-latest
+            artifact_glob: 'apps/desktop/release/*.AppImage'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Build all workspace packages (turborepo respects dep graph)
+      - name: Build workspace
+        run: pnpm -r build --filter '!@open-codesign/desktop'
+
+      # Package the Electron app.
+      # CSC_IDENTITY_AUTO_DISCOVERY=false: skip ad-hoc Mac signing prompt.
+      # WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD: intentionally unset (no cert in v0.1).
+      - name: Package desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm --filter @open-codesign/desktop release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+          retention-days: 7
+
+  # ------------------------------------------------------------------
+  # Publish: create (or update draft) GitHub Release and attach files.
+  # ------------------------------------------------------------------
+  publish:
+    name: Publish GitHub Release
+    needs: [build, changelog]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ needs.changelog.outputs.changelog }}
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: dist/**
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
