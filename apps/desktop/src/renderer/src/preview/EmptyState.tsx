@@ -60,7 +60,7 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
                 bg-[var(--color-background-secondary)]
                 px-[var(--space-4)] py-[var(--space-4)]
                 hover:border-[var(--color-accent)] hover:bg-[var(--color-surface-elevated)]
-                hover:-translate-y-[2px] hover:shadow-[var(--shadow-card)]
+                hover:-translate-y-[var(--space-0_5)] hover:shadow-[var(--shadow-card)]
                 active:translate-y-0 active:shadow-none
                 transition-[border-color,background-color,transform,box-shadow]
                 duration-[var(--duration-base)] ease-[var(--ease-out)]

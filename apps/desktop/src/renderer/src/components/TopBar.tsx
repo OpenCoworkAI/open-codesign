@@ -35,27 +35,27 @@ function ByokBadge() {
 
   return (
     <div
-      className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 select-none"
+      className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2)] py-[var(--space-1)] select-none"
       title={t('topbar.byokTitle')}
     >
       {/* Provider + model chip */}
-      <span className="text-[11px] text-[var(--color-text-secondary)] leading-none">
+      <span className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-none">
         {providerLabel}
-        <span className="mx-1 text-[var(--color-border-strong)]">·</span>
+        <span className="mx-[var(--space-1)] text-[var(--color-border-strong)]">·</span>
         <span className="text-[var(--color-text-muted)]">{modelLabel}</span>
       </span>
 
-      <span className="w-px h-3 bg-[var(--color-border)]" aria-hidden="true" />
+      <span className="w-px h-[var(--size-icon-xs)] bg-[var(--color-border)]" aria-hidden="true" />
 
       {/* Cost this week — tabular mono numerals */}
       <Tooltip label={t('topbar.spendTooltip')}>
         <span
-          className="text-[11px] text-[var(--color-text-secondary)] leading-none"
+          className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-none"
           style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
         >
           $0.00
           <span
-            className="ml-1 text-[var(--color-text-muted)]"
+            className="ml-[var(--space-1)] text-[var(--color-text-muted)]"
             style={{ fontFamily: 'var(--font-sans)' }}
           >
             {t('topbar.spendThisWeek')}
@@ -98,14 +98,14 @@ export function TopBar() {
         <div className="flex items-center gap-1">
           <Tooltip label={t('commands.tooltips.commandPalette')}>
             <IconButton label={t('commands.openPalette')} size="sm" onClick={openCommandPalette}>
-              <Command className="w-4 h-4" />
+              <Command className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" />
             </IconButton>
           </Tooltip>
           <LanguageToggle />
           <ThemeToggle />
           <Tooltip label={t('commands.tooltips.settings')}>
             <IconButton label={t('commands.items.openSettings')} size="sm" onClick={openSettings}>
-              <SettingsIcon className="w-4 h-4" />
+              <SettingsIcon className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" />
             </IconButton>
           </Tooltip>
         </div>

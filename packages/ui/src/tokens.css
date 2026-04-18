@@ -81,6 +81,7 @@
   --leading-heading: 1.2;
   --leading-ui: 1.4;
   --leading-body: 1.6;
+  --leading-snug: 1.5;
 
   /* Letter spacing */
   --tracking-heading: -0.01em;
@@ -95,8 +96,11 @@
   --size-control-lg: 48px;
 
   /* Spacing — strict 4-px scale */
+  --space-0_5: 2px;
   --space-1: 4px;
+  --space-1_5: 6px;
   --space-2: 8px;
+  --space-2_5: 10px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
@@ -105,6 +109,12 @@
   --space-12: 48px;
   --space-16: 64px;
   --space-content: 24px;
+
+  /* Icon sizes */
+  --size-icon-xs: 12px;
+  --size-icon-sm: 14px;
+  --size-icon-md: 16px;
+  --size-input-height: 40px;
 
   /* Radius — slightly larger, friendlier */
   --radius-sm: 6px;
@@ -117,6 +127,7 @@
   /* Motion — subtle, editorial */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 120ms;
+  --duration-faster: 150ms;
   --duration-base: 200ms;
   --duration-slow: 300ms;
   --transition-base: all var(--duration-base) var(--ease-out);
