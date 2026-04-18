@@ -293,6 +293,11 @@
     "byokTitle": "BYOK — bring-your-own-key. Full usage tracking coming soon.",
     "spendTooltip": "Spending this week (full tracking coming soon)"
   },
+  "theme": {
+    "toggleAria": "Toggle theme",
+    "switchToLight": "Switch to light",
+    "switchToDark": "Switch to dark"
+  },
   "commands": {
     "title": "Commands",
     "placeholder": "Type a command or search…",
