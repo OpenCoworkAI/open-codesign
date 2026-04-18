@@ -113,7 +113,6 @@ describe('registerOnboardingIpc — channel versioning', () => {
     }
   });
 });
-
 describe('registerOnboardingIpc — validate-key passes baseUrl to pingProvider', () => {
   it('forwards baseUrl to pingProvider when provided', async () => {
     const { pingProvider } = await import('@open-codesign/providers');
@@ -142,5 +141,32 @@ describe('registerOnboardingIpc — validate-key passes baseUrl to pingProvider'
     await handler?.({} as unknown, { provider: 'anthropic', apiKey: 'sk-ant-test' });
 
     expect(pingProvider).toHaveBeenCalledWith('anthropic', 'sk-ant-test', undefined);
+  });
+});
+
+describe('getApiKeyForProvider — API key retrieval', () => {
+  it('returns the decrypted key when the provider secret exists in config', async () => {
+    const { loadConfigOnBoot, getApiKeyForProvider } = await import('./onboarding-ipc');
+
+    // Override readConfig to return a config with an anthropic secret.
+    const { readConfig } = await import('./config');
+    vi.mocked(readConfig).mockResolvedValueOnce({
+      version: 1,
+      provider: 'anthropic',
+      modelPrimary: 'claude-sonnet-4-6',
+      modelFast: 'claude-haiku-3',
+      secrets: { anthropic: { ciphertext: 'enc:sk-ant-test' } },
+      baseUrls: {},
+    });
+
+    await loadConfigOnBoot();
+    const key = getApiKeyForProvider('anthropic');
+    // decryptSecret mock strips the 'enc:' prefix.
+    expect(key).toBe('sk-ant-test');
+  });
+
+  it('throws PROVIDER_KEY_MISSING when provider has no stored secret', async () => {
+    const { getApiKeyForProvider } = await import('./onboarding-ipc');
+    expect(() => getApiKeyForProvider('openai')).toThrow(/PROVIDER_KEY_MISSING|No API key stored/);
   });
 });

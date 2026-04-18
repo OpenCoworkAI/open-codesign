@@ -11,6 +11,7 @@ import {
 import { Button } from '@open-codesign/ui';
 import {
   AlertTriangle,
+  ArrowLeft,
   CheckCircle,
   ChevronDown,
   Cpu,
@@ -574,6 +575,12 @@ function ActiveModelSelector({
   const [fast, setFast] = useState(config.modelFast ?? sl.defaultFast);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Sync local state when the config changes (e.g. provider re-activated with different models).
+  useEffect(() => {
+    setPrimary(config.modelPrimary ?? sl.defaultPrimary);
+    setFast(config.modelFast ?? sl.defaultFast);
+  }, [config.modelPrimary, config.modelFast, sl.defaultPrimary, sl.defaultFast]);
+
   useEffect(() => {
     return () => {
       if (saveTimeout.current !== null) {
@@ -756,6 +763,22 @@ function ModelsTab() {
 
 // ─── Appearance tab ───────────────────────────────────────────────────────────
 
+/**
+ * Applies a locale change end-to-end:
+ *   1. Persists it via the IPC bridge (writes to disk on the main process)
+ *   2. Changes the active i18next language so React components re-render
+ *
+ * Exported so it can be unit-tested without a DOM.
+ */
+export async function applyLocaleChange(
+  locale: string,
+  localeApi: { set: (locale: string) => Promise<string> } | undefined,
+): Promise<string> {
+  const persisted = localeApi ? await localeApi.set(locale) : locale;
+  const applied = await applyLocale(persisted);
+  return applied;
+}
+
 function AppearanceTab() {
   const theme = useCodesignStore((s) => s.theme);
   const setTheme = useCodesignStore((s) => s.setTheme);
@@ -779,8 +802,7 @@ function AppearanceTab() {
   async function handleLocaleChange(v: string) {
     if (!window.codesign) return;
     try {
-      const persisted = await window.codesign.locale.set(v);
-      const applied = await applyLocale(persisted);
+      const applied = await applyLocaleChange(v, window.codesign.locale);
       setLocale(applied);
     } catch (err) {
       pushToast({
@@ -892,7 +914,7 @@ function PathRow({ label, value, onOpen }: { label: string; value: string; onOpe
 
 function StorageTab() {
   const pushToast = useCodesignStore((s) => s.pushToast);
-  const closeSettings = useCodesignStore((s) => s.closeSettings);
+  const setView = useCodesignStore((s) => s.setView);
   const completeOnboarding = useCodesignStore((s) => s.completeOnboarding);
   const [paths, setPaths] = useState<AppPaths | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -928,7 +950,7 @@ function StorageTab() {
     await window.codesign.settings.resetOnboarding();
     const newState = await window.codesign.onboarding.getState();
     completeOnboarding(newState);
-    closeSettings();
+    setView('workspace');
     pushToast({ variant: 'info', title: 'Onboarding reset. Restart the app to re-run setup.' });
     setConfirmReset(false);
   }
@@ -1094,30 +1116,28 @@ function AdvancedTab() {
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
 export function Settings() {
-  const open = useCodesignStore((s) => s.settingsOpen);
-  const close = useCodesignStore((s) => s.closeSettings);
+  const setView = useCodesignStore((s) => s.setView);
   const [tab, setTab] = useState<Tab>('models');
 
-  if (!open) return null;
-
   return (
-    <div
-      // biome-ignore lint/a11y/useSemanticElements: native <dialog> top-layer rendering interferes with our overlay stack
-      role="dialog"
-      aria-modal="true"
-      aria-label="Settings"
-      className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[var(--color-overlay)] animate-[overlay-in_120ms_ease-out]"
-      onClick={close}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') close();
-      }}
-    >
-      <div
-        className="w-full max-w-3xl h-[36rem] rounded-[var(--radius-2xl)] bg-[var(--color-background)] border border-[var(--color-border)] shadow-[var(--shadow-elevated)] grid grid-cols-[11rem_1fr] overflow-hidden animate-[panel-in_160ms_ease-out]"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-        role="document"
-      >
+    <div className="h-full flex flex-col bg-[var(--color-background)]">
+      <header className="flex items-center gap-3 px-5 h-12 border-b border-[var(--color-border)] shrink-0">
+        <button
+          type="button"
+          onClick={() => setView('workspace')}
+          className="inline-flex items-center gap-1.5 text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+          aria-label="Back to workspace"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Workspace
+        </button>
+        <span className="text-[var(--color-text-muted)]">/</span>
+        <span className="text-[var(--text-sm)] font-semibold text-[var(--color-text-primary)] capitalize">
+          {tab}
+        </span>
+      </header>
+
+      <div className="flex-1 grid grid-cols-[11rem_1fr] min-h-0">
         <aside className="bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] p-3">
           <div className="flex items-center gap-2 px-2 py-2 mb-2">
             <Sliders className="w-4 h-4 text-[var(--color-text-secondary)]" />
@@ -1148,21 +1168,11 @@ export function Settings() {
           </nav>
         </aside>
 
-        <section className="flex flex-col min-w-0">
-          <header className="flex items-center justify-between px-5 h-12 border-b border-[var(--color-border)] shrink-0">
-            <h2 className="text-[var(--text-sm)] font-semibold text-[var(--color-text-primary)] capitalize">
-              {tab}
-            </h2>
-            <Button variant="ghost" size="sm" onClick={close} aria-label="Close settings">
-              <X className="w-4 h-4" />
-            </Button>
-          </header>
-          <div className="flex-1 overflow-y-auto p-5">
-            {tab === 'models' ? <ModelsTab /> : null}
-            {tab === 'appearance' ? <AppearanceTab /> : null}
-            {tab === 'storage' ? <StorageTab /> : null}
-            {tab === 'advanced' ? <AdvancedTab /> : null}
-          </div>
+        <section className="flex flex-col min-h-0 overflow-y-auto p-5">
+          {tab === 'models' ? <ModelsTab /> : null}
+          {tab === 'appearance' ? <AppearanceTab /> : null}
+          {tab === 'storage' ? <StorageTab /> : null}
+          {tab === 'advanced' ? <AdvancedTab /> : null}
         </section>
       </div>
     </div>

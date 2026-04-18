@@ -17,11 +17,10 @@ export function App() {
   const loadConfig = useCodesignStore((s) => s.loadConfig);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
   const isGenerating = useCodesignStore((s) => s.isGenerating);
-  const openSettings = useCodesignStore((s) => s.openSettings);
-  const closeSettings = useCodesignStore((s) => s.closeSettings);
+  const setView = useCodesignStore((s) => s.setView);
   const openCommandPalette = useCodesignStore((s) => s.openCommandPalette);
   const closeCommandPalette = useCodesignStore((s) => s.closeCommandPalette);
-  const settingsOpen = useCodesignStore((s) => s.settingsOpen);
+  const view = useCodesignStore((s) => s.view);
   const commandPaletteOpen = useCodesignStore((s) => s.commandPaletteOpen);
 
   const [prompt, setPrompt] = useState('');
@@ -55,7 +54,7 @@ export function App() {
         combo: 'mod+,',
         handler: () => {
           if (!ready) return;
-          openSettings();
+          setView('settings');
         },
       },
       {
@@ -68,7 +67,7 @@ export function App() {
       {
         combo: 'escape',
         handler: () => {
-          if (settingsOpen) closeSettings();
+          if (view === 'settings') setView('workspace');
           else if (commandPaletteOpen) closeCommandPalette();
         },
         preventDefault: false,
@@ -79,11 +78,10 @@ export function App() {
       isGenerating,
       ready,
       sendPrompt,
-      settingsOpen,
+      view,
       commandPaletteOpen,
-      openSettings,
+      setView,
       openCommandPalette,
-      closeSettings,
       closeCommandPalette,
     ],
   );
@@ -104,13 +102,18 @@ export function App() {
   return (
     <div className="h-full flex flex-col bg-[var(--color-background)]">
       <TopBar />
-      <div className="flex-1 grid grid-cols-[360px_1fr] min-h-0">
-        <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
-        <main className="flex flex-col min-h-0">
-          <PreviewPane onPickStarter={(p) => setPrompt(p)} />
-        </main>
+      <div className="flex-1 min-h-0">
+        {view === 'settings' ? (
+          <Settings />
+        ) : (
+          <div className="h-full grid grid-cols-[360px_1fr]">
+            <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
+            <main className="flex flex-col min-h-0">
+              <PreviewPane onPickStarter={(p) => setPrompt(p)} />
+            </main>
+          </div>
+        )}
       </div>
-      <Settings />
       <CommandPalette />
       <ToastViewport />
     </div>

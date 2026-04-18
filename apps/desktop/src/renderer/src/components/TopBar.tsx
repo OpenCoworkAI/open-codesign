@@ -71,7 +71,7 @@ export function TopBar() {
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const isGenerating = useCodesignStore((s) => s.isGenerating);
   const errorMessage = useCodesignStore((s) => s.errorMessage);
-  const openSettings = useCodesignStore((s) => s.openSettings);
+  const setView = useCodesignStore((s) => s.setView);
   const openCommandPalette = useCodesignStore((s) => s.openCommandPalette);
 
   let crumb = t('preview.noDesign');
@@ -104,7 +104,11 @@ export function TopBar() {
           <LanguageToggle />
           <ThemeToggle />
           <Tooltip label={t('commands.tooltips.settings')}>
-            <IconButton label={t('commands.items.openSettings')} size="sm" onClick={openSettings}>
+            <IconButton
+              label={t('commands.items.openSettings')}
+              size="sm"
+              onClick={() => setView('settings')}
+            >
               <SettingsIcon className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" />
             </IconButton>
           </Tooltip>

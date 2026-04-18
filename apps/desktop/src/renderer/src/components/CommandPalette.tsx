@@ -15,7 +15,7 @@ export function CommandPalette() {
   const t = useT();
   const open = useCodesignStore((s) => s.commandPaletteOpen);
   const close = useCodesignStore((s) => s.closeCommandPalette);
-  const openSettings = useCodesignStore((s) => s.openSettings);
+  const setView = useCodesignStore((s) => s.setView);
   const toggleTheme = useCodesignStore((s) => s.toggleTheme);
   const pushToast = useCodesignStore((s) => s.pushToast);
 
@@ -52,7 +52,7 @@ export function CommandPalette() {
         label: t('commands.items.openSettings'),
         hint: t('commands.hints.openSettings'),
         icon: SettingsIcon,
-        run: openSettings,
+        run: () => setView('settings'),
       },
       {
         id: 'export',
@@ -67,7 +67,7 @@ export function CommandPalette() {
           }),
       },
     ],
-    [openSettings, pushToast, t, toggleTheme],
+    [setView, pushToast, t, toggleTheme],
   );
 
   const filtered = useMemo(() => {
