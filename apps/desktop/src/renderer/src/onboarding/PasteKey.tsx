@@ -496,18 +496,14 @@ function DetectLine({ state, helpUrl, t }: DetectLineProps) {
     return (
       <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
         <AlertCircle className="w-4 h-4 shrink-0" />
-        <span>
-          {t('onboarding.paste.errors.detectIpc', { message: state.message })}
-        </span>
+        <span>{t('onboarding.paste.errors.detectIpc', { message: state.message })}</span>
       </div>
     );
   }
   return (
     <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
       <AlertCircle className="w-4 h-4 shrink-0" />
-      <span>
-        {t('onboarding.paste.errors.detectNetwork', { message: state.message })}
-      </span>
+      <span>{t('onboarding.paste.errors.detectNetwork', { message: state.message })}</span>
     </div>
   );
 }

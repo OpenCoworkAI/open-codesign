@@ -13,6 +13,7 @@
  */
 
 import i18next from 'i18next';
+import { useCallback } from 'react';
 import { initReactI18next, useTranslation } from 'react-i18next';
 import en from './locales/en.json';
 import zhCN from './locales/zh-CN.json';
@@ -104,8 +105,13 @@ export function getCurrentLocale(): Locale {
 }
 
 export function useT(): (key: string, options?: Record<string, unknown>) => string {
-  const { t } = useTranslation();
-  return (key, options) => t(key, options ?? {}) as string;
+  const { t, i18n } = useTranslation();
+  // Memoize keyed on the active language so that `useEffect` dependency
+  // arrays holding this function only re-run when the locale actually
+  // changes, not on every render (react-i18next's `t` identity is not
+  // stable across renders).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: identity must track locale, not `t`.
+  return useCallback((key, options) => t(key, options ?? {}) as string, [i18n.language]);
 }
 
 export { i18next as i18n };
