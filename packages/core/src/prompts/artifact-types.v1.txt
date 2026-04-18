@@ -29,8 +29,8 @@ The floor is the lower bound. Each section must carry real content — a title, 
 | `pricing` | 4 | headline · tier grid (3 tiers minimum, with feature matrix or per-tier feature list) · FAQ or comparison · CTA |
 | `slide` | 1 | one rectangle, one idea, hierarchy across at least three type sizes |
 | `email` | 5 | preheader · headline · body with one image or accent · CTA · footer |
-| `one_pager` | 6 | hero · 3 supporting blocks · evidence (numbers, quote, or chart) · CTA |
-| `report` | 7 | cover · TL;DR · 3 finding sections · methodology · conclusion |
+| `one_pager` | 6 | hero · supporting block 1 · supporting block 2 · supporting block 3 · evidence (numbers, quote, or chart) · CTA |
+| `report` | 7 | cover · TL;DR · finding 1 · finding 2 · finding 3 · methodology · conclusion |
 
 If the design would render fewer sections than the floor, the design is wrong — add depth before shipping.
 
