@@ -1,4 +1,4 @@
-import { setLocale as applyLocale, useT } from '@open-codesign/i18n';
+import { i18n, setLocale as applyLocale, useT } from '@open-codesign/i18n';
 import type {
   ErrorCode,
   OnboardingState,
@@ -260,14 +260,21 @@ function AddProviderModal({
 
   const [form, setForm] = useState<AddProviderFormState>(makeDefaultForm('anthropic'));
   const [logsFolder, setLogsFolder] = useState<string | undefined>(undefined);
+  const pushToast = useCodesignStore((s) => s.pushToast);
 
   useEffect(() => {
     if (!window.codesign) return;
     void window.codesign.settings
       .getPaths()
       .then((p) => setLogsFolder(p.logsFolder))
-      .catch(() => undefined);
-  }, []);
+      .catch((err: unknown) => {
+        pushToast({
+          variant: 'error',
+          title: i18n.t('settings.storage.pathsLoadFailed') as string,
+          description: err instanceof Error ? err.message : String(err),
+        });
+      });
+  }, [pushToast]);
 
   function setField<K extends keyof AddProviderFormState>(k: K, v: AddProviderFormState[K]) {
     setForm((prev) => ({ ...prev, [k]: v, error: null, errorCode: null, validated: false }));
