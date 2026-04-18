@@ -8,27 +8,24 @@ import {
 import { Button } from '@open-codesign/ui';
 import { AlertCircle, CheckCircle2, ExternalLink, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  ConnectionTestError,
-  ConnectionTestResult,
-  ValidateKeyError,
-  ValidateKeyResult,
-} from '../../../preload/index';
+import type { ConnectionTestError } from '../../../preload/index';
 
-const VALIDATE_DEBOUNCE_MS = 500;
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-type ValidationState =
+type DetectState =
   | { kind: 'idle' }
   | { kind: 'detecting' }
-  | { kind: 'validating' }
-  | { kind: 'ok'; modelCount: number }
-  | { kind: 'error'; code: ValidateKeyError['code'] | 'unsupported'; message: string };
+  | { kind: 'detected'; provider: SupportedOnboardingProvider }
+  | { kind: 'unknown' };
 
-type ConnectionState =
-  | { kind: 'idle' }
-  | { kind: 'testing' }
-  | { kind: 'ok' }
-  | { kind: 'error'; code: ConnectionTestError['code']; hint: string };
+// Single authoritative connection state — no separate ValidationState.
+type ConnectionCheck =
+  | { status: 'idle' }
+  | { status: 'testing' }
+  | { status: 'ok' }
+  | { status: 'failed'; code: ConnectionTestError['code']; hint: string };
 
 interface PasteKeyProps {
   onValidated: (
@@ -39,14 +36,33 @@ interface PasteKeyProps {
   onBack: () => void;
 }
 
-function getErrorHint(code: ConnectionTestError['code']): string {
+// ---------------------------------------------------------------------------
+// Default base URLs — must mirror buildDefaultBaseUrl in connection-ipc.ts
+// ---------------------------------------------------------------------------
+
+function defaultBaseUrl(provider: SupportedOnboardingProvider): string {
+  switch (provider) {
+    case 'anthropic':
+      return 'https://api.anthropic.com';
+    case 'openai':
+      return 'https://api.openai.com/v1';
+    case 'openrouter':
+      return 'https://openrouter.ai/api/v1';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Error hint for connection failures
+// ---------------------------------------------------------------------------
+
+function connectionHint(code: ConnectionTestError['code']): string {
   switch (code) {
     case '401':
-      return 'API key invalid or unauthorized.';
+      return 'API key invalid or unauthorized. Check it in your provider dashboard.';
     case '404':
       return 'Base URL path wrong. Try adding /v1 suffix (e.g. https://your-host/v1).';
     case 'ECONNREFUSED':
-      return 'Cannot reach base URL. Check domain/port/network.';
+      return 'Cannot reach base URL. Check domain / port / network.';
     case 'NETWORK':
       return 'Network error. Check your connection.';
     case 'PARSE':
@@ -56,15 +72,51 @@ function getErrorHint(code: ConnectionTestError['code']): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Provider detection helper (extracted to keep useEffect complexity low)
+// ---------------------------------------------------------------------------
+
+async function detectProvider(
+  trimmed: string,
+  reqId: number,
+  reqIdRef: { current: number },
+  setDetectState: (s: DetectState) => void,
+  setConnCheck: (s: ConnectionCheck) => void,
+): Promise<void> {
+  if (!window.codesign) {
+    setDetectState({ kind: 'unknown' });
+    return;
+  }
+  let detected: string | null;
+  try {
+    detected = await window.codesign.detectProvider(trimmed);
+  } catch {
+    if (reqId !== reqIdRef.current) return;
+    setDetectState({ kind: 'unknown' });
+    return;
+  }
+  if (reqId !== reqIdRef.current) return;
+  if (detected !== null && isSupportedOnboardingProvider(detected)) {
+    setDetectState({ kind: 'detected', provider: detected });
+  } else {
+    setDetectState({ kind: 'unknown' });
+  }
+  // Changing the key always resets the connection check.
+  setConnCheck({ status: 'idle' });
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState<ProxyPresetId | ''>('');
-  const [provider, setProvider] = useState<SupportedOnboardingProvider | null>(null);
-  const [state, setState] = useState<ValidationState>({ kind: 'idle' });
-  const [connState, setConnState] = useState<ConnectionState>({ kind: 'idle' });
-  const reqIdRef = useRef(0);
+  const [detectState, setDetectState] = useState<DetectState>({ kind: 'idle' });
+  const [connCheck, setConnCheck] = useState<ConnectionCheck>({ status: 'idle' });
+  const detectReqRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -74,131 +126,84 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
   const trimmed = apiKey.trim();
   const trimmedBaseUrl = baseUrl.trim();
 
+  // Derived: the provider from detect state (if known)
+  const detectedProvider = detectState.kind === 'detected' ? detectState.provider : null;
+
+  // Detect provider on key change (lightweight prefix-match IPC, no network auth)
+  useEffect(() => {
+    if (trimmed.length === 0) {
+      setDetectState({ kind: 'idle' });
+      setConnCheck({ status: 'idle' });
+      return;
+    }
+    setDetectState({ kind: 'detecting' });
+    const reqId = ++detectReqRef.current;
+    const handle = window.setTimeout(
+      () => void detectProvider(trimmed, reqId, detectReqRef, setDetectState, setConnCheck),
+      300,
+    );
+    return () => window.clearTimeout(handle);
+  }, [trimmed]);
+
+  function handleBaseUrlChange(value: string) {
+    setBaseUrl(value);
+    setConnCheck({ status: 'idle' });
+  }
+
   function handlePresetChange(presetId: string) {
     if (presetId === '') {
       setSelectedPresetId('');
       setBaseUrl('');
+      setConnCheck({ status: 'idle' });
       return;
     }
     const preset = PROXY_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     setSelectedPresetId(preset.id as ProxyPresetId);
     setBaseUrl(preset.baseUrl);
-    if (preset.id !== 'custom') {
-      setAdvancedOpen(true);
-    }
-    setConnState({ kind: 'idle' });
+    if (preset.id !== 'custom') setAdvancedOpen(true);
+    setConnCheck({ status: 'idle' });
   }
 
-  useEffect(() => {
-    if (trimmed.length === 0) {
-      setProvider(null);
-      setState({ kind: 'idle' });
-      return;
-    }
+  // The effective base URL passed to connection.test:
+  // – if user typed something, use that
+  // – otherwise fall back to the provider's official default (same as main-process default)
+  function effectiveBaseUrl(): string {
+    if (trimmedBaseUrl.length > 0) return trimmedBaseUrl;
+    if (detectedProvider !== null) return defaultBaseUrl(detectedProvider);
+    return '';
+  }
 
-    setState({ kind: 'detecting' });
-    const reqId = ++reqIdRef.current;
+  async function handleTest() {
+    if (!detectedProvider || trimmed.length === 0) return;
+    const baseUrlForTest = effectiveBaseUrl();
+    if (baseUrlForTest.length === 0) return;
 
-    const handle = window.setTimeout(async () => {
-      if (!window.codesign) {
-        setState({
-          kind: 'error',
-          code: 'network',
-          message: 'Renderer is not connected to the main process.',
-        });
-        return;
-      }
-      let detected: string | null;
-      try {
-        detected = await window.codesign.detectProvider(trimmed);
-      } catch (err) {
-        if (reqId !== reqIdRef.current) return;
-        setState({
-          kind: 'error',
-          code: 'network',
-          message: err instanceof Error ? err.message : 'Provider detection failed.',
-        });
-        return;
-      }
-      if (reqId !== reqIdRef.current) return;
-
-      if (detected === null) {
-        setProvider(null);
-        setState({
-          kind: 'error',
-          code: 'unsupported',
-          message:
-            'Unrecognized key prefix. Supported: sk-ant- (Anthropic), sk- (OpenAI), sk-or- (OpenRouter).',
-        });
-        return;
-      }
-      if (!isSupportedOnboardingProvider(detected)) {
-        setProvider(null);
-        setState({
-          kind: 'error',
-          code: 'unsupported',
-          message: `${detected} is not supported in v0.1. Use Anthropic, OpenAI, or OpenRouter.`,
-        });
-        return;
-      }
-      setProvider(detected);
-      setState({ kind: 'validating' });
-
-      let result: ValidateKeyResult | ValidateKeyError;
-      try {
-        result = await window.codesign.onboarding.validateKey({
-          provider: detected,
-          apiKey: trimmed,
-          ...(trimmedBaseUrl.length > 0 ? { baseUrl: trimmedBaseUrl } : {}),
-        });
-      } catch (err) {
-        if (reqId !== reqIdRef.current) return;
-        setState({
-          kind: 'error',
-          code: 'network',
-          message: err instanceof Error ? err.message : 'Validation request failed.',
-        });
-        return;
-      }
-      if (reqId !== reqIdRef.current) return;
-
-      if (result.ok) {
-        setState({ kind: 'ok', modelCount: result.modelCount });
-      } else {
-        setState({ kind: 'error', code: result.code, message: result.message });
-      }
-    }, VALIDATE_DEBOUNCE_MS);
-
-    return () => window.clearTimeout(handle);
-  }, [trimmed, trimmedBaseUrl]);
-
-  async function handleConnectionTest() {
-    if (!provider || trimmed.length === 0 || trimmedBaseUrl.length === 0) return;
     if (!window.codesign?.connection) {
-      setConnState({
-        kind: 'error',
+      setConnCheck({
+        status: 'failed',
         code: 'NETWORK',
         hint: 'Renderer is not connected to the main process.',
       });
       return;
     }
-    setConnState({ kind: 'testing' });
+
+    setConnCheck({ status: 'testing' });
     try {
       const result = await window.codesign.connection.test({
-        provider,
+        provider: detectedProvider,
         apiKey: trimmed,
-        baseUrl: trimmedBaseUrl,
+        baseUrl: baseUrlForTest,
       });
       if (result.ok) {
-        setConnState({ kind: 'ok' });
+        setConnCheck({ status: 'ok' });
       } else {
         const err = result as ConnectionTestError;
-        setConnState({ kind: 'error', code: err.code, hint: getErrorHint(err.code) });
+        setConnCheck({ status: 'failed', code: err.code, hint: connectionHint(err.code) });
       }
     } catch (err) {
-      setConnState({
-        kind: 'error',
+      setConnCheck({
+        status: 'failed',
         code: 'NETWORK',
         hint: err instanceof Error ? err.message : 'Connection test failed.',
       });
@@ -206,16 +211,19 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
   }
 
   const helpUrl = useMemo(() => {
-    if (provider === null) return null;
-    return PROVIDER_SHORTLIST[provider].keyHelpUrl;
-  }, [provider]);
+    if (detectedProvider === null) return null;
+    return PROVIDER_SHORTLIST[detectedProvider].keyHelpUrl;
+  }, [detectedProvider]);
 
   function handleContinue() {
-    if (state.kind !== 'ok' || provider === null) return;
-    onValidated(provider, trimmed, trimmedBaseUrl.length > 0 ? trimmedBaseUrl : null);
+    if (connCheck.status !== 'ok' || detectedProvider === null) return;
+    onValidated(detectedProvider, trimmed, trimmedBaseUrl.length > 0 ? trimmedBaseUrl : null);
   }
 
   const selectedPreset = PROXY_PRESETS.find((p) => p.id === selectedPresetId);
+  const testDisabled =
+    connCheck.status === 'testing' || detectedProvider === null || trimmed.length === 0;
+  const continueDisabled = connCheck.status !== 'ok';
 
   return (
     <div className="flex flex-col gap-5">
@@ -224,8 +232,8 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
           Paste your API key
         </h2>
         <p className="text-[var(--text-base)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
-          We auto-detect the provider and validate against /v1/models. Your key is encrypted with
-          the OS keychain.
+          Auto-detects your provider. Click <strong>Test</strong> to verify the key and endpoint
+          before continuing. Your key is encrypted with the OS keychain.
         </p>
       </div>
 
@@ -251,11 +259,12 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
           ))}
         </select>
         <span className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
-          Not sure which to pick? Choose OpenAI Official for official endpoint, or pick by relay
+          Not sure which to pick? Choose OpenAI Official for the official endpoint, or pick by relay
           name.
         </span>
       </label>
 
+      {/* API key input */}
       <label className="flex flex-col gap-2">
         <span
           className="text-[var(--text-2xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium"
@@ -277,8 +286,9 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
         </div>
       </label>
 
-      <StatusLine provider={provider} state={state} helpUrl={helpUrl} />
+      <DetectLine state={detectState} helpUrl={helpUrl} />
 
+      {/* Advanced: custom base URL */}
       <details
         open={advancedOpen}
         onToggle={(e) => setAdvancedOpen((e.currentTarget as HTMLDetailsElement).open)}
@@ -297,64 +307,64 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
           >
             Base URL
           </span>
-          <div className="flex gap-2 items-center">
-            <input
-              type="url"
-              value={baseUrl}
-              onChange={(e) => {
-                setBaseUrl(e.target.value);
-                setConnState({ kind: 'idle' });
-              }}
-              placeholder={
-                selectedPreset && selectedPreset.id !== 'custom'
-                  ? selectedPreset.baseUrl
-                  : 'https://your-proxy.example.com/v1'
-              }
-              spellCheck={false}
-              style={{ fontFamily: 'var(--font-mono)' }}
-              className="flex-1 h-[var(--size-control-md)] px-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
-            />
-            <button
-              type="button"
-              onClick={handleConnectionTest}
-              disabled={
-                connState.kind === 'testing' ||
-                provider === null ||
-                trimmed.length === 0 ||
-                trimmedBaseUrl.length === 0
-              }
-              className="h-[var(--size-control-md)] px-[var(--space-3)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 whitespace-nowrap"
-            >
-              {connState.kind === 'testing' ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : connState.kind === 'ok' ? (
-                <Wifi className="w-3.5 h-3.5 text-[var(--color-success)]" />
-              ) : connState.kind === 'error' ? (
-                <WifiOff className="w-3.5 h-3.5 text-[var(--color-error)]" />
-              ) : (
-                <Wifi className="w-3.5 h-3.5" />
-              )}
-              {connState.kind === 'testing' ? 'Testing...' : 'Test'}
-            </button>
-          </div>
-          {connState.kind === 'ok' && (
-            <span className="text-[var(--text-xs)] text-[var(--color-success)] flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-              Connected
-            </span>
-          )}
-          {connState.kind === 'error' && (
-            <span className="text-[var(--text-xs)] text-[var(--color-error)] flex items-center gap-1.5">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-              {connState.hint}
-            </span>
-          )}
+          <input
+            type="url"
+            value={baseUrl}
+            onChange={(e) => handleBaseUrlChange(e.target.value)}
+            placeholder={
+              selectedPreset && selectedPreset.id !== 'custom'
+                ? selectedPreset.baseUrl
+                : 'https://your-proxy.example.com/v1'
+            }
+            spellCheck={false}
+            style={{ fontFamily: 'var(--font-mono)' }}
+            className="w-full h-[var(--size-control-md)] px-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
+          />
           <span className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
-            Override the default endpoint for your provider. Useful for relay services (e.g.
-            third-party AI gateways) and self-hosted proxies. Leave empty for the official endpoint.
+            Override the default endpoint for your provider. Useful for relay services and
+            self-hosted proxies. Leave empty to use the official endpoint.
           </span>
         </label>
       </details>
+
+      {/* Test button + connection status — the sole authority for key+endpoint verification */}
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => void handleTest()}
+          disabled={testDisabled}
+          className="self-start h-[var(--size-control-md)] px-[var(--space-4)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+        >
+          {connCheck.status === 'testing' ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : connCheck.status === 'ok' ? (
+            <Wifi className="w-4 h-4 text-[var(--color-success)]" />
+          ) : connCheck.status === 'failed' ? (
+            <WifiOff className="w-4 h-4 text-[var(--color-error)]" />
+          ) : (
+            <Wifi className="w-4 h-4" />
+          )}
+          {connCheck.status === 'testing' ? 'Testing...' : 'Test'}
+        </button>
+
+        {connCheck.status === 'ok' && (
+          <span className="text-[var(--text-sm)] text-[var(--color-success)] flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            Connected — key and endpoint verified
+          </span>
+        )}
+        {connCheck.status === 'failed' && (
+          <span className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {connCheck.hint}
+          </span>
+        )}
+        {connCheck.status === 'idle' && detectedProvider !== null && (
+          <span className="text-[var(--text-xs)] text-[var(--color-text-muted)]">
+            Run Test to verify your key and connection before continuing.
+          </span>
+        )}
+      </div>
 
       <div className="flex justify-between gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onBack}>
@@ -364,7 +374,8 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
           type="button"
           variant="primary"
           onClick={handleContinue}
-          disabled={state.kind !== 'ok'}
+          disabled={continueDisabled}
+          title={continueDisabled ? 'Run Test to verify your connection first' : undefined}
         >
           Continue
         </Button>
@@ -373,84 +384,58 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
   );
 }
 
-interface StatusLineProps {
-  provider: SupportedOnboardingProvider | null;
-  state: ValidationState;
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+interface DetectLineProps {
+  state: DetectState;
   helpUrl: string | null;
 }
 
-function StatusLine({ provider, state, helpUrl }: StatusLineProps) {
+function DetectLine({ state, helpUrl }: DetectLineProps) {
   if (state.kind === 'idle') {
     return (
-      <p className="text-xs text-[var(--color-text-muted)]">
-        Paste a key to detect the provider and validate live.
+      <p className="text-[var(--text-xs)] text-[var(--color-text-muted)]">
+        Paste a key above — provider is auto-detected from the prefix.
       </p>
     );
   }
   if (state.kind === 'detecting') {
-    return <Pending text="Detecting provider..." />;
-  }
-  if (state.kind === 'validating') {
     return (
-      <Pending
-        text={`Recognized: ${provider ? PROVIDER_SHORTLIST[provider].label : 'unknown'} — validating...`}
-      />
-    );
-  }
-  if (state.kind === 'ok') {
-    return (
-      <div className="text-sm text-[var(--color-success)] flex items-center gap-2">
-        <CheckCircle2 className="w-4 h-4 shrink-0" />
-        <span>
-          Recognized: {provider ? PROVIDER_SHORTLIST[provider].label : 'provider'} — Connected (
-          {state.modelCount} models)
-        </span>
+      <div className="text-[var(--text-sm)] text-[var(--color-text-secondary)] flex items-center gap-2">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span>Detecting provider...</span>
       </div>
     );
   }
-  const errorMessage = getValidationErrorMessage(state.code, state.message);
-  return (
-    <div className="text-sm text-[var(--color-error)] flex flex-col gap-1">
-      <span className="flex items-start gap-2">
-        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-        <span>{errorMessage}</span>
-      </span>
-      {helpUrl !== null ? (
-        <a
-          href={helpUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="ml-6 inline-flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline"
-        >
-          How to get a key <ExternalLink className="w-3 h-3" />
-        </a>
-      ) : null}
-    </div>
-  );
-}
-
-function getValidationErrorMessage(
-  code: ValidateKeyError['code'] | 'unsupported',
-  originalMessage: string,
-): string {
-  switch (code) {
-    case '401':
-    case '402':
-      return 'API key invalid or unauthorized. Check it in your provider dashboard.';
-    case '429':
-      return 'Rate limited. Wait a moment and try again.';
-    case 'network':
-      return 'Cannot reach base URL. Check domain/port/network.';
-    default:
-      return originalMessage;
+  if (state.kind === 'detected') {
+    return (
+      <div className="text-[var(--text-sm)] text-[var(--color-text-secondary)] flex items-center gap-2">
+        <CheckCircle2 className="w-4 h-4 text-[var(--color-success)] shrink-0" />
+        <span>
+          Recognized: <strong>{PROVIDER_SHORTLIST[state.provider].label}</strong> — click Test to
+          verify
+        </span>
+        {helpUrl !== null ? (
+          <a
+            href={helpUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-accent)] hover:underline ml-1"
+          >
+            Get key <ExternalLink className="w-3 h-3" />
+          </a>
+        ) : null}
+      </div>
+    );
   }
-}
-
-function Pending({ text }: { text: string }) {
   return (
-    <div className="text-sm text-[var(--color-text-secondary)] flex items-center gap-2">
-      <Loader2 className="w-4 h-4 animate-spin" />
-      <span>{text}</span>
+    <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
+      <AlertCircle className="w-4 h-4 shrink-0" />
+      <span>
+        Unrecognized key prefix. Supported: sk-ant- (Anthropic), sk- (OpenAI), sk-or- (OpenRouter).
+      </span>
     </div>
   );
 }
