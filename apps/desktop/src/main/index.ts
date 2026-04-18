@@ -28,10 +28,8 @@ import {
   registerOnboardingIpc,
   setDesignSystem,
 } from './onboarding-ipc';
+import { registerPreferencesIpc } from './preferences-ipc';
 import { preparePromptContext } from './prompt-context';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 let mainWindow: ElectronBrowserWindow | null = null;
 
@@ -353,6 +351,7 @@ void app.whenReady().then(async () => {
   registerIpcHandlers();
   registerLocaleIpc();
   registerOnboardingIpc();
+  registerPreferencesIpc();
   registerExporterIpc(() => mainWindow);
   setupAutoUpdater();
   createWindow();
