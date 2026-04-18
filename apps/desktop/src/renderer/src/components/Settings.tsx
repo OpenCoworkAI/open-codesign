@@ -1,4 +1,4 @@
-import { i18n, setLocale as applyLocale, useT } from '@open-codesign/i18n';
+import { setLocale as applyLocale, i18n, useT } from '@open-codesign/i18n';
 import type {
   ErrorCode,
   OnboardingState,
