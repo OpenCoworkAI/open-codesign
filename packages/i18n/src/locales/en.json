@@ -307,5 +307,11 @@
   },
   "topbar": {
     "spendThisWeek": "this week"
+  },
+  "starterPrompts": {
+    "landing": "Build a landing page for an AI startup. Hero with a strong tagline, 3 feature cards, social proof section, CTA.",
+    "pitch": "Generate the first 3 slides of a pitch deck for a fintech startup. Title slide, problem, solution.",
+    "mobile": "Design a 3-screen mobile app onboarding flow. Welcome, permissions, first action.",
+    "dashboard": "Build a data dashboard with 3 charts: bar chart for sales, line chart for retention, pie chart for segments. Use a clean dark theme."
   }
 }

@@ -6,29 +6,25 @@ export interface EmptyStateProps {
 
 interface StarterCard {
   labelKey: string;
-  prompt: string;
+  promptKey: string;
 }
 
 const STARTER_CARDS: StarterCard[] = [
   {
     labelKey: 'emptyState.starters.landing',
-    prompt:
-      'Design a modern marketing landing page for an AI startup. Include a bold hero section with tagline, three feature cards, social proof section, and a primary CTA. Use a warm neutral palette with confident typography.',
+    promptKey: 'starterPrompts.landing',
   },
   {
     labelKey: 'emptyState.starters.pitch',
-    prompt:
-      'Design the first 3 slides of a startup pitch deck: (1) cover with company name and tagline, (2) problem slide with headline stat, (3) solution overview with product screenshot placeholder. Clean, investor-ready.',
+    promptKey: 'starterPrompts.pitch',
   },
   {
     labelKey: 'emptyState.starters.mobile',
-    prompt:
-      'Design 3 mobile onboarding screens shown in a phone frame: welcome splash, key benefit highlight, and permission request. Soft palette, generous white space, progress dots at bottom.',
+    promptKey: 'starterPrompts.mobile',
   },
   {
     labelKey: 'emptyState.starters.dashboard',
-    prompt:
-      'Design a data analytics dashboard with a top KPI strip (4 metrics) and 3 charts: a line chart for trend, a bar chart for comparison, and a donut chart for composition. Dark mode, dense but readable.',
+    promptKey: 'starterPrompts.dashboard',
   },
 ];
 
@@ -57,7 +53,7 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
             <button
               key={card.labelKey}
               type="button"
-              onClick={() => onPickStarter(card.prompt)}
+              onClick={() => onPickStarter(t(card.promptKey))}
               className="
                 group text-left
                 rounded-[var(--radius-md)] border border-[var(--color-border)]
