@@ -1,5 +1,6 @@
+import { IconButton } from '@open-codesign/ui';
 import { ArrowUp, Square } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { type FormEvent, type KeyboardEvent, useEffect, useRef } from 'react';
 import { useCodesignStore } from '../store';
 
 export interface SidebarProps {
@@ -8,11 +9,18 @@ export interface SidebarProps {
   onSubmit: () => void;
 }
 
-const MAX_TEXTAREA_HEIGHT = 144; // 6 lines × ~24px
+const MAX_TEXTAREA_ROWS = 6;
+const FALLBACK_ROW_HEIGHT = 24;
+
+function getTextareaRowHeight(el: HTMLTextAreaElement): number {
+  const rowHeight = Number.parseFloat(getComputedStyle(el).getPropertyValue('--space-6'));
+  return Number.isFinite(rowHeight) && rowHeight > 0 ? rowHeight : FALLBACK_ROW_HEIGHT;
+}
 
 function resizeTextarea(el: HTMLTextAreaElement): void {
+  const rowHeight = getTextareaRowHeight(el);
   el.style.height = 'auto';
-  el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
+  el.style.height = `${Math.min(el.scrollHeight, rowHeight * MAX_TEXTAREA_ROWS)}px`;
 }
 
 export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
@@ -22,17 +30,16 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    // sync height on mount to match any pre-filled value
     if (taRef.current) resizeTextarea(taRef.current);
   }, []);
 
-  function handleSubmit(e: React.FormEvent): void {
+  function handleSubmit(e: FormEvent): void {
     e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
     onSubmit();
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       handleSubmit(e);
@@ -42,7 +49,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   const canSend = prompt.trim().length > 0 && !isGenerating;
 
   return (
-    <aside className="flex flex-col border-r border-[var(--color-border)] bg-[var(--color-background-secondary)] min-h-0">
+    <aside className="flex flex-col min-h-0 border-r border-[var(--color-border)] bg-[var(--color-background-secondary)]">
       <div className="flex-1 overflow-y-auto px-5 py-6 space-y-3">
         {messages.length === 0 ? (
           <p className="text-[var(--text-sm)] text-[var(--color-text-muted)] leading-[var(--leading-body)]">
@@ -52,7 +59,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
           messages.map((m, i) => (
             <div
               key={`${m.role}-${i}-${m.content.slice(0, 8)}`}
-              className={`px-4 py-3 rounded-[var(--radius-lg)] text-[var(--text-sm)] leading-[1.55] ${
+              className={`px-[var(--space-4)] py-[var(--space-3)] rounded-[var(--radius-lg)] text-[var(--text-sm)] leading-[var(--leading-body)] ${
                 m.role === 'user'
                   ? 'bg-[var(--color-accent-soft)] text-[var(--color-text-primary)] border border-[var(--color-accent-muted)]'
                   : 'bg-[var(--color-surface)] border border-[var(--color-border-muted)] text-[var(--color-text-primary)]'
@@ -74,32 +81,32 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
               resizeTextarea(e.currentTarget);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Describe what to design… (Enter to send, Shift+Enter for newline)"
+            placeholder="Describe what to design... (Enter to send, Shift+Enter for newline)"
             disabled={isGenerating}
             rows={1}
-            className="block w-full resize-none bg-transparent px-3 pt-3 pb-10 text-[var(--text-sm)] leading-[1.5] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none min-h-[24px] max-h-[144px] overflow-y-auto"
+            className="block w-full resize-none bg-transparent px-[var(--space-3)] pt-[var(--space-3)] pb-[calc(var(--space-6)+var(--space-4))] text-[var(--text-sm)] leading-[var(--leading-body)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none min-h-[var(--space-6)] max-h-[calc(var(--space-6)*6)] overflow-y-auto"
           />
 
-          {/* action button pinned to bottom-right inside the textarea container */}
-          <div className="absolute bottom-2 right-2">
+          <div className="absolute bottom-[var(--space-2)] right-[var(--space-2)]">
             {isGenerating ? (
-              <button
-                type="button"
+              <IconButton
+                size="sm"
+                label="Stop generation"
                 onClick={cancelGeneration}
-                aria-label="Stop generation"
-                className="inline-flex items-center justify-center w-7 h-7 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] hover:scale-[1.04] active:scale-[0.96] transition-[transform,background-color] duration-150 ease-[var(--ease-out)]"
+                className="bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] hover:text-white hover:scale-[1.04] active:scale-[0.96] transition-[transform,background-color,color] duration-150 ease-[var(--ease-out)]"
               >
-                <Square className="w-3.5 h-3.5" strokeWidth={0} fill="currentColor" />
-              </button>
+                <Square className="w-4 h-4" strokeWidth={0} fill="currentColor" />
+              </IconButton>
             ) : (
-              <button
+              <IconButton
+                size="sm"
                 type="submit"
+                label="Send prompt"
                 disabled={!canSend}
-                aria-label="Send prompt"
-                className="inline-flex items-center justify-center w-7 h-7 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-white shadow-[var(--shadow-soft)] hover:bg-[var(--color-accent-hover)] hover:scale-[1.04] active:scale-[0.96] disabled:opacity-30 disabled:hover:scale-100 disabled:pointer-events-none transition-[transform,background-color,opacity] duration-150 ease-[var(--ease-out)]"
+                className="bg-[var(--color-accent)] text-white shadow-[var(--shadow-soft)] hover:bg-[var(--color-accent-hover)] hover:text-white hover:scale-[1.04] active:scale-[0.96] disabled:opacity-30 disabled:hover:scale-100 transition-[transform,background-color,opacity,color] duration-150 ease-[var(--ease-out)]"
               >
-                <ArrowUp className="w-3.5 h-3.5" strokeWidth={2.4} />
-              </button>
+                <ArrowUp className="w-4 h-4" strokeWidth={2.4} />
+              </IconButton>
             )}
           </div>
         </div>

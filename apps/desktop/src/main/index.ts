@@ -2,7 +2,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generate } from '@open-codesign/core';
 import { detectProviderFromKey } from '@open-codesign/providers';
-import { BRAND, CodesignError, GeneratePayload } from '@open-codesign/shared';
+import {
+  BRAND,
+  CancelGenerationPayloadV1,
+  CodesignError,
+  GeneratePayload,
+} from '@open-codesign/shared';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { registerExporterIpc } from './exporter-ipc';
@@ -127,8 +132,9 @@ function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.handle('codesign:cancel-generation', (_e, raw: unknown) => {
-    cancelGenerationRequest(raw, inFlight, logIpc);
+  ipcMain.handle('codesign:v1:cancel-generation', (_e, raw: unknown) => {
+    const { generationId } = CancelGenerationPayloadV1.parse(raw);
+    cancelGenerationRequest(generationId, inFlight, logIpc);
   });
 
   ipcMain.handle('codesign:open-log-folder', async () => {

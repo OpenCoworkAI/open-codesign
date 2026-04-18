@@ -89,6 +89,12 @@ export const GeneratePayload = z.object({
 });
 export type GeneratePayload = z.infer<typeof GeneratePayload>;
 
+export const CancelGenerationPayloadV1 = z.object({
+  schemaVersion: z.literal(1),
+  generationId: z.string().min(1),
+});
+export type CancelGenerationPayloadV1 = z.infer<typeof CancelGenerationPayloadV1>;
+
 /**
  * Iframe runtime error event — schema for the postMessage payload sent by
  * the sandbox overlay (see packages/runtime/src/overlay.ts) when JS inside

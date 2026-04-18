@@ -1,4 +1,5 @@
 import type {
+  CancelGenerationPayloadV1,
   ChatMessage,
   ModelRef,
   OnboardingState,
@@ -33,7 +34,11 @@ const api = {
     baseUrl?: string;
     generationId?: string;
   }) => ipcRenderer.invoke('codesign:generate', payload),
-  cancelGeneration: (id: string) => ipcRenderer.invoke('codesign:cancel-generation', id),
+  cancelGeneration: (generationId: string) =>
+    ipcRenderer.invoke('codesign:v1:cancel-generation', {
+      schemaVersion: 1,
+      generationId,
+    } satisfies CancelGenerationPayloadV1),
   export: (payload: { format: ExportFormat; htmlContent: string; defaultFilename?: string }) =>
     ipcRenderer.invoke('codesign:export', payload) as Promise<ExportInvokeResponse>,
   checkForUpdates: () => ipcRenderer.invoke('codesign:check-for-updates'),
