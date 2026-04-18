@@ -11,10 +11,10 @@ interface ExportItem {
 }
 
 const EXPORT_ITEMS: ExportItem[] = [
-  { format: 'html', label: 'HTML', ready: true },
-  { format: 'pdf', label: 'PDF', ready: false, hint: 'Coming in Phase 2' },
-  { format: 'pptx', label: 'PPTX', ready: false, hint: 'Coming in Phase 2' },
-  { format: 'zip', label: 'ZIP bundle', ready: false, hint: 'Coming in Phase 2' },
+  { format: 'html', label: 'HTML', ready: true, hint: 'Single self-contained .html file' },
+  { format: 'pdf', label: 'PDF', ready: true, hint: 'Rendered via your installed Chrome' },
+  { format: 'pptx', label: 'PPTX', ready: true, hint: 'Editable slides; one per <section>' },
+  { format: 'zip', label: 'ZIP bundle', ready: true, hint: 'index.html + assets + README.md' },
 ];
 
 export function PreviewToolbar(): ReactElement {
@@ -74,7 +74,7 @@ export function PreviewToolbar(): ReactElement {
                 type="button"
                 role="menuitem"
                 disabled={!item.ready}
-                title={item.ready ? undefined : item.hint}
+                title={item.hint}
                 onClick={() => {
                   setOpen(false);
                   void exportActive(item.format);
@@ -82,8 +82,10 @@ export function PreviewToolbar(): ReactElement {
                 className="w-full flex items-center justify-between gap-3 px-3 py-2 text-[13px] text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors duration-100"
               >
                 <span>{item.label}</span>
-                {!item.ready && (
-                  <span className="text-[11px] text-[var(--color-text-muted)]">{item.hint}</span>
+                {item.hint && (
+                  <span className="text-[11px] text-[var(--color-text-muted)] truncate max-w-[60%]">
+                    {item.hint}
+                  </span>
                 )}
               </button>
             ))}

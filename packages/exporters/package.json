@@ -17,7 +17,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@open-codesign/shared": "workspace:*"
+    "@open-codesign/shared": "workspace:*",
+    "pptxgenjs": "^3.12.0",
+    "puppeteer-core": "^24.10.0",
+    "zip-lib": "^1.0.4"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
