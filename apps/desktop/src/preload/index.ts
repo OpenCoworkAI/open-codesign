@@ -1,9 +1,7 @@
 import type {
   ChatMessage,
-  LocalInputFile,
   ModelRef,
   OnboardingState,
-  SelectedElement,
   SupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
@@ -33,30 +31,11 @@ const api = {
     history: ChatMessage[];
     model: ModelRef;
     baseUrl?: string;
-    referenceUrl?: string;
-    attachments?: LocalInputFile[];
+    generationId?: string;
   }) => ipcRenderer.invoke('codesign:generate', payload),
-  applyComment: (payload: {
-    html: string;
-    comment: string;
-    selection: SelectedElement;
-    model?: ModelRef;
-    referenceUrl?: string;
-    attachments?: LocalInputFile[];
-  }) => ipcRenderer.invoke('codesign:apply-comment', payload),
-  pickInputFiles: () =>
-    ipcRenderer.invoke('codesign:pick-input-files') as Promise<LocalInputFile[]>,
-  pickDesignSystemDirectory: () =>
-    ipcRenderer.invoke('codesign:pick-design-system-directory') as Promise<OnboardingState>,
-  clearDesignSystem: () =>
-    ipcRenderer.invoke('codesign:clear-design-system') as Promise<OnboardingState>,
+  cancelGeneration: (id: string) => ipcRenderer.invoke('codesign:cancel-generation', id),
   export: (payload: { format: ExportFormat; htmlContent: string; defaultFilename?: string }) =>
     ipcRenderer.invoke('codesign:export', payload) as Promise<ExportInvokeResponse>,
-  locale: {
-    getSystem: () => ipcRenderer.invoke('locale:get-system') as Promise<string>,
-    getCurrent: () => ipcRenderer.invoke('locale:get-current') as Promise<string>,
-    set: (locale: string) => ipcRenderer.invoke('locale:set', locale) as Promise<string>,
-  },
   checkForUpdates: () => ipcRenderer.invoke('codesign:check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('codesign:download-update'),
   installUpdate: () => ipcRenderer.invoke('codesign:install-update'),
