@@ -97,7 +97,12 @@ describe('createSnapshot + listSnapshots', () => {
     const db = makeDb();
     const design = createDesign(db);
     // Insert with explicit timestamps to avoid sub-millisecond collisions.
-    const insertSnap = (at: string, parentId: string | null, type: 'initial' | 'edit', prompt: string) => {
+    const insertSnap = (
+      at: string,
+      parentId: string | null,
+      type: 'initial' | 'edit',
+      prompt: string,
+    ) => {
       const id = crypto.randomUUID();
       db.prepare(
         `INSERT INTO design_snapshots
