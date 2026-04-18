@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyComment, generate } from '@open-codesign/core';
+import { type CoreLogger, applyComment, generate } from '@open-codesign/core';
 import { detectProviderFromKey } from '@open-codesign/providers';
 import {
   ApplyCommentPayload,
@@ -10,6 +10,7 @@ import {
   CodesignError,
   GeneratePayload,
   GeneratePayloadV1,
+  isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
@@ -68,6 +69,14 @@ function createWindow(): void {
 
 function registerIpcHandlers(): void {
   const logIpc = getLogger('main:ipc');
+
+  /** Adapter so `core` can log step events through the same scoped electron-log
+   * sink the IPC handler uses. Keeps a single timeline per generation in the
+   * log file without forcing `core` to depend on electron-log. */
+  const coreLoggerFor = (id: string): CoreLogger => ({
+    info: (event, data) => logIpc.info(event, { id, ...(data ?? {}) }),
+    error: (event, data) => logIpc.error(event, { id, ...(data ?? {}) }),
+  });
 
   /** In-flight requests: generationId → AbortController */
   const inFlight = new Map<string, AbortController>();
@@ -134,11 +143,43 @@ function registerIpcHandlers(): void {
     const controller = new AbortController();
     const id = payload.generationId;
     inFlight.set(id, controller);
+    const coreLogger = coreLoggerFor(id);
+    const stepCtx = { id, provider: payload.model.provider, modelId: payload.model.modelId };
 
+    coreLogger.info('[generate] step=load_config');
+    const loadStart = Date.now();
     const apiKey = getApiKeyForProvider(payload.model.provider);
     const storedBaseUrl = getBaseUrlForProvider(payload.model.provider);
     const baseUrl = payload.baseUrl ?? storedBaseUrl;
     const cfg = getCachedConfig();
+    coreLogger.info('[generate] step=load_config.ok', {
+      ms: Date.now() - loadStart,
+      hasApiKey: apiKey.length > 0,
+      baseUrl: baseUrl ?? '<default>',
+    });
+
+    coreLogger.info('[generate] step=validate_provider', stepCtx);
+    if (apiKey.length === 0) {
+      coreLogger.error('[generate] step=validate_provider.fail', {
+        provider: payload.model.provider,
+        reason: 'missing_api_key',
+      });
+      inFlight.delete(id);
+      throw new CodesignError(
+        `No API key configured for provider "${payload.model.provider}". Open Settings to add one.`,
+        'PROVIDER_AUTH_MISSING',
+      );
+    }
+    if (!isSupportedOnboardingProvider(payload.model.provider)) {
+      // Non-shortlist providers still work (any ProviderId is accepted by the
+      // payload schema), just warn so the log timeline shows we noticed.
+      coreLogger.info('[generate] step=validate_provider.warn', {
+        provider: payload.model.provider,
+        reason: 'not_in_onboarding_shortlist',
+      });
+    }
+    coreLogger.info('[generate] step=validate_provider.ok', { provider: payload.model.provider });
+
     const promptContext = await preparePromptContext({
       attachments: payload.attachments,
       referenceUrl: payload.referenceUrl,
@@ -169,6 +210,7 @@ function registerIpcHandlers(): void {
         designSystem: promptContext.designSystem ?? null,
         ...(baseUrl !== undefined ? { baseUrl } : {}),
         signal: controller.signal,
+        logger: coreLogger,
       });
       logIpc.info('generate.ok', {
         id,

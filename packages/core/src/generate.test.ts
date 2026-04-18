@@ -228,6 +228,72 @@ describe('generate()', () => {
     expect(result.artifacts).toHaveLength(1);
   });
 
+  it('emits named-step logs in order through the injected logger', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    const events: string[] = [];
+    const logger = {
+      info: (event: string) => events.push(event),
+      error: (event: string) => events.push(`ERR:${event}`),
+    };
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+      logger,
+    });
+
+    expect(events).toEqual([
+      '[generate] step=resolve_model',
+      '[generate] step=resolve_model.ok',
+      '[generate] step=build_request',
+      '[generate] step=build_request.ok',
+      '[generate] step=send_request',
+      '[generate] step=send_request.ok',
+      '[generate] step=parse_response',
+      '[generate] step=parse_response.ok',
+    ]);
+  });
+
+  it('logs send_request.fail and rewrites leaked openai URL when provider is non-openai', async () => {
+    const upstream = Object.assign(
+      new Error('Incorrect API key. See https://platform.openai.com/account/api-keys.'),
+      {
+        status: 401,
+      },
+    );
+    completeMock.mockRejectedValueOnce(upstream);
+
+    const events: string[] = [];
+    const logger = {
+      info: (event: string) => events.push(event),
+      error: (event: string) => events.push(`ERR:${event}`),
+    };
+
+    await expect(
+      generate({
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        logger,
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('console.anthropic.com/settings/keys'),
+    });
+
+    expect(events).toContain('[generate] step=send_request');
+    expect(events).toContain('ERR:[generate] step=send_request.fail');
+    expect(events).not.toContain('[generate] step=parse_response');
+  });
+
   it('brand tokens in designSystem are placed in a user message, not the system prompt', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,

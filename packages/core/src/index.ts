@@ -1,4 +1,5 @@
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
+import type { GenerateResult } from '@open-codesign/providers';
 import { type RetryReason, complete, completeWithRetry } from '@open-codesign/providers';
 import type {
   Artifact,
@@ -8,9 +9,17 @@ import type {
   StoredDesignSystem,
 } from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
+import { remapProviderError } from './errors.js';
+import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { type PromptComposeOptions, composeSystemPrompt } from './prompts/index.js';
 
 export type { PromptComposeOptions };
+export type { CoreLogger } from './logger.js';
+export {
+  PROVIDER_KEY_HELP_URL,
+  remapProviderError,
+  rewriteUpstreamMessage,
+} from './errors.js';
 
 export interface AttachmentContext {
   name: string;
@@ -44,6 +53,7 @@ export interface GenerateInput {
   mode?: Extract<PromptComposeOptions['mode'], 'create'> | undefined;
   signal?: AbortSignal | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
+  logger?: CoreLogger | undefined;
 }
 
 export interface ApplyCommentInput {
@@ -58,6 +68,7 @@ export interface ApplyCommentInput {
   referenceUrl?: ReferenceUrlContext | null | undefined;
   signal?: AbortSignal | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
+  logger?: CoreLogger | undefined;
 }
 
 export interface GenerateOutput {
@@ -80,6 +91,7 @@ interface ModelRunInput {
   signal?: AbortSignal | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
   messages: ChatMessage[];
+  logger?: CoreLogger | undefined;
 }
 
 function createHtmlArtifact(content: string, index: number): Artifact {
@@ -238,43 +250,101 @@ function buildRevisionPrompt(input: ApplyCommentInput, contextSections: string[]
 }
 
 async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
-  const result = await completeWithRetry(
-    input.model,
-    input.messages,
-    {
-      apiKey: input.apiKey,
-      ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
-      ...(input.signal !== undefined ? { signal: input.signal } : {}),
-    },
-    {
-      ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
-    },
-    complete,
-  );
+  const log = input.logger ?? NOOP_LOGGER;
+  const ctx = {
+    provider: input.model.provider,
+    modelId: input.model.modelId,
+  } as const;
 
-  const parser = createArtifactParser();
-  const collected: Collected = { text: '', artifacts: [] };
-  collect(parser.feed(result.content), collected);
-  collect(parser.flush(), collected);
-
-  if (collected.artifacts.length === 0) {
-    const fallback = extractFallbackArtifact(collected.text);
-    if (fallback.artifact) {
-      collected.artifacts.push(fallback.artifact);
-      collected.text = fallback.message;
-    }
+  log.info('[generate] step=send_request', ctx);
+  const sendStart = Date.now();
+  let result: GenerateResult;
+  try {
+    result = await completeWithRetry(
+      input.model,
+      input.messages,
+      {
+        apiKey: input.apiKey,
+        ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+        ...(input.signal !== undefined ? { signal: input.signal } : {}),
+      },
+      {
+        ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
+      },
+      complete,
+    );
+  } catch (err) {
+    const remapped = remapProviderError(err, input.model.provider);
+    log.error('[generate] step=send_request.fail', {
+      ...ctx,
+      ms: Date.now() - sendStart,
+      errorClass: err instanceof Error ? err.constructor.name : typeof err,
+      status: extractStatus(err),
+      code: remapped instanceof CodesignError ? remapped.code : undefined,
+    });
+    throw remapped;
   }
+  log.info('[generate] step=send_request.ok', { ...ctx, ms: Date.now() - sendStart });
 
-  return {
-    message: collected.text.trim(),
-    artifacts: collected.artifacts,
-    inputTokens: result.inputTokens,
-    outputTokens: result.outputTokens,
-    costUsd: result.costUsd,
-  };
+  log.info('[generate] step=parse_response', ctx);
+  const parseStart = Date.now();
+  try {
+    const parser = createArtifactParser();
+    const collected: Collected = { text: '', artifacts: [] };
+    collect(parser.feed(result.content), collected);
+    collect(parser.flush(), collected);
+
+    if (collected.artifacts.length === 0) {
+      const fallback = extractFallbackArtifact(collected.text);
+      if (fallback.artifact) {
+        collected.artifacts.push(fallback.artifact);
+        collected.text = fallback.message;
+      }
+    }
+
+    log.info('[generate] step=parse_response.ok', {
+      ...ctx,
+      ms: Date.now() - parseStart,
+      artifacts: collected.artifacts.length,
+    });
+
+    return {
+      message: collected.text.trim(),
+      artifacts: collected.artifacts,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      costUsd: result.costUsd,
+    };
+  } catch (err) {
+    log.error('[generate] step=parse_response.fail', {
+      ...ctx,
+      ms: Date.now() - parseStart,
+      errorClass: err instanceof Error ? err.constructor.name : typeof err,
+    });
+    throw err;
+  }
+}
+
+function extractStatus(err: unknown): number | undefined {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const candidates = [
+    (err as { status?: unknown }).status,
+    (err as { statusCode?: unknown }).statusCode,
+    (err as { response?: { status?: unknown } }).response?.status,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c)) return c;
+  }
+  return undefined;
 }
 
 export async function generate(input: GenerateInput): Promise<GenerateOutput> {
+  const log = input.logger ?? NOOP_LOGGER;
+  const ctx = {
+    provider: input.model.provider,
+    modelId: input.model.modelId,
+  } as const;
+
   if (!input.prompt.trim()) {
     throw new CodesignError('Prompt cannot be empty', 'INPUT_EMPTY_PROMPT');
   }
@@ -290,6 +360,15 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     );
   }
 
+  log.info('[generate] step=resolve_model', ctx);
+  const resolveStart = Date.now();
+  // Tier 1: model is already resolved by the caller (no primary/fast fallback
+  // here yet). Step exists so logs/UI can show the same name even when the
+  // logic later picks between primary/fast.
+  log.info('[generate] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
+
+  log.info('[generate] step=build_request', ctx);
+  const buildStart = Date.now();
   const messages: ChatMessage[] = [
     {
       role: 'system',
@@ -302,6 +381,11 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     ...input.history,
     { role: 'user', content: buildPrompt(input.prompt, buildContextSections(input)) },
   ];
+  log.info('[generate] step=build_request.ok', {
+    ...ctx,
+    ms: Date.now() - buildStart,
+    messages: messages.length,
+  });
 
   return runModel({
     model: input.model,
@@ -310,6 +394,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     signal: input.signal,
     onRetry: input.onRetry,
     messages,
+    logger: input.logger,
   });
 }
 
