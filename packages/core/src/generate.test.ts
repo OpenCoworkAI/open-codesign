@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ChatMessage, ModelRef, StoredDesignSystem } from '@open-codesign/shared';
 import { CodesignError, STORED_DESIGN_SYSTEM_SCHEMA_VERSION } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { composeSystemPrompt } from './prompts/index.js';
+import { PROMPT_SECTIONS, PROMPT_SECTION_FILES, composeSystemPrompt } from './prompts/index.js';
 
 const completeMock = vi.fn();
 
@@ -349,21 +349,16 @@ describe('composeSystemPrompt()', () => {
   });
 });
 
-describe('tweaks-protocol .txt vs TS constant drift', () => {
-  it('EDITMODE block in .txt and the inlined TS constant are character-for-character identical', () => {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const txt = readFileSync(path.join(__dirname, 'prompts', 'tweaks-protocol.v1.txt'), 'utf-8');
+describe('prompt section .txt vs TS drift', () => {
+  const promptsDir = resolve(dirname(fileURLToPath(import.meta.url)), 'prompts');
 
-    // Extract the handleEdits function block from .txt
-    const txtHandleEditsMatch = txt.match(/function handleEdits[\s\S]*?^}/m);
-    expect(txtHandleEditsMatch, 'handleEdits not found in .txt').toBeTruthy();
-
-    // The TS constant embeds the same content — verify the critical setProperty
-    // line uses String(value) in both places.
-    expect(txt).toContain("root.style.setProperty('--' + key, String(value))");
-
-    // Also verify the tweak-mode system prompt (which uses the TS constant) has it.
-    const prompt = composeSystemPrompt({ mode: 'tweak' });
-    expect(prompt).toContain("root.style.setProperty('--' + key, String(value))");
-  });
+  for (const [key, txtFileName] of Object.entries(PROMPT_SECTION_FILES)) {
+    it(`${key}.v1.txt matches inlined TS constant byte-for-byte`, () => {
+      const tsConstant = PROMPT_SECTIONS[key];
+      expect(tsConstant, `PROMPT_SECTIONS["${key}"] is missing`).toBeDefined();
+      const txtContent = readFileSync(resolve(promptsDir, txtFileName), 'utf-8');
+      // trim trailing newline if .txt has one but constant doesn't (or vice versa)
+      expect((tsConstant as string).trim()).toBe(txtContent.trim());
+    });
+  }
 });

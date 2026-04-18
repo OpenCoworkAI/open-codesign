@@ -316,6 +316,30 @@ For any declined request: respond with one sentence explaining that you cannot h
 If the request is clearly outside design scope (e.g., "write me a Python script"), note that briefly and redirect: "That's outside what I do best — I design visual artifacts. If you'd like a UI for this feature, I can build that."`;
 
 // ---------------------------------------------------------------------------
+// Section maps (used by drift tests and tooling)
+// ---------------------------------------------------------------------------
+
+export const PROMPT_SECTIONS: Record<string, string> = {
+  identity: IDENTITY,
+  workflow: WORKFLOW,
+  outputRules: OUTPUT_RULES,
+  designMethodology: DESIGN_METHODOLOGY,
+  tweaksProtocol: TWEAKS_PROTOCOL,
+  antiSlop: ANTI_SLOP,
+  safety: SAFETY,
+};
+
+export const PROMPT_SECTION_FILES: Record<keyof typeof PROMPT_SECTIONS, string> = {
+  identity: 'identity.v1.txt',
+  workflow: 'workflow.v1.txt',
+  outputRules: 'output-rules.v1.txt',
+  designMethodology: 'design-methodology.v1.txt',
+  tweaksProtocol: 'tweaks-protocol.v1.txt',
+  antiSlop: 'anti-slop.v1.txt',
+  safety: 'safety.v1.txt',
+};
+
+// ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
