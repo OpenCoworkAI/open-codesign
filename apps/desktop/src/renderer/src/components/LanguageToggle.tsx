@@ -1,7 +1,10 @@
 import { setLocale as applyLocale, getCurrentLocale, useT } from '@open-codesign/i18n';
 import type { Locale } from '@open-codesign/i18n';
 import { Globe } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
+
+const noDragStyle = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
 function nextLocale(locale: Locale): Locale {
   return locale === 'en' ? 'zh-CN' : 'en';
@@ -30,6 +33,7 @@ export function LanguageToggle() {
     <button
       type="button"
       onClick={() => void handleToggle()}
+      style={noDragStyle}
       className="inline-flex items-center gap-2 h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[12px] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
       aria-label={t('settings.language.label')}
       title={t('settings.language.label')}

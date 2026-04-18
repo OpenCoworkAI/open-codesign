@@ -1,3 +1,4 @@
+import { setLocale as applyLocale } from '@open-codesign/i18n';
 import type {
   OnboardingState,
   PROVIDER_SHORTLIST,
@@ -777,9 +778,10 @@ function AppearanceTab() {
 
   async function handleLocaleChange(v: string) {
     if (!window.codesign) return;
-    setLocale(v);
     try {
-      await window.codesign.locale.set(v);
+      const persisted = await window.codesign.locale.set(v);
+      const applied = await applyLocale(persisted);
+      setLocale(applied);
     } catch (err) {
       pushToast({
         variant: 'error',
@@ -829,7 +831,7 @@ function AppearanceTab() {
       </div>
 
       <div className="pt-2 border-t border-[var(--color-border-subtle)]">
-        <Row label="Language" hint="Restart the app after changing the language.">
+        <Row label="Language" hint="Language changes take effect immediately.">
           <NativeSelect
             value={locale}
             onChange={handleLocaleChange}

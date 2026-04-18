@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { availableLocales, initI18n, isSupportedLocale, normalizeLocale, setLocale } from './index';
+import {
+  availableLocales,
+  getCurrentLocale,
+  initI18n,
+  isSupportedLocale,
+  normalizeLocale,
+  setLocale,
+} from './index';
 
 describe('normalizeLocale', () => {
   it('returns the value unchanged when it is supported', () => {
@@ -68,5 +75,20 @@ describe('initI18n + setLocale (live switching)', () => {
     expect(value).toContain('thisKeyDoesNotExist');
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  it('setLocale updates getCurrentLocale and i18n.t() immediately (no restart needed)', async () => {
+    const { i18n } = await import('./index');
+    await initI18n('en');
+    expect(getCurrentLocale()).toBe('en');
+    expect(i18n.t('common.send')).toBe('Send');
+
+    await setLocale('zh-CN');
+    expect(getCurrentLocale()).toBe('zh-CN');
+    expect(i18n.t('common.send')).toBe('发送');
+
+    await setLocale('en');
+    expect(getCurrentLocale()).toBe('en');
+    expect(i18n.t('common.send')).toBe('Send');
   });
 });
