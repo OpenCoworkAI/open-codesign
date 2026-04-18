@@ -235,7 +235,6 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     });
   },
 
-
   async loadConfig() {
     if (!window.codesign) {
       set({
