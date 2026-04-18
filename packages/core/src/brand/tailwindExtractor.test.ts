@@ -116,6 +116,33 @@ describe('extractFromTailwindConfig()', () => {
     expect(names).toContain('color-brand-secondary');
   });
 
+  it('detects and extracts tokens from @theme inline { ... } (v4)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tw-extract-'));
+    const file = join(dir, 'tailwind.css');
+    await writeFile(file, '@theme inline {\n  --color-brand-x: #112233;\n}\n');
+    const tokens = await extractFromTailwindConfig(file);
+    const names = tokens.map((t) => t.name);
+    expect(names).toContain('color-brand-x');
+  });
+
+  it('detects and extracts tokens from @theme static { ... } (v4)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tw-extract-'));
+    const file = join(dir, 'tailwind.css');
+    await writeFile(file, '@theme static {\n  --spacing-y: 2px;\n}\n');
+    const tokens = await extractFromTailwindConfig(file);
+    const names = tokens.map((t) => t.name);
+    expect(names).toContain('spacing-y');
+  });
+
+  it('detects and extracts tokens from @theme reference { ... } (v4)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tw-extract-'));
+    const file = join(dir, 'tailwind.css');
+    await writeFile(file, '@theme reference {\n  --radius-z: 3px;\n}\n');
+    const tokens = await extractFromTailwindConfig(file);
+    const names = tokens.map((t) => t.name);
+    expect(names).toContain('radius-z');
+  });
+
   it('classifies --text-* size tokens as fontSize and color tokens as color (v4)', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'tw-extract-'));
     const file = join(dir, 'tailwind.css');

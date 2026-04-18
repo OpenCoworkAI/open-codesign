@@ -182,7 +182,7 @@ function collectLeafPairs(body: string, prefix: string): Array<{ name: string; v
 }
 
 function hasTailwindV4Theme(source: string): boolean {
-  return /@theme\s*\{/.test(source);
+  return /@theme\b[^{]*\{/.test(source);
 }
 
 function inferTypeFromCssProp(prop: string, value: string): TokenType | null {
