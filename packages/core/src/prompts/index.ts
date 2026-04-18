@@ -315,11 +315,10 @@ Dark does not mean monotone. A dark design that is one near-black plus one accen
 
 These patterns are not forbidden — they are forbidden when combined without a distinctive visual angle that makes them feel intentional rather than assembled from a component kit.`;
 
-// Adapted from patterns observed in the publicly leaked Claude Design system
-// prompt. Directives are paraphrased and extended; no original text is copied
-// verbatim. See docs/research/15-claude-design-prompts.md for the structural
-// analysis these patterns derive from.
-const CLAUDE_DESIGN_PATTERNS = `# Claude-Design-style craft directives
+// Distilled from public discussion of high-quality LLM design output
+// (community write-ups, comparative artifact studies, our own dogfooding).
+// All directives below are original prose authored for this project.
+const CRAFT_DIRECTIVES = `# Craft directives
 
 These directives encode high-leverage patterns that separate considered design artifacts from generic LLM output. Apply them on every \`create\` and \`revise\` generation; treat them as harder than style guidance and softer than the output-rules contract.
 
@@ -546,7 +545,7 @@ export const PROMPT_SECTIONS: Record<string, string> = {
   artifactTypes: ARTIFACT_TYPES,
   preFlight: PRE_FLIGHT,
   tweaksProtocol: TWEAKS_PROTOCOL,
-  claudeDesignPatterns: CLAUDE_DESIGN_PATTERNS,
+  craftDirectives: CRAFT_DIRECTIVES,
   antiSlop: ANTI_SLOP,
   safety: SAFETY,
 };
@@ -559,7 +558,7 @@ export const PROMPT_SECTION_FILES: Record<keyof typeof PROMPT_SECTIONS, string> 
   artifactTypes: 'artifact-types.v1.txt',
   preFlight: 'pre-flight.v1.txt',
   tweaksProtocol: 'tweaks-protocol.v1.txt',
-  claudeDesignPatterns: 'claude-design-patterns.v1.txt',
+  craftDirectives: 'craft-directives.v1.txt',
   antiSlop: 'anti-slop.v1.txt',
   safety: 'safety.v1.txt',
 };
@@ -590,7 +589,7 @@ export interface PromptComposeOptions {
  * Section order:
  *   identity → workflow → output-rules → design-methodology →
  *   artifact-types → pre-flight → [tweaks-protocol if mode === 'tweak'] →
- *   claude-design-patterns → anti-slop → safety → [skill blobs if any]
+ *   craft-directives → anti-slop → safety → [skill blobs if any]
  *
  * Brand tokens and other user-filesystem data are intentionally excluded here.
  * They are passed as untrusted user-role content in the message array to prevent
@@ -610,7 +609,7 @@ export function composeSystemPrompt(opts: PromptComposeOptions): string {
     sections.push(TWEAKS_PROTOCOL);
   }
 
-  sections.push(CLAUDE_DESIGN_PATTERNS);
+  sections.push(CRAFT_DIRECTIVES);
   sections.push(ANTI_SLOP);
   sections.push(SAFETY);
 

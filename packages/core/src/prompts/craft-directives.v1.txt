@@ -1,4 +1,4 @@
-# Claude-Design-style craft directives
+# Craft directives
 
 These directives encode high-leverage patterns that separate considered design artifacts from generic LLM output. Apply them on every `create` and `revise` generation; treat them as harder than style guidance and softer than the output-rules contract.
 

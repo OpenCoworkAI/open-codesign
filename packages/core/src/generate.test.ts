@@ -615,10 +615,10 @@ describe('composeSystemPrompt()', () => {
     expect(forbiddenLine).not.toContain('Fraunces');
   });
 
-  it('create mode embeds Claude-Design-style craft directives', () => {
+  it('create mode embeds craft directives', () => {
     const prompt = composeSystemPrompt({ mode: 'create' });
     // Section header
-    expect(prompt).toContain('Claude-Design-style craft directives');
+    expect(prompt).toContain('Craft directives');
     // The ten high-leverage directives must all be present
     expect(prompt).toContain('Artifact-type classification');
     expect(prompt).toContain('Density floor');
