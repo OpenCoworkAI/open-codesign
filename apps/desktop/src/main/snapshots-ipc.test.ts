@@ -373,7 +373,7 @@ describe('SQLite error translation', () => {
     } catch (err) {
       expect(err).toBeInstanceOf(CodesignError);
       expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
-      expect((err as Error).message).toBe('Parent snapshot does not exist');
+      expect((err as Error).message).toBe('Referenced design or parent snapshot does not exist');
       expect((err as Error).message).not.toMatch(/SQLITE_/);
     }
   });

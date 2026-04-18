@@ -32,29 +32,51 @@ const logger = getLogger('snapshots-ipc');
  * renderer never sees provider-specific error strings. Constraint subcodes are
  * matched individually because the bare `SQLITE_CONSTRAINT` parent code covers
  * unrelated failures (UNIQUE, NOT NULL, CHECK, FK), and surfacing all of them
- * as "Parent snapshot does not exist" would mislead the UI. Unrecognised errors
- * fall through as IPC_DB_ERROR with the original cause attached for server-side
- * logs.
+ * as a single message would mislead the UI. The FK message is keyed by call-site
+ * context because the same SQLITE_CONSTRAINT_FOREIGNKEY code fires for both a
+ * missing `design_id` and a missing `parent_id` in design_snapshots — naming
+ * only the parent led contributors to chase the wrong cause. Unrecognised
+ * errors fall through as IPC_DB_ERROR with the original cause attached for
+ * server-side logs.
  */
+const FK_MESSAGES: Record<string, string> = {
+  create: 'Referenced design or parent snapshot does not exist',
+  'create.lookup-parent': 'Referenced design or parent snapshot does not exist',
+};
+
+type Translation = {
+  code: 'IPC_BAD_INPUT' | 'IPC_CONFLICT' | 'IPC_DB_BUSY' | 'IPC_DB_FULL';
+  message: string;
+};
+
+function staticTranslation(sqliteCode: string): Translation | null {
+  switch (sqliteCode) {
+    case 'SQLITE_CONSTRAINT_UNIQUE':
+    case 'SQLITE_CONSTRAINT_PRIMARYKEY':
+      return { code: 'IPC_CONFLICT', message: 'Snapshot already exists' };
+    case 'SQLITE_CONSTRAINT_NOTNULL':
+    case 'SQLITE_CONSTRAINT_CHECK':
+      return { code: 'IPC_BAD_INPUT', message: 'Snapshot input violates database constraints' };
+    case 'SQLITE_BUSY':
+    case 'SQLITE_LOCKED':
+      return { code: 'IPC_DB_BUSY', message: 'Database is locked, retry shortly' };
+    case 'SQLITE_FULL':
+      return { code: 'IPC_DB_FULL', message: 'Disk is full' };
+    default:
+      return null;
+  }
+}
+
 function translateSqliteError(err: unknown, context: string): CodesignError {
   const code = (err as { code?: unknown })?.code;
   if (typeof code === 'string') {
     if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
-      return new CodesignError('Parent snapshot does not exist', 'IPC_BAD_INPUT', { cause: err });
+      const message = FK_MESSAGES[context] ?? 'Referenced item does not exist';
+      return new CodesignError(message, 'IPC_BAD_INPUT', { cause: err });
     }
-    if (code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
-      return new CodesignError('Snapshot already exists', 'IPC_CONFLICT', { cause: err });
-    }
-    if (code === 'SQLITE_CONSTRAINT_NOTNULL' || code === 'SQLITE_CONSTRAINT_CHECK') {
-      return new CodesignError('Snapshot input violates database constraints', 'IPC_BAD_INPUT', {
-        cause: err,
-      });
-    }
-    if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') {
-      return new CodesignError('Database is locked, retry shortly', 'IPC_DB_BUSY', { cause: err });
-    }
-    if (code === 'SQLITE_FULL') {
-      return new CodesignError('Disk is full', 'IPC_DB_FULL', { cause: err });
+    const t = staticTranslation(code);
+    if (t !== null) {
+      return new CodesignError(t.message, t.code, { cause: err });
     }
   }
   logger.error('snapshot.db_error', {
