@@ -92,6 +92,8 @@ interface ModelRunInput {
   onRetry?: ((info: RetryReason) => void) | undefined;
   messages: ChatMessage[];
   logger?: CoreLogger | undefined;
+  /** Log step namespace, e.g. 'generate' or 'apply_comment'. Defaults to 'generate'. */
+  logScope?: string | undefined;
 }
 
 function createHtmlArtifact(content: string, index: number): Artifact {
@@ -251,12 +253,13 @@ function buildRevisionPrompt(input: ApplyCommentInput, contextSections: string[]
 
 async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
   const log = input.logger ?? NOOP_LOGGER;
+  const scope = input.logScope ?? 'generate';
   const ctx = {
     provider: input.model.provider,
     modelId: input.model.modelId,
   } as const;
 
-  log.info('[generate] step=send_request', ctx);
+  log.info(`[${scope}] step=send_request`, ctx);
   const sendStart = Date.now();
   let result: GenerateResult;
   try {
@@ -275,7 +278,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
     );
   } catch (err) {
     const remapped = remapProviderError(err, input.model.provider);
-    log.error('[generate] step=send_request.fail', {
+    log.error(`[${scope}] step=send_request.fail`, {
       ...ctx,
       ms: Date.now() - sendStart,
       errorClass: err instanceof Error ? err.constructor.name : typeof err,
@@ -284,9 +287,9 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
     });
     throw remapped;
   }
-  log.info('[generate] step=send_request.ok', { ...ctx, ms: Date.now() - sendStart });
+  log.info(`[${scope}] step=send_request.ok`, { ...ctx, ms: Date.now() - sendStart });
 
-  log.info('[generate] step=parse_response', ctx);
+  log.info(`[${scope}] step=parse_response`, ctx);
   const parseStart = Date.now();
   try {
     const parser = createArtifactParser();
@@ -302,7 +305,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
       }
     }
 
-    log.info('[generate] step=parse_response.ok', {
+    log.info(`[${scope}] step=parse_response.ok`, {
       ...ctx,
       ms: Date.now() - parseStart,
       artifacts: collected.artifacts.length,
@@ -316,7 +319,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
       costUsd: result.costUsd,
     };
   } catch (err) {
-    log.error('[generate] step=parse_response.fail', {
+    log.error(`[${scope}] step=parse_response.fail`, {
       ...ctx,
       ms: Date.now() - parseStart,
       errorClass: err instanceof Error ? err.constructor.name : typeof err,
@@ -399,6 +402,12 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
 }
 
 export async function applyComment(input: ApplyCommentInput): Promise<GenerateOutput> {
+  const log = input.logger ?? NOOP_LOGGER;
+  const ctx = {
+    provider: input.model.provider,
+    modelId: input.model.modelId,
+  } as const;
+
   if (!input.comment.trim()) {
     throw new CodesignError('Comment cannot be empty', 'INPUT_EMPTY_COMMENT');
   }
@@ -406,6 +415,12 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     throw new CodesignError('Existing HTML cannot be empty', 'INPUT_EMPTY_HTML');
   }
 
+  log.info('[apply_comment] step=resolve_model', ctx);
+  const resolveStart = Date.now();
+  log.info('[apply_comment] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
+
+  log.info('[apply_comment] step=build_request', ctx);
+  const buildStart = Date.now();
   const messages: ChatMessage[] = [
     {
       role: 'system',
@@ -415,6 +430,11 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     },
     { role: 'user', content: buildRevisionPrompt(input, buildContextSections(input)) },
   ];
+  log.info('[apply_comment] step=build_request.ok', {
+    ...ctx,
+    ms: Date.now() - buildStart,
+    messages: messages.length,
+  });
 
   return runModel({
     model: input.model,
@@ -423,5 +443,7 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     signal: input.signal,
     onRetry: input.onRetry,
     messages,
+    logger: input.logger,
+    logScope: 'apply_comment',
   });
 }

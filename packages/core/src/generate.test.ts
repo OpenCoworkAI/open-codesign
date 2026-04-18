@@ -474,6 +474,46 @@ describe('applyComment()', () => {
     expect(result.artifacts[0]?.content).toBe(SAMPLE_HTML);
     expect(result.message).toContain('Here is the revised HTML artifact.');
   });
+
+  it('emits named-step logs in order through the injected logger', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    const events: string[] = [];
+    const logger = {
+      info: (event: string) => events.push(event),
+      error: (event: string) => events.push(`ERR:${event}`),
+    };
+
+    await applyComment({
+      html: SAMPLE_HTML,
+      comment: 'Tighten the hero copy.',
+      selection: {
+        selector: '#hero',
+        tag: 'section',
+        outerHTML: '<section id="hero">Hi</section>',
+        rect: { top: 0, left: 0, width: 100, height: 100 },
+      },
+      model: MODEL,
+      apiKey: 'sk-test',
+      logger,
+    });
+
+    expect(events).toEqual([
+      '[apply_comment] step=resolve_model',
+      '[apply_comment] step=resolve_model.ok',
+      '[apply_comment] step=build_request',
+      '[apply_comment] step=build_request.ok',
+      '[apply_comment] step=send_request',
+      '[apply_comment] step=send_request.ok',
+      '[apply_comment] step=parse_response',
+      '[apply_comment] step=parse_response.ok',
+    ]);
+  });
 });
 
 describe('composeSystemPrompt()', () => {
