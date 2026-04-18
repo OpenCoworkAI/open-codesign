@@ -83,7 +83,7 @@ export function ConnectionStatusDot() {
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-50 whitespace-nowrap max-w-xs rounded-[var(--radius-sm)] bg-[var(--color-text-primary)] px-2 py-1 text-[11px] font-medium text-[var(--color-background)] opacity-0 transition-opacity duration-150 delay-[400ms] group-hover:opacity-100 shadow-[var(--shadow-card)]"
+        className="pointer-events-none absolute bottom-full mb-[var(--space-1_5)] left-1/2 -translate-x-1/2 z-50 whitespace-nowrap max-w-xs rounded-[var(--radius-sm)] bg-[var(--color-text-primary)] px-[var(--space-2)] py-[var(--space-1)] text-[var(--text-2xs)] font-medium text-[var(--color-background)] opacity-0 transition-opacity duration-[var(--duration-faster)] delay-[400ms] group-hover:opacity-100 shadow-[var(--shadow-card)]"
       >
         {buildTooltip()}
       </span>
