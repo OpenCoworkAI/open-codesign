@@ -390,7 +390,8 @@
     "onboardingIncomplete": "引导流程尚未完成。",
     "modelListFailed": "无法加载模型列表。",
     "unknown": "未知错误",
-    "localePersistFailed": "无法保存语言偏好"
+    "localePersistFailed": "无法保存语言偏好",
+    "projectStorageFailed": "本机的项目数据读写失败，改动可能未保存。"
   },
   "demos": {
     "meditationApp": {

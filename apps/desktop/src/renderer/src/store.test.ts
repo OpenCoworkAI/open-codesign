@@ -331,3 +331,49 @@ describe('useCodesignStore active provider routing', () => {
     expect(payload.model.modelId).toBe('gpt-4o');
   });
 });
+
+describe('useCodesignStore project storage error surfacing', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
+
+  it('createProject pushes a toast when localStorage.setItem throws and keeps the project in memory', () => {
+    const setItem = vi.fn(() => {
+      throw new Error('QuotaExceededError');
+    });
+    const getItem = vi.fn(() => null);
+
+    vi.stubGlobal('window', {
+      localStorage: { setItem, getItem, removeItem: vi.fn(), clear: vi.fn() },
+      setTimeout,
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const projectsBefore = useCodesignStore.getState().projects;
+    const toastsBefore = useCodesignStore.getState().toasts.length;
+
+    const project = useCodesignStore
+      .getState()
+      .createProject({ name: 'My Project', type: 'slideDeck' });
+
+    const state = useCodesignStore.getState();
+
+    // In-memory state stays consistent — the project was added even though persist failed.
+    expect(state.projects[0]).toEqual(project);
+    expect(state.projects).toHaveLength(projectsBefore.length + 1);
+    expect(state.currentProjectId).toBe(project.id);
+
+    // Toast surfaced with the i18n title and the underlying error message.
+    expect(state.toasts.length).toBe(toastsBefore + 1);
+    expect(state.toasts.at(-1)).toMatchObject({
+      variant: 'error',
+      description: 'QuotaExceededError',
+    });
+    expect(state.toasts.at(-1)?.title).toBeTruthy();
+
+    expect(setItem).toHaveBeenCalledOnce();
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+});

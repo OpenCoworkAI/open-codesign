@@ -391,7 +391,8 @@
     "onboardingIncomplete": "Onboarding is not complete.",
     "modelListFailed": "Could not load model list.",
     "unknown": "Unknown error",
-    "localePersistFailed": "Failed to save language preference"
+    "localePersistFailed": "Failed to save language preference",
+    "projectStorageFailed": "Couldn't read or write projects on this device. Your changes may not persist."
   },
   "demos": {
     "meditationApp": {
