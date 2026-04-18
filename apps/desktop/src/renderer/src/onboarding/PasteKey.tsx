@@ -18,7 +18,35 @@ type DetectState =
   | { kind: 'idle' }
   | { kind: 'detecting' }
   | { kind: 'detected'; provider: SupportedOnboardingProvider }
-  | { kind: 'unknown' };
+  | { kind: 'unknown_prefix' }
+  | { kind: 'ipc_error'; message: string }
+  | { kind: 'network_error'; message: string };
+
+// Result returned by the detectProvider IPC wrapper. Distinguishing the
+// failure modes is required by the no-silent-fallback constraint: an IPC
+// crash or network outage must not be reported to the user as a
+// "key prefix unrecognized" message.
+export type DetectResult =
+  | { ok: true; provider: SupportedOnboardingProvider }
+  | { ok: false; kind: 'unknown_prefix' }
+  | { ok: false; kind: 'ipc_error'; message: string }
+  | { ok: false; kind: 'network_error'; message: string };
+
+// Heuristic: detect-provider IPC is purely local (prefix match, no
+// network), so any caught error is almost always an IPC failure. We still
+// inspect the message in case Electron or a future remote backend surfaces
+// a fetch-style error — those should be reported as a network failure.
+export function classifyDetectError(err: unknown): 'ipc_error' | 'network_error' {
+  if (err instanceof TypeError) return 'network_error';
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  if (/fetch|network|ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN/i.test(msg)) return 'network_error';
+  return 'ipc_error';
+}
+
+function detectErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message.length > 0) return err.message;
+  return 'Provider detection failed.';
+}
 
 // Single authoritative connection state — no separate ValidationState.
 type ConnectionCheck =
@@ -76,33 +104,54 @@ function connectionHint(code: ConnectionTestError['code']): string {
 // Provider detection helper (extracted to keep useEffect complexity low)
 // ---------------------------------------------------------------------------
 
-async function detectProvider(
+export async function detectProvider(
   trimmed: string,
+  bridge: { detectProvider: (key: string) => Promise<string | null> } | undefined,
+): Promise<DetectResult> {
+  if (!bridge) {
+    return {
+      ok: false,
+      kind: 'ipc_error',
+      message: 'Renderer is not connected to the main process.',
+    };
+  }
+  let detected: string | null;
+  try {
+    detected = await bridge.detectProvider(trimmed);
+  } catch (err) {
+    return { ok: false, kind: classifyDetectError(err), message: detectErrorMessage(err) };
+  }
+  if (detected !== null && isSupportedOnboardingProvider(detected)) {
+    return { ok: true, provider: detected };
+  }
+  return { ok: false, kind: 'unknown_prefix' };
+}
+
+function applyDetectResult(
+  result: DetectResult,
   reqId: number,
   reqIdRef: { current: number },
   setDetectState: (s: DetectState) => void,
   setConnCheck: (s: ConnectionCheck) => void,
-): Promise<void> {
-  if (!window.codesign) {
-    setDetectState({ kind: 'unknown' });
-    return;
-  }
-  let detected: string | null;
-  try {
-    detected = await window.codesign.detectProvider(trimmed);
-  } catch {
-    if (reqId !== reqIdRef.current) return;
-    setDetectState({ kind: 'unknown' });
-    return;
-  }
+): void {
   if (reqId !== reqIdRef.current) return;
-  if (detected !== null && isSupportedOnboardingProvider(detected)) {
-    setDetectState({ kind: 'detected', provider: detected });
-  } else {
-    setDetectState({ kind: 'unknown' });
+  if (result.ok) {
+    setDetectState({ kind: 'detected', provider: result.provider });
+    setConnCheck({ status: 'idle' });
+    return;
   }
-  // Changing the key always resets the connection check.
-  setConnCheck({ status: 'idle' });
+  if (result.kind === 'unknown_prefix') {
+    setDetectState({ kind: 'unknown_prefix' });
+    setConnCheck({ status: 'idle' });
+    return;
+  }
+  // IPC / network failures must surface — never silently downgrade to unknown_prefix.
+  setDetectState({ kind: result.kind, message: result.message });
+  setConnCheck({
+    status: 'failed',
+    code: result.kind === 'network_error' ? 'NETWORK' : 'IPC_BAD_INPUT',
+    hint: result.message,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -138,10 +187,11 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
     }
     setDetectState({ kind: 'detecting' });
     const reqId = ++detectReqRef.current;
-    const handle = window.setTimeout(
-      () => void detectProvider(trimmed, reqId, detectReqRef, setDetectState, setConnCheck),
-      300,
-    );
+    const handle = window.setTimeout(() => {
+      void detectProvider(trimmed, window.codesign).then((result) =>
+        applyDetectResult(result, reqId, detectReqRef, setDetectState, setConnCheck),
+      );
+    }, 300);
     return () => window.clearTimeout(handle);
   }, [trimmed]);
 
@@ -430,11 +480,34 @@ function DetectLine({ state, helpUrl }: DetectLineProps) {
       </div>
     );
   }
+  if (state.kind === 'unknown_prefix') {
+    return (
+      <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 shrink-0" />
+        <span>
+          Unrecognized key prefix. Supported: sk-ant- (Anthropic), sk- (OpenAI), sk-or-
+          (OpenRouter).
+        </span>
+      </div>
+    );
+  }
+  if (state.kind === 'ipc_error') {
+    return (
+      <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 shrink-0" />
+        <span>
+          Provider detection failed (main process unreachable): {state.message}. Restart the app
+          and try again.
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
       <AlertCircle className="w-4 h-4 shrink-0" />
       <span>
-        Unrecognized key prefix. Supported: sk-ant- (Anthropic), sk- (OpenAI), sk-or- (OpenRouter).
+        Provider detection failed (network error): {state.message}. Check your connection and try
+        again.
       </span>
     </div>
   );

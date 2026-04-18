@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { classifyDetectError, detectProvider } from './PasteKey';
 
 // ---------------------------------------------------------------------------
 // Unit tests for the unified ConnectionCheck logic in PasteKey.
@@ -176,5 +177,101 @@ describe('handleTest — unified ConnectionCheck', () => {
     expect(checkContinueEnabled({ status: 'testing' })).toBe(false);
     expect(checkContinueEnabled({ status: 'failed', code: 'NETWORK', hint: '' })).toBe(false);
     expect(checkContinueEnabled({ status: 'ok' })).toBe(true);
+  });
+});
+
+describe('detectProvider — discriminated failure kinds', () => {
+  it('returns ok with provider when bridge resolves a known prefix', async () => {
+    const bridge = { detectProvider: vi.fn().mockResolvedValue('openai') };
+    const result = await detectProvider('sk-test', bridge);
+    expect(result).toEqual({ ok: true, provider: 'openai' });
+  });
+
+  it('returns unknown_prefix when bridge resolves null', async () => {
+    const bridge = { detectProvider: vi.fn().mockResolvedValue(null) };
+    const result = await detectProvider('garbage-key', bridge);
+    expect(result).toEqual({ ok: false, kind: 'unknown_prefix' });
+  });
+
+  it('returns unknown_prefix when bridge resolves an unsupported provider string', async () => {
+    const bridge = { detectProvider: vi.fn().mockResolvedValue('made-up-provider') };
+    const result = await detectProvider('sk-x', bridge);
+    expect(result).toEqual({ ok: false, kind: 'unknown_prefix' });
+  });
+
+  it('returns ipc_error when bridge is undefined (renderer not connected)', async () => {
+    const result = await detectProvider('sk-test', undefined);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('ipc_error');
+      if (result.kind === 'ipc_error') {
+        expect(result.message).toContain('not connected');
+      }
+    }
+  });
+
+  it('returns ipc_error when bridge rejects with a non-network Error', async () => {
+    const bridge = {
+      detectProvider: vi.fn().mockRejectedValue(new Error('preload bridge crashed')),
+    };
+    const result = await detectProvider('sk-test', bridge);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('ipc_error');
+      if (result.kind === 'ipc_error') {
+        expect(result.message).toBe('preload bridge crashed');
+      }
+    }
+  });
+
+  it('returns network_error when bridge rejects with a TypeError (fetch failure)', async () => {
+    const bridge = {
+      detectProvider: vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+    };
+    const result = await detectProvider('sk-test', bridge);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('network_error');
+    }
+  });
+
+  it('returns network_error when error message contains a network token', async () => {
+    const bridge = {
+      detectProvider: vi.fn().mockRejectedValue(new Error('ECONNREFUSED 127.0.0.1:443')),
+    };
+    const result = await detectProvider('sk-test', bridge);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('network_error');
+    }
+  });
+
+  it('never collapses an IPC failure into unknown_prefix', async () => {
+    const bridge = { detectProvider: vi.fn().mockRejectedValue(new Error('boom')) };
+    const result = await detectProvider('sk-test', bridge);
+    if (!result.ok) {
+      expect(result.kind).not.toBe('unknown_prefix');
+    }
+  });
+});
+
+describe('classifyDetectError', () => {
+  it('classifies TypeError as network_error', () => {
+    expect(classifyDetectError(new TypeError('Failed to fetch'))).toBe('network_error');
+  });
+
+  it('classifies fetch/network/ECONN/ENOTFOUND/ETIMEDOUT/EAI_AGAIN messages as network_error', () => {
+    for (const token of ['fetch', 'network', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EAI_AGAIN']) {
+      expect(classifyDetectError(new Error(`some ${token} happened`))).toBe('network_error');
+    }
+  });
+
+  it('classifies plain Error as ipc_error', () => {
+    expect(classifyDetectError(new Error('preload missing'))).toBe('ipc_error');
+  });
+
+  it('classifies non-Error throwables as ipc_error', () => {
+    expect(classifyDetectError('weird string')).toBe('ipc_error');
+    expect(classifyDetectError(null)).toBe('ipc_error');
   });
 });
