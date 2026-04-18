@@ -28,7 +28,7 @@ export type Design = z.infer<typeof DesignV1>;
 export const DesignMessageV1 = z.object({
   schemaVersion: z.literal(1).default(1),
   designId: z.string().min(1),
-  role: z.enum(['user', 'assistant']),
+  role: z.enum(['user', 'assistant', 'system']),
   content: z.string(),
   ordinal: z.number().int().nonnegative(),
   createdAt: z.string(),

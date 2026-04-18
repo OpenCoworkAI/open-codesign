@@ -4,6 +4,7 @@
  * No Electron, no filesystem — just better-sqlite3 :memory:.
  */
 
+import { DesignMessageV1 } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import {
   createDesign,
@@ -394,6 +395,22 @@ describe('design messages: replaceMessages + listMessages', () => {
     ]);
     const list = listMessages(db, d.id);
     expect(list.map((m) => m.content)).toEqual(['b', 'c']);
+  });
+
+  it('persists and loads system role messages (validates against DesignMessageV1)', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    replaceMessages(db, d.id, [
+      { role: 'system', content: 'you are a designer' },
+      { role: 'user', content: 'make a hero' },
+      { role: 'assistant', content: 'done' },
+    ]);
+    const list = listMessages(db, d.id);
+    expect(list).toHaveLength(3);
+    expect(list[0]?.role).toBe('system');
+    for (const row of list) {
+      expect(() => DesignMessageV1.parse(row)).not.toThrow();
+    }
   });
 
   it('cascades: deleting the design row removes its messages', () => {
