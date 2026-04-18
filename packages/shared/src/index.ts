@@ -80,6 +80,29 @@ export const ChatMessage = z.object({
 });
 export type ChatMessage = z.infer<typeof ChatMessage>;
 
+export const LocalInputFile = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  size: z.number().int().nonnegative(),
+});
+export type LocalInputFile = z.infer<typeof LocalInputFile>;
+
+export const ElementSelectionRect = z.object({
+  top: z.number(),
+  left: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+export type ElementSelectionRect = z.infer<typeof ElementSelectionRect>;
+
+export const SelectedElement = z.object({
+  selector: z.string().min(1),
+  tag: z.string().min(1),
+  outerHTML: z.string(),
+  rect: ElementSelectionRect,
+});
+export type SelectedElement = z.infer<typeof SelectedElement>;
+
 export const GeneratePayload = z.object({
   prompt: z.string().min(1).max(32_000),
   history: z.array(ChatMessage).max(200),

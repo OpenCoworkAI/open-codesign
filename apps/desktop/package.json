@@ -16,6 +16,7 @@
     "@open-codesign/artifacts": "workspace:*",
     "@open-codesign/core": "workspace:*",
     "@open-codesign/exporters": "workspace:*",
+    "@open-codesign/i18n": "workspace:*",
     "@open-codesign/providers": "workspace:*",
     "@open-codesign/runtime": "workspace:*",
     "@open-codesign/shared": "workspace:*",
