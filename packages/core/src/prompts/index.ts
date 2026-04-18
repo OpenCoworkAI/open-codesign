@@ -411,8 +411,8 @@ When the brief mentions a logo placeholder, generic brand mark, or "Logo here":
 
 ## Imagery rules
 
-- No hotlinked photos from \`placeholder.com\`, \`via.placeholder.com\`, \`placehold.it\`, or \`unsplash.com\`.
-- For abstract photography or hero imagery, prefer: inline SVG composition, CSS gradient + grain overlay, or \`https://picsum.photos/seed/<deterministic-seed>/<w>/<h>\` (deterministic seed only, never random).
+- No hotlinked photos from any external host (including \`placeholder.com\`, \`via.placeholder.com\`, \`placehold.it\`, \`unsplash.com\`, \`picsum.photos\`). All imagery must be self-contained.
+- For abstract photography or hero imagery, prefer: inline SVG composition, CSS gradient + grain overlay, or a \`data:\` URI for tiny thumbnails.
 - Avatars in testimonials: SVG initials on a colored circle (color derived from the name hash), never \`randomuser.me\` or stock face URLs.
 - Brand logos in trust strips: render as text wordmarks in muted color, not fake SVGs of real companies.`;
 
