@@ -12,12 +12,10 @@ concurrency:
 
 jobs:
   check:
+    # Cross-platform builds happen on tag releases via release.yml.
+    # PR/main CI runs on ubuntu only to control Actions cost (macOS 10x / Win 2x multiplier).
     name: Lint, typecheck, test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
