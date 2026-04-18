@@ -24,10 +24,3 @@ linux:
     - target: AppImage
       arch: [x64]
   category: Graphics
-publish:
-  provider: github
-  owner: OpenCoworkAI
-  repo: open-codesign
-  # releaseType: draft — softprops/action-gh-release controls draft/final;
-  # electron-builder is set to "release" so it uploads to an existing tag.
-  releaseType: release
