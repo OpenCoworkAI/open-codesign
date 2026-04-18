@@ -13,6 +13,16 @@ export interface PreviewPaneProps {
   onPickStarter: (prompt: string) => void;
 }
 
+export function formatIframeError(
+  kind: string,
+  message: string,
+  source?: string,
+  lineno?: number,
+): string {
+  const location = source && lineno ? ` (${source}:${lineno})` : '';
+  return `${kind}: ${message}${location}`;
+}
+
 export function isTrustedPreviewMessageSource(
   source: MessageEventSource | null,
   previewWindow: Window | null | undefined,
@@ -46,11 +56,14 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       }
 
       if (isIframeErrorMessage(event.data)) {
-        const location =
-          event.data.source && event.data.lineno
-            ? ` (${event.data.source}:${event.data.lineno})`
-            : '';
-        pushIframeError(`${event.data.kind}: ${event.data.message}${location}`);
+        pushIframeError(
+          formatIframeError(
+            event.data.kind,
+            event.data.message,
+            event.data.source,
+            event.data.lineno,
+          ),
+        );
       }
     }
 

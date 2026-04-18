@@ -1,5 +1,4 @@
 import { useT } from '@open-codesign/i18n';
-import { isIframeErrorMessage } from '@open-codesign/runtime';
 import { useEffect, useMemo, useState } from 'react';
 import { CommandPalette } from './components/CommandPalette';
 import { PreviewPane } from './components/PreviewPane';
@@ -10,11 +9,6 @@ import { TopBar } from './components/TopBar';
 import { useKeyboard } from './hooks/useKeyboard';
 import { Onboarding } from './onboarding';
 import { useCodesignStore } from './store';
-
-export function readIframeErrorMessage(isGenerating: boolean, data: unknown): string | null {
-  if (isGenerating || !isIframeErrorMessage(data)) return null;
-  return data.message;
-}
 
 export function App() {
   const t = useT();
@@ -35,17 +29,6 @@ export function App() {
   useEffect(() => {
     void loadConfig();
   }, [loadConfig]);
-
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      const state = useCodesignStore.getState();
-      const message = readIframeErrorMessage(state.isGenerating, e.data);
-      if (message === null) return;
-      state.pushIframeError(message);
-    };
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, []);
 
   function submit(): void {
     const trimmed = prompt.trim();

@@ -1,28 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { readIframeErrorMessage } from './App';
+import { formatIframeError } from './components/PreviewPane';
 
-describe('readIframeErrorMessage', () => {
-  it('ignores iframe errors while a new generation is in progress', () => {
-    const data = {
-      __codesign: true,
-      type: 'IFRAME_ERROR',
-      kind: 'error',
-      message: 'old preview failed',
-      timestamp: Date.now(),
-    };
-
-    expect(readIframeErrorMessage(true, data)).toBeNull();
+describe('formatIframeError', () => {
+  it('omits location when source or lineno is missing', () => {
+    expect(formatIframeError('error', 'something broke')).toBe('error: something broke');
+    expect(formatIframeError('error', 'something broke', 'app.js')).toBe('error: something broke');
+    expect(formatIframeError('error', 'something broke', undefined, 10)).toBe(
+      'error: something broke',
+    );
   });
 
-  it('returns the iframe error message when generation is idle', () => {
-    const data = {
-      __codesign: true,
-      type: 'IFRAME_ERROR',
-      kind: 'error',
-      message: 'current preview failed',
-      timestamp: Date.now(),
-    };
-
-    expect(readIframeErrorMessage(false, data)).toBe('current preview failed');
+  it('appends source and lineno when both are present', () => {
+    expect(formatIframeError('unhandledrejection', 'promise failed', 'app.js', 42)).toBe(
+      'unhandledrejection: promise failed (app.js:42)',
+    );
   });
 });
