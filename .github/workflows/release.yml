@@ -177,8 +177,8 @@ jobs:
       - name: Validate tag input on dispatch
         if: github.event_name == 'workflow_dispatch'
         run: |
-          if [[ ! "${{ inputs.tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "::error::tag must match v*.*.* (got '${{ inputs.tag }}')"
+          if [[ ! "${{ inputs.tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag must be semver-like (e.g. v1.2.3 or v1.2.3-rc.1)"
             exit 1
           fi
 
