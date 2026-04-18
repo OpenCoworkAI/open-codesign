@@ -6,7 +6,7 @@ import {
   type SupportedOnboardingProvider,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
-import { Button } from '@open-codesign/ui';
+import { Button, Tooltip } from '@open-codesign/ui';
 import { AlertCircle, CheckCircle2, ExternalLink, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ConnectionTestError } from '../../../preload/index';
@@ -276,7 +276,15 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
   const selectedPreset = PROXY_PRESETS.find((p) => p.id === selectedPresetId);
   const testDisabled =
     connCheck.status === 'testing' || detectedProvider === null || trimmed.length === 0;
+  const testDisabledReason = testDisabled
+    ? connCheck.status === 'testing'
+      ? 'Testing connection…'
+      : 'Enter provider and API key to test'
+    : undefined;
   const continueDisabled = connCheck.status !== 'ok';
+  const continueDisabledReason = continueDisabled
+    ? 'Run Test to verify your connection first'
+    : undefined;
 
   return (
     <div className="flex flex-col gap-5">
@@ -379,25 +387,27 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
 
       {/* Test button + connection status — the sole authority for key+endpoint verification */}
       <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={() => void handleTest()}
-          disabled={testDisabled}
-          className="self-start h-[var(--size-control-md)] px-[var(--space-4)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-        >
-          {connCheck.status === 'testing' ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : connCheck.status === 'ok' ? (
-            <Wifi className="w-4 h-4 text-[var(--color-success)]" />
-          ) : connCheck.status === 'failed' ? (
-            <WifiOff className="w-4 h-4 text-[var(--color-error)]" />
-          ) : (
-            <Wifi className="w-4 h-4" />
-          )}
-          {connCheck.status === 'testing'
-            ? t('onboarding.paste.connectionTest.testing')
-            : t('onboarding.paste.connectionTest.button')}
-        </button>
+        <Tooltip label={testDisabledReason} side="top">
+          <button
+            type="button"
+            onClick={() => void handleTest()}
+            disabled={testDisabled}
+            className="self-start h-[var(--size-control-md)] px-[var(--space-4)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            {connCheck.status === 'testing' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : connCheck.status === 'ok' ? (
+              <Wifi className="w-4 h-4 text-[var(--color-success)]" />
+            ) : connCheck.status === 'failed' ? (
+              <WifiOff className="w-4 h-4 text-[var(--color-error)]" />
+            ) : (
+              <Wifi className="w-4 h-4" />
+            )}
+            {connCheck.status === 'testing'
+              ? t('onboarding.paste.connectionTest.testing')
+              : t('onboarding.paste.connectionTest.button')}
+          </button>
+        </Tooltip>
 
         {connCheck.status === 'ok' && (
           <span className="text-[var(--text-sm)] text-[var(--color-success)] flex items-center gap-2">
@@ -422,15 +432,16 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
         <Button type="button" variant="ghost" onClick={onBack}>
           {t('onboarding.paste.back')}
         </Button>
-        <Button
-          type="button"
-          variant="primary"
-          onClick={handleContinue}
-          disabled={continueDisabled}
-          title={continueDisabled ? t('onboarding.paste.connectionTest.runFirst') : undefined}
-        >
-          {t('onboarding.paste.continue')}
-        </Button>
+        <Tooltip label={continueDisabledReason} side="top">
+          <Button
+            type="button"
+            variant="primary"
+            onClick={handleContinue}
+            disabled={continueDisabled}
+          >
+            {t('onboarding.paste.continue')}
+          </Button>
+        </Tooltip>
       </div>
     </div>
   );

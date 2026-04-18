@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { IconButton } from '@open-codesign/ui';
+import { IconButton, Tooltip } from '@open-codesign/ui';
 import { ArrowUp, FolderOpen, Link2, Paperclip, Square, X } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef } from 'react';
 import { useCodesignStore } from '../store';
@@ -66,6 +66,9 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   }
 
   const canSend = prompt.trim().length > 0 && !isGenerating;
+  const sendDisabledReason = isGenerating
+    ? t('disabledReason.generatingInProgress')
+    : t('disabledReason.typePromptToSend');
 
   return (
     <aside
@@ -226,18 +229,20 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
                 />
               </IconButton>
             ) : (
-              <IconButton
-                size="sm"
-                type="submit"
-                label={t('chat.send')}
-                disabled={!canSend}
-                className="bg-[var(--color-accent)] text-[var(--color-on-accent)] shadow-[var(--shadow-soft)] hover:bg-[var(--color-accent-hover)] hover:text-[var(--color-on-accent)] hover:scale-[var(--scale-hover-up)] active:scale-[var(--scale-press-down)] disabled:opacity-30 disabled:hover:scale-100 transition-[transform,background-color,opacity,color] duration-[var(--duration-faster)] ease-[var(--ease-out)]"
-              >
-                <ArrowUp
-                  className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]"
-                  strokeWidth={2.4}
-                />
-              </IconButton>
+              <Tooltip label={!canSend ? sendDisabledReason : undefined} side="top">
+                <IconButton
+                  size="sm"
+                  type="submit"
+                  label={t('chat.send')}
+                  disabled={!canSend}
+                  className="bg-[var(--color-accent)] text-[var(--color-on-accent)] shadow-[var(--shadow-soft)] hover:bg-[var(--color-accent-hover)] hover:text-[var(--color-on-accent)] hover:scale-[var(--scale-hover-up)] active:scale-[var(--scale-press-down)] disabled:opacity-30 disabled:hover:scale-100 transition-[transform,background-color,opacity,color] duration-[var(--duration-faster)] ease-[var(--ease-out)]"
+                >
+                  <ArrowUp
+                    className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]"
+                    strokeWidth={2.4}
+                  />
+                </IconButton>
+              </Tooltip>
             )}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { PROVIDER_SHORTLIST, type SupportedOnboardingProvider } from '@open-codesign/shared';
+import { Tooltip } from '@open-codesign/ui';
 import { ArrowRight, ExternalLink, KeyRound, Rocket, Server } from 'lucide-react';
 
 interface WelcomeProps {
@@ -36,12 +37,14 @@ export function Welcome({ onPickKey, onPickFreeTier, ollamaDetected }: WelcomePr
           onClick={onPickKey}
         />
         {ollamaDetected ? (
-          <PathButton
-            icon={<Server className="w-[18px] h-[18px]" />}
-            title={t('onboarding.welcome.useOllama')}
-            subtitle={t('onboarding.welcome.useOllamaSubtitle')}
-            disabled
-          />
+          <Tooltip label="Ollama integration is coming in v0.2" side="bottom">
+            <PathButton
+              icon={<Server className="w-[18px] h-[18px]" />}
+              title={t('onboarding.welcome.useOllama')}
+              subtitle={t('onboarding.welcome.useOllamaSubtitle')}
+              disabled
+            />
+          </Tooltip>
         ) : null}
       </div>
 

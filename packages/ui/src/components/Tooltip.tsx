@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 export interface TooltipProps {
-  label: string;
+  label: string | undefined;
   side?: 'top' | 'bottom';
   children: ReactNode;
 }
@@ -12,6 +12,7 @@ const sideClass: Record<NonNullable<TooltipProps['side']>, string> = {
 };
 
 export function Tooltip({ label, side = 'bottom', children }: TooltipProps) {
+  if (!label) return <>{children}</>;
   return (
     <span className="relative inline-flex group">
       {children}

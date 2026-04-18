@@ -356,6 +356,20 @@
     "applying": "应用中…",
     "applyChange": "应用修改"
   },
+  "disabledReason": {
+    "typePromptToSend": "输入提示词以开始",
+    "generatingInProgress": "生成中，请稍候",
+    "typeDraftToApply": "输入评论内容后才能应用",
+    "noDesignToExport": "先生成一个设计再导出",
+    "enterApiKeyToValidate": "请输入 API Key 进行验证",
+    "validateKeyFirst": "请先验证 API Key",
+    "fillAllFieldsToTest": "请填写 provider、key 和 Base URL",
+    "testingConnection": "正在测试连接…",
+    "validateKeyToContinue": "验证 API Key 后才能继续",
+    "savingInProgress": "正在保存",
+    "enterBothModels": "两个模型字段均为必填",
+    "ollamaComingSoon": "Ollama 集成将在 v0.2 中支持"
+  },
   "errors": {
     "generic": "出错了。",
     "providerAuthMissing": "还没配置 API Key。打开设置去添加一个。",

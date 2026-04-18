@@ -1,4 +1,5 @@
 import { useT } from '@open-codesign/i18n';
+import { Tooltip } from '@open-codesign/ui';
 import { Download } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
@@ -72,17 +73,19 @@ export function PreviewToolbar(): ReactElement {
       )}
 
       <div className="relative" ref={ref}>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-[var(--radius-md)] text-[13px] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
-          aria-haspopup="menu"
-          aria-expanded={open}
-        >
-          <Download className="w-[14px] h-[14px]" aria-hidden="true" />
-          {t('export.button')}
-        </button>
+        <Tooltip label={disabled ? t('disabledReason.noDesignToExport') : undefined} side="bottom">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-[var(--radius-md)] text-[13px] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            aria-haspopup="menu"
+            aria-expanded={open}
+          >
+            <Download className="w-[14px] h-[14px]" aria-hidden="true" />
+            {t('export.button')}
+          </button>
+        </Tooltip>
 
         {open && (
           <div

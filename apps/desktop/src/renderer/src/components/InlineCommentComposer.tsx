@@ -1,5 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import type { SelectedElement } from '@open-codesign/shared';
+import { Tooltip } from '@open-codesign/ui';
 import { MessageSquareText, X } from 'lucide-react';
 import { useState } from 'react';
 import { useCodesignStore } from '../store';
@@ -22,6 +23,9 @@ function InlineCommentComposerCard({ selectedElement }: InlineCommentComposerCar
   const applyInlineComment = useCodesignStore((s) => s.applyInlineComment);
   const isGenerating = useCodesignStore((s) => s.isGenerating);
   const [draft, setDraft] = useState('');
+  const applyDisabledReason = isGenerating
+    ? t('disabledReason.generatingInProgress')
+    : t('disabledReason.typeDraftToApply');
 
   return (
     <div className="absolute bottom-10 right-10 z-10 w-[min(420px,calc(100%-3rem))] overflow-hidden rounded-[var(--radius-2xl)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)]">
@@ -68,14 +72,19 @@ function InlineCommentComposerCard({ selectedElement }: InlineCommentComposerCar
           >
             {t('common.cancel')}
           </button>
-          <button
-            type="button"
-            disabled={!draft.trim() || isGenerating}
-            onClick={() => void applyInlineComment(draft)}
-            className="inline-flex items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-accent)] px-3 py-2 text-[12px] font-medium text-white shadow-[var(--shadow-soft)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:pointer-events-none disabled:opacity-40"
+          <Tooltip
+            label={!draft.trim() || isGenerating ? applyDisabledReason : undefined}
+            side="top"
           >
-            {isGenerating ? t('inlineComment.applying') : t('inlineComment.applyChange')}
-          </button>
+            <button
+              type="button"
+              disabled={!draft.trim() || isGenerating}
+              onClick={() => void applyInlineComment(draft)}
+              className="inline-flex items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-accent)] px-3 py-2 text-[12px] font-medium text-white shadow-[var(--shadow-soft)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:pointer-events-none disabled:opacity-40"
+            >
+              {isGenerating ? t('inlineComment.applying') : t('inlineComment.applyChange')}
+            </button>
+          </Tooltip>
         </div>
       </div>
     </div>

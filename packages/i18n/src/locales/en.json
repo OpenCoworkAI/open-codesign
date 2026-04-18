@@ -357,6 +357,20 @@
     "applying": "Applying…",
     "applyChange": "Apply change"
   },
+  "disabledReason": {
+    "typePromptToSend": "Type a prompt to start",
+    "generatingInProgress": "Generation in progress",
+    "typeDraftToApply": "Type a comment to apply",
+    "noDesignToExport": "Generate a design first",
+    "enterApiKeyToValidate": "Enter an API key to validate",
+    "validateKeyFirst": "Validate the key first",
+    "fillAllFieldsToTest": "Enter provider, key and base URL to test",
+    "testingConnection": "Testing connection…",
+    "validateKeyToContinue": "Validate your API key to continue",
+    "savingInProgress": "Saving in progress",
+    "enterBothModels": "Both model fields are required",
+    "ollamaComingSoon": "Ollama integration is coming in v0.2"
+  },
   "errors": {
     "generic": "Something went wrong.",
     "providerAuthMissing": "No API key configured. Open Settings to add one.",

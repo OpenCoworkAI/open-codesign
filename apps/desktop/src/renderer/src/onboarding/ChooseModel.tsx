@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { PROVIDER_SHORTLIST, type SupportedOnboardingProvider } from '@open-codesign/shared';
-import { Button } from '@open-codesign/ui';
+import { Button, Tooltip } from '@open-codesign/ui';
 import { useEffect, useId, useState } from 'react';
 
 const OPENROUTER_FREE_MODEL = 'openrouter/free';
@@ -96,17 +96,30 @@ export function ChooseModel({
       ) : null}
 
       <div className="flex justify-between gap-2 pt-2">
-        <Button type="button" variant="ghost" onClick={onBack} disabled={saving}>
-          {t('onboarding.choose.back')}
-        </Button>
-        <Button
-          type="button"
-          variant="primary"
-          onClick={() => onConfirm(trimmedPrimary, trimmedFast)}
-          disabled={!canFinish}
+        <Tooltip label={saving ? 'Saving in progress' : undefined} side="top">
+          <Button type="button" variant="ghost" onClick={onBack} disabled={saving}>
+            {t('onboarding.choose.back')}
+          </Button>
+        </Tooltip>
+        <Tooltip
+          label={
+            !canFinish
+              ? saving
+                ? 'Saving in progress'
+                : 'Both model fields are required'
+              : undefined
+          }
+          side="top"
         >
-          {saving ? t('onboarding.choose.saving') : t('onboarding.choose.finish')}
-        </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => onConfirm(trimmedPrimary, trimmedFast)}
+            disabled={!canFinish}
+          >
+            {saving ? t('onboarding.choose.saving') : t('onboarding.choose.finish')}
+          </Button>
+        </Tooltip>
       </div>
     </div>
   );

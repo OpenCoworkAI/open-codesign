@@ -8,7 +8,7 @@ import {
   PROVIDER_SHORTLIST as SHORTLIST,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
-import { Button } from '@open-codesign/ui';
+import { Button, Tooltip } from '@open-codesign/ui';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -370,23 +370,32 @@ function AddProviderModal({
                 placeholder={t('settings.providers.modal.apiKeyPlaceholder')}
                 className="flex-1"
               />
-              <button
-                type="button"
-                onClick={handleValidate}
-                disabled={form.apiKey.trim().length === 0 || form.validating}
-                className="h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
+              <Tooltip
+                label={
+                  form.apiKey.trim().length === 0 || form.validating
+                    ? 'Enter an API key to validate'
+                    : undefined
+                }
+                side="top"
               >
-                {form.validating ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : form.validated ? (
-                  <CheckCircle className="w-3.5 h-3.5 text-[var(--color-success)]" />
-                ) : null}
-                {form.validating
-                  ? t('settings.providers.modal.validating')
-                  : form.validated
-                    ? t('settings.providers.modal.valid')
-                    : t('settings.providers.modal.validate')}
-              </button>
+                <button
+                  type="button"
+                  onClick={handleValidate}
+                  disabled={form.apiKey.trim().length === 0 || form.validating}
+                  className="h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
+                >
+                  {form.validating ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : form.validated ? (
+                    <CheckCircle className="w-3.5 h-3.5 text-[var(--color-success)]" />
+                  ) : null}
+                  {form.validating
+                    ? t('settings.providers.modal.validating')
+                    : form.validated
+                      ? t('settings.providers.modal.valid')
+                      : t('settings.providers.modal.validate')}
+                </button>
+              </Tooltip>
             </div>
             {form.error && (
               <p className="mt-1.5 text-[var(--text-xs)] text-[var(--color-error)]">{form.error}</p>
@@ -436,9 +445,11 @@ function AddProviderModal({
           <Button variant="secondary" size="sm" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={!canSave}>
-            {t('settings.providers.modal.save')}
-          </Button>
+          <Tooltip label={!canSave ? 'Validate the key first' : undefined} side="top">
+            <Button size="sm" onClick={handleSave} disabled={!canSave}>
+              {t('settings.providers.modal.save')}
+            </Button>
+          </Tooltip>
         </div>
       </div>
     </div>
