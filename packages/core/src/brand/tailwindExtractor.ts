@@ -93,8 +93,7 @@ function collectLeafPairs(body: string, prefix: string): Array<{ name: string; v
   const flat = stripNestedBlocks(body);
 
   // Match  key: 'value'  or  key: "value"  or  key: ['a', 'b']  or  key: ["a", "b"]
-  const leafRe =
-    /['"]?([\w-]+)['"]?\s*:\s*(?:'([^']+)'|"([^"]+)"|\[(['"]?[^[\]]+['"]?)\])/g;
+  const leafRe = /['"]?([\w-]+)['"]?\s*:\s*(?:'([^']+)'|"([^"]+)"|\[(['"]?[^[\]]+['"]?)\])/g;
   const leafMatches = [...flat.matchAll(leafRe)];
 
   for (const m of leafMatches) {
