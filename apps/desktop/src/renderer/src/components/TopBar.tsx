@@ -11,10 +11,13 @@ import { ThemeToggle } from './ThemeToggle';
 const dragStyle = { WebkitAppRegion: 'drag' } as CSSProperties;
 const noDragStyle = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
-// Shell badge — mock data. Full cost accounting tracked separately.
+// Display the BYOK provider chip and accumulated weekly cost. Weekly totals are
+// persisted in localStorage under an ISO-week bucket; resets automatically.
 function ByokBadge() {
   const t = useT();
   const config = useCodesignStore((s) => s.config);
+  const weekCostUsd = useCodesignStore((s) => s.weekUsage.costUsd);
+  const lastUsage = useCodesignStore((s) => s.lastUsage);
 
   const provider = config?.provider ?? null;
   const model = config?.modelPrimary ?? null;
@@ -38,6 +41,14 @@ function ByokBadge() {
     ? (modelLabel.split('/').pop() ?? modelLabel)
     : modelLabel;
   const hasFullForm = shortModelLabel !== modelLabel;
+
+  const costLabel = formatCostUsd(weekCostUsd);
+  const tooltipParts: string[] = [t('topbar.spendTooltip')];
+  if (lastUsage) {
+    tooltipParts.push(
+      `Last: ${lastUsage.inputTokens.toLocaleString()} in / ${lastUsage.outputTokens.toLocaleString()} out · $${formatCostUsd(lastUsage.costUsd)}`,
+    );
+  }
 
   return (
     <div
@@ -65,12 +76,12 @@ function ByokBadge() {
       <span className="w-px h-[var(--size-icon-xs)] bg-[var(--color-border)]" aria-hidden="true" />
 
       {/* Cost this week — tabular mono numerals */}
-      <Tooltip label={t('topbar.spendTooltip')}>
+      <Tooltip label={tooltipParts.join(' — ')}>
         <span
           className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-none"
           style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
         >
-          $0.00
+          ${costLabel}
           <span
             className="ml-[var(--space-1)] text-[var(--color-text-muted)]"
             style={{ fontFamily: 'var(--font-sans)' }}
@@ -81,6 +92,15 @@ function ByokBadge() {
       </Tooltip>
     </div>
   );
+}
+
+export function formatCostUsd(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0.00';
+  // Sub-cent costs are common for cheap providers — show 4 decimals so the
+  // user sees a non-zero number after the first request, then collapse to
+  // 2 decimals once the bucket grows past a cent.
+  if (value < 0.01) return value.toFixed(4);
+  return value.toFixed(2);
 }
 
 export function TopBar() {

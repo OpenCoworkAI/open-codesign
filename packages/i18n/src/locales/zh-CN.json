@@ -298,8 +298,8 @@
       }
     },
     "spendThisWeek": "本周",
-    "byokTitle": "BYOK — 自带密钥，完整用量统计即将上线。",
-    "spendTooltip": "本周花费（完整统计即将上线）"
+    "byokTitle": "BYOK — 自带密钥，用量在本机统计。",
+    "spendTooltip": "本周预估花费"
   },
   "theme": {
     "toggleAria": "切换主题",

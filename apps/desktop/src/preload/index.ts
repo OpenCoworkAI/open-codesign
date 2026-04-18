@@ -56,6 +56,23 @@ export interface AppPaths {
 
 export type UpdateChannel = 'stable' | 'beta';
 
+export interface GenerateArtifact {
+  id: string;
+  type: string;
+  title: string;
+  content: string;
+  designParams: unknown[];
+  createdAt: string;
+}
+
+export interface GenerateResponse {
+  message: string;
+  artifacts: GenerateArtifact[];
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
 export interface Preferences {
   updateChannel: UpdateChannel;
   generationTimeoutSec: number;
@@ -76,7 +93,7 @@ const api = {
     ipcRenderer.invoke('codesign:v1:generate', {
       schemaVersion: 1,
       ...payload,
-    } satisfies GeneratePayloadV1),
+    } satisfies GeneratePayloadV1) as Promise<GenerateResponse>,
   cancelGeneration: (generationId: string) =>
     ipcRenderer.invoke('codesign:v1:cancel-generation', {
       schemaVersion: 1,
@@ -89,7 +106,7 @@ const api = {
     model?: ModelRef;
     referenceUrl?: string;
     attachments?: LocalInputFile[];
-  }) => ipcRenderer.invoke('codesign:apply-comment', payload),
+  }) => ipcRenderer.invoke('codesign:apply-comment', payload) as Promise<GenerateResponse>,
   pickInputFiles: () =>
     ipcRenderer.invoke('codesign:pick-input-files') as Promise<LocalInputFile[]>,
   pickDesignSystemDirectory: () =>

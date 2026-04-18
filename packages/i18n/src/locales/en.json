@@ -299,8 +299,8 @@
       }
     },
     "spendThisWeek": "this week",
-    "byokTitle": "BYOK — bring-your-own-key. Full usage tracking coming soon.",
-    "spendTooltip": "Spending this week (full tracking coming soon)"
+    "byokTitle": "BYOK — bring-your-own-key. Usage tracked locally.",
+    "spendTooltip": "Estimated spending this week"
   },
   "theme": {
     "toggleAria": "Toggle theme",

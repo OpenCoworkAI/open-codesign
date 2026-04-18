@@ -55,6 +55,19 @@ export type InteractionMode = 'default' | 'comment';
 
 export type PreviewViewport = 'desktop' | 'tablet' | 'mobile';
 
+export interface UsageSnapshot {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface WeekUsage {
+  isoWeek: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
 interface PromptRequest {
   prompt: string;
   attachments: LocalInputFile[];
@@ -68,6 +81,8 @@ interface CodesignState {
   activeGenerationId: string | null;
   generationStage: GenerationStage;
   streamingTokenCount: number;
+  lastUsage: UsageSnapshot | null;
+  weekUsage: WeekUsage;
   errorMessage: string | null;
   lastError: string | null;
   config: OnboardingState | null;
@@ -160,6 +175,7 @@ interface CodesignState {
 
 const THEME_STORAGE_KEY = 'open-codesign:theme';
 const PROJECTS_STORAGE_KEY = 'open-codesign:projects:v1';
+const WEEK_USAGE_STORAGE_KEY = 'open-codesign:week-usage';
 
 type ProjectsReadResult = { projects: Project[]; error: string | null };
 
@@ -215,6 +231,71 @@ function persistProjects(projects: Project[]): { error: string | null } {
     console.warn('[open-codesign] Failed to persist projects to storage:', err);
     return { error: msg };
   }
+}
+
+export function isoWeekKey(date: Date): string {
+  // ISO 8601 week-numbering: Thursday-anchored, Monday-start.
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+function readStoredWeekUsage(now: Date): WeekUsage {
+  const fresh: WeekUsage = {
+    isoWeek: isoWeekKey(now),
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+  };
+  if (typeof window === 'undefined') return fresh;
+  try {
+    const raw = window.localStorage.getItem(WEEK_USAGE_STORAGE_KEY);
+    if (!raw) return fresh;
+    const parsed = JSON.parse(raw) as Partial<WeekUsage>;
+    if (
+      typeof parsed.isoWeek !== 'string' ||
+      typeof parsed.inputTokens !== 'number' ||
+      typeof parsed.outputTokens !== 'number' ||
+      typeof parsed.costUsd !== 'number'
+    ) {
+      return fresh;
+    }
+    if (parsed.isoWeek !== fresh.isoWeek) return fresh;
+    return {
+      isoWeek: parsed.isoWeek,
+      inputTokens: parsed.inputTokens,
+      outputTokens: parsed.outputTokens,
+      costUsd: parsed.costUsd,
+    };
+  } catch {
+    return fresh;
+  }
+}
+
+function persistWeekUsage(usage: WeekUsage): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(WEEK_USAGE_STORAGE_KEY, JSON.stringify(usage));
+  } catch {
+    // localStorage unavailable
+  }
+}
+
+export function accumulateWeekUsage(prev: WeekUsage, delta: UsageSnapshot, now: Date): WeekUsage {
+  const currentKey = isoWeekKey(now);
+  const base =
+    prev.isoWeek === currentKey
+      ? prev
+      : { isoWeek: currentKey, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  return {
+    isoWeek: currentKey,
+    inputTokens: base.inputTokens + Math.max(0, delta.inputTokens),
+    outputTokens: base.outputTokens + Math.max(0, delta.outputTokens),
+    costUsd: base.costUsd + Math.max(0, delta.costUsd),
+  };
 }
 
 function readInitialTheme(): Theme {
@@ -426,17 +507,35 @@ function applyGenerateSuccess(
   get: GetState,
   generationId: string,
   prompt: string,
-  result: { artifacts: Array<{ type?: string; content: string }>; message: string },
+  result: {
+    artifacts: Array<{ type?: string; content: string }>;
+    message: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    costUsd?: number;
+  },
 ): void {
   const firstArtifact = result.artifacts[0];
   const assistantMessage = result.message || tr('common.done');
-  finishIfCurrent(set, generationId, (state) => ({
-    messages: [...state.messages, { role: 'assistant', content: assistantMessage }],
-    previewHtml: firstArtifact?.content ?? state.previewHtml,
-    isGenerating: false,
-    activeGenerationId: null,
-    generationStage: 'done' as GenerationStage,
-  }));
+  const usage: UsageSnapshot = {
+    inputTokens: typeof result.inputTokens === 'number' ? result.inputTokens : 0,
+    outputTokens: typeof result.outputTokens === 'number' ? result.outputTokens : 0,
+    costUsd: typeof result.costUsd === 'number' ? result.costUsd : 0,
+  };
+  finishIfCurrent(set, generationId, (state) => {
+    const nextWeek = accumulateWeekUsage(state.weekUsage, usage, new Date());
+    persistWeekUsage(nextWeek);
+    return {
+      messages: [...state.messages, { role: 'assistant', content: assistantMessage }],
+      previewHtml: firstArtifact?.content ?? state.previewHtml,
+      isGenerating: false,
+      activeGenerationId: null,
+      generationStage: 'done' as GenerationStage,
+      streamingTokenCount: usage.inputTokens + usage.outputTokens,
+      lastUsage: usage,
+      weekUsage: nextWeek,
+    };
+  });
   const designId = get().currentDesignId;
   if (designId) {
     const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
@@ -498,7 +597,13 @@ async function runGenerate(
     get,
     generationId,
     payload.prompt,
-    result as { artifacts: Array<{ type?: string; content: string }>; message: string },
+    result as {
+      artifacts: Array<{ type?: string; content: string }>;
+      message: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      costUsd?: number;
+    },
   );
 }
 
@@ -530,6 +635,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   activeGenerationId: null,
   generationStage: 'idle' as GenerationStage,
   streamingTokenCount: 0,
+  lastUsage: null,
+  weekUsage: readStoredWeekUsage(new Date()),
   errorMessage: null,
   lastError: null,
   config: null,
@@ -801,12 +908,23 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       });
       const firstArtifact = result.artifacts[0];
       const assistantText = result.message || tr('common.applied');
-      set((s) => ({
-        messages: [...s.messages, { role: 'assistant', content: assistantText }],
-        previewHtml: firstArtifact?.content ?? s.previewHtml,
-        isGenerating: false,
-        selectedElement: null,
-      }));
+      const usage: UsageSnapshot = {
+        inputTokens: typeof result.inputTokens === 'number' ? result.inputTokens : 0,
+        outputTokens: typeof result.outputTokens === 'number' ? result.outputTokens : 0,
+        costUsd: typeof result.costUsd === 'number' ? result.costUsd : 0,
+      };
+      set((s) => {
+        const nextWeek = accumulateWeekUsage(s.weekUsage, usage, new Date());
+        persistWeekUsage(nextWeek);
+        return {
+          messages: [...s.messages, { role: 'assistant', content: assistantText }],
+          previewHtml: firstArtifact?.content ?? s.previewHtml,
+          isGenerating: false,
+          selectedElement: null,
+          lastUsage: usage,
+          weekUsage: nextWeek,
+        };
+      });
       const designId = get().currentDesignId;
       if (designId) {
         const artifact = artifactFromResult(firstArtifact, userMessage.content, assistantText);
