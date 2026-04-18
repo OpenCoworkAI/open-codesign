@@ -35,14 +35,16 @@ function ByokBadge() {
 
   return (
     <div
-      className="flex items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2)] py-[var(--space-1)] select-none"
+      className="group flex items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2)] py-[var(--space-1)] select-none"
       title={t('topbar.byokTitle')}
     >
-      {/* Provider + model chip */}
+      {/* Provider + model chip — model hidden until hover to keep TopBar uncluttered */}
       <span className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-none">
         {providerLabel}
-        <span className="mx-[var(--space-1)] text-[var(--color-border-strong)]">·</span>
-        <span className="text-[var(--color-text-muted)]">{modelLabel}</span>
+        <span className="hidden group-hover:inline">
+          <span className="mx-[var(--space-1)] text-[var(--color-border-strong)]">·</span>
+          <span className="text-[var(--color-text-muted)]">{modelLabel}</span>
+        </span>
       </span>
 
       <span className="w-px h-[var(--size-icon-xs)] bg-[var(--color-border)]" aria-hidden="true" />

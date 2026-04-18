@@ -27,6 +27,7 @@
   --color-accent-hover: oklch(0.56 0.18 35);
   --color-accent-muted: oklch(0.91 0.04 40);
   --color-accent-soft: oklch(0.95 0.02 40 / 0.5);
+  --color-accent-tint: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
   --color-focus-ring: oklch(0.62 0.16 35 / 0.3);
   --color-on-accent: oklch(0.99 0 0);
 
@@ -183,6 +184,7 @@ pre,
   --color-accent-hover: oklch(0.74 0.16 35);
   --color-accent-muted: oklch(0.28 0.06 35);
   --color-accent-soft: oklch(0.68 0.16 35 / 0.12);
+  --color-accent-tint: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
   --color-focus-ring: oklch(0.68 0.16 35 / 0.35);
   --color-on-accent: oklch(0.18 0.015 50);
 
