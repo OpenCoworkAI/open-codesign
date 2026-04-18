@@ -37,7 +37,7 @@ export function Welcome({ onPickKey, onPickFreeTier, ollamaDetected }: WelcomePr
           onClick={onPickKey}
         />
         {ollamaDetected ? (
-          <Tooltip label="Ollama integration is coming in v0.2" side="bottom">
+          <Tooltip label={t('disabledReason.ollamaComingSoon')} side="bottom">
             <PathButton
               icon={<Server className="w-[18px] h-[18px]" />}
               title={t('onboarding.welcome.useOllama')}

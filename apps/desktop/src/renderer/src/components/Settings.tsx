@@ -373,7 +373,7 @@ function AddProviderModal({
               <Tooltip
                 label={
                   form.apiKey.trim().length === 0 || form.validating
-                    ? 'Enter an API key to validate'
+                    ? t('disabledReason.enterApiKeyToValidate')
                     : undefined
                 }
                 side="top"
@@ -445,7 +445,7 @@ function AddProviderModal({
           <Button variant="secondary" size="sm" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Tooltip label={!canSave ? 'Validate the key first' : undefined} side="top">
+          <Tooltip label={!canSave ? t('disabledReason.validateKeyFirst') : undefined} side="top">
             <Button size="sm" onClick={handleSave} disabled={!canSave}>
               {t('settings.providers.modal.save')}
             </Button>

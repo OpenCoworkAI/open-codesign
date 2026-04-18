@@ -96,7 +96,7 @@ export function ChooseModel({
       ) : null}
 
       <div className="flex justify-between gap-2 pt-2">
-        <Tooltip label={saving ? 'Saving in progress' : undefined} side="top">
+        <Tooltip label={saving ? t('disabledReason.savingInProgress') : undefined} side="top">
           <Button type="button" variant="ghost" onClick={onBack} disabled={saving}>
             {t('onboarding.choose.back')}
           </Button>
@@ -105,8 +105,8 @@ export function ChooseModel({
           label={
             !canFinish
               ? saving
-                ? 'Saving in progress'
-                : 'Both model fields are required'
+                ? t('disabledReason.savingInProgress')
+                : t('disabledReason.enterBothModels')
               : undefined
           }
           side="top"

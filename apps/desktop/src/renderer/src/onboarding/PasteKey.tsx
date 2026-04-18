@@ -278,12 +278,12 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
     connCheck.status === 'testing' || detectedProvider === null || trimmed.length === 0;
   const testDisabledReason = testDisabled
     ? connCheck.status === 'testing'
-      ? 'Testing connection…'
-      : 'Enter provider and API key to test'
+      ? t('disabledReason.testingConnection')
+      : t('disabledReason.fillAllFieldsToTest')
     : undefined;
   const continueDisabled = connCheck.status !== 'ok';
   const continueDisabledReason = continueDisabled
-    ? 'Run Test to verify your connection first'
+    ? t('disabledReason.validateKeyToContinue')
     : undefined;
 
   return (
