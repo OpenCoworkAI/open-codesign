@@ -24,7 +24,7 @@ export function SlideDeckForm({
           type="checkbox"
           checked={speakerNotes}
           onChange={(e) => setSpeakerNotes(e.target.checked)}
-          className="mt-[var(--space-1)] w-4 h-4 accent-[var(--color-accent)]"
+          className="mt-[var(--space-1)] w-[var(--size-icon-md)] h-[var(--size-icon-md)] accent-[var(--color-accent)]"
         />
         <span className="space-y-[var(--space-0_5)]">
           <span className="block text-[var(--text-sm)] text-[var(--color-text-primary)]">
