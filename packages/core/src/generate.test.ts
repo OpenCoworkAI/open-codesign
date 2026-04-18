@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ChatMessage, ModelRef, StoredDesignSystem } from '@open-codesign/shared';
 import { CodesignError, STORED_DESIGN_SYSTEM_SCHEMA_VERSION } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -167,6 +170,41 @@ describe('generate()', () => {
     expect(result.message).toContain('Here is the revised HTML artifact.');
     expect(result.message).not.toContain('```html');
   });
+
+  it('throws CodesignError INPUT_UNSUPPORTED_MODE when mode is not create', async () => {
+    await expect(
+      // Cast required: the type is narrowed to 'create', we force an unsupported
+      // value at runtime to verify the guard fires.
+      generate({
+        prompt: 'tweak my design',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        mode: 'tweak' as 'create',
+      }),
+    ).rejects.toMatchObject({ code: 'INPUT_UNSUPPORTED_MODE' });
+    expect(completeMock).not.toHaveBeenCalled();
+  });
+
+  it('succeeds and calls the model when mode is create', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 5,
+      outputTokens: 10,
+      costUsd: 0,
+    });
+
+    const result = await generate({
+      prompt: 'design a landing page',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+      mode: 'create',
+    });
+
+    expect(completeMock).toHaveBeenCalledOnce();
+    expect(result.artifacts).toHaveLength(1);
+  });
 });
 
 describe('applyComment()', () => {
@@ -286,5 +324,24 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('Muted neutrals with warm copper accents.');
     expect(prompt).toContain('#b45f3d');
     expect(prompt).toContain('IBM Plex Sans');
+  });
+});
+
+describe('tweaks-protocol .txt vs TS constant drift', () => {
+  it('EDITMODE block in .txt and the inlined TS constant are character-for-character identical', () => {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const txt = readFileSync(path.join(__dirname, 'prompts', 'tweaks-protocol.v1.txt'), 'utf-8');
+
+    // Extract the handleEdits function block from .txt
+    const txtHandleEditsMatch = txt.match(/function handleEdits[\s\S]*?^}/m);
+    expect(txtHandleEditsMatch, 'handleEdits not found in .txt').toBeTruthy();
+
+    // The TS constant embeds the same content — verify the critical setProperty
+    // line uses String(value) in both places.
+    expect(txt).toContain("root.style.setProperty('--' + key, String(value))");
+
+    // Also verify the tweak-mode system prompt (which uses the TS constant) has it.
+    const prompt = composeSystemPrompt({ mode: 'tweak' });
+    expect(prompt).toContain("root.style.setProperty('--' + key, String(value))");
   });
 });

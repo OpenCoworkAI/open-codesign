@@ -42,8 +42,11 @@ export interface GenerateInput {
   referenceUrl?: ReferenceUrlContext | null | undefined;
   /** Override the system prompt entirely. When set, `mode` is ignored. */
   systemPrompt?: string | undefined;
-  /** Generation mode. Defaults to 'create'. */
-  mode?: PromptComposeOptions['mode'] | undefined;
+  /**
+   * Generation mode for this call. Only `'create'` is supported here.
+   * Use `applyComment()` for `'revise'`; `'tweak'` has no public entry point yet.
+   */
+  mode?: Extract<PromptComposeOptions['mode'], 'create'> | undefined;
   signal?: AbortSignal | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
 }
@@ -269,13 +272,22 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     throw new CodesignError('Prompt cannot be empty', 'INPUT_EMPTY_PROMPT');
   }
 
+  // Narrow guard: only 'create' is wired through buildPrompt. Callers passing
+  // 'tweak' or 'revise' would silently get wrong output — reject early instead.
+  if (input.mode && input.mode !== 'create') {
+    throw new CodesignError(
+      'generate() only supports mode "create". Use applyComment() for revise; tweak is not yet wired.',
+      'INPUT_UNSUPPORTED_MODE',
+    );
+  }
+
   const messages: ChatMessage[] = [
     {
       role: 'system',
       content:
         input.systemPrompt ??
         composeSystemPrompt({
-          mode: input.mode ?? 'create',
+          mode: 'create',
           brandTokens: input.designSystem ? storedDesignSystemToTokens(input.designSystem) : null,
         }),
     },
