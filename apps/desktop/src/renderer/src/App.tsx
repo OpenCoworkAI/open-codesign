@@ -117,7 +117,12 @@ export function App() {
         {view === 'settings' ? (
           <Settings />
         ) : view === 'hub' ? (
-          <HubView />
+          <HubView
+            onUseExamplePrompt={(p) => {
+              setPrompt(p);
+              setView('workspace');
+            }}
+          />
         ) : (
           <div className="h-full flex flex-col">
             <div className="px-[var(--space-5)] py-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)]">

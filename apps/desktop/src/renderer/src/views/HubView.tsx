@@ -9,7 +9,11 @@ import { YourDesignsTab } from './hub/YourDesignsTab';
 
 const TABS: HubTab[] = ['recent', 'your', 'examples', 'designSystems'];
 
-export function HubView() {
+export interface HubViewProps {
+  onUseExamplePrompt?: (prompt: string) => void;
+}
+
+export function HubView({ onUseExamplePrompt }: HubViewProps = {}) {
   const t = useT();
   const hubTab = useCodesignStore((s) => s.hubTab);
   const setHubTab = useCodesignStore((s) => s.setHubTab);
@@ -60,7 +64,9 @@ export function HubView() {
       <main className="flex-1 min-h-0 overflow-y-auto px-[var(--space-8)] py-[var(--space-6)]">
         {hubTab === 'recent' ? <RecentTab /> : null}
         {hubTab === 'your' ? <YourDesignsTab /> : null}
-        {hubTab === 'examples' ? <ExamplesTab /> : null}
+        {hubTab === 'examples' ? (
+          <ExamplesTab onUsePrompt={(example) => onUseExamplePrompt?.(example.prompt)} />
+        ) : null}
         {hubTab === 'designSystems' ? <DesignSystemsTab /> : null}
       </main>
 
