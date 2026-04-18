@@ -29,14 +29,26 @@ const logger = getLogger('snapshots-ipc');
 
 /**
  * Translate a raw better-sqlite3 SqliteError into a typed CodesignError so the
- * renderer never sees provider-specific error strings. Unrecognised errors fall
- * through as IPC_DB_ERROR with the original cause attached for server-side logs.
+ * renderer never sees provider-specific error strings. Constraint subcodes are
+ * matched individually because the bare `SQLITE_CONSTRAINT` parent code covers
+ * unrelated failures (UNIQUE, NOT NULL, CHECK, FK), and surfacing all of them
+ * as "Parent snapshot does not exist" would mislead the UI. Unrecognised errors
+ * fall through as IPC_DB_ERROR with the original cause attached for server-side
+ * logs.
  */
 function translateSqliteError(err: unknown, context: string): CodesignError {
   const code = (err as { code?: unknown })?.code;
   if (typeof code === 'string') {
-    if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY' || code === 'SQLITE_CONSTRAINT') {
+    if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
       return new CodesignError('Parent snapshot does not exist', 'IPC_BAD_INPUT', { cause: err });
+    }
+    if (code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+      return new CodesignError('Snapshot already exists', 'IPC_CONFLICT', { cause: err });
+    }
+    if (code === 'SQLITE_CONSTRAINT_NOTNULL' || code === 'SQLITE_CONSTRAINT_CHECK') {
+      return new CodesignError('Snapshot input violates database constraints', 'IPC_BAD_INPUT', {
+        cause: err,
+      });
     }
     if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') {
       return new CodesignError('Database is locked, retry shortly', 'IPC_DB_BUSY', { cause: err });

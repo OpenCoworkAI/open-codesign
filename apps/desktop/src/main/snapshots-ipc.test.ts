@@ -408,6 +408,53 @@ describe('SQLite error translation', () => {
     }
   });
 
+  it('translates SQLITE_CONSTRAINT_UNIQUE to IPC_CONFLICT', () => {
+    try {
+      withDbThrowing('SQLITE_CONSTRAINT_UNIQUE', attemptCreate);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CodesignError);
+      expect((err as CodesignError).code).toBe('IPC_CONFLICT');
+      expect((err as Error).message).toBe('Snapshot already exists');
+      expect((err as Error).message).not.toMatch(/SQLITE_/);
+    }
+  });
+
+  it('translates SQLITE_CONSTRAINT_NOTNULL to IPC_BAD_INPUT with neutral message', () => {
+    try {
+      withDbThrowing('SQLITE_CONSTRAINT_NOTNULL', attemptCreate);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CodesignError);
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+      expect((err as Error).message).toBe('Snapshot input violates database constraints');
+      expect((err as Error).message).not.toMatch(/Parent snapshot/);
+    }
+  });
+
+  it('translates SQLITE_CONSTRAINT_CHECK to IPC_BAD_INPUT with neutral message', () => {
+    try {
+      withDbThrowing('SQLITE_CONSTRAINT_CHECK', attemptCreate);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+      expect((err as Error).message).toBe('Snapshot input violates database constraints');
+    }
+  });
+
+  it('translates bare SQLITE_CONSTRAINT (no subcode) to generic IPC_DB_ERROR', () => {
+    try {
+      withDbThrowing('SQLITE_CONSTRAINT', attemptCreate);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CodesignError);
+      expect((err as CodesignError).code).toBe('IPC_DB_ERROR');
+      expect((err as Error).message).not.toMatch(/Parent snapshot/);
+      expect((err as Error).message).not.toMatch(/SQLITE_/);
+      expect((err as Error).cause).toBeDefined();
+    }
+  });
+
   it('translates unknown SQLite errors to IPC_DB_ERROR with no leak', () => {
     try {
       withDbThrowing('SQLITE_CORRUPT', attemptCreate);
