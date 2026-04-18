@@ -37,6 +37,7 @@ export function PhoneFrame({ children }: PhoneFrameProps): ReactElement {
           borderBottomLeftRadius: 'var(--radius-lg)',
           borderBottomRightRadius: 'var(--radius-lg)',
           zIndex: 2,
+          pointerEvents: 'none',
         }}
       />
       {/* Screen area */}
