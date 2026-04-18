@@ -6,7 +6,7 @@ import {
   isIframeErrorMessage,
   isOverlayMessage,
 } from '@open-codesign/runtime';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { EmptyState } from '../preview/EmptyState';
 import { ErrorState } from '../preview/ErrorState';
 import { LoadingState } from '../preview/LoadingState';
@@ -137,6 +137,12 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Memoize the srcdoc string so we only re-run the (regex-heavy) builder when
+  // previewHtml actually changes. Without this, every unrelated store update
+  // (toasts, theme, errors) re-ran buildSrcdoc and React still diffed an
+  // identical srcDoc prop — but the regex cost is non-trivial on large designs.
+  const srcDoc = useMemo(() => (previewHtml ? buildSrcdoc(previewHtml) : null), [previewHtml]);
+
   useEffect(() => {
     postModeToPreviewWindow(iframeRef.current?.contentWindow, interactionMode, pushIframeError);
   }, [interactionMode, pushIframeError]);
@@ -185,10 +191,9 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     const rawIframe = (
       <iframe
         ref={iframeRef}
-        key={previewHtml.length}
         title="design-preview"
         sandbox="allow-scripts"
-        srcDoc={buildSrcdoc(previewHtml)}
+        srcDoc={srcDoc ?? ''}
         onLoad={() => {
           postModeToPreviewWindow(
             iframeRef.current?.contentWindow,
