@@ -1,36 +1,39 @@
 /**
  * Design tokens for open-codesign.
- * Aligned with open-cowork's Claude-style aesthetic: warm beige, soft shadows.
+ * Anthropic Claude Design aesthetic: warm cream surfaces, serif display type,
+ * terracotta accent, editorial warmth meets technical precision.
  * All values are CSS custom properties — never hardcode.
  */
 
 :root {
-  /* Surface */
-  --color-background: #faf8f3;
-  --color-background-secondary: #f3efe6;
-  --color-surface: #ffffff;
-  --color-surface-hover: #f7f4ec;
-  --color-surface-active: #efeae0;
-  --color-surface-muted: #f3efe6;
+  /* Surface — warm cream (Anthropic signature) */
+  --color-background: oklch(0.98 0.012 80); /* #FAF7F3 cream */
+  --color-background-secondary: oklch(0.96 0.015 75);
+  --color-surface: oklch(0.99 0.008 80);
+  --color-surface-hover: oklch(0.96 0.015 75);
+  --color-surface-active: oklch(0.94 0.018 72);
+  --color-surface-muted: oklch(0.96 0.015 75);
+  /* alias used by some components */
+  --color-surface-elevated: oklch(0.99 0.008 80);
 
   /* Border */
-  --color-border: #e3ddd0;
-  --color-border-muted: #ece6d8;
-  --color-border-subtle: #f3efe6;
-  --color-border-strong: #d4cdbc;
+  --color-border: oklch(0.88 0.012 70);
+  --color-border-muted: oklch(0.91 0.01 72);
+  --color-border-subtle: oklch(0.94 0.008 74);
+  --color-border-strong: oklch(0.78 0.015 65);
 
-  /* Accent */
-  --color-accent: #c96442;
-  --color-accent-hover: #b75636;
-  --color-accent-muted: #f3d9cf;
-  --color-accent-soft: rgba(201, 100, 66, 0.08);
-  --color-focus-ring: rgba(201, 100, 66, 0.3);
-  --color-on-accent: #ffffff;
+  /* Accent — warm Anthropic terracotta */
+  --color-accent: oklch(0.62 0.16 35); /* ~ #C76D54 */
+  --color-accent-hover: oklch(0.56 0.18 35);
+  --color-accent-muted: oklch(0.91 0.04 40);
+  --color-accent-soft: oklch(0.95 0.02 40 / 0.5);
+  --color-focus-ring: oklch(0.62 0.16 35 / 0.3);
+  --color-on-accent: oklch(0.99 0 0);
 
   /* Text */
-  --color-text-primary: #1f1d18;
-  --color-text-secondary: #57544c;
-  --color-text-muted: #8c887d;
+  --color-text-primary: oklch(0.22 0.025 50); /* warm dark brown */
+  --color-text-secondary: oklch(0.5 0.02 55);
+  --color-text-muted: oklch(0.65 0.015 58);
 
   /* Semantic */
   --color-success: #4f7a52;
@@ -41,27 +44,38 @@
   /* Feedback */
   --color-toast-success: #4f7a52;
   --color-toast-error: #b04030;
-  --color-overlay: rgba(31, 29, 24, 0.45);
+  --color-overlay: oklch(0.22 0.025 50 / 0.45);
 
   /* Shadow — warm-tinted, three discrete levels */
-  --shadow-soft: 0 1px 2px rgba(57, 41, 24, 0.04);
-  --shadow-card: 0 1px 2px rgba(57, 41, 24, 0.04), 0 4px 16px rgba(57, 41, 24, 0.06);
-  --shadow-elevated: 0 2px 4px rgba(57, 41, 24, 0.05), 0 12px 32px rgba(57, 41, 24, 0.1);
+  --shadow-soft: 0 1px 2px oklch(0.3 0.02 45 / 0.04);
+  --shadow-card: 0 1px 2px oklch(0.3 0.02 45 / 0.04), 0 4px 16px oklch(0.3 0.02 45 / 0.06);
+  --shadow-elevated: 0 2px 4px oklch(0.3 0.02 45 / 0.05), 0 12px 32px oklch(0.3 0.02 45 / 0.1);
   --shadow-inset-soft: inset 0 0 0 1px var(--color-border-subtle);
 
-  /* Typography */
-  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  /* Typography — Anthropic-inspired stack */
+  --font-display: "Fraunces Variable", "Times New Roman", serif;
+  --font-sans: "Geist Variable", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
-  /* Type scale — strict 8 sizes */
+  /* Extended type scale */
+  --font-size-display-2xl: 48px;
+  --font-size-display-xl: 36px;
+  --font-size-display-lg: 28px;
+  --font-size-body-lg: 17px;
+  --font-size-body: 15px;
+  --font-size-body-sm: 13px;
+  --font-size-body-xs: 11px;
+  --font-size-mono: 13px;
+
+  /* Type scale — strict 8 sizes (kept for back-compat) */
   --text-2xs: 10px;
   --text-xs: 12px;
   --text-sm: 13px;
-  --text-base: 14px;
-  --text-md: 16px;
+  --text-base: 15px;
+  --text-md: 17px;
   --text-lg: 20px;
-  --text-xl: 24px;
-  --text-2xl: 32px;
+  --text-xl: 28px;
+  --text-2xl: 36px;
 
   /* Line height */
   --leading-heading: 1.2;
@@ -90,47 +104,69 @@
   --space-8: 32px;
   --space-12: 48px;
   --space-16: 64px;
+  --space-content: 24px;
 
-  /* Radius */
+  /* Radius — slightly larger, friendlier */
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --radius-xl: 14px;
-  --radius-2xl: 16px;
+  --radius-2xl: 18px;
   --radius-full: 9999px;
 
-  /* Motion */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --duration-fast: 150ms;
+  /* Motion — subtle, editorial */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 300ms;
   --transition-base: all var(--duration-base) var(--ease-out);
   --transition-fast: all var(--duration-fast) var(--ease-out);
 }
 
+/* Display headings use Fraunces */
+h1,
+h2,
+h3,
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+/* Monospaced numbers and code */
+code,
+kbd,
+pre,
+.mono,
+.num {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
+}
+
 .dark {
-  --color-background: #1a1815;
-  --color-background-secondary: #221f1b;
-  --color-surface: #26221d;
-  --color-surface-hover: #2d2925;
-  --color-surface-active: #34302b;
-  --color-surface-muted: #221f1b;
+  /* Warm dark — not blue-black */
+  --color-background: oklch(0.18 0.015 50);
+  --color-background-secondary: oklch(0.22 0.015 50);
+  --color-surface: oklch(0.22 0.015 50);
+  --color-surface-hover: oklch(0.26 0.018 50);
+  --color-surface-active: oklch(0.29 0.018 50);
+  --color-surface-muted: oklch(0.22 0.015 50);
+  --color-surface-elevated: oklch(0.26 0.018 50);
 
-  --color-border: #3a352f;
-  --color-border-muted: #2f2b26;
-  --color-border-subtle: #26221d;
-  --color-border-strong: #4a443c;
+  --color-border: oklch(0.3 0.012 50);
+  --color-border-muted: oklch(0.27 0.01 50);
+  --color-border-subtle: oklch(0.24 0.01 50);
+  --color-border-strong: oklch(0.4 0.015 55);
 
-  --color-accent: #d97757;
-  --color-accent-hover: #e88868;
-  --color-accent-muted: #4a2b22;
-  --color-accent-soft: rgba(217, 119, 87, 0.1);
-  --color-focus-ring: rgba(217, 119, 87, 0.35);
-  --color-on-accent: #ffffff;
+  --color-accent: oklch(0.68 0.16 35);
+  --color-accent-hover: oklch(0.74 0.16 35);
+  --color-accent-muted: oklch(0.28 0.06 35);
+  --color-accent-soft: oklch(0.68 0.16 35 / 0.12);
+  --color-focus-ring: oklch(0.68 0.16 35 / 0.35);
+  --color-on-accent: oklch(0.18 0.015 50);
 
-  --color-text-primary: #f5f1e8;
-  --color-text-secondary: #b8b3a6;
-  --color-text-muted: #807b6f;
+  --color-text-primary: oklch(0.95 0.01 70); /* warm off-white */
+  --color-text-secondary: oklch(0.7 0.015 60);
+  --color-text-muted: oklch(0.55 0.012 58);
 
   --color-success: #6b9c6e;
   --color-warning: #d4a04a;
@@ -139,11 +175,11 @@
 
   --color-toast-success: #6b9c6e;
   --color-toast-error: #d96050;
-  --color-overlay: rgba(0, 0, 0, 0.6);
+  --color-overlay: oklch(0 0 0 / 0.6);
 
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 4px 16px rgba(0, 0, 0, 0.35);
-  --shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-soft: 0 1px 2px oklch(0 0 0 / 0.3);
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.25), 0 4px 16px oklch(0 0 0 / 0.35);
+  --shadow-elevated: 0 2px 4px oklch(0 0 0 / 0.3), 0 12px 32px oklch(0 0 0 / 0.5);
   --shadow-inset-soft: inset 0 0 0 1px var(--color-border-subtle);
 }
 

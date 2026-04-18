@@ -12,14 +12,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-#root {
-  height: 100%;
+h1,
+h2,
+h3,
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
 }
 
-code,
-kbd,
-pre {
-  font-family: var(--font-mono);
+#root {
+  height: 100%;
 }
 
 * {

@@ -18,6 +18,11 @@
     "react": "^19.0.0",
     "tailwindcss": "^4.0.0"
   },
+  "dependencies": {
+    "@fontsource-variable/fraunces": "^5.1.1",
+    "@fontsource-variable/geist": "^5.1.0",
+    "@fontsource-variable/jetbrains-mono": "^5.1.0"
+  },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "react": "^19.0.0",

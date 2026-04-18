@@ -1,3 +1,5 @@
+// Side-effects only — loads Fraunces, Geist, JetBrains Mono variable fonts.
+import './fonts';
 export { Button } from './components/Button';
 export { Card } from './components/Card';
 export { IconButton } from './components/IconButton';
