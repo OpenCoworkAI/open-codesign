@@ -12,6 +12,7 @@ export function Onboarding() {
   const completeOnboarding = useCodesignStore((s) => s.completeOnboarding);
   const [step, setStep] = useState<Step>('welcome');
   const [provider, setProvider] = useState<SupportedOnboardingProvider | null>(null);
+  const [preferFreeTier, setPreferFreeTier] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -19,6 +20,7 @@ export function Onboarding() {
 
   function handleValidated(p: SupportedOnboardingProvider, key: string, url: string | null) {
     setProvider(p);
+    setPreferFreeTier((current) => (p === 'openrouter' ? current : false));
     setApiKey(key);
     setBaseUrl(url);
     setStep('model');
@@ -68,8 +70,12 @@ export function Onboarding() {
 
         {step === 'welcome' ? (
           <Welcome
-            onPickKey={() => setStep('paste')}
+            onPickKey={() => {
+              setPreferFreeTier(false);
+              setStep('paste');
+            }}
             onPickFreeTier={() => {
+              setPreferFreeTier(true);
               setProvider('openrouter');
               setStep('paste');
             }}
@@ -82,6 +88,8 @@ export function Onboarding() {
         {step === 'model' && provider !== null ? (
           <ChooseModel
             provider={provider}
+            preferFreeTier={preferFreeTier}
+            baseUrl={baseUrl}
             saving={saving}
             errorMessage={errorMessage}
             onConfirm={handleConfirm}
