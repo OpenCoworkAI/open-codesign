@@ -485,6 +485,36 @@
       "loadFailed": "Could not load your designs"
     }
   },
+  "diagnostics": {
+    "title": "Connection failed",
+    "status": "Status: {{status}}",
+    "attempted": "What we tried: {{url}}",
+    "cause": {
+      "keyInvalid": "API key invalid or revoked.",
+      "balanceEmpty": "Account balance is empty.",
+      "missingV1": "Base URL path is likely missing the /v1 suffix.",
+      "rateLimit": "Rate limit exceeded.",
+      "hostUnreachable": "Cannot reach host — check domain, port, or VPN.",
+      "timedOut": "Request timed out — check firewall or VPN.",
+      "corsError": "CORS error (should not happen in main process). This is a bug.",
+      "sslError": "SSL / certificate error (self-signed cert on relay?).",
+      "unknown": "Unknown error — check the full log for details."
+    },
+    "fix": {
+      "updateKey": "Update key",
+      "addCredits": "Add credits →",
+      "addV1": "Add /v1",
+      "waitAndRetry": "Wait and retry",
+      "checkNetwork": "Check network / VPN",
+      "checkVpn": "Check VPN / firewall",
+      "reportBug": "Report this bug",
+      "disableTls": "Disable TLS verify"
+    },
+    "applyFix": "Apply this fix",
+    "testAgain": "Test again",
+    "showLog": "Show full log",
+    "dismiss": "Dismiss"
+  },
   "demos": {
     "meditationApp": {
       "title": "Calm Spaces meditation app",

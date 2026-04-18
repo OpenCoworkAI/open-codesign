@@ -241,3 +241,11 @@ export type { Design, DesignMessage, DesignSnapshot, SnapshotCreateInput } from 
 
 export { SkillFrontmatterV1 } from './skills';
 export type { LoadedSkill } from './skills';
+
+export { diagnose } from './diagnostics';
+export type {
+  DiagnosticHypothesis,
+  DiagnosticFix,
+  DiagnoseContext,
+  ErrorCode,
+} from './diagnostics';

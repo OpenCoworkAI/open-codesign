@@ -1,5 +1,6 @@
 import { setLocale as applyLocale, useT } from '@open-codesign/i18n';
 import type {
+  ErrorCode,
   OnboardingState,
   PROVIDER_SHORTLIST,
   SupportedOnboardingProvider,
@@ -29,6 +30,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import type { AppPaths, Preferences, ProviderRow } from '../../../preload/index';
 import { useCodesignStore } from '../store';
+import { ConnectionDiagnosticPanel } from './ConnectionDiagnosticPanel';
 
 type Tab = 'models' | 'appearance' | 'storage' | 'advanced';
 
@@ -180,6 +182,7 @@ interface AddProviderFormState {
   modelFast: string;
   validating: boolean;
   error: string | null;
+  errorCode: ErrorCode | null;
   validated: boolean;
 }
 
@@ -193,6 +196,7 @@ function makeDefaultForm(provider: SupportedOnboardingProvider): AddProviderForm
     modelFast: sl.defaultFast,
     validating: false,
     error: null,
+    errorCode: null,
     validated: false,
   };
 }
@@ -219,6 +223,7 @@ export function applyValidateResult(
   snapshot: ValidateSnapshot,
   ok: boolean,
   message: string | undefined,
+  errorCode?: ErrorCode,
 ): AddProviderFormState {
   if (
     current.provider !== snapshot.provider ||
@@ -229,9 +234,14 @@ export function applyValidateResult(
     return current;
   }
   if (ok) {
-    return { ...current, validating: false, validated: true };
+    return { ...current, validating: false, validated: true, error: null, errorCode: null };
   }
-  return { ...current, validating: false, error: message ?? 'Validation failed' };
+  return {
+    ...current,
+    validating: false,
+    error: message ?? 'Validation failed',
+    errorCode: errorCode ?? null,
+  };
 }
 
 function AddProviderModal({
@@ -249,9 +259,18 @@ function AddProviderModal({
   ];
 
   const [form, setForm] = useState<AddProviderFormState>(makeDefaultForm('anthropic'));
+  const [logsFolder, setLogsFolder] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!window.codesign) return;
+    void window.codesign.settings
+      .getPaths()
+      .then((p) => setLogsFolder(p.logsFolder))
+      .catch(() => undefined);
+  }, []);
 
   function setField<K extends keyof AddProviderFormState>(k: K, v: AddProviderFormState[K]) {
-    setForm((prev) => ({ ...prev, [k]: v, error: null, validated: false }));
+    setForm((prev) => ({ ...prev, [k]: v, error: null, errorCode: null, validated: false }));
   }
 
   function handleProviderChange(p: string) {
@@ -266,7 +285,13 @@ function AddProviderModal({
       apiKey: form.apiKey.trim(),
       baseUrl: form.baseUrl.trim(),
     };
-    setForm((prev) => ({ ...prev, validating: true, error: null, validated: false }));
+    setForm((prev) => ({
+      ...prev,
+      validating: true,
+      error: null,
+      errorCode: null,
+      validated: false,
+    }));
     try {
       const res = await window.codesign.settings.validateKey({
         provider: snapshot.provider,
@@ -274,7 +299,13 @@ function AddProviderModal({
         ...(snapshot.baseUrl.length > 0 ? { baseUrl: snapshot.baseUrl } : {}),
       });
       setForm((current) =>
-        applyValidateResult(current, snapshot, res.ok, res.ok ? undefined : res.message),
+        applyValidateResult(
+          current,
+          snapshot,
+          res.ok,
+          res.ok ? undefined : res.message,
+          res.ok ? undefined : res.code,
+        ),
       );
     } finally {
       setForm((current) => (current.validating ? { ...current, validating: false } : current));
@@ -397,9 +428,30 @@ function AddProviderModal({
                 </button>
               </Tooltip>
             </div>
-            {form.error && (
+            {form.error && form.errorCode !== null ? (
+              <div className="mt-2">
+                <ConnectionDiagnosticPanel
+                  errorCode={form.errorCode}
+                  httpStatus={form.error}
+                  baseUrl={form.baseUrl}
+                  provider={form.provider}
+                  {...(logsFolder !== undefined ? { logsPath: logsFolder } : {})}
+                  onApplyFix={(newUrl) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      baseUrl: newUrl,
+                      error: null,
+                      errorCode: null,
+                      validated: false,
+                    }))
+                  }
+                  onTestAgain={() => void handleValidate()}
+                  onDismiss={() => setForm((prev) => ({ ...prev, error: null, errorCode: null }))}
+                />
+              </div>
+            ) : form.error !== null ? (
               <p className="mt-1.5 text-[var(--text-xs)] text-[var(--color-error)]">{form.error}</p>
-            )}
+            ) : null}
           </div>
 
           <div>

@@ -47,6 +47,7 @@ describe('applyValidateResult', () => {
     modelFast: 'claude-haiku-3',
     validating: true,
     error: null,
+    errorCode: null,
     validated: false,
   };
 

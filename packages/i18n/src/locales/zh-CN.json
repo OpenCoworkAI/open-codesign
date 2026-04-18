@@ -480,6 +480,36 @@
       "loadFailed": "无法加载设计列表"
     }
   },
+  "diagnostics": {
+    "title": "连接失败",
+    "status": "状态：{{status}}",
+    "attempted": "我们尝试了：{{url}}",
+    "cause": {
+      "keyInvalid": "API Key 无效或已被撤销。",
+      "balanceEmpty": "账户余额不足。",
+      "missingV1": "Base URL 路径可能缺少 /v1 后缀。",
+      "rateLimit": "请求被限流，超过了速率限制。",
+      "hostUnreachable": "无法连接到主机——检查域名、端口或 VPN。",
+      "timedOut": "请求超时——检查防火墙或 VPN。",
+      "corsError": "CORS 跨域错误（主进程中不应出现此错误，这是一个 Bug）。",
+      "sslError": "SSL / 证书错误（中转服务使用了自签证书？）。",
+      "unknown": "未知错误——请查看完整日志以获取详情。"
+    },
+    "fix": {
+      "updateKey": "更新 Key",
+      "addCredits": "充值 →",
+      "addV1": "添加 /v1",
+      "waitAndRetry": "等待后重试",
+      "checkNetwork": "检查网络 / VPN",
+      "checkVpn": "检查 VPN / 防火墙",
+      "reportBug": "报告此 Bug",
+      "disableTls": "禁用 TLS 验证"
+    },
+    "applyFix": "应用此修复",
+    "testAgain": "再次测试",
+    "showLog": "查看完整日志",
+    "dismiss": "关闭"
+  },
   "demos": {
     "meditationApp": {
       "title": "Calm Spaces 冥想 App",
