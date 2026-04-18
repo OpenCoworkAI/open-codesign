@@ -768,13 +768,16 @@ function ModelsTab() {
  *   1. Persists it via the IPC bridge (writes to disk on the main process)
  *   2. Changes the active i18next language so React components re-render
  *
+ * Requires a connected `localeApi` — callers must guard against a missing
+ * bridge before invoking this function.
+ *
  * Exported so it can be unit-tested without a DOM.
  */
 export async function applyLocaleChange(
   locale: string,
-  localeApi: { set: (locale: string) => Promise<string> } | undefined,
+  localeApi: { set: (locale: string) => Promise<string> },
 ): Promise<string> {
-  const persisted = localeApi ? await localeApi.set(locale) : locale;
+  const persisted = await localeApi.set(locale);
   const applied = await applyLocale(persisted);
   return applied;
 }
@@ -800,14 +803,21 @@ function AppearanceTab() {
   }, [pushToast]);
 
   async function handleLocaleChange(v: string) {
-    if (!window.codesign) return;
+    if (!window.codesign?.locale) {
+      pushToast({
+        variant: 'error',
+        title: 'Failed to save language preference',
+        description: 'Renderer is not connected to the main process.',
+      });
+      return;
+    }
     try {
       const applied = await applyLocaleChange(v, window.codesign.locale);
       setLocale(applied);
     } catch (err) {
       pushToast({
         variant: 'error',
-        title: 'Failed to save language',
+        title: 'Failed to save language preference',
         description: err instanceof Error ? err.message : 'Unknown error',
       });
     }

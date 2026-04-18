@@ -98,12 +98,17 @@ describe('applyLocaleChange', () => {
     expect(result).toBe('zh-CN');
   });
 
-  it('skips IPC set and applies locale directly when no locale API is provided', async () => {
+  it('applies the locale returned by the IPC bridge, not the requested locale', async () => {
     const { setLocale: mockSetLocale } = await import('@open-codesign/i18n');
+    // Bridge normalises 'zh' → 'zh-CN'
+    const mockLocaleApi = {
+      set: vi.fn((_locale: string) => Promise.resolve('zh-CN')),
+    };
 
-    const result = await applyLocaleChange('en', undefined);
+    const result = await applyLocaleChange('zh', mockLocaleApi);
 
-    expect(mockSetLocale).toHaveBeenCalledWith('en');
-    expect(result).toBe('en');
+    expect(mockLocaleApi.set).toHaveBeenCalledWith('zh');
+    expect(mockSetLocale).toHaveBeenCalledWith('zh-CN');
+    expect(result).toBe('zh-CN');
   });
 });

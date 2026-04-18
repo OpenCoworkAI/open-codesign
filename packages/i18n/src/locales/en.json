@@ -274,7 +274,8 @@
     "rendererDisconnected": "Renderer is not connected to the main process.",
     "onboardingIncomplete": "Onboarding is not complete.",
     "modelListFailed": "Could not load model list.",
-    "unknown": "Unknown error"
+    "unknown": "Unknown error",
+    "localePersistFailed": "Failed to save language preference"
   },
   "demos": {
     "meditationApp": {
