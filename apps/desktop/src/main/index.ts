@@ -30,6 +30,8 @@ import {
 import { registerPreferencesIpc } from './preferences-ipc';
 import { preparePromptContext } from './prompt-context';
 import { resolveActiveModel } from './provider-settings';
+import { safeInitSnapshotsDb } from './snapshots-db';
+import { registerSnapshotsIpc, registerSnapshotsUnavailableIpc } from './snapshots-ipc';
 
 let mainWindow: ElectronBrowserWindow | null = null;
 
@@ -437,6 +439,28 @@ function setupAutoUpdater(): void {
 void app.whenReady().then(async () => {
   initLogger();
   await loadConfigOnBoot();
+  // Snapshot persistence is best-effort at boot — a failure here (corrupt DB,
+  // permission denied, missing native binding) must NOT block the BrowserWindow
+  // from opening. Surface it via an error dialog and skip registering the
+  // snapshots IPC channels; the rest of the app stays usable.
+  const dbResult = safeInitSnapshotsDb(join(app.getPath('userData'), 'designs.db'));
+  if (dbResult.ok) {
+    registerSnapshotsIpc(dbResult.db);
+  } else {
+    const bootLog = getLogger('main:boot');
+    bootLog.error('snapshotsDb.init.fail', {
+      message: dbResult.error.message,
+      stack: dbResult.error.stack,
+    });
+    // Install stub handlers so renderer-side calls reject with a typed
+    // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
+    // "No handler registered" rejection — see snapshots-ipc.ts.
+    registerSnapshotsUnavailableIpc(dbResult.error.message);
+    dialog.showErrorBox(
+      'Design history unavailable',
+      `Could not open the local snapshots database. Version history will be disabled for this session.\n\n${dbResult.error.message}`,
+    );
+  }
   registerIpcHandlers();
   registerLocaleIpc();
   registerConnectionIpc();

@@ -202,6 +202,8 @@ export {
   getPresetById,
 } from './proxy-presets';
 export type { ProxyPresetId } from './proxy-presets';
-
 export { DesignTokenV1, DesignTokenSet } from './design-token';
 export type { DesignToken } from './design-token';
+
+export { DesignSnapshotV1, DesignV1 } from './snapshot';
+export type { Design, DesignSnapshot, SnapshotCreateInput } from './snapshot';
