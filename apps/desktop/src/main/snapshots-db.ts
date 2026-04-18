@@ -59,9 +59,37 @@ function applySchema(db: Database): void {
 /** Initialize and return the singleton DB instance for production use. */
 export function initSnapshotsDb(dbPath: string): Database {
   if (singleton) return singleton;
-  singleton = openDatabase(dbPath);
-  applySchema(singleton);
+  const db = openDatabase(dbPath);
+  try {
+    applySchema(db);
+  } catch (cause) {
+    // Don't cache a half-open DB — let the next caller retry from scratch.
+    try {
+      db.close();
+    } catch {
+      /* swallow secondary close failure */
+    }
+    throw cause;
+  }
+  singleton = db;
   return singleton;
+}
+
+/**
+ * Boot-time wrapper that never throws. Returns either the live DB or the
+ * underlying error, so the caller can degrade gracefully without blocking
+ * the BrowserWindow from opening when snapshot persistence is unavailable
+ * (e.g. corrupt file, permission denied, native binding missing).
+ */
+export function safeInitSnapshotsDb(
+  dbPath: string,
+): { ok: true; db: Database } | { ok: false; error: Error } {
+  try {
+    return { ok: true, db: initSnapshotsDb(dbPath) };
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    return { ok: false, error };
+  }
 }
 
 /** For use in Vitest tests only — returns a fresh isolated in-memory instance. */
