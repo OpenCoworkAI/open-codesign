@@ -32,10 +32,10 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
   const t = useT();
 
   return (
-    <div className="h-full flex items-center justify-center px-8 py-12">
-      <div className="w-full max-w-xl flex flex-col items-center gap-8">
+    <div className="h-full flex items-center justify-center px-[var(--space-8)] py-[var(--space-12)]">
+      <div className="w-full max-w-xl flex flex-col items-center gap-[var(--space-8)]">
         {/* Editorial heading block */}
-        <div className="text-center space-y-3">
+        <div className="text-center space-y-[var(--space-3)]">
           <h1
             className="text-[var(--font-size-display-xl)] leading-[var(--leading-heading)] tracking-[var(--tracking-heading)] text-[var(--color-text-primary)]"
             style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}
@@ -48,7 +48,7 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
         </div>
 
         {/* 2×2 starter card grid */}
-        <div className="w-full grid grid-cols-2 gap-3">
+        <div className="w-full grid grid-cols-2 gap-[var(--space-3)]">
           {STARTER_CARDS.map((card) => (
             <button
               key={card.labelKey}
