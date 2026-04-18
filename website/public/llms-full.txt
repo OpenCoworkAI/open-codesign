@@ -1,0 +1,88 @@
+# open-codesign — Extended Summary
+
+## What it is
+
+open-codesign is an open-source desktop AI design tool. It is the open counterpart to Anthropic's Claude Design (released 2026-04-17). The product runs locally on macOS and Windows, takes natural-language prompts, and produces:
+
+- Interactive HTML prototypes (mobile + desktop)
+- One-page PDF case studies, reports, marketing pages
+- PPTX slide decks (pitch, quarterly, training)
+- Design-system-aware mockups derived from a user's existing codebase
+- Asset bundles (ZIP) ready to handoff
+
+## Differentiation
+
+| Axis | Claude Design | open-codesign |
+| --- | --- | --- |
+| Model | Opus 4.7 only | Multi-provider via `@mariozechner/pi-ai` |
+| Form | Web SaaS | Local desktop (Electron) |
+| Privacy | Cloud-stored | Local-first, no telemetry by default |
+| Backend | Anthropic + Canva | None |
+| Engineering handoff | Claude Code | open-cowork |
+| Source | Closed | Apache-2.0 |
+| Cost | Subscription | BYOK token cost only |
+
+## Killer demos targeted for v1.0
+
+1. Calm Spaces meditation app — mobile prototype with phone frame, soft palette, interactive nav.
+2. Client case study one-pager — dark theme, before/after metrics, exportable as PDF.
+3. B2B SaaS pitch deck — 8–12 slides exported as PPTX.
+4. Inline comment editing — click any element in preview, AI rewrites that region.
+5. AI-generated tunable sliders — model emits adjustable parameters; user drags to refine.
+6. Codebase → design system — point at a local repo, extract tokens, apply forward.
+7. Web Capture — paste a URL, scrape it as a design reference.
+8. Handoff to open-cowork — package the design + intent README, hand off to engineering.
+
+## Hard constraints
+
+- Install size budget ≤ 80 MB across Mac and Windows installers.
+- ≤ 30 production dependencies. New deps require justification.
+- BYOK only — no proxied API calls, no cloud accounts.
+- Local-first storage (SQLite via `better-sqlite3` + TOML for config).
+- Apache-2.0-compatible deps only (no GPL/AGPL/SSPL/proprietary).
+- All UI uses tokens from `packages/ui` (warm beige Claude-style palette).
+- Heavy features (PPTX export, codebase scan, web capture) dynamic-import on first use.
+
+## Stack
+
+- Package manager: pnpm (workspace + Corepack-pinned).
+- Build orchestration: Turborepo.
+- Lint + format: Biome (single tool, no ESLint + Prettier).
+- Tests: Vitest (unit) + Playwright (E2E).
+- TypeScript: strict, `verbatimModuleSyntax`, `moduleResolution: "bundler"`.
+- Node: 22 LTS.
+- Frontend: React 19 + Vite 6 + Tailwind v4 + Zustand + Radix + lucide-react.
+- Sandbox renderer: Electron iframe `srcdoc` + esbuild-wasm + import maps.
+- Storage: better-sqlite3 (history) + TOML files (config). No `electron-store` blob.
+
+## Repository layout
+
+```
+apps/desktop/        Electron app shell (main + renderer)
+packages/core/       Generation orchestration
+packages/providers/  pi-ai adapter
+packages/runtime/    Sandbox renderer (iframe-based preview)
+packages/ui/         Shared design system + tokens
+packages/artifacts/  Artifact schema (HTML / React / SVG / PPTX)
+packages/exporters/  PDF / PPTX / ZIP (lazy-loaded)
+packages/templates/  Built-in demo prompts
+packages/shared/     Types, utils, zod schemas
+docs/                Vision, roadmap, principles, RFCs
+website/             This marketing site (VitePress + Tailwind v4)
+```
+
+## Roadmap (high-level)
+
+- Phase 0 — Foundations: scaffolding, OSS files, CI.
+- Phase 1 — Spike: providers + runtime + core wired end-to-end. One demo working.
+- Phase 2 — Three demos: PPTX + PDF export, settings page, three demos shipped.
+- Phase 3 — Killer interactions: inline comments, AI sliders, version timeline.
+- Phase 4 — Ecosystem: codebase scanner, Web Capture, handoff to open-cowork.
+- Phase 5 — Release polish: notarized installers, ≤ 80 MB, public 1.0.
+
+## Resources
+
+- Site: https://opencoworkai.github.io/open-codesign/
+- Source: https://github.com/OpenCoworkAI/open-codesign
+- Sister project: https://github.com/OpenCoworkAI/open-cowork
+- License: Apache-2.0

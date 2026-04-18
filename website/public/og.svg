@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#faf8f3"/>
+      <stop offset="1" stop-color="#f3d9cf"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#c96442"/>
+      <stop offset="1" stop-color="#b75636"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g transform="translate(80,140)">
+    <text x="0" y="0" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-weight="700" font-size="92" fill="#1f1d18" letter-spacing="-3">open-codesign</text>
+    <text x="0" y="120" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-weight="600" font-size="56" fill="url(#accent)" letter-spacing="-1.5">Design with any model.</text>
+    <text x="0" y="190" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-weight="600" font-size="56" fill="url(#accent)" letter-spacing="-1.5">On your own laptop.</text>
+    <text x="0" y="290" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-weight="400" font-size="28" fill="#57544c">Open-source desktop AI design tool. Multi-model, BYOK, local-first.</text>
+    <text x="0" y="332" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-weight="400" font-size="28" fill="#57544c">The open counterpart to Claude Design. Apache-2.0.</text>
+  </g>
+  <g transform="translate(80,560)">
+    <rect x="0" y="0" width="220" height="48" rx="10" fill="#c96442"/>
+    <text x="110" y="32" text-anchor="middle" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-weight="600" font-size="20" fill="#ffffff">Quickstart →</text>
+    <text x="248" y="32" font-family="JetBrains Mono, ui-monospace, monospace" font-size="20" fill="#8c887d">github.com/OpenCoworkAI/open-codesign</text>
+  </g>
+</svg>

@@ -2,7 +2,7 @@
 
 > Open-source AI design tool — prompt to interactive prototype, slide deck, and marketing assets. Multi-model, BYOK, runs on your laptop.
 
-[Vision](./docs/VISION.md) · [Roadmap](./docs/ROADMAP.md) · [Contributing](./CONTRIBUTING.md) · [Collaboration](./docs/COLLABORATION.md)
+[Vision](./docs/VISION.md) · [Roadmap](./docs/ROADMAP.md) · [Website](https://opencoworkai.github.io/open-codesign/) · [Contributing](./CONTRIBUTING.md) · [Collaboration](./docs/COLLABORATION.md)
 
 ---
 

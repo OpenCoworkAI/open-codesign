@@ -24,6 +24,9 @@
     "lint:fix": "biome check --write .",
     "typecheck": "turbo run typecheck",
     "format": "biome format --write .",
+    "docs:dev": "pnpm --filter open-codesign-website dev",
+    "docs:build": "pnpm --filter open-codesign-website build",
+    "docs:preview": "pnpm --filter open-codesign-website preview",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "turbo run build && changeset publish"

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://opencoworkai.github.io/open-codesign/sitemap.xml

@@ -51,3 +51,7 @@ pnpm-debug.log*
 .claude/workspace/
 .claude/worktrees/
 *.local
+
+# VitePress
+website/.vitepress/dist/
+website/.vitepress/cache/

@@ -1,0 +1,22 @@
+# open-codesign
+
+> Open-source desktop AI design tool. Prompt to interactive prototype, slide deck, and marketing assets. Multi-model (BYOK), local-first, Apache-2.0. The open-source counterpart to Anthropic's Claude Design.
+
+open-codesign is an Electron desktop app for macOS and Windows. It turns natural-language prompts into HTML prototypes, PDF one-pagers, PPTX decks, and design-system-aware mockups. All model calls go through `@mariozechner/pi-ai`, so any provider works (Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, local Ollama). User credentials live in `~/.config/open-codesign/config.toml` and never leave the machine.
+
+## Docs
+
+- [Quickstart](https://opencoworkai.github.io/open-codesign/quickstart): install + first design in 90 seconds
+- [Architecture](https://opencoworkai.github.io/open-codesign/architecture): packages, data flow, boundaries
+- [Roadmap](https://opencoworkai.github.io/open-codesign/roadmap): phased plan to v1.0
+
+## Source
+
+- [GitHub repository](https://github.com/OpenCoworkAI/open-codesign)
+- [Vision (locked decisions)](https://github.com/OpenCoworkAI/open-codesign/blob/main/docs/VISION.md)
+- [Engineering Principles](https://github.com/OpenCoworkAI/open-codesign/blob/main/docs/PRINCIPLES.md)
+- [Differentiation vs Claude Design](https://github.com/OpenCoworkAI/open-codesign/blob/main/docs/DIFFERENTIATION.md)
+
+## Optional
+
+- [open-cowork](https://github.com/OpenCoworkAI/open-cowork): sister project for engineering handoff

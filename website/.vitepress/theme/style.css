@@ -1,0 +1,279 @@
+@import 'tailwindcss';
+
+/**
+ * open-codesign tokens — kept in sync with packages/ui/src/tokens.css.
+ * If you change a value here, update tokens.css too.
+ */
+:root {
+  --color-background: #faf8f3;
+  --color-background-secondary: #f3efe6;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f7f4ec;
+  --color-surface-active: #efeae0;
+  --color-surface-muted: #f3efe6;
+
+  --color-border: #e3ddd0;
+  --color-border-muted: #ece6d8;
+  --color-border-subtle: #f3efe6;
+
+  --color-accent: #c96442;
+  --color-accent-hover: #b75636;
+  --color-accent-muted: #f3d9cf;
+
+  --color-text-primary: #1f1d18;
+  --color-text-secondary: #57544c;
+  --color-text-muted: #8c887d;
+
+  --color-success: #4f7a52;
+  --color-warning: #b8862a;
+  --color-error: #b04030;
+
+  --shadow-soft: 0 1px 2px rgba(31, 29, 24, 0.04);
+  --shadow-card: 0 2px 8px rgba(31, 29, 24, 0.06);
+  --shadow-elevated: 0 8px 24px rgba(31, 29, 24, 0.1);
+
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 16px;
+}
+
+.dark {
+  --color-background: #1a1815;
+  --color-background-secondary: #221f1b;
+  --color-surface: #26221d;
+  --color-surface-hover: #2d2925;
+  --color-surface-active: #34302b;
+  --color-surface-muted: #221f1b;
+
+  --color-border: #3a352f;
+  --color-border-muted: #2f2b26;
+  --color-border-subtle: #26221d;
+
+  --color-accent: #d97757;
+  --color-accent-hover: #e88868;
+  --color-accent-muted: #4a2b22;
+
+  --color-text-primary: #f5f1e8;
+  --color-text-secondary: #b8b3a6;
+  --color-text-muted: #807b6f;
+
+  --color-success: #6b9c6e;
+  --color-warning: #d4a04a;
+  --color-error: #d96050;
+
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Map open-codesign tokens onto VitePress variables. */
+:root {
+  --vp-c-bg: var(--color-background);
+  --vp-c-bg-alt: var(--color-background-secondary);
+  --vp-c-bg-soft: var(--color-surface-muted);
+  --vp-c-bg-elv: var(--color-surface);
+
+  --vp-c-text-1: var(--color-text-primary);
+  --vp-c-text-2: var(--color-text-secondary);
+  --vp-c-text-3: var(--color-text-muted);
+
+  --vp-c-divider: var(--color-border);
+  --vp-c-divider-light: var(--color-border-muted);
+  --vp-c-border: var(--color-border);
+  --vp-c-gutter: var(--color-border-subtle);
+
+  --vp-c-brand-1: var(--color-accent);
+  --vp-c-brand-2: var(--color-accent-hover);
+  --vp-c-brand-3: var(--color-accent-hover);
+  --vp-c-brand-soft: var(--color-accent-muted);
+  --vp-c-brand-text: #ffffff;
+
+  --vp-button-brand-bg: var(--color-accent);
+  --vp-button-brand-hover-bg: var(--color-accent-hover);
+  --vp-button-brand-active-bg: var(--color-accent-hover);
+  --vp-button-brand-border: var(--color-accent);
+  --vp-button-brand-hover-border: var(--color-accent-hover);
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+
+  --vp-button-alt-bg: var(--color-surface);
+  --vp-button-alt-hover-bg: var(--color-surface-hover);
+  --vp-button-alt-border: var(--color-border);
+  --vp-button-alt-hover-border: var(--color-accent);
+  --vp-button-alt-text: var(--color-text-primary);
+
+  --vp-home-hero-name-color: var(--color-accent);
+  --vp-home-hero-image-background-image: linear-gradient(
+    135deg,
+    var(--color-accent-muted),
+    var(--color-surface-active)
+  );
+  --vp-home-hero-image-filter: blur(48px);
+
+  --vp-font-family-base: var(--font-sans);
+  --vp-font-family-mono: var(--font-mono);
+}
+
+html {
+  font-feature-settings:
+    'cv11',
+    'ss01',
+    'ss03';
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text-primary);
+}
+
+/* Hero polish */
+.VPHero .name,
+.VPHero .text {
+  letter-spacing: -0.02em;
+}
+
+.VPHero .tagline {
+  color: var(--color-text-secondary);
+  max-width: 36rem;
+}
+
+/* Feature cards */
+.VPFeature {
+  border: 1px solid var(--color-border-muted);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-soft);
+  border-radius: var(--radius-xl);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.VPFeature:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-accent-muted);
+  box-shadow: var(--shadow-card);
+}
+
+/* Comparison + section blocks reused on the homepage */
+.codesign-section {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 56px 24px 24px;
+}
+.codesign-section h2 {
+  text-align: center;
+  font-size: 1.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 12px;
+}
+.codesign-section .lede {
+  text-align: center;
+  color: var(--color-text-secondary);
+  max-width: 38rem;
+  margin: 0 auto 32px;
+}
+
+.codesign-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+.codesign-step {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-muted);
+  border-radius: var(--radius-xl);
+  padding: 20px;
+  box-shadow: var(--shadow-soft);
+}
+.codesign-step .num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--color-accent-muted);
+  color: var(--color-accent);
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+}
+.codesign-step h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.codesign-step p {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.codesign-comparison {
+  overflow-x: auto;
+}
+.codesign-comparison table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-muted);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  font-size: 0.95rem;
+}
+.codesign-comparison th,
+.codesign-comparison td {
+  padding: 12px 16px;
+  text-align: center;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.codesign-comparison th {
+  background: var(--color-surface-muted);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.codesign-comparison th:first-child,
+.codesign-comparison td:first-child {
+  text-align: left;
+  color: var(--color-text-secondary);
+}
+.codesign-comparison tr:last-child td {
+  border-bottom: 0;
+}
+.codesign-comparison .yes {
+  color: var(--color-success);
+  font-weight: 600;
+}
+.codesign-comparison .no {
+  color: var(--color-text-muted);
+}
+.codesign-comparison .ours {
+  background: var(--color-accent-muted);
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.codesign-cta {
+  text-align: center;
+  padding: 64px 24px 96px;
+}
+.codesign-cta a {
+  display: inline-block;
+  padding: 12px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--color-accent);
+  color: #ffffff;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow-card);
+  transition: background 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.codesign-cta a:hover {
+  background: var(--color-accent-hover);
+  transform: translateY(-1px);
+}
