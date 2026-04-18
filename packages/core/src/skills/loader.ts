@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
+import { CodesignError } from '@open-codesign/shared';
 import { type LoadedSkill, SkillFrontmatterV1 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -192,6 +193,7 @@ export async function loadSkillsFromDir(
   }
 
   const skills: LoadedSkill[] = [];
+  const errors: string[] = [];
 
   for (const entry of entries) {
     if (extname(entry) !== '.md') continue;
@@ -202,8 +204,9 @@ export async function loadSkillsFromDir(
     try {
       raw = await readFile(filePath, 'utf-8');
     } catch (err) {
-      // Warn but do not crash the entire loader for one bad file.
-      console.warn(`[skills] Could not read ${filePath}:`, err);
+      errors.push(
+        `Could not read ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+      );
       continue;
     }
 
@@ -211,7 +214,9 @@ export async function loadSkillsFromDir(
     try {
       parsed = parseFrontmatter(raw);
     } catch (err) {
-      console.warn(`[skills] Could not parse frontmatter in ${filePath}:`, err);
+      errors.push(
+        `Could not parse frontmatter in ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+      );
       continue;
     }
 
@@ -223,7 +228,8 @@ export async function loadSkillsFromDir(
 
     const result = SkillFrontmatterV1.safeParse(raw_fm);
     if (!result.success) {
-      console.warn(`[skills] Invalid frontmatter in ${filePath}:`, result.error.issues);
+      const issues = result.error.issues.map((i) => i.message).join('; ');
+      errors.push(`Invalid frontmatter in ${filePath}: ${issues}`);
       continue;
     }
 
@@ -233,6 +239,10 @@ export async function loadSkillsFromDir(
       frontmatter: result.data,
       body: parsed.body.trim(),
     });
+  }
+
+  if (errors.length > 0) {
+    throw new CodesignError(`Skill loading failed:\n${errors.join('\n')}`, 'SKILL_LOAD_FAILED');
   }
 
   return skills;

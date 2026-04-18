@@ -1,6 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { CodesignError } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadAllSkills, loadSkillsFromDir } from './loader.js';
 
@@ -110,7 +111,7 @@ Body.
     expect(skill.frontmatter.trigger.providers).toEqual(['*']);
   });
 
-  it('rejects a skill whose description exceeds 1536 characters', async () => {
+  it('throws SKILL_LOAD_FAILED when a skill has a description exceeding 1536 characters', async () => {
     const longDesc = 'x'.repeat(1537);
     const content = `---
 schemaVersion: 1
@@ -120,24 +121,23 @@ description: ${longDesc}
 Body.
 `;
     await writeSkill(testDir, 'too-long.md', content);
-    // Invalid frontmatter → silently skipped; array is empty
-    const skills = await loadSkillsFromDir(testDir, 'user');
-    expect(skills).toHaveLength(0);
+    await expect(loadSkillsFromDir(testDir, 'user')).rejects.toSatisfy(
+      (err: unknown) => err instanceof CodesignError && err.code === 'SKILL_LOAD_FAILED',
+    );
   });
 
-  it('skips a corrupted .md file without crashing the entire load', async () => {
+  it('throws SKILL_LOAD_FAILED when any skill file has invalid frontmatter', async () => {
     // Valid skill
     await writeSkill(testDir, 'good.md', MINIMAL_SKILL);
-    // Corrupted file — description exceeds max → validation fails → skipped
+    // Broken skill — description exceeds max → validation fails → throws
     await writeSkill(
       testDir,
       'bad.md',
       `---\nschemaVersion: 1\nname: bad\ndescription: ${'z'.repeat(2000)}\n---\nBody.`,
     );
-    const skills = await loadSkillsFromDir(testDir, 'user');
-    // Only the good skill survives
-    expect(skills).toHaveLength(1);
-    expect(skills[0]?.id).toBe('good');
+    await expect(loadSkillsFromDir(testDir, 'user')).rejects.toSatisfy(
+      (err: unknown) => err instanceof CodesignError && err.code === 'SKILL_LOAD_FAILED',
+    );
   });
 
   it('ignores non-.md files in the directory', async () => {
@@ -232,5 +232,23 @@ describe('loadAllSkills()', () => {
     const skills = await loadAllSkills({ builtinDir });
     expect(skills).toHaveLength(1);
     expect(skills[0]?.source).toBe('builtin');
+  });
+
+  it('throws SKILL_LOAD_FAILED when a broken skill (missing description) is present', async () => {
+    const builtinDir = join(testDir, 'builtin');
+    // Skill missing required `description` field
+    const brokenSkill = `---
+schemaVersion: 1
+name: broken-skill
+---
+Body without description.
+`;
+    await writeSkill(builtinDir, 'broken-skill.md', brokenSkill);
+    await expect(loadAllSkills({ builtinDir })).rejects.toSatisfy(
+      (err: unknown) =>
+        err instanceof CodesignError &&
+        err.code === 'SKILL_LOAD_FAILED' &&
+        err.message.includes('broken-skill.md'),
+    );
   });
 });
