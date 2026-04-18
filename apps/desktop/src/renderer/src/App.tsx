@@ -67,8 +67,13 @@ export function App() {
       {
         combo: 'escape',
         handler: () => {
-          if (view === 'settings') setView('workspace');
-          else if (commandPaletteOpen) closeCommandPalette();
+          if (commandPaletteOpen) {
+            closeCommandPalette();
+            return;
+          }
+          if (view === 'settings') {
+            setView('workspace');
+          }
         },
         preventDefault: false,
       },

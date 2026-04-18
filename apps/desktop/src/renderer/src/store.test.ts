@@ -247,6 +247,59 @@ describe('useCodesignStore view navigation', () => {
     useCodesignStore.getState().setView('workspace');
     expect(useCodesignStore.getState().view).toBe('workspace');
   });
+});
+
+// Simulate the escape handler logic from App.tsx to verify priority:
+//   commandPaletteOpen → close palette (view unchanged)
+//   palette closed + view=settings → go to workspace
+function pressEscape(
+  view: ReturnType<typeof useCodesignStore.getState>['view'],
+  commandPaletteOpen: boolean,
+): void {
+  const store = useCodesignStore.getState();
+  if (commandPaletteOpen) {
+    store.closeCommandPalette();
+    return;
+  }
+  if (view === 'settings') {
+    store.setView('workspace');
+  }
+}
+
+describe('ESC key priority: command palette > settings view', () => {
+  it('ESC closes command palette without leaving settings when both are open', () => {
+    useCodesignStore.setState({ view: 'settings', commandPaletteOpen: true });
+    pressEscape('settings', true);
+
+    const s = useCodesignStore.getState();
+    expect(s.commandPaletteOpen).toBe(false);
+    // view must stay on settings — the palette consumed the keypress
+    expect(s.view).toBe('settings');
+  });
+
+  it('ESC navigates back to workspace when palette is closed and view is settings', () => {
+    useCodesignStore.setState({ view: 'settings', commandPaletteOpen: false });
+    pressEscape('settings', false);
+
+    const s = useCodesignStore.getState();
+    expect(s.view).toBe('workspace');
+    expect(s.commandPaletteOpen).toBe(false);
+  });
+
+  it('ESC is a no-op when palette is closed and view is workspace', () => {
+    useCodesignStore.setState({ view: 'workspace', commandPaletteOpen: false });
+    pressEscape('workspace', false);
+
+    const s = useCodesignStore.getState();
+    expect(s.view).toBe('workspace');
+    expect(s.commandPaletteOpen).toBe(false);
+  });
+});
+
+describe('useCodesignStore active provider routing', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
 
   it('sendPrompt uses the active provider from config after setActiveProvider updates config', async () => {
     const generate = vi.fn(() =>
