@@ -70,7 +70,7 @@ function extractBodyAt(text: string, bracePos: number): string | null {
   let inBlockComment = false;
 
   for (let i = bracePos; i < text.length; i++) {
-    const ch = text[i]!;
+    const ch = text[i] as string;
     const next = text[i + 1];
 
     if (inLineComment) {
