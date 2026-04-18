@@ -130,23 +130,16 @@ function applyGenerateError(
   err: unknown,
 ): void {
   const msg = err instanceof Error ? err.message : 'Unknown error';
-  const lower = msg.toLowerCase();
-  const isCancelled = lower.includes('abort') || lower.includes('cancel');
-  const isCurrentGeneration = get().activeGenerationId === generationId;
-  if (!isCurrentGeneration) return;
+  if (get().activeGenerationId !== generationId) return;
 
   finishIfCurrent(set, generationId, (state) => ({
-    messages: isCancelled
-      ? state.messages
-      : [...state.messages, { role: 'assistant', content: `Error: ${msg}` }],
+    messages: [...state.messages, { role: 'assistant', content: `Error: ${msg}` }],
     isGenerating: false,
     activeGenerationId: null,
-    errorMessage: isCancelled ? null : msg,
-    lastError: isCancelled ? state.lastError : msg,
+    errorMessage: msg,
+    lastError: msg,
   }));
-  if (!isCancelled) {
-    get().pushToast({ variant: 'error', title: 'Generation failed', description: msg });
-  }
+  get().pushToast({ variant: 'error', title: 'Generation failed', description: msg });
 }
 
 export const useCodesignStore = create<CodesignState>((set, get) => ({

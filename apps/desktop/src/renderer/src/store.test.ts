@@ -126,6 +126,7 @@ describe('useCodesignStore generation cancellation', () => {
         generate,
         cancelGeneration,
       },
+      setTimeout,
     });
 
     const firstRun = useCodesignStore.getState().sendPrompt('first prompt');
@@ -161,5 +162,48 @@ describe('useCodesignStore generation cancellation', () => {
     expect(cancelGeneration).toHaveBeenCalledWith(firstId);
     expect(useCodesignStore.getState().previewHtml).toBe('<html>fresh</html>');
     expect(useCodesignStore.getState().isGenerating).toBe(false);
+  });
+
+  it('surfaces current-generation failures even when the message contains abort wording', async () => {
+    const pendingById = new Map<
+      string,
+      ReturnType<typeof deferred<{ artifacts: Array<{ content: string }>; message: string }>>
+    >();
+    const generate = vi.fn((payload: { generationId?: string }) => {
+      if (!payload.generationId) throw new Error('missing generationId');
+      const task = deferred<{ artifacts: Array<{ content: string }>; message: string }>();
+      pendingById.set(payload.generationId, task);
+      return task.promise;
+    });
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        cancelGeneration: vi.fn(),
+      },
+      setTimeout,
+    });
+
+    const run = useCodesignStore.getState().sendPrompt('first prompt');
+    const generationId = useCodesignStore.getState().activeGenerationId;
+    if (!generationId) throw new Error('expected generation id');
+
+    pendingById.get(generationId)?.reject(new Error('Upstream proxy aborted the response'));
+    await run;
+
+    const state = useCodesignStore.getState();
+    expect(state.isGenerating).toBe(false);
+    expect(state.activeGenerationId).toBeNull();
+    expect(state.errorMessage).toBe('Upstream proxy aborted the response');
+    expect(state.lastError).toBe('Upstream proxy aborted the response');
+    expect(state.messages.at(-1)).toEqual({
+      role: 'assistant',
+      content: 'Error: Upstream proxy aborted the response',
+    });
+    expect(state.toasts.at(-1)).toMatchObject({
+      variant: 'error',
+      title: 'Generation failed',
+      description: 'Upstream proxy aborted the response',
+    });
   });
 });

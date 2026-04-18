@@ -10,15 +10,26 @@ export interface SidebarProps {
 }
 
 const MAX_TEXTAREA_ROWS = 6;
-const FALLBACK_ROW_HEIGHT = 24;
+const FALLBACK_FONT_SIZE = 13;
+const FALLBACK_LINE_HEIGHT_MULTIPLIER = 1.6;
 
-function getTextareaRowHeight(el: HTMLTextAreaElement): number {
-  const rowHeight = Number.parseFloat(getComputedStyle(el).getPropertyValue('--space-6'));
-  return Number.isFinite(rowHeight) && rowHeight > 0 ? rowHeight : FALLBACK_ROW_HEIGHT;
+export function getTextareaLineHeight(el: HTMLTextAreaElement): number {
+  const styles = getComputedStyle(el);
+  const lineHeight = Number.parseFloat(styles.lineHeight);
+  if (Number.isFinite(lineHeight) && lineHeight > 0) return lineHeight;
+
+  const fontSize = Number.parseFloat(styles.fontSize);
+  const leading = Number.parseFloat(styles.getPropertyValue('--leading-body'));
+  const resolvedFontSize =
+    Number.isFinite(fontSize) && fontSize > 0 ? fontSize : FALLBACK_FONT_SIZE;
+  const resolvedLeading =
+    Number.isFinite(leading) && leading > 0 ? leading : FALLBACK_LINE_HEIGHT_MULTIPLIER;
+
+  return resolvedFontSize * resolvedLeading;
 }
 
 function resizeTextarea(el: HTMLTextAreaElement): void {
-  const rowHeight = getTextareaRowHeight(el);
+  const rowHeight = getTextareaLineHeight(el);
   el.style.height = 'auto';
   el.style.height = `${Math.min(el.scrollHeight, rowHeight * MAX_TEXTAREA_ROWS)}px`;
 }
@@ -84,7 +95,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
             placeholder="Describe what to design... (Enter to send, Shift+Enter for newline)"
             disabled={isGenerating}
             rows={1}
-            className="block w-full resize-none bg-transparent px-[var(--space-3)] pt-[var(--space-3)] pb-[calc(var(--space-6)+var(--space-4))] text-[var(--text-sm)] leading-[var(--leading-body)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none min-h-[var(--space-6)] max-h-[calc(var(--space-6)*6)] overflow-y-auto"
+            className="block w-full resize-none bg-transparent px-[var(--space-3)] pt-[var(--space-3)] pb-[calc(var(--space-6)+var(--space-4))] text-[var(--text-sm)] leading-[var(--leading-body)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none min-h-[var(--space-6)] overflow-y-auto"
           />
 
           <div className="absolute bottom-[var(--space-2)] right-[var(--space-2)]">
