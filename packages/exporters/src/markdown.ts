@@ -88,15 +88,18 @@ function convertBody(html: string): string {
   out = out.replace(
     /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
     (_m, href: string, inner: string) => {
-      const text = decodeEntities(stripTags(inner)).trim() || href;
-      return `[${text}](${href})`;
+      const safeHref = sanitizeUrl(href, 'link');
+      const text = decodeEntities(stripTags(inner)).trim();
+      if (!safeHref) return text;
+      return `[${text || safeHref}](${safeHref})`;
     },
   );
 
   out = out.replace(/<img\b[^>]*>/gi, (tag) => {
     const src = /src=["']([^"']+)["']/i.exec(tag)?.[1] ?? '';
     const alt = /alt=["']([^"']*)["']/i.exec(tag)?.[1] ?? '';
-    return src ? `![${alt}](${src})` : '';
+    const safeSrc = sanitizeUrl(src, 'image');
+    return safeSrc ? `![${alt}](${safeSrc})` : '';
   });
 
   out = out.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_m, level: string, inner: string) => {
@@ -140,6 +143,22 @@ function renderList(inner: string, ordered: boolean): string {
 
 function stripTags(input: string): string {
   return input.replace(/<[^>]+>/g, '');
+}
+
+/**
+ * Allowlist URL schemes for exported Markdown. Anything outside the safe set
+ * (http/https/mailto, relative URLs, fragments) returns null so the caller can
+ * drop the link wrapper. Inline `data:image/*` is permitted for images only.
+ */
+export function sanitizeUrl(raw: string, kind: 'link' | 'image'): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  if (/^(https?:|mailto:)/i.test(value)) return value;
+  if (kind === 'image' && /^data:image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp);/i.test(value)) {
+    return value;
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
+  return value;
 }
 
 function decodeEntities(input: string): string {

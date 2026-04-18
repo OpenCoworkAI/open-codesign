@@ -78,4 +78,49 @@ describe('htmlToMarkdown', () => {
     expect(typeof out).toBe('string');
     expect(out.length).toBeGreaterThan(0);
   });
+
+  it('strips javascript: links but keeps the visible text', () => {
+    const out = htmlToMarkdown('<p><a href="javascript:alert(1)">x</a></p>', META);
+    expect(out).toContain('x');
+    expect(out).not.toContain('javascript:');
+    expect(out).not.toContain('](');
+  });
+
+  it('keeps https links untouched', () => {
+    const out = htmlToMarkdown('<a href="https://x.test">x</a>', META);
+    expect(out).toContain('[x](https://x.test)');
+  });
+
+  it('allows mailto and relative link schemes', () => {
+    const out = htmlToMarkdown(
+      '<a href="mailto:a@b.test">mail</a><a href="/foo">rel</a><a href="#anchor">anc</a>',
+      META,
+    );
+    expect(out).toContain('[mail](mailto:a@b.test)');
+    expect(out).toContain('[rel](/foo)');
+    expect(out).toContain('[anc](#anchor)');
+  });
+
+  it('keeps inline data:image/* sources', () => {
+    const src = 'data:image/png;base64,iVBORw0KGgo=';
+    const out = htmlToMarkdown(`<img src="${src}" alt="px" />`, META);
+    expect(out).toContain(`![px](${src})`);
+  });
+
+  it('strips non-image data: URLs from images', () => {
+    const out = htmlToMarkdown('<img src="data:text/html,<script>x</script>" alt="bad" />', META);
+    expect(out).not.toContain('data:text/html');
+    expect(out).not.toContain('![bad]');
+  });
+
+  it('strips other dangerous schemes (vbscript:, file:)', () => {
+    const out = htmlToMarkdown(
+      '<a href="vbscript:msgbox">v</a><a href="file:///etc/passwd">f</a>',
+      META,
+    );
+    expect(out).not.toContain('vbscript:');
+    expect(out).not.toContain('file:');
+    expect(out).toContain('v');
+    expect(out).toContain('f');
+  });
 });
