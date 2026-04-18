@@ -27,7 +27,7 @@ Open CoDesign 把自然语言提示词变成精美的 HTML 原型、幻灯片或
 
 ## 快速演示（60 秒）
 
-▶ [在 YouTube 观看](https://www.youtube.com/watch?v=TODO)（占位 — 发布前替换为真实视频）
+_演示视频即将上线。_
 
 ![几秒内从提示词到原型](https://placehold.co/800x450/f5f0eb/c96442?text=演示+GIF+即将上线)
 <!-- 发布前替换为真实 GIF -->

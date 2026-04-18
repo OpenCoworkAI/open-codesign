@@ -27,7 +27,7 @@ Open CoDesign turns a natural-language prompt into a polished HTML prototype, sl
 
 ## Quick demo (60 s)
 
-▶ [Watch on YouTube](https://www.youtube.com/watch?v=TODO) _(placeholder — video coming before launch)_
+_Demo video coming soon._
 
 ![Prompt to prototype in seconds](https://placehold.co/800x450/f5f0eb/c96442?text=Demo+GIF+coming+soon)
 <!-- Replace with real demo GIF before launch -->
