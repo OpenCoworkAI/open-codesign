@@ -53,7 +53,8 @@
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
 
-  /* Type scale — strict 7 sizes */
+  /* Type scale — strict 8 sizes */
+  --text-2xs: 10px;
   --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 14px;
@@ -72,6 +73,12 @@
   --tracking-tight: -0.005em;
   --tracking-normal: 0;
   --tracking-wide: 0.04em;
+  --tracking-label: 0.08em;
+
+  /* Control sizes */
+  --size-control-sm: 32px;
+  --size-control-md: 40px;
+  --size-control-lg: 48px;
 
   /* Spacing — strict 4-px scale */
   --space-1: 4px;

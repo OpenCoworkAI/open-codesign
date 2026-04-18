@@ -211,10 +211,10 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
-        <h2 className="text-[20px] font-semibold text-[var(--color-text-primary)] tracking-[-0.01em] leading-[1.2]">
+        <h2 className="text-[var(--text-lg)] font-semibold text-[var(--color-text-primary)] tracking-[var(--tracking-heading)] leading-[var(--leading-heading)]">
           Paste your API key
         </h2>
-        <p className="text-[14px] text-[var(--color-text-secondary)] leading-[1.55]">
+        <p className="text-[var(--text-base)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
           We auto-detect the provider and validate against /v1/models. Your key is encrypted with
           the OS keychain.
         </p>
@@ -223,7 +223,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
       {/* Preset selector */}
       <label className="flex flex-col gap-2">
         <span
-          className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)] font-medium"
+          className="text-[var(--text-2xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
           Preset
@@ -231,7 +231,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
         <select
           value={selectedPresetId}
           onChange={(e) => handlePresetChange(e.target.value)}
-          className="w-full h-[40px] px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[13px] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] appearance-none cursor-pointer"
+          className="w-full h-[var(--size-control-md)] px-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)] appearance-none cursor-pointer"
         >
           <option value="">-- choose a preset --</option>
           {PROXY_PRESETS.map((preset) => (
@@ -241,7 +241,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
             </option>
           ))}
         </select>
-        <span className="text-[12px] text-[var(--color-text-muted)] leading-[1.5]">
+        <span className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
           Not sure which to pick? Choose OpenAI Official for official endpoint, or pick by relay
           name.
         </span>
@@ -249,7 +249,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
 
       <label className="flex flex-col gap-2">
         <span
-          className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)] font-medium"
+          className="text-[var(--text-2xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
           API key
@@ -263,7 +263,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
             placeholder="sk-ant-…  /  sk-…  /  sk-or-…"
             spellCheck={false}
             style={{ fontFamily: 'var(--font-mono)' }}
-            className="w-full h-[40px] px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            className="w-full h-[var(--size-control-md)] px-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
           />
         </div>
       </label>
@@ -273,17 +273,17 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
       <details
         open={advancedOpen}
         onToggle={(e) => setAdvancedOpen((e.currentTarget as HTMLDetailsElement).open)}
-        className="text-[13px] text-[var(--color-text-secondary)]"
+        className="text-[var(--text-sm)] text-[var(--color-text-secondary)]"
       >
         <summary
-          className="cursor-pointer select-none text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors"
+          className="cursor-pointer select-none text-[var(--text-xs)] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
           Advanced — custom base URL (proxy / relay)
         </summary>
         <label className="flex flex-col gap-2 mt-3">
           <span
-            className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)] font-medium"
+            className="text-[var(--text-2xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium"
             style={{ fontFamily: 'var(--font-mono)' }}
           >
             Base URL
@@ -303,7 +303,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
               }
               spellCheck={false}
               style={{ fontFamily: 'var(--font-mono)' }}
-              className="flex-1 h-[40px] px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
+              className="flex-1 h-[var(--size-control-md)] px-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
             />
             <button
               type="button"
@@ -314,7 +314,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
                 trimmed.length === 0 ||
                 trimmedBaseUrl.length === 0
               }
-              className="h-[40px] px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[12px] text-[var(--color-text-secondary)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 whitespace-nowrap"
+              className="h-[var(--size-control-md)] px-[var(--space-3)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 whitespace-nowrap"
             >
               {connState.kind === 'testing' ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -329,18 +329,18 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
             </button>
           </div>
           {connState.kind === 'ok' && (
-            <span className="text-[12px] text-[var(--color-success)] flex items-center gap-1.5">
+            <span className="text-[var(--text-xs)] text-[var(--color-success)] flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
               Connected
             </span>
           )}
           {connState.kind === 'error' && (
-            <span className="text-[12px] text-[var(--color-error)] flex items-center gap-1.5">
+            <span className="text-[var(--text-xs)] text-[var(--color-error)] flex items-center gap-1.5">
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
               {connState.hint}
             </span>
           )}
-          <span className="text-[12px] text-[var(--color-text-muted)] leading-[1.5]">
+          <span className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
             Override the default endpoint for your provider. Useful for relay services (e.g.
             third-party AI gateways) and self-hosted proxies. Leave empty for the official endpoint.
           </span>
