@@ -205,6 +205,7 @@
     "exporterNotReady": "导出器还在加载，稍等片刻再试。",
     "rendererDisconnected": "渲染进程未连接到主进程。",
     "onboardingIncomplete": "引导流程尚未完成。",
+    "modelListFailed": "无法加载模型列表。",
     "unknown": "未知错误"
   },
   "demos": {

@@ -32,9 +32,14 @@ export interface ConnectionTestError {
   hint: string;
 }
 
-export interface ModelsListResult {
-  models: string[];
-}
+export type ModelsListResponse =
+  | { ok: true; models: string[] }
+  | {
+      ok: false;
+      code: 'IPC_BAD_INPUT' | 'NETWORK' | 'HTTP' | 'PARSE';
+      message: string;
+      hint: string;
+    };
 
 function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
   if (typeof raw !== 'object' || raw === null) {
@@ -270,18 +275,23 @@ export function registerConnectionIpc(): void {
     },
   );
 
-  ipcMain.handle('models:v1:list', async (_e, raw: unknown): Promise<ModelsListResult> => {
+  ipcMain.handle('models:v1:list', async (_e, raw: unknown): Promise<ModelsListResponse> => {
     let payload: ModelsListPayloadV1;
     try {
       payload = parseModelsListPayload(raw);
-    } catch {
-      return { models: [] };
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'IPC_BAD_INPUT',
+        message: err instanceof Error ? err.message : String(err),
+        hint: 'Invalid models:v1:list payload',
+      };
     }
 
     const { provider, apiKey, baseUrl } = payload;
 
     const cached = getCachedModels(provider, baseUrl);
-    if (cached !== null) return { models: cached };
+    if (cached !== null) return { ok: true, models: cached };
 
     const ep = buildModelsEndpoint(provider, baseUrl);
     const authHeaders = buildAuthHeaders(provider, apiKey);
@@ -292,21 +302,38 @@ export function registerConnectionIpc(): void {
         method: 'GET',
         headers: { ...ep.headers, ...authHeaders },
       });
-    } catch {
-      return { models: [] };
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'NETWORK',
+        message: err instanceof Error ? err.message : String(err),
+        hint: 'Cannot reach provider /models endpoint',
+      };
     }
 
-    if (!res.ok) return { models: [] };
+    if (!res.ok) {
+      return {
+        ok: false,
+        code: 'HTTP',
+        message: `HTTP ${res.status}`,
+        hint: 'Model list request failed',
+      };
+    }
 
     let body: unknown;
     try {
       body = await res.json();
     } catch {
-      return { models: [] };
+      return {
+        ok: false,
+        code: 'PARSE',
+        message: 'Invalid JSON in response',
+        hint: 'Provider returned non-JSON',
+      };
     }
 
     const models = extractModelIds(body);
     setCachedModels(provider, baseUrl, models);
-    return { models };
+    return { ok: true, models };
   });
 }

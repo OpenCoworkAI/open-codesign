@@ -30,6 +30,15 @@ export interface ConnectionTestError {
   hint: string;
 }
 
+export type ModelsListResponse =
+  | { ok: true; models: string[] }
+  | {
+      ok: false;
+      code: 'IPC_BAD_INPUT' | 'NETWORK' | 'HTTP' | 'PARSE';
+      message: string;
+      hint: string;
+    };
+
 export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip';
 export interface ExportInvokeResponse {
   status: 'saved' | 'cancelled';
@@ -179,7 +188,7 @@ const api = {
       provider: SupportedOnboardingProvider;
       apiKey: string;
       baseUrl: string;
-    }) => ipcRenderer.invoke('models:v1:list', input) as Promise<{ models: string[] }>,
+    }) => ipcRenderer.invoke('models:v1:list', input) as Promise<ModelsListResponse>,
   },
 };
 

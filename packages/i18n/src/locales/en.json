@@ -205,6 +205,7 @@
     "exporterNotReady": "Exporter is still loading. Try again in a moment.",
     "rendererDisconnected": "Renderer is not connected to the main process.",
     "onboardingIncomplete": "Onboarding is not complete.",
+    "modelListFailed": "Could not load model list.",
     "unknown": "Unknown error"
   },
   "demos": {

@@ -54,6 +54,111 @@ function classifyHttpError(status: number): { code: ErrorCode; hint: string } {
   return { code: 'NETWORK', hint: `服务器返回 HTTP ${status}` };
 }
 
+// ----- ModelsListResponse error union (mirrors connection-ipc.ts) -----------
+
+type ModelsListResponse =
+  | { ok: true; models: string[] }
+  | {
+      ok: false;
+      code: 'IPC_BAD_INPUT' | 'NETWORK' | 'HTTP' | 'PARSE';
+      message: string;
+      hint: string;
+    };
+
+// Minimal inline handler exercising the same logic as the real ipcMain handler.
+async function handleModelsList(
+  raw: unknown,
+  fetchImpl: (
+    url: string,
+  ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>,
+): Promise<ModelsListResponse> {
+  // Validate payload
+  if (typeof raw !== 'object' || raw === null) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: 'payload must be an object',
+      hint: 'Invalid models:v1:list payload',
+    };
+  }
+  const r = raw as Record<string, unknown>;
+  if (
+    typeof r['provider'] !== 'string' ||
+    !['anthropic', 'openai', 'openrouter'].includes(r['provider'])
+  ) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: `Unsupported provider: ${String(r['provider'])}`,
+      hint: 'Invalid models:v1:list payload',
+    };
+  }
+  if (typeof r['apiKey'] !== 'string' || (r['apiKey'] as string).trim().length === 0) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: 'apiKey must be a non-empty string',
+      hint: 'Invalid models:v1:list payload',
+    };
+  }
+  if (typeof r['baseUrl'] !== 'string' || (r['baseUrl'] as string).trim().length === 0) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: 'baseUrl must be a non-empty string',
+      hint: 'Invalid models:v1:list payload',
+    };
+  }
+
+  const provider = r['provider'] as string;
+  const baseUrl = (r['baseUrl'] as string).trim();
+
+  const cached = getCachedModels(provider, baseUrl);
+  if (cached !== null) return { ok: true, models: cached };
+
+  let res: { ok: boolean; status: number; json: () => Promise<unknown> };
+  try {
+    res = await fetchImpl(`${baseUrl}/models`);
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'NETWORK',
+      message: err instanceof Error ? err.message : String(err),
+      hint: 'Cannot reach provider /models endpoint',
+    };
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      code: 'HTTP',
+      message: `HTTP ${res.status}`,
+      hint: 'Model list request failed',
+    };
+  }
+
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return {
+      ok: false,
+      code: 'PARSE',
+      message: 'Invalid JSON in response',
+      hint: 'Provider returned non-JSON',
+    };
+  }
+
+  const data = (body as { data?: unknown }).data;
+  const models = Array.isArray(data)
+    ? data
+        .filter((i) => typeof i === 'object' && i !== null && 'id' in i)
+        .map((i) => String((i as { id: unknown }).id))
+    : [];
+  setCachedModels(provider, baseUrl, models);
+  return { ok: true, models };
+}
+
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
@@ -123,5 +228,65 @@ describe('models cache (5-min TTL)', () => {
 
   it('returns null for keys not yet in cache', () => {
     expect(getCachedModels('anthropic', 'https://api.anthropic.com')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// models:v1:list — error union (no more silent [] fallback)
+// ---------------------------------------------------------------------------
+
+describe('models:v1:list error union', () => {
+  it('bad payload (missing provider) → ok=false, code=IPC_BAD_INPUT', async () => {
+    const result = await handleModelsList(
+      { apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' },
+      async () => {
+        throw new Error('should not be called');
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('IPC_BAD_INPUT');
+    }
+  });
+
+  it('HTTP 500 from provider → ok=false, code=HTTP', async () => {
+    const result = await handleModelsList(
+      { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' },
+      async () => ({ ok: false, status: 500, json: async () => ({}) }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('HTTP');
+      expect(result.message).toBe('HTTP 500');
+    }
+  });
+
+  it('network error (fetch throws) → ok=false, code=NETWORK', async () => {
+    const result = await handleModelsList(
+      { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' },
+      async () => {
+        throw new Error('ECONNREFUSED');
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('NETWORK');
+      expect(result.message).toContain('ECONNREFUSED');
+    }
+  });
+
+  it('successful fetch → ok=true with model ids', async () => {
+    const result = await handleModelsList(
+      { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' },
+      async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ id: 'gpt-4o' }, { id: 'gpt-4o-mini' }] }),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.models).toEqual(['gpt-4o', 'gpt-4o-mini']);
+    }
   });
 });
