@@ -163,21 +163,36 @@ function classifyNetworkError(err: unknown): { code: ConnectionTestError['code']
   };
 }
 
-function extractModelIds(body: unknown): string[] {
-  if (body === null || typeof body !== 'object') return [];
+function extractModelIds(body: unknown): string[] | null {
+  if (body === null || typeof body !== 'object') return null;
+
+  // OpenAI / OpenAI-compat: { data: [{ id: string }, ...] }
   const data = (body as { data?: unknown }).data;
   if (Array.isArray(data)) {
-    return data
-      .filter((item) => typeof item === 'object' && item !== null && 'id' in item)
-      .map((item) => String((item as { id: unknown }).id));
+    const ids = data
+      .map((item) =>
+        item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string'
+          ? (item as { id: string }).id
+          : null,
+      )
+      .filter((id): id is string => id !== null);
+    return ids;
   }
+
+  // Anthropic: { models: [{ id: string }, ...] }
   const models = (body as { models?: unknown }).models;
   if (Array.isArray(models)) {
-    return models
-      .filter((item) => typeof item === 'object' && item !== null && 'id' in item)
-      .map((item) => String((item as { id: unknown }).id));
+    const ids = models
+      .map((item) =>
+        item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string'
+          ? (item as { id: string }).id
+          : null,
+      )
+      .filter((id): id is string => id !== null);
+    return ids;
   }
-  return [];
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -332,8 +347,16 @@ export function registerConnectionIpc(): void {
       };
     }
 
-    const models = extractModelIds(body);
-    setCachedModels(provider, baseUrl, models);
-    return { ok: true, models };
+    const ids = extractModelIds(body);
+    if (ids === null) {
+      return {
+        ok: false,
+        code: 'PARSE',
+        message: 'Provider returned unexpected models response shape',
+        hint: 'Unexpected response shape — check provider /models endpoint compatibility',
+      };
+    }
+    setCachedModels(provider, baseUrl, ids);
+    return { ok: true, models: ids };
   });
 }

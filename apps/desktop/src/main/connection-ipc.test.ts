@@ -149,14 +149,43 @@ async function handleModelsList(
     };
   }
 
-  const data = (body as { data?: unknown }).data;
-  const models = Array.isArray(data)
-    ? data
-        .filter((i) => typeof i === 'object' && i !== null && 'id' in i)
-        .map((i) => String((i as { id: unknown }).id))
-    : [];
-  setCachedModels(provider, baseUrl, models);
-  return { ok: true, models };
+  // mirrors extractModelIds: returns null when shape is unrecognised
+  function extractModelIds(b: unknown): string[] | null {
+    if (b === null || typeof b !== 'object') return null;
+    const data = (b as { data?: unknown }).data;
+    if (Array.isArray(data)) {
+      return data
+        .map((i) =>
+          i && typeof i === 'object' && typeof (i as { id?: unknown }).id === 'string'
+            ? (i as { id: string }).id
+            : null,
+        )
+        .filter((id): id is string => id !== null);
+    }
+    const models = (b as { models?: unknown }).models;
+    if (Array.isArray(models)) {
+      return models
+        .map((i) =>
+          i && typeof i === 'object' && typeof (i as { id?: unknown }).id === 'string'
+            ? (i as { id: string }).id
+            : null,
+        )
+        .filter((id): id is string => id !== null);
+    }
+    return null;
+  }
+
+  const ids = extractModelIds(body);
+  if (ids === null) {
+    return {
+      ok: false,
+      code: 'PARSE',
+      message: 'Provider returned unexpected models response shape',
+      hint: 'Unexpected response shape — check provider /models endpoint compatibility',
+    };
+  }
+  setCachedModels(provider, baseUrl, ids);
+  return { ok: true, models: ids };
 }
 
 // ---------------------------------------------------------------------------
@@ -287,6 +316,52 @@ describe('models:v1:list error union', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.models).toEqual(['gpt-4o', 'gpt-4o-mini']);
+    }
+  });
+
+  it('unexpected response shape { "unexpected": "thing" } → ok=false, code=PARSE, hint mentions "shape"', async () => {
+    const result = await handleModelsList(
+      { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' },
+      async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ unexpected: 'thing' }),
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('PARSE');
+      expect(result.hint.toLowerCase()).toContain('shape');
+    }
+  });
+
+  it('mixed data array (one valid, one without id) → ok=true, only valid id returned', async () => {
+    const result = await handleModelsList(
+      { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' },
+      async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ id: 'gpt-4o' }, { foo: 'bar' }] }),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.models).toEqual(['gpt-4o']);
+    }
+  });
+
+  it('empty data array { "data": [] } → ok=true, models=[]', async () => {
+    const result = await handleModelsList(
+      { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' },
+      async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [] }),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.models).toEqual([]);
     }
   });
 });
