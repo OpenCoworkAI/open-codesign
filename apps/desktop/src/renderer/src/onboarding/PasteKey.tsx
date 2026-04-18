@@ -496,8 +496,8 @@ function DetectLine({ state, helpUrl }: DetectLineProps) {
       <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
         <AlertCircle className="w-4 h-4 shrink-0" />
         <span>
-          Provider detection failed (main process unreachable): {state.message}. Restart the app
-          and try again.
+          Provider detection failed (main process unreachable): {state.message}. Restart the app and
+          try again.
         </span>
       </div>
     );

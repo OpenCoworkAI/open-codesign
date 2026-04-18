@@ -261,7 +261,14 @@ describe('classifyDetectError', () => {
   });
 
   it('classifies fetch/network/ECONN/ENOTFOUND/ETIMEDOUT/EAI_AGAIN messages as network_error', () => {
-    for (const token of ['fetch', 'network', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EAI_AGAIN']) {
+    for (const token of [
+      'fetch',
+      'network',
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'ETIMEDOUT',
+      'EAI_AGAIN',
+    ]) {
       expect(classifyDetectError(new Error(`some ${token} happened`))).toBe('network_error');
     }
   });
