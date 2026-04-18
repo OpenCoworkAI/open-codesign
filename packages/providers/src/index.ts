@@ -98,9 +98,11 @@ export function detectProviderFromKey(key: string): ModelRef['provider'] | null 
   return null;
 }
 
+export { classifyError, completeWithRetry, sleepWithAbort } from './retry';
+export type { CompleteWithRetryOptions, RetryReason } from './retry';
+
 // Tier 2 surface (not yet implemented):
 //   structuredComplete<T>(model, schema, messages, opts): Promise<T>
 //   streamArtifacts(model, messages, opts): AsyncIterable<ArtifactEvent>
 //   streamWithFallback(models[], messages, opts)
-//   completeWithRetry(model, messages, opts, { maxRetries, baseDelayMs })
 //   completeWithPdf(pdfBase64, prompt, opts)

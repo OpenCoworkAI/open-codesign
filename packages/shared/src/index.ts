@@ -93,6 +93,17 @@ export const BRAND = {
   backgroundColor: '#faf8f3',
 } as const;
 
+export const IframeErrorEvent = z.object({
+  kind: z.enum(['error', 'unhandledrejection']),
+  message: z.string(),
+  source: z.string().optional(),
+  lineno: z.number().optional(),
+  colno: z.number().optional(),
+  stack: z.string().optional(),
+  timestamp: z.number(),
+});
+export type IframeErrorEvent = z.infer<typeof IframeErrorEvent>;
+
 export class CodesignError extends Error {
   constructor(
     message: string,

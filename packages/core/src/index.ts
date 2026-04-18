@@ -1,5 +1,5 @@
 import { createArtifactParser } from '@open-codesign/artifacts';
-import { complete } from '@open-codesign/providers';
+import { type RetryReason, completeWithRetry } from '@open-codesign/providers';
 import type { Artifact, ChatMessage, ModelRef } from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
 
@@ -10,6 +10,8 @@ export interface GenerateInput {
   apiKey: string;
   baseUrl?: string;
   systemPrompt?: string;
+  signal?: AbortSignal;
+  onRetry?: (info: RetryReason) => void;
 }
 
 export interface GenerateOutput {
@@ -45,10 +47,18 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     { role: 'user', content: input.prompt },
   ];
 
-  const result = await complete(input.model, messages, {
-    apiKey: input.apiKey,
-    ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
-  });
+  const result = await completeWithRetry(
+    input.model,
+    messages,
+    {
+      apiKey: input.apiKey,
+      ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+      ...(input.signal !== undefined ? { signal: input.signal } : {}),
+    },
+    {
+      ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
+    },
+  );
 
   const parser = createArtifactParser();
   const artifacts: Artifact[] = [];
