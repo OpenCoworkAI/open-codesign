@@ -1,85 +1,33 @@
-import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Mock electron-runtime so importing connection-ipc doesn't require('electron').
+vi.mock('./electron-runtime', () => ({
+  ipcMain: { handle: vi.fn() },
+}));
+
+import { createHash } from 'node:crypto';
+import {
+  _clearModelsCache,
+  classifyHttpError,
+  extractIds,
+  extractModelIds,
+  getCacheKey,
+} from './connection-ipc';
+
 // ---------------------------------------------------------------------------
-// Unit tests for pure logic extracted from connection-ipc.ts
-// These tests do NOT import connection-ipc directly because that file imports
-// ./electron-runtime which requires('electron') — unavailable in vitest.
-// Instead we test the pure helpers inline.
+// Thin test-only handler that exercises the same fetch/parse/cache path
+// as the real ipcMain handler but accepts an injected fetch so we can control
+// network responses without hitting the network.
 // ---------------------------------------------------------------------------
 
-// ----- Cache logic (mirrors the implementation in connection-ipc.ts) --------
+import type { ModelsListResponse } from './connection-ipc';
 
-interface CacheEntry {
-  models: string[];
-  expiresAt: number;
-}
-
-const CACHE_TTL_MS = 5 * 60 * 1000;
-let cache: Map<string, CacheEntry>;
-
-function getCacheKey(provider: string, baseUrl: string, apiKey: string): string {
-  const keyHash = createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
-  return `${provider}::${baseUrl}::${keyHash}`;
-}
-
-function getCachedModels(provider: string, baseUrl: string, apiKey: string): string[] | null {
-  const key = getCacheKey(provider, baseUrl, apiKey);
-  const entry = cache.get(key);
-  if (entry === undefined) return null;
-  if (Date.now() > entry.expiresAt) {
-    cache.delete(key);
-    return null;
-  }
-  return entry.models;
-}
-
-function setCachedModels(
-  provider: string,
-  baseUrl: string,
-  apiKey: string,
-  models: string[],
-): void {
-  const key = getCacheKey(provider, baseUrl, apiKey);
-  cache.set(key, { models, expiresAt: Date.now() + CACHE_TTL_MS });
-}
-
-// ----- Error classification (mirrors connection-ipc.ts) --------------------
-
-type ErrorCode = '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE';
-
-function classifyHttpError(status: number): { code: ErrorCode; hint: string } {
-  if (status === 401 || status === 403) {
-    return { code: '401', hint: 'API key 错误或权限不足' };
-  }
-  if (status === 404) {
-    return {
-      code: '404',
-      hint: 'baseUrl 路径错误。OpenAI 兼容代理通常需要 /v1 后缀（试试 https://your-host/v1）',
-    };
-  }
-  return { code: 'NETWORK', hint: `服务器返回 HTTP ${status}` };
-}
-
-// ----- ModelsListResponse error union (mirrors connection-ipc.ts) -----------
-
-type ModelsListResponse =
-  | { ok: true; models: string[] }
-  | {
-      ok: false;
-      code: 'IPC_BAD_INPUT' | 'NETWORK' | 'HTTP' | 'PARSE';
-      message: string;
-      hint: string;
-    };
-
-// Minimal inline handler exercising the same logic as the real ipcMain handler.
 async function handleModelsList(
   raw: unknown,
   fetchImpl: (
     url: string,
   ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>,
 ): Promise<ModelsListResponse> {
-  // Validate payload
   if (typeof raw !== 'object' || raw === null) {
     return {
       ok: false,
@@ -121,9 +69,6 @@ async function handleModelsList(
   const apiKey = (r['apiKey'] as string).trim();
   const baseUrl = (r['baseUrl'] as string).trim();
 
-  const cached = getCachedModels(provider, baseUrl, apiKey);
-  if (cached !== null) return { ok: true, models: cached };
-
   let res: { ok: boolean; status: number; json: () => Promise<unknown> };
   try {
     res = await fetchImpl(`${baseUrl}/models`);
@@ -157,28 +102,6 @@ async function handleModelsList(
     };
   }
 
-  // mirrors extractIds/extractModelIds: any item missing a string id rejects entirely
-  function extractIds(items: unknown[]): string[] | null {
-    const ids: string[] = [];
-    for (const item of items) {
-      if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
-        ids.push((item as { id: string }).id);
-      } else {
-        return null;
-      }
-    }
-    return ids;
-  }
-
-  function extractModelIds(b: unknown): string[] | null {
-    if (b === null || typeof b !== 'object') return null;
-    const data = (b as { data?: unknown }).data;
-    if (Array.isArray(data)) return extractIds(data);
-    const models = (b as { models?: unknown }).models;
-    if (Array.isArray(models)) return extractIds(models);
-    return null;
-  }
-
   const ids = extractModelIds(body);
   if (ids === null) {
     return {
@@ -188,19 +111,96 @@ async function handleModelsList(
       hint: 'Unexpected response shape — check provider /models endpoint compatibility',
     };
   }
-  setCachedModels(provider, baseUrl, apiKey, ids);
   return { ok: true, models: ids };
 }
 
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  cache = new Map();
+  _clearModelsCache();
   vi.useFakeTimers();
 });
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+// ---------------------------------------------------------------------------
+// extractIds
+// ---------------------------------------------------------------------------
+
+describe('extractIds', () => {
+  it('returns ids for a valid array', () => {
+    expect(extractIds([{ id: 'a' }, { id: 'b' }])).toEqual(['a', 'b']);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(extractIds([])).toEqual([]);
+  });
+
+  it('returns null when any item is missing a string id', () => {
+    expect(extractIds([{ id: 'a' }, { foo: 'bar' }])).toBeNull();
+  });
+
+  it('returns null when an id is a number instead of a string', () => {
+    expect(extractIds([{ id: 'a' }, { id: 123 }])).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractModelIds
+// ---------------------------------------------------------------------------
+
+describe('extractModelIds', () => {
+  it('handles OpenAI-compat { data: [...] } shape', () => {
+    expect(extractModelIds({ data: [{ id: 'gpt-4o' }] })).toEqual(['gpt-4o']);
+  });
+
+  it('handles Anthropic { models: [...] } shape', () => {
+    expect(extractModelIds({ models: [{ id: 'claude-3-5-sonnet' }] })).toEqual([
+      'claude-3-5-sonnet',
+    ]);
+  });
+
+  it('returns null for unknown shape', () => {
+    expect(extractModelIds({ unexpected: 'thing' })).toBeNull();
+  });
+
+  it('returns null for non-object input', () => {
+    expect(extractModelIds(null)).toBeNull();
+    expect(extractModelIds('string')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getCacheKey
+// ---------------------------------------------------------------------------
+
+describe('getCacheKey', () => {
+  it('includes provider and baseUrl in the key', () => {
+    const key = getCacheKey('openai', 'https://api.openai.com/v1', 'sk-test');
+    expect(key).toContain('openai');
+    expect(key).toContain('https://api.openai.com/v1');
+  });
+
+  it('uses a hash of the apiKey, not the raw value', () => {
+    const key = getCacheKey('openai', 'https://api.openai.com/v1', 'sk-secret');
+    expect(key).not.toContain('sk-secret');
+    const expectedHash = createHash('sha256').update('sk-secret').digest('hex').slice(0, 16);
+    expect(key).toContain(expectedHash);
+  });
+
+  it('produces different keys for different apiKeys', () => {
+    const keyA = getCacheKey('openai', 'https://api.openai.com/v1', 'sk-key-A');
+    const keyB = getCacheKey('openai', 'https://api.openai.com/v1', 'sk-key-B');
+    expect(keyA).not.toBe(keyB);
+  });
+
+  it('produces different keys for different providers', () => {
+    const keyA = getCacheKey('openai', 'https://api.example.com', 'sk-test');
+    const keyB = getCacheKey('anthropic', 'https://api.example.com', 'sk-test');
+    expect(keyA).not.toBe(keyB);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -227,56 +227,6 @@ describe('classifyHttpError', () => {
   it('returns NETWORK code for unexpected status', () => {
     const { code } = classifyHttpError(500);
     expect(code).toBe('NETWORK');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// models:v1:list — 5-minute cache TTL
-// ---------------------------------------------------------------------------
-
-describe('models cache (5-min TTL)', () => {
-  it('returns cached models within TTL', () => {
-    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-test', ['gpt-4o', 'gpt-4o-mini']);
-    const result = getCachedModels('openai', 'https://api.openai.com/v1', 'sk-test');
-    expect(result).toEqual(['gpt-4o', 'gpt-4o-mini']);
-  });
-
-  it('returns null after TTL expires', () => {
-    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-test', ['gpt-4o']);
-
-    // Advance past the 5-minute TTL
-    vi.advanceTimersByTime(CACHE_TTL_MS + 1);
-
-    const result = getCachedModels('openai', 'https://api.openai.com/v1', 'sk-test');
-    expect(result).toBeNull();
-  });
-
-  it('different provider+baseUrl combinations are cached independently', () => {
-    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-test', ['gpt-4o']);
-    setCachedModels('openai', 'https://relay.example.com/v1', 'sk-test', ['custom-model']);
-
-    expect(getCachedModels('openai', 'https://api.openai.com/v1', 'sk-test')).toEqual(['gpt-4o']);
-    expect(getCachedModels('openai', 'https://relay.example.com/v1', 'sk-test')).toEqual([
-      'custom-model',
-    ]);
-  });
-
-  it('returns null for keys not yet in cache', () => {
-    expect(getCachedModels('anthropic', 'https://api.anthropic.com', 'sk-ant-test')).toBeNull();
-  });
-
-  it('different apiKeys produce different cache entries — no cross-key leakage', () => {
-    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-A', ['model-for-A']);
-    // key-B should NOT see key-A's cached models
-    expect(getCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-B')).toBeNull();
-  });
-
-  it('same provider+baseUrl but different apiKey are stored under distinct cache entries', () => {
-    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-A', ['model-A']);
-    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-B', ['model-B']);
-
-    expect(getCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-A')).toEqual(['model-A']);
-    expect(getCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-B')).toEqual(['model-B']);
   });
 });
 

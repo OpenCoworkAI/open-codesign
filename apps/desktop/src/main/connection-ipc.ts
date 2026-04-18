@@ -128,7 +128,7 @@ function buildAuthHeaders(
   return { authorization: `Bearer ${apiKey}` };
 }
 
-function classifyHttpError(status: number): {
+export function classifyHttpError(status: number): {
   code: ConnectionTestError['code'];
   hint: string;
 } {
@@ -164,7 +164,7 @@ function classifyNetworkError(err: unknown): { code: ConnectionTestError['code']
   };
 }
 
-function extractIds(items: unknown[]): string[] | null {
+export function extractIds(items: unknown[]): string[] | null {
   const ids: string[] = [];
   for (const item of items) {
     if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
@@ -177,7 +177,7 @@ function extractIds(items: unknown[]): string[] | null {
   return ids;
 }
 
-function extractModelIds(body: unknown): string[] | null {
+export function extractModelIds(body: unknown): string[] | null {
   if (body === null || typeof body !== 'object') return null;
 
   // OpenAI / OpenAI-compat: { data: [{ id: string }, ...] }
@@ -203,7 +203,7 @@ interface CacheEntry {
 const modelsCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-function getCacheKey(provider: string, baseUrl: string, apiKey: string): string {
+export function getCacheKey(provider: string, baseUrl: string, apiKey: string): string {
   const keyHash = createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
   return `${provider}::${baseUrl}::${keyHash}`;
 }
