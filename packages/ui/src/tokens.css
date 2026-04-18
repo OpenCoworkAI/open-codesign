@@ -92,10 +92,15 @@
   --tracking-label: 0.08em;
 
   /* Control sizes */
+  --size-control-xs: 30px;
   --size-control-sm: 32px;
   --size-control-md: 40px;
   --size-control-lg: 48px;
   --size-accent-stripe: 3px;
+
+  /* Icon sizes */
+  --size-icon-sm: 14px;
+  --size-icon-md: 16px;
 
   /* Spacing — strict 4-px scale */
   --space-0_5: 2px;

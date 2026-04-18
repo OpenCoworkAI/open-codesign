@@ -83,17 +83,26 @@ export function PreviewToolbar(): ReactElement {
     {
       value: 'desktop',
       label: t('preview.viewport.desktop'),
-      icon: <Monitor className="w-[14px] h-[14px]" aria-hidden="true" />,
+      icon: (
+        <Monitor className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" aria-hidden="true" />
+      ),
     },
     {
       value: 'tablet',
       label: t('preview.viewport.tablet'),
-      icon: <Tablet className="w-[14px] h-[14px]" aria-hidden="true" />,
+      icon: (
+        <Tablet className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" aria-hidden="true" />
+      ),
     },
     {
       value: 'mobile',
       label: t('preview.viewport.mobile'),
-      icon: <Smartphone className="w-[14px] h-[14px]" aria-hidden="true" />,
+      icon: (
+        <Smartphone
+          className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]"
+          aria-hidden="true"
+        />
+      ),
     },
   ];
 
@@ -121,7 +130,7 @@ export function PreviewToolbar(): ReactElement {
               aria-pressed={active}
               onClick={() => setPreviewViewport(item.value)}
               className={[
-                'inline-flex items-center justify-center w-[30px] h-[30px] transition-[background-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]',
+                'inline-flex items-center justify-center w-[var(--size-control-xs)] h-[var(--size-control-xs)] transition-[background-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]',
                 active
                   ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]'
                   : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-secondary)]',
@@ -139,7 +148,7 @@ export function PreviewToolbar(): ReactElement {
             type="button"
             disabled={disabled}
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 h-[var(--size-control-sm)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            className="inline-flex items-center gap-1.5 h-[var(--size-control-xs)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
             aria-haspopup="menu"
             aria-expanded={open}
           >

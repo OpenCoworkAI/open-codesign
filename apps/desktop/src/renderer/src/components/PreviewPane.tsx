@@ -32,7 +32,7 @@ export function isTrustedPreviewMessageSource(
 }
 
 const COMMENT_HINT_CLASS =
-  'absolute left-5 top-5 z-10 rounded-full border border-[var(--color-border)] bg-[rgba(255,255,255,0.88)] px-3 py-1 text-[11px] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur';
+  'absolute left-[var(--space-5)] top-[var(--space-5)] z-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur';
 
 export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const t = useT();
@@ -90,43 +90,6 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   } else if (isGenerating && !previewHtml) {
     body = <LoadingState />;
   } else if (previewHtml) {
-<<<<<<< HEAD
-    body = (
-      <div className="h-full p-6">
-        <div className="relative h-full">
-          <div className="absolute left-5 top-5 z-10 rounded-full border border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-surface)_88%,transparent)] px-3 py-1 text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur">
-            {t('preview.clickToComment')}
-          </div>
-          <iframe
-            ref={iframeRef}
-            key={previewHtml.length}
-            title="design-preview"
-            sandbox="allow-scripts"
-            srcDoc={buildSrcdoc(previewHtml)}
-            className="w-full h-full bg-[var(--color-surface)] rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]"
-          />
-          <InlineCommentComposer />
-        </div>
-      </div>
-||||||| parent of 117e6ee (feat(desktop): mobile/tablet/desktop viewport preview with phone bezel)
-    body = (
-      <div className="h-full p-6">
-        <div className="relative h-full">
-          <div className="absolute left-5 top-5 z-10 rounded-full border border-[var(--color-border)] bg-[rgba(255,255,255,0.88)] px-3 py-1 text-[11px] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur">
-            {t('preview.clickToComment')}
-          </div>
-          <iframe
-            ref={iframeRef}
-            key={previewHtml.length}
-            title="design-preview"
-            sandbox="allow-scripts"
-            srcDoc={buildSrcdoc(previewHtml)}
-            className="w-full h-full bg-white rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]"
-          />
-          <InlineCommentComposer />
-        </div>
-      </div>
-=======
     const isMobile = previewViewport === 'mobile';
     const viewportStyle: React.CSSProperties | undefined = isMobile
       ? {
@@ -148,7 +111,6 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         }
         style={viewportStyle}
       />
->>>>>>> 117e6ee (feat(desktop): mobile/tablet/desktop viewport preview with phone bezel)
     );
 
     if (isMobile) {
