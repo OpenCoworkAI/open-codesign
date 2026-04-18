@@ -107,9 +107,17 @@ export function Onboarding() {
 
 function Stepper({ current, total }: { current: number; total: number }) {
   return (
-    <div className="flex items-center gap-2">
+    <div
+      tabIndex={-1}
+      role="progressbar"
+      aria-valuenow={current}
+      aria-valuemin={1}
+      aria-valuemax={total}
+      aria-label={`Step ${current} of ${total}`}
+      className="flex items-center gap-2"
+    >
       <span
-        className="text-[11px] text-[var(--color-text-muted)] tracking-[0.05em]"
+        className="text-[var(--text-xs)] text-[var(--color-text-muted)] tracking-[0.05em]"
         style={{ fontFamily: 'var(--font-mono)' }}
       >
         {current.toString().padStart(2, '0')} / {total.toString().padStart(2, '0')}

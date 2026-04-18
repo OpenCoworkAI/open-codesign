@@ -48,10 +48,10 @@ export function ChooseModel({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
-        <h2 className="text-[20px] font-semibold text-[var(--color-text-primary)] tracking-[-0.01em] leading-[1.2]">
+        <h2 className="text-[var(--text-lg)] font-semibold text-[var(--color-text-primary)] tracking-[var(--tracking-heading)] leading-[var(--leading-heading)]">
           {t('onboarding.choose.title')}
         </h2>
-        <p className="text-[14px] text-[var(--color-text-secondary)] leading-[1.55]">
+        <p className="text-[var(--text-base)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
           {t('onboarding.choose.description')}
         </p>
       </div>
@@ -79,20 +79,20 @@ export function ChooseModel({
         onChange={setModelFast}
       />
 
-      {baseUrl !== null ? (
-        <p className="text-[12px] text-[var(--color-text-muted)] leading-[1.5]">
-          {t('onboarding.choose.customBaseUrl', { url: baseUrl })}
-        </p>
-      ) : null}
-
-      <p className="text-[12px] text-[var(--color-text-muted)] leading-[1.5]">
+      <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-snug)]">
+        {baseUrl !== null ? (
+          <>
+            {t('onboarding.choose.customBaseUrl', { url: baseUrl })}
+            <br />
+          </>
+        ) : null}
         {useFreeTierDefaults
           ? t('onboarding.choose.costNoteFree')
           : t('onboarding.choose.costNote')}
       </p>
 
       {errorMessage !== null ? (
-        <p className="text-[13px] text-[var(--color-error)]">{errorMessage}</p>
+        <p className="text-[var(--text-sm)] text-[var(--color-error)]">{errorMessage}</p>
       ) : null}
 
       <div className="flex justify-between gap-2 pt-2">
@@ -141,7 +141,7 @@ function ModelPicker({ label, hint, value, options, onChange }: ModelPickerProps
     <div className="flex flex-col gap-2">
       <label
         htmlFor={inputId}
-        className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)] font-medium"
+        className="text-[var(--text-2xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium"
         style={{ fontFamily: 'var(--font-mono)' }}
       >
         {label}
@@ -156,7 +156,7 @@ function ModelPicker({ label, hint, value, options, onChange }: ModelPickerProps
         placeholder={options[0]}
         spellCheck={false}
         style={{ fontFamily: 'var(--font-mono)' }}
-        className="w-full h-[40px] px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        className="w-full h-[var(--size-control-md)] px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
       />
       <datalist id={datalistId}>
         {options.map((opt) => (
@@ -173,7 +173,7 @@ function ModelPicker({ label, hint, value, options, onChange }: ModelPickerProps
               key={opt}
               type="button"
               onClick={() => onChange(opt)}
-              className={`px-2.5 h-[28px] rounded-full border text-[11px] transition-colors ${
+              className={`px-2.5 h-[var(--size-control-sm)] rounded-full border text-[var(--text-xs)] transition-colors ${
                 selected
                   ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
                   : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)]'
@@ -186,7 +186,9 @@ function ModelPicker({ label, hint, value, options, onChange }: ModelPickerProps
         })}
       </div>
 
-      <span className="text-[12px] text-[var(--color-text-muted)] leading-[1.4]">{hint}</span>
+      <span className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
+        {hint}
+      </span>
     </div>
   );
 }
