@@ -2,8 +2,9 @@
  * Exporter entry point. Each format lives in its own subpath export and is
  * loaded lazily so the cold-start bundle stays lean (PRINCIPLES §1).
  *
- * Tier 1 ships HTML. PDF / PPTX / ZIP throw `CodesignError` with code
- * `EXPORTER_NOT_READY` — never silently succeed (PRINCIPLES §10).
+ * Tier 1 ships HTML, PDF, PPTX, and ZIP — all four lazy-loaded so the heavy
+ * runtime deps (`puppeteer-core`, `pptxgenjs`, `zip-lib`) only enter the
+ * module graph the first time a user actually exports.
  */
 
 import { CodesignError } from '@open-codesign/shared';
@@ -21,11 +22,14 @@ export interface ExportResult {
   path: string;
 }
 
-export function isExporterReady(format: ExporterFormat): boolean {
-  return format === 'html';
+export function isExporterReady(_format: ExporterFormat): boolean {
+  return true;
 }
 
 export type { ExportHtmlOptions } from './html';
+export type { ExportPdfOptions } from './pdf';
+export type { ExportPptxOptions } from './pptx';
+export type { ExportZipOptions, ZipAsset } from './zip';
 
 export async function exportHtml(
   htmlContent: string,
@@ -46,15 +50,15 @@ export async function exportArtifact(
   }
   if (format === 'pdf') {
     const mod = await import('./pdf');
-    return mod.exportPdf();
+    return mod.exportPdf(htmlContent, destinationPath);
   }
   if (format === 'pptx') {
     const mod = await import('./pptx');
-    return mod.exportPptx();
+    return mod.exportPptx(htmlContent, destinationPath);
   }
   if (format === 'zip') {
     const mod = await import('./zip');
-    return mod.exportZip();
+    return mod.exportZip(htmlContent, destinationPath);
   }
   throw new CodesignError(`Unknown exporter format: ${format as string}`, 'EXPORTER_UNKNOWN');
 }

@@ -56,9 +56,8 @@ export function registerExporterIpc(getWindow: () => BrowserWindow | null): void
       return { status: 'cancelled' };
     }
 
-    // Tier 1: HTML succeeds, others throw EXPORTER_NOT_READY. We deliberately
-    // do NOT swallow the error here — let it propagate so the renderer can
-    // surface it as a toast (PRINCIPLES §10).
+    // All four formats ship in tier 1; the heavy deps load lazily inside
+    // exportArtifact. Errors propagate to the renderer as toasts (PRINCIPLES §10).
     const result = await exportArtifact(req.format, req.htmlContent, picked.filePath);
     return { status: 'saved', path: result.path, bytes: result.bytes };
   });
