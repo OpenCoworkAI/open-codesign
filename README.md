@@ -1,23 +1,22 @@
-# open-codesign
+# Open CoDesign
 
-> Open-source AI design tool — prompt to interactive prototype, slide deck, and marketing assets. Multi-model, BYOK, runs on your laptop.
+**简体中文**: [README.zh-CN.md](./README.zh-CN.md)
 
-[Vision](./docs/VISION.md) · [Roadmap](./docs/ROADMAP.md) · [Website](https://opencoworkai.github.io/open-codesign/) · [Contributing](./CONTRIBUTING.md) · [Collaboration](./docs/COLLABORATION.md)
+> An open-source desktop app for designing with AI. Bring your own model, keep everything local.
+
+[Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [Contributing](./CONTRIBUTING.md) · [Vision](./docs/VISION.md)
 
 ---
 
-**Status**: 🚧 Pre-alpha — designing in public. Not usable yet.
+**Status**: Pre-alpha. We're building in public. Not usable yet.
 
-open-codesign is an open-source desktop app that turns natural-language prompts into HTML prototypes, PDF one-pagers, PPTX decks, and design-system-aware mockups. Built as the open counterpart to Claude Design, with multi-provider model support and a local-first storage model.
+Open CoDesign turns natural-language prompts into HTML prototypes, slide decks, and marketing assets — all running on your laptop, with whichever AI model you bring. It's the open-source counterpart to Anthropic Claude Design, built around three convictions:
 
-## Why
+1. **Your designs are yours.** Prompts, generated artifacts, and codebase scans live on disk. No mandatory cloud, no telemetry by default.
+2. **Your model, your bill.** Bring your own API key (Anthropic / OpenAI / Google / OpenAI-compatible relays). We don't proxy, we don't charge per token.
+3. **Your craft, amplified.** Generated work isn't a black box — every artifact ships with the parameters worth tweaking, the version history worth diffing, the design system worth reusing.
 
-- **Multi-model**: Anthropic, OpenAI, Gemini, DeepSeek, local models — bring your own key.
-- **Local-first**: Your prompts, designs, and codebase scans never leave your laptop unless you opt in.
-- **Lean**: Target install size ≤ 80 MB. No bundled runtimes, no telemetry by default.
-- **Ecosystem-friendly**: Designed to handoff to [open-cowork](https://github.com/OpenCoworkAI/open-cowork) for engineering, and to interoperate with Claude Artifacts.
-
-## Install
+## Quickstart
 
 Download the latest installer from the [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases) page.
 
