@@ -12,6 +12,15 @@ import { enDemos } from './locales/en';
 import { zhCNDemos } from './locales/zh-CN';
 
 export { SYSTEM_PROMPTS, type SystemPromptId } from './system/index';
+export {
+  EXAMPLES,
+  getExample,
+  getExamples,
+  type Example,
+  type ExampleCategory,
+  type ExampleContent,
+  type LocalizedExample,
+} from './examples/index';
 
 export interface DemoTemplate {
   id: string;
