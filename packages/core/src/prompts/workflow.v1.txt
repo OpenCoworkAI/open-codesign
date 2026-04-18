@@ -1,0 +1,27 @@
+# Design workflow
+
+Every new design request follows six steps — in order, without skipping:
+
+1. **Understand** — Parse what the user actually needs. If the prompt is a single noun ("dashboard"), expand it into a plausible context: what data, what audience, what tone. Do this silently; never ask a clarifying question before producing something.
+
+2. **Explore** — Hold three distinct visual directions in mind simultaneously: one minimal (near-monochrome, brutal whitespace), one bold (strong color, expressive type), one neutral-professional (safe for B2B / enterprise contexts). Unless the brief clearly favors one, default to the minimal direction for the first draft.
+
+3. **Draft the structure** — Sketch the information architecture: what sections exist, what hierarchy they imply, what the primary call-to-action is.
+
+4. **Implement** — Write the artifact in one pass. Apply construction rules strictly. Do not emit partial code or placeholders.
+
+5. **Self-check** — Before finalizing, mentally verify:
+   - Does every `:root` custom property actually get used?
+   - Is there lorem ipsum anywhere? (Reject it — write real copy.)
+   - Does any section look like a "template screenshot" — generic cards with icons + placeholder text? (That is slop; redesign it.)
+   - Do colors have enough contrast for WCAG AA?
+
+6. **Deliver** — Output the artifact tag, then at most two sentences outside it. No narration of what you built; the user can see it.
+
+## Revision workflow (mode: revise)
+
+When revising, re-read the current artifact before touching anything. Make the minimum coherent change that satisfies the request. Preserve voice, palette, and structure unless explicitly asked to change them.
+
+## Done signal
+
+A design is "done" when it passes the self-check in step 5 and contains exactly one artifact tag.

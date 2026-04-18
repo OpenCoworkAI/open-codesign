@@ -1,0 +1,62 @@
+# Visual taste guidelines (anti-slop)
+
+These rules encode the difference between a design that looks generated and one that looks considered.
+
+## Typography
+
+**Forbidden fonts** (overused to the point of invisibility):
+- Inter, Roboto, Arial, Helvetica, Fraunces, Playfair Display (unless explicitly requested)
+
+**Preferred alternatives** (expressive, distinct, free via Google Fonts):
+- Display / editorial: Syne, DM Serif Display, Instrument Serif, Space Grotesk
+- Clean sans: Geist, Outfit, Plus Jakarta Sans, Neue Montreal (system-ui fallback)
+- Mono accents: JetBrains Mono, Fira Code (use sparingly, for data or code)
+
+Typography rules:
+- Mix weights deliberately: one very heavy line (700–900) anchors hierarchy; body at 400; captions at 400 with reduced opacity.
+- Use `letter-spacing: -0.02em` on large headings (36 px+). Tight tracking reads as confident.
+- Never center-align body paragraphs. Center alignment is for short headlines and CTAs only.
+- Line length: 60–75 characters for body text. Use `max-width: 65ch` on prose containers.
+
+## Color
+
+- Use oklch color space for accent colors. oklch gives perceptually uniform chroma — a color and its 20% lighter variant will feel proportionally related, unlike hex math.
+  - Example: `oklch(62% 0.22 265)` (blue-violet), `oklch(72% 0.18 40)` (warm amber)
+- Avoid pure black (`#000`) for text. Use near-black with a slight hue cast: `oklch(12% 0.01 265)`.
+- Do not use the default Tailwind blue (`#3b82f6`). It signals "this is an uncustomized Tailwind design."
+- Accent palette: one primary accent, optionally one complementary. Three or more accent colors indicates lack of restraint.
+- Background: off-white or very light warm neutral (`#f8f5f0`, `oklch(97% 0.005 80)`) almost always beats pure white.
+
+## Layout
+
+- Prefer **asymmetry** over perfect bilateral symmetry. A 7:5 split column feels more alive than 6:6.
+- Vary section heights. A 3-section page where every section is the same height looks like a slideshow.
+- Use negative space as a design element, not as leftover space. A single large headline on 30vh of white is a design choice.
+- Avoid the "three features in a row with icon + title + text" pattern unless you add a distinctive twist (unusual icon treatment, color band, staggered layout).
+
+## Motion
+
+- CSS-only: `transition: color 120ms ease, background 200ms ease`. No JS loops.
+- Hover states: subtle, not dramatic. `opacity: 0.85` or `translateY(-2px)` — not scale + shadow + color simultaneously.
+- Page-level animation: `@keyframes` fade-in on `<main>` at 150ms is enough. No scroll-triggered choreography.
+
+## Texture and depth
+
+- Grain overlay: a `0.03` opacity SVG noise filter or CSS `url()` feTurbulence adds tactile quality to flat surfaces. Use on hero backgrounds, not everywhere.
+- Glass: `backdrop-filter: blur(12px)` cards look modern when used once. Used everywhere, they look like a tutorial.
+- Borders: prefer `1px solid oklch(85% 0.01 0)` (slightly warm gray) over stark `border-gray-200`.
+
+## Content quality signals
+
+- Photographs: inline SVG abstract compositions or CSS gradient fills. Never hotlinked placeholder images.
+- Data visualizations: hand-coded SVG bar charts or sparklines, not fake progress bars at suspiciously round percentages.
+- Icon weight: match the overall design weight. Light design = 1.5px stroke icons. Heavy design = filled icons.
+
+## What "slop" looks like (avoid)
+
+- A hero section with a gradient blob background, bold sans headline, and a generic screenshot mockup.
+- A features section with six 1:1 cards, each with a 24px icon, a two-word title, and a sentence of filler text.
+- A testimonials section with circular avatars, a name, a title, and a five-star rating.
+- A footer with three columns of nav links and a social media icon row.
+
+These patterns are not forbidden — they are forbidden when combined without a distinctive visual angle that makes them feel intentional rather than assembled from a component kit.

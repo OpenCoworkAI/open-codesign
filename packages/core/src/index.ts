@@ -8,7 +8,14 @@ import type {
   StoredDesignSystem,
 } from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
-import { SYSTEM_PROMPTS } from '@open-codesign/templates';
+import {
+  type PromptComposeOptions,
+  type SerializedBrandTokens,
+  composeSystemPrompt,
+  storedDesignSystemToTokens,
+} from './prompts/index.js';
+
+export type { PromptComposeOptions, SerializedBrandTokens };
 
 export interface AttachmentContext {
   name: string;
@@ -33,7 +40,10 @@ export interface GenerateInput {
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
+  /** Override the system prompt entirely. When set, `mode` is ignored. */
   systemPrompt?: string | undefined;
+  /** Generation mode. Defaults to 'create'. */
+  mode?: PromptComposeOptions['mode'] | undefined;
   signal?: AbortSignal | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
 }
@@ -260,7 +270,15 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   }
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: input.systemPrompt ?? SYSTEM_PROMPTS.designGenerator },
+    {
+      role: 'system',
+      content:
+        input.systemPrompt ??
+        composeSystemPrompt({
+          mode: input.mode ?? 'create',
+          brandTokens: input.designSystem ? storedDesignSystemToTokens(input.designSystem) : null,
+        }),
+    },
     ...input.history,
     { role: 'user', content: buildPrompt(input.prompt, buildContextSections(input)) },
   ];
@@ -286,10 +304,10 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
   const messages: ChatMessage[] = [
     {
       role: 'system',
-      content: [
-        SYSTEM_PROMPTS.designGenerator,
-        'You may also be asked to revise an existing artifact. In that case, preserve the design intent and make the smallest coherent change that satisfies the request.',
-      ].join('\n\n'),
+      content: composeSystemPrompt({
+        mode: 'revise',
+        brandTokens: input.designSystem ? storedDesignSystemToTokens(input.designSystem) : null,
+      }),
     },
     { role: 'user', content: buildRevisionPrompt(input, buildContextSections(input)) },
   ];

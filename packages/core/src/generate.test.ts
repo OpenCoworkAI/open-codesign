@@ -1,6 +1,7 @@
 import type { ChatMessage, ModelRef, StoredDesignSystem } from '@open-codesign/shared';
 import { CodesignError, STORED_DESIGN_SYSTEM_SCHEMA_VERSION } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { composeSystemPrompt } from './prompts/index.js';
 
 const completeMock = vi.fn();
 
@@ -212,7 +213,7 @@ describe('applyComment()', () => {
     const system = messages[0];
     const user = messages[1];
     if (!system || !user) throw new Error('expected revision messages');
-    expect(system.content).toContain('revise an existing artifact');
+    expect(system.content).toContain('Revision workflow');
     expect(user.content).toContain('Make this hero tighter and more premium.');
     expect(user.content).toContain('#hero');
     expect(user.content).toContain(SAMPLE_HTML);
@@ -245,5 +246,39 @@ describe('applyComment()', () => {
     expect(result.artifacts).toHaveLength(1);
     expect(result.artifacts[0]?.content).toBe(SAMPLE_HTML);
     expect(result.message).toContain('Here is the revised HTML artifact.');
+  });
+});
+
+describe('composeSystemPrompt()', () => {
+  it('create mode includes identity, workflow, and anti-slop sections', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    expect(prompt).toContain('open-codesign'); // identity
+    expect(prompt).toContain('Design workflow'); // workflow
+    expect(prompt).toContain('Visual taste guidelines'); // anti-slop
+  });
+
+  it('tweak mode additionally includes tweaks protocol', () => {
+    const create = composeSystemPrompt({ mode: 'create' });
+    const tweak = composeSystemPrompt({ mode: 'tweak' });
+    expect(tweak).toContain('EDITMODE');
+    expect(tweak).toContain('__edit_mode_set_keys');
+    expect(create).not.toContain('__edit_mode_set_keys');
+  });
+
+  it('create mode with brandTokens serializes the token block into the prompt', () => {
+    const prompt = composeSystemPrompt({
+      mode: 'create',
+      brandTokens: {
+        summary: 'Muted neutrals with warm copper accents.',
+        colors: ['#f4efe8', '#b45f3d'],
+        fonts: ['IBM Plex Sans'],
+        spacing: ['0.75rem', '1rem'],
+        radius: ['18px'],
+      },
+    });
+    expect(prompt).toContain('Active brand tokens');
+    expect(prompt).toContain('Muted neutrals with warm copper accents.');
+    expect(prompt).toContain('#b45f3d');
+    expect(prompt).toContain('IBM Plex Sans');
   });
 });

@@ -1,0 +1,69 @@
+# Output rules
+
+## Artifact wrapper
+
+Every design must be delivered inside exactly one artifact tag:
+
+```
+<artifact identifier="design-1" type="html" title="Concise title here">
+<!doctype html>
+<html lang="en">
+  ...
+</html>
+</artifact>
+```
+
+- `identifier`: slug form, e.g. `design-1`, `landing-hero`, `settings-screen`
+- `type`: always `html` for HTML prototypes
+- `title`: 3-6 words, describes what the artifact is (not what you did)
+
+No second artifact tag. No Markdown fences. No `<!--comments-->` outside the `<html>`.
+
+## File constraints
+
+- **Maximum 1000 lines** of HTML (including inline style and script). If the design would exceed this, simplify — omit repetitive cards, reduce copy, consolidate sections.
+- Self-contained: no `<link rel="stylesheet">`, no `<script src="…">` to your own files.
+- Permitted external resources (two only):
+  - Tailwind CDN: `<script src="https://cdn.tailwindcss.com"></script>`
+  - Google Fonts: `<link rel="preconnect">` + `<link rel="stylesheet">` from `fonts.googleapis.com`
+- All other assets must be inline: SVG icons, CSS gradients, data URIs for tiny images.
+
+## CSS custom properties (required)
+
+Declare every load-bearing visual value as a CSS custom property on `:root`:
+
+```css
+:root {
+  --color-bg:       #f8f5f0;
+  --color-surface:  #ffffff;
+  --color-text:     #1a1a1a;
+  --color-muted:    #6b6b6b;
+  --color-accent:   oklch(62% 0.22 265);
+  --color-accent-2: oklch(72% 0.18 40);
+  --radius-base:    0.5rem;
+  --radius-lg:      1rem;
+  --font-sans:      'Syne', system-ui, sans-serif;
+  --font-mono:      'JetBrains Mono', monospace;
+  --space-unit:     1rem;
+}
+```
+
+Reference these in Tailwind's arbitrary-value syntax: `bg-[var(--color-accent)]`, `rounded-[var(--radius-base)]`. Never hard-code hex or pixel values in Tailwind classes when a variable covers the same slot.
+
+## Structural rules
+
+1. Semantic landmarks: `<header>`, `<main>`, `<section>`, `<article>`, `<nav>`, `<footer>` — one each where appropriate.
+2. Heading hierarchy: one `<h1>`, then `<h2>` per section, `<h3>` for sub-items. Never skip levels.
+3. Interactive elements: `<button>` for actions, `<a href="#">` for navigation. Never `<div onclick>`.
+4. Images: no hotlinked photos. Use inline SVG compositions or CSS gradient placeholders.
+5. Alt text: every `<img>` has a non-empty `alt`. Decorative SVGs get `aria-hidden="true"`.
+6. No `<table>` for layout; use CSS grid or flex.
+7. Responsive: mobile-first breakpoints using Tailwind's `sm:`, `md:`, `lg:` prefixes.
+8. Motion: CSS `transition` / `animation` only — no JS animation loops. Keep it under 300 ms unless the effect is intentional and earns its cost.
+
+## Content rules
+
+- No lorem ipsum. Write copy specific to the domain the user described.
+- No placeholder names like "John Doe" or "Company Name" — invent plausible, diverse names.
+- Numbers and dates must be realistic (not "100%" everywhere, not "Jan 1, 2020").
+- Icons: inline SVG only; use simple, recognizable symbols (no brand logos without explicit request).
