@@ -10,7 +10,6 @@ import {
   CodesignError,
   GeneratePayload,
   GeneratePayloadV1,
-  isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
@@ -23,7 +22,6 @@ import { registerLocaleIpc } from './locale-ipc';
 import { getLogPath, getLogger, initLogger } from './logger';
 import {
   getApiKeyForProvider,
-  getBaseUrlForProvider,
   getCachedConfig,
   getOnboardingState,
   loadConfigOnBoot,
@@ -32,6 +30,7 @@ import {
 } from './onboarding-ipc';
 import { registerPreferencesIpc } from './preferences-ipc';
 import { preparePromptContext } from './prompt-context';
+import { resolveActiveModel } from './provider-settings';
 
 let mainWindow: ElectronBrowserWindow | null = null;
 
@@ -144,52 +143,70 @@ function registerIpcHandlers(): void {
     const id = payload.generationId;
     inFlight.set(id, controller);
     const coreLogger = coreLoggerFor(id);
-    const stepCtx = { id, provider: payload.model.provider, modelId: payload.model.modelId };
 
     coreLogger.info('[generate] step=load_config');
     const loadStart = Date.now();
-    const apiKey = getApiKeyForProvider(payload.model.provider);
-    const storedBaseUrl = getBaseUrlForProvider(payload.model.provider);
-    const baseUrl = payload.baseUrl ?? storedBaseUrl;
     const cfg = getCachedConfig();
+    if (cfg === null) {
+      inFlight.delete(id);
+      throw new CodesignError(
+        'No configuration found. Complete onboarding first.',
+        'CONFIG_MISSING',
+      );
+    }
+    // Snap to the canonical active provider in cachedConfig — the SAME source
+    // the Settings UI uses for the Active badge — so the actual call cannot
+    // diverge from what the user sees.
+    const active = resolveActiveModel(cfg, payload.model);
+    const apiKey = getApiKeyForProvider(active.model.provider);
+    const baseUrl = payload.baseUrl ?? active.baseUrl ?? undefined;
     coreLogger.info('[generate] step=load_config.ok', {
       ms: Date.now() - loadStart,
       hasApiKey: apiKey.length > 0,
       baseUrl: baseUrl ?? '<default>',
     });
 
+    if (active.overridden) {
+      coreLogger.info('[generate] step=resolve_active.override', {
+        requested: payload.model.provider,
+        requestedModelId: payload.model.modelId,
+        active: active.model.provider,
+        activeModelId: active.model.modelId,
+      });
+    }
+
+    const stepCtx = {
+      id,
+      provider: active.model.provider,
+      modelId: active.model.modelId,
+    };
     coreLogger.info('[generate] step=validate_provider', stepCtx);
     if (apiKey.length === 0) {
       coreLogger.error('[generate] step=validate_provider.fail', {
-        provider: payload.model.provider,
+        provider: active.model.provider,
         reason: 'missing_api_key',
       });
       inFlight.delete(id);
       throw new CodesignError(
-        `No API key configured for provider "${payload.model.provider}". Open Settings to add one.`,
+        `No API key configured for provider "${active.model.provider}". Open Settings to add one.`,
         'PROVIDER_AUTH_MISSING',
       );
     }
-    if (!isSupportedOnboardingProvider(payload.model.provider)) {
-      // Non-shortlist providers still work (any ProviderId is accepted by the
-      // payload schema), just warn so the log timeline shows we noticed.
-      coreLogger.info('[generate] step=validate_provider.warn', {
-        provider: payload.model.provider,
-        reason: 'not_in_onboarding_shortlist',
-      });
-    }
-    coreLogger.info('[generate] step=validate_provider.ok', { provider: payload.model.provider });
+    coreLogger.info('[generate] step=validate_provider.ok', { provider: active.model.provider });
 
     const promptContext = await preparePromptContext({
       attachments: payload.attachments,
       referenceUrl: payload.referenceUrl,
-      designSystem: cfg?.designSystem ?? null,
+      designSystem: cfg.designSystem ?? null,
     });
 
     logIpc.info('generate', {
       id,
-      provider: payload.model.provider,
-      modelId: payload.model.modelId,
+      provider: active.model.provider,
+      modelId: active.model.modelId,
+      ...(active.overridden
+        ? { requestedProvider: payload.model.provider, requestedModelId: payload.model.modelId }
+        : {}),
       promptLen: payload.prompt.length,
       historyLen: payload.history.length,
       attachmentCount: payload.attachments.length,
@@ -203,7 +220,7 @@ function registerIpcHandlers(): void {
       const result = await generate({
         prompt: payload.prompt,
         history: payload.history,
-        model: payload.model,
+        model: active.model,
         apiKey,
         attachments: promptContext.attachments,
         referenceUrl: promptContext.referenceUrl,
@@ -223,8 +240,8 @@ function registerIpcHandlers(): void {
       logIpc.error('generate.fail', {
         id,
         ms: Date.now() - t0,
-        provider: payload.model.provider,
-        modelId: payload.model.modelId,
+        provider: active.model.provider,
+        modelId: active.model.modelId,
         baseUrl: baseUrl ?? '<default>',
         message: err instanceof Error ? err.message : String(err),
         code: err instanceof CodesignError ? err.code : undefined,
@@ -246,20 +263,30 @@ function registerIpcHandlers(): void {
     const controller = new AbortController();
     inFlight.set(id, controller);
 
-    const apiKey = getApiKeyForProvider(payload.model.provider);
-    const storedBaseUrl = getBaseUrlForProvider(payload.model.provider);
-    const baseUrl = payload.baseUrl ?? storedBaseUrl;
     const cfg = getCachedConfig();
+    if (cfg === null) {
+      inFlight.delete(id);
+      throw new CodesignError(
+        'No configuration found. Complete onboarding first.',
+        'CONFIG_MISSING',
+      );
+    }
+    const active = resolveActiveModel(cfg, payload.model);
+    const apiKey = getApiKeyForProvider(active.model.provider);
+    const baseUrl = payload.baseUrl ?? active.baseUrl ?? undefined;
     const promptContext = await preparePromptContext({
       attachments: payload.attachments,
       referenceUrl: payload.referenceUrl,
-      designSystem: cfg?.designSystem ?? null,
+      designSystem: cfg.designSystem ?? null,
     });
 
     logIpc.info('generate', {
       id,
-      provider: payload.model.provider,
-      modelId: payload.model.modelId,
+      provider: active.model.provider,
+      modelId: active.model.modelId,
+      ...(active.overridden
+        ? { requestedProvider: payload.model.provider, requestedModelId: payload.model.modelId }
+        : {}),
       promptLen: payload.prompt.length,
       historyLen: payload.history.length,
       attachmentCount: payload.attachments.length,
@@ -273,7 +300,7 @@ function registerIpcHandlers(): void {
       const result = await generate({
         prompt: payload.prompt,
         history: payload.history,
-        model: payload.model,
+        model: active.model,
         apiKey,
         attachments: promptContext.attachments,
         referenceUrl: promptContext.referenceUrl,
@@ -292,8 +319,8 @@ function registerIpcHandlers(): void {
       logIpc.error('generate.fail', {
         id,
         ms: Date.now() - t0,
-        provider: payload.model.provider,
-        modelId: payload.model.modelId,
+        provider: active.model.provider,
+        modelId: active.model.modelId,
         baseUrl: baseUrl ?? '<default>',
         message: err instanceof Error ? err.message : String(err),
         code: err instanceof CodesignError ? err.code : undefined,
@@ -318,9 +345,13 @@ function registerIpcHandlers(): void {
         'CONFIG_MISSING',
       );
     }
-    const model = payload.model ?? { provider: cfg.provider, modelId: cfg.modelFast };
-    const apiKey = getApiKeyForProvider(model.provider);
-    const storedBaseUrl = getBaseUrlForProvider(model.provider);
+    // Inline-comment edits don't need to be tied to whatever provider was
+    // pinned in the original generate; resolve fresh against the canonical
+    // active provider so a switch in Settings takes effect immediately.
+    const hint = payload.model ?? { provider: cfg.provider, modelId: cfg.modelFast };
+    const active = resolveActiveModel(cfg, hint);
+    const apiKey = getApiKeyForProvider(active.model.provider);
+    const baseUrl = active.baseUrl ?? undefined;
     const promptContext = await preparePromptContext({
       attachments: payload.attachments,
       referenceUrl: payload.referenceUrl,
@@ -328,13 +359,16 @@ function registerIpcHandlers(): void {
     });
 
     logIpc.info('applyComment', {
-      provider: model.provider,
-      modelId: model.modelId,
+      provider: active.model.provider,
+      modelId: active.model.modelId,
+      ...(active.overridden
+        ? { requestedProvider: hint.provider, requestedModelId: hint.modelId }
+        : {}),
       selector: payload.selection.selector,
       attachmentCount: payload.attachments.length,
       hasReferenceUrl: payload.referenceUrl !== undefined,
       hasDesignSystem: promptContext.designSystem !== null,
-      baseUrl: storedBaseUrl ?? '<default>',
+      baseUrl: baseUrl ?? '<default>',
     });
 
     const t0 = Date.now();
@@ -343,12 +377,12 @@ function registerIpcHandlers(): void {
         html: payload.html,
         comment: payload.comment,
         selection: payload.selection,
-        model,
+        model: active.model,
         apiKey,
         attachments: promptContext.attachments,
         referenceUrl: promptContext.referenceUrl,
         designSystem: promptContext.designSystem ?? null,
-        ...(storedBaseUrl !== undefined ? { baseUrl: storedBaseUrl } : {}),
+        ...(baseUrl !== undefined ? { baseUrl } : {}),
       });
       logIpc.info('applyComment.ok', {
         ms: Date.now() - t0,
@@ -359,8 +393,8 @@ function registerIpcHandlers(): void {
     } catch (err) {
       logIpc.error('applyComment.fail', {
         ms: Date.now() - t0,
-        provider: model.provider,
-        modelId: model.modelId,
+        provider: active.model.provider,
+        modelId: active.model.modelId,
         selector: payload.selection.selector,
         message: err instanceof Error ? err.message : String(err),
         code: err instanceof CodesignError ? err.code : undefined,

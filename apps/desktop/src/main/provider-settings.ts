@@ -1,6 +1,7 @@
 import {
   CodesignError,
   type Config,
+  type ModelRef,
   PROVIDER_SHORTLIST,
   type SupportedOnboardingProvider,
   isSupportedOnboardingProvider,
@@ -135,4 +136,53 @@ export function computeDeleteProviderResult(
   }
 
   return { nextActive, modelPrimary: cfg.modelPrimary, modelFast: cfg.modelFast };
+}
+
+/**
+ * Result of resolving which provider/model to call against, given the canonical
+ * cached config and the renderer's hint payload.
+ *
+ * Why this exists: the renderer keeps its own copy of `cfg.provider` /
+ * `cfg.modelPrimary` in the Zustand store and forwards them in
+ * `GeneratePayloadV1.model`. If that copy drifts (settings IPC succeeds in
+ * main but the store mutation is missed, or a second window is open), the
+ * generate handler would silently call a different provider than what the
+ * Settings UI shows as Active. We treat the renderer payload as a hint and
+ * always snap back to the canonical active provider in `cachedConfig`, which
+ * is the SAME source `toProviderRows` uses to render the Active badge.
+ */
+export interface ActiveModelResolution {
+  model: ModelRef;
+  baseUrl: string | null;
+  /** True when the renderer-supplied hint provider didn't match the canonical active. */
+  overridden: boolean;
+}
+
+export function resolveActiveModel(
+  cfg: Config,
+  hint: { provider: string; modelId: string },
+): ActiveModelResolution {
+  if (!isSupportedOnboardingProvider(cfg.provider)) {
+    throw new CodesignError(
+      `Active provider "${cfg.provider}" is not in the onboarding shortlist.`,
+      'PROVIDER_NOT_SUPPORTED',
+    );
+  }
+  if (cfg.secrets[cfg.provider] === undefined) {
+    throw new CodesignError(
+      `No API key stored for active provider "${cfg.provider}". Re-run onboarding to add one.`,
+      'PROVIDER_KEY_MISSING',
+    );
+  }
+  const overridden = cfg.provider !== hint.provider;
+  // When the hint's provider matches active, trust the modelId (lets the
+  // renderer pick between primary and fast). When it doesn't match, the
+  // hint's modelId likely belongs to the wrong provider's catalog, so snap
+  // to the active provider's primary model to keep the call coherent.
+  const modelId = overridden ? cfg.modelPrimary : hint.modelId;
+  return {
+    model: { provider: cfg.provider, modelId },
+    baseUrl: cfg.baseUrls?.[cfg.provider]?.baseUrl ?? null,
+    overridden,
+  };
 }
