@@ -12,6 +12,7 @@ import {
   extractIds,
   extractModelIds,
   getCacheKey,
+  normalizeBaseUrl,
 } from './connection-ipc';
 
 // ---------------------------------------------------------------------------
@@ -348,5 +349,77 @@ describe('models:v1:list error union', () => {
     if (result.ok) {
       expect(result.models).toEqual([]);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeBaseUrl
+// ---------------------------------------------------------------------------
+
+describe('normalizeBaseUrl', () => {
+  // anthropic — strip /v1 suffix so we can append /v1/models ourselves
+  it('anthropic: strips trailing /v1', () => {
+    expect(normalizeBaseUrl('https://api.anthropic.com/v1', 'anthropic')).toBe(
+      'https://api.anthropic.com',
+    );
+  });
+
+  it('anthropic: leaves root unchanged', () => {
+    expect(normalizeBaseUrl('https://api.anthropic.com', 'anthropic')).toBe(
+      'https://api.anthropic.com',
+    );
+  });
+
+  it('anthropic: strips trailing slashes before /v1 check', () => {
+    expect(normalizeBaseUrl('https://api.anthropic.com/v1/', 'anthropic')).toBe(
+      'https://api.anthropic.com',
+    );
+  });
+
+  // openai — ensure /v1 suffix
+  it('openai: adds /v1 when missing', () => {
+    expect(normalizeBaseUrl('https://api.openai.com', 'openai')).toBe('https://api.openai.com/v1');
+  });
+
+  it('openai: keeps existing /v1 suffix', () => {
+    expect(normalizeBaseUrl('https://api.openai.com/v1', 'openai')).toBe(
+      'https://api.openai.com/v1',
+    );
+  });
+
+  it('openai: strips trailing slash then adds /v1', () => {
+    expect(normalizeBaseUrl('https://your-host/', 'openai')).toBe('https://your-host/v1');
+  });
+
+  // openrouter (same rule as openai)
+  it('openrouter: adds /v1 when missing', () => {
+    expect(normalizeBaseUrl('https://openrouter.ai/api', 'openrouter')).toBe(
+      'https://openrouter.ai/api/v1',
+    );
+  });
+
+  it('openrouter: keeps existing /v1 suffix', () => {
+    expect(normalizeBaseUrl('https://openrouter.ai/api/v1', 'openrouter')).toBe(
+      'https://openrouter.ai/api/v1',
+    );
+  });
+
+  // google — strip /v1 or /v1beta
+  it('google: strips /v1beta', () => {
+    expect(normalizeBaseUrl('https://generativelanguage.googleapis.com/v1beta', 'google')).toBe(
+      'https://generativelanguage.googleapis.com',
+    );
+  });
+
+  it('google: strips /v1', () => {
+    expect(normalizeBaseUrl('https://generativelanguage.googleapis.com/v1', 'google')).toBe(
+      'https://generativelanguage.googleapis.com',
+    );
+  });
+
+  it('google: leaves root unchanged', () => {
+    expect(normalizeBaseUrl('https://generativelanguage.googleapis.com', 'google')).toBe(
+      'https://generativelanguage.googleapis.com',
+    );
   });
 });

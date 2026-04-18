@@ -93,25 +93,44 @@ interface ProviderEndpoint {
   headers: Record<string, string>;
 }
 
+/**
+ * Normalize a user-supplied baseUrl to the root form each provider expects,
+ * so downstream path concatenation never produces duplicate segments.
+ *
+ * - anthropic: strip trailing /v1 — we append /v1/models internally
+ * - openai / openrouter: ensure /v1 suffix — the API lives at <root>/v1/models
+ * - google: strip trailing /v1 or /v1beta — we append the full path internally
+ */
+export function normalizeBaseUrl(
+  baseUrl: string,
+  provider: 'openai' | 'anthropic' | 'google' | 'openrouter',
+): string {
+  const cleaned = baseUrl.replace(/\/+$/, ''); // strip trailing slashes
+  if (provider === 'openai' || provider === 'openrouter') {
+    return cleaned.endsWith('/v1') ? cleaned : `${cleaned}/v1`;
+  }
+  if (provider === 'anthropic') {
+    return cleaned.replace(/\/v1$/, '');
+  }
+  if (provider === 'google') {
+    return cleaned.replace(/\/v1(beta)?$/, '');
+  }
+  return cleaned;
+}
+
 function buildModelsEndpoint(
   provider: SupportedOnboardingProvider,
   baseUrl: string,
 ): ProviderEndpoint {
+  const root = normalizeBaseUrl(baseUrl, provider);
   switch (provider) {
     case 'anthropic':
-      // Anthropic baseUrl is typically https://api.anthropic.com (no /v1 suffix)
-      // We append /v1/models if baseUrl doesn't already end with /models
-      return {
-        url: baseUrl.endsWith('/v1/models') ? baseUrl : `${baseUrl}/v1/models`,
-        headers: {},
-      };
+      // Anthropic root has no /v1; we append the full versioned path.
+      return { url: `${root}/v1/models`, headers: {} };
     case 'openai':
     case 'openrouter':
-      // OpenAI-compatible: baseUrl should end with /v1
-      return {
-        url: baseUrl.endsWith('/models') ? baseUrl : `${baseUrl}/models`,
-        headers: {},
-      };
+      // OpenAI-compatible: root already ends with /v1 after normalization.
+      return { url: `${root}/models`, headers: {} };
   }
 }
 
