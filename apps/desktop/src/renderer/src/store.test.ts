@@ -149,9 +149,9 @@ describe('useCodesignStore generation cancellation', () => {
     expect(useCodesignStore.getState().activeGenerationId).toBe(secondId);
     expect(useCodesignStore.getState().isGenerating).toBe(true);
     expect(useCodesignStore.getState().previewHtml).toBeNull();
-    expect(
-      useCodesignStore.getState().messages.some((m) => m.content === 'Old result'),
-    ).toBe(false);
+    expect(useCodesignStore.getState().messages.some((m) => m.content === 'Old result')).toBe(
+      false,
+    );
 
     pendingById.get(secondId)?.resolve({
       artifacts: [{ content: '<html>fresh</html>' }],

@@ -47,4 +47,24 @@ describe('cancelGenerationRequest', () => {
     expect(inFlight.has('gen-2')).toBe(true);
     expect(logIpc.info).toHaveBeenCalledWith('generate.cancelled', { id: 'gen-1' });
   });
+
+  it('is a noop when the generationId is not in the in-flight map', () => {
+    const other = makeController();
+    const inFlight = new Map([['gen-2', other]]);
+    const logIpc = { info: vi.fn() };
+
+    cancelGenerationRequest('gen-unknown', inFlight, logIpc);
+
+    expect(other.abort).not.toHaveBeenCalled();
+    expect(inFlight.has('gen-2')).toBe(true);
+    expect(logIpc.info).not.toHaveBeenCalled();
+  });
+
+  it('rejects CancelGenerationPayloadV1 with empty generationId or missing schemaVersion', () => {
+    expect(() => CancelGenerationPayloadV1.parse({ schemaVersion: 1, generationId: '' })).toThrow();
+    expect(() => CancelGenerationPayloadV1.parse({ generationId: 'gen-1' })).toThrow();
+    expect(() =>
+      CancelGenerationPayloadV1.parse({ schemaVersion: 2, generationId: 'gen-1' }),
+    ).toThrow();
+  });
 });
