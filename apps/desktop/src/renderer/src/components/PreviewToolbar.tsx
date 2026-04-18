@@ -78,11 +78,14 @@ export function PreviewToolbar(): ReactElement {
             type="button"
             disabled={disabled}
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            className="inline-flex items-center gap-1.5 h-[var(--size-control-sm)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
             aria-haspopup="menu"
             aria-expanded={open}
           >
-            <Download className="w-[14px] h-[14px]" aria-hidden="true" />
+            <Download
+              className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]"
+              aria-hidden="true"
+            />
             {t('export.button')}
           </button>
         </Tooltip>
@@ -90,7 +93,7 @@ export function PreviewToolbar(): ReactElement {
         {open && (
           <div
             role="menu"
-            className="absolute right-0 top-full mt-2 min-w-[200px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1 z-10"
+            className="absolute right-0 top-full mt-2 min-w-[var(--size-stage-min)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1 z-10"
           >
             {exportItems.map((item) => (
               <button

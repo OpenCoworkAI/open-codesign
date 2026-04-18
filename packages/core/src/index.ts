@@ -251,6 +251,7 @@ function buildRevisionPrompt(input: ApplyCommentInput, contextSections: string[]
   return parts.join('\n\n');
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: orchestration step with linear branching; refactor tracked separately
 async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
   const log = input.logger ?? NOOP_LOGGER;
   const scope = input.logScope ?? 'generate';
