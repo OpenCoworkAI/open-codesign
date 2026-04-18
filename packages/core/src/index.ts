@@ -274,9 +274,11 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
 
   // Narrow guard: only 'create' is wired through buildPrompt. Callers passing
   // 'tweak' or 'revise' would silently get wrong output — reject early instead.
-  if (input.mode && input.mode !== 'create') {
+  // When systemPrompt is provided the caller owns the full system message, so
+  // mode is irrelevant and we skip the guard (the contract says mode is ignored).
+  if (!input.systemPrompt && input.mode && input.mode !== 'create') {
     throw new CodesignError(
-      'generate() only supports mode "create". Use applyComment() for revise; tweak is not yet wired.',
+      'generate() built-in prompt only supports mode "create". Use applyComment() for revise; tweak is not yet wired.',
       'INPUT_UNSUPPORTED_MODE',
     );
   }

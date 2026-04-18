@@ -186,6 +186,28 @@ describe('generate()', () => {
     expect(completeMock).not.toHaveBeenCalled();
   });
 
+  it('does NOT throw when mode is unsupported but systemPrompt overrides the built-in prompt', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 5,
+      outputTokens: 10,
+      costUsd: 0,
+    });
+
+    // systemPrompt bypass: mode guard must be skipped entirely.
+    await expect(
+      generate({
+        prompt: 'tweak my design',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        mode: 'tweak' as 'create',
+        systemPrompt: 'You are a custom design assistant.',
+      }),
+    ).resolves.toBeDefined();
+    expect(completeMock).toHaveBeenCalledOnce();
+  });
+
   it('succeeds and calls the model when mode is create', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
