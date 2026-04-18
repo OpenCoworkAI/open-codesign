@@ -35,7 +35,7 @@ function ByokBadge() {
 
   return (
     <div
-      className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2)] py-[var(--space-1)] select-none"
+      className="flex items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2)] py-[var(--space-1)] select-none"
       title={t('topbar.byokTitle')}
     >
       {/* Provider + model chip */}
@@ -81,10 +81,10 @@ export function TopBar() {
 
   return (
     <header
-      className="h-[44px] shrink-0 flex items-center justify-between pl-[88px] pr-4 border-b border-[var(--color-border)] bg-[var(--color-background)] select-none"
+      className="h-[var(--size-titlebar-height)] shrink-0 flex items-center justify-between pl-[var(--size-titlebar-pad-left)] pr-[var(--space-4)] border-b border-[var(--color-border)] bg-[var(--color-background)] select-none"
       style={dragStyle}
     >
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-[var(--space-3)] min-w-0">
         <Wordmark badge={t('common.preAlpha')} size="sm" />
         <span className="text-[var(--color-text-muted)]">/</span>
         <span className="text-[var(--text-sm)] text-[var(--color-text-secondary)] truncate">
@@ -93,9 +93,9 @@ export function TopBar() {
         <ConnectionStatusDot />
       </div>
 
-      <div className="flex items-center gap-2" style={noDragStyle}>
+      <div className="flex items-center gap-[var(--space-2)]" style={noDragStyle}>
         <ByokBadge />
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-[var(--space-1)]">
           <Tooltip label={t('commands.tooltips.commandPalette')}>
             <IconButton label={t('commands.openPalette')} size="sm" onClick={openCommandPalette}>
               <Command className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" />

@@ -116,6 +116,17 @@
   --size-icon-md: 16px;
   --size-input-height: 40px;
 
+  /* Titlebar (Electron frameless window) */
+  --size-titlebar-height: 44px;
+  --size-titlebar-pad-left: 88px; /* clears macOS traffic-light buttons */
+
+  /* Chip / file-token max width */
+  --size-chip-max: 180px;
+
+  /* Press feedback scale */
+  --scale-hover-up: 1.04;
+  --scale-press-down: 0.96;
+
   /* Radius — slightly larger, friendlier */
   --radius-sm: 6px;
   --radius-md: 10px;
