@@ -13,6 +13,7 @@ import {
 } from '@open-codesign/shared';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { registerConnectionIpc } from './connection-ipc';
 import { scanDesignSystem } from './design-system';
 import { BrowserWindow, app, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
@@ -350,6 +351,7 @@ void app.whenReady().then(async () => {
   await loadConfigOnBoot();
   registerIpcHandlers();
   registerLocaleIpc();
+  registerConnectionIpc();
   registerOnboardingIpc();
   registerPreferencesIpc();
   registerExporterIpc(() => mainWindow);

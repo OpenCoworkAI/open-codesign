@@ -193,3 +193,12 @@ export type {
   ProviderShortlist,
   SupportedOnboardingProvider,
 } from './config';
+
+export {
+  PROXY_PRESET_SCHEMA_VERSION,
+  PROXY_PRESETS,
+  ProxyPreset,
+  ProxyPresetIdSchema,
+  getPresetById,
+} from './proxy-presets';
+export type { ProxyPresetId } from './proxy-presets';

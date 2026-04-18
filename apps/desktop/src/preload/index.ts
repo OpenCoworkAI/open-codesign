@@ -20,6 +20,16 @@ export interface ValidateKeyError {
   message: string;
 }
 
+export interface ConnectionTestResult {
+  ok: true;
+}
+export interface ConnectionTestError {
+  ok: false;
+  code: '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE';
+  message: string;
+  hint: string;
+}
+
 export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip';
 export interface ExportInvokeResponse {
   status: 'saved' | 'cancelled';
@@ -153,6 +163,23 @@ const api = {
     get: () => ipcRenderer.invoke('preferences:v1:get') as Promise<Preferences>,
     update: (patch: Partial<Preferences>) =>
       ipcRenderer.invoke('preferences:v1:update', patch) as Promise<Preferences>,
+  },
+  connection: {
+    test: (input: {
+      provider: SupportedOnboardingProvider;
+      apiKey: string;
+      baseUrl: string;
+    }) =>
+      ipcRenderer.invoke('connection:v1:test', input) as Promise<
+        ConnectionTestResult | ConnectionTestError
+      >,
+  },
+  models: {
+    list: (input: {
+      provider: SupportedOnboardingProvider;
+      apiKey: string;
+      baseUrl: string;
+    }) => ipcRenderer.invoke('models:v1:list', input) as Promise<{ models: string[] }>,
   },
 };
 

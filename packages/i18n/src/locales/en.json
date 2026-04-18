@@ -105,6 +105,23 @@
       "advanced": {
         "title": "Advanced — custom base URL",
         "description": "If you use a proxy or relay, paste the full base URL (must include /v1)."
+      },
+      "preset": {
+        "label": "Preset",
+        "hint": "Not sure which to pick? Choose the first one for OpenAI official, or pick by relay name.",
+        "custom": "Custom"
+      },
+      "connectionTest": {
+        "button": "Test",
+        "testing": "Testing...",
+        "ok": "Connected",
+        "errors": {
+          "401": "API key invalid or unauthorized.",
+          "404": "Base URL path wrong. Try adding /v1 suffix (e.g. https://your-host/v1).",
+          "ECONNREFUSED": "Cannot reach base URL. Check domain/port/network.",
+          "NETWORK": "Network error. Check your connection.",
+          "PARSE": "Unexpected response format."
+        }
       }
     },
     "choose": {

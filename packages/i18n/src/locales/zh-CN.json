@@ -105,6 +105,23 @@
       "advanced": {
         "title": "高级 — 自定义 Base URL",
         "description": "如果使用代理或中转站，请粘贴完整的 Base URL（必须包含 /v1）。"
+      },
+      "preset": {
+        "label": "预设",
+        "hint": "不知道选哪个？用 OpenAI 官方就选第一个，用中转代理选对应名字。",
+        "custom": "自定义"
+      },
+      "connectionTest": {
+        "button": "测试连通",
+        "testing": "测试中...",
+        "ok": "连接成功",
+        "errors": {
+          "401": "API key 错误或权限不足。",
+          "404": "Base URL 路径错误。试试加 /v1 后缀（如 https://your-host/v1）。",
+          "ECONNREFUSED": "无法连接到 Base URL，检查域名 / 端口 / 网络。",
+          "NETWORK": "网络错误，检查你的网络连接。",
+          "PARSE": "响应格式异常。"
+        }
       }
     },
     "choose": {
