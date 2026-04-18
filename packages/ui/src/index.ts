@@ -1,5 +1,5 @@
-// Side-effects only — loads Fraunces, Geist, JetBrains Mono variable fonts.
-import './fonts';
+// Fonts are loaded once via the dedicated `@open-codesign/ui/fonts` entry point
+// (see apps/desktop/src/renderer/src/main.tsx). Do not re-import them here.
 export { Button } from './components/Button';
 export { Card } from './components/Card';
 export { IconButton } from './components/IconButton';

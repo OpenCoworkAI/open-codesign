@@ -124,10 +124,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
                   key={file.path}
                   className="inline-flex items-center gap-[var(--space-1_5)] max-w-full rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2_5)] py-[var(--space-1)] text-[var(--text-xs)] text-[var(--color-text-secondary)]"
                 >
-                  <span
-                    className="truncate max-w-[var(--size-chip-max)]"
-                    title={file.path}
-                  >
+                  <span className="truncate max-w-[var(--size-chip-max)]" title={file.path}>
                     {file.name}
                   </span>
                   <button
@@ -195,7 +192,10 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-[var(--color-border-muted)] p-[var(--space-4)]">
+      <form
+        onSubmit={handleSubmit}
+        className="border-t border-[var(--color-border-muted)] p-[var(--space-4)]"
+      >
         <div className="relative rounded-[var(--radius-lg)] bg-[var(--color-surface)] border border-[var(--color-border)] focus-within:border-[var(--color-accent)] focus-within:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-[var(--duration-faster)] ease-[var(--ease-out)]">
           <textarea
             ref={taRef}
