@@ -230,6 +230,9 @@ async function runGenerate(
   payload: Parameters<CodesignApi['generate']>[0],
 ): Promise<void> {
   advanceStageIfCurrent(get, set, generationId, 'thinking');
+  // Enter streaming stage before the IPC call so the UI shows "receiving response"
+  // while the main process communicates with the model provider.
+  advanceStageIfCurrent(get, set, generationId, 'streaming');
   const result = await window.codesign!.generate(payload);
   // Response fully received — move through parsing → rendering before finalising.
   advanceStageIfCurrent(get, set, generationId, 'parsing');

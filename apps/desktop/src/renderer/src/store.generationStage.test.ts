@@ -47,7 +47,7 @@ describe('generationStage transitions', () => {
     expect(useCodesignStore.getState().generationStage).toBe('idle');
   });
 
-  it('moves sending → thinking → parsing → rendering → done on success', async () => {
+  it('moves sending → thinking → streaming → parsing → rendering → done on success', async () => {
     const stages: string[] = [];
 
     const generate = vi.fn(
@@ -75,9 +75,10 @@ describe('generationStage transitions', () => {
 
     unsub();
 
-    // Must pass through sending, thinking (at least), then parsing, rendering, done
+    // Must pass through all 5 named stages before done
     expect(stagesBefore).toContain('sending');
     expect(stagesBefore).toContain('thinking');
+    expect(stagesBefore).toContain('streaming');
     expect(stagesBefore).toContain('parsing');
     expect(stagesBefore).toContain('rendering');
     expect(stagesBefore).toContain('done');
