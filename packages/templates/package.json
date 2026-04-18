@@ -13,6 +13,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@open-codesign/i18n": "workspace:*",
     "@open-codesign/shared": "workspace:*"
   },
   "devDependencies": {
