@@ -508,6 +508,7 @@
     "applyFix": "应用此修复",
     "testAgain": "再次测试",
     "showLog": "查看完整日志",
+    "showLogFailed": "无法打开日志文件夹",
     "dismiss": "关闭"
   },
   "demos": {

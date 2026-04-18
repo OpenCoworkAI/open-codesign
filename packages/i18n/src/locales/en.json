@@ -513,6 +513,7 @@
     "applyFix": "Apply this fix",
     "testAgain": "Test again",
     "showLog": "Show full log",
+    "showLogFailed": "Failed to open logs folder",
     "dismiss": "Dismiss"
   },
   "demos": {

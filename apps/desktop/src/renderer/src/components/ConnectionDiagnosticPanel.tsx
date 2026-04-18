@@ -3,6 +3,7 @@ import { type DiagnoseContext, type DiagnosticHypothesis, diagnose } from '@open
 import type { ErrorCode } from '@open-codesign/shared';
 import { AlertCircle, ExternalLink, FileText, RefreshCw, X } from 'lucide-react';
 import { useState } from 'react';
+import { useCodesignStore } from '../store';
 
 export interface ConnectionDiagnosticPanelProps {
   /** The error code returned by connection.test or generate */
@@ -37,6 +38,7 @@ export function ConnectionDiagnosticPanel({
   logsPath,
 }: ConnectionDiagnosticPanelProps) {
   const t = useT();
+  const pushToast = useCodesignStore((s) => s.pushToast);
   const [fixApplied, setFixApplied] = useState(false);
 
   const ctx: DiagnoseContext = { provider, baseUrl };
@@ -60,8 +62,13 @@ export function ConnectionDiagnosticPanel({
     if (!logsPath || !window.codesign) return;
     try {
       await window.codesign.settings.openFolder(logsPath);
-    } catch {
-      // Swallow — user can navigate manually
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to open logs folder';
+      pushToast({
+        variant: 'error',
+        title: t('diagnostics.showLogFailed'),
+        description: message,
+      });
     }
   }
 
