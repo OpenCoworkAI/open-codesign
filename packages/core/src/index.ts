@@ -21,6 +21,9 @@ export {
   rewriteUpstreamMessage,
 } from './errors.js';
 
+export { loadAllSkills, loadSkillsFromDir } from './skills/index.js';
+export type { LoadAllSkillsOptions } from './skills/index.js';
+
 export interface AttachmentContext {
   name: string;
   path: string;
