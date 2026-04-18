@@ -1,3 +1,4 @@
+import { useT } from '@open-codesign/i18n';
 import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { useEffect } from 'react';
 import { useCodesignStore } from '../store';
@@ -41,6 +42,7 @@ export function scheduleAutoDismiss(
 
 function ToastItem({ toast }: { toast: ToastModel }) {
   const dismiss = useCodesignStore((s) => s.dismissToast);
+  const t = useT();
   const Icon = iconFor[toast.variant];
   const isError = toast.variant === 'error';
   const autoMs = AUTO_DISMISS_MS[toast.variant];
@@ -71,7 +73,7 @@ function ToastItem({ toast }: { toast: ToastModel }) {
       </div>
       <button
         type="button"
-        aria-label="Dismiss notification"
+        aria-label={t('common.dismissNotification')}
         onClick={() => {
           dismiss(toast.id);
         }}
