@@ -32,6 +32,9 @@ importers:
       '@open-codesign/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@open-codesign/exporters':
+        specifier: workspace:*
+        version: link:../../packages/exporters
       '@open-codesign/providers':
         specifier: workspace:*
         version: link:../../packages/providers
@@ -130,6 +133,9 @@ importers:
       '@open-codesign/shared':
         specifier: workspace:*
         version: link:../shared
+      '@open-codesign/templates':
+        specifier: workspace:*
+        version: link:../templates
     devDependencies:
       typescript:
         specifier: ^5.7.2

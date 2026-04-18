@@ -2,8 +2,15 @@ import { buildSrcdoc } from '@open-codesign/runtime';
 import { BUILTIN_DEMOS } from '@open-codesign/templates';
 import { Button } from '@open-codesign/ui';
 import { Send, Sparkles } from 'lucide-react';
+<<<<<<< HEAD
 import { useEffect, useState } from 'react';
 import { Onboarding } from './onboarding';
+||||||| parent of bca116c (feat(core,exporters,desktop): end-to-end first demo + HTML export)
+import { useState } from 'react';
+=======
+import { useState } from 'react';
+import { PreviewToolbar } from './components/PreviewToolbar';
+>>>>>>> bca116c (feat(core,exporters,desktop): end-to-end first demo + HTML export)
 import { useCodesignStore } from './store';
 
 export function App() {
@@ -78,7 +85,6 @@ export function App() {
           ) : (
             messages.map((m, i) => (
               <div
-                // biome-ignore lint/suspicious/noArrayIndexKey: tier-1 chat list with no reordering
                 key={`${m.role}-${i}`}
                 className={`px-3 py-2 rounded-[var(--radius-md)] text-sm ${
                   m.role === 'user'
@@ -119,6 +125,7 @@ export function App() {
             BYOK · local-first · multi-model
           </span>
         </header>
+        <PreviewToolbar />
         <div className="flex-1 p-6 overflow-auto">
           {previewHtml ? (
             <iframe

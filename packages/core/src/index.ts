@@ -1,7 +1,8 @@
-import { createArtifactParser } from '@open-codesign/artifacts';
+import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
 import { complete } from '@open-codesign/providers';
 import type { Artifact, ChatMessage, ModelRef } from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
+import { SYSTEM_PROMPTS } from '@open-codesign/templates';
 
 export interface GenerateInput {
   prompt: string;
@@ -20,14 +21,27 @@ export interface GenerateOutput {
   costUsd: number;
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are a UI designer. When the user asks for a visual design, output a single self-contained HTML artifact wrapped in:
+interface Collected {
+  text: string;
+  artifacts: Artifact[];
+}
 
-<artifact identifier="design-1" type="html" title="Short title">
-<!doctype html>
-<html>...</html>
-</artifact>
-
-Use Tailwind via the CDN script <script src="https://cdn.tailwindcss.com"></script>. Use semantic HTML, modern aesthetics (warm neutrals, generous whitespace, subtle shadows). Use CSS custom properties for tunable values (colors, spacing, font sizes) so the user can tweak them later.`;
+function collect(events: Iterable<ArtifactEvent>, into: Collected): void {
+  for (const ev of events) {
+    if (ev.type === 'text') {
+      into.text += ev.delta;
+    } else if (ev.type === 'artifact:end') {
+      into.artifacts.push({
+        id: ev.identifier || `design-${into.artifacts.length + 1}`,
+        type: 'html',
+        title: 'Design',
+        content: ev.fullContent,
+        designParams: [],
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
+}
 
 /**
  * Generate one design artifact in response to a user prompt.
@@ -40,7 +54,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   }
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: input.systemPrompt ?? DEFAULT_SYSTEM_PROMPT },
+    { role: 'system', content: input.systemPrompt ?? SYSTEM_PROMPTS.designGenerator },
     ...input.history,
     { role: 'user', content: input.prompt },
   ];
@@ -51,39 +65,13 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   });
 
   const parser = createArtifactParser();
-  const artifacts: Artifact[] = [];
-  let textBuffer = '';
-
-  for (const ev of parser.feed(result.content)) {
-    if (ev.type === 'text') textBuffer += ev.delta;
-    if (ev.type === 'artifact:end') {
-      artifacts.push({
-        id: ev.identifier || `design-${artifacts.length + 1}`,
-        type: 'html',
-        title: 'Design',
-        content: ev.fullContent,
-        designParams: [],
-        createdAt: new Date().toISOString(),
-      });
-    }
-  }
-  for (const ev of parser.flush()) {
-    if (ev.type === 'text') textBuffer += ev.delta;
-    if (ev.type === 'artifact:end') {
-      artifacts.push({
-        id: ev.identifier || `design-${artifacts.length + 1}`,
-        type: 'html',
-        title: 'Design',
-        content: ev.fullContent,
-        designParams: [],
-        createdAt: new Date().toISOString(),
-      });
-    }
-  }
+  const collected: Collected = { text: '', artifacts: [] };
+  collect(parser.feed(result.content), collected);
+  collect(parser.flush(), collected);
 
   return {
-    message: textBuffer.trim(),
-    artifacts,
+    message: collected.text.trim(),
+    artifacts: collected.artifacts,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
     costUsd: result.costUsd,

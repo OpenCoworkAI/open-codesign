@@ -15,7 +15,8 @@
   "dependencies": {
     "@open-codesign/artifacts": "workspace:*",
     "@open-codesign/providers": "workspace:*",
-    "@open-codesign/shared": "workspace:*"
+    "@open-codesign/shared": "workspace:*",
+    "@open-codesign/templates": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

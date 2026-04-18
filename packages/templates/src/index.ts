@@ -3,6 +3,8 @@
  * we committed to replicate (see docs/VISION.md).
  */
 
+export { SYSTEM_PROMPTS, type SystemPromptId } from './system/index';
+
 export interface DemoTemplate {
   id: string;
   title: string;

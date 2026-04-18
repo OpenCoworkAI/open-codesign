@@ -5,7 +5,12 @@ import { detectProviderFromKey } from '@open-codesign/providers';
 import { BRAND, CodesignError, GeneratePayload } from '@open-codesign/shared';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
+<<<<<<< HEAD
 import { getApiKeyForProvider, loadConfigOnBoot, registerOnboardingIpc } from './onboarding-ipc';
+||||||| parent of bca116c (feat(core,exporters,desktop): end-to-end first demo + HTML export)
+=======
+import { registerExporterIpc } from './exporter-ipc';
+>>>>>>> bca116c (feat(core,exporters,desktop): end-to-end first demo + HTML export)
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -81,7 +86,12 @@ function setupAutoUpdater(): void {
 void app.whenReady().then(async () => {
   await loadConfigOnBoot();
   registerIpcHandlers();
+<<<<<<< HEAD
   registerOnboardingIpc();
+||||||| parent of bca116c (feat(core,exporters,desktop): end-to-end first demo + HTML export)
+=======
+  registerExporterIpc(() => mainWindow);
+>>>>>>> bca116c (feat(core,exporters,desktop): end-to-end first demo + HTML export)
   setupAutoUpdater();
   createWindow();
 

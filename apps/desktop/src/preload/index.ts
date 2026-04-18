@@ -6,6 +6,7 @@ import type {
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
 
+<<<<<<< HEAD
 export interface ValidateKeyResult {
   ok: true;
   modelCount: number;
@@ -16,6 +17,16 @@ export interface ValidateKeyError {
   message: string;
 }
 
+||||||| parent of bca116c (feat(core,exporters,desktop): end-to-end first demo + HTML export)
+=======
+export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip';
+export interface ExportInvokeResponse {
+  status: 'saved' | 'cancelled';
+  path?: string;
+  bytes?: number;
+}
+
+>>>>>>> bca116c (feat(core,exporters,desktop): end-to-end first demo + HTML export)
 const api = {
   detectProvider: (key: string) =>
     ipcRenderer.invoke('codesign:detect-provider', key) as Promise<string | null>,
@@ -25,6 +36,8 @@ const api = {
     model: ModelRef;
     baseUrl?: string;
   }) => ipcRenderer.invoke('codesign:generate', payload),
+  export: (payload: { format: ExportFormat; htmlContent: string; defaultFilename?: string }) =>
+    ipcRenderer.invoke('codesign:export', payload) as Promise<ExportInvokeResponse>,
   checkForUpdates: () => ipcRenderer.invoke('codesign:check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('codesign:download-update'),
   installUpdate: () => ipcRenderer.invoke('codesign:install-update'),
