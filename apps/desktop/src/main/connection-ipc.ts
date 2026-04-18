@@ -28,10 +28,12 @@ export interface ConnectionTestResult {
 
 export interface ConnectionTestError {
   ok: false;
-  code: '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE';
+  code: 'IPC_BAD_INPUT' | '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE';
   message: string;
   hint: string;
 }
+
+export type ConnectionTestResponse = ConnectionTestResult | ConnectionTestError;
 
 export type ModelsListResponse =
   | { ok: true; models: string[] }
@@ -264,16 +266,16 @@ export function _getModelsCache(): Map<string, CacheEntry> {
 export function registerConnectionIpc(): void {
   ipcMain.handle(
     'connection:v1:test',
-    async (_e, raw: unknown): Promise<ConnectionTestResult | ConnectionTestError> => {
+    async (_e, raw: unknown): Promise<ConnectionTestResponse> => {
       let payload: ConnectionTestPayloadV1;
       try {
         payload = parseConnectionTestPayload(raw);
       } catch (err) {
         return {
           ok: false,
-          code: 'NETWORK',
-          message: err instanceof Error ? err.message : 'Invalid payload',
-          hint: '请检查输入参数',
+          code: 'IPC_BAD_INPUT',
+          message: err instanceof Error ? err.message : String(err),
+          hint: 'Invalid connection test payload',
         };
       }
 

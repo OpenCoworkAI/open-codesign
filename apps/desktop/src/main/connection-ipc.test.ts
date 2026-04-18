@@ -21,7 +21,76 @@ import {
 // network responses without hitting the network.
 // ---------------------------------------------------------------------------
 
-import type { ModelsListResponse } from './connection-ipc';
+import type { ConnectionTestResponse, ModelsListResponse } from './connection-ipc';
+
+// ---------------------------------------------------------------------------
+// connection:v1:test test helper
+// ---------------------------------------------------------------------------
+
+async function handleConnectionTest(
+  raw: unknown,
+  fetchImpl: (url: string) => Promise<{ ok: boolean; status: number }>,
+): Promise<ConnectionTestResponse> {
+  if (typeof raw !== 'object' || raw === null) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: 'connection:v1:test expects an object payload',
+      hint: 'Invalid connection test payload',
+    };
+  }
+  const r = raw as Record<string, unknown>;
+  if (
+    typeof r['provider'] !== 'string' ||
+    !['anthropic', 'openai', 'openrouter'].includes(r['provider'])
+  ) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: `Unsupported provider: ${String(r['provider'])}`,
+      hint: 'Invalid connection test payload',
+    };
+  }
+  if (typeof r['apiKey'] !== 'string' || (r['apiKey'] as string).trim().length === 0) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: 'apiKey must be a non-empty string',
+      hint: 'Invalid connection test payload',
+    };
+  }
+  if (typeof r['baseUrl'] !== 'string' || (r['baseUrl'] as string).trim().length === 0) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: 'baseUrl must be a non-empty string',
+      hint: 'Invalid connection test payload',
+    };
+  }
+
+  const baseUrl = (r['baseUrl'] as string).trim();
+
+  let res: { ok: boolean; status: number };
+  try {
+    res = await fetchImpl(`${baseUrl}/v1/models`);
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'NETWORK',
+      message: err instanceof Error ? err.message : String(err),
+      hint: 'Cannot reach base URL',
+    };
+  }
+
+  if (!res.ok) {
+    const { code, hint } = classifyHttpError(res.status);
+    return { ok: false, code, message: `HTTP ${res.status}`, hint };
+  }
+
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 
 async function handleModelsList(
   raw: unknown,
@@ -201,6 +270,56 @@ describe('getCacheKey', () => {
     const keyA = getCacheKey('openai', 'https://api.example.com', 'sk-test');
     const keyB = getCacheKey('anthropic', 'https://api.example.com', 'sk-test');
     expect(keyA).not.toBe(keyB);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// connection:v1:test — bad payload returns IPC_BAD_INPUT
+// ---------------------------------------------------------------------------
+
+describe('connection:v1:test error handling', () => {
+  it('bad payload (missing provider) → ok=false, code=IPC_BAD_INPUT', async () => {
+    const result = await handleConnectionTest(
+      { apiKey: 'sk-test', baseUrl: 'https://api.openai.com' },
+      async () => {
+        throw new Error('should not be called');
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('IPC_BAD_INPUT');
+    }
+  });
+
+  it('bad payload (null) → ok=false, code=IPC_BAD_INPUT', async () => {
+    const result = await handleConnectionTest(null, async () => {
+      throw new Error('should not be called');
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('IPC_BAD_INPUT');
+    }
+  });
+
+  it('network error (fetch throws) → ok=false, code=NETWORK', async () => {
+    const result = await handleConnectionTest(
+      { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com' },
+      async () => {
+        throw new Error('ECONNREFUSED');
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('NETWORK');
+    }
+  });
+
+  it('HTTP 200 → ok=true', async () => {
+    const result = await handleConnectionTest(
+      { provider: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.openai.com' },
+      async () => ({ ok: true, status: 200 }),
+    );
+    expect(result.ok).toBe(true);
   });
 });
 
