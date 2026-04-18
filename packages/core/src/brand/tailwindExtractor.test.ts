@@ -115,4 +115,28 @@ describe('extractFromTailwindConfig()', () => {
     const names = tokens.map((t) => t.name);
     expect(names).toContain('color-brand-secondary');
   });
+
+  it('classifies --text-* size tokens as fontSize and color tokens as color (v4)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tw-extract-'));
+    const file = join(dir, 'tailwind.css');
+    await writeFile(
+      file,
+      [
+        '@theme {',
+        '  --text-lg: 1.125rem;',
+        '  --text-base: 1rem;',
+        '  --text-primary: oklch(0.7 0.1 30);',
+        '  --text-muted: #888888;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const tokens = await extractFromTailwindConfig(file);
+    const byName = new Map(tokens.map((t) => [t.name, t]));
+
+    expect(byName.get('text-lg')?.type).toBe('fontSize');
+    expect(byName.get('text-base')?.type).toBe('fontSize');
+    expect(byName.get('text-primary')?.type).toBe('color');
+    expect(byName.get('text-muted')?.type).toBe('color');
+  });
 });

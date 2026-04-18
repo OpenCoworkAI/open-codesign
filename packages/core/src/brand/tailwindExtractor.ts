@@ -36,6 +36,10 @@ function looksLikeColor(value: string): boolean {
   );
 }
 
+function looksLikeLength(value: string): boolean {
+  return /^-?\d*\.?\d+(px|rem|em|%|vh|vw|ch|ex|pt|cm|mm|in)\b/i.test(value.trim());
+}
+
 // Extract all section object literal bodies for a given key.
 // We collect all occurrences (e.g. theme.colors AND theme.extend.colors) so
 // nested extends do not shadow the base theme.
@@ -182,13 +186,24 @@ function hasTailwindV4Theme(source: string): boolean {
 }
 
 function inferTypeFromCssProp(prop: string, value: string): TokenType | null {
-  if (/color|bg|text|border|fill|stroke|ring/.test(prop)) return 'color';
+  // Order matters: specific shape patterns must run before broad keyword fallbacks
+  // so Tailwind v4 `--text-*` size tokens are not misclassified as color.
   if (/font-size|text-size/.test(prop)) return 'fontSize';
   if (/font-family/.test(prop)) return 'fontFamily';
-  if (/spacing|gap|padding|margin|space/.test(prop)) return 'spacing';
+  if (/line-height|leading/.test(prop)) return 'lineHeight';
   if (/radius|rounded/.test(prop)) return 'radius';
   if (/shadow/.test(prop)) return 'shadow';
-  if (/line-height|leading/.test(prop)) return 'lineHeight';
+  if (/spacing|gap|padding|margin|space/.test(prop)) return 'spacing';
+
+  // `--text-*` is ambiguous in Tailwind v4 (size vs color). Disambiguate by value.
+  if (/^text-/.test(prop)) {
+    if (looksLikeColor(value)) return 'color';
+    if (looksLikeLength(value)) return 'fontSize';
+    if (/^text-(xs|sm|base|lg|xl|\d+xl)$/.test(prop)) return 'fontSize';
+    return 'color';
+  }
+
+  if (/color|bg|border|fill|stroke|ring/.test(prop)) return 'color';
   if (looksLikeColor(value)) return 'color';
   return null;
 }

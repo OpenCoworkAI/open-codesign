@@ -6,16 +6,29 @@ type TokenType = DesignToken['type'];
 function inferType(prop: string, value: string): TokenType | null {
   const p = prop.toLowerCase();
 
-  if (/color|palette|brand|accent|fg|bg|foreground|background|fill|stroke|ring|border/.test(p))
-    return 'color';
-  if (/font-size|text-size|text-sm|text-base|text-lg|text-xl/.test(p)) return 'fontSize';
+  // Order matters: specific shape patterns must run before broad color keywords
+  // so things like `--border-radius-md` and `--text-lg` are not misclassified.
+  if (/font-size|text-size/.test(p)) return 'fontSize';
   if (/font-family|font-sans|font-mono|font-serif|typeface/.test(p)) return 'fontFamily';
-  if (/spacing|space|gap|padding|margin|indent|offset/.test(p)) return 'spacing';
-  if (/radius|rounded/.test(p)) return 'radius';
-  if (/shadow|elevation/.test(p)) return 'shadow';
   if (/line-height|leading/.test(p)) return 'lineHeight';
+  if (/radius|rounded|border-radius/.test(p)) return 'radius';
+  if (/shadow|elevation/.test(p)) return 'shadow';
+  if (/spacing|space|gap|padding|margin|indent|offset/.test(p)) return 'spacing';
 
-  // Value-based fallback
+  // `--text-*` is ambiguous in Tailwind v4 (size vs color). Disambiguate by value.
+  if (/^text-/.test(p)) {
+    if (looksLikeColor(value)) return 'color';
+    if (looksLikeLength(value)) return 'fontSize';
+    if (/^text-(xs|sm|base|lg|xl|\d+xl)$/.test(p)) return 'fontSize';
+    return 'color';
+  }
+
+  if (
+    /color|palette|brand|accent|fg|bg|foreground|background|fill|stroke|ring|border-color/.test(p)
+  )
+    return 'color';
+
+  // Value-based fallback (handles e.g. `--border-primary: #fff` after broad keywords).
   if (looksLikeColor(value)) return 'color';
 
   return null;
@@ -29,6 +42,10 @@ function looksLikeColor(value: string): boolean {
     /^oklch\s*\(/.test(value) ||
     /^color\s*\(/.test(value)
   );
+}
+
+function looksLikeLength(value: string): boolean {
+  return /^-?\d*\.?\d+(px|rem|em|%|vh|vw|ch|ex|pt|cm|mm|in)\b/i.test(value.trim());
 }
 
 // Extract all CSS custom-property declarations from `:root` or `[data-theme]`

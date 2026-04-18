@@ -1,4 +1,6 @@
-import { dirname, resolve } from 'node:path';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { extractFromCssVars } from './cssVarExtractor.js';
@@ -83,5 +85,45 @@ describe('extractFromCssVars()', () => {
     // [data-theme="dark"] re-declares --color-background and --color-foreground
     const backgroundCount = names.filter((n) => n === 'color-background').length;
     expect(backgroundCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('classifies --text-* size tokens as fontSize and color variants as color', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'css-vars-'));
+    const file = join(dir, 'tokens.css');
+    await writeFile(
+      file,
+      [
+        ':root {',
+        '  --text-lg: 1.125rem;',
+        '  --text-base: 1rem;',
+        '  --text-primary: oklch(0.7 0.1 30);',
+        '  --text-muted: #888888;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const tokens = await extractFromCssVars(file);
+    const byName = new Map(tokens.map((t) => [t.name, t]));
+
+    expect(byName.get('text-lg')?.type).toBe('fontSize');
+    expect(byName.get('text-base')?.type).toBe('fontSize');
+    expect(byName.get('text-primary')?.type).toBe('color');
+    expect(byName.get('text-muted')?.type).toBe('color');
+  });
+
+  it('classifies --border-radius-* as radius rather than color', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'css-vars-'));
+    const file = join(dir, 'tokens.css');
+    await writeFile(
+      file,
+      [':root {', '  --border-radius-md: 8px;', '  --border-color-muted: #ddd;', '}', ''].join(
+        '\n',
+      ),
+    );
+    const tokens = await extractFromCssVars(file);
+    const byName = new Map(tokens.map((t) => [t.name, t]));
+
+    expect(byName.get('border-radius-md')?.type).toBe('radius');
+    expect(byName.get('border-color-muted')?.type).toBe('color');
   });
 });
