@@ -172,9 +172,12 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   },
 
   pushIframeError(message) {
-    set((s) => ({
-      iframeErrors: [...s.iframeErrors.slice(-9), message],
-    }));
+    set((s) => {
+      const last = s.iframeErrors[s.iframeErrors.length - 1];
+      if (last === message) return {};
+      const next = [...s.iframeErrors, message];
+      return { iframeErrors: next.length > 50 ? next.slice(1) : next };
+    });
   },
 
   async loadConfig() {
