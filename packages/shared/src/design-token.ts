@@ -2,7 +2,16 @@ import { z } from 'zod';
 
 export const DesignTokenV1 = z.object({
   schemaVersion: z.literal(1).default(1),
-  type: z.enum(['color', 'fontFamily', 'fontSize', 'spacing', 'radius', 'shadow', 'lineHeight']),
+  type: z.enum([
+    'color',
+    'fontFamily',
+    'fontSize',
+    'spacing',
+    'radius',
+    'shadow',
+    'lineHeight',
+    'unknown',
+  ]),
   name: z.string().min(1),
   value: z.string().min(1),
   origin: z.enum(['tailwind-config', 'css-vars', 'figma', 'manual', 'pdf', 'dtcg-json']),

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importDtcgJson } from './dtcgImporter.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -139,5 +139,42 @@ describe('importDtcgJson()', () => {
     expect(importDtcgJson('not-an-object')).toEqual([]);
     expect(importDtcgJson(42)).toEqual([]);
     expect(importDtcgJson([])).toEqual([]);
+  });
+
+  describe('unresolved type inference', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it('preserves tokens with unresolvable type as `unknown` and warns with token name', () => {
+      const tokens = importDtcgJson({
+        misc: {
+          mystery: { $value: '42deg', $type: 'angle' },
+        },
+      });
+
+      const mystery = tokens.find((t) => t.name === 'misc.mystery');
+      expect(mystery).toBeDefined();
+      expect(mystery?.type).toBe('unknown');
+      expect(mystery?.value).toBe('42deg');
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? '');
+      expect(message).toContain('misc.mystery');
+      expect(message).toContain('unknown');
+    });
+
+    it('does not warn when every token resolves to a known type', () => {
+      importDtcgJson({
+        color: { brand: { $value: '#fff', $type: 'color' } },
+      });
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
   });
 });

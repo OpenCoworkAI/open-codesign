@@ -53,14 +53,21 @@ function pushLeafToken(
   pathSegments: string[],
   inherited$type: string | undefined,
   into: DesignToken[],
+  unresolved: string[],
 ): void {
   const rawValue = record['$value'];
   const $type = typeof record['$type'] === 'string' ? record['$type'] : inherited$type;
 
   const value = serializeValue(rawValue);
   const name = pathSegments.join('.');
-  const tokenType = resolveType($type, name);
-  if (!tokenType) return;
+  const resolved = resolveType($type, name);
+  // Preserve unrecognized tokens under `unknown` rather than silently dropping
+  // them — losing user-authored brand tokens is worse than carrying a token
+  // the renderer chooses to ignore. Caller is warned with the full name list.
+  const tokenType: TokenType = resolved ?? 'unknown';
+  if (resolved === null) {
+    unresolved.push(name);
+  }
 
   const group = pathSegments.length > 1 ? pathSegments.slice(0, -1).join('.') : undefined;
 
@@ -81,13 +88,14 @@ function walk(
   pathSegments: string[],
   inherited$type: string | undefined,
   into: DesignToken[],
+  unresolved: string[],
 ): void {
   if (typeof node !== 'object' || node === null || Array.isArray(node)) return;
 
   const record = node as Record<string, unknown>;
 
   if ('$value' in record) {
-    pushLeafToken(record, pathSegments, inherited$type, into);
+    pushLeafToken(record, pathSegments, inherited$type, into, unresolved);
     return;
   }
 
@@ -96,12 +104,18 @@ function walk(
 
   for (const key of Object.keys(record)) {
     if (key.startsWith('$')) continue;
-    walk(record[key], [...pathSegments, key], groupType, into);
+    walk(record[key], [...pathSegments, key], groupType, into, unresolved);
   }
 }
 
 export function importDtcgJson(json: unknown): DesignToken[] {
   const tokens: DesignToken[] = [];
-  walk(json, [], undefined, tokens);
+  const unresolved: string[] = [];
+  walk(json, [], undefined, tokens, unresolved);
+  if (unresolved.length > 0) {
+    console.warn(
+      `[dtcgImporter] ${unresolved.length} token(s) imported as type "unknown" (could not infer DTCG type from $type or path): ${unresolved.join(', ')}`,
+    );
+  }
   return tokens;
 }
