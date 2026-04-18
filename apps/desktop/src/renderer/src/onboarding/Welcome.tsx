@@ -1,3 +1,4 @@
+import { useT } from '@open-codesign/i18n';
 import { PROVIDER_SHORTLIST, type SupportedOnboardingProvider } from '@open-codesign/shared';
 import { ArrowRight, ExternalLink, KeyRound, Rocket, Server } from 'lucide-react';
 
@@ -8,35 +9,37 @@ interface WelcomeProps {
 }
 
 export function Welcome({ onPickKey, onPickFreeTier, ollamaDetected }: WelcomeProps) {
+  const t = useT();
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-[24px] font-semibold text-[var(--color-text-primary)] tracking-[-0.01em] leading-[1.2]">
-          Design with any model.
+          {t('onboarding.welcome.title')}
         </h1>
         <p className="text-[14px] text-[var(--color-text-secondary)] leading-[1.55]">
-          Pick how you want to power your designs. You can change this later in Settings.
+          {t('onboarding.welcome.subtitle')}
         </p>
       </div>
 
       <div className="flex flex-col gap-3">
         <PathButton
           icon={<Rocket className="w-[18px] h-[18px]" />}
-          title="Try free now"
-          subtitle="OpenRouter free tier - paste an OpenRouter key, then start with openrouter/free or type any model ID."
+          title={t('onboarding.welcome.tryFree')}
+          subtitle={t('onboarding.welcome.tryFreeSubtitle')}
           onClick={onPickFreeTier}
         />
         <PathButton
           icon={<KeyRound className="w-[18px] h-[18px]" />}
-          title="Use my API key"
-          subtitle="Anthropic, OpenAI, or OpenRouter. Auto-detected from the key prefix."
+          title={t('onboarding.welcome.useKey')}
+          subtitle={t('onboarding.welcome.useKeySubtitle')}
           onClick={onPickKey}
         />
         {ollamaDetected ? (
           <PathButton
             icon={<Server className="w-[18px] h-[18px]" />}
-            title="Use local model (Ollama detected)"
-            subtitle="Coming in v0.2 - Ollama integration is on the roadmap."
+            title={t('onboarding.welcome.useOllama')}
+            subtitle={t('onboarding.welcome.useOllamaSubtitle')}
             disabled
           />
         ) : null}
@@ -47,7 +50,7 @@ export function Welcome({ onPickKey, onPickFreeTier, ollamaDetected }: WelcomePr
           className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)] font-medium"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Where to get a key
+          {t('onboarding.welcome.whereToGetKey')}
         </span>
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           {(

@@ -1,3 +1,4 @@
+import { useT } from '@open-codesign/i18n';
 import { PROVIDER_SHORTLIST, type SupportedOnboardingProvider } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
 import { useEffect, useId, useState } from 'react';
@@ -23,6 +24,7 @@ export function ChooseModel({
   onConfirm,
   onBack,
 }: ChooseModelProps) {
+  const t = useT();
   const shortlist = PROVIDER_SHORTLIST[provider];
   const useFreeTierDefaults = provider === 'openrouter' && preferFreeTier;
   const primaryOptions = withFreeTierSuggestion(shortlist.primary, useFreeTierDefaults);
@@ -47,31 +49,30 @@ export function ChooseModel({
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
         <h2 className="text-[20px] font-semibold text-[var(--color-text-primary)] tracking-[-0.01em] leading-[1.2]">
-          Pick default models
+          {t('onboarding.choose.title')}
         </h2>
         <p className="text-[14px] text-[var(--color-text-secondary)] leading-[1.55]">
-          Start with a recommendation or enter any provider-specific model ID. You can switch these
-          per design later.
+          {t('onboarding.choose.description')}
         </p>
       </div>
 
       <ModelPicker
-        label="Primary design model"
+        label={t('onboarding.choose.primary')}
         hint={
           useFreeTierDefaults
-            ? 'Free path starts on openrouter/free, but you can enter any OpenRouter model ID.'
-            : 'Used for full design generation.'
+            ? t('onboarding.choose.primaryHintFree')
+            : t('onboarding.choose.primaryHint')
         }
         value={modelPrimary}
         options={primaryOptions}
         onChange={setModelPrimary}
       />
       <ModelPicker
-        label="Fast completion model"
+        label={t('onboarding.choose.fast')}
         hint={
           useFreeTierDefaults
-            ? 'Keep openrouter/free for lowest cost, or replace it with a faster custom choice.'
-            : 'Used for quick edits and inline tweaks.'
+            ? t('onboarding.choose.fastHintFree')
+            : t('onboarding.choose.fastHint')
         }
         value={modelFast}
         options={fastOptions}
@@ -80,14 +81,14 @@ export function ChooseModel({
 
       {baseUrl !== null ? (
         <p className="text-[12px] text-[var(--color-text-muted)] leading-[1.5]">
-          Custom base URL: <span style={{ fontFamily: 'var(--font-mono)' }}>{baseUrl}</span>
+          {t('onboarding.choose.customBaseUrl', { url: baseUrl })}
         </p>
       ) : null}
 
       <p className="text-[12px] text-[var(--color-text-muted)] leading-[1.5]">
         {useFreeTierDefaults
-          ? 'OpenRouter free routing availability can change. If a free route is unavailable, type another model ID here.'
-          : 'Estimated cost varies by provider, chosen model, and prompt length.'}
+          ? t('onboarding.choose.costNoteFree')
+          : t('onboarding.choose.costNote')}
       </p>
 
       {errorMessage !== null ? (
@@ -96,7 +97,7 @@ export function ChooseModel({
 
       <div className="flex justify-between gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onBack} disabled={saving}>
-          Back
+          {t('onboarding.choose.back')}
         </Button>
         <Button
           type="button"
@@ -104,7 +105,7 @@ export function ChooseModel({
           onClick={() => onConfirm(trimmedPrimary, trimmedFast)}
           disabled={!canFinish}
         >
-          {saving ? 'Saving...' : 'Finish'}
+          {saving ? t('onboarding.choose.saving') : t('onboarding.choose.finish')}
         </Button>
       </div>
     </div>

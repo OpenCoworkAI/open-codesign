@@ -92,3 +92,55 @@ describe('initI18n + setLocale (live switching)', () => {
     expect(i18n.t('common.send')).toBe('Send');
   });
 });
+
+describe('onboarding i18n keys (Welcome / PasteKey / ChooseModel)', () => {
+  it('returns correct English strings for all onboarding screens', async () => {
+    const { i18n } = await import('./index');
+    await initI18n('en');
+
+    // Welcome
+    expect(i18n.t('onboarding.welcome.title')).toBe('Design with any model.');
+    expect(i18n.t('onboarding.welcome.tryFree')).toBe('Try free now');
+    expect(i18n.t('onboarding.welcome.useKey')).toBe('Use my API key');
+    expect(i18n.t('onboarding.welcome.whereToGetKey')).toBe('Where to get a key');
+
+    // PasteKey
+    expect(i18n.t('onboarding.paste.title')).toBe('Paste your API key');
+    expect(i18n.t('onboarding.paste.back')).toBe('Back');
+    expect(i18n.t('onboarding.paste.continue')).toBe('Continue');
+    expect(i18n.t('onboarding.paste.connectionTest.button')).toBe('Test');
+    expect(i18n.t('onboarding.paste.connectionTest.ok')).toBe('Connected');
+
+    // ChooseModel
+    expect(i18n.t('onboarding.choose.title')).toBe('Pick default models');
+    expect(i18n.t('onboarding.choose.finish')).toBe('Finish');
+    expect(i18n.t('onboarding.choose.back')).toBe('Back');
+  });
+
+  it('switches all onboarding strings to Chinese when locale is zh-CN', async () => {
+    const { i18n } = await import('./index');
+    await initI18n('en');
+    await setLocale('zh-CN');
+
+    // Welcome
+    expect(i18n.t('onboarding.welcome.title')).toBe('选择你的设计模型。');
+    expect(i18n.t('onboarding.welcome.tryFree')).toBe('免费试用');
+    expect(i18n.t('onboarding.welcome.useKey')).toBe('使用我的 API Key');
+    expect(i18n.t('onboarding.welcome.whereToGetKey')).toBe('在哪里获取 Key');
+
+    // PasteKey
+    expect(i18n.t('onboarding.paste.title')).toBe('粘贴你的 API Key');
+    expect(i18n.t('onboarding.paste.back')).toBe('返回');
+    expect(i18n.t('onboarding.paste.continue')).toBe('继续');
+    expect(i18n.t('onboarding.paste.connectionTest.button')).toBe('测试连通');
+    expect(i18n.t('onboarding.paste.connectionTest.ok')).toBe('连接成功');
+
+    // ChooseModel
+    expect(i18n.t('onboarding.choose.title')).toBe('选择默认模型');
+    expect(i18n.t('onboarding.choose.finish')).toBe('完成设置');
+    expect(i18n.t('onboarding.choose.back')).toBe('返回');
+
+    // Reset to en for other tests
+    await setLocale('en');
+  });
+});

@@ -83,53 +83,93 @@
   },
   "onboarding": {
     "welcome": {
-      "title": "欢迎来到 open-codesign",
-      "subtitle": "用一句话生成可交互的设计稿。挑一种方式开始吧。",
-      "tryFree": "试用免费模型",
+      "title": "选择你的设计模型。",
+      "subtitle": "选一种方式来驱动你的设计。之后可以在设置里随时更改。",
+      "tryFree": "免费试用",
+      "tryFreeSubtitle": "使用 OpenRouter 免费额度 — 粘贴一个 OpenRouter Key，然后选 openrouter/free 或输入任意模型 ID。",
       "useKey": "使用我的 API Key",
-      "useOllama": "用本地模型（Ollama）"
+      "useKeySubtitle": "支持 Anthropic、OpenAI 或 OpenRouter，自动识别 Key 前缀。",
+      "useOllama": "使用本地模型（已检测到 Ollama）",
+      "useOllamaSubtitle": "将在 v0.2 中推出 — Ollama 集成已列入路线图。",
+      "whereToGetKey": "在哪里获取 Key"
     },
     "paste": {
       "title": "粘贴你的 API Key",
+      "description": "自动识别提供商。点击\"测试连通\"验证 Key 与端点后再继续。你的 Key 会使用系统钥匙串加密存储。",
       "placeholder": "sk-\u2026",
       "recognized": "已识别提供商：{{provider}}",
       "connected_one": "已连接 {{count}} 个模型",
       "connected_other": "已连接 {{count}} 个模型",
       "howToGet": "怎么获取 API Key？",
+      "getKey": "获取 Key",
+      "statusIdle": "在上方粘贴 Key — 系统会根据前缀自动识别提供商。",
+      "statusDetecting": "正在识别提供商...",
+      "statusValidating": "已识别：{{provider}} — 验证中...",
+      "statusDetected": "已识别：{{provider}} — 点击\"测试连通\"验证",
+      "statusOk": "已识别：{{provider}} — 连接成功（{{count}} 个模型）",
       "errors": {
         "401": "Key 被拒绝了。去提供商后台核对一下。",
         "402": "账户余额不足，充值后重试。",
         "429": "请求被限流，稍等片刻再试。",
-        "network": "连接提供商失败，检查一下网络。"
+        "network": "无法连接到 Base URL，检查域名 / 端口 / 网络。",
+        "unsupported": "无法识别的 Key 前缀。支持：sk-ant-（Anthropic）、sk-（OpenAI）、sk-or-（OpenRouter）。",
+        "notSupportedProvider": "{{provider}} 在 v0.1 中暂不支持，请使用 Anthropic、OpenAI 或 OpenRouter。",
+        "rendererDisconnected": "渲染进程未连接到主进程。",
+        "detectIpc": "提供商识别失败（无法连接主进程）：{{message}}。请重启应用后重试。",
+        "detectNetwork": "提供商识别失败（网络错误）：{{message}}。请检查网络后重试。"
       },
       "advanced": {
+        "toggle": "高级 — 自定义 Base URL（代理 / 中转）",
         "title": "高级 — 自定义 Base URL",
-        "description": "如果使用代理或中转站，请粘贴完整的 Base URL（必须包含 /v1）。"
+        "description": "覆盖提供商的默认端点。适用于中转服务和自托管代理。留空则使用官方端点。"
       },
       "preset": {
         "label": "预设",
-        "hint": "不知道选哪个？用 OpenAI 官方就选第一个，用中转代理选对应名字。",
+        "placeholder": "-- 选择一个预设 --",
+        "hint": "不知道选哪个？官方端点选 OpenAI Official，用中转代理选对应名字。",
         "custom": "自定义"
+      },
+      "apiKey": {
+        "label": "API Key"
+      },
+      "baseUrl": {
+        "label": "Base URL"
       },
       "connectionTest": {
         "button": "测试连通",
         "testing": "测试中...",
         "ok": "连接成功",
+        "okVerified": "连接成功 — Key 与端点已验证",
+        "idleHint": "继续之前请点击\"测试连通\"验证 Key 与连接。",
+        "runFirst": "请先点击\"测试连通\"验证连接",
         "errors": {
           "401": "API key 错误或权限不足。",
           "404": "Base URL 路径错误。试试加 /v1 后缀（如 https://your-host/v1）。",
           "ECONNREFUSED": "无法连接到 Base URL，检查域名 / 端口 / 网络。",
           "NETWORK": "网络错误，检查你的网络连接。",
-          "PARSE": "响应格式异常。"
+          "PARSE": "响应格式异常。请查看日志 ~/Library/Logs/open-codesign/main.log",
+          "IPC_BAD_INPUT": "传给连接测试的参数不合法，请检查提供商 / API Key / Base URL。"
         }
-      }
+      },
+      "back": "返回",
+      "continue": "继续"
     },
     "choose": {
-      "title": "选一个默认模型",
-      "primary": "主力",
-      "fast": "快速",
+      "title": "选择默认模型",
+      "description": "从推荐列表选一个，或直接输入提供商的模型 ID。之后可以按设计切换。",
+      "primary": "主力设计模型",
+      "fast": "快速补全模型",
+      "primaryHint": "用于完整设计生成。",
+      "fastHint": "用于快速编辑和局部调整。",
+      "primaryHintFree": "免费路径从 openrouter/free 开始，你也可以输入任意 OpenRouter 模型 ID。",
+      "fastHintFree": "保留 openrouter/free 以控制成本，或换成更快的自选模型。",
+      "customBaseUrl": "自定义 Base URL：{{url}}",
+      "costNote": "预计费用因提供商、模型和提示词长度而异。",
+      "costNoteFree": "OpenRouter 免费路由随时可能变动，如果免费路由不可用，请在此输入其他模型 ID。",
       "estimatedCost": "预计费用：{{amount}}",
-      "start": "开始设计"
+      "back": "返回",
+      "saving": "保存中...",
+      "finish": "完成设置"
     }
   },
   "topbar": {

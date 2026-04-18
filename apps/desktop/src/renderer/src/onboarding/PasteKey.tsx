@@ -1,3 +1,4 @@
+import { useT } from '@open-codesign/i18n';
 import {
   PROVIDER_SHORTLIST,
   PROXY_PRESETS,
@@ -83,20 +84,20 @@ function defaultBaseUrl(provider: SupportedOnboardingProvider): string {
 // Error hint for connection failures
 // ---------------------------------------------------------------------------
 
-function connectionHint(code: ConnectionTestError['code']): string {
+function connectionHint(code: ConnectionTestError['code'], t: (key: string) => string): string {
   switch (code) {
     case '401':
-      return 'API key invalid or unauthorized. Check it in your provider dashboard.';
+      return t('onboarding.paste.connectionTest.errors.401');
     case '404':
-      return 'Base URL path wrong. Try adding /v1 suffix (e.g. https://your-host/v1).';
+      return t('onboarding.paste.connectionTest.errors.404');
     case 'ECONNREFUSED':
-      return 'Cannot reach base URL. Check domain / port / network.';
+      return t('onboarding.paste.connectionTest.errors.ECONNREFUSED');
     case 'NETWORK':
-      return 'Network error. Check your connection.';
+      return t('onboarding.paste.connectionTest.errors.NETWORK');
     case 'PARSE':
-      return 'Unexpected response. View logs at ~/Library/Logs/open-codesign/main.log';
+      return t('onboarding.paste.connectionTest.errors.PARSE');
     case 'IPC_BAD_INPUT':
-      return 'Invalid input sent to connection test. Check provider / API key / base URL fields.';
+      return t('onboarding.paste.connectionTest.errors.IPC_BAD_INPUT');
   }
 }
 
@@ -159,6 +160,7 @@ function applyDetectResult(
 // ---------------------------------------------------------------------------
 
 export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
+  const t = useT();
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -233,7 +235,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
       setConnCheck({
         status: 'failed',
         code: 'NETWORK',
-        hint: 'Renderer is not connected to the main process.',
+        hint: t('onboarding.paste.errors.rendererDisconnected'),
       });
       return;
     }
@@ -249,13 +251,14 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
         setConnCheck({ status: 'ok' });
       } else {
         const err = result as ConnectionTestError;
-        setConnCheck({ status: 'failed', code: err.code, hint: connectionHint(err.code) });
+        setConnCheck({ status: 'failed', code: err.code, hint: connectionHint(err.code, t) });
       }
     } catch (err) {
       setConnCheck({
         status: 'failed',
         code: 'NETWORK',
-        hint: err instanceof Error ? err.message : 'Connection test failed.',
+        hint:
+          err instanceof Error ? err.message : t('onboarding.paste.connectionTest.errors.NETWORK'),
       });
     }
   }
@@ -279,11 +282,10 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
         <h2 className="text-[var(--text-lg)] font-semibold text-[var(--color-text-primary)] tracking-[var(--tracking-heading)] leading-[var(--leading-heading)]">
-          Paste your API key
+          {t('onboarding.paste.title')}
         </h2>
         <p className="text-[var(--text-base)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
-          Auto-detects your provider. Click <strong>Test</strong> to verify the key and endpoint
-          before continuing. Your key is encrypted with the OS keychain.
+          {t('onboarding.paste.description')}
         </p>
       </div>
 
@@ -293,14 +295,14 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
           className="text-[var(--text-2xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Preset
+          {t('onboarding.paste.preset.label')}
         </span>
         <select
           value={selectedPresetId}
           onChange={(e) => handlePresetChange(e.target.value)}
           className="w-full h-[var(--size-control-md)] px-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)] appearance-none cursor-pointer"
         >
-          <option value="">-- choose a preset --</option>
+          <option value="">{t('onboarding.paste.preset.placeholder')}</option>
           {PROXY_PRESETS.map((preset) => (
             <option key={preset.id} value={preset.id}>
               {preset.label}
@@ -309,8 +311,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
           ))}
         </select>
         <span className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
-          Not sure which to pick? Choose OpenAI Official for the official endpoint, or pick by relay
-          name.
+          {t('onboarding.paste.preset.hint')}
         </span>
       </label>
 
@@ -320,7 +321,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
           className="text-[var(--text-2xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          API key
+          {t('onboarding.paste.apiKey.label')}
         </span>
         <div className="relative">
           <input
@@ -336,7 +337,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
         </div>
       </label>
 
-      <DetectLine state={detectState} helpUrl={helpUrl} />
+      <DetectLine state={detectState} helpUrl={helpUrl} t={t} />
 
       {/* Advanced: custom base URL */}
       <details
@@ -348,14 +349,14 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
           className="cursor-pointer select-none text-[var(--text-xs)] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Advanced — custom base URL (proxy / relay)
+          {t('onboarding.paste.advanced.toggle')}
         </summary>
         <label className="flex flex-col gap-2 mt-3">
           <span
             className="text-[var(--text-2xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium"
             style={{ fontFamily: 'var(--font-mono)' }}
           >
-            Base URL
+            {t('onboarding.paste.baseUrl.label')}
           </span>
           <input
             type="url"
@@ -371,8 +372,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
             className="w-full h-[var(--size-control-md)] px-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[box-shadow,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
           />
           <span className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
-            Override the default endpoint for your provider. Useful for relay services and
-            self-hosted proxies. Leave empty to use the official endpoint.
+            {t('onboarding.paste.advanced.description')}
           </span>
         </label>
       </details>
@@ -394,13 +394,15 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
           ) : (
             <Wifi className="w-4 h-4" />
           )}
-          {connCheck.status === 'testing' ? 'Testing...' : 'Test'}
+          {connCheck.status === 'testing'
+            ? t('onboarding.paste.connectionTest.testing')
+            : t('onboarding.paste.connectionTest.button')}
         </button>
 
         {connCheck.status === 'ok' && (
           <span className="text-[var(--text-sm)] text-[var(--color-success)] flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
-            Connected — key and endpoint verified
+            {t('onboarding.paste.connectionTest.okVerified')}
           </span>
         )}
         {connCheck.status === 'failed' && (
@@ -411,23 +413,23 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
         )}
         {connCheck.status === 'idle' && detectedProvider !== null && (
           <span className="text-[var(--text-xs)] text-[var(--color-text-muted)]">
-            Run Test to verify your key and connection before continuing.
+            {t('onboarding.paste.connectionTest.idleHint')}
           </span>
         )}
       </div>
 
       <div className="flex justify-between gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onBack}>
-          Back
+          {t('onboarding.paste.back')}
         </Button>
         <Button
           type="button"
           variant="primary"
           onClick={handleContinue}
           disabled={continueDisabled}
-          title={continueDisabled ? 'Run Test to verify your connection first' : undefined}
+          title={continueDisabled ? t('onboarding.paste.connectionTest.runFirst') : undefined}
         >
-          Continue
+          {t('onboarding.paste.continue')}
         </Button>
       </div>
     </div>
@@ -441,13 +443,14 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
 interface DetectLineProps {
   state: DetectState;
   helpUrl: string | null;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }
 
-function DetectLine({ state, helpUrl }: DetectLineProps) {
+function DetectLine({ state, helpUrl, t }: DetectLineProps) {
   if (state.kind === 'idle') {
     return (
       <p className="text-[var(--text-xs)] text-[var(--color-text-muted)]">
-        Paste a key above — provider is auto-detected from the prefix.
+        {t('onboarding.paste.statusIdle')}
       </p>
     );
   }
@@ -455,7 +458,7 @@ function DetectLine({ state, helpUrl }: DetectLineProps) {
     return (
       <div className="text-[var(--text-sm)] text-[var(--color-text-secondary)] flex items-center gap-2">
         <Loader2 className="w-4 h-4 animate-spin" />
-        <span>Detecting provider...</span>
+        <span>{t('onboarding.paste.statusDetecting')}</span>
       </div>
     );
   }
@@ -464,8 +467,9 @@ function DetectLine({ state, helpUrl }: DetectLineProps) {
       <div className="text-[var(--text-sm)] text-[var(--color-text-secondary)] flex items-center gap-2">
         <CheckCircle2 className="w-4 h-4 text-[var(--color-success)] shrink-0" />
         <span>
-          Recognized: <strong>{PROVIDER_SHORTLIST[state.provider].label}</strong> — click Test to
-          verify
+          {t('onboarding.paste.statusDetected', {
+            provider: PROVIDER_SHORTLIST[state.provider].label,
+          })}
         </span>
         {helpUrl !== null ? (
           <a
@@ -474,7 +478,7 @@ function DetectLine({ state, helpUrl }: DetectLineProps) {
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-accent)] hover:underline ml-1"
           >
-            Get key <ExternalLink className="w-3 h-3" />
+            {t('onboarding.paste.getKey')} <ExternalLink className="w-3 h-3" />
           </a>
         ) : null}
       </div>
@@ -484,10 +488,7 @@ function DetectLine({ state, helpUrl }: DetectLineProps) {
     return (
       <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
         <AlertCircle className="w-4 h-4 shrink-0" />
-        <span>
-          Unrecognized key prefix. Supported: sk-ant- (Anthropic), sk- (OpenAI), sk-or-
-          (OpenRouter).
-        </span>
+        <span>{t('onboarding.paste.errors.unsupported')}</span>
       </div>
     );
   }
@@ -496,8 +497,7 @@ function DetectLine({ state, helpUrl }: DetectLineProps) {
       <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
         <AlertCircle className="w-4 h-4 shrink-0" />
         <span>
-          Provider detection failed (main process unreachable): {state.message}. Restart the app and
-          try again.
+          {t('onboarding.paste.errors.detectIpc', { message: state.message })}
         </span>
       </div>
     );
@@ -506,8 +506,7 @@ function DetectLine({ state, helpUrl }: DetectLineProps) {
     <div className="text-[var(--text-sm)] text-[var(--color-error)] flex items-center gap-2">
       <AlertCircle className="w-4 h-4 shrink-0" />
       <span>
-        Provider detection failed (network error): {state.message}. Check your connection and try
-        again.
+        {t('onboarding.paste.errors.detectNetwork', { message: state.message })}
       </span>
     </div>
   );
