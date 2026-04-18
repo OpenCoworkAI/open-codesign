@@ -62,8 +62,6 @@ export default defineConfig({
           'Claude Design alternative, open source AI design tool, BYOK design app, local-first design generator, Anthropic Claude Design open source, AI prototype generator, open-codesign, multi-model design, BYOK Electron app',
       },
     ],
-    // Canonical
-    ['link', { rel: 'canonical', href: SITE_URL }],
     // JSON-LD — SoftwareApplication
     [
       'script',
@@ -98,6 +96,13 @@ export default defineConfig({
   ],
 
   sitemap: { hostname: SITE_URL },
+
+  transformPageData(pageData) {
+    const path = pageData.relativePath.replace(/index\.md$/, '').replace(/\.md$/, '');
+    const canonical = `${SITE_URL}${path}`;
+    pageData.frontmatter.head ??= [];
+    pageData.frontmatter.head.push(['link', { rel: 'canonical', href: canonical }]);
+  },
 
   themeConfig: {
     logo: { src: '/favicon.ico', alt: 'open-codesign' },
