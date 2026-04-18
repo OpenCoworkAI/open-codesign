@@ -246,3 +246,31 @@ export function registerSnapshotsIpc(db: Database): void {
     return runDb('create-design', () => createDesign(db, (r['name'] as string).trim()));
   });
 }
+
+/**
+ * Stub channels installed when snapshots DB init fails at boot. Without these,
+ * any renderer call to window.codesign.snapshots.* would surface as Electron's
+ * generic "No handler registered for ..." rejection — opaque to the user and
+ * to logs. We register handlers that throw a typed CodesignError so the
+ * renderer can branch on `SNAPSHOTS_UNAVAILABLE` and surface a placeholder.
+ *
+ * Channels listed here MUST match the set registered in registerSnapshotsIpc.
+ */
+export const SNAPSHOTS_CHANNELS_V1 = [
+  'snapshots:v1:list-designs',
+  'snapshots:v1:create-design',
+  'snapshots:v1:list',
+  'snapshots:v1:get',
+  'snapshots:v1:create',
+  'snapshots:v1:delete',
+] as const;
+
+export function registerSnapshotsUnavailableIpc(reason: string): void {
+  const message = `Snapshots database failed to initialize. Check Settings → Storage for diagnostics. (${reason})`;
+  const fail = (): never => {
+    throw new CodesignError(message, 'SNAPSHOTS_UNAVAILABLE');
+  };
+  for (const channel of SNAPSHOTS_CHANNELS_V1) {
+    ipcMain.handle(channel, fail);
+  }
+}

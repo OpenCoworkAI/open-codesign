@@ -28,7 +28,11 @@ vi.mock('./logger', () => ({
 }));
 
 import { createDesign, createSnapshot, initInMemoryDb } from './snapshots-db';
-import { registerSnapshotsIpc } from './snapshots-ipc';
+import {
+  SNAPSHOTS_CHANNELS_V1,
+  registerSnapshotsIpc,
+  registerSnapshotsUnavailableIpc,
+} from './snapshots-ipc';
 
 function call(channel: string, raw: unknown): unknown {
   const fn = handlers.get(channel);
@@ -531,5 +535,47 @@ describe('SQLite error translation', () => {
       // Original error preserved for server-side logging only.
       expect((err as Error).cause).toBeDefined();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// registerSnapshotsUnavailableIpc — DB init failure path
+//
+// When safeInitSnapshotsDb fails at boot, main/index.ts installs stub handlers
+// instead of skipping registration entirely. Without these, every renderer
+// call to window.codesign.snapshots.* would surface as Electron's opaque
+// "No handler registered" rejection. The stub MUST throw a typed CodesignError
+// with code SNAPSHOTS_UNAVAILABLE so the renderer can branch deterministically.
+// ---------------------------------------------------------------------------
+
+describe('registerSnapshotsUnavailableIpc', () => {
+  beforeEach(() => {
+    handlers.clear();
+    registerSnapshotsUnavailableIpc('disk_full: out of space');
+  });
+
+  for (const channel of SNAPSHOTS_CHANNELS_V1) {
+    it(`${channel} throws SNAPSHOTS_UNAVAILABLE instead of going unhandled`, () => {
+      try {
+        call(channel, { schemaVersion: 1 });
+        throw new Error('expected throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CodesignError);
+        expect((err as CodesignError).code).toBe('SNAPSHOTS_UNAVAILABLE');
+        expect((err as Error).message).toMatch(/Snapshots database failed to initialize/);
+        expect((err as Error).message).toMatch(/disk_full: out of space/);
+      }
+    });
+  }
+
+  it('covers exactly the channels registered by registerSnapshotsIpc', () => {
+    handlers.clear();
+    const dbForLive = initInMemoryDb();
+    registerSnapshotsIpc(dbForLive);
+    const live = new Set(handlers.keys());
+    handlers.clear();
+    registerSnapshotsUnavailableIpc('reason');
+    const stubs = new Set(handlers.keys());
+    expect(stubs).toEqual(live);
   });
 });

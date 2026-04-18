@@ -31,7 +31,7 @@ import { registerPreferencesIpc } from './preferences-ipc';
 import { preparePromptContext } from './prompt-context';
 import { resolveActiveModel } from './provider-settings';
 import { safeInitSnapshotsDb } from './snapshots-db';
-import { registerSnapshotsIpc } from './snapshots-ipc';
+import { registerSnapshotsIpc, registerSnapshotsUnavailableIpc } from './snapshots-ipc';
 
 let mainWindow: ElectronBrowserWindow | null = null;
 
@@ -452,6 +452,10 @@ void app.whenReady().then(async () => {
       message: dbResult.error.message,
       stack: dbResult.error.stack,
     });
+    // Install stub handlers so renderer-side calls reject with a typed
+    // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
+    // "No handler registered" rejection — see snapshots-ipc.ts.
+    registerSnapshotsUnavailableIpc(dbResult.error.message);
     dialog.showErrorBox(
       'Design history unavailable',
       `Could not open the local snapshots database. Version history will be disabled for this session.\n\n${dbResult.error.message}`,
