@@ -84,12 +84,6 @@ export default defineConfig({
           priceCurrency: 'USD',
           description: 'Free and open source. Bring your own API key (token cost only).',
         },
-        aggregateRating: {
-          '@type': 'AggregateRating',
-          ratingValue: '5',
-          reviewCount: '1',
-          // placeholder — update when real reviews exist
-        },
         license: 'https://www.apache.org/licenses/LICENSE-2.0',
         codeRepository: 'https://github.com/OpenCoworkAI/open-codesign',
         author: {
