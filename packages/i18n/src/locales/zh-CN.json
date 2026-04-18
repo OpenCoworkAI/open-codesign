@@ -498,6 +498,7 @@
     "fix": {
       "updateKey": "更新 Key",
       "addCredits": "充值 →",
+      "addCreditsGeneric": "请前往你的 Provider 充值页面",
       "addV1": "添加 /v1",
       "waitAndRetry": "等待后重试",
       "checkNetwork": "检查网络 / VPN",

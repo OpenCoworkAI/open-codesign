@@ -23,7 +23,27 @@ describe('diagnose', () => {
     const result = diagnose('402', baseCtx);
     expect(result[0]?.cause).toBe('diagnostics.cause.balanceEmpty');
     expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.addCredits');
-    expect(result[0]?.suggestedFix?.externalUrl).toBeDefined();
+    expect(result[0]?.suggestedFix?.externalUrl).toBe(
+      'https://platform.openai.com/settings/organization/billing',
+    );
+  });
+
+  it('402 returns provider-specific billing URL for anthropic', () => {
+    const result = diagnose('402', { ...baseCtx, provider: 'anthropic' });
+    expect(result[0]?.suggestedFix?.externalUrl).toBe(
+      'https://console.anthropic.com/settings/billing',
+    );
+  });
+
+  it('402 returns provider-specific billing URL for openrouter', () => {
+    const result = diagnose('402', { ...baseCtx, provider: 'openrouter' });
+    expect(result[0]?.suggestedFix?.externalUrl).toBe('https://openrouter.ai/settings/credits');
+  });
+
+  it('402 returns generic message (no URL) for unknown provider', () => {
+    const result = diagnose('402', { ...baseCtx, provider: 'mystery-provider' });
+    expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.addCreditsGeneric');
+    expect(result[0]?.suggestedFix?.externalUrl).toBeUndefined();
   });
 
   it('maps 404 to missingV1 with a baseUrl transform', () => {

@@ -38,6 +38,18 @@ export interface DiagnoseContext {
   attemptedUrl?: string;
 }
 
+const BILLING_URLS: Record<string, string> = {
+  openai: 'https://platform.openai.com/settings/organization/billing',
+  anthropic: 'https://console.anthropic.com/settings/billing',
+  openrouter: 'https://openrouter.ai/settings/credits',
+  google: 'https://aistudio.google.com/app/apikey',
+  deepseek: 'https://platform.deepseek.com/usage',
+};
+
+function billingUrlFor(provider: string): string | undefined {
+  return BILLING_URLS[provider.toLowerCase()];
+}
+
 /**
  * Map an ErrorCode + context to one or more DiagnosticHypothesis items.
  * The first item is the "most likely" cause; subsequent items are alternatives.
@@ -56,12 +68,13 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
   }
 
   if (normalised === '402') {
+    const externalUrl = billingUrlFor(ctx.provider);
     return [
       {
         cause: 'diagnostics.cause.balanceEmpty',
         suggestedFix: {
-          label: 'diagnostics.fix.addCredits',
-          externalUrl: 'https://platform.openai.com/settings/organization/billing',
+          label: externalUrl ? 'diagnostics.fix.addCredits' : 'diagnostics.fix.addCreditsGeneric',
+          ...(externalUrl ? { externalUrl } : {}),
         },
       },
     ];

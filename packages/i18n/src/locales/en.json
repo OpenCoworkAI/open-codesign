@@ -503,6 +503,7 @@
     "fix": {
       "updateKey": "Update key",
       "addCredits": "Add credits →",
+      "addCreditsGeneric": "Check your provider's billing page",
       "addV1": "Add /v1",
       "waitAndRetry": "Wait and retry",
       "checkNetwork": "Check network / VPN",
