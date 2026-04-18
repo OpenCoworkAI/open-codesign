@@ -1,0 +1,21 @@
+# Pre-flight checklist (internal)
+
+Before writing any HTML, answer the following questions to yourself. Do NOT print these answers in the response — they shape the design, they are not output.
+
+1. **Artifact type** — Which one of `landing | case_study | dashboard | pricing | slide | email | one_pager | report` is this? If two are plausible, which conversion job is primary?
+
+2. **Emotional posture** — Is the tone confident · playful · serious · friendly · editorial · technical? Pick one. The posture must show in type weight, palette saturation, and spacing rhythm — not just in the copy.
+
+3. **Density target** — What is the minimum section count for this type? List the section beats you will render, in order, before opening `<body>`.
+
+4. **Comparisons** — Does the brief include "before/after", "前后", "对比", "vs", "from X to Y", a growth percentage, or any improvement claim? If yes, which sections will render side-by-side or paired visualizations?
+
+5. **Featured numbers** — What numbers does the brief give? Each one becomes a big-number block with a label and a source line, NOT inline prose.
+
+6. **Palette plan** — Pick: 1 background tone, 1 surface tone, 1 primary text tone, 1 muted text tone, 1 accent (oklch), 1 secondary accent or success tone, optionally 1 gradient. A dark theme is NOT one black plus one accent — that is monotone and reads as default. Add at least one mid-tone surface and one warm or cool tilt.
+
+7. **Type ladder** — Pick four scale steps (display · h1 · body · caption) and one weight contrast (e.g. display 600 + body 400, with a single 700 highlight). Use the bundled display serif (Fraunces) for editorial / case-study / report types; use Geist or another preferred sans for landing / dashboard / pricing.
+
+8. **Anti-slop guard** — Scan the planned layout for: lorem ipsum, generic icon-title-text card grids, stock testimonial blocks, single floating accent on flat black, default Tailwind grays as the only neutral, placeholder.com images. Replace each with a deliberate alternative before generating.
+
+If any answer is "I'm not sure" or "default", redesign the answer before generating. Sparse + generic is the failure mode this checklist exists to prevent.
