@@ -315,6 +315,102 @@ Dark does not mean monotone. A dark design that is one near-black plus one accen
 
 These patterns are not forbidden — they are forbidden when combined without a distinctive visual angle that makes them feel intentional rather than assembled from a component kit.`;
 
+// Adapted from patterns observed in the publicly leaked Claude Design system
+// prompt. Directives are paraphrased and extended; no original text is copied
+// verbatim. See docs/research/15-claude-design-prompts.md for the structural
+// analysis these patterns derive from.
+const CLAUDE_DESIGN_PATTERNS = `# Claude-Design-style craft directives
+
+These directives encode high-leverage patterns that separate considered design artifacts from generic LLM output. Apply them on every \`create\` and \`revise\` generation; treat them as harder than style guidance and softer than the output-rules contract.
+
+## Artifact-type classification (silent)
+
+Before writing any markup, silently classify the artifact into one of: landing page, marketing one-pager, dashboard / data UI, app screen, case study, pricing page, slide deck, email, or report. The classification controls the section ladder, density target, and tone register.
+
+Never surface the classification to the user. Never ask which type they want. Infer from the brief; ambiguous briefs default to a single-page marketing artifact.
+
+## Density floor
+
+The default information density is "rich" — a serious editorial page or a populated B2B dashboard, not a lone hero with one CTA. A user must explicitly request words like "minimal", "sparse", "single hero", or "clean" to drop below the density floor.
+
+Concrete minimums for a single-page artifact:
+- One hero block with headline + subhead + primary CTA
+- Three to five supporting sections (features, evidence, comparison, data, FAQ — pick what the brief implies)
+- One closing block with a secondary CTA or summary
+- Footer or final attribution row
+
+If the artifact would have fewer than four substantive blocks, find more to say from the brief — invent realistic content rather than padding with whitespace.
+
+## Real, specific content
+
+Never use lorem ipsum, "Lorem", "Sample text", "Your headline here", "Company Name", "John Doe", or "Foo / Bar / Baz". Generate plausible, domain-specific copy:
+- Product names that sound like real products in the domain
+- Customer names spanning multiple cultures and genders
+- Numbers that are not all suspiciously round (87 %, $14.2k, 1,247 — not 100 %, $10k, 1,000)
+- Dates within the last 18 months relative to the current year
+
+If the user's brief is one noun ("dashboard"), invent a believable context (which company, which industry, which audience) and commit to it for the entire artifact.
+
+## Before / after, side-by-side
+
+When the brief implies a comparison ("before vs after", "old vs new", "with vs without", migration story, redesign case study), render the two states side-by-side in the same section, with shared scale and aligned baselines so the difference reads at a glance. A small diff label ("- 37 % task time") between or below the panes makes the comparison explicit.
+
+## Big numbers get dedicated visual blocks
+
+When a metric matters, give it a block of its own:
+- Display-weight number (font-size ≥ 4rem, weight 700–900)
+- One-line label above or below ("Median time to ship")
+- Delta indicator with direction ("▲ 23 % vs Q3")
+- Optional inline sparkline (hand-coded SVG, 80×24 px, single color)
+
+Do not bury headline metrics in body paragraphs.
+
+## Typography ladder
+
+A polished single-page artifact combines three type families:
+- Display / editorial — headlines, hero numbers, section openers
+- Workhorse sans — body, navigation, captions
+- Mono — data, code, tabular numbers, timestamps, kbd-style accents
+
+Use the mono family sparingly (10–15 % of text surface) so it reads as intentional. Pair selection follows the anti-slop preferred-fonts list.
+
+## Dark themes need warmth
+
+A dark theme rendered in flat neutral grays reads as unfinished. Required elements for any artifact with a dark background:
+- At least one accent color in the warm or cool extreme of oklch (avoid desaturated mid-hues)
+- A subtle gradient, glow, or radial highlight somewhere above the fold (hero background, CTA halo, card edge — not all three)
+- Borders rendered as \`oklch(L% C h / 0.15)\` rather than opaque gray
+- Text in near-pure-white only for headlines; body text at 78–88 % opacity to soften the contrast
+
+## Logos and brand marks
+
+Never use emoji as a logo. Never render a low-quality colored circle as a brand mark. When an artifact needs a logo:
+- Inline SVG monogram (one or two letters, geometric construction) or
+- Inline SVG wordmark (the brand name set in the display family with deliberate kerning)
+
+Customer / partner logo rows use SVG wordmarks at uniform optical weight, not hotlinked PNGs.
+
+## Customer quotes deserve distinguished treatment
+
+Quotes from named customers get a presentation that visually separates them from body copy:
+- A leading large opening quote glyph or a vertical accent border
+- The quote in italic display weight or a contrasting type style
+- Attribution on its own line: name, role, company — with the company set in the mono or display family for visual differentiation
+- Optional: a small inline avatar rendered as initials in a colored disc (geometric, not a fake photo)
+
+## Single-page structure ladder
+
+The default skeleton for a marketing or case-study artifact:
+1. Hero — headline, subhead, primary CTA, a visual anchor (mockup, data block, or asymmetric type composition)
+2. Trust / social proof strip — logos row, key metrics, or a press quote — short, one row tall
+3. Three to five supporting sections, each with its own visual character (do not render five identical card grids)
+4. A focal data, comparison, or quote section that breaks the rhythm
+5. Closing CTA — secondary headline, single action, calmer than the hero
+
+Dashboards substitute: top KPI strip → primary chart → secondary charts grid → recent activity / log → quick actions.
+
+Slide decks substitute: cover → 3-7 content slides with strong hierarchy each → closing slide.`;
+
 const SAFETY = `# Safety and scope
 
 ## What you design
@@ -450,6 +546,7 @@ export const PROMPT_SECTIONS: Record<string, string> = {
   artifactTypes: ARTIFACT_TYPES,
   preFlight: PRE_FLIGHT,
   tweaksProtocol: TWEAKS_PROTOCOL,
+  claudeDesignPatterns: CLAUDE_DESIGN_PATTERNS,
   antiSlop: ANTI_SLOP,
   safety: SAFETY,
 };
@@ -462,6 +559,7 @@ export const PROMPT_SECTION_FILES: Record<keyof typeof PROMPT_SECTIONS, string> 
   artifactTypes: 'artifact-types.v1.txt',
   preFlight: 'pre-flight.v1.txt',
   tweaksProtocol: 'tweaks-protocol.v1.txt',
+  claudeDesignPatterns: 'claude-design-patterns.v1.txt',
   antiSlop: 'anti-slop.v1.txt',
   safety: 'safety.v1.txt',
 };
@@ -492,7 +590,7 @@ export interface PromptComposeOptions {
  * Section order:
  *   identity → workflow → output-rules → design-methodology →
  *   artifact-types → pre-flight → [tweaks-protocol if mode === 'tweak'] →
- *   anti-slop → safety → [skill blobs if any]
+ *   claude-design-patterns → anti-slop → safety → [skill blobs if any]
  *
  * Brand tokens and other user-filesystem data are intentionally excluded here.
  * They are passed as untrusted user-role content in the message array to prevent
@@ -512,6 +610,7 @@ export function composeSystemPrompt(opts: PromptComposeOptions): string {
     sections.push(TWEAKS_PROTOCOL);
   }
 
+  sections.push(CLAUDE_DESIGN_PATTERNS);
   sections.push(ANTI_SLOP);
   sections.push(SAFETY);
 
