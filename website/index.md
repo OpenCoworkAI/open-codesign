@@ -9,7 +9,7 @@ hero:
   text: Design with intent.
   tagline: An open-source desktop app for designing with AI. Bring your own model. Keep everything local. The open-source alternative to Anthropic Claude Design.
   image:
-    src: /hero.png
+    src: /og.svg
     alt: Open CoDesign — prompt to prototype
   actions:
     - theme: brand

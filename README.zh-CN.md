@@ -7,8 +7,8 @@
 [官网](https://opencoworkai.github.io/open-codesign/) · [快速开始](#快速开始) · [贡献指南](./CONTRIBUTING.md) · [安全政策](./SECURITY.md)
 
 <p align="center">
-  <img src="website/public/hero.png" alt="Open CoDesign — 提示词到原型" width="900" />
-  <!-- hero.png 占位 — 正式发布前替换为真实截图 -->
+  <img src="https://placehold.co/1200x600/E8E5DE/0E0E10?text=open-codesign+demo" alt="Open CoDesign — 提示词到原型（演示即将上线）" width="900" />
+  <!-- Hero 占位（placehold.co）— 正式发布前替换为真实截图 -->
 </p>
 
 <p align="center">

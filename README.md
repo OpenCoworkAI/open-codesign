@@ -7,8 +7,8 @@
 [Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [Docs](https://opencoworkai.github.io/open-codesign/quickstart) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
 
 <p align="center">
-  <img src="website/public/hero.png" alt="Open CoDesign — prompt to prototype" width="900" />
-  <!-- hero.png placeholder — real screenshot coming before launch -->
+  <img src="https://placehold.co/1200x600/E8E5DE/0E0E10?text=open-codesign+demo" alt="Open CoDesign — prompt to prototype (demo coming soon)" width="900" />
+  <!-- Hero placeholder via placehold.co — real screenshot coming before launch -->
 </p>
 
 <p align="center">

@@ -9,7 +9,7 @@ hero:
   text: 用心设计。
   tagline: 一个开源的桌面 AI 设计工具。自带模型，本地优先。Anthropic Claude Design 的开源替代。
   image:
-    src: /hero.png
+    src: /og.svg
     alt: Open CoDesign — 提示词到原型
   actions:
     - theme: brand
