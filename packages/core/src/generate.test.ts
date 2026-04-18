@@ -1,5 +1,5 @@
 import type { ChatMessage, ModelRef, StoredDesignSystem } from '@open-codesign/shared';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, STORED_DESIGN_SYSTEM_SCHEMA_VERSION } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const completeMock = vi.fn();
@@ -34,6 +34,7 @@ ${SAMPLE_HTML}
 \`\`\``;
 
 const DESIGN_SYSTEM: StoredDesignSystem = {
+  schemaVersion: STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
   rootPath: '/repo',
   summary: 'Muted neutrals with warm copper accents.',
   extractedAt: '2026-04-18T00:00:00.000Z',
