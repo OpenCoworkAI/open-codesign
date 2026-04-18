@@ -139,9 +139,6 @@ importers:
       '@open-codesign/shared':
         specifier: workspace:*
         version: link:../shared
-      '@open-codesign/templates':
-        specifier: workspace:*
-        version: link:../templates
     devDependencies:
       typescript:
         specifier: ^5.7.2
