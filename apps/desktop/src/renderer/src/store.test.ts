@@ -113,7 +113,7 @@ describe('useCodesignStore generation cancellation', () => {
       string,
       ReturnType<typeof deferred<{ artifacts: Array<{ content: string }>; message: string }>>
     >();
-    const cancelGeneration = vi.fn();
+    const cancelGeneration = vi.fn(() => Promise.resolve());
     const generate = vi.fn((payload: { generationId?: string }) => {
       if (!payload.generationId) throw new Error('missing generationId');
       const task = deferred<{ artifacts: Array<{ content: string }>; message: string }>();
@@ -134,6 +134,9 @@ describe('useCodesignStore generation cancellation', () => {
     if (!firstId) throw new Error('expected first generation id');
 
     useCodesignStore.getState().cancelGeneration();
+
+    // Drain microtasks so the cancel IPC promise resolves and clears state
+    await Promise.resolve();
 
     const secondRun = useCodesignStore.getState().sendPrompt({ prompt: 'second prompt' });
     const secondId = useCodesignStore.getState().activeGenerationId;
@@ -179,7 +182,7 @@ describe('useCodesignStore generation cancellation', () => {
     vi.stubGlobal('window', {
       codesign: {
         generate,
-        cancelGeneration: vi.fn(),
+        cancelGeneration: vi.fn(() => Promise.resolve()),
       },
       setTimeout,
     });

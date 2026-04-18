@@ -369,8 +369,21 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   cancelGeneration() {
     const id = get().activeGenerationId;
     if (!id || !window.codesign) return;
-    window.codesign.cancelGeneration(id);
-    set({ isGenerating: false, activeGenerationId: null });
+
+    void window.codesign
+      .cancelGeneration(id)
+      .then(() => {
+        finishIfCurrent(set, id, () => ({ isGenerating: false, activeGenerationId: null }));
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : tr('errors.unknown');
+        set({ errorMessage: msg, lastError: msg });
+        get().pushToast({
+          variant: 'error',
+          title: tr('notifications.cancellationFailed'),
+          description: msg,
+        });
+      });
   },
 
   async retryLastPrompt() {

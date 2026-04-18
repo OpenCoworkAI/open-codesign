@@ -165,6 +165,7 @@
     "designSystemCleared": "Design system cleared",
     "clearDesignSystemFailed": "Unable to clear design system",
     "generationFailed": "Generation failed",
+    "cancellationFailed": "Cancellation failed",
     "inlineCommentFailed": "Inline comment failed",
     "noDesignToExport": "No design to export yet.",
     "exportedTo": "Exported to {{path}}"

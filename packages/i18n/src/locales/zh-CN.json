@@ -165,6 +165,7 @@
     "designSystemCleared": "设计系统已清除",
     "clearDesignSystemFailed": "无法清除设计系统",
     "generationFailed": "生成失败",
+    "cancellationFailed": "取消失败",
     "inlineCommentFailed": "局部修改失败",
     "noDesignToExport": "当前还没有可导出的设计。",
     "exportedTo": "已导出到 {{path}}"

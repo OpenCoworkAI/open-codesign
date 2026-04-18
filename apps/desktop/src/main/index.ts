@@ -8,7 +8,7 @@ import {
   BRAND,
   CancelGenerationPayloadV1,
   CodesignError,
-  GeneratePayload,
+  GeneratePayloadV1,
 } from '@open-codesign/shared';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
@@ -129,10 +129,10 @@ function registerIpcHandlers(): void {
     return nextState;
   });
 
-  ipcMain.handle('codesign:generate', async (_e, raw: unknown) => {
-    const payload = GeneratePayload.parse(raw);
+  ipcMain.handle('codesign:v1:generate', async (_e, raw: unknown) => {
+    const payload = GeneratePayloadV1.parse(raw);
     const controller = new AbortController();
-    const id = payload.generationId ?? `gen-${Date.now()}`;
+    const id = payload.generationId;
     inFlight.set(id, controller);
 
     const apiKey = getApiKeyForProvider(payload.model.provider);

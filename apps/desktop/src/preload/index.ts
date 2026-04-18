@@ -1,6 +1,7 @@
 import type {
   CancelGenerationPayloadV1,
   ChatMessage,
+  GeneratePayloadV1,
   LocalInputFile,
   ModelRef,
   OnboardingState,
@@ -35,9 +36,13 @@ const api = {
     model: ModelRef;
     baseUrl?: string;
     referenceUrl?: string;
-    attachments?: LocalInputFile[];
-    generationId?: string;
-  }) => ipcRenderer.invoke('codesign:generate', payload),
+    attachments: LocalInputFile[];
+    generationId: string;
+  }) =>
+    ipcRenderer.invoke('codesign:v1:generate', {
+      schemaVersion: 1,
+      ...payload,
+    } satisfies GeneratePayloadV1),
   cancelGeneration: (generationId: string) =>
     ipcRenderer.invoke('codesign:v1:cancel-generation', {
       schemaVersion: 1,
