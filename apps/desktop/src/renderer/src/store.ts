@@ -1,6 +1,7 @@
 import { i18n } from '@open-codesign/i18n';
 import {
   type ChatMessage,
+  type Design,
   type LocalInputFile,
   type ModelRef,
   type OnboardingState,
@@ -73,6 +74,13 @@ interface CodesignState {
   toastMessage: string | null;
   connectionStatus: ConnectionStatus;
 
+  designs: Design[];
+  currentDesignId: string | null;
+  designsLoaded: boolean;
+  designsViewOpen: boolean;
+  designToDelete: Design | null;
+  designToRename: Design | null;
+
   theme: Theme;
   view: AppView;
   hubTab: HubTab;
@@ -127,6 +135,19 @@ interface CodesignState {
   setPreviewViewport: (viewport: PreviewViewport) => void;
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
+
+  loadDesigns: () => Promise<void>;
+  ensureCurrentDesign: () => Promise<void>;
+  createNewDesign: () => Promise<Design | null>;
+  switchDesign: (id: string) => Promise<void>;
+  renameCurrentDesign: (name: string) => Promise<void>;
+  renameDesign: (id: string, name: string) => Promise<void>;
+  duplicateDesign: (id: string) => Promise<Design | null>;
+  softDeleteDesign: (id: string) => Promise<void>;
+  openDesignsView: () => void;
+  closeDesignsView: () => void;
+  requestDeleteDesign: (design: Design | null) => void;
+  requestRenameDesign: (design: Design | null) => void;
 
   pushToast: (toast: Omit<Toast, 'id'>) => string;
   dismissToast: (id?: string) => void;
@@ -249,6 +270,76 @@ function tr(key: string, options?: Record<string, unknown>): string {
 type SetState = StoreApi<CodesignState>['setState'];
 type GetState = StoreApi<CodesignState>['getState'];
 
+function autoNameFromPrompt(prompt: string): string {
+  const condensed = prompt.replace(/\s+/g, ' ').trim();
+  if (condensed.length === 0) return 'Untitled design';
+  return condensed.length > 40 ? `${condensed.slice(0, 40).trimEnd()}…` : condensed;
+}
+
+function isDefaultDesignName(name: string): boolean {
+  return name === 'Untitled design' || /^Untitled design \d+$/.test(name);
+}
+
+async function persistDesignState(
+  get: GetState,
+  designId: string,
+  messages: ChatMessage[],
+  previewHtml: string | null,
+): Promise<void> {
+  if (!window.codesign) return;
+  try {
+    await window.codesign.snapshots.replaceMessages(
+      designId,
+      messages.map((m) => ({ role: m.role, content: m.content })),
+    );
+    if (previewHtml !== null) {
+      const firstUser = messages.find((m) => m.role === 'user');
+      const thumbText = firstUser ? firstUser.content.slice(0, 200) : null;
+      await window.codesign.snapshots.setThumbnail(designId, thumbText);
+    }
+    await get().loadDesigns();
+  } catch (err) {
+    // Persistence failures should not break the chat experience — log to console
+    // and leave the in-memory state untouched. The next successful persist will
+    // overwrite anyway because we replace the whole list.
+    console.error('persistDesignState failed', err);
+  }
+}
+
+async function maybeAutoRename(
+  get: GetState,
+  designId: string,
+  firstPrompt: string,
+): Promise<void> {
+  if (!window.codesign) return;
+  const design = get().designs.find((d) => d.id === designId);
+  if (!design || !isDefaultDesignName(design.name)) return;
+  const newName = autoNameFromPrompt(firstPrompt);
+  try {
+    await window.codesign.snapshots.renameDesign(designId, newName);
+    await get().loadDesigns();
+  } catch (err) {
+    console.error('maybeAutoRename failed', err);
+  }
+}
+
+function triggerAutoRenameIfFirst(get: GetState, isFirstPrompt: boolean, prompt: string): void {
+  if (!isFirstPrompt) return;
+  const designId = get().currentDesignId;
+  if (designId) void maybeAutoRename(get, designId, prompt);
+}
+
+interface ReadyConfig extends OnboardingState {
+  hasKey: true;
+  provider: SupportedOnboardingProvider;
+  modelPrimary: string;
+}
+
+function isReadyConfig(cfg: OnboardingState | null): cfg is ReadyConfig {
+  if (cfg === null) return false;
+  return cfg.hasKey && cfg.provider !== null && cfg.modelPrimary !== null;
+}
+
 function finishIfCurrent(
   set: SetState,
   generationId: string,
@@ -259,6 +350,7 @@ function finishIfCurrent(
 
 function applyGenerateSuccess(
   set: SetState,
+  get: GetState,
   generationId: string,
   result: { artifacts: Array<{ content: string }>; message: string },
 ): void {
@@ -273,6 +365,10 @@ function applyGenerateSuccess(
     activeGenerationId: null,
     generationStage: 'done' as GenerationStage,
   }));
+  const designId = get().currentDesignId;
+  if (designId) {
+    void persistDesignState(get, designId, get().messages, get().previewHtml);
+  }
 }
 
 function applyGenerateError(
@@ -318,15 +414,15 @@ async function runGenerate(
   // Enter streaming stage before the IPC call so the UI shows "receiving response"
   // while the main process communicates with the model provider.
   advanceStageIfCurrent(get, set, generationId, 'streaming');
-  if (!window.codesign) {
-    throw new Error('codesign IPC bridge unavailable');
-  }
-  const result = await window.codesign.generate(payload);
+  const api = window.codesign;
+  if (!api) throw new Error(tr('errors.rendererDisconnected'));
+  const result = await api.generate(payload);
   // Response fully received — move through parsing → rendering before finalising.
   advanceStageIfCurrent(get, set, generationId, 'parsing');
   advanceStageIfCurrent(get, set, generationId, 'rendering');
   applyGenerateSuccess(
     set,
+    get,
     generationId,
     result as { artifacts: Array<{ content: string }>; message: string },
   );
@@ -378,6 +474,13 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   toasts: [],
   iframeErrors: [],
 
+  designs: [],
+  currentDesignId: null,
+  designsLoaded: false,
+  designsViewOpen: false,
+  designToDelete: null,
+  designToRename: null,
+
   inputFiles: [],
   referenceUrl: '',
   lastPromptInput: null,
@@ -406,6 +509,9 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     }
     const state = await window.codesign.onboarding.getState();
     set({ config: state, configLoaded: true });
+    if (state.hasKey) {
+      await get().ensureCurrentDesign();
+    }
   },
 
   completeOnboarding(next: OnboardingState) {
@@ -500,7 +606,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       return;
     }
     const cfg = get().config;
-    if (cfg === null || !cfg.hasKey || cfg.provider === null || cfg.modelPrimary === null) {
+    if (!isReadyConfig(cfg)) {
       const msg = tr('errors.onboardingIncomplete');
       set({ errorMessage: msg, lastError: msg });
       return;
@@ -511,6 +617,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
     const generationId = newId();
     const history = get().messages;
+    const isFirstPrompt = history.length === 0;
     set((s) => ({
       messages: [...s.messages, { role: 'user', content: request.prompt }],
       isGenerating: true,
@@ -522,6 +629,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       selectedElement: null,
       iframeErrors: [],
     }));
+
+    triggerAutoRenameIfFirst(get, isFirstPrompt, request.prompt);
 
     try {
       await runGenerate(get, set, generationId, {
@@ -777,6 +886,191 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   },
   closeCommandPalette() {
     set({ commandPaletteOpen: false });
+  },
+
+  async loadDesigns() {
+    if (!window.codesign) return;
+    try {
+      const designs = await window.codesign.snapshots.listDesigns();
+      set({ designs, designsLoaded: true });
+    } catch (err) {
+      console.error('loadDesigns failed', err);
+      set({ designsLoaded: true });
+    }
+  },
+
+  async ensureCurrentDesign() {
+    if (!window.codesign) return;
+    await get().loadDesigns();
+    const designs = get().designs;
+    if (get().currentDesignId !== null) return;
+
+    if (designs.length > 0) {
+      const first = designs[0];
+      if (first) await get().switchDesign(first.id);
+      return;
+    }
+    // No designs exist yet — create the first one silently. The user can
+    // rename it later or just send a prompt and we'll auto-name it.
+    await get().createNewDesign();
+  },
+
+  async createNewDesign() {
+    if (!window.codesign) return null;
+    if (get().isGenerating) return null;
+    const existingCount = get().designs.length;
+    const name = `Untitled design ${existingCount + 1}`;
+    try {
+      const design = await window.codesign.snapshots.createDesign(name);
+      set({
+        currentDesignId: design.id,
+        messages: [],
+        previewHtml: null,
+        errorMessage: null,
+        iframeErrors: [],
+        selectedElement: null,
+        lastPromptInput: null,
+        designsViewOpen: false,
+      });
+      await get().loadDesigns();
+      return design;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.createFailed'),
+        description: msg,
+      });
+      return null;
+    }
+  },
+
+  async switchDesign(id: string) {
+    if (!window.codesign) return;
+    if (get().isGenerating) {
+      get().pushToast({
+        variant: 'info',
+        title: tr('projects.notifications.switchBlockedGenerating'),
+      });
+      return;
+    }
+    if (get().currentDesignId === id) {
+      set({ designsViewOpen: false });
+      return;
+    }
+    try {
+      const [messages, snapshots] = await Promise.all([
+        window.codesign.snapshots.listMessages(id),
+        window.codesign.snapshots.list(id),
+      ]);
+      const latest = snapshots[0] ?? null;
+      set({
+        currentDesignId: id,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        previewHtml: latest ? latest.artifactSource : null,
+        errorMessage: null,
+        iframeErrors: [],
+        selectedElement: null,
+        lastPromptInput: null,
+        designsViewOpen: false,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.switchFailed'),
+        description: msg,
+      });
+    }
+  },
+
+  async renameCurrentDesign(name: string) {
+    const id = get().currentDesignId;
+    if (!id) return;
+    await get().renameDesign(id, name);
+  },
+
+  async renameDesign(id: string, name: string) {
+    if (!window.codesign) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      await window.codesign.snapshots.renameDesign(id, trimmed);
+      await get().loadDesigns();
+      set({ designToRename: null });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.renameFailed'),
+        description: msg,
+      });
+    }
+  },
+
+  async duplicateDesign(id: string) {
+    if (!window.codesign) return null;
+    const source = get().designs.find((d) => d.id === id);
+    if (!source) return null;
+    const name = tr('projects.duplicateNameTemplate', { name: source.name });
+    try {
+      const cloned = await window.codesign.snapshots.duplicateDesign(id, name);
+      await get().loadDesigns();
+      get().pushToast({
+        variant: 'success',
+        title: tr('projects.notifications.duplicated', { name: cloned.name }),
+      });
+      return cloned;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.duplicateFailed'),
+        description: msg,
+      });
+      return null;
+    }
+  },
+
+  async softDeleteDesign(id: string) {
+    if (!window.codesign) return;
+    try {
+      await window.codesign.snapshots.softDeleteDesign(id);
+      const wasCurrent = get().currentDesignId === id;
+      await get().loadDesigns();
+      if (wasCurrent) {
+        const remaining = get().designs;
+        set({ currentDesignId: null, messages: [], previewHtml: null });
+        if (remaining.length > 0 && remaining[0]) {
+          await get().switchDesign(remaining[0].id);
+        } else {
+          await get().createNewDesign();
+        }
+      }
+      set({ designToDelete: null });
+      get().pushToast({ variant: 'info', title: tr('projects.notifications.deleted') });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.deleteFailed'),
+        description: msg,
+      });
+    }
+  },
+
+  openDesignsView() {
+    void get().loadDesigns();
+    set({ designsViewOpen: true });
+  },
+  closeDesignsView() {
+    set({ designsViewOpen: false });
+  },
+  requestDeleteDesign(design) {
+    set({ designToDelete: design });
+  },
+  requestRenameDesign(design) {
+    set({ designToRename: design });
   },
 
   pushToast(toast) {

@@ -231,6 +231,7 @@ describe('useCodesignStore generation cancellation', () => {
   });
 });
 
+
 describe('useCodesignStore view navigation', () => {
   it('starts on hub view', () => {
     expect(useCodesignStore.getState().view).toBe('hub');
@@ -456,5 +457,128 @@ describe('useCodesignStore previewViewport', () => {
     useCodesignStore.getState().setPreviewViewport('mobile');
     useCodesignStore.getState().setPreviewViewport('desktop');
     expect(useCodesignStore.getState().previewViewport).toBe('desktop');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Project (design) management
+// ---------------------------------------------------------------------------
+
+describe('useCodesignStore design management', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
+
+  it('switches the message list when switchDesign is called and isolates state per design', async () => {
+    const designs = [
+      {
+        schemaVersion: 1 as const,
+        id: 'design-a',
+        name: 'A',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        thumbnailText: null,
+        deletedAt: null,
+      },
+      {
+        schemaVersion: 1 as const,
+        id: 'design-b',
+        name: 'B',
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        thumbnailText: null,
+        deletedAt: null,
+      },
+    ];
+
+    const messagesByDesign: Record<string, Array<{ role: string; content: string }>> = {
+      'design-a': [
+        { role: 'user', content: 'A user' },
+        { role: 'assistant', content: 'A reply' },
+      ],
+      'design-b': [{ role: 'user', content: 'B user' }],
+    };
+
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: {
+          listDesigns: vi.fn(() => Promise.resolve(designs)),
+          listMessages: vi.fn((id: string) => Promise.resolve(messagesByDesign[id] ?? [])),
+          list: vi.fn(() => Promise.resolve([])),
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({ currentDesignId: 'design-a' });
+    await useCodesignStore.getState().switchDesign('design-b');
+
+    expect(useCodesignStore.getState().currentDesignId).toBe('design-b');
+    expect(useCodesignStore.getState().messages.map((m) => m.content)).toEqual(['B user']);
+
+    await useCodesignStore.getState().switchDesign('design-a');
+    expect(useCodesignStore.getState().messages.map((m) => m.content)).toEqual([
+      'A user',
+      'A reply',
+    ]);
+  });
+
+  it('createNewDesign resets messages + preview and stores the new id as current', async () => {
+    const created = {
+      schemaVersion: 1 as const,
+      id: 'fresh',
+      name: 'Untitled design 1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      thumbnailText: null,
+      deletedAt: null,
+    };
+
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: {
+          createDesign: vi.fn(() => Promise.resolve(created)),
+          listDesigns: vi.fn(() => Promise.resolve([created])),
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({
+      messages: [{ role: 'user', content: 'leftover' }],
+      previewHtml: '<html>old</html>',
+      currentDesignId: 'old-id',
+    });
+
+    const result = await useCodesignStore.getState().createNewDesign();
+    expect(result?.id).toBe('fresh');
+    const state = useCodesignStore.getState();
+    expect(state.currentDesignId).toBe('fresh');
+    expect(state.messages).toEqual([]);
+    expect(state.previewHtml).toBeNull();
+  });
+
+  it('blocks switchDesign while a generation is running', async () => {
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: {
+          listMessages: vi.fn(() => Promise.resolve([])),
+          list: vi.fn(() => Promise.resolve([])),
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({
+      currentDesignId: 'design-a',
+      isGenerating: true,
+    });
+
+    await useCodesignStore.getState().switchDesign('design-b');
+
+    // Should not have switched.
+    expect(useCodesignStore.getState().currentDesignId).toBe('design-a');
+    // Should have surfaced a toast about the block.
+    expect(useCodesignStore.getState().toasts.at(-1)?.variant).toBe('info');
   });
 });

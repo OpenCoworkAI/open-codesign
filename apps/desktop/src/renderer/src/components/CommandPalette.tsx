@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { Download, Moon, Plus, Settings as SettingsIcon } from 'lucide-react';
+import { Download, FolderOpen, Moon, Pencil, Plus, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useCodesignStore } from '../store';
 
@@ -18,26 +18,41 @@ export function CommandPalette() {
   const setView = useCodesignStore((s) => s.setView);
   const toggleTheme = useCodesignStore((s) => s.toggleTheme);
   const pushToast = useCodesignStore((s) => s.pushToast);
+  const createNewDesign = useCodesignStore((s) => s.createNewDesign);
+  const openDesignsView = useCodesignStore((s) => s.openDesignsView);
+  const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
+  const designs = useCodesignStore((s) => s.designs);
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
 
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
 
-  const actions: PaletteAction[] = useMemo(
-    () => [
+  const actions: PaletteAction[] = useMemo(() => {
+    const current = designs.find((d) => d.id === currentDesignId) ?? null;
+    return [
       {
         id: 'new-design',
         label: t('commands.items.newDesign'),
         hint: t('commands.hints.newDesign'),
         icon: Plus,
         run: () => {
-          useCodesignStore.setState({
-            messages: [],
-            previewHtml: null,
-            errorMessage: null,
-            iframeErrors: [],
-            selectedElement: null,
-          });
-          pushToast({ variant: 'info', title: t('commands.cleared') });
+          void createNewDesign();
+        },
+      },
+      {
+        id: 'browse-designs',
+        label: t('commands.items.browseDesigns'),
+        hint: t('commands.hints.browseDesigns'),
+        icon: FolderOpen,
+        run: openDesignsView,
+      },
+      {
+        id: 'rename-design',
+        label: t('commands.items.renameDesign'),
+        hint: t('commands.hints.renameDesign'),
+        icon: Pencil,
+        run: () => {
+          if (current) requestRenameDesign(current);
         },
       },
       {
@@ -66,9 +81,18 @@ export function CommandPalette() {
             description: t('commands.exportUseToolbarBody'),
           }),
       },
-    ],
-    [setView, pushToast, t, toggleTheme],
-  );
+    ];
+  }, [
+    createNewDesign,
+    currentDesignId,
+    designs,
+    openDesignsView,
+    setView,
+    pushToast,
+    requestRenameDesign,
+    t,
+    toggleTheme,
+  ]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

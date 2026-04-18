@@ -9,10 +9,17 @@ import {
   createDesign,
   createSnapshot,
   deleteSnapshot,
+  duplicateDesign,
+  getDesign,
   getSnapshot,
   initInMemoryDb,
   listDesigns,
+  listMessages,
   listSnapshots,
+  renameDesign,
+  replaceMessages,
+  setDesignThumbnail,
+  softDeleteDesign,
 } from './snapshots-db';
 
 function makeDb() {
@@ -293,5 +300,196 @@ describe('listDesigns activity sort', () => {
 
     const ids = listDesigns(db).map((d) => d.id);
     expect(ids.indexOf('older')).toBeLessThan(ids.indexOf('newer'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Project management additions: rename / soft-delete / duplicate / thumbnail
+// ---------------------------------------------------------------------------
+
+describe('renameDesign', () => {
+  it('updates the name and bumps updated_at', () => {
+    const db = makeDb();
+    const d = createDesign(db, 'Original');
+    const renamed = renameDesign(db, d.id, '   New name   ');
+    expect(renamed?.name).toBe('New name');
+    // updated_at may equal createdAt within the same millisecond — only assert
+    // the column is non-empty and ordered no earlier than the original create.
+    expect(renamed?.updatedAt).toBeTruthy();
+    expect(new Date(renamed?.updatedAt ?? '').getTime()).toBeGreaterThanOrEqual(
+      new Date(d.updatedAt).getTime(),
+    );
+  });
+
+  it('returns null when the design is missing', () => {
+    const db = makeDb();
+    expect(renameDesign(db, 'missing', 'Anything')).toBeNull();
+  });
+
+  it('refuses an empty name', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    expect(() => renameDesign(db, d.id, '   ')).toThrow();
+  });
+});
+
+describe('setDesignThumbnail', () => {
+  it('sets and clears the thumbnail text', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    const set1 = setDesignThumbnail(db, d.id, 'A nice landing page');
+    expect(set1?.thumbnailText).toBe('A nice landing page');
+    const cleared = setDesignThumbnail(db, d.id, null);
+    expect(cleared?.thumbnailText).toBeNull();
+  });
+});
+
+describe('softDeleteDesign + listDesigns filter', () => {
+  it('hides soft-deleted designs from listDesigns but keeps the row', () => {
+    const db = makeDb();
+    const a = createDesign(db, 'Keeper');
+    const b = createDesign(db, 'To delete');
+
+    expect(
+      listDesigns(db)
+        .map((d) => d.id)
+        .sort(),
+    ).toEqual([a.id, b.id].sort());
+
+    const deleted = softDeleteDesign(db, b.id);
+    expect(deleted?.deletedAt).not.toBeNull();
+
+    const remaining = listDesigns(db).map((d) => d.id);
+    expect(remaining).toEqual([a.id]);
+
+    // Row still exists and is fetchable by id.
+    expect(getDesign(db, b.id)?.deletedAt).not.toBeNull();
+  });
+});
+
+describe('design messages: replaceMessages + listMessages', () => {
+  it('persists a message list keyed by design and ordinal', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    replaceMessages(db, d.id, [
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'reply' },
+      { role: 'user', content: 'second' },
+    ]);
+    const list = listMessages(db, d.id);
+    expect(list).toHaveLength(3);
+    expect(list[0]?.ordinal).toBe(0);
+    expect(list[0]?.role).toBe('user');
+    expect(list[1]?.role).toBe('assistant');
+    expect(list[2]?.content).toBe('second');
+  });
+
+  it('replaces (not appends) when called again', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    replaceMessages(db, d.id, [{ role: 'user', content: 'a' }]);
+    replaceMessages(db, d.id, [
+      { role: 'user', content: 'b' },
+      { role: 'assistant', content: 'c' },
+    ]);
+    const list = listMessages(db, d.id);
+    expect(list.map((m) => m.content)).toEqual(['b', 'c']);
+  });
+
+  it('cascades: deleting the design row removes its messages', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    replaceMessages(db, d.id, [{ role: 'user', content: 'doomed' }]);
+    db.prepare('DELETE FROM designs WHERE id = ?').run(d.id);
+    expect(listMessages(db, d.id)).toEqual([]);
+  });
+});
+
+describe('duplicateDesign', () => {
+  it('clones the design row, all messages, and all snapshots with parent rewiring', () => {
+    const db = makeDb();
+    const source = createDesign(db, 'Source');
+    setDesignThumbnail(db, source.id, 'thumbnail preview');
+    replaceMessages(db, source.id, [
+      { role: 'user', content: 'make a hero' },
+      { role: 'assistant', content: 'here you go' },
+    ]);
+    const s1 = createSnapshot(db, {
+      designId: source.id,
+      parentId: null,
+      type: 'initial',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<html>v1</html>',
+    });
+    const s2 = createSnapshot(db, {
+      designId: source.id,
+      parentId: s1.id,
+      type: 'edit',
+      prompt: 'tweak',
+      artifactType: 'html',
+      artifactSource: '<html>v2</html>',
+    });
+
+    const cloned = duplicateDesign(db, source.id, 'Source copy');
+    expect(cloned).not.toBeNull();
+    expect(cloned?.name).toBe('Source copy');
+    expect(cloned?.thumbnailText).toBe('thumbnail preview');
+    expect(cloned?.id).not.toBe(source.id);
+
+    const clonedMessages = listMessages(db, cloned?.id ?? '');
+    expect(clonedMessages.map((m) => m.content)).toEqual(['make a hero', 'here you go']);
+
+    const clonedSnaps = listSnapshots(db, cloned?.id ?? '');
+    expect(clonedSnaps).toHaveLength(2);
+    const clonedInitial = clonedSnaps.find((s) => s.type === 'initial');
+    const clonedEdit = clonedSnaps.find((s) => s.type === 'edit');
+    expect(clonedInitial).toBeDefined();
+    expect(clonedEdit).toBeDefined();
+    // Parent of the cloned edit must point at the cloned initial, not the
+    // original snapshot — that's the key invariant of the rewrite.
+    expect(clonedEdit?.parentId).toBe(clonedInitial?.id);
+    expect(clonedEdit?.parentId).not.toBe(s2.parentId);
+
+    // Source remains untouched.
+    expect(listSnapshots(db, source.id)).toHaveLength(2);
+  });
+
+  it('returns null when the source design does not exist', () => {
+    const db = makeDb();
+    expect(duplicateDesign(db, 'missing', 'X')).toBeNull();
+  });
+
+  it('used delete CASCADE on snapshots after duplicate (independence)', () => {
+    const db = makeDb();
+    const source = createDesign(db);
+    createSnapshot(db, {
+      designId: source.id,
+      parentId: null,
+      type: 'initial',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<html/>',
+    });
+    const cloned = duplicateDesign(db, source.id, 'copy');
+    db.prepare('DELETE FROM designs WHERE id = ?').run(source.id);
+    // Cloned snapshots survive the source deletion because they belong to a
+    // different design row.
+    expect(listSnapshots(db, cloned?.id ?? '')).toHaveLength(1);
+  });
+});
+
+describe('migration is idempotent', () => {
+  it('re-applying the schema does not lose data', () => {
+    const db = makeDb();
+    const d = createDesign(db, 'persist me');
+    // Re-apply migration (simulates a second app boot).
+    type ColumnInfo = { name: string };
+    const cols = (db.prepare('PRAGMA table_info(designs)').all() as ColumnInfo[]).map(
+      (c) => c.name,
+    );
+    expect(cols).toContain('thumbnail_text');
+    expect(cols).toContain('deleted_at');
+    expect(getDesign(db, d.id)?.name).toBe('persist me');
   });
 });

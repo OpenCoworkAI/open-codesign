@@ -313,13 +313,17 @@
       "newDesign": "New design",
       "toggleTheme": "Toggle theme",
       "openSettings": "Open settings",
-      "export": "Export current design"
+      "export": "Export current design",
+      "browseDesigns": "Browse all designs",
+      "renameDesign": "Rename current design"
     },
     "hints": {
-      "newDesign": "Clear chat and start fresh",
+      "newDesign": "Start a fresh design (Cmd+N)",
       "toggleTheme": "Switch between light and dark",
       "openSettings": "Models, appearance, storage",
-      "export": "Use the export button in the toolbar"
+      "export": "Use the export button in the toolbar",
+      "browseDesigns": "Open the designs grid",
+      "renameDesign": "Edit the current design's name"
     },
     "tooltips": {
       "commandPalette": "Command palette  Ctrl/Cmd+K",
@@ -407,6 +411,69 @@
     "unknown": "Unknown error",
     "localePersistFailed": "Failed to save language preference",
     "projectStorageFailed": "Couldn't read or write projects on this device. Your changes may not persist."
+  },
+  "projects": {
+    "untitled": "Untitled design",
+    "untitledNumbered": "Untitled design {{n}}",
+    "duplicateNameTemplate": "{{name}} copy",
+    "switcher": {
+      "currentLabel": "Current design",
+      "menuLabel": "Switch design",
+      "newDesign": "New design",
+      "renameCurrent": "Rename",
+      "viewAll": "View all designs\u2026",
+      "recent": "Recent",
+      "noOthers": "No other designs yet"
+    },
+    "view": {
+      "title": "Designs",
+      "subtitle": "All your saved designs. Switch, rename, duplicate, or delete.",
+      "newDesign": "New design",
+      "search": "Search designs",
+      "empty": "No designs yet — create your first one to get started.",
+      "noMatches": "No designs match \"{{query}}\".",
+      "open": "Open",
+      "rename": "Rename",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "edited": "Edited {{when}}",
+      "snapshotCount_one": "{{count}} version",
+      "snapshotCount_other": "{{count}} versions",
+      "close": "Close designs view"
+    },
+    "rename": {
+      "title": "Rename design",
+      "label": "Design name",
+      "placeholder": "e.g. Landing page hero",
+      "save": "Save",
+      "cancel": "Cancel"
+    },
+    "delete": {
+      "title": "Delete this design?",
+      "body": "\"{{name}}\" and all of its history will be removed from the designs list. This cannot be undone in v0.",
+      "confirm": "Delete design",
+      "cancel": "Keep it"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo_one": "{{count}} minute ago",
+      "minutesAgo_other": "{{count}} minutes ago",
+      "hoursAgo_one": "{{count}} hour ago",
+      "hoursAgo_other": "{{count}} hours ago",
+      "yesterday": "yesterday",
+      "daysAgo_one": "{{count}} day ago",
+      "daysAgo_other": "{{count}} days ago"
+    },
+    "notifications": {
+      "createFailed": "Could not create a new design",
+      "switchFailed": "Could not switch design",
+      "switchBlockedGenerating": "Wait for generation to finish before switching",
+      "renameFailed": "Could not rename the design",
+      "duplicated": "Duplicated as \"{{name}}\"",
+      "duplicateFailed": "Could not duplicate the design",
+      "deleted": "Design moved out of the active list",
+      "deleteFailed": "Could not delete the design"
+    }
   },
   "demos": {
     "meditationApp": {

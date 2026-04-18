@@ -2,7 +2,10 @@ import { useT } from '@open-codesign/i18n';
 import { ChevronLeft } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { CommandPalette } from './components/CommandPalette';
+import { DeleteDesignDialog } from './components/DeleteDesignDialog';
+import { DesignsView } from './components/DesignsView';
 import { PreviewPane } from './components/PreviewPane';
+import { RenameDesignDialog } from './components/RenameDesignDialog';
 import { Settings } from './components/Settings';
 import { Sidebar } from './components/Sidebar';
 import { ToastViewport } from './components/Toast';
@@ -24,6 +27,13 @@ export function App() {
   const closeCommandPalette = useCodesignStore((s) => s.closeCommandPalette);
   const view = useCodesignStore((s) => s.view);
   const commandPaletteOpen = useCodesignStore((s) => s.commandPaletteOpen);
+  const designsViewOpen = useCodesignStore((s) => s.designsViewOpen);
+  const closeDesignsView = useCodesignStore((s) => s.closeDesignsView);
+  const createNewDesign = useCodesignStore((s) => s.createNewDesign);
+  const designToDelete = useCodesignStore((s) => s.designToDelete);
+  const designToRename = useCodesignStore((s) => s.designToRename);
+  const requestDeleteDesign = useCodesignStore((s) => s.requestDeleteDesign);
+  const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
 
   const [prompt, setPrompt] = useState('');
 
@@ -67,10 +77,29 @@ export function App() {
         },
       },
       {
+        combo: 'mod+n',
+        handler: () => {
+          if (!ready) return;
+          void createNewDesign();
+        },
+      },
+      {
         combo: 'escape',
         handler: () => {
+          if (designToDelete) {
+            requestDeleteDesign(null);
+            return;
+          }
+          if (designToRename) {
+            requestRenameDesign(null);
+            return;
+          }
           if (commandPaletteOpen) {
             closeCommandPalette();
+            return;
+          }
+          if (designsViewOpen) {
+            closeDesignsView();
             return;
           }
           if (view === 'settings') {
@@ -91,9 +120,16 @@ export function App() {
       sendPrompt,
       view,
       commandPaletteOpen,
+      designsViewOpen,
+      designToDelete,
+      designToRename,
       setView,
       openCommandPalette,
       closeCommandPalette,
+      closeDesignsView,
+      createNewDesign,
+      requestDeleteDesign,
+      requestRenameDesign,
     ],
   );
   useKeyboard(bindings);
@@ -145,6 +181,9 @@ export function App() {
         )}
       </div>
       <CommandPalette />
+      <DesignsView />
+      <RenameDesignDialog />
+      <DeleteDesignDialog />
       <ToastViewport />
     </div>
   );

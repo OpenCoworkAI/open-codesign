@@ -1,5 +1,5 @@
 /**
- * SQLite persistence layer for design snapshots.
+ * SQLite persistence layer for designs, snapshots, and chat messages.
  *
  * Uses better-sqlite3 (synchronous API — safe in the Electron main process,
  * which is the only caller). WAL mode for concurrent read performance.
@@ -9,7 +9,12 @@
  */
 
 import { createRequire } from 'node:module';
-import type { Design, DesignSnapshot, SnapshotCreateInput } from '@open-codesign/shared';
+import type {
+  Design,
+  DesignMessage,
+  DesignSnapshot,
+  SnapshotCreateInput,
+} from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 
 // better-sqlite3 is a native module — require() instead of import.
@@ -53,7 +58,39 @@ function applySchema(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_snapshots_design_created
       ON design_snapshots(design_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS design_messages (
+      design_id   TEXT NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
+      ordinal     INTEGER NOT NULL,
+      role        TEXT NOT NULL CHECK(role IN ('user','assistant','system')),
+      content     TEXT NOT NULL,
+      created_at  TEXT NOT NULL,
+      PRIMARY KEY (design_id, ordinal)
+    );
   `);
+
+  applyAdditiveMigrations(db);
+}
+
+/**
+ * Additive column migrations.
+ *
+ * Each block uses PRAGMA table_info to detect whether the column already
+ * exists; SQLite has no IF NOT EXISTS for ADD COLUMN. Safe to run on every
+ * boot.
+ */
+function applyAdditiveMigrations(db: Database): void {
+  type ColumnInfo = { name: string };
+  const designCols = (db.prepare('PRAGMA table_info(designs)').all() as ColumnInfo[]).map(
+    (c) => c.name,
+  );
+  if (!designCols.includes('thumbnail_text')) {
+    db.exec('ALTER TABLE designs ADD COLUMN thumbnail_text TEXT');
+  }
+  if (!designCols.includes('deleted_at')) {
+    db.exec('ALTER TABLE designs ADD COLUMN deleted_at TEXT');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_designs_deleted_at ON designs(deleted_at)');
+  }
 }
 
 /** Initialize and return the singleton DB instance for production use. */
@@ -110,6 +147,8 @@ interface DesignRow {
   name: string;
   created_at: string;
   updated_at: string;
+  thumbnail_text: string | null;
+  deleted_at: string | null;
 }
 
 interface SnapshotRow {
@@ -125,6 +164,14 @@ interface SnapshotRow {
   message: string | null;
 }
 
+interface MessageRow {
+  design_id: string;
+  ordinal: number;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Row → domain type mappers
 // ---------------------------------------------------------------------------
@@ -136,6 +183,8 @@ function rowToDesign(row: DesignRow): Design {
     name: row.name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    thumbnailText: row.thumbnail_text ?? null,
+    deletedAt: row.deleted_at ?? null,
   };
 }
 
@@ -154,8 +203,19 @@ function rowToSnapshot(row: SnapshotRow): DesignSnapshot {
   };
 }
 
+function rowToMessage(row: MessageRow): DesignMessage {
+  return {
+    schemaVersion: 1,
+    designId: row.design_id,
+    role: row.role as DesignMessage['role'],
+    content: row.content,
+    ordinal: row.ordinal,
+    createdAt: row.created_at,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Public DB functions
+// Designs
 // ---------------------------------------------------------------------------
 
 export function createDesign(db: Database, name = 'Untitled design'): Design {
@@ -167,15 +227,123 @@ export function createDesign(db: Database, name = 'Untitled design'): Design {
   return rowToDesign(db.prepare('SELECT * FROM designs WHERE id = ?').get(id) as DesignRow);
 }
 
+export function getDesign(db: Database, id: string): Design | null {
+  const row = db.prepare('SELECT * FROM designs WHERE id = ?').get(id) as DesignRow | undefined;
+  return row ? rowToDesign(row) : null;
+}
+
 export function listDesigns(db: Database): Design[] {
-  // updated_at bumps on each new snapshot, so recently edited designs surface first;
-  // created_at is the tiebreaker for designs that have never been edited.
+  // Soft-deleted designs are hidden from the default list. updated_at bumps on
+  // each new snapshot so recently-edited designs surface first; created_at is
+  // the tiebreaker for designs that have never been edited.
   return (
     db
-      .prepare('SELECT * FROM designs ORDER BY updated_at DESC, created_at DESC')
+      .prepare(
+        'SELECT * FROM designs WHERE deleted_at IS NULL ORDER BY updated_at DESC, created_at DESC',
+      )
       .all() as DesignRow[]
   ).map(rowToDesign);
 }
+
+export function renameDesign(db: Database, id: string, name: string): Design | null {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    throw new Error('Design name must not be empty');
+  }
+  const now = new Date().toISOString();
+  const result = db
+    .prepare('UPDATE designs SET name = ?, updated_at = ? WHERE id = ?')
+    .run(trimmed, now, id);
+  if (result.changes === 0) return null;
+  return getDesign(db, id);
+}
+
+export function setDesignThumbnail(
+  db: Database,
+  id: string,
+  thumbnailText: string | null,
+): Design | null {
+  const result = db
+    .prepare('UPDATE designs SET thumbnail_text = ? WHERE id = ?')
+    .run(thumbnailText, id);
+  if (result.changes === 0) return null;
+  return getDesign(db, id);
+}
+
+export function softDeleteDesign(db: Database, id: string): Design | null {
+  const now = new Date().toISOString();
+  const result = db.prepare('UPDATE designs SET deleted_at = ? WHERE id = ?').run(now, id);
+  if (result.changes === 0) return null;
+  return getDesign(db, id);
+}
+
+/**
+ * Duplicate a design row + all its messages + all its snapshots. Snapshot
+ * parent_id references are remapped to point at the freshly-cloned snapshots
+ * so the lineage is preserved inside the new design.
+ */
+export function duplicateDesign(db: Database, sourceId: string, newName: string): Design | null {
+  const source = getDesign(db, sourceId);
+  if (source === null) return null;
+
+  const newId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const trimmed = newName.trim() || `${source.name} copy`;
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      'INSERT INTO designs (id, schema_version, name, created_at, updated_at, thumbnail_text, deleted_at) VALUES (?, 1, ?, ?, ?, ?, NULL)',
+    ).run(newId, trimmed, now, now, source.thumbnailText);
+
+    const messages = db
+      .prepare('SELECT * FROM design_messages WHERE design_id = ? ORDER BY ordinal ASC')
+      .all(sourceId) as MessageRow[];
+    const insertMsg = db.prepare(
+      'INSERT INTO design_messages (design_id, ordinal, role, content, created_at) VALUES (?, ?, ?, ?, ?)',
+    );
+    for (const m of messages) {
+      insertMsg.run(newId, m.ordinal, m.role, m.content, m.created_at);
+    }
+
+    // Snapshots: clone in chronological order so parent_ids are remapped first.
+    // Tie-break by rowid so we always process older inserts first when two
+    // snapshots share a millisecond.
+    const snaps = db
+      .prepare(
+        'SELECT * FROM design_snapshots WHERE design_id = ? ORDER BY created_at ASC, rowid ASC',
+      )
+      .all(sourceId) as SnapshotRow[];
+    const idMap = new Map<string, string>();
+    const insertSnap = db.prepare(
+      `INSERT INTO design_snapshots
+         (id, schema_version, design_id, parent_id, type, prompt, artifact_type, artifact_source, created_at, message)
+       VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const s of snaps) {
+      const cloneId = crypto.randomUUID();
+      idMap.set(s.id, cloneId);
+      const newParent = s.parent_id !== null ? (idMap.get(s.parent_id) ?? null) : null;
+      insertSnap.run(
+        cloneId,
+        newId,
+        newParent,
+        s.type,
+        s.prompt,
+        s.artifact_type,
+        s.artifact_source,
+        s.created_at,
+        s.message,
+      );
+    }
+  });
+  tx();
+
+  return getDesign(db, newId);
+}
+
+// ---------------------------------------------------------------------------
+// Snapshots
+// ---------------------------------------------------------------------------
 
 export function createSnapshot(db: Database, input: SnapshotCreateInput): DesignSnapshot {
   const id = crypto.randomUUID();
@@ -219,4 +387,46 @@ export function getSnapshot(db: Database, id: string): DesignSnapshot | null {
 
 export function deleteSnapshot(db: Database, id: string): void {
   db.prepare('DELETE FROM design_snapshots WHERE id = ?').run(id);
+}
+
+// ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+export function listMessages(db: Database, designId: string): DesignMessage[] {
+  return (
+    db
+      .prepare('SELECT * FROM design_messages WHERE design_id = ? ORDER BY ordinal ASC')
+      .all(designId) as MessageRow[]
+  ).map(rowToMessage);
+}
+
+export interface MessageInput {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+/**
+ * Replace the entire message list for a design atomically. We rewrite rather
+ * than appending so the renderer's source-of-truth stays trivially in sync —
+ * the chat list is small (< 200 entries) so a full rewrite is cheap and avoids
+ * ordinal-conflict bugs across edits / cancels / retries.
+ */
+export function replaceMessages(
+  db: Database,
+  designId: string,
+  messages: MessageInput[],
+): DesignMessage[] {
+  const now = new Date().toISOString();
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM design_messages WHERE design_id = ?').run(designId);
+    const insert = db.prepare(
+      'INSERT INTO design_messages (design_id, ordinal, role, content, created_at) VALUES (?, ?, ?, ?, ?)',
+    );
+    messages.forEach((m, i) => {
+      insert.run(designId, i, m.role, m.content, now);
+    });
+  });
+  tx();
+  return listMessages(db, designId);
 }

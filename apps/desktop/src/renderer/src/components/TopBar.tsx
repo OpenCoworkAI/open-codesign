@@ -4,6 +4,7 @@ import { Command, Settings as SettingsIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useCodesignStore } from '../store';
 import { ConnectionStatusDot } from './ConnectionStatusDot';
+import { DesignSwitcher } from './DesignSwitcher';
 import { LanguageToggle } from './LanguageToggle';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -84,16 +85,8 @@ function ByokBadge() {
 
 export function TopBar() {
   const t = useT();
-  const previewHtml = useCodesignStore((s) => s.previewHtml);
-  const isGenerating = useCodesignStore((s) => s.isGenerating);
-  const errorMessage = useCodesignStore((s) => s.errorMessage);
   const setView = useCodesignStore((s) => s.setView);
   const openCommandPalette = useCodesignStore((s) => s.openCommandPalette);
-
-  let crumb = t('preview.noDesign');
-  if (errorMessage) crumb = t('preview.error.title');
-  else if (isGenerating) crumb = t('preview.loading.title');
-  else if (previewHtml) crumb = t('preview.ready');
 
   return (
     <header
@@ -103,9 +96,7 @@ export function TopBar() {
       <div className="flex items-center gap-[var(--space-3)] min-w-0">
         <Wordmark badge={t('common.preAlpha')} size="sm" />
         <span className="text-[var(--color-text-muted)]">/</span>
-        <span className="text-[var(--text-sm)] text-[var(--color-text-secondary)] truncate">
-          {crumb}
-        </span>
+        <DesignSwitcher />
         <ConnectionStatusDot />
       </div>
 

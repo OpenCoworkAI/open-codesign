@@ -579,3 +579,113 @@ describe('registerSnapshotsUnavailableIpc', () => {
     expect(stubs).toEqual(live);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Project management IPC: rename / soft-delete / duplicate / messages
+// ---------------------------------------------------------------------------
+
+describe('snapshots:v1:rename-design', () => {
+  it('renames the design and returns the updated row', () => {
+    const d = createDesign(db, 'Old');
+    const updated = call('snapshots:v1:rename-design', { id: d.id, name: 'New' }) as {
+      name: string;
+    };
+    expect(updated.name).toBe('New');
+  });
+
+  it('rejects an empty name', () => {
+    const d = createDesign(db);
+    expect(() => call('snapshots:v1:rename-design', { id: d.id, name: '   ' })).toThrow();
+  });
+
+  it('throws IPC_NOT_FOUND for an unknown id', () => {
+    try {
+      call('snapshots:v1:rename-design', { id: 'missing', name: 'x' });
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_NOT_FOUND');
+    }
+  });
+});
+
+describe('snapshots:v1:set-thumbnail', () => {
+  it('updates the thumbnail text', () => {
+    const d = createDesign(db);
+    const updated = call('snapshots:v1:set-thumbnail', {
+      id: d.id,
+      thumbnailText: 'preview snippet',
+    }) as { thumbnailText: string | null };
+    expect(updated.thumbnailText).toBe('preview snippet');
+  });
+
+  it('accepts null to clear', () => {
+    const d = createDesign(db);
+    call('snapshots:v1:set-thumbnail', { id: d.id, thumbnailText: 'x' });
+    const cleared = call('snapshots:v1:set-thumbnail', {
+      id: d.id,
+      thumbnailText: null,
+    }) as { thumbnailText: string | null };
+    expect(cleared.thumbnailText).toBeNull();
+  });
+});
+
+describe('snapshots:v1:soft-delete-design', () => {
+  it('hides the design from list-designs', () => {
+    const d = createDesign(db, 'Doomed');
+    call('snapshots:v1:soft-delete-design', { id: d.id });
+    const list = call('snapshots:v1:list-designs', undefined) as Array<{ id: string }>;
+    expect(list.find((row) => row.id === d.id)).toBeUndefined();
+  });
+});
+
+describe('snapshots:v1:duplicate-design', () => {
+  it('clones the design and reports a different id', () => {
+    const source = createDesign(db, 'Source');
+    const cloned = call('snapshots:v1:duplicate-design', {
+      id: source.id,
+      name: 'Source copy',
+    }) as { id: string; name: string };
+    expect(cloned.id).not.toBe(source.id);
+    expect(cloned.name).toBe('Source copy');
+  });
+});
+
+describe('snapshots:v1:list-messages + replace-messages', () => {
+  it('round-trips a message list', () => {
+    const d = createDesign(db);
+    call('snapshots:v1:replace-messages', {
+      designId: d.id,
+      messages: [
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'hi' },
+      ],
+    });
+    const list = call('snapshots:v1:list-messages', { designId: d.id }) as Array<{
+      role: string;
+      content: string;
+    }>;
+    expect(list.map((m) => m.content)).toEqual(['hello', 'hi']);
+  });
+
+  it('rejects malformed roles', () => {
+    const d = createDesign(db);
+    expect(() =>
+      call('snapshots:v1:replace-messages', {
+        designId: d.id,
+        messages: [{ role: 'bot', content: 'x' }],
+      }),
+    ).toThrow();
+  });
+});
+
+describe('snapshots:v1:get-design', () => {
+  it('returns the design row by id', () => {
+    const d = createDesign(db, 'Lookup me');
+    const found = call('snapshots:v1:get-design', { id: d.id }) as { name: string } | null;
+    expect(found?.name).toBe('Lookup me');
+  });
+
+  it('returns null for an unknown id', () => {
+    expect(call('snapshots:v1:get-design', { id: 'nope' })).toBeNull();
+  });
+});

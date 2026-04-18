@@ -20,8 +20,20 @@ export const DesignV1 = z.object({
   name: z.string().default('Untitled design'),
   createdAt: z.string(),
   updatedAt: z.string(),
+  thumbnailText: z.string().nullable().default(null),
+  deletedAt: z.string().nullable().default(null),
 });
 export type Design = z.infer<typeof DesignV1>;
+
+export const DesignMessageV1 = z.object({
+  schemaVersion: z.literal(1).default(1),
+  designId: z.string().min(1),
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+  ordinal: z.number().int().nonnegative(),
+  createdAt: z.string(),
+});
+export type DesignMessage = z.infer<typeof DesignMessageV1>;
 
 export interface SnapshotCreateInput {
   designId: string;

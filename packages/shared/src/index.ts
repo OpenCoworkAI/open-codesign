@@ -235,8 +235,8 @@ export type { ProxyPresetId } from './proxy-presets';
 export { DesignTokenV1, DesignTokenSet } from './design-token';
 export type { DesignToken } from './design-token';
 
-export { DesignSnapshotV1, DesignV1 } from './snapshot';
-export type { Design, DesignSnapshot, SnapshotCreateInput } from './snapshot';
+export { DesignMessageV1, DesignSnapshotV1, DesignV1 } from './snapshot';
+export type { Design, DesignMessage, DesignSnapshot, SnapshotCreateInput } from './snapshot';
 
 export { SkillFrontmatterV1 } from './skills';
 export type { LoadedSkill } from './skills';

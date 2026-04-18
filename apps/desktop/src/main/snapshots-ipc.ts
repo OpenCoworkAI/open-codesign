@@ -9,18 +9,31 @@
  * initSnapshotsDb().
  */
 
-import type { Design, DesignSnapshot, SnapshotCreateInput } from '@open-codesign/shared';
+import type {
+  Design,
+  DesignMessage,
+  DesignSnapshot,
+  SnapshotCreateInput,
+} from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
 import {
+  type MessageInput,
   createDesign,
   createSnapshot,
   deleteSnapshot,
+  duplicateDesign,
+  getDesign,
   getSnapshot,
   listDesigns,
+  listMessages,
   listSnapshots,
+  renameDesign,
+  replaceMessages,
+  setDesignThumbnail,
+  softDeleteDesign,
 } from './snapshots-db';
 
 type Database = BetterSqlite3.Database;
@@ -244,6 +257,155 @@ export function registerSnapshotsIpc(db: Database): void {
       throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
     }
     return runDb('create-design', () => createDesign(db, (r['name'] as string).trim()));
+  });
+
+  ipcMain.handle('snapshots:v1:get-design', (_e: unknown, raw: unknown): Design | null => {
+    const id = parseIdPayload(raw, 'get-design');
+    return runDb('get-design', () => getDesign(db, id));
+  });
+
+  ipcMain.handle('snapshots:v1:rename-design', (_e: unknown, raw: unknown): Design => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError('snapshots:v1:rename-design expects { id, name }', 'IPC_BAD_INPUT');
+    }
+    const r = raw as Record<string, unknown>;
+    if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
+      throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    if (typeof r['name'] !== 'string' || r['name'].trim().length === 0) {
+      throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    const updated = runDb('rename-design', () =>
+      renameDesign(db, r['id'] as string, r['name'] as string),
+    );
+    if (updated === null) {
+      throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+    }
+    logger.info('design.renamed', { id: updated.id, name: updated.name });
+    return updated;
+  });
+
+  ipcMain.handle('snapshots:v1:set-thumbnail', (_e: unknown, raw: unknown): Design => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError(
+        'snapshots:v1:set-thumbnail expects { id, thumbnailText }',
+        'IPC_BAD_INPUT',
+      );
+    }
+    const r = raw as Record<string, unknown>;
+    if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
+      throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    const value = r['thumbnailText'];
+    if (value !== null && typeof value !== 'string') {
+      throw new CodesignError('thumbnailText must be a string or null', 'IPC_BAD_INPUT');
+    }
+    const updated = runDb('set-thumbnail', () =>
+      setDesignThumbnail(db, r['id'] as string, value as string | null),
+    );
+    if (updated === null) {
+      throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+    }
+    return updated;
+  });
+
+  ipcMain.handle('snapshots:v1:soft-delete-design', (_e: unknown, raw: unknown): Design => {
+    const id = parseIdPayload(raw, 'soft-delete-design');
+    const updated = runDb('soft-delete-design', () => softDeleteDesign(db, id));
+    if (updated === null) {
+      throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+    }
+    logger.info('design.soft_deleted', { id });
+    return updated;
+  });
+
+  ipcMain.handle('snapshots:v1:duplicate-design', (_e: unknown, raw: unknown): Design => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError(
+        'snapshots:v1:duplicate-design expects { id, name }',
+        'IPC_BAD_INPUT',
+      );
+    }
+    const r = raw as Record<string, unknown>;
+    if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
+      throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    if (typeof r['name'] !== 'string' || r['name'].trim().length === 0) {
+      throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    const cloned = runDb('duplicate-design', () =>
+      duplicateDesign(db, r['id'] as string, r['name'] as string),
+    );
+    if (cloned === null) {
+      throw new CodesignError('Source design not found', 'IPC_NOT_FOUND');
+    }
+    logger.info('design.duplicated', { sourceId: r['id'], newId: cloned.id });
+    return cloned;
+  });
+
+  ipcMain.handle('snapshots:v1:list-messages', (_e: unknown, raw: unknown): DesignMessage[] => {
+    const id = parseDesignIdPayload(raw, 'list-messages');
+    return runDb('list-messages', () => listMessages(db, id));
+  });
+
+  ipcMain.handle('snapshots:v1:replace-messages', (_e: unknown, raw: unknown): DesignMessage[] => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError(
+        'snapshots:v1:replace-messages expects { designId, messages }',
+        'IPC_BAD_INPUT',
+      );
+    }
+    const r = raw as Record<string, unknown>;
+    if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+      throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    const messages = parseMessageList(r['messages']);
+    return runDb('replace-messages', () => replaceMessages(db, r['designId'] as string, messages));
+  });
+}
+
+function parseIdPayload(raw: unknown, channel: string): string {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError(`snapshots:v1:${channel} expects { id }`, 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
+    throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  return r['id'] as string;
+}
+
+function parseDesignIdPayload(raw: unknown, channel: string): string {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError(`snapshots:v1:${channel} expects { designId }`, 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  return r['designId'] as string;
+}
+
+function parseMessageList(raw: unknown): MessageInput[] {
+  if (!Array.isArray(raw)) {
+    throw new CodesignError('messages must be an array', 'IPC_BAD_INPUT');
+  }
+  const validRoles = ['user', 'assistant', 'system'] as const;
+  return raw.map((entry, index) => {
+    if (typeof entry !== 'object' || entry === null) {
+      throw new CodesignError(`messages[${index}] must be an object`, 'IPC_BAD_INPUT');
+    }
+    const e = entry as Record<string, unknown>;
+    if (!validRoles.includes(e['role'] as (typeof validRoles)[number])) {
+      throw new CodesignError(
+        `messages[${index}].role must be one of: ${validRoles.join(', ')}`,
+        'IPC_BAD_INPUT',
+      );
+    }
+    if (typeof e['content'] !== 'string') {
+      throw new CodesignError(`messages[${index}].content must be a string`, 'IPC_BAD_INPUT');
+    }
+    return { role: e['role'] as MessageInput['role'], content: e['content'] as string };
   });
 }
 

@@ -312,13 +312,17 @@
       "newDesign": "新建设计",
       "toggleTheme": "切换主题",
       "openSettings": "打开设置",
-      "export": "导出当前设计"
+      "export": "导出当前设计",
+      "browseDesigns": "查看所有设计",
+      "renameDesign": "重命名当前设计"
     },
     "hints": {
-      "newDesign": "清空当前会话并重新开始",
+      "newDesign": "开始一个新的设计 (Cmd+N)",
       "toggleTheme": "在浅色和深色之间切换",
       "openSettings": "模型、外观、存储",
-      "export": "使用顶部工具栏里的导出按钮"
+      "export": "使用顶部工具栏里的导出按钮",
+      "browseDesigns": "打开设计网格视图",
+      "renameDesign": "修改当前设计的名字"
     },
     "tooltips": {
       "commandPalette": "命令面板  Ctrl/Cmd+K",
@@ -406,6 +410,65 @@
     "unknown": "未知错误",
     "localePersistFailed": "无法保存语言偏好",
     "projectStorageFailed": "本机的项目数据读写失败，改动可能未保存。"
+  },
+  "projects": {
+    "untitled": "未命名设计",
+    "untitledNumbered": "未命名设计 {{n}}",
+    "duplicateNameTemplate": "{{name}} 副本",
+    "switcher": {
+      "currentLabel": "当前设计",
+      "menuLabel": "切换设计",
+      "newDesign": "新建设计",
+      "renameCurrent": "重命名",
+      "viewAll": "查看全部设计…",
+      "recent": "最近",
+      "noOthers": "暂无其他设计"
+    },
+    "view": {
+      "title": "设计列表",
+      "subtitle": "你保存的全部设计。可以切换、重命名、复制或删除。",
+      "newDesign": "新建设计",
+      "search": "搜索设计",
+      "empty": "还没有任何设计 — 创建第一个吧。",
+      "noMatches": "没有名字匹配“{{query}}”的设计。",
+      "open": "打开",
+      "rename": "重命名",
+      "duplicate": "复制",
+      "delete": "删除",
+      "edited": "{{when}} 编辑",
+      "snapshotCount_other": "{{count}} 个版本",
+      "close": "关闭设计列表"
+    },
+    "rename": {
+      "title": "重命名设计",
+      "label": "设计名",
+      "placeholder": "比如：落地页 hero 区",
+      "save": "保存",
+      "cancel": "取消"
+    },
+    "delete": {
+      "title": "删除该设计？",
+      "body": "“{{name}}”及其所有历史会从设计列表移除。在 v0 版本中无法撤销。",
+      "confirm": "删除设计",
+      "cancel": "保留"
+    },
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo_other": "{{count}} 分钟前",
+      "hoursAgo_other": "{{count}} 小时前",
+      "yesterday": "昨天",
+      "daysAgo_other": "{{count}} 天前"
+    },
+    "notifications": {
+      "createFailed": "无法创建新设计",
+      "switchFailed": "无法切换设计",
+      "switchBlockedGenerating": "等当前生成完成后再切换",
+      "renameFailed": "无法重命名设计",
+      "duplicated": "已复制为“{{name}}”",
+      "duplicateFailed": "无法复制设计",
+      "deleted": "设计已从活动列表中移除",
+      "deleteFailed": "无法删除设计"
+    }
   },
   "demos": {
     "meditationApp": {
