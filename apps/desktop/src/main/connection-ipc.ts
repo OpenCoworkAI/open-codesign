@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   CodesignError,
   type SupportedOnboardingProvider,
@@ -202,12 +203,13 @@ interface CacheEntry {
 const modelsCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-function getCacheKey(provider: string, baseUrl: string): string {
-  return `${provider}::${baseUrl}`;
+function getCacheKey(provider: string, baseUrl: string, apiKey: string): string {
+  const keyHash = createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
+  return `${provider}::${baseUrl}::${keyHash}`;
 }
 
-function getCachedModels(provider: string, baseUrl: string): string[] | null {
-  const key = getCacheKey(provider, baseUrl);
+function getCachedModels(provider: string, baseUrl: string, apiKey: string): string[] | null {
+  const key = getCacheKey(provider, baseUrl, apiKey);
   const entry = modelsCache.get(key);
   if (entry === undefined) return null;
   if (Date.now() > entry.expiresAt) {
@@ -217,8 +219,13 @@ function getCachedModels(provider: string, baseUrl: string): string[] | null {
   return entry.models;
 }
 
-function setCachedModels(provider: string, baseUrl: string, models: string[]): void {
-  const key = getCacheKey(provider, baseUrl);
+function setCachedModels(
+  provider: string,
+  baseUrl: string,
+  apiKey: string,
+  models: string[],
+): void {
+  const key = getCacheKey(provider, baseUrl, apiKey);
   modelsCache.set(key, { models, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
@@ -300,7 +307,7 @@ export function registerConnectionIpc(): void {
 
     const { provider, apiKey, baseUrl } = payload;
 
-    const cached = getCachedModels(provider, baseUrl);
+    const cached = getCachedModels(provider, baseUrl, apiKey);
     if (cached !== null) return { ok: true, models: cached };
 
     const ep = buildModelsEndpoint(provider, baseUrl);
@@ -351,7 +358,7 @@ export function registerConnectionIpc(): void {
         hint: 'Unexpected response shape — check provider /models endpoint compatibility',
       };
     }
-    setCachedModels(provider, baseUrl, ids);
+    setCachedModels(provider, baseUrl, apiKey, ids);
     return { ok: true, models: ids };
   });
 }

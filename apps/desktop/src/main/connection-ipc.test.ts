@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -17,12 +18,13 @@ interface CacheEntry {
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cache: Map<string, CacheEntry>;
 
-function getCacheKey(provider: string, baseUrl: string): string {
-  return `${provider}::${baseUrl}`;
+function getCacheKey(provider: string, baseUrl: string, apiKey: string): string {
+  const keyHash = createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
+  return `${provider}::${baseUrl}::${keyHash}`;
 }
 
-function getCachedModels(provider: string, baseUrl: string): string[] | null {
-  const key = getCacheKey(provider, baseUrl);
+function getCachedModels(provider: string, baseUrl: string, apiKey: string): string[] | null {
+  const key = getCacheKey(provider, baseUrl, apiKey);
   const entry = cache.get(key);
   if (entry === undefined) return null;
   if (Date.now() > entry.expiresAt) {
@@ -32,8 +34,13 @@ function getCachedModels(provider: string, baseUrl: string): string[] | null {
   return entry.models;
 }
 
-function setCachedModels(provider: string, baseUrl: string, models: string[]): void {
-  const key = getCacheKey(provider, baseUrl);
+function setCachedModels(
+  provider: string,
+  baseUrl: string,
+  apiKey: string,
+  models: string[],
+): void {
+  const key = getCacheKey(provider, baseUrl, apiKey);
   cache.set(key, { models, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
@@ -111,9 +118,10 @@ async function handleModelsList(
   }
 
   const provider = r['provider'] as string;
+  const apiKey = (r['apiKey'] as string).trim();
   const baseUrl = (r['baseUrl'] as string).trim();
 
-  const cached = getCachedModels(provider, baseUrl);
+  const cached = getCachedModels(provider, baseUrl, apiKey);
   if (cached !== null) return { ok: true, models: cached };
 
   let res: { ok: boolean; status: number; json: () => Promise<unknown> };
@@ -180,7 +188,7 @@ async function handleModelsList(
       hint: 'Unexpected response shape — check provider /models endpoint compatibility',
     };
   }
-  setCachedModels(provider, baseUrl, ids);
+  setCachedModels(provider, baseUrl, apiKey, ids);
   return { ok: true, models: ids };
 }
 
@@ -228,31 +236,47 @@ describe('classifyHttpError', () => {
 
 describe('models cache (5-min TTL)', () => {
   it('returns cached models within TTL', () => {
-    setCachedModels('openai', 'https://api.openai.com/v1', ['gpt-4o', 'gpt-4o-mini']);
-    const result = getCachedModels('openai', 'https://api.openai.com/v1');
+    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-test', ['gpt-4o', 'gpt-4o-mini']);
+    const result = getCachedModels('openai', 'https://api.openai.com/v1', 'sk-test');
     expect(result).toEqual(['gpt-4o', 'gpt-4o-mini']);
   });
 
   it('returns null after TTL expires', () => {
-    setCachedModels('openai', 'https://api.openai.com/v1', ['gpt-4o']);
+    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-test', ['gpt-4o']);
 
     // Advance past the 5-minute TTL
     vi.advanceTimersByTime(CACHE_TTL_MS + 1);
 
-    const result = getCachedModels('openai', 'https://api.openai.com/v1');
+    const result = getCachedModels('openai', 'https://api.openai.com/v1', 'sk-test');
     expect(result).toBeNull();
   });
 
   it('different provider+baseUrl combinations are cached independently', () => {
-    setCachedModels('openai', 'https://api.openai.com/v1', ['gpt-4o']);
-    setCachedModels('openai', 'https://relay.example.com/v1', ['custom-model']);
+    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-test', ['gpt-4o']);
+    setCachedModels('openai', 'https://relay.example.com/v1', 'sk-test', ['custom-model']);
 
-    expect(getCachedModels('openai', 'https://api.openai.com/v1')).toEqual(['gpt-4o']);
-    expect(getCachedModels('openai', 'https://relay.example.com/v1')).toEqual(['custom-model']);
+    expect(getCachedModels('openai', 'https://api.openai.com/v1', 'sk-test')).toEqual(['gpt-4o']);
+    expect(getCachedModels('openai', 'https://relay.example.com/v1', 'sk-test')).toEqual([
+      'custom-model',
+    ]);
   });
 
   it('returns null for keys not yet in cache', () => {
-    expect(getCachedModels('anthropic', 'https://api.anthropic.com')).toBeNull();
+    expect(getCachedModels('anthropic', 'https://api.anthropic.com', 'sk-ant-test')).toBeNull();
+  });
+
+  it('different apiKeys produce different cache entries — no cross-key leakage', () => {
+    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-A', ['model-for-A']);
+    // key-B should NOT see key-A's cached models
+    expect(getCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-B')).toBeNull();
+  });
+
+  it('same provider+baseUrl but different apiKey are stored under distinct cache entries', () => {
+    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-A', ['model-A']);
+    setCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-B', ['model-B']);
+
+    expect(getCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-A')).toEqual(['model-A']);
+    expect(getCachedModels('openai', 'https://api.openai.com/v1', 'sk-key-B')).toEqual(['model-B']);
   });
 });
 

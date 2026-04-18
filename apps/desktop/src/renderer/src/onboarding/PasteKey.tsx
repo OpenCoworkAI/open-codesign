@@ -173,7 +173,14 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
 
   async function handleConnectionTest() {
     if (!provider || trimmed.length === 0 || trimmedBaseUrl.length === 0) return;
-    if (!window.codesign?.connection) return;
+    if (!window.codesign?.connection) {
+      setConnState({
+        kind: 'error',
+        code: 'NETWORK',
+        hint: 'Renderer is not connected to the main process.',
+      });
+      return;
+    }
     setConnState({ kind: 'testing' });
     try {
       const result = await window.codesign.connection.test({
