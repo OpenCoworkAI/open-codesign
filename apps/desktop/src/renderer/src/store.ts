@@ -53,6 +53,7 @@ interface CodesignState {
   retryLastPrompt: () => Promise<void>;
   clearError: () => void;
   clearIframeErrors: () => void;
+  pushIframeError: (message: string) => void;
   exportActive: (format: ExportFormat) => Promise<void>;
 
   setTheme: (theme: Theme) => void;
@@ -253,6 +254,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       isGenerating: true,
       activeGenerationId: generationId,
       errorMessage: null,
+      iframeErrors: [],
     }));
 
     try {

@@ -84,6 +84,13 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   collect(parser.feed(result.content), collected);
   collect(parser.flush(), collected);
 
+  if (collected.artifacts.length === 0) {
+    throw new CodesignError(
+      'Model response did not include any <artifact> output',
+      'OUTPUT_MISSING_ARTIFACT',
+    );
+  }
+
   return {
     message: collected.text.trim(),
     artifacts: collected.artifacts,

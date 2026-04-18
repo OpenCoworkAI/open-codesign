@@ -766,8 +766,14 @@ function AppearanceTab() {
     void window.codesign.locale
       .getCurrent()
       .then((l) => setLocale(l))
-      .catch(() => {});
-  }, []);
+      .catch((err) => {
+        pushToast({
+          variant: 'error',
+          title: 'Failed to load language',
+          description: err instanceof Error ? err.message : 'Unknown error',
+        });
+      });
+  }, [pushToast]);
 
   async function handleLocaleChange(v: string) {
     if (!window.codesign) return;
@@ -1005,8 +1011,15 @@ function AdvancedTab() {
     void window.codesign.preferences
       .get()
       .then(setPrefs)
-      .catch(() => {});
-  }, []);
+      .catch((err) => {
+        pushToast({
+          variant: 'error',
+          title: 'Failed to load preferences',
+          description: err instanceof Error ? err.message : 'Unknown error',
+        });
+      });
+  }, [pushToast]);
+
 
   async function updatePref(patch: Partial<Preferences>) {
     if (!window.codesign) return;

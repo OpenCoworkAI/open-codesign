@@ -88,4 +88,23 @@ describe('generate()', () => {
     expect(system.content).toContain('open-codesign');
     expect(system.content).toContain('artifact');
   });
+
+  it('throws CodesignError with OUTPUT_MISSING_ARTIFACT when the model returns no <artifact> tags', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: 'Here is your design, but I forgot the artifact tags.',
+      inputTokens: 5,
+      outputTokens: 10,
+      costUsd: 0,
+    });
+
+    const err = await generate({
+      prompt: 'design a landing page',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(CodesignError);
+    expect((err as CodesignError).code).toBe('OUTPUT_MISSING_ARTIFACT');
+  });
 });

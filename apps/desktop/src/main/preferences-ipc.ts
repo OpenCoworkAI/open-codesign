@@ -37,7 +37,7 @@ const DEFAULTS: Preferences = {
   generationTimeoutSec: 120,
 };
 
-async function readPersisted(): Promise<Preferences> {
+export async function readPersisted(): Promise<Preferences> {
   try {
     const raw = await readFile(PREFS_FILE, 'utf8');
     const parsed = JSON.parse(raw) as Partial<PreferencesFile>;
@@ -53,8 +53,10 @@ async function readPersisted(): Promise<Preferences> {
     };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ...DEFAULTS };
-    console.warn(`[preferences-ipc] failed to read ${PREFS_FILE}:`, err);
-    return { ...DEFAULTS };
+    throw new CodesignError(
+      `Failed to read preferences at ${PREFS_FILE}: ${err instanceof Error ? err.message : String(err)}`,
+      'PREFERENCES_READ_FAILED',
+    );
   }
 }
 
