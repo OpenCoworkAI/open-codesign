@@ -292,6 +292,11 @@
     "byokTitle": "BYOK — 自带密钥，完整用量统计即将上线。",
     "spendTooltip": "本周花费（完整统计即将上线）"
   },
+  "theme": {
+    "toggleAria": "切换主题",
+    "switchToLight": "切换到浅色",
+    "switchToDark": "切换到深色"
+  },
   "commands": {
     "title": "命令面板",
     "placeholder": "输入命令或搜索…",
