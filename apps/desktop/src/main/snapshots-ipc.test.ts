@@ -36,6 +36,12 @@ function call(channel: string, raw: unknown): unknown {
   return fn(null, raw);
 }
 
+// All snapshots:v1:* object payloads carry schemaVersion: 1; this helper keeps
+// tests focused on the field under test rather than repeating the version field.
+function v1<T extends object>(payload: T): T & { schemaVersion: 1 } {
+  return { schemaVersion: 1, ...payload };
+}
+
 let db: ReturnType<typeof initInMemoryDb>;
 
 beforeEach(() => {
@@ -50,13 +56,13 @@ beforeEach(() => {
 
 describe('snapshots:v1:list-designs', () => {
   it('returns an empty array when no designs exist', () => {
-    const result = call('snapshots:v1:list-designs', undefined);
+    const result = call('snapshots:v1:list-designs', v1({}));
     expect(result).toEqual([]);
   });
 
   it('returns created designs', () => {
     createDesign(db, 'Test design');
-    const result = call('snapshots:v1:list-designs', undefined) as unknown[];
+    const result = call('snapshots:v1:list-designs', v1({})) as unknown[];
     expect(result).toHaveLength(1);
   });
 });
@@ -76,14 +82,14 @@ describe('snapshots:v1:list', () => {
       artifactType: 'html',
       artifactSource: '<html/>',
     });
-    const result = call('snapshots:v1:list', { designId: design.id }) as unknown[];
+    const result = call('snapshots:v1:list', v1({ designId: design.id })) as unknown[];
     expect(result).toHaveLength(1);
   });
 
   it('rejects a missing designId with IPC_BAD_INPUT', () => {
-    expect(() => call('snapshots:v1:list', {})).toThrow(CodesignError);
+    expect(() => call('snapshots:v1:list', v1({}))).toThrow(CodesignError);
     try {
-      call('snapshots:v1:list', {});
+      call('snapshots:v1:list', v1({}));
     } catch (err) {
       expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
     }
@@ -106,14 +112,14 @@ describe('snapshots:v1:list', () => {
 describe('snapshots:v1:create', () => {
   it('creates and returns a snapshot', () => {
     const design = createDesign(db);
-    const input = {
+    const input = v1({
       designId: design.id,
       parentId: null,
       type: 'initial',
       prompt: 'Build a hero section',
       artifactType: 'html',
       artifactSource: '<html>hero</html>',
-    };
+    });
     const result = call('snapshots:v1:create', input) as Record<string, unknown>;
     expect(result['id']).toBeTruthy();
     expect(result['designId']).toBe(design.id);
@@ -121,13 +127,13 @@ describe('snapshots:v1:create', () => {
   });
 
   it('rejects bad payload (missing designId) with IPC_BAD_INPUT', () => {
-    const bad = {
+    const bad = v1({
       parentId: null,
       type: 'initial',
       prompt: null,
       artifactType: 'html',
       artifactSource: '<html/>',
-    };
+    });
     expect(() => call('snapshots:v1:create', bad)).toThrow(CodesignError);
     try {
       call('snapshots:v1:create', bad);
@@ -137,14 +143,14 @@ describe('snapshots:v1:create', () => {
   });
 
   it('rejects invalid type with IPC_BAD_INPUT', () => {
-    const bad = {
+    const bad = v1({
       designId: 'some-id',
       parentId: null,
       type: 'invalid-type',
       prompt: null,
       artifactType: 'html',
       artifactSource: '<html/>',
-    };
+    });
     expect(() => call('snapshots:v1:create', bad)).toThrow(CodesignError);
     try {
       call('snapshots:v1:create', bad);
@@ -154,14 +160,14 @@ describe('snapshots:v1:create', () => {
   });
 
   it('rejects invalid artifactType with IPC_BAD_INPUT', () => {
-    const bad = {
+    const bad = v1({
       designId: 'some-id',
       parentId: null,
       type: 'edit',
       prompt: null,
       artifactType: 'pptx',
       artifactSource: '<html/>',
-    };
+    });
     expect(() => call('snapshots:v1:create', bad)).toThrow(CodesignError);
     try {
       call('snapshots:v1:create', bad);
@@ -181,14 +187,14 @@ describe('snapshots:v1:create', () => {
 
   it('rejects a parentId that does not exist with IPC_BAD_INPUT', () => {
     const design = createDesign(db);
-    const bad = {
+    const bad = v1({
       designId: design.id,
       parentId: 'no-such-snapshot',
       type: 'edit',
       prompt: null,
       artifactType: 'html',
       artifactSource: '<html/>',
-    };
+    });
     expect(() => call('snapshots:v1:create', bad)).toThrow(CodesignError);
     try {
       call('snapshots:v1:create', bad);
@@ -208,14 +214,14 @@ describe('snapshots:v1:create', () => {
       artifactType: 'html',
       artifactSource: '<html/>',
     });
-    const bad = {
+    const bad = v1({
       designId: designB.id,
       parentId: parentInA.id,
       type: 'edit',
       prompt: null,
       artifactType: 'html',
       artifactSource: '<html/>',
-    };
+    });
     expect(() => call('snapshots:v1:create', bad)).toThrow(CodesignError);
     try {
       call('snapshots:v1:create', bad);
@@ -231,7 +237,10 @@ describe('snapshots:v1:create', () => {
 
 describe('snapshots:v1:create-design', () => {
   it('creates a design with the trimmed name', () => {
-    const result = call('snapshots:v1:create-design', '  My design  ') as Record<string, unknown>;
+    const result = call('snapshots:v1:create-design', v1({ name: '  My design  ' })) as Record<
+      string,
+      unknown
+    >;
     expect(result['name']).toBe('My design');
     expect(typeof result['id']).toBe('string');
   });
@@ -245,19 +254,19 @@ describe('snapshots:v1:create-design', () => {
     }
   });
 
-  it('rejects an empty / whitespace-only string with IPC_BAD_INPUT', () => {
-    expect(() => call('snapshots:v1:create-design', '   ')).toThrow(CodesignError);
+  it('rejects an empty / whitespace-only name with IPC_BAD_INPUT', () => {
+    expect(() => call('snapshots:v1:create-design', v1({ name: '   ' }))).toThrow(CodesignError);
     try {
-      call('snapshots:v1:create-design', '');
+      call('snapshots:v1:create-design', v1({ name: '' }));
     } catch (err) {
       expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
     }
   });
 
-  it('rejects a non-string payload with IPC_BAD_INPUT', () => {
-    expect(() => call('snapshots:v1:create-design', { name: 'x' })).toThrow(CodesignError);
+  it('rejects a non-string name with IPC_BAD_INPUT', () => {
+    expect(() => call('snapshots:v1:create-design', v1({ name: 42 }))).toThrow(CodesignError);
     try {
-      call('snapshots:v1:create-design', 42);
+      call('snapshots:v1:create-design', v1({ name: { wrong: true } }));
     } catch (err) {
       expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
     }
@@ -270,7 +279,7 @@ describe('snapshots:v1:create-design', () => {
 
 describe('snapshots:v1:get', () => {
   it('returns null for an unknown id', () => {
-    const result = call('snapshots:v1:get', { id: 'ghost' });
+    const result = call('snapshots:v1:get', v1({ id: 'ghost' }));
     expect(result).toBeNull();
   });
 
@@ -284,14 +293,14 @@ describe('snapshots:v1:get', () => {
       artifactType: 'html',
       artifactSource: '<html/>',
     });
-    const result = call('snapshots:v1:get', { id: snap.id }) as Record<string, unknown>;
+    const result = call('snapshots:v1:get', v1({ id: snap.id })) as Record<string, unknown>;
     expect(result['id']).toBe(snap.id);
   });
 
   it('rejects missing id with IPC_BAD_INPUT', () => {
-    expect(() => call('snapshots:v1:get', {})).toThrow(CodesignError);
+    expect(() => call('snapshots:v1:get', v1({}))).toThrow(CodesignError);
     try {
-      call('snapshots:v1:get', {});
+      call('snapshots:v1:get', v1({}));
     } catch (err) {
       expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
     }
@@ -313,19 +322,72 @@ describe('snapshots:v1:delete', () => {
       artifactType: 'html',
       artifactSource: '<html/>',
     });
-    call('snapshots:v1:delete', { id: snap.id });
-    const result = call('snapshots:v1:get', { id: snap.id });
+    call('snapshots:v1:delete', v1({ id: snap.id }));
+    const result = call('snapshots:v1:get', v1({ id: snap.id }));
     expect(result).toBeNull();
   });
 
   it('rejects missing id with IPC_BAD_INPUT', () => {
-    expect(() => call('snapshots:v1:delete', {})).toThrow(CodesignError);
+    expect(() => call('snapshots:v1:delete', v1({}))).toThrow(CodesignError);
     try {
-      call('snapshots:v1:delete', {});
+      call('snapshots:v1:delete', v1({}));
     } catch (err) {
       expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// schemaVersion gating
+//
+// Every snapshots:v1:* object payload must carry schemaVersion: 1. Older or
+// future callers that omit it (or send a different value) get IPC_BAD_INPUT
+// rather than a silent mis-parse, so handler revisions can break cleanly.
+// ---------------------------------------------------------------------------
+
+describe('schemaVersion gating', () => {
+  const channelsAndSamples: Array<[string, Record<string, unknown>]> = [
+    ['snapshots:v1:list-designs', {}],
+    ['snapshots:v1:list', { designId: 'd' }],
+    ['snapshots:v1:get', { id: 'x' }],
+    ['snapshots:v1:delete', { id: 'x' }],
+    ['snapshots:v1:create-design', { name: 'd' }],
+    [
+      'snapshots:v1:create',
+      {
+        designId: 'd',
+        parentId: null,
+        type: 'initial',
+        prompt: null,
+        artifactType: 'html',
+        artifactSource: '<html/>',
+      },
+    ],
+  ];
+
+  for (const [channel, sample] of channelsAndSamples) {
+    it(`${channel} rejects missing schemaVersion with IPC_BAD_INPUT`, () => {
+      try {
+        call(channel, sample);
+        throw new Error('expected throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CodesignError);
+        expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+        expect((err as Error).message).toMatch(/schemaVersion/);
+      }
+    });
+
+    it(`${channel} rejects schemaVersion: 2 with IPC_BAD_INPUT`, () => {
+      try {
+        call(channel, { schemaVersion: 2, ...sample });
+        throw new Error('expected throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CodesignError);
+        expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+        expect((err as Error).message).toMatch(/schemaVersion/);
+      }
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -356,14 +418,17 @@ describe('SQLite error translation', () => {
 
   function attemptCreate(): unknown {
     const design = createDesign(db);
-    return call('snapshots:v1:create', {
-      designId: design.id,
-      parentId: null,
-      type: 'initial',
-      prompt: null,
-      artifactType: 'html',
-      artifactSource: '<html/>',
-    });
+    return call(
+      'snapshots:v1:create',
+      v1({
+        designId: design.id,
+        parentId: null,
+        type: 'initial',
+        prompt: null,
+        artifactType: 'html',
+        artifactSource: '<html/>',
+      }),
+    );
   }
 
   it('translates SQLITE_CONSTRAINT_FOREIGNKEY to IPC_BAD_INPUT', () => {

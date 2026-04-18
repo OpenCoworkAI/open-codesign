@@ -97,11 +97,23 @@ function runDb<T>(context: string, fn: () => T): T {
   }
 }
 
+/**
+ * Every snapshots:v1:* object payload carries `schemaVersion: 1` so that future
+ * handler revisions can reject older callers up-front rather than silently
+ * mis-parsing fields. Bare scalar payloads (none currently) would not carry one.
+ */
+function requireSchemaV1(r: Record<string, unknown>, channel: string): void {
+  if (r['schemaVersion'] !== 1) {
+    throw new CodesignError(`${channel} requires schemaVersion: 1`, 'IPC_BAD_INPUT');
+  }
+}
+
 function parseSnapshotCreateInput(raw: unknown): SnapshotCreateInput {
   if (typeof raw !== 'object' || raw === null) {
     throw new CodesignError('snapshots:v1:create expects an object payload', 'IPC_BAD_INPUT');
   }
   const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, 'snapshots:v1:create');
 
   if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
     throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
@@ -145,7 +157,14 @@ function parseSnapshotCreateInput(raw: unknown): SnapshotCreateInput {
 }
 
 export function registerSnapshotsIpc(db: Database): void {
-  ipcMain.handle('snapshots:v1:list-designs', (): Design[] => {
+  ipcMain.handle('snapshots:v1:list-designs', (_e: unknown, raw: unknown): Design[] => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError(
+        'snapshots:v1:list-designs expects an object payload',
+        'IPC_BAD_INPUT',
+      );
+    }
+    requireSchemaV1(raw as Record<string, unknown>, 'snapshots:v1:list-designs');
     return runDb('list-designs', () => listDesigns(db));
   });
 
@@ -154,6 +173,7 @@ export function registerSnapshotsIpc(db: Database): void {
       throw new CodesignError('snapshots:v1:list expects an object with designId', 'IPC_BAD_INPUT');
     }
     const r = raw as Record<string, unknown>;
+    requireSchemaV1(r, 'snapshots:v1:list');
     if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
       throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
     }
@@ -165,6 +185,7 @@ export function registerSnapshotsIpc(db: Database): void {
       throw new CodesignError('snapshots:v1:get expects an object with id', 'IPC_BAD_INPUT');
     }
     const r = raw as Record<string, unknown>;
+    requireSchemaV1(r, 'snapshots:v1:get');
     if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
       throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
     }
@@ -202,6 +223,7 @@ export function registerSnapshotsIpc(db: Database): void {
       throw new CodesignError('snapshots:v1:delete expects an object with id', 'IPC_BAD_INPUT');
     }
     const r = raw as Record<string, unknown>;
+    requireSchemaV1(r, 'snapshots:v1:delete');
     if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
       throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
     }
@@ -210,9 +232,17 @@ export function registerSnapshotsIpc(db: Database): void {
   });
 
   ipcMain.handle('snapshots:v1:create-design', (_e: unknown, raw: unknown): Design => {
-    if (typeof raw !== 'string' || raw.trim().length === 0) {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError(
+        'snapshots:v1:create-design expects an object with name',
+        'IPC_BAD_INPUT',
+      );
+    }
+    const r = raw as Record<string, unknown>;
+    requireSchemaV1(r, 'snapshots:v1:create-design');
+    if (typeof r['name'] !== 'string' || r['name'].trim().length === 0) {
       throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
     }
-    return runDb('create-design', () => createDesign(db, raw.trim()));
+    return runDb('create-design', () => createDesign(db, (r['name'] as string).trim()));
   });
 }
