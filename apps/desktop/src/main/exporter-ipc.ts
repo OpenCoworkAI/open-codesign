@@ -8,6 +8,7 @@ const FORMAT_FILTERS: Record<ExporterFormat, Electron.FileFilter[]> = {
   pdf: [{ name: 'PDF', extensions: ['pdf'] }],
   pptx: [{ name: 'PowerPoint', extensions: ['pptx'] }],
   zip: [{ name: 'ZIP archive', extensions: ['zip'] }],
+  markdown: [{ name: 'Markdown', extensions: ['md'] }],
 };
 
 export interface ExportRequest {
@@ -30,7 +31,13 @@ export function parseRequest(raw: unknown): ExportRequest {
   const format = r['format'];
   const html = r['htmlContent'];
   const defaultFilename = r['defaultFilename'];
-  if (format !== 'html' && format !== 'pdf' && format !== 'pptx' && format !== 'zip') {
+  if (
+    format !== 'html' &&
+    format !== 'pdf' &&
+    format !== 'pptx' &&
+    format !== 'zip' &&
+    format !== 'markdown'
+  ) {
     throw new CodesignError(`Unknown export format: ${String(format)}`, 'EXPORTER_UNKNOWN');
   }
   if (typeof html !== 'string' || html.length === 0) {

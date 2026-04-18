@@ -9,7 +9,7 @@
 
 import { CodesignError } from '@open-codesign/shared';
 
-export const EXPORTER_FORMATS = ['html', 'pdf', 'pptx', 'zip'] as const;
+export const EXPORTER_FORMATS = ['html', 'pdf', 'pptx', 'zip', 'markdown'] as const;
 export type ExporterFormat = (typeof EXPORTER_FORMATS)[number];
 
 export interface ExportOptions {
@@ -30,6 +30,8 @@ export type { ExportHtmlOptions } from './html';
 export type { ExportPdfOptions } from './pdf';
 export type { ExportPptxOptions } from './pptx';
 export type { ExportZipOptions, ZipAsset } from './zip';
+export type { ExportMarkdownOptions, MarkdownMeta } from './markdown';
+export { htmlToMarkdown } from './markdown';
 
 export async function exportHtml(
   htmlContent: string,
@@ -59,6 +61,10 @@ export async function exportArtifact(
   if (format === 'zip') {
     const mod = await import('./zip');
     return mod.exportZip(htmlContent, destinationPath);
+  }
+  if (format === 'markdown') {
+    const mod = await import('./markdown');
+    return mod.exportMarkdown(htmlContent, destinationPath);
   }
   throw new CodesignError(`Unknown exporter format: ${format as string}`, 'EXPORTER_UNKNOWN');
 }

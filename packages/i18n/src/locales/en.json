@@ -341,6 +341,10 @@
       "zip": {
         "label": "ZIP bundle",
         "hint": "index.html + assets + README.md"
+      },
+      "markdown": {
+        "label": "Markdown",
+        "hint": "Plain .md with YAML frontmatter"
       }
     }
   },
