@@ -421,6 +421,13 @@ function parseMessageList(raw: unknown): MessageInput[] {
 export const SNAPSHOTS_CHANNELS_V1 = [
   'snapshots:v1:list-designs',
   'snapshots:v1:create-design',
+  'snapshots:v1:get-design',
+  'snapshots:v1:rename-design',
+  'snapshots:v1:set-thumbnail',
+  'snapshots:v1:soft-delete-design',
+  'snapshots:v1:duplicate-design',
+  'snapshots:v1:list-messages',
+  'snapshots:v1:replace-messages',
   'snapshots:v1:list',
   'snapshots:v1:get',
   'snapshots:v1:create',

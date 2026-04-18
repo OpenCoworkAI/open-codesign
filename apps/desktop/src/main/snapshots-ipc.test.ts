@@ -633,7 +633,7 @@ describe('snapshots:v1:soft-delete-design', () => {
   it('hides the design from list-designs', () => {
     const d = createDesign(db, 'Doomed');
     call('snapshots:v1:soft-delete-design', { id: d.id });
-    const list = call('snapshots:v1:list-designs', undefined) as Array<{ id: string }>;
+    const list = call('snapshots:v1:list-designs', { schemaVersion: 1 }) as Array<{ id: string }>;
     expect(list.find((row) => row.id === d.id)).toBeUndefined();
   });
 });

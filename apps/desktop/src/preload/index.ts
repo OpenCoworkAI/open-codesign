@@ -209,7 +209,7 @@ const api = {
     replaceMessages: (designId: string, messages: Array<{ role: string; content: string }>) =>
       ipcRenderer.invoke('snapshots:v1:replace-messages', { designId, messages }) as Promise<
         DesignMessage[]
-      >
+      >,
     list: (designId: string) =>
       ipcRenderer.invoke('snapshots:v1:list', { schemaVersion: 1, designId }) as Promise<
         DesignSnapshot[]
