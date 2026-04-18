@@ -125,6 +125,9 @@
   /* Chip / file-token max width */
   --size-chip-max: 180px;
 
+  /* Minimum width for menus, popovers, and stage panels */
+  --size-stage-min: 200px;
+
   /* Press feedback scale */
   --scale-hover-up: 1.04;
   --scale-press-down: 0.96;
