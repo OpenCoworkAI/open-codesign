@@ -1,4 +1,8 @@
-import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
+import {
+  type ArtifactEvent,
+  createArtifactParser,
+  stripEmptyCodeFences,
+} from '@open-codesign/artifacts';
 import type { GenerateResult } from '@open-codesign/providers';
 import { type RetryReason, complete, completeWithRetry } from '@open-codesign/providers';
 import type {
@@ -117,6 +121,15 @@ function collect(events: Iterable<ArtifactEvent>, into: Collected): void {
       into.artifacts.push(artifact);
     }
   }
+}
+
+/**
+ * Strip leftover empty markdown code fences such as ```html\n``` that some
+ * models emit alongside an `<artifact>` tag. They leak into chat history as
+ * ugly empty blocks otherwise.
+ */
+function stripEmptyFences(text: string): string {
+  return text.replace(/```[a-zA-Z]*\s*```/g, '').trim();
 }
 
 function extractHtmlDocument(source: string): string | null {
@@ -313,7 +326,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
     });
 
     return {
-      message: collected.text.trim(),
+      message: stripEmptyCodeFences(collected.text),
       artifacts: collected.artifacts,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,

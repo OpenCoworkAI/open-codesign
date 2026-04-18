@@ -2,7 +2,7 @@
  * Tests for the streaming artifact parser.
  */
 import { describe, expect, it } from 'vitest';
-import { createArtifactParser } from './parser';
+import { createArtifactParser, stripEmptyCodeFences } from './parser';
 
 function collectEvents(chunks: string[]): unknown[] {
   const parser = createArtifactParser();
@@ -65,5 +65,26 @@ describe('artifact parser', () => {
     const last = events[events.length - 1] as { type: string; fullContent?: string };
     expect(last.type).toBe('artifact:end');
     expect(last.fullContent).toBe('unfinished');
+  });
+});
+
+describe('stripEmptyCodeFences', () => {
+  it('removes orphan empty html fence pairs', () => {
+    const input = 'Here is your design:\n\n```html\n\n```\n\nHope this helps.';
+    expect(stripEmptyCodeFences(input)).toBe('Here is your design:\n\nHope this helps.');
+  });
+
+  it('returns empty string when only an empty fence remains', () => {
+    expect(stripEmptyCodeFences('```html\n```')).toBe('');
+    expect(stripEmptyCodeFences('  ```html```  ')).toBe('');
+  });
+
+  it('preserves fences that still contain content', () => {
+    const input = '```ts\nconst x = 1;\n```';
+    expect(stripEmptyCodeFences(input)).toBe(input);
+  });
+
+  it('handles bare empty fences without a language tag', () => {
+    expect(stripEmptyCodeFences('before\n```\n```\nafter')).toBe('before\n\nafter');
   });
 });

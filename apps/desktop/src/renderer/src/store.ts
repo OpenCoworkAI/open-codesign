@@ -259,11 +259,18 @@ function applyGenerateSuccess(
   result: { artifacts: Array<{ content: string }>; message: string },
 ): void {
   const firstArtifact = result.artifacts[0];
+  const trimmed = result.message.trim();
+  // When the model only returned an artifact (no commentary), do not push an
+  // empty / placeholder assistant bubble — the artifact appearing in the canvas
+  // IS the reply. Fall back to a "done" stub only when there is also no artifact
+  // (defensive — generate() should not return both empty, but keep the chat in
+  // sync if it ever does).
+  const bubbleText = trimmed.length > 0 ? trimmed : firstArtifact ? null : tr('common.done');
   finishIfCurrent(set, generationId, (state) => ({
-    messages: [
-      ...state.messages,
-      { role: 'assistant', content: result.message || tr('common.done') },
-    ],
+    messages:
+      bubbleText === null
+        ? state.messages
+        : [...state.messages, { role: 'assistant', content: bubbleText }],
     previewHtml: firstArtifact?.content ?? state.previewHtml,
     isGenerating: false,
     activeGenerationId: null,

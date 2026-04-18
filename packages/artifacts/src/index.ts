@@ -1,5 +1,6 @@
 export {
   createArtifactParser,
+  stripEmptyCodeFences,
   type ArtifactEvent,
   type ArtifactStartEvent,
   type ArtifactChunkEvent,

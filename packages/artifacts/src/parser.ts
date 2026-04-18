@@ -157,6 +157,21 @@ export function createArtifactParser() {
 }
 
 /**
+ * Strip Markdown code fences whose body is empty (or whitespace only).
+ *
+ * When the model wraps an `<artifact>` tag in a ```html ... ``` fence, the
+ * artifact parser pulls the artifact out cleanly but leaves the fence pair
+ * behind in the surrounding text. The empty pair would then surface as a
+ * meaningless assistant bubble in the chat. Fences with real content (e.g. a
+ * code sample the model wanted to show) are preserved.
+ */
+export function stripEmptyCodeFences(text: string): string {
+  if (text.length === 0) return text;
+  const cleaned = text.replace(/```[a-zA-Z0-9_-]*\s*```/g, '');
+  return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
  * Find the largest index up to which we can safely emit text without
  * potentially splitting an "<artifact" prefix in two.
  */
