@@ -1,0 +1,130 @@
+{
+  "common": {
+    "appName": "open-codesign",
+    "send": "Send",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "save": "Save",
+    "close": "Close",
+    "settings": "Settings",
+    "advanced": "Advanced",
+    "about": "About",
+    "learnMore": "Learn more",
+    "copy": "Copy",
+    "copied": "Copied",
+    "comingSoon": "Coming soon",
+    "loading": "Loading…",
+    "preAlpha": "pre-alpha",
+    "tagline": "BYOK · local-first · multi-model"
+  },
+  "preview": {
+    "empty": {
+      "title": "Design with AI",
+      "body": "Pick a starter on the left, or describe what you want to design. The result renders here in a sandboxed preview.",
+      "starterChip": "Try a starter prompt:"
+    },
+    "loading": {
+      "title": "Generating your design…"
+    },
+    "error": {
+      "title": "Generation failed",
+      "body": "Something went wrong while generating your design.",
+      "copyError": "Copy error details"
+    },
+    "ready": "Preview",
+    "noDesign": "No design yet"
+  },
+  "chat": {
+    "placeholder": "Describe what to design…",
+    "sendShortcut": "Send (Enter)",
+    "emptyHint": "Start with a starter prompt or your own idea."
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "models": "Models",
+      "appearance": "Appearance",
+      "storage": "Storage",
+      "advanced": "Advanced"
+    },
+    "language": {
+      "label": "Language",
+      "system": "System default"
+    },
+    "theme": {
+      "label": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    }
+  },
+  "onboarding": {
+    "welcome": {
+      "title": "Welcome to open-codesign",
+      "subtitle": "Turn natural-language prompts into design artifacts. Pick how you want to start.",
+      "tryFree": "Try a free model",
+      "useKey": "Use my API key",
+      "useOllama": "Use a local model (Ollama)"
+    },
+    "paste": {
+      "title": "Paste your API key",
+      "placeholder": "sk-…",
+      "recognized": "Detected provider: {{provider}}",
+      "connected_one": "Connected {{count}} model",
+      "connected_other": "Connected {{count}} models",
+      "howToGet": "How do I get a key?",
+      "errors": {
+        "401": "That key was rejected. Check it in your provider dashboard.",
+        "402": "Your account has no credit. Top up and retry.",
+        "429": "Rate limited. Wait a moment and try again.",
+        "network": "Network error reaching the provider. Check your connection."
+      }
+    },
+    "choose": {
+      "title": "Pick a default model",
+      "primary": "Primary",
+      "fast": "Fast",
+      "estimatedCost": "Estimated cost: {{amount}}",
+      "start": "Start designing"
+    }
+  },
+  "commands": {
+    "title": "Commands",
+    "placeholder": "Type a command or search…",
+    "items": {
+      "newDesign": "New design",
+      "toggleTheme": "Toggle theme",
+      "openSettings": "Open settings",
+      "export": "Export current design"
+    }
+  },
+  "errors": {
+    "generic": "Something went wrong.",
+    "providerAuthMissing": "No API key configured. Open Settings to add one.",
+    "providerError": "Provider error: {{message}}",
+    "ipcBadInput": "Invalid input passed to the main process.",
+    "exporterNotReady": "Exporter is still loading. Try again in a moment."
+  },
+  "demos": {
+    "meditationApp": {
+      "title": "Calm Spaces meditation app",
+      "description": "Mobile prototype with phone frame, soft palette, interactive nav.",
+      "prompt": "Design a mobile app prototype for a meditation app called Calm Spaces. Show a phone frame containing a home screen with a meditation list, play button, and progress tracker. Use serene typography, soft greens and blues, and lots of white space."
+    },
+    "caseStudy": {
+      "title": "Client case study one-pager",
+      "description": "Dark theme one-page PDF-ready layout with hero metrics.",
+      "prompt": "Create a one-page client case study. The client increased qualified leads 40% using our platform. Include before/after metrics, a CEO quote, and a logo placeholder. Clean, minimal, dark theme."
+    },
+    "pitchDeck": {
+      "title": "B2B SaaS pitch deck",
+      "description": "8-12 slides for a healthcare-targeted SaaS pitch.",
+      "prompt": "Design a pitch deck for a B2B SaaS company targeting mid-market healthcare. 8 to 10 slides covering problem, market, product, traction, team, and ask."
+    },
+    "marketingLanding": {
+      "title": "Marketing landing page",
+      "description": "Hero + features + CTA, tunable accent color.",
+      "prompt": "Design a modern marketing landing page for an AI productivity tool. Include a hero section, three feature cards, social proof, and a call to action. Use a warm neutral palette."
+    }
+  }
+}

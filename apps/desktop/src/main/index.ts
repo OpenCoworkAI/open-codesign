@@ -5,6 +5,7 @@ import { detectProviderFromKey } from '@open-codesign/providers';
 import { BRAND, CodesignError, GeneratePayload } from '@open-codesign/shared';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { registerLocaleIpc } from './locale-ipc';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -78,6 +79,7 @@ function setupAutoUpdater(): void {
 
 void app.whenReady().then(() => {
   registerIpcHandlers();
+  registerLocaleIpc();
   setupAutoUpdater();
   createWindow();
 

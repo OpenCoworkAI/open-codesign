@@ -1,3 +1,4 @@
+import { type Locale, setLocale as applyLocale, normalizeLocale } from '@open-codesign/i18n';
 import type { ChatMessage } from '@open-codesign/shared';
 import { create } from 'zustand';
 import type { CodesignApi } from '../../preload/index';
@@ -13,6 +14,9 @@ interface CodesignState {
   previewHtml: string | null;
   isGenerating: boolean;
   errorMessage: string | null;
+  locale: Locale;
+  initLocale: () => Promise<void>;
+  setLocale: (locale: string) => Promise<void>;
   sendPrompt: (prompt: string) => Promise<void>;
 }
 
@@ -21,6 +25,23 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   previewHtml: null,
   isGenerating: false,
   errorMessage: null,
+  locale: 'en',
+
+  async initLocale() {
+    if (!window.codesign) return;
+    const raw = await window.codesign.locale.getCurrent();
+    const normalized = normalizeLocale(raw);
+    await applyLocale(normalized);
+    set({ locale: normalized });
+  },
+
+  async setLocale(locale: string) {
+    const normalized = await applyLocale(locale);
+    set({ locale: normalized });
+    if (window.codesign) {
+      await window.codesign.locale.set(normalized);
+    }
+  },
 
   async sendPrompt(prompt: string) {
     if (get().isGenerating) return;

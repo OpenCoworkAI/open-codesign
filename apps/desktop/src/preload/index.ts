@@ -19,6 +19,11 @@ const api = {
     ipcRenderer.on('codesign:update-available', listener);
     return () => ipcRenderer.removeListener('codesign:update-available', listener);
   },
+  locale: {
+    getSystem: () => ipcRenderer.invoke('locale:get-system') as Promise<string>,
+    getCurrent: () => ipcRenderer.invoke('locale:get-current') as Promise<string>,
+    set: (locale: string) => ipcRenderer.invoke('locale:set', locale) as Promise<string>,
+  },
 };
 
 contextBridge.exposeInMainWorld('codesign', api);

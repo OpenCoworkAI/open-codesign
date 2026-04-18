@@ -1,16 +1,21 @@
+import { useT } from '@open-codesign/i18n';
 import { buildSrcdoc } from '@open-codesign/runtime';
-import { BUILTIN_DEMOS } from '@open-codesign/templates';
+import { getDemos } from '@open-codesign/templates';
 import { Button } from '@open-codesign/ui';
 import { Send, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useCodesignStore } from './store';
 
 export function App() {
+  const t = useT();
   const messages = useCodesignStore((s) => s.messages);
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const isGenerating = useCodesignStore((s) => s.isGenerating);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
+  const locale = useCodesignStore((s) => s.locale);
   const [prompt, setPrompt] = useState('');
+
+  const demos = getDemos(locale);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,8 +30,12 @@ export function App() {
         <header className="px-5 py-4 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-[var(--color-accent)]" />
-            <span className="font-semibold text-[var(--color-text-primary)]">open-codesign</span>
-            <span className="ml-auto text-xs text-[var(--color-text-muted)]">pre-alpha</span>
+            <span className="font-semibold text-[var(--color-text-primary)]">
+              {t('common.appName')}
+            </span>
+            <span className="ml-auto text-xs text-[var(--color-text-muted)]">
+              {t('common.preAlpha')}
+            </span>
           </div>
         </header>
 
@@ -34,10 +43,10 @@ export function App() {
           {messages.length === 0 ? (
             <div>
               <p className="text-sm text-[var(--color-text-secondary)] mb-3">
-                Try a starter prompt:
+                {t('preview.empty.starterChip')}
               </p>
               <ul className="space-y-2">
-                {BUILTIN_DEMOS.map((demo) => (
+                {demos.map((demo) => (
                   <li key={demo.id}>
                     <button
                       type="button"
@@ -80,11 +89,17 @@ export function App() {
             type="text"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe what to design…"
+            placeholder={t('chat.placeholder')}
+            aria-label={t('chat.placeholder')}
             disabled={isGenerating}
             className="flex-1 px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)]"
           />
-          <Button type="submit" size="md" disabled={isGenerating || !prompt.trim()}>
+          <Button
+            type="submit"
+            size="md"
+            disabled={isGenerating || !prompt.trim()}
+            aria-label={t('common.send')}
+          >
             <Send className="w-4 h-4" />
           </Button>
         </form>
@@ -93,11 +108,9 @@ export function App() {
       <main className="flex flex-col">
         <header className="h-12 px-5 border-b border-[var(--color-border)] flex items-center justify-between">
           <span className="text-sm text-[var(--color-text-secondary)]">
-            {previewHtml ? 'Preview' : 'No design yet'}
+            {previewHtml ? t('preview.ready') : t('preview.noDesign')}
           </span>
-          <span className="text-xs text-[var(--color-text-muted)]">
-            BYOK · local-first · multi-model
-          </span>
+          <span className="text-xs text-[var(--color-text-muted)]">{t('common.tagline')}</span>
         </header>
         <div className="flex-1 p-6 overflow-auto">
           {previewHtml ? (
@@ -115,11 +128,10 @@ export function App() {
                   <Sparkles className="w-7 h-7 text-[var(--color-accent)]" />
                 </div>
                 <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
-                  Design with AI
+                  {t('preview.empty.title')}
                 </h2>
                 <p className="text-sm text-[var(--color-text-secondary)]">
-                  Pick a starter on the left, or describe what you want to design. The result
-                  renders here in a sandboxed preview.
+                  {t('preview.empty.body')}
                 </p>
               </div>
             </div>
