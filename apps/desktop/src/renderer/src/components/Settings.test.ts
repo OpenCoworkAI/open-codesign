@@ -3,6 +3,7 @@ import { applyLocaleChange, applyValidateResult, canSaveProvider } from './Setti
 
 vi.mock('@open-codesign/i18n', () => ({
   setLocale: vi.fn((locale: string) => Promise.resolve(locale)),
+  useT: () => (key: string) => key,
 }));
 
 describe('canSaveProvider', () => {

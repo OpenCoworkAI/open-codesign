@@ -82,6 +82,69 @@
       "storage": "存储",
       "advanced": "高级"
     },
+    "shell": {
+      "back": "工作区",
+      "backAria": "返回工作区"
+    },
+    "common": {
+      "loading": "加载中\u2026",
+      "cancel": "取消",
+      "copy": "复制",
+      "copied": "已复制",
+      "open": "打开",
+      "unknownError": "未知错误"
+    },
+    "providers": {
+      "sectionTitle": "API 服务",
+      "addProvider": "添加服务",
+      "empty": "还没有配置任何服务，添加一个即可开始生成。",
+      "active": "当前",
+      "decryptionFailed": "解密失败",
+      "setActive": "设为当前",
+      "reEnterKey": "重新输入 Key",
+      "confirm": "确认",
+      "deleteAria": "删除 {{label}} 服务",
+      "primary": "主力",
+      "fast": "快速",
+      "modal": {
+        "title": "添加服务",
+        "provider": "服务商",
+        "apiKey": "API Key",
+        "getKey": "获取 Key \u2197",
+        "apiKeyPlaceholder": "sk-...",
+        "validate": "验证",
+        "validating": "验证中\u2026",
+        "valid": "已通过",
+        "baseUrl": "接入地址",
+        "baseUrlOptional": "（可选）",
+        "baseUrlPlaceholder": "https://your-proxy.example.com",
+        "primaryModel": "主力模型",
+        "fastModel": "快速模型",
+        "save": "保存"
+      },
+      "toast": {
+        "loadFailed": "加载服务列表失败",
+        "removed": "服务已删除",
+        "deleteFailed": "删除失败",
+        "switchedTo": "已切换到 {{label}}",
+        "switchFailed": "切换失败",
+        "saved": "服务已保存",
+        "modelSaveFailed": "保存模型选择失败"
+      }
+    },
+    "appearance": {
+      "themeTitle": "主题",
+      "themeHint": "选择会在重启后保留。",
+      "lightLabel": "浅色",
+      "lightDesc": "暖米色，柔和阴影",
+      "darkLabel": "深色",
+      "darkDesc": "深沉中性，低反光",
+      "languageLabel": "语言",
+      "languageHint": "切换语言会立即生效。",
+      "languageLoadFailed": "加载语言设置失败",
+      "langEn": "English",
+      "langZhCN": "中文 (简体)"
+    },
     "language": {
       "label": "语言",
       "system": "跟随系统"
@@ -91,6 +154,35 @@
       "light": "浅色",
       "dark": "深色",
       "system": "跟随系统"
+    },
+    "storage": {
+      "pathsTitle": "目录",
+      "config": "配置",
+      "logs": "日志",
+      "data": "数据目录",
+      "onboardingTitle": "首次引导",
+      "onboardingHint": "清除引导完成标记，下次启动时会再次运行设置向导。",
+      "resetConfirm": "此操作会删除已保存的 Key，是否继续？",
+      "reset": "重置",
+      "resetButton": "重置引导",
+      "pathsLoadFailed": "加载应用路径失败",
+      "openFolderFailed": "无法打开文件夹",
+      "onboardingResetToast": "引导已重置，重启应用即可重新运行设置。"
+    },
+    "advanced": {
+      "updateChannel": "更新通道",
+      "updateChannelHint": "Stable：稳定版；Beta：抢先体验（可能有 bug）。",
+      "stable": "稳定版",
+      "beta": "测试版",
+      "timeout": "生成超时",
+      "timeoutHint": "超过该秒数后会中止生成请求。",
+      "timeoutSeconds": "{{value}} 秒",
+      "devtools": "开发者工具",
+      "devtoolsHint": "打开渲染进程的 Chromium DevTools 面板。",
+      "toggleDevtools": "切换 DevTools",
+      "prefsLoadFailed": "加载偏好设置失败",
+      "prefsSaveFailed": "保存偏好失败",
+      "devtoolsFailed": "无法切换 DevTools"
     }
   },
   "onboarding": {

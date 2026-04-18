@@ -83,6 +83,69 @@
       "storage": "Storage",
       "advanced": "Advanced"
     },
+    "shell": {
+      "back": "Workspace",
+      "backAria": "Back to workspace"
+    },
+    "common": {
+      "loading": "Loading\u2026",
+      "cancel": "Cancel",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "open": "Open",
+      "unknownError": "Unknown error"
+    },
+    "providers": {
+      "sectionTitle": "API Providers",
+      "addProvider": "Add provider",
+      "empty": "No providers configured yet. Add one to start generating.",
+      "active": "Active",
+      "decryptionFailed": "Decryption failed",
+      "setActive": "Set active",
+      "reEnterKey": "Re-enter key",
+      "confirm": "Confirm",
+      "deleteAria": "Delete {{label}} provider",
+      "primary": "Primary",
+      "fast": "Fast",
+      "modal": {
+        "title": "Add provider",
+        "provider": "Provider",
+        "apiKey": "API Key",
+        "getKey": "Get key \u2197",
+        "apiKeyPlaceholder": "sk-...",
+        "validate": "Validate",
+        "validating": "Validating\u2026",
+        "valid": "Valid",
+        "baseUrl": "Base URL",
+        "baseUrlOptional": "(optional)",
+        "baseUrlPlaceholder": "https://your-proxy.example.com",
+        "primaryModel": "Primary model",
+        "fastModel": "Fast model",
+        "save": "Save provider"
+      },
+      "toast": {
+        "loadFailed": "Failed to load providers",
+        "removed": "Provider removed",
+        "deleteFailed": "Delete failed",
+        "switchedTo": "Switched to {{label}}",
+        "switchFailed": "Switch failed",
+        "saved": "Provider saved",
+        "modelSaveFailed": "Failed to save model selection"
+      }
+    },
+    "appearance": {
+      "themeTitle": "Theme",
+      "themeHint": "Choice persists across restarts.",
+      "lightLabel": "Light",
+      "lightDesc": "Warm beige, soft shadows",
+      "darkLabel": "Dark",
+      "darkDesc": "Deep neutral, low glare",
+      "languageLabel": "Language",
+      "languageHint": "Language changes take effect immediately.",
+      "languageLoadFailed": "Failed to load language",
+      "langEn": "English",
+      "langZhCN": "\u4e2d\u6587 (\u7b80\u4f53)"
+    },
     "language": {
       "label": "Language",
       "system": "System default"
@@ -92,6 +155,35 @@
       "light": "Light",
       "dark": "Dark",
       "system": "System"
+    },
+    "storage": {
+      "pathsTitle": "Paths",
+      "config": "Config",
+      "logs": "Logs",
+      "data": "Data directory",
+      "onboardingTitle": "Onboarding",
+      "onboardingHint": "Clear the setup flag so the onboarding wizard runs again on next launch.",
+      "resetConfirm": "This will remove your saved keys. Continue?",
+      "reset": "Reset",
+      "resetButton": "Reset onboarding",
+      "pathsLoadFailed": "Failed to load app paths",
+      "openFolderFailed": "Could not open folder",
+      "onboardingResetToast": "Onboarding reset. Restart the app to re-run setup."
+    },
+    "advanced": {
+      "updateChannel": "Update channel",
+      "updateChannelHint": "Stable: tested releases. Beta: early access (may have bugs).",
+      "stable": "Stable",
+      "beta": "Beta",
+      "timeout": "Generation timeout",
+      "timeoutHint": "Seconds before a generation request is aborted.",
+      "timeoutSeconds": "{{value}} s",
+      "devtools": "Developer tools",
+      "devtoolsHint": "Open the Chromium DevTools panel for the renderer.",
+      "toggleDevtools": "Toggle DevTools",
+      "prefsLoadFailed": "Failed to load preferences",
+      "prefsSaveFailed": "Failed to save preference",
+      "devtoolsFailed": "Could not toggle DevTools"
     }
   },
   "onboarding": {
