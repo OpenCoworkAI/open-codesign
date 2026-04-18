@@ -50,7 +50,13 @@
     "noDesign": "还没有设计",
     "clickToComment": "点击预览中的任意元素即可留下局部评论。",
     "runtimeError": "预览运行时错误",
-    "dismissErrors": "关闭预览错误"
+    "dismissErrors": "关闭预览错误",
+    "viewport": {
+      "label": "视口",
+      "desktop": "桌面",
+      "tablet": "平板",
+      "mobile": "手机"
+    }
   },
   "chat": {
     "placeholder": "想设计什么？",

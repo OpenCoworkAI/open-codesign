@@ -1,8 +1,9 @@
 import { useT } from '@open-codesign/i18n';
 import { Tooltip } from '@open-codesign/ui';
-import { Download } from 'lucide-react';
+import { Download, Monitor, Smartphone, Tablet } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
+import type { PreviewViewport } from '../store';
 import { useCodesignStore } from '../store';
 
 interface ExportItem {
@@ -12,12 +13,20 @@ interface ExportItem {
   ready: boolean;
 }
 
+interface ViewportItem {
+  value: PreviewViewport;
+  label: string;
+  icon: ReactElement;
+}
+
 export function PreviewToolbar(): ReactElement {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const exportActive = useCodesignStore((s) => s.exportActive);
   const toastMessage = useCodesignStore((s) => s.toastMessage);
   const dismissToast = useCodesignStore((s) => s.dismissToast);
+  const previewViewport = useCodesignStore((s) => s.previewViewport);
+  const setPreviewViewport = useCodesignStore((s) => s.setPreviewViewport);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -70,6 +79,24 @@ export function PreviewToolbar(): ReactElement {
     },
   ];
 
+  const viewportItems: ViewportItem[] = [
+    {
+      value: 'desktop',
+      label: t('preview.viewport.desktop'),
+      icon: <Monitor className="w-[14px] h-[14px]" aria-hidden="true" />,
+    },
+    {
+      value: 'tablet',
+      label: t('preview.viewport.tablet'),
+      icon: <Tablet className="w-[14px] h-[14px]" aria-hidden="true" />,
+    },
+    {
+      value: 'mobile',
+      label: t('preview.viewport.mobile'),
+      icon: <Smartphone className="w-[14px] h-[14px]" aria-hidden="true" />,
+    },
+  ];
+
   return (
     <div className="flex items-center justify-end gap-2 px-6 py-2 border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)]">
       {toastMessage && (
@@ -77,6 +104,34 @@ export function PreviewToolbar(): ReactElement {
           {toastMessage}
         </output>
       )}
+
+      <fieldset
+        aria-label={t('preview.viewport.label')}
+        className="flex items-center rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden"
+        style={{ margin: 0, padding: 0 }}
+      >
+        <legend className="sr-only">{t('preview.viewport.label')}</legend>
+        {viewportItems.map((item) => {
+          const active = previewViewport === item.value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              title={item.label}
+              aria-pressed={active}
+              onClick={() => setPreviewViewport(item.value)}
+              className={[
+                'inline-flex items-center justify-center w-[30px] h-[30px] transition-[background-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]',
+                active
+                  ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]'
+                  : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-secondary)]',
+              ].join(' ')}
+            >
+              {item.icon}
+            </button>
+          );
+        })}
+      </fieldset>
 
       <div className="relative" ref={ref}>
         <Tooltip label={disabled ? t('disabledReason.noDesignToExport') : undefined} side="bottom">

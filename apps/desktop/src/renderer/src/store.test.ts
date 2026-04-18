@@ -436,3 +436,25 @@ describe('useCodesignStore project storage error surfacing', () => {
     expect(state.generationStage).toBe('idle');
   });
 });
+
+describe('useCodesignStore previewViewport', () => {
+  it('defaults to desktop', () => {
+    expect(useCodesignStore.getState().previewViewport).toBe('desktop');
+  });
+
+  it('switches to tablet via setPreviewViewport', () => {
+    useCodesignStore.getState().setPreviewViewport('tablet');
+    expect(useCodesignStore.getState().previewViewport).toBe('tablet');
+  });
+
+  it('switches to mobile via setPreviewViewport', () => {
+    useCodesignStore.getState().setPreviewViewport('mobile');
+    expect(useCodesignStore.getState().previewViewport).toBe('mobile');
+  });
+
+  it('switches back to desktop via setPreviewViewport', () => {
+    useCodesignStore.getState().setPreviewViewport('mobile');
+    useCodesignStore.getState().setPreviewViewport('desktop');
+    expect(useCodesignStore.getState().previewViewport).toBe('desktop');
+  });
+});
