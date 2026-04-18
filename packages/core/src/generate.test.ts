@@ -265,6 +265,12 @@ describe('composeSystemPrompt()', () => {
     expect(create).not.toContain('__edit_mode_set_keys');
   });
 
+  it('tweak mode prompt requires window.addEventListener for message events', () => {
+    const prompt = composeSystemPrompt({ mode: 'tweak' });
+    expect(prompt).toContain("window.addEventListener('message'");
+    expect(prompt).not.toMatch(/document\.addEventListener\(['"]message['"]/);
+  });
+
   it('create mode with brandTokens serializes the token block into the prompt', () => {
     const prompt = composeSystemPrompt({
       mode: 'create',

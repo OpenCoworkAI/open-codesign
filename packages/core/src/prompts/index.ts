@@ -180,13 +180,13 @@ The EDITMODE block is a JS object literal wrapped in marker comments, placed ins
 
 // The script may also contain runtime logic below the EDITMODE block.
 // The block itself is a pure JSON object literal — no trailing commas.
-document.addEventListener('message', handleEdits);
+window.addEventListener('message', handleEdits);
 
 function handleEdits(e) {
   if (!e.data || e.data.type !== '__edit_mode_set_keys') return;
   const root = document.documentElement;
   for (const [key, value] of Object.entries(e.data.edits)) {
-    root.style.setProperty('--' + key, value);
+    root.style.setProperty('--' + key, String(value));
   }
 }
 </script>
