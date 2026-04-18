@@ -4,7 +4,7 @@
 
 > An open-source desktop app for designing with AI. Bring your own model, keep everything local.
 
-[Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [Contributing](./CONTRIBUTING.md) · [Vision](./docs/VISION.md)
+[Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
 
 ---
 

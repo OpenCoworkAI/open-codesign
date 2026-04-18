@@ -4,7 +4,7 @@
 
 > 一款开源桌面 AI 设计工具。自带模型，本地优先，一切留在你自己的电脑。
 
-[项目愿景](./docs/VISION.md) · [路线图](./docs/ROADMAP.md) · [官网](https://opencoworkai.github.io/open-codesign/) · [贡献指南](./CONTRIBUTING.md)
+[官网](https://opencoworkai.github.io/open-codesign/) · [贡献指南](./CONTRIBUTING.md) · [安全政策](./SECURITY.md) · [行为准则](./CODE_OF_CONDUCT.md)
 
 ---
 
@@ -61,7 +61,7 @@ chmod +x open-codesign-*.AppImage
 
 ## 状态与路线图
 
-详见 [`docs/ROADMAP.md`](./docs/ROADMAP.md)。MVP 成功标准：复现所有公开的 Claude Design 演示效果。
+详细进展追踪于 [GitHub Issues](https://github.com/OpenCoworkAI/open-codesign/issues)。MVP 成功标准：复现所有公开的 Claude Design 演示效果。
 
 ## 许可证
 
