@@ -623,11 +623,6 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     const id = newId();
     const next: Toast = { id, ...toast };
     set((s) => ({ toasts: [...s.toasts, next] }));
-    if (typeof window !== 'undefined') {
-      window.setTimeout(() => {
-        get().dismissToast(id);
-      }, 4000);
-    }
     return id;
   },
 

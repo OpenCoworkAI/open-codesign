@@ -92,6 +92,15 @@ h3,
   }
 }
 
+@keyframes toast-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 @keyframes shimmer-pulse {
   0% {
     background-position: -200% 0;
