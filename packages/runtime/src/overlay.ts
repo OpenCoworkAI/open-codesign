@@ -57,7 +57,7 @@ export const OVERLAY_SCRIPT = `(function() {
         outerHTML: (el.outerHTML || '').slice(0, 800),
         rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
       }, '*');
-    } catch (_) {}
+    } catch (err) { console.warn('[overlay] postMessage ELEMENT_SELECTED failed:', err); }
   }
   function onError(ev) {
     try {
@@ -72,7 +72,7 @@ export const OVERLAY_SCRIPT = `(function() {
         stack: ev && ev.error && ev.error.stack ? String(ev.error.stack) : undefined,
         timestamp: Date.now()
       }, '*');
-    } catch (_) {}
+    } catch (err) { console.warn('[overlay] postMessage IFRAME_ERROR (error) failed:', err); }
   }
   function onRejection(ev) {
     try {
@@ -86,7 +86,7 @@ export const OVERLAY_SCRIPT = `(function() {
         stack: (reason && reason.stack) ? String(reason.stack) : undefined,
         timestamp: Date.now()
       }, '*');
-    } catch (_) {}
+    } catch (err) { console.warn('[overlay] postMessage IFRAME_ERROR (unhandledrejection) failed:', err); }
   }
 
   // Install + reinstall every 200ms. User code may call removeEventListener
@@ -100,18 +100,18 @@ export const OVERLAY_SCRIPT = `(function() {
   function reattach() {
     for (var i = 0; i < installs.length; i++) {
       var spec = installs[i];
-      try { document.removeEventListener(spec.evt, spec.fn, true); } catch (_) {}
-      try { document.addEventListener(spec.evt, spec.fn, true); } catch (_) {}
+      try { document.removeEventListener(spec.evt, spec.fn, true); } catch (err) { console.warn('[overlay] removeEventListener failed for ' + spec.evt + ':', err); }
+      try { document.addEventListener(spec.evt, spec.fn, true); } catch (err) { console.warn('[overlay] addEventListener failed for ' + spec.evt + ':', err); }
     }
     if (!window.__cs_err) {
-      try { window.addEventListener('error', onError, true); window.__cs_err = true; } catch (_) {}
+      try { window.addEventListener('error', onError, true); window.__cs_err = true; } catch (err) { console.warn('[overlay] attach window error listener failed:', err); }
     }
     if (!window.__cs_rej) {
-      try { window.addEventListener('unhandledrejection', onRejection, true); window.__cs_rej = true; } catch (_) {}
+      try { window.addEventListener('unhandledrejection', onRejection, true); window.__cs_rej = true; } catch (err) { console.warn('[overlay] attach unhandledrejection listener failed:', err); }
     }
   }
   reattach();
-  try { setInterval(reattach, 200); } catch (_) {}
+  try { setInterval(reattach, 200); } catch (err) { console.warn('[overlay] setInterval reattach failed:', err); }
 })();`;
 
 export interface OverlayMessage {
