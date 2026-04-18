@@ -92,6 +92,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <p className="text-sm text-[var(--color-text-secondary)] mb-4">
             The rest of the app is still running. Reload this view, or copy the stack to file a bug.
           </p>
+          {/* token-ok: stack-trace pre uses 11px to fit longer lines without scrolling horizontally */}
           <pre className="text-[11px] leading-snug font-mono text-[var(--color-text-muted)] bg-[var(--color-surface-active)] border border-[var(--color-border-muted)] rounded-[var(--radius-md)] p-3 max-h-40 overflow-auto whitespace-pre-wrap">
             {error.stack ?? '(no stack)'}
           </pre>

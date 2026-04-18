@@ -11,8 +11,10 @@ interface WordmarkProps {
 
 export function Wordmark({ badge, size = 'md' }: WordmarkProps) {
   const markPx = size === 'sm' ? 14 : 16;
+  // token-ok: brand wordmark uses 13/14 px to match diamond mark optical sizing; tokens are not granular enough here
   const wordSize = size === 'sm' ? 'text-[13px]' : 'text-[14px]';
   return (
+    // token-ok: wordmark gap tuned to 10px to align with mark stroke width
     <span className="inline-flex items-center gap-[10px] leading-none">
       <Mark size={markPx} />
       <span
@@ -22,6 +24,7 @@ export function Wordmark({ badge, size = 'md' }: WordmarkProps) {
       </span>
       {badge ? (
         <span
+          // token-ok: brand badge pill is intentionally smaller than text-xs to read as a meta tag, not a label
           className="inline-flex items-center h-[18px] px-[6px] ml-[6px] rounded-[var(--radius-sm)] bg-[var(--color-accent-soft)] text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-accent)]"
           style={{ fontFamily: 'var(--font-mono)' }}
         >

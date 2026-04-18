@@ -24,7 +24,7 @@ describe('artifact parser', () => {
 
   it('parses a complete artifact in a single chunk', () => {
     const events = collectEvents([
-      'before <artifact identifier="a1" type="html" title="Hello">body</artifact> after',
+      'before <artifact identifier="a1" type="html" title="Hello">body</artifact> after', // i18n-ok: artifact tag fixture, not a UI attribute
     ]);
     expect(events).toEqual([
       { type: 'text', delta: 'before ' },

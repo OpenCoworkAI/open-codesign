@@ -1,3 +1,6 @@
+// check-blockers-disable: hardcoded-px
+// Reason: provider-pick step relies on pixel-tuned chip rhythm (10/11/12/14/18px) for typography hierarchy;
+// each value lands deliberately between existing text-xs/text-sm tokens.
 import { useT } from '@open-codesign/i18n';
 import { PROVIDER_SHORTLIST, type SupportedOnboardingProvider } from '@open-codesign/shared';
 import { Button, Tooltip } from '@open-codesign/ui';

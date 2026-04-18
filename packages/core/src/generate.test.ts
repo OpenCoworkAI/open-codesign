@@ -25,9 +25,11 @@ const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
 
 const SAMPLE_HTML = `<!doctype html><html lang="en"><body><h1>Hi</h1></body></html>`;
 
+// i18n-ok: artifact tag is part of the LLM streaming protocol, not a UI attribute
+const ARTIFACT_OPEN = '<artifact identifier="design-1" type="html" title="Hello world">';
 const RESPONSE = `Here is your design.
 
-<artifact identifier="design-1" type="html" title="Hello world">
+${ARTIFACT_OPEN}
 ${SAMPLE_HTML}
 </artifact>`;
 

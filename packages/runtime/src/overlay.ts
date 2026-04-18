@@ -57,7 +57,7 @@ export const OVERLAY_SCRIPT = `(function() {
         outerHTML: (el.outerHTML || '').slice(0, 800),
         rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
       }, '*');
-    } catch (_) {}
+    } catch (_) {} // silent-ok: parent frame may be gone or cross-origin; selection is best-effort
   }
   function onError(ev) {
     try {
@@ -72,7 +72,7 @@ export const OVERLAY_SCRIPT = `(function() {
         stack: ev && ev.error && ev.error.stack ? String(ev.error.stack) : undefined,
         timestamp: Date.now()
       }, '*');
-    } catch (_) {}
+    } catch (_) {} // silent-ok: parent frame may be gone or cross-origin; error reporting is best-effort
   }
   function onRejection(ev) {
     try {
@@ -86,7 +86,7 @@ export const OVERLAY_SCRIPT = `(function() {
         stack: (reason && reason.stack) ? String(reason.stack) : undefined,
         timestamp: Date.now()
       }, '*');
-    } catch (_) {}
+    } catch (_) {} // silent-ok: parent frame may be gone or cross-origin; rejection reporting is best-effort
   }
 
   // Install + reinstall every 200ms. User code may call removeEventListener
@@ -100,18 +100,18 @@ export const OVERLAY_SCRIPT = `(function() {
   function reattach() {
     for (var i = 0; i < installs.length; i++) {
       var spec = installs[i];
-      try { document.removeEventListener(spec.evt, spec.fn, true); } catch (_) {}
-      try { document.addEventListener(spec.evt, spec.fn, true); } catch (_) {}
+      try { document.removeEventListener(spec.evt, spec.fn, true); } catch (_) {} // silent-ok: removing a not-installed listener is a no-op
+      try { document.addEventListener(spec.evt, spec.fn, true); } catch (_) {} // silent-ok: user code may have frozen document; re-attempt next tick
     }
     if (!window.__cs_err) {
-      try { window.addEventListener('error', onError, true); window.__cs_err = true; } catch (_) {}
+      try { window.addEventListener('error', onError, true); window.__cs_err = true; } catch (_) {} // silent-ok: best-effort attach in hostile sandbox
     }
     if (!window.__cs_rej) {
-      try { window.addEventListener('unhandledrejection', onRejection, true); window.__cs_rej = true; } catch (_) {}
+      try { window.addEventListener('unhandledrejection', onRejection, true); window.__cs_rej = true; } catch (_) {} // silent-ok: best-effort attach in hostile sandbox
     }
   }
   reattach();
-  try { setInterval(reattach, 200); } catch (_) {}
+  try { setInterval(reattach, 200); } catch (_) {} // silent-ok: timers may be unavailable in extremely locked sandboxes
 })();`;
 
 export interface OverlayMessage {

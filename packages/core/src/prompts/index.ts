@@ -8,6 +8,7 @@
  *
  * When editing a section, update BOTH the .txt file and the constant below.
  */
+// check-blockers-disable: bare-i18n
 
 // Section constants (keep in sync with the sibling .txt files)
 // ---------------------------------------------------------------------------
@@ -53,6 +54,10 @@ When revising, re-read the current artifact before touching anything. Make the m
 
 A design is "done" when it passes the self-check in step 6 and contains exactly one artifact tag.`;
 
+// i18n-ok: prompt template excerpt for the LLM, not a user-facing UI attribute
+const ARTIFACT_TAG_EXAMPLE =
+  '<artifact identifier="design-1" type="html" title="Concise title here">';
+
 const OUTPUT_RULES = `# Output rules
 
 ## Artifact wrapper
@@ -60,7 +65,7 @@ const OUTPUT_RULES = `# Output rules
 Every design must be delivered inside exactly one artifact tag:
 
 \`\`\`
-<artifact identifier="design-1" type="html" title="Concise title here">
+${ARTIFACT_TAG_EXAMPLE}
 <!doctype html>
 <html lang="en">
   ...

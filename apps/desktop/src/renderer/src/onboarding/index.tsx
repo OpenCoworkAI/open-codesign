@@ -1,3 +1,6 @@
+// check-blockers-disable: hardcoded-px
+// Reason: onboarding shell uses pixel-precise stepper/progress bar (3px, 6px, 14px) and 11px caption track that
+// don't map to existing tokens; replacing with tokens would coarsen the visual rhythm.
 import { PROVIDER_SHORTLIST, type SupportedOnboardingProvider } from '@open-codesign/shared';
 import { Wordmark } from '@open-codesign/ui';
 import { useState } from 'react';

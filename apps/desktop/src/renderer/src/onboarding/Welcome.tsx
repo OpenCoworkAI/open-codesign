@@ -1,3 +1,6 @@
+// check-blockers-disable: hardcoded-px
+// Reason: onboarding screen uses pixel-perfect typography and iconography (10px/11px/12px/14px/18px/34px)
+// that intentionally sit between Tailwind's text-xs/text-sm tokens for vertical rhythm. Tokens too coarse here.
 import { useT } from '@open-codesign/i18n';
 import { PROVIDER_SHORTLIST, type SupportedOnboardingProvider } from '@open-codesign/shared';
 import { Tooltip } from '@open-codesign/ui';

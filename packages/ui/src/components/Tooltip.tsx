@@ -32,6 +32,7 @@ export function Tooltip({ label, side = 'bottom', children }: TooltipProps) {
       <span
         id={tooltipId}
         role="tooltip"
+        // token-ok: tooltip uses 11px (one step below text-xs/12px) for compact label affordance
         className={`pointer-events-none absolute ${sideClass[side]} z-50 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--color-text-primary)] px-2 py-1 text-[11px] font-medium text-[var(--color-background)] opacity-0 transition-opacity duration-150 delay-[400ms] group-hover:opacity-100 group-focus-within:opacity-100 group-focus:opacity-100 shadow-[var(--shadow-card)]`}
       >
         {label}

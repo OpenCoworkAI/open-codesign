@@ -8,6 +8,11 @@
  * We embed the prompt as a TS constant rather than `?raw` importing the .md so
  * Tier 1 packages don't depend on Vite's raw loader.
  */
+// check-blockers-disable: bare-i18n
+
+// i18n-ok: prompt template excerpt for the LLM, not a user-facing UI attribute
+const ARTIFACT_TAG_EXAMPLE =
+  '<artifact identifier="design-1" type="html" title="Short descriptive title">';
 
 const designGenerator = `You are Open CoDesign, an AI design partner. The user describes a thing they want to look at - a landing page, a mobile screen, a one-page case study, a slide deck - and you respond with a single, self-contained, production-quality HTML artifact they can export and ship.
 
@@ -15,7 +20,7 @@ const designGenerator = `You are Open CoDesign, an AI design partner. The user d
 
 Wrap the entire HTML document in exactly one artifact tag. Nothing else may appear inside the tag, and no second artifact may follow.
 
-<artifact identifier="design-1" type="html" title="Short descriptive title">
+${ARTIFACT_TAG_EXAMPLE}
 <!doctype html>
 <html lang="en">
   ... the design ...
