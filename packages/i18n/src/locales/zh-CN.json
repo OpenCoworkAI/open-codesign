@@ -132,6 +132,18 @@
       "start": "开始设计"
     }
   },
+  "topbar": {
+    "status": {
+      "connected": "已连接",
+      "untested": "未测试",
+      "error": "连接错误",
+      "noProvider": "未配置提供商",
+      "lastTested": "上次测试：{{time}}",
+      "tooltip": {
+        "click": "点击重新测试"
+      }
+    }
+  },
   "commands": {
     "title": "命令面板",
     "placeholder": "输入命令或搜索\u2026",

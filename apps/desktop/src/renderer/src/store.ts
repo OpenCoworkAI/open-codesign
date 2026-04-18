@@ -26,6 +26,14 @@ export interface Toast {
   description?: string;
 }
 
+export type ConnectionState = 'connected' | 'untested' | 'error' | 'no_provider';
+
+export interface ConnectionStatus {
+  state: ConnectionState;
+  lastTestedAt: number | null;
+  lastError: string | null;
+}
+
 export type Theme = 'light' | 'dark';
 
 interface PromptRequest {
@@ -44,6 +52,7 @@ interface CodesignState {
   config: OnboardingState | null;
   configLoaded: boolean;
   toastMessage: string | null;
+  connectionStatus: ConnectionStatus;
 
   theme: Theme;
   settingsOpen: boolean;
@@ -58,6 +67,8 @@ interface CodesignState {
 
   loadConfig: () => Promise<void>;
   completeOnboarding: (next: OnboardingState) => void;
+  setConnectionStatus: (status: ConnectionStatus) => void;
+  testConnection: () => Promise<void>;
   sendPrompt: (input: {
     prompt: string;
     attachments?: LocalInputFile[] | undefined;
@@ -210,6 +221,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   config: null,
   configLoaded: false,
   toastMessage: null,
+  connectionStatus: { state: 'no_provider', lastTestedAt: null, lastError: null },
 
   theme: readInitialTheme(),
   settingsOpen: false,
@@ -249,6 +261,29 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   completeOnboarding(next: OnboardingState) {
     set({ config: next });
+  },
+
+  setConnectionStatus(status: ConnectionStatus) {
+    set({ connectionStatus: status });
+  },
+
+  async testConnection() {
+    const cfg = get().config;
+    if (!window.codesign || cfg === null || !cfg.hasKey || cfg.provider === null) {
+      set({ connectionStatus: { state: 'no_provider', lastTestedAt: null, lastError: null } });
+      return;
+    }
+    const result = await window.codesign.connection.testActive().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      return { ok: false as const, code: 'NETWORK' as const, message: msg, hint: msg };
+    });
+    if (result.ok) {
+      set({ connectionStatus: { state: 'connected', lastTestedAt: Date.now(), lastError: null } });
+    } else {
+      set({
+        connectionStatus: { state: 'error', lastTestedAt: Date.now(), lastError: result.message },
+      });
+    }
   },
 
   async pickInputFiles() {

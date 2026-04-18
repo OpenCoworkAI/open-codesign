@@ -170,6 +170,10 @@ const api = {
       ipcRenderer.invoke('connection:v1:test', input) as Promise<
         ConnectionTestResult | ConnectionTestError
       >,
+    testActive: () =>
+      ipcRenderer.invoke('connection:v1:test-active') as Promise<
+        ConnectionTestResult | ConnectionTestError
+      >,
   },
   models: {
     list: (input: {

@@ -3,6 +3,7 @@ import { IconButton, Tooltip, Wordmark } from '@open-codesign/ui';
 import { Command, Settings as SettingsIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useCodesignStore } from '../store';
+import { ConnectionStatusDot } from './ConnectionStatusDot';
 import { LanguageToggle } from './LanguageToggle';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -33,6 +34,7 @@ export function TopBar() {
         <span className="text-[var(--text-sm)] text-[var(--color-text-secondary)] truncate">
           {crumb}
         </span>
+        <ConnectionStatusDot />
       </div>
 
       <div className="flex items-center gap-1" style={noDragStyle}>

@@ -5,6 +5,7 @@ import {
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { ipcMain } from './electron-runtime';
+import { getApiKeyForProvider, getBaseUrlForProvider, getCachedConfig } from './onboarding-ipc';
 
 // ---------------------------------------------------------------------------
 // Payload schemas (plain validation, no zod in main to keep bundle lean)
@@ -263,6 +264,47 @@ export function _getModelsCache(): Map<string, CacheEntry> {
 // IPC registration
 // ---------------------------------------------------------------------------
 
+function buildDefaultBaseUrl(provider: SupportedOnboardingProvider): string {
+  switch (provider) {
+    case 'anthropic':
+      return 'https://api.anthropic.com';
+    case 'openai':
+      return 'https://api.openai.com/v1';
+    case 'openrouter':
+      return 'https://openrouter.ai/api/v1';
+  }
+}
+
+interface ActiveProviderCredentials {
+  provider: SupportedOnboardingProvider;
+  apiKey: string;
+  baseUrl: string;
+}
+
+function resolveActiveCredentials(): ActiveProviderCredentials | ConnectionTestError {
+  const cfg = getCachedConfig();
+  if (cfg === null || !isSupportedOnboardingProvider(cfg.provider)) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: 'No active provider configured',
+      hint: 'Complete onboarding first',
+    };
+  }
+  try {
+    const apiKey = getApiKeyForProvider(cfg.provider);
+    const baseUrl = getBaseUrlForProvider(cfg.provider) ?? buildDefaultBaseUrl(cfg.provider);
+    return { provider: cfg.provider, apiKey, baseUrl };
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: err instanceof Error ? err.message : String(err),
+      hint: 'Could not read active provider credentials',
+    };
+  }
+}
+
 export function registerConnectionIpc(): void {
   ipcMain.handle(
     'connection:v1:test',
@@ -381,5 +423,33 @@ export function registerConnectionIpc(): void {
     }
     setCachedModels(provider, baseUrl, apiKey, ids);
     return { ok: true, models: ids };
+  });
+
+  // Tests the currently active provider using the stored (encrypted) key — no key passed from renderer.
+  ipcMain.handle('connection:v1:test-active', async (): Promise<ConnectionTestResponse> => {
+    const creds = resolveActiveCredentials();
+    if (!('provider' in creds)) return creds;
+
+    const ep = buildModelsEndpoint(creds.provider, creds.baseUrl);
+    const authHeaders = buildAuthHeaders(creds.provider, creds.apiKey);
+
+    let res: Response;
+    try {
+      res = await fetch(ep.url, { method: 'GET', headers: { ...ep.headers, ...authHeaders } });
+    } catch (err) {
+      const { code, hint } = classifyNetworkError(err);
+      return {
+        ok: false,
+        code,
+        message: err instanceof Error ? err.message : 'Network request failed',
+        hint,
+      };
+    }
+
+    if (!res.ok) {
+      const { code, hint } = classifyHttpError(res.status);
+      return { ok: false, code, message: `HTTP ${res.status}`, hint };
+    }
+    return { ok: true };
   });
 }

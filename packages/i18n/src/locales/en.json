@@ -132,6 +132,18 @@
       "start": "Start designing"
     }
   },
+  "topbar": {
+    "status": {
+      "connected": "Connected",
+      "untested": "Not tested",
+      "error": "Connection error",
+      "noProvider": "No provider configured",
+      "lastTested": "Last tested {{time}}",
+      "tooltip": {
+        "click": "Click to re-test"
+      }
+    }
+  },
   "commands": {
     "title": "Commands",
     "placeholder": "Type a command or search\u2026",
