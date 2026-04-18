@@ -17,6 +17,16 @@ declare global {
   }
 }
 
+export type GenerationStage =
+  | 'idle'
+  | 'sending'
+  | 'thinking'
+  | 'streaming'
+  | 'parsing'
+  | 'rendering'
+  | 'done'
+  | 'error';
+
 export type ToastVariant = 'success' | 'error' | 'info';
 
 export interface Toast {
@@ -39,6 +49,8 @@ interface CodesignState {
   previewHtml: string | null;
   isGenerating: boolean;
   activeGenerationId: string | null;
+  generationStage: GenerationStage;
+  streamingTokenCount: number;
   errorMessage: string | null;
   lastError: string | null;
   config: OnboardingState | null;
@@ -174,6 +186,7 @@ function applyGenerateSuccess(
     previewHtml: firstArtifact?.content ?? state.previewHtml,
     isGenerating: false,
     activeGenerationId: null,
+    generationStage: 'done' as GenerationStage,
   }));
 }
 
@@ -192,6 +205,7 @@ function applyGenerateError(
     activeGenerationId: null,
     errorMessage: msg,
     lastError: msg,
+    generationStage: 'error' as GenerationStage,
   }));
   get().pushToast({
     variant: 'error',
@@ -200,11 +214,59 @@ function applyGenerateError(
   });
 }
 
+function advanceStageIfCurrent(
+  get: GetState,
+  set: SetState,
+  generationId: string,
+  stage: GenerationStage,
+): void {
+  if (get().activeGenerationId === generationId) set({ generationStage: stage });
+}
+
+async function runGenerate(
+  get: GetState,
+  set: SetState,
+  generationId: string,
+  payload: Parameters<CodesignApi['generate']>[0],
+): Promise<void> {
+  advanceStageIfCurrent(get, set, generationId, 'thinking');
+  const result = await window.codesign!.generate(payload);
+  // Response fully received — move through parsing → rendering before finalising.
+  advanceStageIfCurrent(get, set, generationId, 'parsing');
+  advanceStageIfCurrent(get, set, generationId, 'rendering');
+  applyGenerateSuccess(
+    set,
+    generationId,
+    result as { artifacts: Array<{ content: string }>; message: string },
+  );
+}
+
+function buildPromptRequest(
+  input: {
+    prompt: string;
+    attachments?: LocalInputFile[] | undefined;
+    referenceUrl?: string | undefined;
+  },
+  storeInputFiles: LocalInputFile[],
+  storeReferenceUrl: string,
+): PromptRequest | null {
+  const prompt = input.prompt.trim();
+  if (!prompt) return null;
+  const refUrl = normalizeReferenceUrl(input.referenceUrl ?? storeReferenceUrl);
+  return {
+    prompt,
+    attachments: uniqueFiles(input.attachments ?? storeInputFiles),
+    ...(refUrl ? { referenceUrl: refUrl } : {}),
+  };
+}
+
 export const useCodesignStore = create<CodesignState>((set, get) => ({
   messages: [],
   previewHtml: null,
   isGenerating: false,
   activeGenerationId: null,
+  generationStage: 'idle' as GenerationStage,
+  streamingTokenCount: 0,
   errorMessage: null,
   lastError: null,
   config: null,
@@ -322,24 +384,17 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       return;
     }
 
-    const prompt = input.prompt.trim();
-    if (!prompt) return;
-
-    const request: PromptRequest = {
-      prompt,
-      attachments: uniqueFiles(input.attachments ?? get().inputFiles),
-      ...(normalizeReferenceUrl(input.referenceUrl ?? get().referenceUrl)
-        ? { referenceUrl: normalizeReferenceUrl(input.referenceUrl ?? get().referenceUrl) }
-        : {}),
-    };
+    const request = buildPromptRequest(input, get().inputFiles, get().referenceUrl);
+    if (!request) return;
 
     const generationId = newId();
     const history = get().messages;
-    const userMessage: ChatMessage = { role: 'user', content: prompt };
     set((s) => ({
-      messages: [...s.messages, userMessage],
+      messages: [...s.messages, { role: 'user', content: request.prompt }],
       isGenerating: true,
       activeGenerationId: generationId,
+      generationStage: 'sending',
+      streamingTokenCount: 0,
       errorMessage: null,
       lastPromptInput: request,
       selectedElement: null,
@@ -347,19 +402,14 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     }));
 
     try {
-      const result = await window.codesign.generate({
-        prompt,
+      await runGenerate(get, set, generationId, {
+        prompt: request.prompt,
         history,
         model: modelRef(cfg.provider, cfg.modelPrimary),
         ...(request.referenceUrl ? { referenceUrl: request.referenceUrl } : {}),
         attachments: request.attachments,
         generationId,
       });
-      applyGenerateSuccess(
-        set,
-        generationId,
-        result as { artifacts: Array<{ content: string }>; message: string },
-      );
     } catch (err) {
       applyGenerateError(get, set, generationId, err);
     }
@@ -382,7 +432,11 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     void window.codesign
       .cancelGeneration(id)
       .then(() => {
-        finishIfCurrent(set, id, () => ({ isGenerating: false, activeGenerationId: null }));
+        finishIfCurrent(set, id, () => ({
+          isGenerating: false,
+          activeGenerationId: null,
+          generationStage: 'idle' as GenerationStage,
+        }));
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');

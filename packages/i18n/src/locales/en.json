@@ -20,6 +20,16 @@
     "applied": "Applied.",
     "working": "Working"
   },
+  "loading": {
+    "stage": {
+      "sending": "Sending prompt...",
+      "thinking": "Model is thinking...",
+      "streaming": "Receiving response...",
+      "parsing": "Parsing artifact...",
+      "rendering": "Rendering preview...",
+      "done": "Done"
+    }
+  },
   "preview": {
     "empty": {
       "title": "Design with AI",

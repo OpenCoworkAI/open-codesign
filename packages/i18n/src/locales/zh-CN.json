@@ -20,6 +20,16 @@
     "applied": "已应用。",
     "working": "处理中"
   },
+  "loading": {
+    "stage": {
+      "sending": "正在发送...",
+      "thinking": "模型思考中...",
+      "streaming": "接收响应中...",
+      "parsing": "解析中...",
+      "rendering": "渲染预览...",
+      "done": "完成"
+    }
+  },
   "preview": {
     "empty": {
       "title": "用 AI 设计",
