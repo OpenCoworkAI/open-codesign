@@ -77,4 +77,69 @@ describe('Tooltip', () => {
     const tooltip = screen.getByRole('tooltip');
     expect(tooltip.className).toContain('top-full');
   });
+
+  it('exposes a focusable wrapper so keyboard users can reach disabled controls', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">Before</button>
+        <Tooltip label="Disabled because no API key">
+          <button type="button" disabled>
+            Send
+          </button>
+        </Tooltip>
+      </>,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    const wrapper = tooltip.parentElement as HTMLElement;
+    expect(wrapper.getAttribute('tabindex')).toBe('0');
+
+    screen.getByRole('button', { name: 'Before' }).focus();
+    await user.tab();
+    expect(document.activeElement).toBe(wrapper);
+  });
+
+  it('wires aria-describedby on the wrapper to the tooltip text id', () => {
+    render(
+      <Tooltip label="Reason">
+        <button type="button" disabled>
+          Send
+        </button>
+      </Tooltip>,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    const wrapper = tooltip.parentElement as HTMLElement;
+    const describedBy = wrapper.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(tooltip.id).toBe(describedBy);
+  });
+
+  it('reveals tooltip when wrapper receives focus and hides on blur', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">Before</button>
+        <Tooltip label="Focus me">
+          <button type="button" disabled>
+            Send
+          </button>
+        </Tooltip>
+        <button type="button">After</button>
+      </>,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip.className).toContain('group-focus-within:opacity-100');
+    expect(tooltip.className).toContain('group-focus:opacity-100');
+
+    screen.getByRole('button', { name: 'Before' }).focus();
+    await user.tab();
+    const wrapper = tooltip.parentElement as HTMLElement;
+    expect(document.activeElement).toBe(wrapper);
+
+    await user.tab();
+    expect(document.activeElement).not.toBe(wrapper);
+  });
 });
