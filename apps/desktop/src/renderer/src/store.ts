@@ -1,4 +1,9 @@
-import type { ChatMessage } from '@open-codesign/shared';
+import type {
+  ChatMessage,
+  ModelRef,
+  OnboardingState,
+  SupportedOnboardingProvider,
+} from '@open-codesign/shared';
 import { create } from 'zustand';
 import type { CodesignApi } from '../../preload/index';
 
@@ -13,7 +18,15 @@ interface CodesignState {
   previewHtml: string | null;
   isGenerating: boolean;
   errorMessage: string | null;
+  config: OnboardingState | null;
+  configLoaded: boolean;
+  loadConfig: () => Promise<void>;
+  completeOnboarding: (next: OnboardingState) => void;
   sendPrompt: (prompt: string) => Promise<void>;
+}
+
+function modelRef(provider: SupportedOnboardingProvider, modelId: string): ModelRef {
+  return { provider, modelId };
 }
 
 export const useCodesignStore = create<CodesignState>((set, get) => ({
@@ -21,11 +34,34 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   previewHtml: null,
   isGenerating: false,
   errorMessage: null,
+  config: null,
+  configLoaded: false,
+
+  async loadConfig() {
+    if (!window.codesign) {
+      set({
+        configLoaded: true,
+        errorMessage: 'Renderer is not connected to the main process.',
+      });
+      return;
+    }
+    const state = await window.codesign.onboarding.getState();
+    set({ config: state, configLoaded: true });
+  },
+
+  completeOnboarding(next: OnboardingState) {
+    set({ config: next });
+  },
 
   async sendPrompt(prompt: string) {
     if (get().isGenerating) return;
     if (!window.codesign) {
       set({ errorMessage: 'Renderer is not connected to the main process.' });
+      return;
+    }
+    const cfg = get().config;
+    if (cfg === null || !cfg.hasKey || cfg.provider === null || cfg.modelPrimary === null) {
+      set({ errorMessage: 'Onboarding is not complete.' });
       return;
     }
 
@@ -36,30 +72,11 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       errorMessage: null,
     }));
 
-    // Tier 1 wiring: hardcoded provider/model and key-from-env until the
-    // onboarding flow lands. The real flow will read from the keychain.
-    const apiKey = '';
-    if (!apiKey) {
-      set((s) => ({
-        messages: [
-          ...s.messages,
-          {
-            role: 'assistant',
-            content:
-              'No API key configured yet. Onboarding flow coming in v0.1 — see docs/research/06-api-onboarding-ux.md.',
-          },
-        ],
-        isGenerating: false,
-      }));
-      return;
-    }
-
     try {
       const result = await window.codesign.generate({
         prompt,
         history: get().messages,
-        model: { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
-        apiKey,
+        model: modelRef(cfg.provider, cfg.modelPrimary),
       });
       const firstArtifact = (result as { artifacts: Array<{ content: string }> }).artifacts[0];
       const message = (result as { message: string }).message;

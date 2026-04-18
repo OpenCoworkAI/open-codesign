@@ -98,6 +98,9 @@ export function detectProviderFromKey(key: string): ModelRef['provider'] | null 
   return null;
 }
 
+export { pingProvider } from './validate';
+export type { ValidateResult } from './validate';
+
 // Tier 2 surface (not yet implemented):
 //   structuredComplete<T>(model, schema, messages, opts): Promise<T>
 //   streamArtifacts(model, messages, opts): AsyncIterable<ArtifactEvent>

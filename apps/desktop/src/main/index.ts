@@ -5,6 +5,7 @@ import { detectProviderFromKey } from '@open-codesign/providers';
 import { BRAND, CodesignError, GeneratePayload } from '@open-codesign/shared';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { getApiKeyForProvider, loadConfigOnBoot, registerOnboardingIpc } from './onboarding-ipc';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -52,11 +53,12 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('codesign:generate', async (_e, raw: unknown) => {
     const payload = GeneratePayload.parse(raw);
+    const apiKey = getApiKeyForProvider(payload.model.provider);
     return generate({
       prompt: payload.prompt,
       history: payload.history,
       model: payload.model,
-      apiKey: payload.apiKey,
+      apiKey,
       ...(payload.baseUrl !== undefined ? { baseUrl: payload.baseUrl } : {}),
     });
   });
@@ -76,8 +78,10 @@ function setupAutoUpdater(): void {
   ipcMain.handle('codesign:install-update', () => autoUpdater.quitAndInstall());
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
+  await loadConfigOnBoot();
   registerIpcHandlers();
+  registerOnboardingIpc();
   setupAutoUpdater();
   createWindow();
 

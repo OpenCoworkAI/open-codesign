@@ -84,7 +84,6 @@ export const GeneratePayload = z.object({
   prompt: z.string().min(1).max(32_000),
   history: z.array(ChatMessage).max(200),
   model: ModelRef,
-  apiKey: z.string().min(1).max(500),
   baseUrl: z.string().url().optional(),
 });
 export type GeneratePayload = z.infer<typeof GeneratePayload>;
@@ -103,3 +102,17 @@ export class CodesignError extends Error {
     this.name = 'CodesignError';
   }
 }
+
+export {
+  ConfigSchema,
+  PROVIDER_SHORTLIST,
+  SUPPORTED_ONBOARDING_PROVIDERS,
+  SecretRef,
+  isSupportedOnboardingProvider,
+} from './config';
+export type {
+  Config,
+  OnboardingState,
+  ProviderShortlist,
+  SupportedOnboardingProvider,
+} from './config';

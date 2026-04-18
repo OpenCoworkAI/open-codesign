@@ -2,7 +2,8 @@ import { buildSrcdoc } from '@open-codesign/runtime';
 import { BUILTIN_DEMOS } from '@open-codesign/templates';
 import { Button } from '@open-codesign/ui';
 import { Send, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Onboarding } from './onboarding';
 import { useCodesignStore } from './store';
 
 export function App() {
@@ -10,13 +11,32 @@ export function App() {
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const isGenerating = useCodesignStore((s) => s.isGenerating);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
+  const config = useCodesignStore((s) => s.config);
+  const configLoaded = useCodesignStore((s) => s.configLoaded);
+  const loadConfig = useCodesignStore((s) => s.loadConfig);
   const [prompt, setPrompt] = useState('');
+
+  useEffect(() => {
+    void loadConfig();
+  }, [loadConfig]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
     void sendPrompt(prompt);
     setPrompt('');
+  }
+
+  if (!configLoaded) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[var(--color-background)] text-sm text-[var(--color-text-muted)]">
+        Loading…
+      </div>
+    );
+  }
+
+  if (config === null || !config.hasKey) {
+    return <Onboarding />;
   }
 
   return (
