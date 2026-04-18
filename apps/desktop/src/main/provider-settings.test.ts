@@ -211,6 +211,24 @@ describe('resolveActiveModel', () => {
     expect(result.baseUrl).toBe('https://api.duckcoding.ai/v1');
   });
 
+  it('ignores stale hint baseUrl entry and returns active provider baseUrl on override', () => {
+    // Reproduces the Codex finding: hint says {openai, duckcoding}, active is
+    // openrouter. The resolver must report openrouter's baseUrl (null here) so
+    // the IPC handler does not route the openrouter key to duckcoding.
+    const cfg: Config = {
+      ...baseCfg,
+      baseUrls: {
+        openai: { baseUrl: 'https://api.duckcoding.ai/v1' },
+        openrouter: { baseUrl: 'https://openrouter.ai/api/v1' },
+      },
+    };
+    const result = resolveActiveModel(cfg, { provider: 'openai', modelId: 'gpt-4o' });
+
+    expect(result.overridden).toBe(true);
+    expect(result.model.provider).toBe('openrouter');
+    expect(result.baseUrl).toBe('https://openrouter.ai/api/v1');
+  });
+
   it('throws PROVIDER_KEY_MISSING when the active provider has no stored secret', () => {
     const cfg: Config = {
       ...baseCfg,

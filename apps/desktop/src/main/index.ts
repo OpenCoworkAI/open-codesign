@@ -159,7 +159,11 @@ function registerIpcHandlers(): void {
     // diverge from what the user sees.
     const active = resolveActiveModel(cfg, payload.model);
     const apiKey = getApiKeyForProvider(active.model.provider);
-    const baseUrl = payload.baseUrl ?? active.baseUrl ?? undefined;
+    // Once we've snapped to the canonical active provider, the renderer-supplied
+    // baseUrl can no longer be trusted — it may belong to a different (stale)
+    // provider and would route the active provider's API key to the wrong host.
+    // Always use the per-provider baseUrl from cached config.
+    const baseUrl = active.baseUrl ?? undefined;
     coreLogger.info('[generate] step=load_config.ok', {
       ms: Date.now() - loadStart,
       hasApiKey: apiKey.length > 0,
@@ -273,7 +277,8 @@ function registerIpcHandlers(): void {
     }
     const active = resolveActiveModel(cfg, payload.model);
     const apiKey = getApiKeyForProvider(active.model.provider);
-    const baseUrl = payload.baseUrl ?? active.baseUrl ?? undefined;
+    // See codesign:v1:generate above — renderer baseUrl is ignored post-snap.
+    const baseUrl = active.baseUrl ?? undefined;
     const promptContext = await preparePromptContext({
       attachments: payload.attachments,
       referenceUrl: payload.referenceUrl,
