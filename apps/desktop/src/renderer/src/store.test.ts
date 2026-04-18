@@ -129,13 +129,13 @@ describe('useCodesignStore generation cancellation', () => {
       setTimeout,
     });
 
-    const firstRun = useCodesignStore.getState().sendPrompt('first prompt');
+    const firstRun = useCodesignStore.getState().sendPrompt({ prompt: 'first prompt' });
     const firstId = useCodesignStore.getState().activeGenerationId;
     if (!firstId) throw new Error('expected first generation id');
 
     useCodesignStore.getState().cancelGeneration();
 
-    const secondRun = useCodesignStore.getState().sendPrompt('second prompt');
+    const secondRun = useCodesignStore.getState().sendPrompt({ prompt: 'second prompt' });
     const secondId = useCodesignStore.getState().activeGenerationId;
     if (!secondId) throw new Error('expected second generation id');
     expect(secondId).not.toBe(firstId);
@@ -184,7 +184,7 @@ describe('useCodesignStore generation cancellation', () => {
       setTimeout,
     });
 
-    const run = useCodesignStore.getState().sendPrompt('first prompt');
+    const run = useCodesignStore.getState().sendPrompt({ prompt: 'first prompt' });
     const generationId = useCodesignStore.getState().activeGenerationId;
     if (!generationId) throw new Error('expected generation id');
 
@@ -202,7 +202,6 @@ describe('useCodesignStore generation cancellation', () => {
     });
     expect(state.toasts.at(-1)).toMatchObject({
       variant: 'error',
-      title: 'Generation failed',
       description: 'Upstream proxy aborted the response',
     });
   });

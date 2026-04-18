@@ -1,29 +1,38 @@
-import { dirname, join } from 'node:path';
+import { stat } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generate } from '@open-codesign/core';
+import { applyComment, generate } from '@open-codesign/core';
 import { detectProviderFromKey } from '@open-codesign/providers';
 import {
+  ApplyCommentPayload,
   BRAND,
   CancelGenerationPayloadV1,
   CodesignError,
   GeneratePayload,
 } from '@open-codesign/shared';
-import { BrowserWindow, app, ipcMain, shell } from 'electron';
+import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { scanDesignSystem } from './design-system';
+import { BrowserWindow, app, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
 import { cancelGenerationRequest } from './generation-ipc';
+import { registerLocaleIpc } from './locale-ipc';
 import { getLogPath, getLogger, initLogger } from './logger';
 import {
   getApiKeyForProvider,
   getBaseUrlForProvider,
+  getCachedConfig,
+  getOnboardingState,
   loadConfigOnBoot,
   registerOnboardingIpc,
+  setDesignSystem,
 } from './onboarding-ipc';
+import { preparePromptContext } from './prompt-context';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-let mainWindow: BrowserWindow | null = null;
+let mainWindow: ElectronBrowserWindow | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -31,6 +40,7 @@ function createWindow(): void {
     height: 820,
     minWidth: 960,
     minHeight: 640,
+    autoHideMenuBar: process.platform !== 'darwin',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: BRAND.backgroundColor,
     show: false,
@@ -44,7 +54,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => mainWindow?.show());
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url }: { url: string }) => {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -56,59 +66,8 @@ function createWindow(): void {
   }
 }
 
-interface RunGenerateArgs {
-  payload: GeneratePayload;
-  controller: AbortController;
-  logIpc: ReturnType<typeof getLogger>;
-}
-
-async function runGenerate({ payload, controller, logIpc }: RunGenerateArgs): Promise<unknown> {
-  const apiKey = getApiKeyForProvider(payload.model.provider);
-  const storedBaseUrl = getBaseUrlForProvider(payload.model.provider);
-  const baseUrl = payload.baseUrl ?? storedBaseUrl;
-  const id = payload.generationId ?? `gen-${Date.now()}`;
-
-  logIpc.info('generate', {
-    id,
-    provider: payload.model.provider,
-    modelId: payload.model.modelId,
-    promptLen: payload.prompt.length,
-    historyLen: payload.history.length,
-    baseUrl: baseUrl ?? '<default>',
-  });
-  const t0 = Date.now();
-  try {
-    const result = await generate({
-      prompt: payload.prompt,
-      history: payload.history,
-      model: payload.model,
-      apiKey,
-      ...(baseUrl !== undefined ? { baseUrl } : {}),
-      signal: controller.signal,
-    });
-    logIpc.info('generate.ok', {
-      id,
-      ms: Date.now() - t0,
-      artifacts: (result as { artifacts?: unknown[] }).artifacts?.length ?? 0,
-      cost: (result as { costUsd?: number }).costUsd,
-    });
-    return result;
-  } catch (err) {
-    logIpc.error('generate.fail', {
-      id,
-      ms: Date.now() - t0,
-      provider: payload.model.provider,
-      modelId: payload.model.modelId,
-      baseUrl: baseUrl ?? '<default>',
-      message: err instanceof Error ? err.message : String(err),
-      code: err instanceof CodesignError ? err.code : undefined,
-    });
-    throw err;
-  }
-}
-
 function registerIpcHandlers(): void {
-  const logIpc = getLogger('ipc');
+  const logIpc = getLogger('main:ipc');
 
   /** In-flight requests: generationId → AbortController */
   const inFlight = new Map<string, AbortController>();
@@ -120,13 +79,115 @@ function registerIpcHandlers(): void {
     return detectProviderFromKey(key);
   });
 
+  ipcMain.handle('codesign:pick-input-files', async () => {
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, {
+          properties: ['openFile', 'multiSelections'],
+        })
+      : await dialog.showOpenDialog({
+          properties: ['openFile', 'multiSelections'],
+        });
+    if (result.canceled || result.filePaths.length === 0) return [];
+    return Promise.all(
+      result.filePaths.map(async (path) => {
+        try {
+          const info = await stat(path);
+          return { path, name: basename(path), size: info.size };
+        } catch {
+          return { path, name: basename(path), size: 0 };
+        }
+      }),
+    );
+  });
+
+  ipcMain.handle('codesign:pick-design-system-directory', async () => {
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, {
+          properties: ['openDirectory'],
+        })
+      : await dialog.showOpenDialog({
+          properties: ['openDirectory'],
+        });
+    if (result.canceled || result.filePaths.length === 0) return getOnboardingState();
+    const rootPath = result.filePaths[0];
+    if (!rootPath) return getOnboardingState();
+    logIpc.info('designSystem.scan.start', { rootPath });
+    const snapshot = await scanDesignSystem(rootPath);
+    const nextState = await setDesignSystem(snapshot);
+    logIpc.info('designSystem.scan.ok', {
+      rootPath,
+      sourceFiles: snapshot.sourceFiles.length,
+      colors: snapshot.colors.length,
+      fonts: snapshot.fonts.length,
+    });
+    return nextState;
+  });
+
+  ipcMain.handle('codesign:clear-design-system', async () => {
+    const nextState = await setDesignSystem(null);
+    logIpc.info('designSystem.clear');
+    return nextState;
+  });
+
   ipcMain.handle('codesign:generate', async (_e, raw: unknown) => {
     const payload = GeneratePayload.parse(raw);
     const controller = new AbortController();
     const id = payload.generationId ?? `gen-${Date.now()}`;
     inFlight.set(id, controller);
+
+    const apiKey = getApiKeyForProvider(payload.model.provider);
+    const storedBaseUrl = getBaseUrlForProvider(payload.model.provider);
+    const baseUrl = payload.baseUrl ?? storedBaseUrl;
+    const cfg = getCachedConfig();
+    const promptContext = await preparePromptContext({
+      attachments: payload.attachments,
+      referenceUrl: payload.referenceUrl,
+      designSystem: cfg?.designSystem ?? null,
+    });
+
+    logIpc.info('generate', {
+      id,
+      provider: payload.model.provider,
+      modelId: payload.model.modelId,
+      promptLen: payload.prompt.length,
+      historyLen: payload.history.length,
+      attachmentCount: payload.attachments.length,
+      hasReferenceUrl: payload.referenceUrl !== undefined,
+      hasDesignSystem: promptContext.designSystem !== null,
+      baseUrl: baseUrl ?? '<default>',
+    });
+
+    const t0 = Date.now();
     try {
-      return await runGenerate({ payload, controller, logIpc });
+      const result = await generate({
+        prompt: payload.prompt,
+        history: payload.history,
+        model: payload.model,
+        apiKey,
+        attachments: promptContext.attachments,
+        referenceUrl: promptContext.referenceUrl,
+        designSystem: promptContext.designSystem ?? null,
+        ...(baseUrl !== undefined ? { baseUrl } : {}),
+        signal: controller.signal,
+      });
+      logIpc.info('generate.ok', {
+        id,
+        ms: Date.now() - t0,
+        artifacts: result.artifacts.length,
+        cost: result.costUsd,
+      });
+      return result;
+    } catch (err) {
+      logIpc.error('generate.fail', {
+        id,
+        ms: Date.now() - t0,
+        provider: payload.model.provider,
+        modelId: payload.model.modelId,
+        baseUrl: baseUrl ?? '<default>',
+        message: err instanceof Error ? err.message : String(err),
+        code: err instanceof CodesignError ? err.code : undefined,
+      });
+      throw err;
     } finally {
       inFlight.delete(id);
     }
@@ -135,6 +196,66 @@ function registerIpcHandlers(): void {
   ipcMain.handle('codesign:v1:cancel-generation', (_e, raw: unknown) => {
     const { generationId } = CancelGenerationPayloadV1.parse(raw);
     cancelGenerationRequest(generationId, inFlight, logIpc);
+  });
+
+  ipcMain.handle('codesign:apply-comment', async (_e, raw: unknown) => {
+    const payload = ApplyCommentPayload.parse(raw);
+    const cfg = getCachedConfig();
+    if (cfg === null) {
+      throw new CodesignError(
+        'No configuration found. Complete onboarding first.',
+        'CONFIG_MISSING',
+      );
+    }
+    const model = payload.model ?? { provider: cfg.provider, modelId: cfg.modelFast };
+    const apiKey = getApiKeyForProvider(model.provider);
+    const storedBaseUrl = getBaseUrlForProvider(model.provider);
+    const promptContext = await preparePromptContext({
+      attachments: payload.attachments,
+      referenceUrl: payload.referenceUrl,
+      designSystem: cfg.designSystem ?? null,
+    });
+
+    logIpc.info('applyComment', {
+      provider: model.provider,
+      modelId: model.modelId,
+      selector: payload.selection.selector,
+      attachmentCount: payload.attachments.length,
+      hasReferenceUrl: payload.referenceUrl !== undefined,
+      hasDesignSystem: promptContext.designSystem !== null,
+      baseUrl: storedBaseUrl ?? '<default>',
+    });
+
+    const t0 = Date.now();
+    try {
+      const result = await applyComment({
+        html: payload.html,
+        comment: payload.comment,
+        selection: payload.selection,
+        model,
+        apiKey,
+        attachments: promptContext.attachments,
+        referenceUrl: promptContext.referenceUrl,
+        designSystem: promptContext.designSystem ?? null,
+        ...(storedBaseUrl !== undefined ? { baseUrl: storedBaseUrl } : {}),
+      });
+      logIpc.info('applyComment.ok', {
+        ms: Date.now() - t0,
+        artifacts: result.artifacts.length,
+        cost: result.costUsd,
+      });
+      return result;
+    } catch (err) {
+      logIpc.error('applyComment.fail', {
+        ms: Date.now() - t0,
+        provider: model.provider,
+        modelId: model.modelId,
+        selector: payload.selection.selector,
+        message: err instanceof Error ? err.message : String(err),
+        code: err instanceof CodesignError ? err.code : undefined,
+      });
+      throw err;
+    }
   });
 
   ipcMain.handle('codesign:open-log-folder', async () => {
@@ -160,6 +281,7 @@ void app.whenReady().then(async () => {
   initLogger();
   await loadConfigOnBoot();
   registerIpcHandlers();
+  registerLocaleIpc();
   registerOnboardingIpc();
   registerExporterIpc(() => mainWindow);
   setupAutoUpdater();
