@@ -103,30 +103,46 @@ function modelRef(provider: SupportedOnboardingProvider, modelId: string): Model
 type SetState = StoreApi<CodesignState>['setState'];
 type GetState = StoreApi<CodesignState>['getState'];
 
-function applyGenerateSuccess(set: SetState, result: unknown): void {
+function finishIfCurrent(
+  set: SetState,
+  generationId: string,
+  update: (state: CodesignState) => Partial<CodesignState>,
+): void {
+  set((state) => (state.activeGenerationId === generationId ? update(state) : {}));
+}
+
+function applyGenerateSuccess(set: SetState, generationId: string, result: unknown): void {
   const r = result as { artifacts: Array<{ content: string }>; message: string };
   const firstArtifact = r.artifacts[0];
   const message = r.message;
-  set((s) => ({
-    messages: [...s.messages, { role: 'assistant', content: message || 'Done.' }],
-    previewHtml: firstArtifact?.content ?? s.previewHtml,
+  finishIfCurrent(set, generationId, (state) => ({
+    messages: [...state.messages, { role: 'assistant', content: message || 'Done.' }],
+    previewHtml: firstArtifact?.content ?? state.previewHtml,
     isGenerating: false,
     activeGenerationId: null,
   }));
 }
 
-function applyGenerateError(get: GetState, set: SetState, err: unknown): void {
+function applyGenerateError(
+  get: GetState,
+  set: SetState,
+  generationId: string,
+  err: unknown,
+): void {
   const msg = err instanceof Error ? err.message : 'Unknown error';
   const lower = msg.toLowerCase();
   const isCancelled = lower.includes('abort') || lower.includes('cancel');
-  set((s) => ({
+  const isCurrentGeneration = get().activeGenerationId === generationId;
+  if (!isCurrentGeneration) return;
+
+  finishIfCurrent(set, generationId, (state) => ({
     messages: isCancelled
-      ? s.messages
-      : [...s.messages, { role: 'assistant', content: `Error: ${msg}` }],
+      ? state.messages
+      : [...state.messages, { role: 'assistant', content: `Error: ${msg}` }],
     isGenerating: false,
     activeGenerationId: null,
     errorMessage: isCancelled ? null : msg,
-    lastError: isCancelled ? s.lastError : msg,
+    lastError: isCancelled ? state.lastError : msg,
   }));
   if (!isCancelled) {
     get().pushToast({ variant: 'error', title: 'Generation failed', description: msg });
@@ -210,9 +226,9 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         model: modelRef(cfg.provider, cfg.modelPrimary),
         generationId,
       });
-      applyGenerateSuccess(set, result);
+      applyGenerateSuccess(set, generationId, result);
     } catch (err) {
-      applyGenerateError(get, set, err);
+      applyGenerateError(get, set, generationId, err);
     }
   },
 

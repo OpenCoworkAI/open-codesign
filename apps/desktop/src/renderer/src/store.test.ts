@@ -13,12 +13,23 @@ const READY_CONFIG: OnboardingState = {
 
 const initialState = useCodesignStore.getState();
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function resetStore() {
   useCodesignStore.setState({
     ...initialState,
     messages: [],
     previewHtml: null,
     isGenerating: false,
+    activeGenerationId: null,
     errorMessage: null,
     lastError: null,
     config: READY_CONFIG,
@@ -93,5 +104,62 @@ describe('useCodesignStore iframe error handling', () => {
     // oldest (0-4) should have been shifted out; newest (5-54) remain
     expect(errors[0]).toBe('error-5');
     expect(errors[49]).toBe('error-54');
+  });
+});
+
+describe('useCodesignStore generation cancellation', () => {
+  it('ignores stale completions from a cancelled generation after a resubmit', async () => {
+    const pendingById = new Map<
+      string,
+      ReturnType<typeof deferred<{ artifacts: Array<{ content: string }>; message: string }>>
+    >();
+    const cancelGeneration = vi.fn();
+    const generate = vi.fn((payload: { generationId?: string }) => {
+      if (!payload.generationId) throw new Error('missing generationId');
+      const task = deferred<{ artifacts: Array<{ content: string }>; message: string }>();
+      pendingById.set(payload.generationId, task);
+      return task.promise;
+    });
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        cancelGeneration,
+      },
+    });
+
+    const firstRun = useCodesignStore.getState().sendPrompt('first prompt');
+    const firstId = useCodesignStore.getState().activeGenerationId;
+    if (!firstId) throw new Error('expected first generation id');
+
+    useCodesignStore.getState().cancelGeneration();
+
+    const secondRun = useCodesignStore.getState().sendPrompt('second prompt');
+    const secondId = useCodesignStore.getState().activeGenerationId;
+    if (!secondId) throw new Error('expected second generation id');
+    expect(secondId).not.toBe(firstId);
+
+    pendingById.get(firstId)?.resolve({
+      artifacts: [{ content: '<html>old</html>' }],
+      message: 'Old result',
+    });
+    await firstRun;
+
+    expect(useCodesignStore.getState().activeGenerationId).toBe(secondId);
+    expect(useCodesignStore.getState().isGenerating).toBe(true);
+    expect(useCodesignStore.getState().previewHtml).toBeNull();
+    expect(
+      useCodesignStore.getState().messages.some((m) => m.content === 'Old result'),
+    ).toBe(false);
+
+    pendingById.get(secondId)?.resolve({
+      artifacts: [{ content: '<html>fresh</html>' }],
+      message: 'Fresh result',
+    });
+    await secondRun;
+
+    expect(cancelGeneration).toHaveBeenCalledWith(firstId);
+    expect(useCodesignStore.getState().previewHtml).toBe('<html>fresh</html>');
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
   });
 });

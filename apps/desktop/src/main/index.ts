@@ -6,6 +6,7 @@ import { BRAND, CodesignError, GeneratePayload } from '@open-codesign/shared';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { registerExporterIpc } from './exporter-ipc';
+import { cancelGenerationRequest } from './generation-ipc';
 import { getLogPath, getLogger, initLogger } from './logger';
 import {
   getApiKeyForProvider,
@@ -127,21 +128,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('codesign:cancel-generation', (_e, raw: unknown) => {
-    const id = typeof raw === 'string' ? raw : undefined;
-    if (id !== undefined) {
-      const controller = inFlight.get(id);
-      if (controller) {
-        controller.abort();
-        inFlight.delete(id);
-        logIpc.info('generate.cancelled', { id });
-      }
-    } else {
-      for (const [key, controller] of inFlight) {
-        controller.abort();
-        logIpc.info('generate.cancelled', { id: key });
-      }
-      inFlight.clear();
-    }
+    cancelGenerationRequest(raw, inFlight, logIpc);
   });
 
   ipcMain.handle('codesign:open-log-folder', async () => {
