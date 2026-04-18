@@ -33,7 +33,8 @@ function InlineCommentComposerCard({ selectedElement }: InlineCommentComposerCar
         <div className="min-w-0">
           <div className="inline-flex items-center gap-2 text-[var(--text-xs)] font-medium text-[var(--color-text-primary)]">
             <MessageSquareText className="h-4 w-4 text-[var(--color-accent)]" />
-            {t('inlineComment.title')} <code className="text-[var(--text-xs)]">{selectedElement.tag}</code>
+            {t('inlineComment.title')}{' '}
+            <code className="text-[var(--text-xs)]">{selectedElement.tag}</code>
           </div>
           <p
             className="mt-1 truncate text-[var(--text-xs)] text-[var(--color-text-muted)]"

@@ -372,6 +372,14 @@
     "enterBothModels": "Both model fields are required",
     "ollamaComingSoon": "Ollama integration is coming in v0.2"
   },
+  "errorBoundary": {
+    "scopeFallback": "this view",
+    "crashedSuffix": "{{scope}} crashed",
+    "body": "The rest of the app is still running. Reload this view, or copy the stack to file a bug.",
+    "noStack": "(no stack)",
+    "copyStack": "Copy stack",
+    "reload": "Reload"
+  },
   "errors": {
     "generic": "Something went wrong.",
     "providerAuthMissing": "No API key configured. Open Settings to add one.",

@@ -11,6 +11,7 @@
  * preview / topbar) so a single crash never blanks the entire window.
  */
 
+import { useT } from '@open-codesign/i18n';
 import { Button } from '@open-codesign/ui';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
@@ -79,39 +80,56 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (this.props.fallback) {
       return this.props.fallback({ error, reset: this.reset });
     }
-    const scope = this.props.scope ?? 'this view';
     return (
-      <div className="h-full w-full flex items-center justify-center p-6 bg-[var(--color-background)]">
-        <div className="max-w-md w-full rounded-[var(--radius-2xl)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] p-6">
-          <div className="text-xs uppercase tracking-wide text-[var(--color-error)] font-semibold mb-2">
-            {scope} crashed
-          </div>
-          <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
-            {error.name}: {error.message}
-          </h2>
-          <p className="text-sm text-[var(--color-text-secondary)] mb-4">
-            The rest of the app is still running. Reload this view, or copy the stack to file a bug.
-          </p>
-          <pre className="text-[11px] leading-snug font-mono text-[var(--color-text-muted)] bg-[var(--color-surface-active)] border border-[var(--color-border-muted)] rounded-[var(--radius-md)] p-3 max-h-40 overflow-auto whitespace-pre-wrap">
-            {error.stack ?? '(no stack)'}
-          </pre>
-          <div className="mt-4 flex gap-2 justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              size="md"
-              onClick={() => void this.copyStack()}
-            >
-              Copy stack
-            </Button>
-            <Button type="button" size="md" onClick={this.reset}>
-              Reload
-            </Button>
-          </div>
-        </div>
-      </div>
+      <ErrorBoundaryFallback
+        error={error}
+        scope={this.props.scope}
+        onReset={this.reset}
+        onCopyStack={() => void this.copyStack()}
+      />
     );
   }
+}
+
+interface ErrorBoundaryFallbackProps {
+  error: Error;
+  scope?: string | undefined;
+  onReset: () => void;
+  onCopyStack: () => void;
+}
+
+function ErrorBoundaryFallback({
+  error,
+  scope,
+  onReset,
+  onCopyStack,
+}: ErrorBoundaryFallbackProps): ReactNode {
+  const t = useT();
+  const scopeLabel = scope ?? t('errorBoundary.scopeFallback');
+  return (
+    <div className="h-full w-full flex items-center justify-center p-6 bg-[var(--color-background)]">
+      <div className="max-w-md w-full rounded-[var(--radius-2xl)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] p-6">
+        <div className="text-xs uppercase tracking-wide text-[var(--color-error)] font-semibold mb-2">
+          {t('errorBoundary.crashedSuffix', { scope: scopeLabel })}
+        </div>
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
+          {error.name}: {error.message}
+        </h2>
+        <p className="text-sm text-[var(--color-text-secondary)] mb-4">{t('errorBoundary.body')}</p>
+        <pre className="text-[11px] leading-snug font-mono text-[var(--color-text-muted)] bg-[var(--color-surface-active)] border border-[var(--color-border-muted)] rounded-[var(--radius-md)] p-3 max-h-40 overflow-auto whitespace-pre-wrap">
+          {error.stack ?? t('errorBoundary.noStack')}
+        </pre>
+        <div className="mt-4 flex gap-2 justify-end">
+          <Button type="button" variant="secondary" size="md" onClick={onCopyStack}>
+            {t('errorBoundary.copyStack')}
+          </Button>
+          <Button type="button" size="md" onClick={onReset}>
+            {t('errorBoundary.reload')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ErrorBoundaryChildren({ children }: { children: ReactNode }): ReactNode {

@@ -371,6 +371,14 @@
     "enterBothModels": "两个模型字段均为必填",
     "ollamaComingSoon": "Ollama 集成将在 v0.2 中支持"
   },
+  "errorBoundary": {
+    "scopeFallback": "这个视图",
+    "crashedSuffix": "{{scope}}崩溃了",
+    "body": "应用其余部分仍在运行。可以重新加载该视图，或复制堆栈用于反馈问题。",
+    "noStack": "（无堆栈信息）",
+    "copyStack": "复制堆栈",
+    "reload": "重新加载"
+  },
   "errors": {
     "generic": "出错了。",
     "providerAuthMissing": "还没配置 API Key。打开设置去添加一个。",
