@@ -3,6 +3,7 @@ import { BUILTIN_DEMOS } from '@open-codesign/templates';
 import { Button } from '@open-codesign/ui';
 import { Send, Sparkles } from 'lucide-react';
 import { useState } from 'react';
+import { PreviewToolbar } from './components/PreviewToolbar';
 import { useCodesignStore } from './store';
 
 export function App() {
@@ -58,7 +59,6 @@ export function App() {
           ) : (
             messages.map((m, i) => (
               <div
-                // biome-ignore lint/suspicious/noArrayIndexKey: tier-1 chat list with no reordering
                 key={`${m.role}-${i}`}
                 className={`px-3 py-2 rounded-[var(--radius-md)] text-sm ${
                   m.role === 'user'
@@ -99,6 +99,7 @@ export function App() {
             BYOK · local-first · multi-model
           </span>
         </header>
+        <PreviewToolbar />
         <div className="flex-1 p-6 overflow-auto">
           {previewHtml ? (
             <iframe
