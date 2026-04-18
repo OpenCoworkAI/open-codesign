@@ -306,7 +306,9 @@
     }
   },
   "topbar": {
-    "spendThisWeek": "this week"
+    "spendThisWeek": "this week",
+    "byokTitle": "BYOK — bring-your-own-key. Full usage tracking coming soon.",
+    "spendTooltip": "Spending this week (full tracking coming soon)"
   },
   "starterPrompts": {
     "landing": "Build a landing page for an AI startup. Hero with a strong tagline, 3 feature cards, social proof section, CTA.",

@@ -36,7 +36,7 @@ function ByokBadge() {
   return (
     <div
       className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 select-none"
-      title="BYOK — bring-your-own-key. Full usage tracking coming soon."
+      title={t('topbar.byokTitle')}
     >
       {/* Provider + model chip */}
       <span className="text-[11px] text-[var(--color-text-secondary)] leading-none">
@@ -48,7 +48,7 @@ function ByokBadge() {
       <span className="w-px h-3 bg-[var(--color-border)]" aria-hidden="true" />
 
       {/* Cost this week — tabular mono numerals */}
-      <Tooltip label="Spending this week (full tracking coming soon)">
+      <Tooltip label={t('topbar.spendTooltip')}>
         <span
           className="text-[11px] text-[var(--color-text-secondary)] leading-none"
           style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}

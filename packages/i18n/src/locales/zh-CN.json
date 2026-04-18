@@ -305,7 +305,9 @@
     }
   },
   "topbar": {
-    "spendThisWeek": "本周"
+    "spendThisWeek": "本周",
+    "byokTitle": "BYOK — 自带密钥，完整用量统计即将上线。",
+    "spendTooltip": "本周花费（完整统计即将上线）"
   },
   "starterPrompts": {
     "landing": "为一家 AI 创业公司做一个落地页。Hero 区一句有力的 slogan，3 个特性卡片，社会证明区，CTA。",
