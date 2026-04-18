@@ -368,7 +368,17 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   cancelGeneration() {
     const id = get().activeGenerationId;
-    if (!id || !window.codesign) return;
+    if (!id) return;
+    if (!window.codesign) {
+      const msg = tr('errors.rendererDisconnected');
+      set({ errorMessage: msg, lastError: msg });
+      get().pushToast({
+        variant: 'error',
+        title: tr('notifications.cancellationFailed'),
+        description: msg,
+      });
+      return;
+    }
 
     void window.codesign
       .cancelGeneration(id)

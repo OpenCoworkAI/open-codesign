@@ -1,5 +1,6 @@
 import type { OnboardingState } from '@open-codesign/shared';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initI18n } from '@open-codesign/i18n';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCodesignStore } from './store';
 
 const READY_CONFIG: OnboardingState = {
@@ -108,6 +109,10 @@ describe('useCodesignStore iframe error handling', () => {
 });
 
 describe('useCodesignStore generation cancellation', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
+
   it('ignores stale completions from a cancelled generation after a resubmit', async () => {
     const pendingById = new Map<
       string,
@@ -165,6 +170,21 @@ describe('useCodesignStore generation cancellation', () => {
     expect(cancelGeneration).toHaveBeenCalledWith(firstId);
     expect(useCodesignStore.getState().previewHtml).toBe('<html>fresh</html>');
     expect(useCodesignStore.getState().isGenerating).toBe(false);
+  });
+
+  it('sets errorMessage and pushes a toast when window.codesign is missing during cancel', () => {
+    vi.stubGlobal('window', { setTimeout });
+
+    useCodesignStore.setState({ activeGenerationId: 'gen-123' });
+
+    useCodesignStore.getState().cancelGeneration();
+
+    const state = useCodesignStore.getState();
+    expect(state.errorMessage).toBeTruthy();
+    expect(state.lastError).toBe(state.errorMessage);
+    expect(state.toasts.at(-1)).toMatchObject({
+      variant: 'error',
+    });
   });
 
   it('surfaces current-generation failures even when the message contains abort wording', async () => {
