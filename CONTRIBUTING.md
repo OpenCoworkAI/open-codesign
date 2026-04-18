@@ -1,4 +1,4 @@
-# Contributing to open-codesign
+# Contributing to Open CoDesign
 
 Thanks for considering a contribution. This project is in **pre-alpha**: the architecture is being shaped, the codebase is small, and we are deliberately keeping the surface area lean. The fastest way to help is to file thoughtful issues; the second fastest is to start a discussion before writing code.
 

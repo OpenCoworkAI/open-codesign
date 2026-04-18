@@ -1,6 +1,6 @@
 # Demo · Calm Spaces meditation app
 
-The "Calm Spaces" mobile prototype is the headline first demo for open-codesign,
+The "Calm Spaces" mobile prototype is the headline first demo for Open CoDesign,
 mirroring the marquee Claude Design example (see `docs/research/01-claude-design-teardown.md`).
 
 ## What it generates

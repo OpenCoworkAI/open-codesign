@@ -1,4 +1,4 @@
-# CLAUDE.md — open-codesign
+# CLAUDE.md — Open CoDesign
 
 Instructions for Claude Code (and any AI coding agent) working in this repository. Read this before making changes.
 

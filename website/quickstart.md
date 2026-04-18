@@ -1,11 +1,11 @@
 ---
 title: Quickstart
-description: Install open-codesign and create your first design in 90 seconds.
+description: Install Open CoDesign and create your first design in 90 seconds.
 ---
 
 # Quickstart
 
-> open-codesign is pre-alpha. Installers ship at v0.5. Until then, run from source.
+> Open CoDesign is pre-alpha. Installers ship at v0.5. Until then, run from source.
 
 ## 1. Clone and install
 

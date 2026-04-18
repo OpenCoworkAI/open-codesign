@@ -1,11 +1,11 @@
 ---
 title: 快速开始
-description: 90 秒安装 open-codesign，跑通你的第一个设计。
+description: 90 秒安装 Open CoDesign，跑通你的第一个设计。
 ---
 
 # 快速开始
 
-> open-codesign 处于 pre-alpha 阶段。安装包计划在 v0.5 提供，目前先从源码运行。
+> Open CoDesign 处于 pre-alpha 阶段。安装包计划在 v0.5 提供，目前先从源码运行。
 
 ## 1. 克隆并安装
 

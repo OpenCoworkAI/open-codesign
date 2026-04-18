@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: How open-codesign is laid out across packages and apps.
+description: How Open CoDesign is laid out across packages and apps.
 ---
 
 # Architecture

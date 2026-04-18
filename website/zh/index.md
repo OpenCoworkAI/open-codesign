@@ -1,12 +1,12 @@
 ---
 layout: home
-title: open-codesign
+title: Open CoDesign
 titleTemplate: 开源 AI 设计工具
 
 hero:
-  name: open-codesign
-  text: 用任何模型设计，全部跑在你的电脑里。
-  tagline: 一句话生成交互原型、幻灯片与营销素材。多模型、自带密钥、本地优先。Claude Design 的开源对照版本。
+  name: Open CoDesign
+  text: 用心设计。
+  tagline: 一个开源的桌面 AI 设计工具。自带模型，本地优先。Anthropic Claude Design 的开源对照版本。
   actions:
     - theme: brand
       text: 快速开始
@@ -16,30 +16,30 @@ hero:
       link: https://github.com/OpenCoworkAI/open-codesign
 
 features:
-  - icon: 🧘
-    title: Calm Spaces 冥想 App
-    details: 一句话生成手机壳框、柔和配色、可点击导航的移动端原型。
-  - icon: 📄
-    title: 客户案例单页
-    details: 深色主题、前后对比指标、CEO 引言，可直接导出成印刷级 PDF。
-  - icon: 🪄
-    title: B2B 演示稿
-    details: 8–12 页 PPTX 输出，形状可编辑。无需 Canva，也无需第二个订阅。
-  - icon: 💬
-    title: 元素级评论改写
-    details: 在预览里点中任意元素留下批注，模型只重写那一块。
+  - icon: 🪶
+    title: 自带模型
+    details: Anthropic、OpenAI、Gemini、DeepSeek，或任意 OpenAI 兼容端点。在设置里切换 provider，我们不做代理，也不按 token 计费。
+  - icon: 🏡
+    title: 你的电脑就是云
+    details: 设计稿、提示词、代码库扫描——SQLite 加密 TOML，全在本地磁盘。无需注册账号，默认无遥测。
   - icon: 🎚️
     title: AI 生成的滑块
-    details: 模型主动给出值得调的参数——颜色、间距、字体——拖一下即可微调。
+    details: 模型主动给出值得调的参数——颜色、间距、字体——拖一下即可微调，不用每次重新发送提示。
+  - icon: 🪄
+    title: Skills，而非魔法
+    details: 内置反 AI 糟粕设计 Skill。添加你自己的 SKILL.md，教会模型你的审美。
   - icon: 🧬
     title: 代码库 → 设计系统
-    details: 指向你本地的仓库，我们抽取 token 并应用到之后的每一次生成。
-  - icon: 🌐
-    title: 网页截取
-    details: 粘贴任意网址，作为参考素材重新创作。
-  - icon: 🔁
-    title: 交接到 open-cowork
-    details: 把设计连同意图说明打包，交给 open-cowork 完成工程化。
+    details: 指向本地仓库，我们抽取 Tailwind token、CSS 变量和 W3C 设计 token——之后每次生成都自动遵循。
+  - icon: 📐
+    title: 版本、对比、快照
+    details: 每一次迭代都是一个快照。并排 diff 两个版本，回滚，分支。这是 Claude Design 没有的历史记录。
+  - icon: 💸
+    title: 成本透明
+    details: 生成前显示 token 估算，工具栏显示本周花费。设置预算，超出前收到提醒，不再有意外账单。
+  - icon: 🚢
+    title: 三种导出，真实文件
+    details: HTML（内联 CSS）、PDF（Playwright）、PPTX（pptxgenjs）。全部本地生成，无需绕道 Canva。
 ---
 
 <div class="codesign-section">
@@ -74,12 +74,12 @@ features:
 
 <div class="codesign-comparison">
 
-|                   | 模型         | 本地运行 | 源码         | 计费方式       |
-| ----------------- | :----------: | :------: | :----------: | :------------: |
-| Claude Design     | 仅 Opus       | ✗        | 闭源         | 订阅           |
-| v0 by Vercel      | 平台精选     | ✗        | 闭源         | 订阅           |
-| Bolt.new          | 平台精选     | ✗        | 部分开源     | 订阅           |
-| **open-codesign** | **任意（自带密钥）** | **✓** | **Apache-2.0** | **仅 token 成本** |
+|                       | 模型             | 本地运行 | 源码           | 计费方式             |
+| --------------------- | :--------------: | :------: | :------------: | :------------------: |
+| Claude Design         | 仅 Opus          | ✗        | 闭源           | 订阅                 |
+| v0 by Vercel          | 平台精选         | ✗        | 闭源           | 订阅                 |
+| Bolt.new              | 平台精选         | ✗        | 部分开源       | 订阅                 |
+| **Open CoDesign**     | **任意（自带密钥）** | **✓** | **Apache-2.0** | **仅 token 成本**    |
 
 </div>
 

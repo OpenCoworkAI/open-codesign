@@ -1,45 +1,45 @@
 ---
 layout: home
-title: open-codesign
-titleTemplate: Open-Source AI Design Tool
+title: Open CoDesign
+titleTemplate: An open-source AI design tool
 
 hero:
-  name: open-codesign
-  text: Design with any model. On your own laptop.
-  tagline: Prompt to interactive prototype, slide deck, and marketing assets. Multi-model, BYOK, local-first. The open-source counterpart to Claude Design.
+  name: Open CoDesign
+  text: Design with intent.
+  tagline: An open-source desktop app for designing with AI. Bring your own model. Keep everything local. The open counterpart to Anthropic Claude Design.
   actions:
     - theme: brand
       text: Quickstart
       link: /quickstart
     - theme: alt
-      text: View on GitHub
+      text: GitHub
       link: https://github.com/OpenCoworkAI/open-codesign
 
 features:
-  - icon: 🧘
-    title: Calm Spaces prototype
-    details: Mobile mockup with phone frame, soft palette, working navigation — from one prompt.
-  - icon: 📄
-    title: Case-study one-pager
-    details: Dark-theme, before/after metrics, CEO quote — exportable as a print-ready PDF.
-  - icon: 🪄
-    title: B2B pitch deck
-    details: 8–12 slides exported as PPTX with editable shapes. No Canva, no second subscription.
-  - icon: 💬
-    title: Inline comment editing
-    details: Click any element in the preview, leave a comment, the model rewrites just that region.
+  - icon: 🪶
+    title: Bring your own model
+    details: Anthropic, OpenAI, Gemini, DeepSeek, or any OpenAI-compatible relay. Switch providers in Settings. We don't proxy, we don't charge.
+  - icon: 🏡
+    title: Your laptop is the cloud
+    details: Designs, prompts, codebase scans — SQLite + encrypted TOML on disk. No mandatory account, no telemetry by default.
   - icon: 🎚️
     title: AI-tuned sliders
-    details: The model emits the parameters worth tweaking — color, spacing, font — drag to refine.
+    details: The model emits the parameters worth tweaking — color, spacing, font — and you drag to refine. No round-tripping the LLM for every nudge.
+  - icon: 🪄
+    title: Skills, not magic
+    details: Anti-AI-slop design Skill ships built-in. Add your own SKILL.md to teach the model your taste.
   - icon: 🧬
-    title: Codebase → design system
-    details: Point at a local repo. We extract tokens and apply them to every subsequent generation.
-  - icon: 🌐
-    title: Web Capture
-    details: Paste any URL. We scrape it as a reference and let you riff on the aesthetic.
-  - icon: 🔁
-    title: Handoff to open-cowork
-    details: Package the design plus an intent README and ship it to engineering.
+    title: Codebase to design system
+    details: Point at a local repo. We extract Tailwind tokens, CSS vars, and W3C design tokens — every subsequent generation respects them.
+  - icon: 📐
+    title: Versions, diffs, snapshots
+    details: Every iteration is a snapshot. Diff two versions side-by-side. Roll back. Fork. The history Claude Design doesn't have.
+  - icon: 💸
+    title: Cost transparency
+    details: Token estimate before each generation. Weekly spend in the toolbar. Set a budget, get warned, never get surprised.
+  - icon: 🚢
+    title: Three exports, real files
+    details: HTML (inlined CSS), PDF (Playwright), PPTX (pptxgenjs). All generated locally. No Canva detour.
 ---
 
 <div class="codesign-section">
@@ -74,12 +74,12 @@ features:
 
 <div class="codesign-comparison">
 
-|                  | Models           | Runs locally | Source       | Pricing         |
-| ---------------- | :--------------: | :----------: | :----------: | :-------------: |
-| Claude Design    | Opus only        | ✗            | Closed       | Subscription    |
-| v0 by Vercel     | Curated          | ✗            | Closed       | Subscription    |
-| Bolt.new         | Curated          | ✗            | Partial      | Subscription    |
-| **open-codesign**| **Any (BYOK)**   | **✓**        | **Apache-2.0** | **Token cost only** |
+|                       | Models           | Runs locally | Source         | Pricing             |
+| --------------------- | :--------------: | :----------: | :------------: | :-----------------: |
+| Claude Design         | Opus only        | ✗            | Closed         | Subscription        |
+| v0 by Vercel          | Curated          | ✗            | Closed         | Subscription        |
+| Bolt.new              | Curated          | ✗            | Partial        | Subscription        |
+| **Open CoDesign**     | **Any (BYOK)**   | **✓**        | **Apache-2.0** | **Token cost only** |
 
 </div>
 
