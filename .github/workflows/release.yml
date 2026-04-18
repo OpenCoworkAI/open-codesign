@@ -34,9 +34,12 @@ jobs:
     name: Gate (lint · typecheck · test)
     runs-on: ubuntu-latest
     if: github.repository == 'OpenCoworkAI/open-codesign'
+    env:
+      RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -68,11 +71,14 @@ jobs:
     name: Build changelog
     runs-on: ubuntu-latest
     if: github.repository == 'OpenCoworkAI/open-codesign'
+    env:
+      RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     outputs:
       changelog: ${{ steps.build.outputs.changelog }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
 
       - name: Build changelog
@@ -128,9 +134,12 @@ jobs:
           - os: ubuntu-latest
             artifact_glob: 'apps/desktop/release/*.AppImage'
     runs-on: ${{ matrix.os }}
+    env:
+      RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -173,12 +182,19 @@ jobs:
     name: Publish GitHub Release
     needs: [build, changelog]
     runs-on: ubuntu-latest
+    env:
+      RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
       - name: Validate tag input on dispatch
         if: github.event_name == 'workflow_dispatch'
         run: |
           if [[ ! "${{ inputs.tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::tag must be semver-like (e.g. v1.2.3 or v1.2.3-rc.1)"
+            exit 1
+          fi
+          # Verify the tag exists on the remote before proceeding
+          if ! git ls-remote --tags origin "refs/tags/${{ inputs.tag }}" | grep -q "${{ inputs.tag }}"; then
+            echo "::error::tag '${{ inputs.tag }}' does not exist on origin"
             exit 1
           fi
 
