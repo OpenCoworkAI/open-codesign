@@ -88,7 +88,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     body = (
       <div className="h-full p-6">
         <div className="relative h-full">
-          <div className="absolute left-5 top-5 z-10 rounded-full border border-[var(--color-border)] bg-[rgba(255,255,255,0.88)] px-3 py-1 text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur">
+          <div className="absolute left-5 top-5 z-10 rounded-full border border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-surface)_88%,transparent)] px-3 py-1 text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur">
             {t('preview.clickToComment')}
           </div>
           <iframe
@@ -97,7 +97,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             title="design-preview"
             sandbox="allow-scripts"
             srcDoc={buildSrcdoc(previewHtml)}
-            className="w-full h-full bg-white rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]"
+            className="w-full h-full bg-[var(--color-surface)] rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]"
           />
           <InlineCommentComposer />
         </div>
