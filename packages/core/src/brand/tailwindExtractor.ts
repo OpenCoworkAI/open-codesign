@@ -155,33 +155,34 @@ function inferTypeFromCssProp(prop: string, value: string): TokenType | null {
 function extractFromV4Theme(source: string): DesignToken[] {
   const results: DesignToken[] = [];
 
-  const themeBlockRe = /@theme\s*\{/g;
-  const m = themeBlockRe.exec(source);
-  if (!m) return results;
+  const themeBlockRe = /@theme\b[^{]*\{/g;
+  const seen = new Set<string>();
 
-  const blockStart = m.index + m[0].length - 1;
-  const body = extractBodyAt(source, blockStart);
-  if (!body) return results;
+  for (const m of source.matchAll(themeBlockRe)) {
+    const blockStart = (m.index ?? 0) + m[0].length - 1;
+    const body = extractBodyAt(source, blockStart);
+    if (!body) continue;
 
-  const declRe = /--([\w-]+)\s*:\s*([^;]+);/g;
-  const declMatches = [...body.matchAll(declRe)];
+    const declRe = /--([\w-]+)\s*:\s*([^;]+);/g;
+    for (const dm of body.matchAll(declRe)) {
+      const prop = dm[1];
+      const rawValue = dm[2]?.trim();
+      if (!prop || !rawValue) continue;
+      if (seen.has(prop)) continue;
 
-  for (const dm of declMatches) {
-    const prop = dm[1];
-    const rawValue = dm[2]?.trim();
-    if (!prop || !rawValue) continue;
+      const tokenType = inferTypeFromCssProp(prop, rawValue);
+      if (!tokenType) continue;
 
-    const tokenType = inferTypeFromCssProp(prop, rawValue);
-    if (!tokenType) continue;
-
-    results.push({
-      schemaVersion: 1,
-      type: tokenType,
-      name: prop,
-      value: rawValue,
-      origin: 'tailwind-config',
-      group: prop.split('-').slice(0, 2).join('.'),
-    });
+      seen.add(prop);
+      results.push({
+        schemaVersion: 1,
+        type: tokenType,
+        name: prop,
+        value: rawValue,
+        origin: 'tailwind-config',
+        group: prop.split('-').slice(0, 2).join('.'),
+      });
+    }
   }
 
   return results;

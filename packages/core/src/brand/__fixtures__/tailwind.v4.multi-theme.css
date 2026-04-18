@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #ff0066;
+  --color-brand-secondary: #3366ff;
+  --font-size-base: 1rem;
+}
+
+/* A second @theme block — e.g. split across files or appended by a plugin. */
+@theme {
+  --color-accent: #00ffaa;
+  --radius-md: 0.5rem;
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.2);
+}

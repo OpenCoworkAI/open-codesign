@@ -74,4 +74,18 @@ describe('extractFromTailwindConfig()', () => {
     const unique = new Set(names);
     expect(unique.size).toBe(names.length);
   });
+
+  it('extracts tokens from every @theme block when multiple are present (v4)', async () => {
+    const multiThemeFixture = resolve(__dir, '__fixtures__/tailwind.v4.multi-theme.css');
+    const tokens = await extractFromTailwindConfig(multiThemeFixture);
+    const names = tokens.map((t) => t.name);
+
+    expect(names).toContain('color-brand-primary');
+    expect(names).toContain('color-brand-secondary');
+    expect(names).toContain('font-size-base');
+
+    expect(names).toContain('color-accent');
+    expect(names).toContain('radius-md');
+    expect(names).toContain('shadow-lg');
+  });
 });
