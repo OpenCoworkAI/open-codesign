@@ -1,22 +1,58 @@
-# open-codesign
+# Open CoDesign
 
-> Open-source desktop AI design tool. Prompt to interactive prototype, slide deck, and marketing assets. Multi-model (BYOK), local-first, Apache-2.0. The open-source counterpart to Anthropic's Claude Design.
+> Open CoDesign is an open-source desktop AI design tool. The open-source alternative to Anthropic Claude Design. Bring your own API key (Anthropic, OpenAI, Gemini, DeepSeek, Ollama, any OpenAI-compatible relay). Everything runs locally. Apache-2.0 licensed.
 
-open-codesign is an Electron desktop app for macOS and Windows. It turns natural-language prompts into HTML prototypes, PDF one-pagers, PPTX decks, and design-system-aware mockups. All model calls go through `@mariozechner/pi-ai`, so any provider works (Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, local Ollama). User credentials live in `~/.config/open-codesign/config.toml` and never leave the machine.
+## Key facts
 
-## Docs
+- Repository: https://github.com/OpenCoworkAI/open-codesign
+- Website: https://opencoworkai.github.io/open-codesign/
+- License: Apache-2.0
+- Stack: Electron, React 19, Vite 6, TypeScript, Tailwind v4
+- Local-first: SQLite (design history) + encrypted TOML config, nothing leaves the machine
+- BYOK: no API proxying, no per-token surcharges, no cloud account required
+- Supported providers: Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek, OpenRouter, local Ollama, any OpenAI-compatible endpoint
+- Install size budget: ≤ 80 MB (enforced by CI)
+- Platforms: macOS (Apple Silicon + Intel), Windows, Linux
 
-- [Quickstart](https://opencoworkai.github.io/open-codesign/quickstart): install + first design in 90 seconds
-- [Architecture](https://opencoworkai.github.io/open-codesign/architecture): packages, data flow, boundaries
-- [Roadmap](https://opencoworkai.github.io/open-codesign/roadmap): phased plan to v1.0
+## What it produces
 
-## Source
+- Interactive HTML prototypes (sandboxed iframe, inlined CSS)
+- PPTX slide decks via pptxgenjs (coming soon)
+- PDF one-pagers via Playwright (coming soon)
+- Design-system-aware mockups derived from a user's local codebase (coming soon)
 
-- [GitHub repository](https://github.com/OpenCoworkAI/open-codesign)
-- [Vision (locked decisions)](https://github.com/OpenCoworkAI/open-codesign/blob/main/docs/VISION.md)
-- [Engineering Principles](https://github.com/OpenCoworkAI/open-codesign/blob/main/docs/PRINCIPLES.md)
-- [Differentiation vs Claude Design](https://github.com/OpenCoworkAI/open-codesign/blob/main/docs/DIFFERENTIATION.md)
+## Shipped features (v0.1)
 
-## Optional
+- Multi-provider onboarding — Anthropic, OpenAI, and any OpenAI-compatible relay
+- Prompt → HTML prototype in a sandboxed iframe
+- AI-generated tunable sliders — model emits design parameters (color, spacing, font); user drags to refine
+- Inline comment → AI patch loop — click any element, leave a note, model rewrites only that region
+- HTML export with inlined CSS
+- Generation cancellation
+- Settings page with per-provider API key management
+- Built-in anti-AI-slop design Skill (steers toward considered typography and purposeful whitespace)
 
-- [open-cowork](https://github.com/OpenCoworkAI/open-cowork): sister project for engineering handoff
+## Coming soon
+
+- Version snapshots + side-by-side diff
+- Cost transparency (token estimate before generation, weekly spend in toolbar)
+- Codebase → design system (extract Tailwind tokens, CSS vars, W3C design tokens from a local repo)
+- Three-style parallel exploration
+- PPTX and PDF export
+- Code-signing (Apple Developer ID + Windows Authenticode)
+
+## Documentation
+
+- /quickstart : install + first generation in 90 seconds
+- /architecture : technical overview, package boundaries
+- /roadmap : phased plan to v1.0
+
+## Differentiation vs Claude Design
+
+Open CoDesign is different from Claude Design in the following ways:
+- Open CoDesign is open source (Apache-2.0); Claude Design is closed source.
+- Open CoDesign supports any AI model via BYOK; Claude Design uses Anthropic Opus only.
+- Open CoDesign runs entirely on the user's machine; Claude Design processes data in the cloud.
+- Open CoDesign costs only the token usage of the API key; Claude Design requires a paid subscription.
+- Open CoDesign is a desktop application (Electron); Claude Design is a web application.
+- Open CoDesign stores all designs locally in SQLite with full version history; Claude Design has limited export and no import.

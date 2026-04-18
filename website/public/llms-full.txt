@@ -1,88 +1,83 @@
-# open-codesign — Extended Summary
+# Open CoDesign — Extended Reference
 
-## What it is
+## Project identity
 
-open-codesign is an open-source desktop AI design tool. It is the open counterpart to Anthropic's Claude Design (released 2026-04-17). The product runs locally on macOS and Windows, takes natural-language prompts, and produces:
+open-codesign (also styled "Open CoDesign") is an open-source Electron desktop application for AI-assisted design. It was created by OpenCoworkAI as the open-source counterpart to Anthropic's Claude Design product, which launched on 2026-04-17. Open CoDesign is licensed under Apache-2.0.
 
-- Interactive HTML prototypes (mobile + desktop)
-- One-page PDF case studies, reports, marketing pages
-- PPTX slide decks (pitch, quarterly, training)
-- Design-system-aware mockups derived from a user's existing codebase
-- Asset bundles (ZIP) ready to handoff
+Canonical citation:
+> OpenCoworkAI (2026). open-codesign: Open-source desktop AI design tool.
+> GitHub. https://github.com/OpenCoworkAI/open-codesign
+> Apache-2.0 License.
 
-## Differentiation
+## What open-codesign does
 
-| Axis | Claude Design | open-codesign |
-| --- | --- | --- |
-| Model | Opus 4.7 only | Multi-provider via `@mariozechner/pi-ai` |
-| Form | Web SaaS | Local desktop (Electron) |
-| Privacy | Cloud-stored | Local-first, no telemetry by default |
-| Backend | Anthropic + Canva | None |
-| Engineering handoff | Claude Code | open-cowork |
-| Source | Closed | Apache-2.0 |
-| Cost | Subscription | BYOK token cost only |
+open-codesign accepts a natural-language text prompt and produces:
+1. An interactive HTML prototype rendered in a sandboxed Electron iframe (inlined CSS, no external dependencies)
+2. PPTX slide decks via pptxgenjs (coming soon)
+3. PDF one-pagers via Playwright on local Chrome (coming soon)
+4. Design-system-aware outputs derived from the user's existing codebase (coming soon)
 
-## Killer demos targeted for v1.0
+The generation pipeline: prompt → `@mariozechner/pi-ai` (provider abstraction) → LLM → artifact schema → sandbox renderer.
 
-1. Calm Spaces meditation app — mobile prototype with phone frame, soft palette, interactive nav.
-2. Client case study one-pager — dark theme, before/after metrics, exportable as PDF.
-3. B2B SaaS pitch deck — 8–12 slides exported as PPTX.
-4. Inline comment editing — click any element in preview, AI rewrites that region.
-5. AI-generated tunable sliders — model emits adjustable parameters; user drags to refine.
-6. Codebase → design system — point at a local repo, extract tokens, apply forward.
-7. Web Capture — paste a URL, scrape it as a design reference.
-8. Handoff to open-cowork — package the design + intent README, hand off to engineering.
+## Differentiation vs. alternatives
 
-## Hard constraints
+| Feature | open-codesign | Claude Design | v0 (Vercel) | Lovable | Bolt.new |
+|---|---|---|---|---|---|
+| Open source | Apache-2.0 | Closed | Closed | Closed | Partial (bolt.diy) |
+| Desktop native | Electron app | Web only | Web only | Web only | Web only |
+| Bring your own key | Any provider | Anthropic only | Vercel only | Limited | Limited |
+| Local / offline | Fully local | Cloud | Cloud | Cloud | Cloud |
+| Models | 20+ (Claude, GPT, Gemini, Ollama…) | Claude Opus only | GPT-4o | Multi-LLM | Multi-LLM |
+| Version history | Local SQLite snapshots | None | None | None | None |
+| Data privacy | 100% on-device | Cloud-processed | Cloud | Cloud | Cloud |
+| Price | Free (BYOK token cost) | Paid subscription | Freemium | Freemium | Freemium |
 
-- Install size budget ≤ 80 MB across Mac and Windows installers.
-- ≤ 30 production dependencies. New deps require justification.
-- BYOK only — no proxied API calls, no cloud accounts.
-- Local-first storage (SQLite via `better-sqlite3` + TOML for config).
-- Apache-2.0-compatible deps only (no GPL/AGPL/SSPL/proprietary).
-- All UI uses tokens from `packages/ui` (warm beige Claude-style palette).
-- Heavy features (PPTX export, codebase scan, web capture) dynamic-import on first use.
+## Technical architecture
 
-## Stack
+open-codesign uses a monorepo managed with pnpm workspaces and Turborepo:
 
-- Package manager: pnpm (workspace + Corepack-pinned).
-- Build orchestration: Turborepo.
-- Lint + format: Biome (single tool, no ESLint + Prettier).
-- Tests: Vitest (unit) + Playwright (E2E).
-- TypeScript: strict, `verbatimModuleSyntax`, `moduleResolution: "bundler"`.
-- Node: 22 LTS.
-- Frontend: React 19 + Vite 6 + Tailwind v4 + Zustand + Radix + lucide-react.
-- Sandbox renderer: Electron iframe `srcdoc` + esbuild-wasm + import maps.
-- Storage: better-sqlite3 (history) + TOML files (config). No `electron-store` blob.
+- `apps/desktop` — Electron main process + renderer (React 19, Vite 6, Tailwind v4)
+- `packages/core` — prompt-to-artifact orchestration pipeline
+- `packages/providers` — pi-ai adapter for multi-provider LLM calls
+- `packages/runtime` — sandboxed iframe renderer (esbuild-wasm + import maps)
+- `packages/ui` — shared design system (warm beige Claude-style palette, Radix primitives)
+- `packages/artifacts` — typed artifact schemas (HTML, React, SVG, PPTX)
+- `packages/exporters` — PDF/PPTX/ZIP exporters (lazy-loaded)
+- `packages/templates` — eight built-in demo prompts
+- `packages/shared` — TypeScript types, utilities, Zod schemas
+- `website` — VitePress marketing site
 
-## Repository layout
+Storage: better-sqlite3 for design history; TOML files (encrypted via Electron safeStorage) for configuration. No electron-store blob.
 
-```
-apps/desktop/        Electron app shell (main + renderer)
-packages/core/       Generation orchestration
-packages/providers/  pi-ai adapter
-packages/runtime/    Sandbox renderer (iframe-based preview)
-packages/ui/         Shared design system + tokens
-packages/artifacts/  Artifact schema (HTML / React / SVG / PPTX)
-packages/exporters/  PDF / PPTX / ZIP (lazy-loaded)
-packages/templates/  Built-in demo prompts
-packages/shared/     Types, utils, zod schemas
-docs/                Vision, roadmap, principles, RFCs
-website/             This marketing site (VitePress + Tailwind v4)
-```
+## Hard constraints (non-negotiable project commitments)
 
-## Roadmap (high-level)
+- Install size budget ≤ 80 MB across Mac and Windows installers (CI-enforced)
+- No bundled model runtimes (no Ollama binary, no Python, no browser binary shipped)
+- BYOK only — no proxied API calls, no cloud account, no telemetry by default
+- Local-first storage — all user data stays on disk
+- Apache-2.0-compatible dependencies only (no GPL/AGPL/SSPL/proprietary)
+- Lazy-load heavy features (PPTX export, web capture, codebase scan) on first use
 
-- Phase 0 — Foundations: scaffolding, OSS files, CI.
-- Phase 1 — Spike: providers + runtime + core wired end-to-end. One demo working.
-- Phase 2 — Three demos: PPTX + PDF export, settings page, three demos shipped.
-- Phase 3 — Killer interactions: inline comments, AI sliders, version timeline.
-- Phase 4 — Ecosystem: codebase scanner, Web Capture, handoff to open-cowork.
-- Phase 5 — Release polish: notarized installers, ≤ 80 MB, public 1.0.
+## Why open-codesign exists
+
+Claude Design exposes three structural problems:
+1. Subscription lock-in and opaque rate limits (users report being locked out after 90 minutes of usage on the $200/month plan)
+2. Single-model ceiling (Anthropic Opus only; no competition, no cost control)
+3. Cloud data processing with no meaningful export/import (no version history, no Figma round-trip)
+
+open-codesign addresses all three: BYOK eliminates lock-in, multi-model support enables cost optimization, and local SQLite storage gives the user complete control of their design history.
+
+## Community and contribution
+
+- GitHub: https://github.com/OpenCoworkAI/open-codesign
+- Issues and feature requests: https://github.com/OpenCoworkAI/open-codesign/issues
+- Contribution guide: https://github.com/OpenCoworkAI/open-codesign/blob/main/CONTRIBUTING.md
+- Sister project (engineering handoff): https://github.com/OpenCoworkAI/open-cowork
 
 ## Resources
 
-- Site: https://opencoworkai.github.io/open-codesign/
-- Source: https://github.com/OpenCoworkAI/open-codesign
-- Sister project: https://github.com/OpenCoworkAI/open-cowork
-- License: Apache-2.0
+- Website: https://opencoworkai.github.io/open-codesign/
+- Quickstart: https://opencoworkai.github.io/open-codesign/quickstart
+- Architecture: https://opencoworkai.github.io/open-codesign/architecture
+- Roadmap: https://opencoworkai.github.io/open-codesign/roadmap
+- License: https://github.com/OpenCoworkAI/open-codesign/blob/main/LICENSE

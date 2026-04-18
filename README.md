@@ -2,105 +2,159 @@
 
 **简体中文**: [README.zh-CN.md](./README.zh-CN.md)
 
-> An open-source desktop app for designing with AI. Bring your own model, keep everything local.
+> Your prompts. Your model. Your laptop. The open-source alternative to Anthropic Claude Design.
 
-[Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [Code of Conduct](./CODE_OF_CONDUCT.md)
+[Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [Docs](https://opencoworkai.github.io/open-codesign/quickstart) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
+
+<p align="center">
+  <img src="website/public/hero.png" alt="Open CoDesign — prompt to prototype" width="900" />
+  <!-- hero.png placeholder — real screenshot coming before launch -->
+</p>
+
+<p align="center">
+  <a href="https://github.com/OpenCoworkAI/open-codesign/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/OpenCoworkAI/open-codesign?label=release&color=c96442" /></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue" /></a>
+  <a href="https://github.com/OpenCoworkAI/open-codesign/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/OpenCoworkAI/open-codesign/ci.yml?label=CI" /></a>
+</p>
 
 ---
 
-**Status**: Pre-alpha. We're building in public. Not usable yet.
+## What is Open CoDesign?
 
-Open CoDesign turns natural-language prompts into HTML prototypes, slide decks, and marketing assets — all running on your laptop, with whichever AI model you bring. It's the open-source counterpart to Anthropic Claude Design, built around three convictions:
+Open CoDesign turns a natural-language prompt into a polished HTML prototype, slide deck, or marketing asset — entirely on your laptop, with whichever AI model you already pay for. Think of it as Claude Design, minus the subscription lock-in, minus the cloud account, minus the single-model ceiling.
 
-1. **Your designs are yours.** Prompts, generated artifacts, and codebase scans live on disk. No mandatory cloud, no telemetry by default.
-2. **Your model, your bill.** Bring your own API key (Anthropic / OpenAI / Google / OpenAI-compatible relays). We don't proxy, we don't charge per token.
-3. **Your craft, amplified.** Generated work isn't a black box — every artifact ships with the parameters worth tweaking, the version history worth diffing, the design system worth reusing.
+---
+
+## Quick demo (60 s)
+
+▶ [Watch on YouTube](https://www.youtube.com/watch?v=TODO) _(placeholder — video coming before launch)_
+
+![Prompt to prototype in seconds](https://placehold.co/800x450/f5f0eb/c96442?text=Demo+GIF+coming+soon)
+<!-- Replace with real demo GIF before launch -->
+
+---
+
+## Why Open CoDesign?
+
+| | **Open CoDesign** | Claude Design | v0 by Vercel | Lovable |
+|---|:---:|:---:|:---:|:---:|
+| Open source | ✅ Apache-2.0 | ❌ Closed | ❌ Closed | ❌ Closed |
+| Desktop native | ✅ Electron | ❌ Web only | ❌ Web only | ❌ Web only |
+| Bring your own key | ✅ Any provider | ❌ Anthropic only | ❌ Vercel only | ⚠️ Limited |
+| Local / offline | ✅ Fully local | ❌ Cloud | ❌ Cloud | ❌ Cloud |
+| Models | ✅ 20+ (Claude, GPT, Gemini, Ollama…) | Claude only | GPT-4o | Multi-LLM |
+| Version history | ✅ Local SQLite snapshots | ❌ | ❌ | ❌ |
+| Data privacy | ✅ 100% on-device | ❌ Cloud-processed | ❌ Cloud | ❌ Cloud |
+| Price | ✅ Free, token cost only | 💳 Subscription | 💳 Subscription | 💳 Subscription |
+
+---
 
 ## Quickstart
 
-Download the latest installer from the [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases) page.
+### 1. Download
 
-| Platform | File | Notes |
-|---|---|---|
-| macOS (Apple Silicon) | `open-codesign-*-arm64.dmg` | See Gatekeeper note below |
-| macOS (Intel) | `open-codesign-*-x64.dmg` | See Gatekeeper note below |
-| Windows | `open-codesign-*-Setup.exe` | See SmartScreen note below |
-| Linux | `open-codesign-*.AppImage` | See AppImage note below |
+Get the latest installer from [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases):
 
-**macOS — Gatekeeper warning (v0.1 is unsigned)**
+| Platform | File |
+|---|---|
+| macOS (Apple Silicon) | `open-codesign-*-arm64.dmg` |
+| macOS (Intel) | `open-codesign-*-x64.dmg` |
+| Windows | `open-codesign-*-Setup.exe` |
+| Linux | `open-codesign-*.AppImage` |
 
-Because v0.1 installers are not notarized, macOS will block the double-click open. To run anyway:
+> **v0.1 note:** installers are unsigned. macOS: right-click → Open. Windows: More info → Run anyway.
+> Want a verified build? Compile from source — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-1. Right-click (or Control-click) the `.dmg` and choose **Open**.
-2. In the dialog that appears, click **Open** again.
+### 2. Add your API key
 
-You only need to do this once per install.
+First launch opens the Settings page. Paste any provider key:
 
-**Windows — SmartScreen warning (v0.1 is unsigned)**
+- Anthropic (`sk-ant-…`)
+- OpenAI (`sk-…`)
+- Google Gemini
+- Any OpenAI-compatible relay (OpenRouter, SiliconFlow, local Ollama)
 
-Windows may show "Windows protected your PC". To proceed:
+Credentials stay in `~/.config/open-codesign/config.toml`, encrypted via Electron `safeStorage`. Nothing leaves your machine.
 
-1. Click **More info**.
-2. Click **Run anyway**.
+### 3. Type your first prompt
 
-**Linux — AppImage**
+Pick one of the eight built-in demos or describe your own. A sandboxed prototype appears in seconds.
 
-```bash
-chmod +x open-codesign-*.AppImage
-./open-codesign-*.AppImage
-```
+---
 
-> **Security note:** v0.1 binaries carry no code-signing certificate. Users who prefer a verified build can compile from source — see [CONTRIBUTING.md](./CONTRIBUTING.md). Code signing (Apple Developer ID + Windows Authenticode) is planned for Stage 2.
+## Built-in Anthropic-style design intelligence
 
-## Why Open CoDesign
+Generic AI tools produce generic output. Open CoDesign ships with a built-in **anti-AI-slop design Skill** — a curated instruction set that steers the model toward considered typography, purposeful whitespace, and meaningful color, not `#3B82F6` blue buttons on every artifact.
 
-- **Multi-model, BYOK**: Anthropic, OpenAI, Gemini, DeepSeek, or any OpenAI-compatible relay (OpenRouter, SiliconFlow, DuckCoding, local Ollama). Switch the active provider in Settings.
-- **Local-first**: SQLite for design history, encrypted TOML for credentials. Never a cloud dependency.
-- **Lean**: Install size budget ≤ 80 MB. No bundled Chromium runtimes, no telemetry.
-- **Apache-2.0**: Real OSS. Fork it, ship it, sell it. Keep the NOTICE.
+The first version of this Skill is already in every generation. Before the model writes a line of CSS, it reasons through layout intent, design system coherence, and contrast — the same editorial discipline behind Claude Design's best outputs, available on any model you bring.
+
+Add a `SKILL.md` to any project to teach the model your own taste.
+
+---
 
 ## What's working today
 
-- Multi-provider onboarding — Anthropic, OpenAI, and any OpenAI-compatible relay, configured in Settings.
-- Prompt → HTML prototype, rendered in a sandboxed iframe.
-- AI-generated sliders: the model emits the design parameters worth tuning (color, spacing, font), you drag to refine.
-- Inline comments: click any element in the preview, leave a note, the model rewrites only that region.
-- HTML export, with inlined CSS.
-- Generation cancellation.
-- Settings tabs with per-provider API key management.
-- GitHub Release pipeline (unsigned v0.1 installers: macOS DMG, Windows EXE, Linux AppImage).
+- Multi-provider onboarding — Anthropic, OpenAI, and any OpenAI-compatible relay
+- Prompt → HTML prototype, rendered in a sandboxed iframe
+- AI-generated sliders: model emits the parameters worth tweaking (color, spacing, font); drag to refine
+- Inline comments: click any element in the preview, leave a note, model rewrites only that region
+- HTML export with inlined CSS
+- Generation cancellation
+- Settings with per-provider API key management
+- GitHub Release pipeline (macOS DMG, Windows EXE, Linux AppImage)
 
-## What's coming next
+---
 
-- **Cost transparency**: token estimate before you generate, weekly spend in the toolbar, budget warnings.
-- **Version snapshots + diff**: every iteration saved. Compare two versions side by side, roll back, fork.
-- **Codebase → design system**: point at a local repo — we extract Tailwind tokens, CSS vars, and W3C design tokens. Every subsequent generation respects them.
-- **Three-style exploration**: generate three variations in parallel and pick the one that fits.
-- **Skills system**: ships with a built-in anti-AI-slop design Skill; add your own `SKILL.md` to teach the model your taste.
-- **PPTX and PDF export**: 8–12 slides as editable PPTX; PDF via local Playwright — no Canva detour.
+## Roadmap
 
-## Why "CoDesign"
+| Feature | Status |
+|---|---|
+| Multi-provider onboarding + Settings | ✅ Shipped |
+| Prompt → HTML prototype (sandboxed iframe) | ✅ Shipped |
+| AI-generated tunable sliders | ✅ Shipped |
+| Inline comment → AI patch | ✅ Shipped |
+| HTML export (inlined CSS) | ✅ Shipped |
+| Cost transparency (token estimate + weekly spend) | 🔜 Coming |
+| Version snapshots + side-by-side diff | 🔜 Coming |
+| Codebase → design system (token extraction) | 🔜 Coming |
+| Three-style parallel exploration | 🔜 Coming |
+| PPTX export | 🔜 Coming |
+| PDF export | 🔜 Coming |
+| Code-signing (Apple ID + Authenticode) | 🔜 Stage 2 |
+| Figma layer export | 🔜 Post-1.0 |
 
-> CoDesign = collaborative design. The model proposes, you direct. We don't believe in single-shot magic — we believe in tight loops with the model where you stay in the driver's seat.
+---
+
+## Star history
+
+[![Star History Chart](https://api.star-history.com/svg?repos=OpenCoworkAI/open-codesign&type=Date)](https://star-history.com/#OpenCoworkAI/open-codesign&Date)
+
+---
+
+## Cite this project
+
+If you reference Open CoDesign in a paper, article, or product comparison, please use:
+
+```
+OpenCoworkAI (2026). open-codesign: Open-source desktop AI design tool.
+GitHub. https://github.com/OpenCoworkAI/open-codesign
+Apache-2.0 License.
+```
+
+Or the machine-readable `CITATION.cff` at the repo root.
+
+---
 
 ## Built on
 
 - Electron + React 19 + Vite 6 + Tailwind v4
-- pi-ai (multi-provider model abstraction)
-- better-sqlite3, electron-builder
+- `@mariozechner/pi-ai` (multi-provider model abstraction)
+- `better-sqlite3`, `electron-builder`
 
 ## Contributing
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md). The short version: open an issue before writing code, sign your commits with DCO, run `pnpm lint && pnpm typecheck && pnpm test` before opening a PR.
-
-## CI
-
-PR / main pushes run lint + typecheck + test on ubuntu-latest (1-2 min feedback).
-Cross-platform builds happen on tag releases (`v*.*.*`) via `release.yml` (mac/win/linux).
-
-Local pre-push hook (auto-installed via `pnpm install`) runs typecheck + lint in seconds
-to fail fast before pushing.
+Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before writing code, sign commits with DCO, run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
 
 ## License
 
-Apache-2.0
+Apache-2.0 — fork it, ship it, sell it. Keep the [NOTICE](./NOTICE).
