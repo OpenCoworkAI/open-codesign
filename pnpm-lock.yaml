@@ -35,9 +35,6 @@ importers:
       '@open-codesign/exporters':
         specifier: workspace:*
         version: link:../../packages/exporters
-      '@open-codesign/i18n':
-        specifier: workspace:*
-        version: link:../../packages/i18n
       '@open-codesign/providers':
         specifier: workspace:*
         version: link:../../packages/providers

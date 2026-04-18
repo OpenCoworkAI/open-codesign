@@ -13,12 +13,9 @@
     "copy": "复制",
     "copied": "已复制",
     "comingSoon": "即将推出",
-    "loading": "加载中\u2026",
+    "loading": "加载中…",
     "preAlpha": "预览版",
-    "tagline": "自带密钥 · 本地优先 · 多模型",
-    "done": "完成。",
-    "applied": "已应用。",
-    "working": "处理中"
+    "tagline": "自带密钥 · 本地优先 · 多模型"
   },
   "preview": {
     "empty": {
@@ -27,7 +24,7 @@
       "starterChip": "试试这些范例提示词："
     },
     "loading": {
-      "title": "正在生成你的设计\u2026"
+      "title": "正在生成你的设计…"
     },
     "error": {
       "title": "生成失败",
@@ -35,10 +32,7 @@
       "copyError": "复制错误详情"
     },
     "ready": "预览",
-    "noDesign": "还没有设计",
-    "clickToComment": "点击预览中的任意元素即可留下局部评论。",
-    "runtimeError": "预览运行时错误",
-    "dismissErrors": "关闭预览错误"
+    "noDesign": "还没有设计"
   },
   "chat": {
     "placeholder": "想设计什么？",
@@ -91,7 +85,7 @@
     },
     "paste": {
       "title": "粘贴你的 API Key",
-      "placeholder": "sk-\u2026",
+      "placeholder": "sk-…",
       "recognized": "已识别提供商：{{provider}}",
       "connected_one": "已连接 {{count}} 个模型",
       "connected_other": "已连接 {{count}} 个模型",
@@ -116,49 +110,13 @@
     }
   },
   "commands": {
-    "title": "命令面板",
-    "placeholder": "输入命令或搜索\u2026",
-    "noMatches": "没有匹配项。",
-    "openPalette": "打开命令面板",
+    "title": "命令",
+    "placeholder": "输入命令或搜索…",
     "items": {
       "newDesign": "新建设计",
       "toggleTheme": "切换主题",
       "openSettings": "打开设置",
       "export": "导出当前设计"
-    },
-    "hints": {
-      "newDesign": "清空当前会话并重新开始",
-      "toggleTheme": "在浅色和深色之间切换",
-      "openSettings": "模型、外观、存储",
-      "export": "使用顶部工具栏里的导出按钮"
-    },
-    "tooltips": {
-      "commandPalette": "命令面板  Ctrl/Cmd+K",
-      "settings": "设置  Ctrl/Cmd+,"
-    },
-    "cleared": "工作区已清空",
-    "exportUseToolbarTitle": "请使用顶部导出",
-    "exportUseToolbarBody": "请使用顶部工具栏里的“导出”按钮。"
-  },
-  "export": {
-    "button": "导出",
-    "items": {
-      "html": {
-        "label": "HTML",
-        "hint": "导出为单个自包含 .html 文件"
-      },
-      "pdf": {
-        "label": "PDF",
-        "hint": "通过你本机已安装的 Chrome 渲染"
-      },
-      "pptx": {
-        "label": "PPTX",
-        "hint": "可编辑幻灯片；每个 <section> 一页"
-      },
-      "zip": {
-        "label": "ZIP 包",
-        "hint": "index.html + 资源文件 + README.md"
-      }
     }
   },
   "notifications": {
@@ -185,10 +143,7 @@
     "providerAuthMissing": "还没配置 API Key。打开设置去添加一个。",
     "providerError": "提供商错误：{{message}}",
     "ipcBadInput": "传给主进程的参数不合法。",
-    "exporterNotReady": "导出器还在加载，稍等片刻再试。",
-    "rendererDisconnected": "渲染进程未连接到主进程。",
-    "onboardingIncomplete": "引导流程尚未完成。",
-    "unknown": "未知错误"
+    "exporterNotReady": "导出器还在加载，稍等片刻再试。"
   },
   "demos": {
     "meditationApp": {

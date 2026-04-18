@@ -1,6 +1,6 @@
 import { join } from 'node:path';
+import { app } from 'electron';
 import log from 'electron-log/main';
-import { app } from './electron-runtime';
 
 /**
  * Centralized logger for the main + preload + renderer processes.

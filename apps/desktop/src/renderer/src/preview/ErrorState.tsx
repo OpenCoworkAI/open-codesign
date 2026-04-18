@@ -1,4 +1,3 @@
-import { useT } from '@open-codesign/i18n';
 import { Button } from '@open-codesign/ui';
 import { AlertTriangle, Copy, RotateCw } from 'lucide-react';
 import { useState } from 'react';
@@ -10,7 +9,6 @@ export interface ErrorStateProps {
 }
 
 export function ErrorState({ message, onRetry, onDismiss }: ErrorStateProps) {
-  const t = useT();
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -28,10 +26,10 @@ export function ErrorState({ message, onRetry, onDismiss }: ErrorStateProps) {
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-[var(--text-base)] font-semibold text-[var(--color-text-primary)]">
-              {t('preview.error.title')}
+              Generation failed
             </h3>
             <p className="text-[var(--text-sm)] text-[var(--color-text-secondary)] mt-1">
-              {t('preview.error.body')}
+              The model returned an error. You can retry or copy the details below.
             </p>
           </div>
         </div>
@@ -41,16 +39,16 @@ export function ErrorState({ message, onRetry, onDismiss }: ErrorStateProps) {
         <div className="flex items-center gap-2 justify-end">
           {onDismiss ? (
             <Button variant="ghost" size="sm" onClick={onDismiss}>
-              {t('common.close')}
+              Dismiss
             </Button>
           ) : null}
           <Button variant="secondary" size="sm" onClick={copy}>
             <Copy className="w-4 h-4" />
-            {copied ? t('common.copied') : t('preview.error.copyError')}
+            {copied ? 'Copied' : 'Copy Error'}
           </Button>
           <Button variant="primary" size="sm" onClick={onRetry}>
             <RotateCw className="w-4 h-4" />
-            {t('common.retry')}
+            Retry
           </Button>
         </div>
       </div>

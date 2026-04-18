@@ -3,14 +3,20 @@ import {
   CodesignError,
   type Config,
   type OnboardingState,
-  StoredDesignSystem,
-  type StoredDesignSystem as StoredDesignSystemValue,
   type SupportedOnboardingProvider,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
-import { readConfig, writeConfig } from './config';
-import { ipcMain } from './electron-runtime';
+import { configDir, configPath, readConfig, writeConfig } from './config';
+import { ipcMain, shell } from './electron-runtime';
 import { decryptSecret, encryptSecret } from './keychain';
+import { getLogPath } from './logger';
+import {
+  type ProviderRow,
+  assertProviderHasStoredSecret,
+  getAddProviderDefaults,
+  toProviderRows,
+} from './provider-settings';
+import { buildAppPaths } from './storage-settings';
 
 interface SaveKeyInput {
   provider: SupportedOnboardingProvider;
@@ -25,6 +31,8 @@ interface ValidateKeyInput {
   apiKey: string;
   baseUrl?: string;
 }
+
+export type { ProviderRow } from './provider-settings';
 
 let cachedConfig: Config | null = null;
 let configLoaded = false;
@@ -63,26 +71,12 @@ export function getBaseUrlForProvider(provider: string): string | undefined {
   return ref?.baseUrl;
 }
 
-export function toState(cfg: Config | null): OnboardingState {
+function toState(cfg: Config | null): OnboardingState {
   if (cfg === null) {
-    return {
-      hasKey: false,
-      provider: null,
-      modelPrimary: null,
-      modelFast: null,
-      baseUrl: null,
-      designSystem: null,
-    };
+    return { hasKey: false, provider: null, modelPrimary: null, modelFast: null, baseUrl: null };
   }
   if (!isSupportedOnboardingProvider(cfg.provider)) {
-    return {
-      hasKey: false,
-      provider: null,
-      modelPrimary: null,
-      modelFast: null,
-      baseUrl: null,
-      designSystem: cfg.designSystem ?? null,
-    };
+    return { hasKey: false, provider: null, modelPrimary: null, modelFast: null, baseUrl: null };
   }
   const ref = cfg.secrets[cfg.provider];
   if (ref === undefined) {
@@ -92,7 +86,6 @@ export function toState(cfg: Config | null): OnboardingState {
       modelPrimary: null,
       modelFast: null,
       baseUrl: null,
-      designSystem: cfg.designSystem ?? null,
     };
   }
   return {
@@ -101,35 +94,7 @@ export function toState(cfg: Config | null): OnboardingState {
     modelPrimary: cfg.modelPrimary,
     modelFast: cfg.modelFast,
     baseUrl: cfg.baseUrls?.[cfg.provider]?.baseUrl ?? null,
-    designSystem: cfg.designSystem ?? null,
   };
-}
-
-export function getOnboardingState(): OnboardingState {
-  return toState(getCachedConfig());
-}
-
-export async function setDesignSystem(
-  designSystem: StoredDesignSystemValue | null,
-): Promise<OnboardingState> {
-  const cfg = getCachedConfig();
-  if (cfg === null) {
-    throw new CodesignError(
-      'Cannot save a design system before onboarding has completed.',
-      'CONFIG_MISSING',
-    );
-  }
-  const next: Config = {
-    ...cfg,
-    ...(designSystem ? { designSystem: StoredDesignSystem.parse(designSystem) } : {}),
-  };
-  if (designSystem === null) {
-    next.designSystem = undefined;
-  }
-  await writeConfig(next);
-  cachedConfig = next;
-  configLoaded = true;
-  return toState(cachedConfig);
 }
 
 function parseSaveKey(raw: unknown): SaveKeyInput {
@@ -221,7 +186,6 @@ export function registerOnboardingIpc(): void {
         [input.provider]: { ciphertext },
       },
       baseUrls: nextBaseUrls,
-      ...(cachedConfig?.designSystem ? { designSystem: cachedConfig.designSystem } : {}),
     };
     await writeConfig(next);
     cachedConfig = next;
@@ -231,5 +195,157 @@ export function registerOnboardingIpc(): void {
 
   ipcMain.handle('onboarding:skip', async (): Promise<OnboardingState> => {
     return toState(cachedConfig);
+  });
+
+  // ── Settings: provider management ──────────────────────────────────────────
+
+  ipcMain.handle('settings:list-providers', (): ProviderRow[] => {
+    return toProviderRows(getCachedConfig(), decryptSecret);
+  });
+
+  ipcMain.handle('settings:add-provider', async (_e, raw: unknown): Promise<ProviderRow[]> => {
+    const input = parseSaveKey(raw);
+    const ciphertext = encryptSecret(input.apiKey);
+    const nextBaseUrls = { ...(cachedConfig?.baseUrls ?? {}) };
+    if (input.baseUrl !== undefined) {
+      nextBaseUrls[input.provider] = { baseUrl: input.baseUrl };
+    } else {
+      delete nextBaseUrls[input.provider];
+    }
+    const nextDefaults = getAddProviderDefaults(cachedConfig, input);
+    const next: Config = {
+      version: 1,
+      provider: nextDefaults.activeProvider,
+      modelPrimary: nextDefaults.modelPrimary,
+      modelFast: nextDefaults.modelFast,
+      secrets: {
+        ...(cachedConfig?.secrets ?? {}),
+        [input.provider]: { ciphertext },
+      },
+      baseUrls: nextBaseUrls,
+    };
+    await writeConfig(next);
+    cachedConfig = next;
+    return toProviderRows(cachedConfig, decryptSecret);
+  });
+
+  ipcMain.handle('settings:delete-provider', async (_e, raw: unknown): Promise<ProviderRow[]> => {
+    if (typeof raw !== 'string' || !isSupportedOnboardingProvider(raw)) {
+      throw new CodesignError('delete-provider expects a provider string', 'IPC_BAD_INPUT');
+    }
+    const cfg = getCachedConfig();
+    if (cfg === null) return [];
+    const nextSecrets = { ...cfg.secrets };
+    delete nextSecrets[raw];
+    const nextBaseUrls = { ...(cfg.baseUrls ?? {}) };
+    delete nextBaseUrls[raw];
+    // If we deleted the active provider, pick the first remaining one with a secret.
+    // If nothing remains, write a tombstone config so onboarding triggers again.
+    const remaining = Object.keys(nextSecrets).filter(isSupportedOnboardingProvider);
+    // Determine the next active provider: keep current if untouched and valid,
+    // otherwise fall back to the first remaining supported provider.
+    const currentIsSupported = isSupportedOnboardingProvider(cfg.provider);
+    const keepCurrent = cfg.provider !== raw && currentIsSupported;
+    let nextActive: SupportedOnboardingProvider;
+    if (keepCurrent) {
+      nextActive = cfg.provider as SupportedOnboardingProvider;
+    } else if (remaining.length > 0) {
+      nextActive = remaining[0] as SupportedOnboardingProvider;
+    } else {
+      // No providers left — write a tombstone config so onboarding triggers again.
+      const emptyNext: Config = {
+        version: 1,
+        provider: cfg.provider,
+        modelPrimary: cfg.modelPrimary,
+        modelFast: cfg.modelFast,
+        secrets: {},
+        baseUrls: {},
+      };
+      await writeConfig(emptyNext);
+      cachedConfig = emptyNext;
+      return toProviderRows(cachedConfig, decryptSecret);
+    }
+    const next: Config = {
+      version: 1,
+      provider: nextActive,
+      modelPrimary: cfg.modelPrimary,
+      modelFast: cfg.modelFast,
+      secrets: nextSecrets,
+      baseUrls: nextBaseUrls,
+    };
+    await writeConfig(next);
+    cachedConfig = next;
+    return toProviderRows(cachedConfig, decryptSecret);
+  });
+
+  ipcMain.handle(
+    'settings:set-active-provider',
+    async (_e, raw: unknown): Promise<OnboardingState> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError('set-active-provider expects an object', 'IPC_BAD_INPUT');
+      }
+      const r = raw as Record<string, unknown>;
+      const provider = r['provider'];
+      const modelPrimary = r['modelPrimary'];
+      const modelFast = r['modelFast'];
+      if (typeof provider !== 'string' || !isSupportedOnboardingProvider(provider)) {
+        throw new CodesignError('provider must be a supported provider string', 'IPC_BAD_INPUT');
+      }
+      if (typeof modelPrimary !== 'string' || modelPrimary.trim().length === 0) {
+        throw new CodesignError('modelPrimary must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      if (typeof modelFast !== 'string' || modelFast.trim().length === 0) {
+        throw new CodesignError('modelFast must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      const cfg = getCachedConfig();
+      if (cfg === null) {
+        throw new CodesignError('No configuration found', 'CONFIG_MISSING');
+      }
+      assertProviderHasStoredSecret(cfg, provider);
+      const next: Config = {
+        ...cfg,
+        provider,
+        modelPrimary,
+        modelFast,
+      };
+      await writeConfig(next);
+      cachedConfig = next;
+      return toState(cachedConfig);
+    },
+  );
+
+  // ── Settings: storage helpers ───────────────────────────────────────────────
+
+  ipcMain.handle('settings:get-paths', () =>
+    buildAppPaths(configPath(), getLogPath(), configDir()),
+  );
+
+  ipcMain.handle('settings:open-folder', async (_e, raw: unknown) => {
+    if (typeof raw !== 'string') {
+      throw new CodesignError('open-folder expects a path string', 'IPC_BAD_INPUT');
+    }
+    const error = await shell.openPath(raw);
+    if (error) {
+      throw new CodesignError(`Could not open ${raw}: ${error}`, 'OPEN_PATH_FAILED');
+    }
+  });
+
+  ipcMain.handle('settings:reset-onboarding', async (): Promise<void> => {
+    const cfg = getCachedConfig();
+    if (cfg === null) return;
+    // Clear secrets so onboarding flow triggers again on next load.
+    const next: Config = {
+      ...cfg,
+      secrets: {},
+    };
+    await writeConfig(next);
+    cachedConfig = next;
+  });
+
+  // ── Settings: appearance / advanced ────────────────────────────────────────
+
+  ipcMain.handle('settings:toggle-devtools', (_e) => {
+    // We need the webContents reference — the event sender is the renderer.
+    _e.sender.toggleDevTools();
   });
 }

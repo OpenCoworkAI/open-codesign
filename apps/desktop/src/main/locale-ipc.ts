@@ -14,7 +14,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { app, ipcMain } from './electron-runtime';
+import { app, ipcMain } from 'electron';
 
 const CONFIG_DIR = join(homedir(), '.config', 'open-codesign');
 const LOCALE_FILE = join(CONFIG_DIR, 'locale.json');

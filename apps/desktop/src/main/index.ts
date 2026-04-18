@@ -1,7 +1,6 @@
-import { stat } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyComment, generate } from '@open-codesign/core';
+import { generate } from '@open-codesign/core';
 import { detectProviderFromKey } from '@open-codesign/providers';
 import {
   ApplyCommentPayload,
@@ -13,8 +12,7 @@ import {
 } from '@open-codesign/shared';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { scanDesignSystem } from './design-system';
-import { BrowserWindow, app, dialog, ipcMain, shell } from './electron-runtime';
+import { BrowserWindow, app, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
 import { cancelGenerationRequest } from './generation-ipc';
 import { registerLocaleIpc } from './locale-ipc';
@@ -22,13 +20,10 @@ import { getLogPath, getLogger, initLogger } from './logger';
 import {
   getApiKeyForProvider,
   getBaseUrlForProvider,
-  getCachedConfig,
-  getOnboardingState,
   loadConfigOnBoot,
   registerOnboardingIpc,
-  setDesignSystem,
 } from './onboarding-ipc';
-import { preparePromptContext } from './prompt-context';
+import { registerPreferencesIpc } from './preferences-ipc';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,7 +36,6 @@ function createWindow(): void {
     height: 820,
     minWidth: 960,
     minHeight: 640,
-    autoHideMenuBar: process.platform !== 'darwin',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: BRAND.backgroundColor,
     show: false,
@@ -139,25 +133,14 @@ function registerIpcHandlers(): void {
     const apiKey = getApiKeyForProvider(payload.model.provider);
     const storedBaseUrl = getBaseUrlForProvider(payload.model.provider);
     const baseUrl = payload.baseUrl ?? storedBaseUrl;
-    const cfg = getCachedConfig();
-    const promptContext = await preparePromptContext({
-      attachments: payload.attachments,
-      referenceUrl: payload.referenceUrl,
-      designSystem: cfg?.designSystem ?? null,
-    });
-
     logIpc.info('generate', {
       id,
       provider: payload.model.provider,
       modelId: payload.model.modelId,
       promptLen: payload.prompt.length,
       historyLen: payload.history.length,
-      attachmentCount: payload.attachments.length,
-      hasReferenceUrl: payload.referenceUrl !== undefined,
-      hasDesignSystem: promptContext.designSystem !== null,
       baseUrl: baseUrl ?? '<default>',
     });
-
     const t0 = Date.now();
     try {
       const result = await generate({
@@ -165,17 +148,14 @@ function registerIpcHandlers(): void {
         history: payload.history,
         model: payload.model,
         apiKey,
-        attachments: promptContext.attachments,
-        referenceUrl: promptContext.referenceUrl,
-        designSystem: promptContext.designSystem ?? null,
         ...(baseUrl !== undefined ? { baseUrl } : {}),
         signal: controller.signal,
       });
       logIpc.info('generate.ok', {
         id,
         ms: Date.now() - t0,
-        artifacts: result.artifacts.length,
-        cost: result.costUsd,
+        artifacts: (result as { artifacts?: unknown[] }).artifacts?.length ?? 0,
+        cost: (result as { costUsd?: number }).costUsd,
       });
       return result;
     } catch (err) {
@@ -353,6 +333,7 @@ void app.whenReady().then(async () => {
   registerIpcHandlers();
   registerLocaleIpc();
   registerOnboardingIpc();
+  registerPreferencesIpc();
   registerExporterIpc(() => mainWindow);
   setupAutoUpdater();
   createWindow();

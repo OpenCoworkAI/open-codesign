@@ -27,29 +27,6 @@ export const BaseUrlRef = z.object({
 });
 export type BaseUrlRef = z.infer<typeof BaseUrlRef>;
 
-export const STORED_DESIGN_SYSTEM_SCHEMA_VERSION = 1 as const;
-
-const StoredDesignSystemShape = z.object({
-  schemaVersion: z.literal(STORED_DESIGN_SYSTEM_SCHEMA_VERSION),
-  rootPath: z.string().min(1),
-  summary: z.string().min(1),
-  extractedAt: z.string().min(1),
-  sourceFiles: z.array(z.string().min(1)).max(24).default([]),
-  colors: z.array(z.string().min(1)).max(24).default([]),
-  fonts: z.array(z.string().min(1)).max(16).default([]),
-  spacing: z.array(z.string().min(1)).max(16).default([]),
-  radius: z.array(z.string().min(1)).max(16).default([]),
-  shadows: z.array(z.string().min(1)).max(16).default([]),
-});
-
-export const StoredDesignSystem = z.preprocess((raw) => {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw;
-  const record = raw as Record<string, unknown>;
-  if ('schemaVersion' in record) return record;
-  return { schemaVersion: STORED_DESIGN_SYSTEM_SCHEMA_VERSION, ...record };
-}, StoredDesignSystemShape);
-export type StoredDesignSystem = z.infer<typeof StoredDesignSystem>;
-
 export const ConfigSchema = z.object({
   version: z.literal(1).default(1),
   provider: ProviderIdEnum,
@@ -57,7 +34,6 @@ export const ConfigSchema = z.object({
   modelFast: z.string().min(1),
   secrets: z.record(ProviderIdEnum, SecretRef).default({}),
   baseUrls: z.record(ProviderIdEnum, BaseUrlRef).default({}),
-  designSystem: StoredDesignSystem.optional(),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 
@@ -67,7 +43,6 @@ export interface OnboardingState {
   modelPrimary: string | null;
   modelFast: string | null;
   baseUrl: string | null;
-  designSystem: StoredDesignSystem | null;
 }
 
 export interface ProviderShortlist {

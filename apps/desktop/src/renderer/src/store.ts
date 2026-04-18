@@ -1,10 +1,7 @@
-import { i18n } from '@open-codesign/i18n';
 import type {
   ChatMessage,
-  LocalInputFile,
   ModelRef,
   OnboardingState,
-  SelectedElement,
   SupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { create } from 'zustand';
@@ -28,12 +25,6 @@ export interface Toast {
 
 export type Theme = 'light' | 'dark';
 
-interface PromptRequest {
-  prompt: string;
-  attachments: LocalInputFile[];
-  referenceUrl?: string | undefined;
-}
-
 interface CodesignState {
   messages: ChatMessage[];
   previewHtml: string | null;
@@ -51,11 +42,6 @@ interface CodesignState {
   toasts: Toast[];
   iframeErrors: string[];
 
-  inputFiles: LocalInputFile[];
-  referenceUrl: string;
-  lastPromptInput: PromptRequest | null;
-  selectedElement: SelectedElement | null;
-
   loadConfig: () => Promise<void>;
   completeOnboarding: (next: OnboardingState) => void;
   sendPrompt: (input: {
@@ -65,21 +51,9 @@ interface CodesignState {
   }) => Promise<void>;
   cancelGeneration: () => void;
   retryLastPrompt: () => Promise<void>;
-  applyInlineComment: (comment: string) => Promise<void>;
   clearError: () => void;
   clearIframeErrors: () => void;
-  pushIframeError: (message: string) => void;
   exportActive: (format: ExportFormat) => Promise<void>;
-
-  pickInputFiles: () => Promise<void>;
-  removeInputFile: (path: string) => void;
-  clearInputFiles: () => void;
-  setReferenceUrl: (value: string) => void;
-  pickDesignSystemDirectory: () => Promise<void>;
-  clearDesignSystem: () => Promise<void>;
-
-  selectCanvasElement: (selection: SelectedElement) => void;
-  clearCanvasElement: () => void;
 
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -217,11 +191,6 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   toasts: [],
   iframeErrors: [],
 
-  inputFiles: [],
-  referenceUrl: '',
-  lastPromptInput: null,
-  selectedElement: null,
-
   clearIframeErrors() {
     set({ iframeErrors: [] });
   },
@@ -239,7 +208,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     if (!window.codesign) {
       set({
         configLoaded: true,
-        errorMessage: tr('errors.rendererDisconnected'),
+        errorMessage: 'Renderer is not connected to the main process.',
       });
       return;
     }
@@ -251,73 +220,16 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     set({ config: next });
   },
 
-  async pickInputFiles() {
-    if (!window.codesign) return;
-    const files = await window.codesign.pickInputFiles();
-    if (files.length === 0) return;
-    set((s) => ({ inputFiles: uniqueFiles([...s.inputFiles, ...files]) }));
-  },
-
-  removeInputFile(path) {
-    set((s) => ({ inputFiles: s.inputFiles.filter((file) => file.path !== path) }));
-  },
-
-  clearInputFiles() {
-    set({ inputFiles: [] });
-  },
-
-  setReferenceUrl(value) {
-    set({ referenceUrl: value });
-  },
-
-  async pickDesignSystemDirectory() {
-    if (!window.codesign) return;
-    try {
-      const next = await window.codesign.pickDesignSystemDirectory();
-      set({ config: next });
-      if (next.designSystem) {
-        get().pushToast({
-          variant: 'success',
-          title: tr('notifications.designSystemLinked'),
-          description: next.designSystem.summary,
-        });
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : tr('errors.generic');
-      get().pushToast({
-        variant: 'error',
-        title: tr('notifications.designSystemScanFailed'),
-        description: message,
-      });
-    }
-  },
-
-  async clearDesignSystem() {
-    if (!window.codesign) return;
-    try {
-      const next = await window.codesign.clearDesignSystem();
-      set({ config: next });
-      get().pushToast({ variant: 'info', title: tr('notifications.designSystemCleared') });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : tr('errors.generic');
-      get().pushToast({
-        variant: 'error',
-        title: tr('notifications.clearDesignSystemFailed'),
-        description: message,
-      });
-    }
-  },
-
-  async sendPrompt(input) {
+  async sendPrompt(prompt: string) {
     if (get().isGenerating) return;
     if (!window.codesign) {
-      const msg = tr('errors.rendererDisconnected');
+      const msg = 'Renderer is not connected to the main process.';
       set({ errorMessage: msg, lastError: msg });
       return;
     }
     const cfg = get().config;
     if (cfg === null || !cfg.hasKey || cfg.provider === null || cfg.modelPrimary === null) {
-      const msg = tr('errors.onboardingIncomplete');
+      const msg = 'Onboarding is not complete.';
       set({ errorMessage: msg, lastError: msg });
       return;
     }
@@ -341,15 +253,12 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       isGenerating: true,
       activeGenerationId: generationId,
       errorMessage: null,
-      lastPromptInput: request,
-      selectedElement: null,
-      iframeErrors: [],
     }));
 
     try {
       const result = await window.codesign.generate({
         prompt,
-        history,
+        history: get().messages,
         model: modelRef(cfg.provider, cfg.modelPrimary),
         ...(request.referenceUrl ? { referenceUrl: request.referenceUrl } : {}),
         attachments: request.attachments,
@@ -396,72 +305,15 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   },
 
   async retryLastPrompt() {
-    const lastPromptInput = get().lastPromptInput;
-    if (!lastPromptInput) return;
-
-    const messages = [...get().messages];
-    const lastMessage = messages.at(-1);
-    if (lastMessage?.role === 'assistant' && lastMessage.content.startsWith('Error:'))
-      messages.pop();
-    const maybeUser = messages.at(-1);
-    if (maybeUser?.role === 'user' && maybeUser.content === lastPromptInput.prompt) messages.pop();
-
-    set({ messages, errorMessage: null });
-    await get().sendPrompt(lastPromptInput);
-  },
-
-  async applyInlineComment(comment) {
-    const trimmed = comment.trim();
-    if (!trimmed || get().isGenerating) return;
-    if (!window.codesign) return;
-    const cfg = get().config;
-    const html = get().previewHtml;
-    const selection = get().selectedElement;
-    if (cfg === null || !cfg.hasKey || html === null || selection === null) return;
-
-    const userMessage: ChatMessage = { role: 'user', content: `Edit ${selection.tag}: ${trimmed}` };
-    const referenceUrl = normalizeReferenceUrl(get().referenceUrl);
-    const attachments = uniqueFiles(get().inputFiles);
-
+    const lastUser = [...get().messages].reverse().find((m) => m.role === 'user');
+    if (!lastUser) return;
     set((s) => ({
-      messages: [...s.messages, userMessage],
-      isGenerating: true,
+      messages: s.messages.filter(
+        (m) => m !== lastUser && !(m.role === 'assistant' && m.content.startsWith('Error:')),
+      ),
       errorMessage: null,
-      iframeErrors: [],
     }));
-
-    try {
-      const result = await window.codesign.applyComment({
-        html,
-        comment: trimmed,
-        selection,
-        ...(referenceUrl ? { referenceUrl } : {}),
-        attachments,
-      });
-      const firstArtifact = result.artifacts[0];
-      set((s) => ({
-        messages: [
-          ...s.messages,
-          { role: 'assistant', content: result.message || tr('common.applied') },
-        ],
-        previewHtml: firstArtifact?.content ?? s.previewHtml,
-        isGenerating: false,
-        selectedElement: null,
-      }));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : tr('errors.unknown');
-      set((s) => ({
-        messages: [...s.messages, { role: 'assistant', content: `Error: ${msg}` }],
-        isGenerating: false,
-        errorMessage: msg,
-        lastError: msg,
-      }));
-      get().pushToast({
-        variant: 'error',
-        title: tr('notifications.inlineCommentFailed'),
-        description: msg,
-      });
-    }
+    await get().sendPrompt(lastUser.content);
   },
 
   clearError() {
@@ -471,11 +323,11 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   async exportActive(format: ExportFormat) {
     const html = get().previewHtml;
     if (!html) {
-      set({ toastMessage: tr('notifications.noDesignToExport') });
+      set({ toastMessage: 'No design to export yet.' });
       return;
     }
     if (!window.codesign) {
-      set({ errorMessage: tr('errors.rendererDisconnected') });
+      set({ errorMessage: 'Renderer is not connected to the main process.' });
       return;
     }
     try {
@@ -486,20 +338,12 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         defaultFilename: `codesign-${stamp}.${format}`,
       });
       if (res.status === 'saved' && res.path) {
-        set({ toastMessage: tr('notifications.exportedTo', { path: res.path }) });
+        set({ toastMessage: `Exported to ${res.path}` });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      const msg = err instanceof Error ? err.message : 'Unknown error';
       set({ toastMessage: msg, errorMessage: msg, lastError: msg });
     }
-  },
-
-  selectCanvasElement(selection) {
-    set({ selectedElement: selection });
-  },
-
-  clearCanvasElement() {
-    set({ selectedElement: null });
   },
 
   setTheme(theme) {

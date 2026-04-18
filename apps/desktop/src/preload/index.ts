@@ -5,7 +5,6 @@ import type {
   LocalInputFile,
   ModelRef,
   OnboardingState,
-  SelectedElement,
   SupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
@@ -25,6 +24,29 @@ export interface ExportInvokeResponse {
   status: 'saved' | 'cancelled';
   path?: string;
   bytes?: number;
+}
+
+export interface ProviderRow {
+  provider: SupportedOnboardingProvider;
+  maskedKey: string;
+  baseUrl: string | null;
+  isActive: boolean;
+  error?: 'decryption_failed' | string;
+}
+
+export interface AppPaths {
+  config: string;
+  configFolder: string;
+  logs: string;
+  logsFolder: string;
+  data: string;
+}
+
+export type UpdateChannel = 'stable' | 'beta';
+
+export interface Preferences {
+  updateChannel: UpdateChannel;
+  generationTimeoutSec: number;
 }
 
 const api = {
@@ -95,6 +117,40 @@ const api = {
       baseUrl?: string;
     }) => ipcRenderer.invoke('onboarding:save-key', input) as Promise<OnboardingState>,
     skip: () => ipcRenderer.invoke('onboarding:skip') as Promise<OnboardingState>,
+  },
+  settings: {
+    listProviders: () => ipcRenderer.invoke('settings:list-providers') as Promise<ProviderRow[]>,
+    addProvider: (input: {
+      provider: SupportedOnboardingProvider;
+      apiKey: string;
+      modelPrimary: string;
+      modelFast: string;
+      baseUrl?: string;
+    }) => ipcRenderer.invoke('settings:add-provider', input) as Promise<ProviderRow[]>,
+    deleteProvider: (provider: SupportedOnboardingProvider) =>
+      ipcRenderer.invoke('settings:delete-provider', provider) as Promise<ProviderRow[]>,
+    setActiveProvider: (input: {
+      provider: SupportedOnboardingProvider;
+      modelPrimary: string;
+      modelFast: string;
+    }) => ipcRenderer.invoke('settings:set-active-provider', input) as Promise<OnboardingState>,
+    getPaths: () => ipcRenderer.invoke('settings:get-paths') as Promise<AppPaths>,
+    openFolder: (path: string) => ipcRenderer.invoke('settings:open-folder', path) as Promise<void>,
+    resetOnboarding: () => ipcRenderer.invoke('settings:reset-onboarding') as Promise<void>,
+    toggleDevtools: () => ipcRenderer.invoke('settings:toggle-devtools') as Promise<void>,
+    validateKey: (input: {
+      provider: SupportedOnboardingProvider;
+      apiKey: string;
+      baseUrl?: string;
+    }) =>
+      ipcRenderer.invoke('onboarding:validate-key', input) as Promise<
+        ValidateKeyResult | ValidateKeyError
+      >,
+  },
+  preferences: {
+    get: () => ipcRenderer.invoke('preferences:get') as Promise<Preferences>,
+    update: (patch: Partial<Preferences>) =>
+      ipcRenderer.invoke('preferences:update', patch) as Promise<Preferences>,
   },
 };
 

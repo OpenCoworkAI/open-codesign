@@ -1,15 +1,28 @@
-import { useT } from '@open-codesign/i18n';
 import { Sparkles } from 'lucide-react';
 
 export interface EmptyStateProps {
   onPickStarter: (prompt: string) => void;
 }
 
-const STARTERS = ['meditationApp', 'pitchDeck', 'caseStudy'] as const;
+const STARTERS: ReadonlyArray<{ label: string; prompt: string }> = [
+  {
+    label: 'Mobile meditation app',
+    prompt:
+      'Design a mobile app prototype for a meditation app called Calm Spaces. Show a phone frame containing a home screen with a meditation list, play button, and progress tracker.',
+  },
+  {
+    label: 'B2B pitch deck',
+    prompt:
+      'Create a 6-slide B2B SaaS pitch deck for an AI workflow tool. Include problem, solution, market, demo screenshot, traction, and ask.',
+  },
+  {
+    label: 'Case study one-pager',
+    prompt:
+      'Create a one-page client case study with hero metrics, a CEO quote, and a logo placeholder. Clean, minimal, dark theme.',
+  },
+];
 
 export function EmptyState({ onPickStarter }: EmptyStateProps) {
-  const t = useT();
-
   return (
     <div className="h-full flex items-center justify-center px-6">
       <div className="text-center max-w-md flex flex-col items-center">
@@ -23,23 +36,20 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
           </div>
         </div>
         <h2 className="text-[var(--text-lg)] font-semibold text-[var(--color-text-primary)] tracking-[var(--tracking-heading)] mb-2">
-          {t('preview.empty.title')}
+          A blank canvas, ready when you are.
         </h2>
-        <p className="text-[var(--text-sm)] text-[var(--color-text-secondary)] leading-[var(--leading-body)] mb-4">
-          {t('preview.empty.body')}
+        <p className="text-[var(--text-sm)] text-[var(--color-text-secondary)] leading-[var(--leading-body)] mb-6">
+          Describe what you want to build, or start from one of these:
         </p>
-        <div className="mb-3 text-[11px] uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
-          {t('preview.empty.starterChip')}
-        </div>
         <div className="flex flex-wrap gap-2 justify-center">
-          {STARTERS.map((starterId) => (
+          {STARTERS.map((s) => (
             <button
-              key={starterId}
+              key={s.label}
               type="button"
-              onClick={() => onPickStarter(t(`demos.${starterId}.prompt`))}
+              onClick={() => onPickStarter(s.prompt)}
               className="px-3 py-1.5 rounded-[var(--radius-full)] text-[var(--text-xs)] font-medium bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border-strong)] transition-colors"
             >
-              {t(`demos.${starterId}.title`)}
+              {s.label}
             </button>
           ))}
         </div>

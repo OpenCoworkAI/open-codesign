@@ -1,4 +1,3 @@
-import { useT } from '@open-codesign/i18n';
 import { Download } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
@@ -11,8 +10,14 @@ interface ExportItem {
   ready: boolean;
 }
 
+const EXPORT_ITEMS: ExportItem[] = [
+  { format: 'html', label: 'HTML', ready: true, hint: 'Single self-contained .html file' },
+  { format: 'pdf', label: 'PDF', ready: true, hint: 'Rendered via your installed Chrome' },
+  { format: 'pptx', label: 'PPTX', ready: true, hint: 'Editable slides; one per <section>' },
+  { format: 'zip', label: 'ZIP bundle', ready: true, hint: 'index.html + assets + README.md' },
+];
+
 export function PreviewToolbar(): ReactElement {
-  const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const exportActive = useCodesignStore((s) => s.exportActive);
   const toastMessage = useCodesignStore((s) => s.toastMessage);
@@ -31,37 +36,11 @@ export function PreviewToolbar(): ReactElement {
 
   useEffect(() => {
     if (!toastMessage) return;
-    const timeout = setTimeout(() => dismissToast(), 4000);
-    return () => clearTimeout(timeout);
+    const t = setTimeout(() => dismissToast(), 4000);
+    return () => clearTimeout(t);
   }, [toastMessage, dismissToast]);
 
   const disabled = !previewHtml;
-  const exportItems: ExportItem[] = [
-    {
-      format: 'html',
-      label: t('export.items.html.label'),
-      ready: true,
-      hint: t('export.items.html.hint'),
-    },
-    {
-      format: 'pdf',
-      label: t('export.items.pdf.label'),
-      ready: true,
-      hint: t('export.items.pdf.hint'),
-    },
-    {
-      format: 'pptx',
-      label: t('export.items.pptx.label'),
-      ready: true,
-      hint: t('export.items.pptx.hint'),
-    },
-    {
-      format: 'zip',
-      label: t('export.items.zip.label'),
-      ready: true,
-      hint: t('export.items.zip.hint'),
-    },
-  ];
 
   return (
     <div className="flex items-center justify-end gap-2 px-6 py-2 border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)]">
@@ -81,7 +60,7 @@ export function PreviewToolbar(): ReactElement {
           aria-expanded={open}
         >
           <Download className="w-[14px] h-[14px]" aria-hidden="true" />
-          {t('export.button')}
+          Export
         </button>
 
         {open && (
@@ -89,7 +68,7 @@ export function PreviewToolbar(): ReactElement {
             role="menu"
             className="absolute right-0 top-full mt-2 min-w-[200px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1 z-10"
           >
-            {exportItems.map((item) => (
+            {EXPORT_ITEMS.map((item) => (
               <button
                 key={item.format}
                 type="button"
