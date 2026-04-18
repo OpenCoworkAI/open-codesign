@@ -16,8 +16,8 @@ export function PhoneFrame({ children }: PhoneFrameProps): ReactElement {
         display: 'inline-flex',
         flexDirection: 'column',
         position: 'relative',
-        borderRadius: 'var(--radius-phone, 44px)',
-        border: '8px solid var(--color-border-strong)',
+        borderRadius: 'var(--radius-phone)',
+        border: 'var(--border-width-strong) solid var(--color-border-strong)',
         boxShadow: 'var(--shadow-elevated)',
         background: 'var(--color-surface)',
         overflow: 'hidden',
@@ -33,8 +33,8 @@ export function PhoneFrame({ children }: PhoneFrameProps): ReactElement {
           top: 0,
           left: '50%',
           transform: 'translateX(-50%)',
-          width: '120px',
-          height: '30px',
+          width: 'var(--size-preview-mobile-notch-width)',
+          height: 'var(--size-preview-mobile-notch-height)',
           background: 'var(--color-border-strong)',
           borderBottomLeftRadius: 'var(--radius-lg)',
           borderBottomRightRadius: 'var(--radius-lg)',
@@ -45,10 +45,10 @@ export function PhoneFrame({ children }: PhoneFrameProps): ReactElement {
       <div
         style={{
           position: 'relative',
-          width: '375px',
-          height: '812px',
+          width: 'var(--size-preview-mobile-width)',
+          height: 'var(--size-preview-mobile-height)',
           overflow: 'hidden',
-          borderRadius: 'calc(var(--radius-phone, 44px) - 8px)',
+          borderRadius: 'calc(var(--radius-phone) - var(--border-width-strong))',
         }}
       >
         {children}

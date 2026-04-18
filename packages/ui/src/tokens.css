@@ -154,6 +154,17 @@
   --radius-xl: 14px;
   --radius-2xl: 18px;
   --radius-full: 9999px;
+  --radius-phone: 44px;
+
+  /* Border width */
+  --border-width-strong: 8px;
+
+  /* Preview viewport sizes */
+  --size-preview-mobile-width: 375px;
+  --size-preview-mobile-height: 812px;
+  --size-preview-mobile-notch-width: 120px;
+  --size-preview-mobile-notch-height: 30px;
+  --size-preview-tablet-width: 768px;
 
   /* Motion — subtle, editorial */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);

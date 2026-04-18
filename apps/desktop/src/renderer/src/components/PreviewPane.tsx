@@ -157,8 +157,11 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       );
     } else if (previewViewport === 'tablet') {
       body = (
-        <div className="h-full p-6 flex justify-center overflow-auto">
-          <div className="relative" style={{ width: '768px', flexShrink: 0 }}>
+        <div className="flex justify-center h-full" style={{ width: '100%' }}>
+          <div
+            className="relative h-full"
+            style={{ width: 'var(--size-preview-tablet-width)', flexShrink: 0 }}
+          >
             <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
             {iframe}
             <InlineCommentComposer />
