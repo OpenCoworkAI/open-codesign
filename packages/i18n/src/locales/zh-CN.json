@@ -1,0 +1,134 @@
+{
+  "common": {
+    "appName": "open-codesign",
+    "send": "发送",
+    "cancel": "取消",
+    "retry": "重试",
+    "save": "保存",
+    "close": "关闭",
+    "settings": "设置",
+    "advanced": "高级",
+    "about": "关于",
+    "learnMore": "了解更多",
+    "copy": "复制",
+    "copied": "已复制",
+    "comingSoon": "即将推出",
+    "loading": "加载中…",
+    "preAlpha": "预览版",
+    "tagline": "自带密钥 · 本地优先 · 多模型"
+  },
+  "preview": {
+    "empty": {
+      "title": "用 AI 设计",
+      "body": "从左侧选一个范例，或直接描述你想做的设计。结果会渲染在右侧的沙箱预览里。",
+      "starterChip": "试试这些范例提示词："
+    },
+    "loading": {
+      "title": "正在生成你的设计…"
+    },
+    "error": {
+      "title": "生成失败",
+      "body": "生成过程中出错了。",
+      "copyError": "复制错误详情"
+    },
+    "ready": "预览",
+    "noDesign": "还没有设计"
+  },
+  "chat": {
+    "placeholder": "想设计什么？",
+    "sendShortcut": "发送（回车）",
+    "emptyHint": "可以从范例开始，也可以直接说出你的想法。"
+  },
+  "settings": {
+    "title": "设置",
+    "tabs": {
+      "models": "模型",
+      "appearance": "外观",
+      "storage": "存储",
+      "advanced": "高级"
+    },
+    "language": {
+      "label": "语言",
+      "system": "跟随系统"
+    },
+    "theme": {
+      "label": "主题",
+      "light": "浅色",
+      "dark": "深色",
+      "system": "跟随系统"
+    }
+  },
+  "onboarding": {
+    "welcome": {
+      "title": "欢迎来到 open-codesign",
+      "subtitle": "用一句话生成可交互的设计稿。挑一种方式开始吧。",
+      "tryFree": "试用免费模型",
+      "useKey": "使用我的 API Key",
+      "useOllama": "用本地模型（Ollama）"
+    },
+    "paste": {
+      "title": "粘贴你的 API Key",
+      "placeholder": "sk-…",
+      "recognized": "已识别提供商：{{provider}}",
+      "connected_one": "已连接 {{count}} 个模型",
+      "connected_other": "已连接 {{count}} 个模型",
+      "howToGet": "怎么获取 API Key？",
+      "errors": {
+        "401": "Key 被拒绝了。去提供商后台核对一下。",
+        "402": "账户余额不足，充值后重试。",
+        "429": "请求被限流，稍等片刻再试。",
+        "network": "连接提供商失败，检查一下网络。"
+      },
+      "advanced": {
+        "title": "高级 — 自定义 Base URL",
+        "description": "如果使用代理或中转站，请粘贴完整的 Base URL（必须包含 /v1）。"
+      }
+    },
+    "choose": {
+      "title": "选一个默认模型",
+      "primary": "主力",
+      "fast": "快速",
+      "estimatedCost": "预计费用：{{amount}}",
+      "start": "开始设计"
+    }
+  },
+  "commands": {
+    "title": "命令",
+    "placeholder": "输入命令或搜索…",
+    "items": {
+      "newDesign": "新建设计",
+      "toggleTheme": "切换主题",
+      "openSettings": "打开设置",
+      "export": "导出当前设计"
+    }
+  },
+  "errors": {
+    "generic": "出错了。",
+    "providerAuthMissing": "还没配置 API Key。打开设置去添加一个。",
+    "providerError": "提供商错误：{{message}}",
+    "ipcBadInput": "传给主进程的参数不合法。",
+    "exporterNotReady": "导出器还在加载，稍等片刻再试。"
+  },
+  "demos": {
+    "meditationApp": {
+      "title": "Calm Spaces 冥想 App",
+      "description": "带手机外框的移动端原型，柔和配色，可点击导航。",
+      "prompt": "为一个名叫 Calm Spaces 的冥想 App 设计移动端原型。展示一个带手机外框的主屏，包含冥想课程列表、播放按钮和进度追踪。字体安静、配色以柔和的绿色和蓝色为主，留白充足。"
+    },
+    "caseStudy": {
+      "title": "客户案例单页",
+      "description": "深色主题、可直接导出 PDF 的单页布局，含核心指标。",
+      "prompt": "做一个一页纸的客户案例。客户使用我们的平台后，合格线索增长了 40%。包含前后对比指标、CEO 引言和 Logo 占位。简洁极简，深色主题。"
+    },
+    "pitchDeck": {
+      "title": "B2B SaaS 融资演示",
+      "description": "面向医疗中端市场的 8 到 12 页 SaaS 路演稿。",
+      "prompt": "为一家面向中端医疗市场的 B2B SaaS 公司设计融资演示稿。8 到 10 页，覆盖问题、市场、产品、增长、团队和融资金额。"
+    },
+    "marketingLanding": {
+      "title": "营销落地页",
+      "description": "Hero + 特性 + 行动召唤，主色可调。",
+      "prompt": "为一款 AI 效率工具设计现代风格的营销落地页。包含 Hero 区、三个特性卡片、社会证明和行动召唤。整体使用暖色调中性配色。"
+    }
+  }
+}
