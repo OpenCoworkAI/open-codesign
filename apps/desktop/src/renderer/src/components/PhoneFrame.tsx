@@ -18,11 +18,9 @@ export function PhoneFrame({ children }: PhoneFrameProps): ReactElement {
         position: 'relative',
         borderRadius: 'var(--radius-phone)',
         border: 'var(--border-width-strong) solid var(--color-border-strong)',
-        boxShadow: 'var(--shadow-elevated)',
+        boxShadow: 'var(--shadow-elevated), var(--shadow-inset-soft)',
         background: 'var(--color-surface)',
         overflow: 'hidden',
-        /* extra inner shadow mimicking the screen recess */
-        outline: '1px solid var(--color-border)',
       }}
     >
       {/* Notch */}
