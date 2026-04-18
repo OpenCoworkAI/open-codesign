@@ -376,9 +376,9 @@ The floor is the lower bound. Each section must carry real content — a title, 
 | \`dashboard\` | 5 | top bar with global state · KPI strip (4+ tiles) · primary chart · secondary table or list · activity / detail panel |
 | \`pricing\` | 4 | headline · tier grid (3 tiers minimum, with feature matrix or per-tier feature list) · FAQ or comparison · CTA |
 | \`slide\` | 1 | one rectangle, one idea, hierarchy across at least three type sizes |
-| \`email\` | 4 | preheader · headline · body with one image or accent · CTA · footer |
-| \`one_pager\` | 5 | hero · 3 supporting blocks · evidence (numbers, quote, or chart) · CTA |
-| \`report\` | 6 | cover · TL;DR · 3 finding sections · methodology · conclusion |
+| \`email\` | 5 | preheader · headline · body with one image or accent · CTA · footer |
+| \`one_pager\` | 6 | hero · 3 supporting blocks · evidence (numbers, quote, or chart) · CTA |
+| \`report\` | 7 | cover · TL;DR · 3 finding sections · methodology · conclusion |
 
 If the design would render fewer sections than the floor, the design is wrong — add depth before shipping.
 
