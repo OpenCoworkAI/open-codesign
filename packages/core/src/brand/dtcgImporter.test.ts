@@ -94,6 +94,46 @@ describe('importDtcgJson()', () => {
     }
   });
 
+  it('classifies $type: dimension under typography.fontSize.* as fontSize, not spacing', () => {
+    const tokens = importDtcgJson(FIXTURE_JSON);
+    const sm = tokens.find((t) => t.name === 'typography.fontSize.sm');
+    const base = tokens.find((t) => t.name === 'typography.fontSize.base');
+
+    expect(sm?.type).toBe('fontSize');
+    expect(base?.type).toBe('fontSize');
+    const spacingNames = tokens.filter((t) => t.type === 'spacing').map((t) => t.name);
+    expect(spacingNames).not.toContain('typography.fontSize.sm');
+  });
+
+  it('classifies $type: dimension under radius.* as radius, not spacing', () => {
+    const tokens = importDtcgJson(FIXTURE_JSON);
+    const radiusSm = tokens.find((t) => t.name === 'radius.sm');
+    expect(radiusSm?.type).toBe('radius');
+  });
+
+  it('does not coerce border-width style dimension tokens into spacing', () => {
+    const tokens = importDtcgJson({
+      border: {
+        width: {
+          thin: { $value: '1px', $type: 'dimension' },
+        },
+      },
+    });
+    // Schema has no `borderWidth`; we must NOT silently bucket it as spacing.
+    const thin = tokens.find((t) => t.name === 'border.width.thin');
+    expect(thin?.type).not.toBe('spacing');
+  });
+
+  it('does not promote a generic $type: dimension (no path hint) into spacing', () => {
+    const tokens = importDtcgJson({
+      misc: {
+        thingy: { $value: '12px', $type: 'dimension' },
+      },
+    });
+    const spacingNames = tokens.filter((t) => t.type === 'spacing').map((t) => t.name);
+    expect(spacingNames).not.toContain('misc.thingy');
+  });
+
   it('handles non-object input gracefully (returns empty array)', () => {
     expect(importDtcgJson(null)).toEqual([]);
     expect(importDtcgJson('not-an-object')).toEqual([]);

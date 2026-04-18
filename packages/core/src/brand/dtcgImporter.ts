@@ -6,14 +6,16 @@ import type { DesignToken } from '@open-codesign/shared';
 
 type TokenType = DesignToken['type'];
 
-// Map W3C DTCG $type values to our internal token types.
+// Map W3C DTCG $type values that have an unambiguous internal counterpart.
+// `dimension` and `number` are intentionally absent: they can mean spacing,
+// font-size, line-height, radius, border-width, etc. — the path is the only
+// reliable hint, so we infer instead of forcing a single bucket.
 const DTCG_TYPE_MAP: Partial<Record<string, TokenType>> = {
   color: 'color',
   fontFamily: 'fontFamily',
   fontSize: 'fontSize',
-  dimension: 'spacing',
   shadow: 'shadow',
-  number: 'spacing',
+  lineHeight: 'lineHeight',
 };
 
 function resolveTypeFromPath(path: string): TokenType | null {
@@ -21,14 +23,18 @@ function resolveTypeFromPath(path: string): TokenType | null {
   if (/color|palette|fill|bg|background|foreground/.test(p)) return 'color';
   if (/font-family|fontfamily|typeface/.test(p)) return 'fontFamily';
   if (/font-size|fontsize|text-size/.test(p)) return 'fontSize';
-  if (/spacing|space|gap|padding|margin/.test(p)) return 'spacing';
+  if (/line-height|lineheight|leading/.test(p)) return 'lineHeight';
   if (/radius|rounded/.test(p)) return 'radius';
   if (/shadow|elevation/.test(p)) return 'shadow';
-  if (/line-height|lineheight|leading/.test(p)) return 'lineHeight';
+  if (/spacing|space|gap|padding|margin/.test(p)) return 'spacing';
   return null;
 }
 
 function resolveType(dtcgType: string | undefined, path: string): TokenType | null {
+  // Ambiguous DTCG types — name/path is authoritative, never silently coerce.
+  if (dtcgType === 'dimension' || dtcgType === 'number') {
+    return resolveTypeFromPath(path);
+  }
   if (dtcgType) {
     const mapped = DTCG_TYPE_MAP[dtcgType];
     if (mapped) return mapped;
