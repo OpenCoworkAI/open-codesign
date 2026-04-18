@@ -13,6 +13,9 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
 import { ipcMain } from 'electron';
+import { getLogger } from './logger';
+
+const logger = getLogger('preferences-ipc');
 
 const CONFIG_DIR = join(homedir(), '.config', 'open-codesign');
 const PREFS_FILE = join(CONFIG_DIR, 'preferences.json');
@@ -83,11 +86,29 @@ function parsePreferences(raw: unknown): Partial<Preferences> {
 }
 
 export function registerPreferencesIpc(): void {
+  // ── Preferences v1 channels ─────────────────────────────────────────────────
+
+  ipcMain.handle('preferences:v1:get', async (): Promise<Preferences> => {
+    return readPersisted();
+  });
+
+  ipcMain.handle('preferences:v1:update', async (_e, raw: unknown): Promise<Preferences> => {
+    const patch = parsePreferences(raw);
+    const current = await readPersisted();
+    const next: Preferences = { ...current, ...patch };
+    await writePersisted(next);
+    return next;
+  });
+
+  // ── Preferences legacy shims (schedule removal next minor) ──────────────────
+
   ipcMain.handle('preferences:get', async (): Promise<Preferences> => {
+    logger.warn('legacy preferences:get channel used, schedule removal next minor');
     return readPersisted();
   });
 
   ipcMain.handle('preferences:update', async (_e, raw: unknown): Promise<Preferences> => {
+    logger.warn('legacy preferences:update channel used, schedule removal next minor');
     const patch = parsePreferences(raw);
     const current = await readPersisted();
     const next: Preferences = { ...current, ...patch };

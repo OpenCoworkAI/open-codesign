@@ -471,12 +471,12 @@ function ProviderCard({
               {label}
             </span>
             {row.isActive && !hasError && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-white text-[10px] font-medium leading-none">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--font-size-badge)] font-medium leading-none">
                 Active
               </span>
             )}
             {hasError && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--color-error)] text-white text-[10px] font-medium leading-none">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--color-error)] text-[var(--color-on-accent)] text-[var(--font-size-badge)] font-medium leading-none">
                 <AlertTriangle className="w-2.5 h-2.5" />
                 Decryption failed
               </span>
@@ -524,7 +524,7 @@ function ProviderCard({
                   setConfirmDelete(false);
                   onDelete(row.provider);
                 }}
-                className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-white bg-[var(--color-error)] hover:opacity-90 transition-opacity"
+                className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-on-accent)] bg-[var(--color-error)] hover:opacity-90 transition-opacity"
               >
                 Confirm
               </button>
@@ -964,7 +964,7 @@ function StorageTab() {
             <button
               type="button"
               onClick={handleReset}
-              className="h-7 px-3 rounded-[var(--radius-sm)] bg-[var(--color-error)] text-white text-[var(--text-xs)] font-medium hover:opacity-90 transition-opacity"
+              className="h-7 px-3 rounded-[var(--radius-sm)] bg-[var(--color-error)] text-[var(--color-on-accent)] text-[var(--text-xs)] font-medium hover:opacity-90 transition-opacity"
             >
               Reset
             </button>
@@ -980,7 +980,7 @@ function StorageTab() {
           <button
             type="button"
             onClick={() => setConfirmReset(true)}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-error)] text-[var(--text-sm)] text-[var(--color-error)] hover:bg-[var(--color-error)] hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-error)] text-[var(--text-sm)] text-[var(--color-error)] hover:bg-[var(--color-error)] hover:text-[var(--color-on-accent)] transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Reset onboarding

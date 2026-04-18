@@ -37,6 +37,8 @@
   --color-warning: #b8862a;
   --color-error: #b04030;
   --color-mcp: #4a6b8a;
+  --color-on-accent: #ffffff;
+  --font-size-badge: 10px;
 
   /* Feedback */
   --color-toast-success: #4f7a52;
@@ -129,6 +131,7 @@
   --color-warning: #d4a04a;
   --color-error: #d96050;
   --color-mcp: #6a8aab;
+  --color-on-accent: #ffffff;
 
   --color-toast-success: #6b9c6e;
   --color-toast-error: #d96050;

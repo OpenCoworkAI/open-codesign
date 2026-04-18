@@ -119,25 +119,26 @@ const api = {
     skip: () => ipcRenderer.invoke('onboarding:skip') as Promise<OnboardingState>,
   },
   settings: {
-    listProviders: () => ipcRenderer.invoke('settings:list-providers') as Promise<ProviderRow[]>,
+    listProviders: () => ipcRenderer.invoke('settings:v1:list-providers') as Promise<ProviderRow[]>,
     addProvider: (input: {
       provider: SupportedOnboardingProvider;
       apiKey: string;
       modelPrimary: string;
       modelFast: string;
       baseUrl?: string;
-    }) => ipcRenderer.invoke('settings:add-provider', input) as Promise<ProviderRow[]>,
+    }) => ipcRenderer.invoke('settings:v1:add-provider', input) as Promise<ProviderRow[]>,
     deleteProvider: (provider: SupportedOnboardingProvider) =>
-      ipcRenderer.invoke('settings:delete-provider', provider) as Promise<ProviderRow[]>,
+      ipcRenderer.invoke('settings:v1:delete-provider', provider) as Promise<ProviderRow[]>,
     setActiveProvider: (input: {
       provider: SupportedOnboardingProvider;
       modelPrimary: string;
       modelFast: string;
-    }) => ipcRenderer.invoke('settings:set-active-provider', input) as Promise<OnboardingState>,
-    getPaths: () => ipcRenderer.invoke('settings:get-paths') as Promise<AppPaths>,
-    openFolder: (path: string) => ipcRenderer.invoke('settings:open-folder', path) as Promise<void>,
-    resetOnboarding: () => ipcRenderer.invoke('settings:reset-onboarding') as Promise<void>,
-    toggleDevtools: () => ipcRenderer.invoke('settings:toggle-devtools') as Promise<void>,
+    }) => ipcRenderer.invoke('settings:v1:set-active-provider', input) as Promise<OnboardingState>,
+    getPaths: () => ipcRenderer.invoke('settings:v1:get-paths') as Promise<AppPaths>,
+    openFolder: (path: string) =>
+      ipcRenderer.invoke('settings:v1:open-folder', path) as Promise<void>,
+    resetOnboarding: () => ipcRenderer.invoke('settings:v1:reset-onboarding') as Promise<void>,
+    toggleDevtools: () => ipcRenderer.invoke('settings:v1:toggle-devtools') as Promise<void>,
     validateKey: (input: {
       provider: SupportedOnboardingProvider;
       apiKey: string;
@@ -148,9 +149,9 @@ const api = {
       >,
   },
   preferences: {
-    get: () => ipcRenderer.invoke('preferences:get') as Promise<Preferences>,
+    get: () => ipcRenderer.invoke('preferences:v1:get') as Promise<Preferences>,
     update: (patch: Partial<Preferences>) =>
-      ipcRenderer.invoke('preferences:update', patch) as Promise<Preferences>,
+      ipcRenderer.invoke('preferences:v1:update', patch) as Promise<Preferences>,
   },
 };
 
