@@ -1,6 +1,7 @@
 import { type ExporterFormat, exportArtifact } from '@open-codesign/exporters';
 import { CodesignError } from '@open-codesign/shared';
-import { type BrowserWindow, dialog, ipcMain } from 'electron';
+import type { BrowserWindow } from 'electron';
+import { dialog, ipcMain } from './electron-runtime';
 
 const FORMAT_FILTERS: Record<ExporterFormat, Electron.FileFilter[]> = {
   html: [{ name: 'HTML', extensions: ['html'] }],

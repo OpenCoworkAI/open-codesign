@@ -32,6 +32,8 @@ export function CommandPalette() {
             messages: [],
             previewHtml: null,
             errorMessage: null,
+            iframeErrors: [],
+            selectedElement: null,
           });
           pushToast({ variant: 'info', title: 'Workspace cleared' });
         },

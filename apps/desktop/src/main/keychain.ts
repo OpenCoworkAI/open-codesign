@@ -1,5 +1,5 @@
 import { CodesignError } from '@open-codesign/shared';
-import { safeStorage } from 'electron';
+import { safeStorage } from './electron-runtime';
 
 export function ensureKeychainAvailable(): void {
   if (!safeStorage.isEncryptionAvailable()) {

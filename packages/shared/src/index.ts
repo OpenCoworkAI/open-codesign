@@ -80,13 +80,48 @@ export const ChatMessage = z.object({
 });
 export type ChatMessage = z.infer<typeof ChatMessage>;
 
+export const LocalInputFile = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  size: z.number().int().nonnegative(),
+});
+export type LocalInputFile = z.infer<typeof LocalInputFile>;
+
+export const ElementSelectionRect = z.object({
+  top: z.number(),
+  left: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+export type ElementSelectionRect = z.infer<typeof ElementSelectionRect>;
+
+export const SelectedElement = z.object({
+  selector: z.string().min(1),
+  tag: z.string().min(1),
+  outerHTML: z.string(),
+  rect: ElementSelectionRect,
+});
+export type SelectedElement = z.infer<typeof SelectedElement>;
+
 export const GeneratePayload = z.object({
   prompt: z.string().min(1).max(32_000),
   history: z.array(ChatMessage).max(200),
   model: ModelRef,
   baseUrl: z.string().url().optional(),
+  referenceUrl: z.string().url().optional(),
+  attachments: z.array(LocalInputFile).max(12).default([]),
 });
 export type GeneratePayload = z.infer<typeof GeneratePayload>;
+
+export const ApplyCommentPayload = z.object({
+  html: z.string().min(1).max(500_000),
+  comment: z.string().min(1).max(4_000),
+  selection: SelectedElement,
+  model: ModelRef.optional(),
+  referenceUrl: z.string().url().optional(),
+  attachments: z.array(LocalInputFile).max(12).default([]),
+});
+export type ApplyCommentPayload = z.infer<typeof ApplyCommentPayload>;
 
 /**
  * Iframe runtime error event — schema for the postMessage payload sent by
@@ -126,6 +161,8 @@ export {
   PROVIDER_SHORTLIST,
   SUPPORTED_ONBOARDING_PROVIDERS,
   SecretRef,
+  STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
+  StoredDesignSystem,
   isSupportedOnboardingProvider,
 } from './config';
 export type {

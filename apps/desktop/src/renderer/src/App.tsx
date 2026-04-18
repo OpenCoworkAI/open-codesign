@@ -31,7 +31,7 @@ export function App() {
   function submit(): void {
     const trimmed = prompt.trim();
     if (!trimmed || isGenerating) return;
-    void sendPrompt(trimmed);
+    void sendPrompt({ prompt: trimmed });
     setPrompt('');
   }
 
@@ -45,7 +45,7 @@ export function App() {
           if (!ready) return;
           const trimmed = prompt.trim();
           if (!trimmed || isGenerating) return;
-          void sendPrompt(trimmed);
+          void sendPrompt({ prompt: trimmed });
           setPrompt('');
         },
       },
