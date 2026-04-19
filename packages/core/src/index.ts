@@ -87,6 +87,12 @@ export interface GenerateOutput {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  /**
+   * Non-fatal issues surfaced during this generate call (e.g. builtin skill
+   * loader failed). Callers MUST forward these to the UI — this is the
+   * "no silent fallbacks" escape hatch for best-effort substeps.
+   */
+  warnings?: string[];
 }
 
 interface Collected {
@@ -357,21 +363,28 @@ function formatSkillBlob(skill: LoadedSkill): string {
 }
 
 // Skill loading is best-effort: a missing or unreadable builtin directory must
-// not block generation. We log the failure and fall through to a skill-less
-// prompt so the user always gets a response.
-async function collectMatchedSkillBlobs(userPrompt: string, log: CoreLogger): Promise<string[]> {
+// not block generation, but the failure must surface (logged at error level
+// AND returned as a warning so the UI can show it). This honours
+// PRINCIPLES "no silent fallbacks" without sacrificing the user's response.
+async function collectMatchedSkillBlobs(
+  userPrompt: string,
+  log: CoreLogger,
+): Promise<{ blobs: string[]; warnings: string[] }> {
   let skills: LoadedSkill[];
   try {
     skills = await loadBuiltinSkills();
   } catch (err) {
-    log.error('[generate] step=load_skills.fail', {
-      errorClass: err instanceof Error ? err.constructor.name : typeof err,
-      message: err instanceof Error ? err.message : String(err),
-    });
-    return [];
+    const message = err instanceof Error ? err.message : String(err);
+    const errorClass = err instanceof Error ? err.constructor.name : typeof err;
+    log.error('[generate] step=load_skills.fail', { errorClass, message });
+    console.warn(`[open-codesign] builtin skills failed to load (${errorClass}): ${message}`);
+    return {
+      blobs: [],
+      warnings: [`Builtin skills unavailable: ${message}`],
+    };
   }
   const matched = matchSkillsToPrompt(skills, userPrompt);
-  return matched.map(formatSkillBlob);
+  return { blobs: matched.map(formatSkillBlob), warnings: [] };
 }
 
 export async function generate(input: GenerateInput): Promise<GenerateOutput> {
@@ -405,7 +418,10 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
 
   log.info('[generate] step=build_request', ctx);
   const buildStart = Date.now();
-  const skillBlobs = input.systemPrompt ? [] : await collectMatchedSkillBlobs(input.prompt, log);
+  const skillResult = input.systemPrompt
+    ? { blobs: [], warnings: [] }
+    : await collectMatchedSkillBlobs(input.prompt, log);
+  const skillBlobs = skillResult.blobs;
   const messages: ChatMessage[] = [
     {
       role: 'system',
@@ -424,9 +440,10 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     ms: Date.now() - buildStart,
     messages: messages.length,
     skills: skillBlobs.length,
+    skillWarnings: skillResult.warnings.length,
   });
 
-  return runModel({
+  const output = await runModel({
     model: input.model,
     apiKey: input.apiKey,
     baseUrl: input.baseUrl,
@@ -435,6 +452,9 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     messages,
     logger: input.logger,
   });
+  return skillResult.warnings.length > 0
+    ? { ...output, warnings: [...(output.warnings ?? []), ...skillResult.warnings] }
+    : output;
 }
 
 export async function applyComment(input: ApplyCommentInput): Promise<GenerateOutput> {

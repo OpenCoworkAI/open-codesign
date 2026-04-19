@@ -484,19 +484,31 @@ describe('generate() skills injection', () => {
     });
     loadBuiltinSkillsMock.mockRejectedValue(new Error('disk read failed'));
 
-    await expect(
-      generate({
-        prompt: 'make a dashboard',
-        history: [],
-        model: MODEL,
-        apiKey: 'sk-test',
-      }),
-    ).resolves.toBeDefined();
+    const errorLogs: Array<{ msg: string; meta?: unknown }> = [];
+    const logger = {
+      info: () => {},
+      error: (msg: string, meta?: unknown) => {
+        errorLogs.push({ msg, meta });
+      },
+    };
+
+    const result = await generate({
+      prompt: 'make a dashboard',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+      logger,
+    });
 
     const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
     const system = messages[0];
     if (!system) throw new Error('expected system message');
     expect(system.content).not.toContain('### Skill:');
+
+    expect(result.warnings).toEqual([
+      expect.stringContaining('Builtin skills unavailable: disk read failed'),
+    ]);
+    expect(errorLogs.some((entry) => entry.msg.includes('step=load_skills.fail'))).toBe(true);
   });
 });
 
