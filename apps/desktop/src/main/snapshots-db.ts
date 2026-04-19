@@ -9,6 +9,7 @@
  */
 
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import type {
   Design,
   DesignMessage,
@@ -24,9 +25,27 @@ type Database = BetterSqlite3.Database;
 
 let singleton: Database | null = null;
 
-function openDatabase(path: string, options?: BetterSqlite3.Options): Database {
+/**
+ * Resolve the .node binary that matches the active runtime ABI.
+ *
+ * scripts/install-sqlite-bindings.cjs stages two prebuilds side by side:
+ *   build/Release/better_sqlite3.node-node.node      ← Node 22 (vitest)
+ *   build/Release/better_sqlite3.node-electron.node  ← Electron (app)
+ * so that one `pnpm install` covers both runtimes without
+ * an electron-rebuild step that toggles the single default binary.
+ */
+function resolveNativeBinding(): string {
+  const isElectron = typeof process.versions.electron === 'string';
+  const filename = isElectron
+    ? 'better_sqlite3.node-electron.node'
+    : 'better_sqlite3.node-node.node';
+  const pkgJson = require.resolve('better-sqlite3/package.json');
+  return path.join(path.dirname(pkgJson), 'build', 'Release', filename);
+}
+
+function openDatabase(filename: string, options?: BetterSqlite3.Options): Database {
   const Database = require('better-sqlite3') as typeof BetterSqlite3;
-  return new Database(path, options);
+  return new Database(filename, { ...options, nativeBinding: resolveNativeBinding() });
 }
 
 function applySchema(db: Database): void {
