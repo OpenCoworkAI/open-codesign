@@ -62,6 +62,12 @@ export function PreviewToolbar(): ReactElement {
       ready: true,
       hint: t('export.items.zip.hint'),
     },
+    {
+      format: 'markdown',
+      label: t('export.items.markdown.label'),
+      ready: true,
+      hint: t('export.items.markdown.hint'),
+    },
   ];
 
   return (

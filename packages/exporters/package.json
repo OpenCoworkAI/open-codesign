@@ -10,7 +10,8 @@
     "./html": "./src/html.ts",
     "./pdf": "./src/pdf.ts",
     "./pptx": "./src/pptx.ts",
-    "./zip": "./src/zip.ts"
+    "./zip": "./src/zip.ts",
+    "./markdown": "./src/markdown.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

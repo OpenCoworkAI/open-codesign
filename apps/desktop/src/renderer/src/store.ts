@@ -575,10 +575,11 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     }
     try {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const ext = format === 'markdown' ? 'md' : format;
       const res = await window.codesign.export({
         format,
         htmlContent: html,
-        defaultFilename: `codesign-${stamp}.${format}`,
+        defaultFilename: `codesign-${stamp}.${ext}`,
       });
       if (res.status === 'saved' && res.path) {
         set({ toastMessage: tr('notifications.exportedTo', { path: res.path }) });

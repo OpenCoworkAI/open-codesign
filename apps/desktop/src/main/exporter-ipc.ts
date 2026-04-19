@@ -8,6 +8,7 @@ const FORMAT_FILTERS: Record<ExporterFormat, Electron.FileFilter[]> = {
   pdf: [{ name: 'PDF', extensions: ['pdf'] }],
   pptx: [{ name: 'PowerPoint', extensions: ['pptx'] }],
   zip: [{ name: 'ZIP archive', extensions: ['zip'] }],
+  markdown: [{ name: 'Markdown', extensions: ['md'] }],
 };
 
 export interface ExportRequest {
@@ -30,7 +31,13 @@ export function parseRequest(raw: unknown): ExportRequest {
   const format = r['format'];
   const html = r['htmlContent'];
   const defaultFilename = r['defaultFilename'];
-  if (format !== 'html' && format !== 'pdf' && format !== 'pptx' && format !== 'zip') {
+  if (
+    format !== 'html' &&
+    format !== 'pdf' &&
+    format !== 'pptx' &&
+    format !== 'zip' &&
+    format !== 'markdown'
+  ) {
     throw new CodesignError(`Unknown export format: ${String(format)}`, 'EXPORTER_UNKNOWN');
   }
   if (typeof html !== 'string' || html.length === 0) {
@@ -47,9 +54,10 @@ export function registerExporterIpc(getWindow: () => BrowserWindow | null): void
   ipcMain.handle('codesign:export', async (_evt, raw: unknown): Promise<ExportResponse> => {
     const req = parseRequest(raw);
     const win = getWindow();
+    const defaultExt = req.format === 'markdown' ? 'md' : req.format;
     const opts: Electron.SaveDialogOptions = {
       title: `Export design as ${req.format.toUpperCase()}`,
-      defaultPath: req.defaultFilename ?? `design.${req.format}`,
+      defaultPath: req.defaultFilename ?? `design.${defaultExt}`,
       filters: FORMAT_FILTERS[req.format],
     };
     const picked = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);

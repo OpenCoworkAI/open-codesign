@@ -340,6 +340,10 @@
       "zip": {
         "label": "ZIP 包",
         "hint": "index.html + 资源文件 + README.md"
+      },
+      "markdown": {
+        "label": "Markdown",
+        "hint": "纯文本 .md（含 YAML frontmatter）"
       }
     }
   },

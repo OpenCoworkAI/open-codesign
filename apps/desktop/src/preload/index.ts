@@ -30,7 +30,7 @@ export interface ValidateKeyError {
   message: string;
 }
 
-export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip';
+export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip' | 'markdown';
 export interface ExportInvokeResponse {
   status: 'saved' | 'cancelled';
   path?: string;
