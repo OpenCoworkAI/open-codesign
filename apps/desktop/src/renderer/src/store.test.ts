@@ -616,3 +616,135 @@ describe('useCodesignStore previewZoom', () => {
     expect(useCodesignStore.getState().previewZoom).toBe(150);
   });
 });
+
+describe('useCodesignStore artifact persistence', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
+
+  it('writes a design_snapshots row after generate.ok and rehydrates the preview on switchDesign', async () => {
+    const designId = 'design-persist';
+    const designRow = {
+      schemaVersion: 1 as const,
+      id: designId,
+      name: 'Untitled design 1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      thumbnailText: null,
+      deletedAt: null,
+    };
+
+    // Stand-in for the SQLite-backed snapshots table.
+    type SnapshotRow = {
+      schemaVersion: 1;
+      id: string;
+      designId: string;
+      parentId: string | null;
+      type: 'initial' | 'edit' | 'fork';
+      prompt: string | null;
+      artifactType: 'html' | 'react' | 'svg';
+      artifactSource: string;
+      createdAt: string;
+      message?: string;
+    };
+    const snapshotsByDesign = new Map<string, SnapshotRow[]>();
+    let nextSnapshotId = 1;
+
+    const generate = vi.fn(() =>
+      Promise.resolve({
+        artifacts: [{ type: 'html', content: '<html><body>persisted</body></html>' }],
+        message: 'Generated.',
+      }),
+    );
+    const replaceMessages = vi.fn(() => Promise.resolve([]));
+    const setThumbnail = vi.fn(() => Promise.resolve(designRow));
+    const renameDesign = vi.fn(() => Promise.resolve(designRow));
+    const listDesigns = vi.fn(() => Promise.resolve([designRow]));
+    const list = vi.fn((id: string) =>
+      Promise.resolve([...(snapshotsByDesign.get(id) ?? [])].reverse()),
+    );
+    const create = vi.fn((input: Omit<SnapshotRow, 'id' | 'createdAt' | 'schemaVersion'>) => {
+      const row: SnapshotRow = {
+        schemaVersion: 1,
+        id: `snap-${nextSnapshotId++}`,
+        createdAt: new Date().toISOString(),
+        ...input,
+      };
+      const bucket = snapshotsByDesign.get(input.designId) ?? [];
+      bucket.push(row);
+      snapshotsByDesign.set(input.designId, bucket);
+      return Promise.resolve(row);
+    });
+    const listMessages = vi.fn(() =>
+      Promise.resolve([
+        {
+          schemaVersion: 1 as const,
+          designId,
+          ordinal: 0,
+          role: 'user' as const,
+          content: 'make a hero section',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+        {
+          schemaVersion: 1 as const,
+          designId,
+          ordinal: 1,
+          role: 'assistant' as const,
+          content: 'Generated.',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ]),
+    );
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        snapshots: {
+          listDesigns,
+          list,
+          create,
+          replaceMessages,
+          setThumbnail,
+          renameDesign,
+          listMessages,
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({ currentDesignId: designId, designs: [designRow] });
+
+    await useCodesignStore.getState().sendPrompt({ prompt: 'make a hero section' });
+    // persistDesignState fires-and-forgets; drain microtasks until create resolves.
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(create).toHaveBeenCalledOnce();
+    const createArg = create.mock.calls[0]?.[0];
+    expect(createArg).toMatchObject({
+      designId,
+      parentId: null,
+      type: 'initial',
+      artifactType: 'html',
+      artifactSource: '<html><body>persisted</body></html>',
+      prompt: 'make a hero section',
+    });
+    expect(snapshotsByDesign.get(designId)).toHaveLength(1);
+
+    // Simulate a fresh app load: blow away in-memory state then switchDesign.
+    useCodesignStore.setState({
+      currentDesignId: null,
+      messages: [],
+      previewHtml: null,
+    });
+
+    await useCodesignStore.getState().switchDesign(designId);
+
+    const restored = useCodesignStore.getState();
+    expect(restored.currentDesignId).toBe(designId);
+    expect(restored.previewHtml).toBe('<html><body>persisted</body></html>');
+    expect(restored.messages).toEqual([
+      { role: 'user', content: 'make a hero section' },
+      { role: 'assistant', content: 'Generated.' },
+    ]);
+  });
+});

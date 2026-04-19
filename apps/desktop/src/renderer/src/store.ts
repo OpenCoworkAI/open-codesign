@@ -282,11 +282,55 @@ function isDefaultDesignName(name: string): boolean {
   return name === 'Untitled design' || /^Untitled design \d+$/.test(name);
 }
 
+// Core emits 'html' | 'svg' | 'slides' | 'bundle' but the snapshots schema only
+// stores 'html' | 'react' | 'svg' (see DesignSnapshotV1). 'slides'/'bundle' fall
+// through to 'html' because their on-disk source is HTML — keeping the column
+// constraint stable means we don't need a schema migration to persist them.
+function toSnapshotArtifactType(coreType: string | undefined): 'html' | 'react' | 'svg' {
+  if (coreType === 'svg') return 'svg';
+  if (coreType === 'react') return 'react';
+  return 'html';
+}
+
+interface PersistArtifact {
+  type: string | undefined;
+  content: string;
+  prompt: string | null;
+  message: string | null;
+}
+
+function artifactFromResult(
+  source: { type?: string; content: string } | undefined,
+  prompt: string | null,
+  message: string | null,
+): PersistArtifact | null {
+  if (!source) return null;
+  return { type: source.type, content: source.content, prompt, message };
+}
+
+async function persistArtifactSnapshot(designId: string, artifact: PersistArtifact): Promise<void> {
+  if (!window.codesign) return;
+  // Look up the latest snapshot to chain parentId; the first generation in a
+  // design has no parent and uses type='initial', subsequent ones use 'edit'.
+  const existing = await window.codesign.snapshots.list(designId);
+  const parent = existing[0] ?? null;
+  await window.codesign.snapshots.create({
+    designId,
+    parentId: parent?.id ?? null,
+    type: parent ? 'edit' : 'initial',
+    prompt: artifact.prompt,
+    artifactType: toSnapshotArtifactType(artifact.type),
+    artifactSource: artifact.content,
+    ...(artifact.message ? { message: artifact.message } : {}),
+  });
+}
+
 async function persistDesignState(
   get: GetState,
   designId: string,
   messages: ChatMessage[],
   previewHtml: string | null,
+  artifact: PersistArtifact | null,
 ): Promise<void> {
   if (!window.codesign) return;
   try {
@@ -294,6 +338,9 @@ async function persistDesignState(
       designId,
       messages.map((m) => ({ role: m.role, content: m.content })),
     );
+    if (artifact !== null) {
+      await persistArtifactSnapshot(designId, artifact);
+    }
     if (previewHtml !== null) {
       const firstUser = messages.find((m) => m.role === 'user');
       const thumbText = firstUser ? firstUser.content.slice(0, 200) : null;
@@ -363,14 +410,13 @@ function applyGenerateSuccess(
   set: SetState,
   get: GetState,
   generationId: string,
-  result: { artifacts: Array<{ content: string }>; message: string },
+  prompt: string,
+  result: { artifacts: Array<{ type?: string; content: string }>; message: string },
 ): void {
   const firstArtifact = result.artifacts[0];
+  const assistantMessage = result.message || tr('common.done');
   finishIfCurrent(set, generationId, (state) => ({
-    messages: [
-      ...state.messages,
-      { role: 'assistant', content: result.message || tr('common.done') },
-    ],
+    messages: [...state.messages, { role: 'assistant', content: assistantMessage }],
     previewHtml: firstArtifact?.content ?? state.previewHtml,
     isGenerating: false,
     activeGenerationId: null,
@@ -378,7 +424,8 @@ function applyGenerateSuccess(
   }));
   const designId = get().currentDesignId;
   if (designId) {
-    void persistDesignState(get, designId, get().messages, get().previewHtml);
+    const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
+    void persistDesignState(get, designId, get().messages, get().previewHtml, artifact);
   }
 }
 
@@ -435,7 +482,8 @@ async function runGenerate(
     set,
     get,
     generationId,
-    result as { artifacts: Array<{ content: string }>; message: string },
+    payload.prompt,
+    result as { artifacts: Array<{ type?: string; content: string }>; message: string },
   );
 }
 
@@ -736,15 +784,18 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         attachments,
       });
       const firstArtifact = result.artifacts[0];
+      const assistantText = result.message || tr('common.applied');
       set((s) => ({
-        messages: [
-          ...s.messages,
-          { role: 'assistant', content: result.message || tr('common.applied') },
-        ],
+        messages: [...s.messages, { role: 'assistant', content: assistantText }],
         previewHtml: firstArtifact?.content ?? s.previewHtml,
         isGenerating: false,
         selectedElement: null,
       }));
+      const designId = get().currentDesignId;
+      if (designId) {
+        const artifact = artifactFromResult(firstArtifact, userMessage.content, assistantText);
+        void persistDesignState(get, designId, get().messages, get().previewHtml, artifact);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
       set((s) => ({
