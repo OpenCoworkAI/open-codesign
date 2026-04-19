@@ -609,7 +609,9 @@ export function composeSystemPrompt(opts: PromptComposeOptions): string {
     sections.push(TWEAKS_PROTOCOL);
   }
 
-  sections.push(CRAFT_DIRECTIVES);
+  if (opts.mode !== 'tweak') {
+    sections.push(CRAFT_DIRECTIVES);
+  }
   sections.push(ANTI_SLOP);
   sections.push(SAFETY);
 
