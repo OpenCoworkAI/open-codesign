@@ -10,8 +10,12 @@ import { type ChatMessage, CodesignError, type ModelRef } from '@open-codesign/s
 
 /** Subset of pi-ai's `ThinkingLevel` we expose. Maps directly to its `reasoning`
  * field, which Anthropic adapters translate to extended-thinking effort/budget
- * (and OpenAI/Gemini adapters translate to their respective reasoning knobs). */
-export type ReasoningLevel = 'low' | 'medium' | 'high' | 'xhigh';
+ * (and OpenAI/Gemini adapters translate to their respective reasoning knobs).
+ *
+ * `'auto'` is an open-codesign sentinel — pi-ai itself only knows the named
+ * effort levels. Provider adapters that recognize a reasoning capability on
+ * the model will translate it; non-reasoning models silently drop it. */
+export type ReasoningLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'auto';
 
 export interface GenerateOptions {
   apiKey: string;

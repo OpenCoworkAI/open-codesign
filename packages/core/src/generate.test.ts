@@ -129,7 +129,7 @@ describe('generate()', () => {
     expect(opts.reasoning).toBe('high');
   });
 
-  it('omits reasoning for non-Claude-4 providers but still raises maxTokens', async () => {
+  it('falls back to auto reasoning for non-Claude-4 providers, still raises maxTokens', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -149,7 +149,64 @@ describe('generate()', () => {
       reasoning?: string;
     };
     expect(opts.maxTokens).toBe(32000);
-    expect(opts.reasoning).toBeUndefined();
+    expect(opts.reasoning).toBe('auto');
+  });
+
+  it('passes reasoning=auto for OpenAI gpt-5 so pi-ai can route it to reasoning_effort', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-5' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBe('auto');
+  });
+
+  it('passes reasoning=auto for OpenRouter pass-through models', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openrouter', modelId: 'elephant/elephant-alpha' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBe('auto');
+  });
+
+  it('passes reasoning=auto for any other provider (groq, etc.)', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'groq', modelId: 'deepseek-r1-distill-llama-70b' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBe('auto');
   });
 
   it('passes the design-generator system prompt by default', async () => {

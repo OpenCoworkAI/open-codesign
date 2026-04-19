@@ -401,9 +401,14 @@ const MAX_OUTPUT_TOKENS = 32000;
 const CLAUDE_4_MODEL_RE = /claude-(?:opus|sonnet)-4/i;
 
 function reasoningForModel(model: ModelRef): ReasoningLevel | undefined {
-  if (model.provider !== 'anthropic') return undefined;
-  if (!CLAUDE_4_MODEL_RE.test(model.modelId)) return undefined;
-  return 'high';
+  // Claude 4.x — explicit high (extended thinking).
+  if (model.provider === 'anthropic' && CLAUDE_4_MODEL_RE.test(model.modelId)) {
+    return 'high';
+  }
+  // Other reasoning-capable models (OpenAI o-series / GPT-5, DeepSeek R1,
+  // Qwen QwQ, OpenRouter pass-through, etc.) — let pi-ai's adapter decide
+  // based on the model capability flag. Non-reasoning models drop it.
+  return 'auto';
 }
 
 export async function generate(input: GenerateInput): Promise<GenerateOutput> {
