@@ -156,6 +156,36 @@ function applyDetectResult(
 }
 
 // ---------------------------------------------------------------------------
+// Per-state tooltip wording for the disabled "Test connection" button.
+// Each blocker condition maps to a distinct i18n key so the user always sees
+// the actual reason — not a stale "paste a key" message after a key is typed
+// but provider detection has failed or is still in flight.
+// ---------------------------------------------------------------------------
+
+export type TestDisabledReasonKey =
+  | 'disabledReason.testingConnection'
+  | 'disabledReason.enterKeyToTest'
+  | 'disabledReason.detectingProvider'
+  | 'disabledReason.unsupportedKeyForTest'
+  | 'disabledReason.providerDetectIpcForTest'
+  | 'disabledReason.providerDetectNetworkForTest'
+  | null;
+
+export function testDisabledReasonKey(
+  connStatus: ConnectionCheck['status'],
+  trimmedLength: number,
+  detectKind: DetectState['kind'],
+): TestDisabledReasonKey {
+  if (connStatus === 'testing') return 'disabledReason.testingConnection';
+  if (trimmedLength === 0) return 'disabledReason.enterKeyToTest';
+  if (detectKind === 'detecting') return 'disabledReason.detectingProvider';
+  if (detectKind === 'unknown_prefix') return 'disabledReason.unsupportedKeyForTest';
+  if (detectKind === 'ipc_error') return 'disabledReason.providerDetectIpcForTest';
+  if (detectKind === 'network_error') return 'disabledReason.providerDetectNetworkForTest';
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -276,11 +306,8 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
   const selectedPreset = PROXY_PRESETS.find((p) => p.id === selectedPresetId);
   const testDisabled =
     connCheck.status === 'testing' || detectedProvider === null || trimmed.length === 0;
-  const testDisabledReason = testDisabled
-    ? connCheck.status === 'testing'
-      ? t('disabledReason.testingConnection')
-      : t('disabledReason.enterKeyToTest')
-    : undefined;
+  const testDisabledKey = testDisabledReasonKey(connCheck.status, trimmed.length, detectState.kind);
+  const testDisabledReason = testDisabledKey !== null ? t(testDisabledKey) : undefined;
   const continueDisabled = connCheck.status !== 'ok';
   const continueDisabledReason = continueDisabled
     ? t('disabledReason.validateKeyToContinue')

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { classifyDetectError, detectProvider } from './PasteKey';
+import { classifyDetectError, detectProvider, testDisabledReasonKey } from './PasteKey';
 
 // ---------------------------------------------------------------------------
 // Unit tests for the unified ConnectionCheck logic in PasteKey.
@@ -280,5 +280,46 @@ describe('classifyDetectError', () => {
   it('classifies non-Error throwables as ipc_error', () => {
     expect(classifyDetectError('weird string')).toBe('ipc_error');
     expect(classifyDetectError(null)).toBe('ipc_error');
+  });
+});
+
+describe('testDisabledReasonKey — per-state tooltip wording', () => {
+  it('returns testingConnection when a test is in flight (highest priority)', () => {
+    expect(testDisabledReasonKey('testing', 12, 'detected')).toBe(
+      'disabledReason.testingConnection',
+    );
+    expect(testDisabledReasonKey('testing', 0, 'idle')).toBe('disabledReason.testingConnection');
+  });
+
+  it('returns enterKeyToTest when no key has been pasted yet', () => {
+    expect(testDisabledReasonKey('idle', 0, 'idle')).toBe('disabledReason.enterKeyToTest');
+  });
+
+  it('returns detectingProvider while detection is still in flight', () => {
+    expect(testDisabledReasonKey('idle', 8, 'detecting')).toBe('disabledReason.detectingProvider');
+  });
+
+  it('returns unsupportedKeyForTest when the key prefix is not recognized', () => {
+    expect(testDisabledReasonKey('idle', 8, 'unknown_prefix')).toBe(
+      'disabledReason.unsupportedKeyForTest',
+    );
+  });
+
+  it('returns IPC-specific wording when provider detection failed via IPC', () => {
+    expect(testDisabledReasonKey('idle', 8, 'ipc_error')).toBe(
+      'disabledReason.providerDetectIpcForTest',
+    );
+  });
+
+  it('returns network-specific wording when provider detection failed via network', () => {
+    expect(testDisabledReasonKey('idle', 8, 'network_error')).toBe(
+      'disabledReason.providerDetectNetworkForTest',
+    );
+  });
+
+  it('returns null (button enabled) when key is pasted and provider is detected', () => {
+    expect(testDisabledReasonKey('idle', 8, 'detected')).toBeNull();
+    expect(testDisabledReasonKey('ok', 8, 'detected')).toBeNull();
+    expect(testDisabledReasonKey('failed', 8, 'detected')).toBeNull();
   });
 });
