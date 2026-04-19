@@ -1,6 +1,6 @@
 import type { ChatMessage, LoadedSkill } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
-import { injectSkillsIntoMessages } from './skill-injector.js';
+import { injectSkillsIntoMessages, matchSkillsToPrompt } from './skill-injector.js';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -312,5 +312,101 @@ describe('injectSkillsIntoMessages()', () => {
     expect(builtinPreIdx).toBeGreaterThan(userPreIdx);
     expect(userContent).not.toContain('Project system body.');
     expect(userContent).not.toContain('Builtin system body.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// matchSkillsToPrompt — keyword resolution incl. Chinese aliases
+// ---------------------------------------------------------------------------
+
+describe('matchSkillsToPrompt()', () => {
+  // Mirror real builtin skill descriptions so the test exercises the same
+  // English vocabulary the matcher sees in production.
+  const dataViz = makeSkill('data-viz-recharts', {
+    frontmatter: {
+      schemaVersion: 1,
+      name: 'data-viz-recharts',
+      description:
+        'Guides data visualization design using Recharts. Use when building charts, dashboards, analytics views, or any data-driven UI.',
+      trigger: { providers: ['*'], scope: 'system' },
+      disable_model_invocation: false,
+      user_invocable: true,
+    },
+  });
+  const mobileMock = makeSkill('mobile-mock', {
+    frontmatter: {
+      schemaVersion: 1,
+      name: 'mobile-mock',
+      description:
+        'Designs mobile UI mocks and prototypes. Use when building a mobile app screen or any prototype intended to be viewed on a phone.',
+      trigger: { providers: ['*'], scope: 'system' },
+      disable_model_invocation: false,
+      user_invocable: true,
+    },
+  });
+  const antiSlop = makeSkill('frontend-design-anti-slop', {
+    frontmatter: {
+      schemaVersion: 1,
+      name: 'frontend-design-anti-slop',
+      description:
+        'Creates distinctive frontend interfaces. Use when building any UI component, landing page, dashboard, prototype, or styling HTML/CSS.',
+      trigger: { providers: ['*'], scope: 'system' },
+      disable_model_invocation: false,
+      user_invocable: true,
+    },
+  });
+  const pitchDeck = makeSkill('pitch-deck', {
+    frontmatter: {
+      schemaVersion: 1,
+      name: 'pitch-deck',
+      description:
+        'Designs polished pitch deck slides and presentation layouts. Use when the user asks for a slide deck, investor pitch, or presentation.',
+      trigger: { providers: ['*'], scope: 'system' },
+      disable_model_invocation: false,
+      user_invocable: true,
+    },
+  });
+  const all = [dataViz, mobileMock, antiSlop, pitchDeck];
+
+  it('returns empty when prompt has no triggering vocabulary', () => {
+    expect(matchSkillsToPrompt(all, 'hello world')).toEqual([]);
+  });
+
+  it('returns empty for blank prompt', () => {
+    expect(matchSkillsToPrompt(all, '   ')).toEqual([]);
+  });
+
+  it('matches English mobile prompt to mobile-mock', () => {
+    const matched = matchSkillsToPrompt(all, 'Design an iOS mobile app screen');
+    expect(matched.map((s) => s.id)).toContain('mobile-mock');
+  });
+
+  it('matches Chinese mobile prompt — "为冥想App设计移动端原型"', () => {
+    const matched = matchSkillsToPrompt(all, '为一个名叫Calm Spaces的冥想App设计移动端原型');
+    const ids = matched.map((s) => s.id);
+    expect(ids).toContain('mobile-mock');
+  });
+
+  it('matches Chinese dashboard prompt — "做一个数据看板"', () => {
+    const matched = matchSkillsToPrompt(all, '做一个数据看板');
+    const ids = matched.map((s) => s.id);
+    expect(ids).toContain('data-viz-recharts');
+    expect(ids).toContain('frontend-design-anti-slop');
+  });
+
+  it('matches Chinese landing prompt — "落地页"', () => {
+    const matched = matchSkillsToPrompt(all, '帮我做个落地页');
+    const ids = matched.map((s) => s.id);
+    expect(ids).toContain('frontend-design-anti-slop');
+  });
+
+  it('matches Chinese deck prompt — "演示文稿"', () => {
+    const matched = matchSkillsToPrompt(all, '需要一份投资人演示文稿');
+    expect(matched.map((s) => s.id)).toContain('pitch-deck');
+  });
+
+  it('does not match unrelated skills (deck prompt skips mobile-mock)', () => {
+    const matched = matchSkillsToPrompt(all, '做一个 pitch deck');
+    expect(matched.map((s) => s.id)).not.toContain('mobile-mock');
   });
 });
