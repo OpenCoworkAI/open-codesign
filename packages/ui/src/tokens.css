@@ -132,6 +132,9 @@
   /* Minimum width for menus, popovers, and stage panels */
   --size-stage-min: 200px;
 
+  /* Compact menu width (zoom dropdown, narrow option pickers) */
+  --size-menu-compact: 6rem;
+
   /* Hub sidebar (Designs hub left rail) */
   --size-hub-sidebar: 360px;
 

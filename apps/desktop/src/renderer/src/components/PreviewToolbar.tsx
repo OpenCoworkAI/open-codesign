@@ -179,7 +179,7 @@ export function PreviewToolbar(): ReactElement {
         {zoomOpen && (
           <div
             role="menu"
-            className="absolute right-0 top-full mt-2 min-w-[6rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1 z-10"
+            className="absolute right-0 top-full mt-2 min-w-[var(--size-menu-compact)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1 z-10"
           >
             {ZOOM_OPTIONS.map((value) => (
               <button
