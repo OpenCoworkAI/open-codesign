@@ -155,7 +155,7 @@ function DesignCard({
         aria-label={`${t('projects.view.open')} — ${design.name}`}
       >
         {design.thumbnailText ? (
-          <span className="absolute inset-0 flex items-end p-3 text-[var(--text-xs)] text-[var(--color-text-primary)] bg-gradient-to-t from-black/10 via-transparent to-transparent">
+          <span className="absolute inset-0 flex items-end p-3 text-[var(--text-xs)] text-[var(--color-text-primary)] bg-gradient-to-t from-[color-mix(in_srgb,var(--color-text-primary)_10%,transparent)] via-transparent to-transparent">
             <span className="line-clamp-3 leading-[var(--leading-body)]">
               {design.thumbnailText}
             </span>

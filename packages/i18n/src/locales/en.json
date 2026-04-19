@@ -473,6 +473,7 @@
       "duplicateFailed": "Could not duplicate the design",
       "deleted": "Design moved out of the active list",
       "deleteFailed": "Could not delete the design",
+      "deleteBlockedGenerating": "Wait for generation to finish before deleting",
       "saveFailed": "Could not save the latest changes",
       "loadFailed": "Could not load your designs"
     }

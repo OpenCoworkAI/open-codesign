@@ -468,6 +468,7 @@
       "duplicateFailed": "无法复制设计",
       "deleted": "设计已从活动列表中移除",
       "deleteFailed": "无法删除设计",
+      "deleteBlockedGenerating": "等当前生成完成后再删除",
       "saveFailed": "无法保存最新更改",
       "loadFailed": "无法加载设计列表"
     }

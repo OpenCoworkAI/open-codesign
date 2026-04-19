@@ -580,4 +580,28 @@ describe('useCodesignStore design management', () => {
     // Should have surfaced a toast about the block.
     expect(useCodesignStore.getState().toasts.at(-1)?.variant).toBe('info');
   });
+
+  it('blocks softDeleteDesign while a generation is running so applyGenerateSuccess cannot leak into a stale design', async () => {
+    const softDeleteDesign = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: {
+          softDeleteDesign,
+          listDesigns: vi.fn(() => Promise.resolve([])),
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({
+      currentDesignId: 'design-a',
+      isGenerating: true,
+    });
+
+    await useCodesignStore.getState().softDeleteDesign('design-a');
+
+    expect(softDeleteDesign).not.toHaveBeenCalled();
+    expect(useCodesignStore.getState().currentDesignId).toBe('design-a');
+    expect(useCodesignStore.getState().toasts.at(-1)?.variant).toBe('info');
+  });
 });

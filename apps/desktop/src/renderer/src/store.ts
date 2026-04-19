@@ -1049,6 +1049,13 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   async softDeleteDesign(id: string) {
     if (!window.codesign) return;
+    if (get().isGenerating) {
+      get().pushToast({
+        variant: 'info',
+        title: tr('projects.notifications.deleteBlockedGenerating'),
+      });
+      return;
+    }
     try {
       await window.codesign.snapshots.softDeleteDesign(id);
       const wasCurrent = get().currentDesignId === id;
