@@ -1184,6 +1184,22 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('Behavior in revise mode');
     expect(prompt).toContain('PRESERVE');
   });
+
+  it('create mode includes the chart rendering contract', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    expect(prompt).toContain('Chart rendering contract');
+    expect(prompt).toContain('Inline SVG');
+    // Defers to the cdnjs whitelist in output rules — no host duplicated here.
+    expect(prompt).toContain("project's approved cdnjs whitelist");
+    // The deprecated open hosts must NOT appear as a recommended chart loader.
+    expect(prompt).not.toContain('esm.sh/recharts');
+    expect(prompt).not.toContain('cdn.jsdelivr.net/npm/chart.js');
+  });
+
+  it('tweak mode does NOT include the chart rendering contract', () => {
+    const prompt = composeSystemPrompt({ mode: 'tweak' });
+    expect(prompt).not.toContain('Chart rendering contract');
+  });
 });
 
 describe('prompt section .txt vs TS drift', () => {
