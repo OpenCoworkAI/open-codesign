@@ -19,6 +19,8 @@ interface ViewportItem {
   icon: ReactElement;
 }
 
+const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200] as const;
+
 export function PreviewToolbar(): ReactElement {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
@@ -27,8 +29,12 @@ export function PreviewToolbar(): ReactElement {
   const dismissToast = useCodesignStore((s) => s.dismissToast);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
   const setPreviewViewport = useCodesignStore((s) => s.setPreviewViewport);
+  const previewZoom = useCodesignStore((s) => s.previewZoom);
+  const setPreviewZoom = useCodesignStore((s) => s.setPreviewZoom);
   const [open, setOpen] = useState(false);
+  const [zoomOpen, setZoomOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  const zoomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -38,6 +44,15 @@ export function PreviewToolbar(): ReactElement {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [open]);
+
+  useEffect(() => {
+    if (!zoomOpen) return;
+    function onClick(e: MouseEvent): void {
+      if (zoomRef.current && !zoomRef.current.contains(e.target as Node)) setZoomOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [zoomOpen]);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -142,6 +157,48 @@ export function PreviewToolbar(): ReactElement {
           );
         })}
       </fieldset>
+
+      <div className="relative" ref={zoomRef}>
+        <Tooltip
+          label={disabled ? t('disabledReason.noDesignToExport') : t('preview.zoom')}
+          side="bottom"
+        >
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setZoomOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 h-[var(--size-control-xs)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
+            aria-haspopup="menu"
+            aria-expanded={zoomOpen}
+            aria-label={t('preview.zoom')}
+          >
+            {previewZoom}%
+          </button>
+        </Tooltip>
+
+        {zoomOpen && (
+          <div
+            role="menu"
+            className="absolute right-0 top-full mt-2 min-w-[6rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1 z-10"
+          >
+            {ZOOM_OPTIONS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={previewZoom === value}
+                onClick={() => {
+                  setPreviewZoom(value);
+                  setZoomOpen(false);
+                }}
+                className={`w-full px-3 py-2 text-[var(--text-sm)] text-left transition-colors duration-100 hover:bg-[var(--color-surface-hover)] ${previewZoom === value ? 'text-[var(--color-accent)] font-medium' : 'text-[var(--color-text-primary)]'}`}
+              >
+                {value}%
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="relative" ref={ref}>
         <Tooltip label={disabled ? t('disabledReason.noDesignToExport') : undefined} side="bottom">

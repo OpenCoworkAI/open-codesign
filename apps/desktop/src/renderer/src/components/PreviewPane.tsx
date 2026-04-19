@@ -44,6 +44,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
+  const previewZoom = useCodesignStore((s) => s.previewZoom);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     body = <LoadingState />;
   } else if (previewHtml) {
     const isMobile = previewViewport === 'mobile';
-    const iframe = (
+    const rawIframe = (
       <iframe
         ref={iframeRef}
         key={previewHtml.length}
@@ -105,13 +106,30 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         }
       />
     );
+    const scale = previewZoom / 100;
+    const inversePct = `${10000 / previewZoom}%`;
+    const iframe =
+      previewZoom === 100 ? (
+        rawIframe
+      ) : (
+        <div
+          className="origin-top-left"
+          style={{
+            transform: `scale(${scale})`,
+            width: inversePct,
+            height: inversePct,
+          }}
+        >
+          {rawIframe}
+        </div>
+      );
 
     if (isMobile) {
       body = (
         <div className="min-h-full p-6 flex flex-col items-center justify-center overflow-auto">
           <div className="relative inline-flex">
             <PhoneFrame>{iframe}</PhoneFrame>
-            <InlineCommentComposer />
+            {previewZoom === 100 && <InlineCommentComposer />}
           </div>
         </div>
       );
@@ -128,7 +146,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           >
             <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
             {iframe}
-            <InlineCommentComposer />
+            {previewZoom === 100 && <InlineCommentComposer />}
           </div>
         </div>
       );
@@ -145,7 +163,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           >
             <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
             {iframe}
-            <InlineCommentComposer />
+            {previewZoom === 100 && <InlineCommentComposer />}
           </div>
         </div>
       );

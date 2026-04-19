@@ -51,6 +51,7 @@
     "clickToComment": "点击预览中的任意元素即可留下局部评论。",
     "runtimeError": "预览运行时错误",
     "dismissErrors": "关闭预览错误",
+    "zoom": "缩放",
     "viewport": {
       "label": "视口",
       "desktop": "桌面",

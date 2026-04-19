@@ -52,6 +52,7 @@
     "clickToComment": "Click any element in the preview to leave an inline comment.",
     "runtimeError": "Preview runtime error",
     "dismissErrors": "Dismiss preview errors",
+    "zoom": "Zoom",
     "viewport": {
       "label": "Viewport",
       "desktop": "Desktop",

@@ -96,6 +96,7 @@ interface CodesignState {
   referenceUrl: string;
   lastPromptInput: PromptRequest | null;
   selectedElement: SelectedElement | null;
+  previewZoom: number;
 
   loadConfig: () => Promise<void>;
   completeOnboarding: (next: OnboardingState) => void;
@@ -123,6 +124,7 @@ interface CodesignState {
 
   selectCanvasElement: (selection: SelectedElement) => void;
   clearCanvasElement: () => void;
+  setPreviewZoom: (zoom: number) => void;
 
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -494,6 +496,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   referenceUrl: '',
   lastPromptInput: null,
   selectedElement: null,
+  previewZoom: 100,
 
   clearIframeErrors() {
     set({ iframeErrors: [] });
@@ -795,6 +798,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   clearCanvasElement() {
     set({ selectedElement: null });
+  },
+
+  setPreviewZoom(zoom) {
+    set({ previewZoom: zoom });
   },
 
   setTheme(theme) {

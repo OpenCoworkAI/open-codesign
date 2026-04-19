@@ -605,3 +605,14 @@ describe('useCodesignStore design management', () => {
     expect(useCodesignStore.getState().toasts.at(-1)?.variant).toBe('info');
   });
 });
+
+describe('useCodesignStore previewZoom', () => {
+  it('defaults previewZoom to 100', () => {
+    expect(useCodesignStore.getState().previewZoom).toBe(100);
+  });
+
+  it('updates previewZoom via setPreviewZoom', () => {
+    useCodesignStore.getState().setPreviewZoom(150);
+    expect(useCodesignStore.getState().previewZoom).toBe(150);
+  });
+});
