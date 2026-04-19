@@ -14,15 +14,18 @@ interface ExportItem {
 const STAGE_TONE: Record<GenerationStage, string> = {
   idle: 'bg-[var(--color-surface)] text-[var(--color-text-muted)] border-[var(--color-border-muted)]',
   sending:
-    'bg-[var(--color-accent-soft)] text-[var(--color-accent)] border-[var(--color-accent-muted)] animate-pulse',
+    'bg-[var(--color-stage-sending-bg)] text-[var(--color-stage-sending-fg)] border-[var(--color-stage-sending-border)] animate-pulse',
   thinking:
-    'bg-[var(--color-accent-soft)] text-[var(--color-accent)] border-[var(--color-accent-muted)] animate-pulse',
+    'bg-[var(--color-stage-thinking-bg)] text-[var(--color-stage-thinking-fg)] border-[var(--color-stage-thinking-border)] animate-pulse',
   streaming:
-    'bg-[var(--color-accent-soft)] text-[var(--color-accent)] border-[var(--color-accent-muted)] animate-pulse',
-  parsing: 'bg-[#FFF4E0] text-[#9A6A1B] border-[#F1CE8B]',
-  rendering: 'bg-[#FFF4E0] text-[#9A6A1B] border-[#F1CE8B]',
-  done: 'bg-[#E8F5E9] text-[#2E7D32] border-[#A5D6A7]',
-  error: 'bg-[#FBE9E7] text-[#C62828] border-[#FFAB91]',
+    'bg-[var(--color-stage-streaming-bg)] text-[var(--color-stage-streaming-fg)] border-[var(--color-stage-streaming-border)] animate-pulse',
+  parsing:
+    'bg-[var(--color-stage-parsing-bg)] text-[var(--color-stage-parsing-fg)] border-[var(--color-stage-parsing-border)]',
+  rendering:
+    'bg-[var(--color-stage-rendering-bg)] text-[var(--color-stage-rendering-fg)] border-[var(--color-stage-rendering-border)]',
+  done: 'bg-[var(--color-stage-done-bg)] text-[var(--color-stage-done-fg)] border-[var(--color-stage-done-border)]',
+  error:
+    'bg-[var(--color-stage-error-bg)] text-[var(--color-stage-error-fg)] border-[var(--color-stage-error-border)]',
 };
 
 export function PreviewToolbar(): ReactElement {

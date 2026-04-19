@@ -31,16 +31,20 @@ function InlineCommentPopoverCard({ selectedElement }: InlineCommentPopoverCardP
   const cardRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [position, setPosition] = useState(() =>
-    computeAnchoredPosition(selectedElement.rect, FALLBACK_HEIGHT, null),
+    computeAnchoredPosition(selectedElement.rect, FALLBACK_HEIGHT, null, null),
   );
 
   const label = getElementLabel(selectedElement);
   const busy = isGenerating && submitted;
 
   useLayoutEffect(() => {
-    const containerHeight = cardRef.current?.parentElement?.getBoundingClientRect().height ?? null;
+    const containerRect = cardRef.current?.parentElement?.getBoundingClientRect() ?? null;
+    const containerHeight = containerRect?.height ?? null;
+    const containerWidth = containerRect?.width ?? null;
     const cardHeight = cardRef.current?.offsetHeight ?? FALLBACK_HEIGHT;
-    setPosition(computeAnchoredPosition(selectedElement.rect, cardHeight, containerHeight));
+    setPosition(
+      computeAnchoredPosition(selectedElement.rect, cardHeight, containerHeight, containerWidth),
+    );
     // Focus the textarea after mount; using a ref+effect avoids the biome
     // a11y/noAutofocus rule while preserving the keyboard-first feel.
     textareaRef.current?.focus();
@@ -137,12 +141,14 @@ interface AnchoredPosition {
  * The popover renders inside the `.relative` container that wraps the
  * preview iframe; coordinates are local to that container. We place the
  * popover below the element when there is room, otherwise above. Horizontal
- * position centres on the element with a left/right safe margin.
+ * position centres on the element with a left/right safe margin and clamps
+ * against the container's right edge so the card never overflows the viewport.
  */
 export function computeAnchoredPosition(
   rect: ElementSelectionRect,
   cardHeight: number,
   containerHeight: number | null,
+  containerWidth: number | null,
 ): AnchoredPosition {
   const elementBottom = rect.top + rect.height;
   const flipBelowToAbove =
@@ -151,6 +157,10 @@ export function computeAnchoredPosition(
     ? Math.max(POPOVER_GAP, rect.top - cardHeight - POPOVER_GAP)
     : elementBottom + POPOVER_GAP;
   const desiredLeft = rect.left + rect.width / 2 - POPOVER_WIDTH / 2;
-  const left = Math.max(POPOVER_GAP, desiredLeft);
+  const maxLeft =
+    containerWidth === null
+      ? Number.POSITIVE_INFINITY
+      : Math.max(POPOVER_GAP, containerWidth - POPOVER_WIDTH - POPOVER_GAP);
+  const left = Math.min(maxLeft, Math.max(POPOVER_GAP, desiredLeft));
   return { top, left };
 }

@@ -47,6 +47,31 @@
   --color-toast-error: #b04030;
   --color-overlay: oklch(0.22 0.025 50 / 0.45);
 
+  /* Stage indicator tones — consumed by PreviewToolbar pill.
+     Light and dark mode share these definitions because every value
+     references a semantic token that flips per theme. */
+  --color-stage-sending-bg: var(--color-accent-soft);
+  --color-stage-sending-fg: var(--color-accent);
+  --color-stage-sending-border: var(--color-accent-muted);
+  --color-stage-thinking-bg: var(--color-accent-soft);
+  --color-stage-thinking-fg: var(--color-accent);
+  --color-stage-thinking-border: var(--color-accent-muted);
+  --color-stage-streaming-bg: var(--color-accent-soft);
+  --color-stage-streaming-fg: var(--color-accent);
+  --color-stage-streaming-border: var(--color-accent-muted);
+  --color-stage-parsing-bg: color-mix(in srgb, var(--color-warning) 14%, var(--color-surface));
+  --color-stage-parsing-fg: var(--color-warning);
+  --color-stage-parsing-border: color-mix(in srgb, var(--color-warning) 45%, var(--color-surface));
+  --color-stage-rendering-bg: color-mix(in srgb, var(--color-warning) 14%, var(--color-surface));
+  --color-stage-rendering-fg: var(--color-warning);
+  --color-stage-rendering-border: color-mix(in srgb, var(--color-warning) 45%, var(--color-surface));
+  --color-stage-done-bg: color-mix(in srgb, var(--color-success) 14%, var(--color-surface));
+  --color-stage-done-fg: var(--color-success);
+  --color-stage-done-border: color-mix(in srgb, var(--color-success) 45%, var(--color-surface));
+  --color-stage-error-bg: color-mix(in srgb, var(--color-error) 14%, var(--color-surface));
+  --color-stage-error-fg: var(--color-error);
+  --color-stage-error-border: color-mix(in srgb, var(--color-error) 45%, var(--color-surface));
+
   /* Shadow — warm-tinted, three discrete levels */
   --shadow-soft: 0 1px 2px oklch(0.3 0.02 45 / 0.04);
   --shadow-card: 0 1px 2px oklch(0.3 0.02 45 / 0.04), 0 4px 16px oklch(0.3 0.02 45 / 0.06);
