@@ -129,7 +129,7 @@ describe('generate()', () => {
     expect(opts.reasoning).toBe('high');
   });
 
-  it('falls back to auto reasoning for non-Claude-4 providers, still raises maxTokens', async () => {
+  it('omits reasoning for non-reasoning models, still raises maxTokens', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -149,10 +149,10 @@ describe('generate()', () => {
       reasoning?: string;
     };
     expect(opts.maxTokens).toBe(32000);
-    expect(opts.reasoning).toBe('auto');
+    expect(opts.reasoning).toBeUndefined();
   });
 
-  it('passes reasoning=auto for OpenAI gpt-5 so pi-ai can route it to reasoning_effort', async () => {
+  it('passes reasoning=high for OpenAI gpt-5 (whitelisted reasoning model)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -168,10 +168,10 @@ describe('generate()', () => {
     });
 
     const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
-    expect(opts.reasoning).toBe('auto');
+    expect(opts.reasoning).toBe('high');
   });
 
-  it('passes reasoning=auto for OpenRouter pass-through models', async () => {
+  it('passes reasoning=high for OpenAI o-series (o1, o3, o4)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -182,15 +182,15 @@ describe('generate()', () => {
     await generate({
       prompt: 'design a meditation app',
       history: [],
-      model: { provider: 'openrouter', modelId: 'elephant/elephant-alpha' },
+      model: { provider: 'openai', modelId: 'o1-preview' },
       apiKey: 'sk-test',
     });
 
     const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
-    expect(opts.reasoning).toBe('auto');
+    expect(opts.reasoning).toBe('high');
   });
 
-  it('passes reasoning=auto for any other provider (groq, etc.)', async () => {
+  it('passes reasoning=high for DeepSeek R1', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -206,7 +206,45 @@ describe('generate()', () => {
     });
 
     const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
-    expect(opts.reasoning).toBe('auto');
+    expect(opts.reasoning).toBe('high');
+  });
+
+  it('omits reasoning for non-whitelisted OpenRouter pass-through models', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openrouter', modelId: 'elephant/elephant-alpha' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBeUndefined();
+  });
+
+  it('omits reasoning for older Anthropic Claude models (avoids accidental extended thinking)', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet-20241022' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBeUndefined();
   });
 
   it('passes the design-generator system prompt by default', async () => {
