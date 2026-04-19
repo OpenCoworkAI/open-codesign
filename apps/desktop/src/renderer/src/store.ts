@@ -299,10 +299,13 @@ async function persistDesignState(
     }
     await get().loadDesigns();
   } catch (err) {
-    // Persistence failures should not break the chat experience — log to console
-    // and leave the in-memory state untouched. The next successful persist will
-    // overwrite anyway because we replace the whole list.
-    console.error('persistDesignState failed', err);
+    const msg = err instanceof Error ? err.message : tr('errors.unknown');
+    get().pushToast({
+      variant: 'error',
+      title: tr('projects.notifications.saveFailed'),
+      description: msg,
+    });
+    throw err instanceof Error ? err : new Error(msg);
   }
 }
 
@@ -319,7 +322,13 @@ async function maybeAutoRename(
     await window.codesign.snapshots.renameDesign(designId, newName);
     await get().loadDesigns();
   } catch (err) {
-    console.error('maybeAutoRename failed', err);
+    const msg = err instanceof Error ? err.message : tr('errors.unknown');
+    get().pushToast({
+      variant: 'error',
+      title: tr('projects.notifications.renameFailed'),
+      description: msg,
+    });
+    throw err instanceof Error ? err : new Error(msg);
   }
 }
 
@@ -894,8 +903,14 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       const designs = await window.codesign.snapshots.listDesigns();
       set({ designs, designsLoaded: true });
     } catch (err) {
-      console.error('loadDesigns failed', err);
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.loadFailed'),
+        description: msg,
+      });
       set({ designsLoaded: true });
+      throw err instanceof Error ? err : new Error(msg);
     }
   },
 

@@ -44,7 +44,7 @@ export function DeleteDesignDialog() {
           <button
             type="button"
             onClick={() => void softDeleteDesign(target.id)}
-            className="h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-error)] text-white text-[var(--text-sm)] font-medium hover:opacity-90 transition-opacity"
+            className="h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-error)] text-[var(--color-on-accent)] text-[var(--text-sm)] font-medium hover:opacity-90 transition-opacity"
           >
             {t('projects.delete.confirm')}
           </button>

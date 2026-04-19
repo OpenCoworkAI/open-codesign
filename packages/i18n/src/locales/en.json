@@ -472,7 +472,9 @@
       "duplicated": "Duplicated as \"{{name}}\"",
       "duplicateFailed": "Could not duplicate the design",
       "deleted": "Design moved out of the active list",
-      "deleteFailed": "Could not delete the design"
+      "deleteFailed": "Could not delete the design",
+      "saveFailed": "Could not save the latest changes",
+      "loadFailed": "Could not load your designs"
     }
   },
   "demos": {
