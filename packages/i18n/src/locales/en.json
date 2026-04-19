@@ -489,6 +489,7 @@
     "title": "Connection failed",
     "status": "Status: {{status}}",
     "attempted": "What we tried: {{url}}",
+    "mostLikelyCause": "Most likely cause:",
     "cause": {
       "keyInvalid": "API key invalid or revoked.",
       "balanceEmpty": "Account balance is empty.",

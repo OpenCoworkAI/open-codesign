@@ -115,7 +115,7 @@ export function ConnectionDiagnosticPanel({
         {primary !== undefined && (
           <p className="mt-2">
             <span className="font-medium text-[var(--color-text-primary)]">
-              Most likely cause:{' '}
+              {t('diagnostics.mostLikelyCause')}{' '}
             </span>
             {t(primary.cause)}
           </p>

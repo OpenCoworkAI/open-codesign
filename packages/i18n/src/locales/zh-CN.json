@@ -484,6 +484,7 @@
     "title": "连接失败",
     "status": "状态：{{status}}",
     "attempted": "我们尝试了：{{url}}",
+    "mostLikelyCause": "最可能的原因：",
     "cause": {
       "keyInvalid": "API Key 无效或已被撤销。",
       "balanceEmpty": "账户余额不足。",
