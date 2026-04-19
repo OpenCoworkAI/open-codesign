@@ -1441,6 +1441,20 @@ describe('composeSystemPrompt() — progressive disclosure', () => {
     expect(p).toContain('Customer quotes deserve distinguished treatment');
   });
 
+  it('marketing prompt includes Fraunces hint', () => {
+    const p = composeSystemPrompt({
+      mode: 'create',
+      userPrompt: 'indie marketing landing page',
+    });
+    expect(p).toContain('Fraunces');
+    expect(p).toContain('Marketing typography hint');
+  });
+
+  it('dashboard prompt does NOT include Fraunces hint', () => {
+    const p = composeSystemPrompt({ mode: 'create', userPrompt: '做个数据看板' });
+    expect(p).not.toContain('Marketing typography hint');
+  });
+
   it('no-keyword prompt: falls back to FULL craft directives', () => {
     const p = composeSystemPrompt({ mode: 'create', userPrompt: '随便做点东西' });
     // Full craft directives includes ALL ten subsections — verify several signal ones

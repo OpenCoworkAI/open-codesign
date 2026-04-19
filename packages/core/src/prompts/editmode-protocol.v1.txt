@@ -26,6 +26,16 @@ The host environment will:
 - Reference the parameters from your code via the named constant (`TWEAK_DEFAULTS.accentColor`).
 - Pick 3-6 parameters that meaningfully change the artifact's look. Don't expose every CSS variable.
 
+## Empty block is valid
+
+Even if your artifact has no tunable parameters yet, you may emit an empty block — it signals to the host that this artifact is tweak-aware:
+
+```js
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{}/*EDITMODE-END*/;
+```
+
+The host scans for the markers regardless of contents.
+
 ## Type detection
 
 | Value pattern                                | Renders as       |
