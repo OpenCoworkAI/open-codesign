@@ -4,6 +4,7 @@ import {
   type RetryReason,
   complete,
   completeWithRetry,
+  filterActive,
   formatSkillsForPrompt,
 } from '@open-codesign/providers';
 import type {
@@ -369,8 +370,11 @@ function extractStatus(err: unknown): number | undefined {
 // All loaded skills are formatted into blobs unconditionally — the model picks
 // which one applies (progressive disclosure level 1+2). Algorithmic prompt
 // matching has been removed: language-gated keyword tables were the bug.
+// We still honour the skill contract: drop entries with
+// `disable_model_invocation: true` and entries restricted to other providers.
 async function collectAllSkillBlobs(
   log: CoreLogger,
+  providerId: string,
 ): Promise<{ blobs: string[]; warnings: string[] }> {
   const start = Date.now();
   let skills: LoadedSkill[];
@@ -386,7 +390,8 @@ async function collectAllSkillBlobs(
       warnings: [`Builtin skills unavailable: ${message}`],
     };
   }
-  const blobs = formatSkillsForPrompt(skills);
+  const active = filterActive(skills, providerId);
+  const blobs = formatSkillsForPrompt(active);
   log.info('[generate] step=load_skills.ok', {
     ms: Date.now() - start,
     skills: blobs.length,
@@ -461,7 +466,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   const buildStart = Date.now();
   const skillResult = input.systemPrompt
     ? { blobs: [], warnings: [] }
-    : await collectAllSkillBlobs(log);
+    : await collectAllSkillBlobs(log, input.model.provider);
   const skillBlobs = skillResult.blobs;
   const messages: ChatMessage[] = [
     {

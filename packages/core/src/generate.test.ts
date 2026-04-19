@@ -754,6 +754,104 @@ describe('generate() skills injection', () => {
     ]);
     expect(errorLogs.some((entry) => entry.msg.includes('step=load_skills.fail'))).toBe(true);
   });
+
+  it('drops skills with disable_model_invocation: true', async () => {
+    const disabledSkill: LoadedSkill = {
+      id: 'disabled-skill',
+      source: 'builtin',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'disabled-skill',
+        description: 'Should never be injected.',
+        trigger: { providers: ['*'], scope: 'system' },
+        disable_model_invocation: true,
+        user_invocable: true,
+      },
+      body: 'SHOULD NOT APPEAR',
+    };
+
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockResolvedValue([dataVizSkill, disabledSkill]);
+
+    await generate({
+      prompt: 'make a dashboard',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    });
+
+    const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
+    const system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).toContain('## Skill: data-viz-recharts');
+    expect(system.content).not.toContain('## Skill: disabled-skill');
+    expect(system.content).not.toContain('SHOULD NOT APPEAR');
+  });
+
+  it('drops provider-restricted skills that do not match the current provider', async () => {
+    const openaiOnlySkill: LoadedSkill = {
+      id: 'openai-only',
+      source: 'builtin',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'openai-only',
+        description: 'Restricted to openai.',
+        trigger: { providers: ['openai'], scope: 'system' },
+        disable_model_invocation: false,
+        user_invocable: true,
+      },
+      body: 'OPENAI ONLY BODY',
+    };
+
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockResolvedValue([openaiOnlySkill]);
+
+    // MODEL is anthropic — the openai-only skill must be filtered out.
+    await generate({
+      prompt: 'make a dashboard',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    });
+
+    let messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
+    let system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).not.toContain('## Skill: openai-only');
+    expect(system.content).not.toContain('OPENAI ONLY BODY');
+
+    // Same skill, openai provider — must be injected.
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockResolvedValue([openaiOnlySkill]);
+
+    await generate({
+      prompt: 'make a dashboard',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-5' },
+      apiKey: 'sk-test',
+    });
+
+    messages = completeMock.mock.calls[1]?.[1] as ChatMessage[];
+    system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).toContain('## Skill: openai-only');
+    expect(system.content).toContain('OPENAI ONLY BODY');
+  });
 });
 
 describe('applyComment()', () => {
