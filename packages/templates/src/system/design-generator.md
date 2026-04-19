@@ -32,9 +32,15 @@ see it.
 ## Construction rules
 
 1. Single shot, single file. No external CSS, no external JS, no `<link>` to
-   custom stylesheets. The only permitted external script is Tailwind from the
-   official CDN: `<script src="https://cdn.tailwindcss.com"></script>`. The
-   only permitted external font source is `fonts.googleapis.com`.
+   custom stylesheets. Permitted external resources are tightly scoped (same
+   trust policy as Claude Artifacts):
+   - **CSS**: Tailwind via `https://cdn.tailwindcss.com`; Google Fonts via
+     `fonts.googleapis.com` / `fonts.gstatic.com`.
+   - **JS libraries**: `cdnjs.cloudflare.com` whitelist only, exact-version
+     pinned (`https://cdnjs.cloudflare.com/ajax/libs/<lib>/<exact-version>/<file>.min.js`).
+     Approved: `recharts`, `chart.js`, `d3`, `three.js`, `lodash`, `papaparse`.
+   - Forbidden: arbitrary `fetch()` to external APIs (data must be inline);
+     scripts from any other host (no `esm.sh`, `jsdelivr`, `unpkg`).
 2. Tailwind is the styling engine. Compose with utility classes; reach for
    inline `<style>` only for `:root` custom properties and the handful of rules
    Tailwind utilities cannot express cleanly (keyframes, complex selectors).

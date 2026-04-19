@@ -23,9 +23,21 @@ No second artifact tag. No Markdown fences. No `<!--comments-->` outside the `<h
 
 - **Maximum 1000 lines** of HTML (including inline style and script). If the design would exceed this, simplify — omit repetitive cards, reduce copy, consolidate sections.
 - Self-contained: no `<link rel="stylesheet">`, no `<script src="…">` to your own files.
-- Permitted external resources (two only):
-  - Tailwind CDN: `<script src="https://cdn.tailwindcss.com"></script>`
-  - Google Fonts: `<link rel="preconnect">` + `<link rel="stylesheet">` from `fonts.googleapis.com`
+- Permitted external resources (tightly scoped — same trust policy as Claude Artifacts):
+  - **CSS**:
+    - Tailwind CDN: `<script src="https://cdn.tailwindcss.com"></script>`
+    - Google Fonts: `<link rel="preconnect">` + `<link rel="stylesheet">` from `fonts.googleapis.com` / `fonts.gstatic.com`
+  - **JS libraries** — `cdnjs.cloudflare.com` whitelist only. Pin an exact version. Format: `https://cdnjs.cloudflare.com/ajax/libs/<lib>/<exact-version>/<file>.min.js`. Approved libraries:
+    - `recharts` — data viz (preferred for dashboards)
+    - `chart.js` — alternative charting
+    - `d3` — low-level visualization
+    - `three.js` — 3D
+    - `lodash` — utilities
+    - `papaparse` — CSV parsing
+- **Forbidden**:
+  - Arbitrary `fetch()` / `XMLHttpRequest` to external APIs — all data must be inline.
+  - Scripts from any host other than `cdnjs.cloudflare.com` (no `esm.sh`, `jsdelivr`, `unpkg` — too open, no version verification).
+  - Hotlinked photos from any host (`placeholder.com`, `unsplash.com`, `picsum.photos`, etc.).
 - All other assets must be inline: SVG icons, CSS gradients, data URIs for tiny images.
 
 ## CSS custom properties (required)

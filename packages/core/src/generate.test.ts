@@ -1006,6 +1006,26 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).not.toContain('.ios-status-bar');
   });
 
+  it('create mode whitelists cdnjs.cloudflare.com for permitted JS libraries', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    expect(prompt).toContain('cdnjs.cloudflare.com');
+    // Pinned-version format must be spelled out so the model emits exact-version URLs.
+    expect(prompt).toContain(
+      'https://cdnjs.cloudflare.com/ajax/libs/<lib>/<exact-version>/<file>.min.js',
+    );
+    // Open hosts must be explicitly forbidden so the model does not fall back to them.
+    expect(prompt).toContain('esm.sh');
+    expect(prompt).toContain('jsdelivr');
+    expect(prompt).toContain('unpkg');
+  });
+
+  it('create mode lists the six approved chart / data libraries', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    for (const lib of ['recharts', 'chart.js', 'd3', 'three.js', 'lodash', 'papaparse']) {
+      expect(prompt, `missing approved cdnjs library: ${lib}`).toContain(lib);
+    }
+  });
+
   it('create mode includes the EDITMODE protocol section', () => {
     const prompt = composeSystemPrompt({ mode: 'create' });
     expect(prompt).toContain('EDITMODE protocol');
