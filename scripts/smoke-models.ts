@@ -209,10 +209,16 @@ async function runMatrix(
   const results: RunResult[] = [];
   for (const m of models) {
     const envName = ENV_KEY[m.provider];
-    const apiKey = envName ? process.env[envName] : undefined;
+    if (!envName) {
+      throw new Error(
+        `Unsupported provider in smoke config: ${m.provider}. Add it to ENV_KEY or fix scripts/smoke-models.toml.`,
+      );
+    }
+
+    const apiKey = process.env[envName];
     if (!apiKey) {
       console.log(
-        `${COLOR.dim}— ${m.provider}/${m.modelId}  (no $${envName ?? '<unknown env>'}; skipped)${COLOR.reset}`,
+        `${COLOR.dim}— ${m.provider}/${m.modelId}  (no $${envName}; skipped)${COLOR.reset}`,
       );
       continue;
     }
