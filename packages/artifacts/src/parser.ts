@@ -199,8 +199,11 @@ function findOpenTag(buffer: string): OpenTagMatch {
       // Buffer ends exactly at `<artifact`; can't yet decide if it's a real tag.
       return { kind: 'partial', start: idx };
     }
-    if (next !== '>' && !/\s/.test(next)) {
-      // `<artifactual`, `<artifact-like`, etc. — not our tag, keep searching.
+    if (!/\s/.test(next)) {
+      // Real Claude artifacts always carry `identifier`/`type` attributes,
+      // so a bare `<artifact>` (or `<artifactual`, `<artifact-like`, …) is
+      // not our tag — keep searching so prose mentioning the literal token
+      // is preserved as text.
       from = afterPrefix;
       continue;
     }

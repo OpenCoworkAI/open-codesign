@@ -227,4 +227,23 @@ describe('artifact parser', () => {
     );
     expect(end?.fullContent).toBe('A code sample: <artifact id="x"> is the opening tag.');
   });
+
+  it('treats a bare <artifact> (no attributes) as plain prose, not an artifact tag', () => {
+    const events = collectEvents(['the <artifact>plain</artifact> token in prose']);
+    expect(events.some((e) => e.type === 'artifact:start')).toBe(false);
+    expect(joinText(events)).toBe('the <artifact>plain</artifact> token in prose');
+  });
+
+  it('still recognizes a real <artifact identifier=... type=...> open tag', () => {
+    const events = collectEvents(['<artifact identifier="a1" type="html">body</artifact>']);
+    const start = events.find(
+      (e): e is Extract<ArtifactEvent, { type: 'artifact:start' }> => e.type === 'artifact:start',
+    );
+    expect(start).toEqual({
+      type: 'artifact:start',
+      identifier: 'a1',
+      artifactType: 'html',
+      title: '',
+    });
+  });
 });
