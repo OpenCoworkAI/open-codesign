@@ -1468,6 +1468,28 @@ describe('composeSystemPrompt() — progressive disclosure', () => {
     const b = composeSystemPrompt({ mode: 'revise', userPrompt: '做个数据看板' });
     expect(b).toBe(a);
   });
+
+  it('does not trigger dashboard routing on substring collisions (paragraph/asymmetric/biometric)', () => {
+    // Pair the colliding tokens with a mobile cue so the composer does NOT
+    // fall back to full CRAFT_DIRECTIVES — that fallback would re-introduce
+    // the dashboard subsection and defeat the substring-collision check.
+    const p = composeSystemPrompt({
+      mode: 'create',
+      userPrompt: 'iOS app screen — paragraph rhythm, asymmetric spacing, biometric login',
+    });
+    expect(p).not.toContain('Chart rendering contract');
+    expect(p).not.toContain('Dashboard ambient signals');
+  });
+
+  it('does not trigger logo routing on "logout" substring', () => {
+    // Same reason as above — pair with an unrelated mobile cue to avoid the
+    // no-keyword fallback that would otherwise pull in full craft directives.
+    const p = composeSystemPrompt({
+      mode: 'create',
+      userPrompt: 'iOS app screen for a logout confirmation modal',
+    });
+    expect(p).not.toContain('Logos and brand marks');
+  });
 });
 
 describe('prompt section .txt vs TS drift', () => {

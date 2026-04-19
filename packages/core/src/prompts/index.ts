@@ -844,10 +844,11 @@ export interface PromptComposeOptions {
 // ---------------------------------------------------------------------------
 
 const KEYWORDS_DASHBOARD =
-  /(dashboard|chart|graph|plot|visualization|数据|看板|图表|analytics|metric|KPI)/i;
-const KEYWORDS_MOBILE = /(mobile|iOS|iPhone|iPad|手机|移动端|app screen|App design)/i;
-const KEYWORDS_MARKETING = /(case study|landing|marketing|hero|pricing|案例|落地页|登录页|首页)/i;
-const KEYWORDS_LOGO = /(logo|brand|品牌|monogram)/i;
+  /\b(dashboard|chart|graph|plot|visualization|analytics|metric|kpi)s?\b|数据|看板|图表/i;
+const KEYWORDS_MOBILE = /\b(mobile|iOS|iPhone|iPad|app screen|app design)\b|手机|移动端/i;
+const KEYWORDS_MARKETING =
+  /\b(case study|landing|marketing|hero|pricing)\b|案例|落地页|登录页|首页/i;
+const KEYWORDS_LOGO = /\b(logo|brand|monogram)s?\b|品牌/i;
 
 // ---------------------------------------------------------------------------
 // Composer
