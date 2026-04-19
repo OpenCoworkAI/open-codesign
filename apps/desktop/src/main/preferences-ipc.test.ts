@@ -54,7 +54,7 @@ describe('readPersisted()', () => {
         'utf8',
       );
     } finally {
-      if (prev === undefined) delete process.env['XDG_CONFIG_HOME'];
+      if (prev === undefined) process.env['XDG_CONFIG_HOME'] = undefined;
       else process.env['XDG_CONFIG_HOME'] = prev;
     }
   });

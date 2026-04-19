@@ -37,9 +37,9 @@ describe('locale-ipc XDG_CONFIG_HOME', () => {
       await setHandler({}, 'fr-FR');
       expect(writeFileMock).toHaveBeenCalled();
       const firstCall = writeFileMock.mock.calls[0];
-      expect(firstCall && firstCall[0]).toBe('/tmp/xdg-locale-test/open-codesign/locale.json');
+      expect(firstCall?.[0]).toBe('/tmp/xdg-locale-test/open-codesign/locale.json');
     } finally {
-      if (prev === undefined) delete process.env['XDG_CONFIG_HOME'];
+      if (prev === undefined) process.env['XDG_CONFIG_HOME'] = undefined;
       else process.env['XDG_CONFIG_HOME'] = prev;
     }
   });
