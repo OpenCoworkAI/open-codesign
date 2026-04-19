@@ -82,7 +82,7 @@ export function CreateProjectModal() {
         onClick={closeModal}
         className="absolute inset-0 bg-[var(--color-overlay)]"
       />
-      <div className="relative w-full max-w-[560px] max-h-[calc(100vh-var(--space-12))] overflow-y-auto rounded-[var(--radius-2xl)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)]">
+      <div className="relative w-full max-w-[var(--size-modal-md)] max-h-[calc(100vh-var(--space-12))] overflow-y-auto rounded-[var(--radius-2xl)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)]">
         <header className="flex items-start justify-between gap-[var(--space-4)] px-[var(--space-6)] pt-[var(--space-6)] pb-[var(--space-3)]">
           <div className="space-y-[var(--space-1)]">
             <h2

@@ -135,7 +135,7 @@ export function App() {
                 {t('hub.backToHub')}
               </button>
             </div>
-            <div className="flex-1 min-h-0 grid grid-cols-[360px_1fr]">
+            <div className="flex-1 min-h-0 grid grid-cols-[var(--size-hub-sidebar)_1fr]">
               <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
               <main className="flex flex-col min-h-0">
                 <PreviewPane onPickStarter={(p) => setPrompt(p)} />

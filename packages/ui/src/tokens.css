@@ -128,6 +128,21 @@
   /* Minimum width for menus, popovers, and stage panels */
   --size-stage-min: 200px;
 
+  /* Hub sidebar (Designs hub left rail) */
+  --size-hub-sidebar: 360px;
+
+  /* Modal widths */
+  --size-modal-md: 560px;
+
+  /* Grid card minimum (project / artifact cards) */
+  --size-card-min: 240px;
+
+  /* Reading-width caps for prose / descriptions */
+  --size-prose-narrow: 60ch;
+
+  /* Card hover lift offset */
+  --lift-card-hover: 1px;
+
   /* Press feedback scale */
   --scale-hover-up: 1.04;
   --scale-press-down: 0.96;
