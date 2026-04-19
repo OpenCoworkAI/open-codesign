@@ -175,7 +175,13 @@ const SKILL_TRIGGER_GROUPS: readonly (readonly string[])[] = [
     '网页',
     '宣传页',
   ],
-  // mobile / app
+  // mobile / app — kept strictly mobile-specific. Generic words like 'prototype'
+  // and '原型' do NOT belong here: bucketing them into mobile false-fires
+  // mobile-mock for "landing page prototype" / "落地页的原型". They also can't
+  // safely live in UI-broad, because mobile-mock's own description hits UI-broad
+  // via 'screen', so the cross-bucket intersection would still false-fire.
+  // The mobile-mock description still lands in this bucket via mobile/app/phone,
+  // so dropping the generic prototype tokens costs no recall on real mobile prompts.
   [
     'mobile',
     'phone',
@@ -184,13 +190,11 @@ const SKILL_TRIGGER_GROUPS: readonly (readonly string[])[] = [
     'ios',
     'iphone',
     'android',
-    'prototype',
     '移动端',
     '移动应用',
     '手机',
     'app设计',
     '应用',
-    '原型',
   ],
   // slides / deck
   [

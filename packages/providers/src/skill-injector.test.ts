@@ -409,4 +409,30 @@ describe('matchSkillsToPrompt()', () => {
     const matched = matchSkillsToPrompt(all, '做一个 pitch deck');
     expect(matched.map((s) => s.id)).not.toContain('mobile-mock');
   });
+
+  // Regression: 'prototype' / '原型' are generic — they must not bias mobile-mock.
+  it('does NOT match mobile-mock for generic prototype prompt — "landing page prototype"', () => {
+    const matched = matchSkillsToPrompt(all, 'landing page prototype');
+    const ids = matched.map((s) => s.id);
+    expect(ids).not.toContain('mobile-mock');
+    // Landing/UI skills should still resolve via the landing bucket.
+    expect(ids).toContain('frontend-design-anti-slop');
+  });
+
+  it('does NOT match mobile-mock for Chinese generic prototype — "做一个产品落地页的原型"', () => {
+    const matched = matchSkillsToPrompt(all, '做一个产品落地页的原型');
+    const ids = matched.map((s) => s.id);
+    expect(ids).not.toContain('mobile-mock');
+    expect(ids).toContain('frontend-design-anti-slop');
+  });
+
+  it('still matches mobile-mock when a mobile-only token co-occurs — "iPhone app prototype"', () => {
+    const matched = matchSkillsToPrompt(all, 'iPhone app prototype');
+    expect(matched.map((s) => s.id)).toContain('mobile-mock');
+  });
+
+  it('still matches mobile-mock for Chinese mobile-only prompt — "做一个移动端原型"', () => {
+    const matched = matchSkillsToPrompt(all, '做一个移动端原型');
+    expect(matched.map((s) => s.id)).toContain('mobile-mock');
+  });
 });
