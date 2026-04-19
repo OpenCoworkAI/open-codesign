@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildSrcdoc } from './index';
 
+const BODY_OPEN_RE = /<body[^>]*>/i;
+
 describe('buildSrcdoc', () => {
   it('wraps a fragment in a full document', () => {
     const out = buildSrcdoc('<div>hi</div>');
@@ -67,6 +69,59 @@ describe('buildSrcdoc', () => {
     expect(out).toContain('background:var(--color-artifact-bg, #ffffff)');
     expect(out).toContain('<div>plain</div>');
     expect(out).toContain('ELEMENT_SELECTED');
+  });
+
+  describe('body tag shape normalization', () => {
+    it('shape 1: leaves matched <body>...</body> intact', () => {
+      const html = '<html><head></head><body><p>both</p></body></html>';
+      const out = buildSrcdoc(html);
+      expect(out).toContain('<p>both</p>');
+      expect(out.match(/<body[^>]*>/gi)?.length).toBe(1);
+      expect(out.match(/<\/body\s*>/gi)?.length).toBe(1);
+      expect(out.indexOf('<body')).toBeLessThan(out.indexOf('<p>both</p>'));
+      expect(out.indexOf('<p>both</p>')).toBeLessThan(out.indexOf('</body>'));
+    });
+
+    it('shape 2: appends </body> when only opener is present', () => {
+      const html = '<html><head></head><body><p>open only</p>';
+      const out = buildSrcdoc(html);
+      expect(out.match(/<body[^>]*>/gi)?.length).toBe(1);
+      expect(out.match(/<\/body\s*>/gi)?.length).toBe(1);
+      expect(out.indexOf('<p>open only</p>')).toBeLessThan(out.indexOf('</body>'));
+      expect(out.indexOf('ELEMENT_SELECTED')).toBeLessThan(out.indexOf('</body>'));
+    });
+
+    it('shape 3: injects <body> opener before content when only </body> is present', () => {
+      const html = '<p>close only</p></body>';
+      const out = buildSrcdoc(html);
+      const bodyOpen = out.search(BODY_OPEN_RE);
+      const contentIdx = out.indexOf('<p>close only</p>');
+      const bodyClose = out.indexOf('</body>');
+      expect(bodyOpen).toBeGreaterThanOrEqual(0);
+      expect(bodyOpen).toBeLessThan(contentIdx);
+      expect(contentIdx).toBeLessThan(bodyClose);
+      expect(out.match(/<body[^>]*>/gi)?.length).toBe(1);
+      expect(out.match(/<\/body\s*>/gi)?.length).toBe(1);
+    });
+
+    it('shape 3: injects <body> after <head> when </body> present without opener', () => {
+      const html = '<html><head><title>t</title></head><p>x</p></body></html>';
+      const out = buildSrcdoc(html);
+      const headClose = out.indexOf('</head>');
+      const bodyOpen = out.search(BODY_OPEN_RE);
+      const contentIdx = out.indexOf('<p>x</p>');
+      expect(headClose).toBeGreaterThanOrEqual(0);
+      expect(bodyOpen).toBeGreaterThan(headClose);
+      expect(bodyOpen).toBeLessThan(contentIdx);
+    });
+
+    it('shape 4: wraps content in <body>...</body> when neither tag is present', () => {
+      const out = buildSrcdoc('<div>none</div>');
+      expect(out).toContain('<body>');
+      expect(out).toContain('</body>');
+      expect(out.indexOf('<body>')).toBeLessThan(out.indexOf('<div>none</div>'));
+      expect(out.indexOf('<div>none</div>')).toBeLessThan(out.indexOf('</body>'));
+    });
   });
 
   it('injects baseline into a full document with <head>', () => {

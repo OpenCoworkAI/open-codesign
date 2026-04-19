@@ -16,6 +16,47 @@ export type { IframeErrorMessage } from './iframe-errors';
 const BASELINE_STYLE =
   '<style>html,body{margin:0;padding:0;background:var(--color-artifact-bg, #ffffff);min-height:100%;}</style>';
 
+const HTML_RE = /<html[^>]*>/i;
+const HEAD_OPEN_RE = /<head[^>]*>/i;
+const HEAD_CLOSE_RE = /<\/head\s*>/i;
+const BODY_OPEN_RE = /<body[^>]*>/i;
+const BODY_CLOSE_RE = /<\/body\s*>/i;
+
+/**
+ * Ensure the document has matching <body>...</body> tags so downstream
+ * baseline/overlay injection can rely on them. Handles all four input
+ * shapes: both tags, opener only, closer only, neither.
+ */
+function normalizeBodyTags(html: string): string {
+  const hasOpen = BODY_OPEN_RE.test(html);
+  const hasClose = BODY_CLOSE_RE.test(html);
+
+  if (hasOpen && hasClose) return html;
+
+  if (hasOpen && !hasClose) {
+    return `${html}</body>`;
+  }
+
+  if (!hasOpen && hasClose) {
+    if (HEAD_CLOSE_RE.test(html)) {
+      return html.replace(HEAD_CLOSE_RE, (m) => `${m}<body>`);
+    }
+    if (HTML_RE.test(html)) {
+      return html.replace(HTML_RE, (m) => `${m}<body>`);
+    }
+    return `<body>${html}`;
+  }
+
+  // Neither opener nor closer.
+  if (HEAD_CLOSE_RE.test(html)) {
+    return `${html.replace(HEAD_CLOSE_RE, (m) => `${m}<body>`)}</body>`;
+  }
+  if (HTML_RE.test(html)) {
+    return `${html.replace(HTML_RE, (m) => `${m}<body>`)}</body>`;
+  }
+  return `<body>${html}</body>`;
+}
+
 /**
  * Build a complete srcdoc HTML string for the preview iframe.
  * Strips CSP <meta> tags from user content to allow overlay injection.
@@ -29,30 +70,14 @@ export function buildSrcdoc(userHtml: string): string {
     '',
   );
 
-  if (/<\/body\s*>/i.test(stripped)) {
-    let withBaseline: string;
-    if (/<head[^>]*>/i.test(stripped)) {
-      withBaseline = stripped.replace(/<head[^>]*>/i, (match) => `${match}${BASELINE_STYLE}`);
-    } else if (/<html[^>]*>/i.test(stripped)) {
-      withBaseline = stripped.replace(
-        /<html[^>]*>/i,
-        (match) => `${match}<head>${BASELINE_STYLE}</head>`,
-      );
-    } else if (/<body[^>]*>/i.test(stripped)) {
-      withBaseline = `${stripped.replace(
-        /<body[^>]*>/i,
-        (match) => `<html><head>${BASELINE_STYLE}</head>${match}`,
-      )}</html>`;
-    } else {
-      withBaseline = `<!doctype html><html><head>${BASELINE_STYLE}</head><body>${stripped}</body></html>`;
-    }
-    return withBaseline.replace(
-      /<\/body\s*>(?![\s\S]*<\/body\s*>)/i,
-      `<script>${OVERLAY_SCRIPT}</script></body>`,
-    );
-  }
+  const hasAnyStructure =
+    HTML_RE.test(stripped) ||
+    HEAD_OPEN_RE.test(stripped) ||
+    BODY_OPEN_RE.test(stripped) ||
+    BODY_CLOSE_RE.test(stripped);
 
-  return `<!doctype html>
+  if (!hasAnyStructure) {
+    return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -65,6 +90,26 @@ ${stripped}
 <script>${OVERLAY_SCRIPT}</script>
 </body>
 </html>`;
+  }
+
+  const normalized = normalizeBodyTags(stripped);
+
+  let withBaseline: string;
+  if (HEAD_OPEN_RE.test(normalized)) {
+    withBaseline = normalized.replace(HEAD_OPEN_RE, (match) => `${match}${BASELINE_STYLE}`);
+  } else if (HTML_RE.test(normalized)) {
+    withBaseline = normalized.replace(
+      HTML_RE,
+      (match) => `${match}<head>${BASELINE_STYLE}</head>`,
+    );
+  } else {
+    withBaseline = `<html><head>${BASELINE_STYLE}</head>${normalized}</html>`;
+  }
+
+  return withBaseline.replace(
+    /<\/body\s*>(?![\s\S]*<\/body\s*>)/i,
+    `<script>${OVERLAY_SCRIPT}</script></body>`,
+  );
 }
 
 /**
