@@ -1,5 +1,5 @@
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
-import type { GenerateResult } from '@open-codesign/providers';
+import type { GenerateResult, ReasoningLevel } from '@open-codesign/providers';
 import {
   type RetryReason,
   complete,
@@ -279,6 +279,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
   log.info(`[${scope}] step=send_request`, ctx);
   const sendStart = Date.now();
   let result: GenerateResult;
+  const reasoning = reasoningForModel(input.model);
   try {
     result = await completeWithRetry(
       input.model,
@@ -287,6 +288,8 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
         apiKey: input.apiKey,
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.signal !== undefined ? { signal: input.signal } : {}),
+        maxTokens: MAX_OUTPUT_TOKENS,
+        ...(reasoning !== undefined ? { reasoning } : {}),
       },
       {
         ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
@@ -385,6 +388,22 @@ async function collectMatchedSkillBlobs(
   }
   const matched = matchSkillsToPrompt(skills, userPrompt);
   return { blobs: matched.map(formatSkillBlob), warnings: [] };
+}
+
+/**
+ * Output-token budget for every generation. Tripled from pi-ai's default
+ * (~1/3 of context window, ~10k for Opus 4) to give Claude room for both
+ * extended-thinking traces and a full HTML artifact.
+ */
+const MAX_OUTPUT_TOKENS = 32000;
+
+/** Match Anthropic's Claude 4.x family, which supports extended thinking. */
+const CLAUDE_4_MODEL_RE = /claude-(?:opus|sonnet)-4/i;
+
+function reasoningForModel(model: ModelRef): ReasoningLevel | undefined {
+  if (model.provider !== 'anthropic') return undefined;
+  if (!CLAUDE_4_MODEL_RE.test(model.modelId)) return undefined;
+  return 'high';
 }
 
 export async function generate(input: GenerateInput): Promise<GenerateOutput> {

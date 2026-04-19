@@ -106,6 +106,52 @@ describe('generate()', () => {
     expect(result.costUsd).toBeCloseTo(0.0001);
   });
 
+  it('requests 32k output tokens and high reasoning for Claude 4 models', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as {
+      maxTokens?: number;
+      reasoning?: string;
+    };
+    expect(opts.maxTokens).toBe(32000);
+    expect(opts.reasoning).toBe('high');
+  });
+
+  it('omits reasoning for non-Claude-4 providers but still raises maxTokens', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-4o' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as {
+      maxTokens?: number;
+      reasoning?: string;
+    };
+    expect(opts.maxTokens).toBe(32000);
+    expect(opts.reasoning).toBeUndefined();
+  });
+
   it('passes the design-generator system prompt by default', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,

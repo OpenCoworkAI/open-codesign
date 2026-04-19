@@ -8,10 +8,22 @@
 
 import { type ChatMessage, CodesignError, type ModelRef } from '@open-codesign/shared';
 
+/** Subset of pi-ai's `ThinkingLevel` we expose. Maps directly to its `reasoning`
+ * field, which Anthropic adapters translate to extended-thinking effort/budget
+ * (and OpenAI/Gemini adapters translate to their respective reasoning knobs). */
+export type ReasoningLevel = 'low' | 'medium' | 'high' | 'xhigh';
+
 export interface GenerateOptions {
   apiKey: string;
   baseUrl?: string;
   signal?: AbortSignal;
+  /** Hard cap on output tokens. When omitted, pi-ai falls back to ~1/3 of
+   *  the model's context window. */
+  maxTokens?: number;
+  /** When set, asks the provider to "think before answering". On Anthropic
+   *  Claude 4.x models this enables extended thinking; on OpenAI/Gemini it
+   *  maps to their reasoning effort. Older/non-reasoning models ignore it. */
+  reasoning?: ReasoningLevel;
 }
 
 export interface GenerateResult {
@@ -105,7 +117,13 @@ export async function complete(
     completeSimple: (
       model: PiModel,
       context: PiContext,
-      opts: { apiKey: string; baseUrl?: string; signal?: AbortSignal },
+      opts: {
+        apiKey: string;
+        baseUrl?: string;
+        signal?: AbortSignal;
+        maxTokens?: number;
+        reasoning?: ReasoningLevel;
+      },
     ) => Promise<PiAssistantMessage>;
   };
 
@@ -117,11 +135,19 @@ export async function complete(
     );
   }
 
-  const piOpts: { apiKey: string; baseUrl?: string; signal?: AbortSignal } = {
+  const piOpts: {
+    apiKey: string;
+    baseUrl?: string;
+    signal?: AbortSignal;
+    maxTokens?: number;
+    reasoning?: ReasoningLevel;
+  } = {
     apiKey: opts.apiKey,
   };
   if (opts.baseUrl !== undefined) piOpts.baseUrl = opts.baseUrl;
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
+  if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
+  if (opts.reasoning !== undefined) piOpts.reasoning = opts.reasoning;
 
   const result = await pi.completeSimple(piModel, toPiContext(messages, piModel), piOpts);
 
