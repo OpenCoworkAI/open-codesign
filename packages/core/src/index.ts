@@ -580,6 +580,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
         input.systemPrompt ??
         composeSystemPrompt({
           mode: 'create',
+          userPrompt: input.prompt,
           ...(skillBlobs.length > 0 ? { skills: skillBlobs } : {}),
         }),
     },

@@ -728,6 +728,58 @@ After copying this skeleton, design your app's specific UI inside \`<main class=
 
 If the user requests Android instead, swap to a 360×800 viewport with Material Design status bar (height 24dp) and gesture nav (height 16dp) — use Material color tokens.`;
 
+// Condensed forbidden-list extracted from ANTI_SLOP for the always-on Layer 1
+// of progressive disclosure. Authored separately so its surface stays tight
+// (~1.5 KB) — small-context models that cannot afford the full anti-slop
+// treatment still get the hard "do not do this" list.
+const ANTI_SLOP_DIGEST = `# Anti-slop digest (forbidden patterns)
+
+Do not produce these. Each one is the tell of an unconsidered, generated-feeling artifact:
+
+- A "minimal dark" page that is \`#0E0E10\` end-to-end with a single purple accent and four sparse stat cards.
+- A hero section with a gradient blob background, bold sans headline, and a generic screenshot mockup.
+- A features section with six 1:1 cards, each with a 24px icon, a two-word title, and a sentence of filler text.
+- A testimonials section with circular avatars, a name, a title, and a five-star rating.
+- A footer with three columns of nav links and a social media icon row.
+- A "case study" that is four metric cards plus a single quote — missing hero, before/after, customer profile, and closing.
+- A logo placeholder rendered as a soft-rounded square with a single random letter centered inside. Use a constructed monogram, a wordmark, or an explicit hatched "YOUR LOGO HERE" rectangle instead.
+- Decorative emoji used as section icons unless the brief explicitly asks for emoji.
+- Default Tailwind blue (\`#3b82f6\`) or default Tailwind grays as the entire neutral scale.
+- Lorem ipsum, "John Doe", "Acme Corp", "100%" / "1,234" round-number filler.
+- Fonts in the overused-default set: Inter, Roboto, Arial, Helvetica, Playfair Display (unless explicitly requested).
+- Hotlinked photos from any external host (\`placeholder.com\`, \`unsplash.com\`, \`picsum.photos\`, \`randomuser.me\`, etc.).
+- Center-aligned body paragraphs.
+- Pure black (\`#000\`) for text — use near-black with a slight hue cast.
+
+These patterns are forbidden when combined without a distinctive visual angle that makes them feel intentional rather than assembled from a component kit.`;
+
+// Split CRAFT_DIRECTIVES into a Map<subsectionName, "## name\n\nbody"> so the
+// progressive-disclosure composer can include only the subsections relevant to
+// the user's prompt. The intro paragraph (everything before the first `## `)
+// is preserved as the "" key so we can always emit it.
+function buildCraftSubsectionMap(): Map<string, string> {
+  const map = new Map<string, string>();
+  const parts = CRAFT_DIRECTIVES.split(/\n(?=## )/);
+  const intro = parts[0];
+  if (intro !== undefined) {
+    map.set('__intro__', intro);
+  }
+  for (const part of parts.slice(1)) {
+    const headingMatch = part.match(/^## (.+?)\n/);
+    const heading = headingMatch?.[1];
+    if (heading) {
+      map.set(heading.trim(), part);
+    }
+  }
+  return map;
+}
+
+const CRAFT_SUBSECTIONS = buildCraftSubsectionMap();
+
+function craftSubsection(name: string): string | undefined {
+  return CRAFT_SUBSECTIONS.get(name);
+}
+
 // ---------------------------------------------------------------------------
 // Section maps (used by drift tests and tooling)
 // ---------------------------------------------------------------------------
@@ -745,6 +797,7 @@ export const PROMPT_SECTIONS: Record<string, string> = {
   chartRendering: CHART_RENDERING,
   iosStarterTemplate: IOS_STARTER_TEMPLATE,
   antiSlop: ANTI_SLOP,
+  antiSlopDigest: ANTI_SLOP_DIGEST,
   safety: SAFETY,
 };
 
@@ -761,6 +814,7 @@ export const PROMPT_SECTION_FILES: Record<keyof typeof PROMPT_SECTIONS, string> 
   chartRendering: 'chart-rendering.v1.txt',
   iosStarterTemplate: 'ios-starter-template.v1.txt',
   antiSlop: 'anti-slop.v1.txt',
+  antiSlopDigest: 'anti-slop-digest.v1.txt',
   safety: 'safety.v1.txt',
 };
 
@@ -775,9 +829,25 @@ export interface PromptComposeOptions {
    *  - `revise`  — targeted edit of an existing artifact
    */
   mode: 'create' | 'tweak' | 'revise';
+  /**
+   * The user's prompt — used for keyword-based progressive disclosure of
+   * craft directives, chart rendering, and starter templates. Optional for
+   * back-compat: when omitted the full (pre-disclosure) prompt is returned.
+   */
+  userPrompt?: string | undefined;
   /** Additional skill blobs to append (future extension point). */
   skills?: string[] | undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Progressive disclosure — keyword routing
+// ---------------------------------------------------------------------------
+
+const KEYWORDS_DASHBOARD =
+  /(dashboard|chart|graph|plot|visualization|数据|看板|图表|analytics|metric|KPI)/i;
+const KEYWORDS_MOBILE = /(mobile|iOS|iPhone|iPad|手机|移动端|app screen|App design)/i;
+const KEYWORDS_MARKETING = /(case study|landing|marketing|hero|pricing|案例|落地页|登录页|首页)/i;
+const KEYWORDS_LOGO = /(logo|brand|品牌|monogram)/i;
 
 // ---------------------------------------------------------------------------
 // Composer
@@ -787,41 +857,37 @@ export interface PromptComposeOptions {
  * Assembles the system prompt from section constants according to the requested
  * generation mode.
  *
- * Section order:
- *   identity → workflow → output-rules → design-methodology →
- *   artifact-types → pre-flight → editmode-protocol →
- *   [tweaks-protocol if mode === 'tweak'] →
- *   craft-directives → chart-rendering → [ios-starter-template if mode === 'create'] →
- *   anti-slop → safety → [skill blobs if any]
+ * Two modes of assembly:
+ *
+ * 1. **Full** (default — when `userPrompt` is undefined, or mode is `tweak` /
+ *    `revise`). Order:
+ *      identity → workflow → output-rules → design-methodology →
+ *      artifact-types → pre-flight → editmode-protocol →
+ *      [tweaks-protocol if mode === 'tweak'] →
+ *      craft-directives → chart-rendering →
+ *      [ios-starter-template if mode === 'create'] →
+ *      anti-slop → safety → [skill blobs if any]
+ *
+ * 2. **Progressive** (mode === 'create' AND `userPrompt` provided). The full
+ *    prompt is ~44 KB / 11k tokens and crushes small-context models. We split
+ *    it into:
+ *      - Layer 1 (always, ~12 KB): identity, workflow, output-rules,
+ *        design-methodology, pre-flight, editmode-protocol, safety,
+ *        anti-slop-digest.
+ *      - Layer 2 (keyword-matched): chart-rendering, ios-starter-template,
+ *        and individual craft-directives subsections triggered by dashboard /
+ *        mobile / marketing / logo cues. If no keyword matches, fall back to
+ *        the full craft-directives section.
  *
  * Brand tokens and other user-filesystem data are intentionally excluded here.
  * They are passed as untrusted user-role content in the message array to prevent
  * prompt injection attacks from adversarial codebase content.
  */
 export function composeSystemPrompt(opts: PromptComposeOptions): string {
-  const sections: string[] = [
-    IDENTITY,
-    WORKFLOW,
-    OUTPUT_RULES,
-    DESIGN_METHODOLOGY,
-    ARTIFACT_TYPES,
-    PRE_FLIGHT,
-    EDITMODE_PROTOCOL,
-  ];
-
-  if (opts.mode === 'tweak') {
-    sections.push(TWEAKS_PROTOCOL);
-  }
-
-  if (opts.mode !== 'tweak') {
-    sections.push(CRAFT_DIRECTIVES);
-    sections.push(CHART_RENDERING);
-  }
-  if (opts.mode === 'create') {
-    sections.push(IOS_STARTER_TEMPLATE);
-  }
-  sections.push(ANTI_SLOP);
-  sections.push(SAFETY);
+  const sections =
+    opts.userPrompt !== undefined && opts.mode === 'create'
+      ? composeCreateProgressive(opts.userPrompt)
+      : composeFull(opts.mode);
 
   if (opts.skills?.length) {
     const header = [
@@ -833,4 +899,103 @@ export function composeSystemPrompt(opts: PromptComposeOptions): string {
   }
 
   return sections.join('\n\n---\n\n');
+}
+
+function composeFull(mode: PromptComposeOptions['mode']): string[] {
+  const sections: string[] = [
+    IDENTITY,
+    WORKFLOW,
+    OUTPUT_RULES,
+    DESIGN_METHODOLOGY,
+    ARTIFACT_TYPES,
+    PRE_FLIGHT,
+    EDITMODE_PROTOCOL,
+  ];
+
+  if (mode === 'tweak') {
+    sections.push(TWEAKS_PROTOCOL);
+  }
+
+  if (mode !== 'tweak') {
+    sections.push(CRAFT_DIRECTIVES);
+    sections.push(CHART_RENDERING);
+  }
+  if (mode === 'create') {
+    sections.push(IOS_STARTER_TEMPLATE);
+  }
+  sections.push(ANTI_SLOP);
+  sections.push(SAFETY);
+  return sections;
+}
+
+// Layer 1 (always-on, ~12 KB) + Layer 2 (keyword-matched).
+// Layer 3 — retry-on-quality-fail injection of full ANTI_SLOP + ARTIFACT_TYPES
+// is deferred. TODO(progressive-prompt-v2): wire this into the generate retry loop.
+const LAYER_1_BASE: readonly string[] = [
+  IDENTITY,
+  WORKFLOW,
+  OUTPUT_RULES,
+  DESIGN_METHODOLOGY,
+  PRE_FLIGHT,
+  EDITMODE_PROTOCOL,
+  SAFETY,
+  ANTI_SLOP_DIGEST,
+];
+
+interface KeywordMatchPlan {
+  topLevel: string[];
+  craftSubsectionNames: string[];
+}
+
+function planKeywordMatches(userPrompt: string): KeywordMatchPlan {
+  const topLevel: string[] = [];
+  const craftSubsectionNames: string[] = [];
+
+  if (KEYWORDS_DASHBOARD.test(userPrompt)) {
+    topLevel.push(CHART_RENDERING);
+    craftSubsectionNames.push('Dashboard ambient signals');
+  }
+  if (KEYWORDS_MOBILE.test(userPrompt)) {
+    topLevel.push(IOS_STARTER_TEMPLATE);
+  }
+  if (KEYWORDS_MARKETING.test(userPrompt)) {
+    craftSubsectionNames.push(
+      'Single-page structure ladder',
+      'Big numbers get dedicated visual blocks',
+      'Customer quotes deserve distinguished treatment',
+    );
+  }
+  if (KEYWORDS_LOGO.test(userPrompt)) {
+    craftSubsectionNames.push('Logos and brand marks');
+  }
+
+  return { topLevel, craftSubsectionNames };
+}
+
+function buildCraftBlock(subsectionNames: string[]): string | undefined {
+  if (subsectionNames.length === 0) return undefined;
+  const parts: string[] = [];
+  const intro = craftSubsection('__intro__');
+  if (intro) parts.push(intro);
+  for (const name of subsectionNames) {
+    const sub = craftSubsection(name);
+    if (sub) parts.push(sub);
+  }
+  return parts.length > 1 ? parts.join('\n\n') : undefined;
+}
+
+function composeCreateProgressive(userPrompt: string): string[] {
+  const sections: string[] = [...LAYER_1_BASE];
+  const plan = planKeywordMatches(userPrompt);
+  const noMatch = plan.topLevel.length === 0 && plan.craftSubsectionNames.length === 0;
+
+  if (noMatch) {
+    sections.push(CRAFT_DIRECTIVES);
+    return sections;
+  }
+
+  sections.push(...plan.topLevel);
+  const craftBlock = buildCraftBlock(plan.craftSubsectionNames);
+  if (craftBlock) sections.push(craftBlock);
+  return sections;
 }

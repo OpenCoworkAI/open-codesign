@@ -1398,6 +1398,78 @@ describe('composeSystemPrompt()', () => {
   });
 });
 
+describe('composeSystemPrompt() — progressive disclosure', () => {
+  const FULL = composeSystemPrompt({ mode: 'create' });
+
+  it('back-compat: omitting userPrompt returns the full prompt byte-identical to today', () => {
+    expect(composeSystemPrompt({ mode: 'create' })).toBe(FULL);
+  });
+
+  it('Layer 1 sections always present regardless of input', () => {
+    for (const userPrompt of ['做个数据看板', 'iOS 移动端', '随便做点东西', '']) {
+      const p = composeSystemPrompt({ mode: 'create', userPrompt });
+      expect(p, `identity missing for "${userPrompt}"`).toContain('open-codesign');
+      expect(p, `workflow missing for "${userPrompt}"`).toContain('Design workflow');
+      expect(p, `output rules missing for "${userPrompt}"`).toContain('Output rules');
+      expect(p, `safety missing for "${userPrompt}"`).toContain('Safety and scope');
+      expect(p, `anti-slop digest missing for "${userPrompt}"`).toContain('Anti-slop digest');
+    }
+  });
+
+  it('dashboard prompt: includes chart rendering, excludes iOS starter', () => {
+    const p = composeSystemPrompt({ mode: 'create', userPrompt: '做个数据看板' });
+    expect(p).toContain('Chart rendering contract');
+    expect(p).toContain('Dashboard ambient signals');
+    expect(p).not.toContain('iOS frame starter');
+  });
+
+  it('mobile prompt: includes iOS starter template, excludes chart rendering', () => {
+    const p = composeSystemPrompt({
+      mode: 'create',
+      userPrompt: 'iOS 移动端 onboarding',
+    });
+    expect(p).toContain('iOS frame starter');
+    expect(p).not.toContain('Chart rendering contract');
+  });
+
+  it('marketing prompt: includes single-page structure ladder subsection', () => {
+    const p = composeSystemPrompt({
+      mode: 'create',
+      userPrompt: 'indie marketing landing page',
+    });
+    expect(p).toContain('Single-page structure ladder');
+    expect(p).toContain('Customer quotes deserve distinguished treatment');
+  });
+
+  it('no-keyword prompt: falls back to FULL craft directives', () => {
+    const p = composeSystemPrompt({ mode: 'create', userPrompt: '随便做点东西' });
+    // Full craft directives includes ALL ten subsections — verify several signal ones
+    expect(p).toContain('Craft directives');
+    expect(p).toContain('Artifact-type classification');
+    expect(p).toContain('Density floor');
+    expect(p).toContain('Dashboard ambient signals');
+    expect(p).toContain('Logos and brand marks');
+    expect(p).toContain('Single-page structure ladder');
+  });
+
+  it('regression guard: matched dashboard prompt stays under 25 KB', () => {
+    const p = composeSystemPrompt({ mode: 'create', userPrompt: '做个数据看板' });
+    expect(p.length).toBeLessThan(25_000);
+  });
+
+  it('mode tweak ignores userPrompt and returns the full tweak prompt', () => {
+    const a = composeSystemPrompt({ mode: 'tweak' });
+    const b = composeSystemPrompt({ mode: 'tweak', userPrompt: '做个数据看板' });
+    expect(b).toBe(a);
+  });
+
+  it('mode revise ignores userPrompt and returns the full revise prompt', () => {
+    const a = composeSystemPrompt({ mode: 'revise' });
+    const b = composeSystemPrompt({ mode: 'revise', userPrompt: '做个数据看板' });
+    expect(b).toBe(a);
+  });
+});
+
 describe('prompt section .txt vs TS drift', () => {
   const promptsDir = resolve(dirname(fileURLToPath(import.meta.url)), 'prompts');
 
