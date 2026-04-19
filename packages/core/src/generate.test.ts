@@ -828,6 +828,28 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).not.toContain('iOS frame starter');
     expect(prompt).not.toContain('.ios-status-bar');
   });
+
+  it('create mode includes the EDITMODE protocol section', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    expect(prompt).toContain('EDITMODE protocol');
+    expect(prompt).toContain('/*EDITMODE-BEGIN*/');
+    expect(prompt).toContain('/*EDITMODE-END*/');
+    expect(prompt).toContain('TWEAK_DEFAULTS');
+  });
+
+  it('tweak mode also includes the EDITMODE protocol section', () => {
+    const prompt = composeSystemPrompt({ mode: 'tweak' });
+    expect(prompt).toContain('EDITMODE protocol');
+    expect(prompt).toContain('/*EDITMODE-BEGIN*/');
+    expect(prompt).toContain('TWEAK_DEFAULTS');
+  });
+
+  it('revise mode includes EDITMODE protocol with revise-mode preservation guidance', () => {
+    const prompt = composeSystemPrompt({ mode: 'revise' });
+    expect(prompt).toContain('EDITMODE protocol');
+    expect(prompt).toContain('Behavior in revise mode');
+    expect(prompt).toContain('PRESERVE');
+  });
 });
 
 describe('prompt section .txt vs TS drift', () => {
