@@ -16,7 +16,7 @@
  *   GROQ_API_KEY, CEREBRAS_API_KEY, XAI_API_KEY, MISTRAL_API_KEY.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import * as TOML from '@iarna/toml';
 import { generate } from '@open-codesign/core';
@@ -151,7 +151,10 @@ async function runOne(model: SmokeModel, prompt: SmokePrompt, apiKey: string): P
     const ms = Date.now() - t0;
     const html = result.artifacts[0]?.content ?? '';
     const artifactPath = resolve(SMOKE_DIR, `${slug(model, prompt)}.html`);
-    if (!artifactPath.startsWith(`${SMOKE_DIR}/`)) {
+    // Use platform-aware containment instead of POSIX-only startsWith — slug
+    // sanitization should already prevent traversal, this is defense-in-depth.
+    const rel = relative(SMOKE_DIR, artifactPath);
+    if (rel.startsWith('..') || isAbsolute(rel)) {
       throw new Error(`Refusing to write outside ${SMOKE_DIR}: ${artifactPath}`);
     }
     writeFileSync(artifactPath, html);
