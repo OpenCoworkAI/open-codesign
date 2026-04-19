@@ -114,7 +114,7 @@ Reference these in Tailwind's arbitrary-value syntax: \`bg-[var(--color-accent)]
 5. Alt text: every \`<img>\` has a non-empty \`alt\`. Decorative SVGs get \`aria-hidden="true"\`.
 6. No \`<table>\` for layout; use CSS grid or flex.
 7. Responsive: mobile-first breakpoints using Tailwind's \`sm:\`, \`md:\`, \`lg:\` prefixes.
-8. Motion: CSS \`transition\` / \`animation\` only — no JS animation loops. Keep it under 300 ms unless the effect is intentional and earns its cost.
+8. Motion: CSS \`transition\` / \`animation\` only — no JS animation loops (no \`requestAnimationFrame\`, no recursive \`setTimeout\` for visuals). Keep it under 300 ms unless the effect is intentional and earns its cost. The single permitted exception is the dashboard live-clock \`setInterval(updateClock, 1000)\` documented in the craft directives.
 
 ## Content rules
 
@@ -414,7 +414,7 @@ For dashboard / data / analytics artifacts, include these "live system" cues to 
 
 - A "LIVE" pill badge in the top-right corner of any chart card showing real-time data. Pill is small (font 10-11px), accent color border 1px, padding 2x6px, border-radius 999.
 - A status indicator near the page title: a small green dot (8px diameter, accent color, animated pulse keyframe) followed by "SYSTEM ONLINE" or "LIVE" in 11px uppercase tracked text.
-- A live clock in the top-right of the page header: HH:MM:SS in tabular-nums font, updated each second via setInterval, with the current date below in smaller secondary text.
+- A live clock in the top-right of the page header: HH:MM:SS in tabular-nums font, updated each second via a single \`setInterval(updateClock, 1000)\`. This is the ONE permitted JS interval — do not chain other animations onto it. Clear it on unmount if your code supports lifecycle.
 - KPI cards get a 4px vertical accent bar on the left side. Color varies by metric category (revenue=teal, growth=amber, retention=violet, regions=green) — pick from the artifact palette, not arbitrary.
 
 Slide decks substitute: cover → 3-7 content slides with strong hierarchy each → closing slide.`;
