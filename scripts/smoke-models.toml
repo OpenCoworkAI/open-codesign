@@ -1,0 +1,49 @@
+# Smoke-test matrix
+#
+# Drives `pnpm smoke`. API keys are NEVER stored here — set them in your
+# environment (one per provider you want to test):
+#
+#   export OPENROUTER_API_KEY=sk-or-...
+#   export ANTHROPIC_API_KEY=sk-ant-...
+#   export OPENAI_API_KEY=sk-...
+#   export GOOGLE_API_KEY=...
+#   export GROQ_API_KEY=...
+#
+# Add or remove rows freely. Rows referencing a provider with no key are
+# skipped with a warning, not failed.
+
+[[prompts]]
+name = "dashboard"
+text = "做一个数据看板，含 3 张图：条形图（销量）、折线图（留存）、饼图（细分）。深色主题。"
+
+[[prompts]]
+name = "mobile_onboarding"
+text = "iOS 移动端 onboarding 三屏：欢迎、权限请求、登录。Liquid Glass 风格，每屏构图不同。"
+
+[[prompts]]
+name = "marketing_landing"
+text = "Landing page for an indie design tool called Open Codesign. Warm cream tones, editorial display serif (Fraunces), dense layout with hero / 3 feature blocks / pricing / FAQ / CTA."
+
+[[prompts]]
+name = "settings"
+text = "应用设置页面，含账户、通知、外观三个 tab。深色主题，sidebar 导航 + 右侧表单。"
+
+[[models]]
+provider = "openrouter"
+modelId = "anthropic/claude-sonnet-4.5"
+
+[[models]]
+provider = "openrouter"
+modelId = "anthropic/claude-3.5-sonnet"
+
+[[models]]
+provider = "openrouter"
+modelId = "openai/gpt-oss-120b:free"
+
+[[models]]
+provider = "openrouter"
+modelId = "minimax/minimax-m2.5:free"
+
+[[models]]
+provider = "anthropic"
+modelId = "claude-sonnet-4-6"
