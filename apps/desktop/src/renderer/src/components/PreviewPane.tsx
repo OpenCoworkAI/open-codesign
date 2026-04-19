@@ -106,7 +106,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         srcDoc={buildSrcdoc(previewHtml)}
         className={
           isMobile
-            ? 'w-full h-full bg-white'
+            ? 'w-full h-full bg-[var(--color-artifact-bg)]'
             : 'w-full h-full bg-white rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]'
         }
         style={viewportStyle}

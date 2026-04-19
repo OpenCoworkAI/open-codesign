@@ -15,6 +15,9 @@
   --color-surface-muted: oklch(0.96 0.015 75);
   /* alias used by some components */
   --color-surface-elevated: oklch(0.99 0.008 80);
+  /* Artifact iframe background — user-generated content defaults to white in
+     both themes; artifacts ship their own styles and should not inherit app theme. */
+  --color-artifact-bg: #ffffff;
 
   /* Border */
   --color-border: oklch(0.88 0.012 70);
@@ -212,6 +215,7 @@ pre,
   --color-surface-active: oklch(0.29 0.018 50);
   --color-surface-muted: oklch(0.22 0.015 50);
   --color-surface-elevated: oklch(0.26 0.018 50);
+  --color-artifact-bg: #ffffff;
 
   --color-border: oklch(0.3 0.012 50);
   --color-border-muted: oklch(0.27 0.01 50);
