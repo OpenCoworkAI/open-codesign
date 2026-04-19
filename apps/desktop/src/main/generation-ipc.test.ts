@@ -1,6 +1,6 @@
 import { CancelGenerationPayloadV1, CodesignError } from '@open-codesign/shared';
-import { describe, expect, it, vi } from 'vitest';
-import { cancelGenerationRequest } from './generation-ipc';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { armGenerationTimeout, cancelGenerationRequest } from './generation-ipc';
 
 function makeController() {
   return { abort: vi.fn() } as unknown as AbortController;
@@ -66,5 +66,80 @@ describe('cancelGenerationRequest', () => {
     expect(() =>
       CancelGenerationPayloadV1.parse({ schemaVersion: 2, generationId: 'gen-1' }),
     ).toThrow();
+  });
+});
+
+describe('armGenerationTimeout', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('aborts the controller with a CodesignError after the configured timeout', async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+
+    const clear = await armGenerationTimeout('gen-1', controller, async () => 5, logger);
+
+    expect(controller.signal.aborted).toBe(false);
+    vi.advanceTimersByTime(5000);
+    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.reason).toBeInstanceOf(CodesignError);
+    expect((controller.signal.reason as CodesignError).code).toBe('GENERATION_TIMEOUT');
+    expect(logger.warn).toHaveBeenCalledWith('generate.timeout.fired', {
+      id: 'gen-1',
+      timeoutSec: 5,
+    });
+    clear();
+  });
+
+  it('does not abort when clear() is called before the timeout fires', async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+
+    const clear = await armGenerationTimeout('gen-1', controller, async () => 60, logger);
+    clear();
+    vi.advanceTimersByTime(120_000);
+
+    expect(controller.signal.aborted).toBe(false);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('returns a no-op when reading preferences fails — generation must not be blocked', async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+
+    const clear = await armGenerationTimeout(
+      'gen-1',
+      controller,
+      async () => {
+        throw new Error('disk gone');
+      },
+      logger,
+    );
+    vi.advanceTimersByTime(600_000);
+
+    expect(controller.signal.aborted).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'generate.timeout.prefs_read_failed',
+      expect.objectContaining({ id: 'gen-1', message: 'disk gone' }),
+    );
+    clear();
+  });
+
+  it('returns a no-op for non-positive or non-finite timeout values', async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+
+    for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const clear = await armGenerationTimeout('gen-1', controller, async () => value, logger);
+      vi.advanceTimersByTime(60_000);
+      clear();
+    }
+
+    expect(controller.signal.aborted).toBe(false);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });

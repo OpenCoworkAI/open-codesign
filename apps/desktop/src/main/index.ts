@@ -16,7 +16,7 @@ import { registerConnectionIpc } from './connection-ipc';
 import { scanDesignSystem } from './design-system';
 import { BrowserWindow, app, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
-import { cancelGenerationRequest } from './generation-ipc';
+import { armGenerationTimeout, cancelGenerationRequest } from './generation-ipc';
 import { registerLocaleIpc } from './locale-ipc';
 import { getLogPath, getLogger, initLogger } from './logger';
 import {
@@ -27,7 +27,7 @@ import {
   registerOnboardingIpc,
   setDesignSystem,
 } from './onboarding-ipc';
-import { registerPreferencesIpc } from './preferences-ipc';
+import { readPersisted as readPreferences, registerPreferencesIpc } from './preferences-ipc';
 import { preparePromptContext } from './prompt-context';
 import { resolveActiveModel } from './provider-settings';
 import { safeInitSnapshotsDb } from './snapshots-db';
@@ -80,6 +80,14 @@ function registerIpcHandlers(): void {
 
   /** In-flight requests: generationId → AbortController */
   const inFlight = new Map<string, AbortController>();
+
+  const armTimeout = (id: string, controller: AbortController) =>
+    armGenerationTimeout(
+      id,
+      controller,
+      async () => (await readPreferences()).generationTimeoutSec,
+      logIpc,
+    );
 
   ipcMain.handle('codesign:detect-provider', (_e, key: unknown) => {
     if (typeof key !== 'string') {
@@ -226,6 +234,7 @@ function registerIpcHandlers(): void {
     });
 
     const t0 = Date.now();
+    const clearTimeoutGuard = await armTimeout(id, controller);
     try {
       const result = await generate({
         prompt: payload.prompt,
@@ -258,6 +267,7 @@ function registerIpcHandlers(): void {
       });
       throw err;
     } finally {
+      clearTimeoutGuard();
       inFlight.delete(id);
     }
   });
@@ -310,6 +320,7 @@ function registerIpcHandlers(): void {
     });
 
     const t0 = Date.now();
+    const clearTimeoutGuard = await armTimeout(id, controller);
     try {
       const result = await generate({
         prompt: payload.prompt,
@@ -341,6 +352,7 @@ function registerIpcHandlers(): void {
       });
       throw err;
     } finally {
+      clearTimeoutGuard();
       inFlight.delete(id);
     }
   });
