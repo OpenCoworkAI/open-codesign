@@ -7,6 +7,7 @@ import { LoadingState } from '../preview/LoadingState';
 import { useCodesignStore } from '../store';
 import { CanvasErrorBar } from './CanvasErrorBar';
 import { InlineCommentComposer } from './InlineCommentComposer';
+import { PhoneFrame } from './PhoneFrame';
 import { PreviewToolbar } from './PreviewToolbar';
 
 export interface PreviewPaneProps {
@@ -30,6 +31,9 @@ export function isTrustedPreviewMessageSource(
   return source !== null && source === previewWindow;
 }
 
+const COMMENT_HINT_CLASS =
+  'absolute left-[var(--space-5)] top-[var(--space-5)] z-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur';
+
 export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
@@ -39,6 +43,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const clearError = useCodesignStore((s) => s.clearError);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
+  const previewViewport = useCodesignStore((s) => s.previewViewport);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -85,24 +90,74 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   } else if (isGenerating && !previewHtml) {
     body = <LoadingState />;
   } else if (previewHtml) {
-    body = (
-      <div className="h-full p-6">
-        <div className="relative h-full">
-          <div className="absolute left-5 top-5 z-10 rounded-full border border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-surface)_88%,transparent)] px-3 py-1 text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur">
-            {t('preview.clickToComment')}
-          </div>
-          <iframe
-            ref={iframeRef}
-            key={previewHtml.length}
-            title="design-preview"
-            sandbox="allow-scripts"
-            srcDoc={buildSrcdoc(previewHtml)}
-            className="w-full h-full bg-[var(--color-surface)] rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]"
-          />
-          <InlineCommentComposer />
-        </div>
-      </div>
+    const isMobile = previewViewport === 'mobile';
+    const viewportStyle: React.CSSProperties | undefined = isMobile
+      ? {
+          width: 'var(--size-preview-mobile-width)',
+          height: 'var(--size-preview-mobile-height)',
+        }
+      : undefined;
+    const iframe = (
+      <iframe
+        ref={iframeRef}
+        key={previewHtml.length}
+        title="design-preview"
+        sandbox="allow-scripts"
+        srcDoc={buildSrcdoc(previewHtml)}
+        className={
+          isMobile
+            ? 'w-full h-full bg-[var(--color-artifact-bg)]'
+            : 'w-full h-full bg-[var(--color-artifact-bg)] rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]'
+        }
+        style={viewportStyle}
+      />
     );
+
+    if (isMobile) {
+      body = (
+        <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
+          <div className="relative">
+            <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
+            <PhoneFrame>{iframe}</PhoneFrame>
+            <InlineCommentComposer />
+          </div>
+        </div>
+      );
+    } else if (previewViewport === 'tablet') {
+      body = (
+        <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
+          <div
+            className="relative"
+            style={{
+              width: 'var(--size-preview-tablet-width)',
+              height: 'var(--size-preview-tablet-height)',
+              flexShrink: 0,
+            }}
+          >
+            <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
+            {iframe}
+            <InlineCommentComposer />
+          </div>
+        </div>
+      );
+    } else {
+      body = (
+        <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
+          <div
+            className="relative"
+            style={{
+              width: 'min(100%, var(--size-preview-desktop-width))',
+              height: 'min(100%, var(--size-preview-desktop-height))',
+              flexShrink: 0,
+            }}
+          >
+            <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
+            {iframe}
+            <InlineCommentComposer />
+          </div>
+        </div>
+      );
+    }
   } else {
     body = <EmptyState onPickStarter={onPickStarter} />;
   }

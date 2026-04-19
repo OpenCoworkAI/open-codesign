@@ -51,6 +51,8 @@ export type Theme = 'light' | 'dark';
 export type AppView = 'hub' | 'workspace' | 'settings';
 export type HubTab = 'recent' | 'your' | 'examples' | 'designSystems';
 
+export type PreviewViewport = 'desktop' | 'tablet' | 'mobile';
+
 interface PromptRequest {
   prompt: string;
   attachments: LocalInputFile[];
@@ -77,6 +79,7 @@ interface CodesignState {
   projects: Project[];
   currentProjectId: string | null;
   createProjectModalOpen: boolean;
+  previewViewport: PreviewViewport;
   commandPaletteOpen: boolean;
   toasts: Toast[];
   iframeErrors: string[];
@@ -121,6 +124,7 @@ interface CodesignState {
   closeCreateProjectModal: () => void;
   createProject: (draft: ProjectDraft) => Project;
   openProject: (id: string) => void;
+  setPreviewViewport: (viewport: PreviewViewport) => void;
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
 
@@ -369,6 +373,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   projects: initialProjectsRead.projects,
   currentProjectId: null,
   createProjectModalOpen: false,
+  previewViewport: 'desktop' as PreviewViewport,
   commandPaletteOpen: false,
   toasts: [],
   iframeErrors: [],
@@ -761,6 +766,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       errorMessage: null,
       lastError: null,
     });
+  },
+
+  setPreviewViewport(viewport) {
+    set({ previewViewport: viewport });
   },
 
   openCommandPalette() {

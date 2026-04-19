@@ -1,8 +1,9 @@
 import { useT } from '@open-codesign/i18n';
 import { Tooltip } from '@open-codesign/ui';
-import { Download } from 'lucide-react';
+import { Download, Monitor, Smartphone, Tablet } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
+import type { PreviewViewport } from '../store';
 import { useCodesignStore } from '../store';
 
 interface ExportItem {
@@ -12,12 +13,20 @@ interface ExportItem {
   ready: boolean;
 }
 
+interface ViewportItem {
+  value: PreviewViewport;
+  label: string;
+  icon: ReactElement;
+}
+
 export function PreviewToolbar(): ReactElement {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const exportActive = useCodesignStore((s) => s.exportActive);
   const toastMessage = useCodesignStore((s) => s.toastMessage);
   const dismissToast = useCodesignStore((s) => s.dismissToast);
+  const previewViewport = useCodesignStore((s) => s.previewViewport);
+  const setPreviewViewport = useCodesignStore((s) => s.setPreviewViewport);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -70,6 +79,33 @@ export function PreviewToolbar(): ReactElement {
     },
   ];
 
+  const viewportItems: ViewportItem[] = [
+    {
+      value: 'desktop',
+      label: t('preview.viewport.desktop'),
+      icon: (
+        <Monitor className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" aria-hidden="true" />
+      ),
+    },
+    {
+      value: 'tablet',
+      label: t('preview.viewport.tablet'),
+      icon: (
+        <Tablet className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" aria-hidden="true" />
+      ),
+    },
+    {
+      value: 'mobile',
+      label: t('preview.viewport.mobile'),
+      icon: (
+        <Smartphone
+          className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]"
+          aria-hidden="true"
+        />
+      ),
+    },
+  ];
+
   return (
     <div className="flex items-center justify-end gap-2 px-6 py-2 border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)]">
       {toastMessage && (
@@ -78,13 +114,42 @@ export function PreviewToolbar(): ReactElement {
         </output>
       )}
 
+      <fieldset
+        aria-label={t('preview.viewport.label')}
+        className="flex items-center rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden"
+        style={{ margin: 0, padding: 0 }}
+      >
+        <legend className="sr-only">{t('preview.viewport.label')}</legend>
+        {viewportItems.map((item) => {
+          const active = previewViewport === item.value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              title={item.label}
+              aria-label={item.label}
+              aria-pressed={active}
+              onClick={() => setPreviewViewport(item.value)}
+              className={[
+                'inline-flex items-center justify-center w-[var(--size-control-xs)] h-[var(--size-control-xs)] transition-[background-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]',
+                active
+                  ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]'
+                  : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-secondary)]',
+              ].join(' ')}
+            >
+              {item.icon}
+            </button>
+          );
+        })}
+      </fieldset>
+
       <div className="relative" ref={ref}>
         <Tooltip label={disabled ? t('disabledReason.noDesignToExport') : undefined} side="bottom">
           <button
             type="button"
             disabled={disabled}
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 h-[var(--size-control-sm)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            className="inline-flex items-center gap-1.5 h-[var(--size-control-xs)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
             aria-haspopup="menu"
             aria-expanded={open}
           >

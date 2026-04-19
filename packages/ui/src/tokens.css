@@ -15,6 +15,9 @@
   --color-surface-muted: oklch(0.96 0.015 75);
   /* alias used by some components */
   --color-surface-elevated: oklch(0.99 0.008 80);
+  /* Artifact iframe background — user-generated content defaults to white in
+     both themes; artifacts ship their own styles and should not inherit app theme. */
+  --color-artifact-bg: #ffffff;
 
   /* Border */
   --color-border: oklch(0.88 0.012 70);
@@ -92,6 +95,7 @@
   --tracking-label: 0.08em;
 
   /* Control sizes */
+  --size-control-xs: 30px;
   --size-control-sm: 32px;
   --size-control-md: 40px;
   --size-control-lg: 48px;
@@ -154,6 +158,20 @@
   --radius-xl: 14px;
   --radius-2xl: 18px;
   --radius-full: 9999px;
+  --radius-phone: 44px;
+
+  /* Border width */
+  --border-width-strong: 8px;
+
+  /* Preview viewport sizes */
+  --size-preview-mobile-width: 375px;
+  --size-preview-mobile-height: 812px;
+  --size-preview-mobile-notch-width: 120px;
+  --size-preview-mobile-notch-height: 30px;
+  --size-preview-tablet-width: 768px;
+  --size-preview-tablet-height: 1024px;
+  --size-preview-desktop-width: 1440px;
+  --size-preview-desktop-height: 900px;
 
   /* Motion — subtle, editorial */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -193,6 +211,7 @@ pre,
   --color-surface-active: oklch(0.29 0.018 50);
   --color-surface-muted: oklch(0.22 0.015 50);
   --color-surface-elevated: oklch(0.26 0.018 50);
+  --color-artifact-bg: #ffffff;
 
   --color-border: oklch(0.3 0.012 50);
   --color-border-muted: oklch(0.27 0.01 50);
