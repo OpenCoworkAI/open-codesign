@@ -31,6 +31,23 @@ export function isTrustedPreviewMessageSource(
   return source !== null && source === previewWindow;
 }
 
+// Convert a rect reported from inside the sandbox iframe (iframe-internal
+// viewport coords) into the parent renderer's viewport coords. The wrapper
+// applies `transform: scale(zoom/100)` to a div sized at `100/scale %`, so a
+// child at iframe-internal position P appears in the parent at P * scale.
+export function scaleRectForZoom(
+  rect: { top: number; left: number; width: number; height: number },
+  zoomPercent: number,
+): { top: number; left: number; width: number; height: number } {
+  const scale = zoomPercent / 100;
+  return {
+    top: rect.top * scale,
+    left: rect.left * scale,
+    width: rect.width * scale,
+    height: rect.height * scale,
+  };
+}
+
 const COMMENT_HINT_CLASS =
   'absolute left-[var(--space-5)] top-[var(--space-5)] z-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur';
 
@@ -56,7 +73,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           selector: event.data.selector,
           tag: event.data.tag,
           outerHTML: event.data.outerHTML,
-          rect: event.data.rect,
+          rect: scaleRectForZoom(event.data.rect, previewZoom),
         });
         return;
       }
@@ -75,7 +92,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [pushIframeError, selectCanvasElement]);
+  }, [pushIframeError, selectCanvasElement, previewZoom]);
 
   let body: React.ReactNode;
   if (errorMessage) {
@@ -129,7 +146,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         <div className="min-h-full p-6 flex flex-col items-center justify-center overflow-auto">
           <div className="relative inline-flex">
             <PhoneFrame>{iframe}</PhoneFrame>
-            {previewZoom === 100 && <InlineCommentComposer />}
+            <InlineCommentComposer />
           </div>
         </div>
       );
@@ -146,7 +163,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           >
             <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
             {iframe}
-            {previewZoom === 100 && <InlineCommentComposer />}
+            <InlineCommentComposer />
           </div>
         </div>
       );
@@ -163,7 +180,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           >
             <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
             {iframe}
-            {previewZoom === 100 && <InlineCommentComposer />}
+            <InlineCommentComposer />
           </div>
         </div>
       );
