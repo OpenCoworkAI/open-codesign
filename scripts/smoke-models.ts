@@ -149,7 +149,11 @@ async function runOne(model: SmokeModel, prompt: SmokePrompt, apiKey: string): P
       },
     });
     const ms = Date.now() - t0;
-    const html = result.artifacts[0]?.content ?? '';
+    const artifact = result.artifacts[0];
+    if (!artifact?.content?.trim()) {
+      throw new Error('No HTML artifact returned from generate()');
+    }
+    const html = artifact.content;
     const artifactPath = resolve(SMOKE_DIR, `${slug(model, prompt)}.html`);
     // Use platform-aware containment instead of POSIX-only startsWith — slug
     // sanitization should already prevent traversal, this is defense-in-depth.
