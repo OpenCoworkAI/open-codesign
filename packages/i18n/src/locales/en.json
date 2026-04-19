@@ -114,6 +114,10 @@
       "setActive": "Set active",
       "reEnterKey": "Re-enter key",
       "confirm": "Confirm",
+      "delete": "Delete",
+      "testConnection": "Test connection",
+      "moreActions": "More actions",
+      "editModel": "Change model",
       "deleteAria": "Delete {{label}} provider",
       "primary": "Primary",
       "fast": "Fast",
@@ -140,7 +144,9 @@
         "switchedTo": "Switched to {{label}}",
         "switchFailed": "Switch failed",
         "saved": "Provider saved",
-        "modelSaveFailed": "Failed to save model selection"
+        "modelSaveFailed": "Failed to save model selection",
+        "connectionOk": "Connection OK",
+        "connectionFailed": "Connection failed"
       }
     },
     "appearance": {

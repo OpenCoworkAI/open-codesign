@@ -18,14 +18,15 @@ import {
   Cpu,
   FolderOpen,
   Globe,
+  KeyRound,
   Loader2,
+  MoreHorizontal,
   Palette,
   Plus,
   RotateCcw,
   Sliders,
   Trash2,
   X,
-  Zap,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { AppPaths, Preferences, ProviderRow } from '../../../preload/index';
@@ -507,6 +508,127 @@ function AddProviderModal({
   );
 }
 
+function ProviderOverflowMenu({
+  isActive,
+  hasError,
+  onTestConnection,
+  onReEnterKey,
+  onDelete,
+  label,
+}: {
+  isActive: boolean;
+  hasError: boolean;
+  onTestConnection: () => void;
+  onReEnterKey: () => void;
+  onDelete: () => void;
+  label: string;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setConfirmDelete(false);
+      }
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  function close() {
+    setOpen(false);
+    setConfirmDelete(false);
+  }
+
+  const itemClass =
+    'w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors';
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+        aria-label={t('settings.providers.moreActions')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-1 z-10 min-w-[10rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1"
+        >
+          {isActive && !hasError && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                close();
+                onTestConnection();
+              }}
+              className={itemClass}
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+              {t('settings.providers.testConnection')}
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              close();
+              onReEnterKey();
+            }}
+            className={itemClass}
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            {t('settings.providers.reEnterKey')}
+          </button>
+          {confirmDelete ? (
+            <div className="px-2.5 py-1.5 flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  onDelete();
+                }}
+                className="h-6 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-on-accent)] bg-[var(--color-error)] hover:opacity-90 transition-opacity"
+              >
+                {t('settings.providers.confirm')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="h-6 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => setConfirmDelete(true)}
+              className={`${itemClass} text-[var(--color-error)] hover:text-[var(--color-error)]`}
+              aria-label={t('settings.providers.deleteAria', { label })}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('settings.providers.delete')}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProviderCard({
   row,
   config,
@@ -521,8 +643,8 @@ function ProviderCard({
   onReEnterKey: (p: SupportedOnboardingProvider) => void;
 }) {
   const t = useT();
+  const pushToast = useCodesignStore((s) => s.pushToast);
   const label = SHORTLIST[row.provider]?.label ?? row.provider;
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const hasError = row.error !== undefined;
 
   const stateClass = hasError
@@ -531,27 +653,35 @@ function ProviderCard({
       ? 'border-[var(--color-border)] border-l-[var(--size-accent-stripe)] border-l-[var(--color-accent)] bg-[var(--color-accent-tint)]'
       : 'border-[var(--color-border)] bg-[var(--color-surface)]';
 
+  async function handleTestConnection() {
+    if (!window.codesign) return;
+    const res = await window.codesign.connection.testActive();
+    if (res.ok) {
+      pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
+    } else {
+      pushToast({
+        variant: 'error',
+        title: t('settings.providers.toast.connectionFailed'),
+        description: res.hint || res.message,
+      });
+    }
+  }
+
   return (
     <div
       className={`rounded-[var(--radius-lg)] border px-[var(--space-3)] py-[var(--space-2_5)] transition-colors ${stateClass}`}
     >
-      <div className="flex items-center justify-between gap-[var(--space-3)]">
-        <div className="min-w-0 flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-[var(--space-3)]">
+        <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
           <span className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
             {label}
           </span>
-          {row.isActive && !hasError && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-[var(--color-accent)] text-[var(--color-accent)] bg-transparent text-[var(--font-size-badge)] font-medium leading-none">
-              {t('settings.providers.active')}
-            </span>
-          )}
-          {hasError && (
+          {hasError ? (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--color-error)] text-[var(--color-on-accent)] text-[var(--font-size-badge)] font-medium leading-none">
               <AlertTriangle className="w-2.5 h-2.5" />
               {t('settings.providers.decryptionFailed')}
             </span>
-          )}
-          {!hasError && (
+          ) : (
             <code className="text-[var(--text-xs)] text-[var(--color-text-muted)] font-mono">
               {row.maskedKey}
             </code>
@@ -564,7 +694,12 @@ function ProviderCard({
           )}
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {row.isActive && !hasError && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-[var(--color-accent)] text-[var(--color-accent)] bg-transparent text-[var(--font-size-badge)] font-medium leading-none">
+              {t('settings.providers.active')}
+            </span>
+          )}
           {!row.isActive && !hasError && (
             <button
               type="button"
@@ -583,36 +718,14 @@ function ProviderCard({
               {t('settings.providers.reEnterKey')}
             </button>
           )}
-          {confirmDelete ? (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirmDelete(false);
-                  onDelete(row.provider);
-                }}
-                className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-on-accent)] bg-[var(--color-error)] hover:opacity-90 transition-opacity"
-              >
-                {t('settings.providers.confirm')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(false)}
-                className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors"
-              >
-                {t('common.cancel')}
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-surface-hover)] transition-colors"
-              aria-label={t('settings.providers.deleteAria', { label })}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <ProviderOverflowMenu
+            isActive={row.isActive}
+            hasError={hasError}
+            onTestConnection={handleTestConnection}
+            onReEnterKey={() => onReEnterKey(row.provider)}
+            onDelete={() => onDelete(row.provider)}
+            label={label}
+          />
         </div>
       </div>
 
@@ -637,29 +750,20 @@ function ActiveModelSelector({
   const pushToast = useCodesignStore((s) => s.pushToast);
 
   const [primary, setPrimary] = useState(config.modelPrimary ?? sl.defaultPrimary);
-  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     setPrimary(config.modelPrimary ?? sl.defaultPrimary);
   }, [config.modelPrimary, sl.defaultPrimary]);
 
-  useEffect(() => {
-    return () => {
-      if (saveTimeout.current !== null) {
-        clearTimeout(saveTimeout.current);
-        saveTimeout.current = null;
-      }
-    };
-  }, []);
-
-  async function save(p: string) {
+  async function save(next: string) {
     if (!window.codesign) return;
     try {
-      const next = await window.codesign.settings.setActiveProvider({
+      const updated = await window.codesign.settings.setActiveProvider({
         provider,
-        modelPrimary: p,
+        modelPrimary: next,
       });
-      setConfig(next);
+      setConfig(updated);
     } catch (err) {
       pushToast({
         variant: 'error',
@@ -669,18 +773,28 @@ function ActiveModelSelector({
     }
   }
 
-  function handlePrimaryChange(v: string) {
+  function handleChange(v: string) {
     setPrimary(v);
-    if (saveTimeout.current !== null) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => void save(v), 400);
+    setEditing(false);
+    void save(v);
   }
 
   return (
-    <div className="mt-[var(--space-2_5)] pt-[var(--space-2_5)] border-t border-[var(--color-border-subtle)]">
-      <p className="flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)] mb-1.5">
-        <Cpu className="w-3 h-3" /> {t('settings.providers.primary')}
-      </p>
-      <NativeSelect value={primary} onChange={handlePrimaryChange} options={primaryOptions} />
+    <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
+      <Cpu className="w-3 h-3 shrink-0" />
+      {editing ? (
+        <NativeSelect value={primary} onChange={handleChange} options={primaryOptions} />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label={t('settings.providers.editModel')}
+          className="inline-flex items-center gap-1 h-6 px-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-xs)] font-mono text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+        >
+          {primary}
+          <ChevronDown className="w-3 h-3 text-[var(--color-text-muted)]" />
+        </button>
+      )}
     </div>
   );
 }
@@ -820,14 +934,6 @@ function ModelsTab() {
                 onReEnterKey={setReEnterProvider}
               />
             ))}
-            <button
-              type="button"
-              onClick={() => setShowAdd(true)}
-              className="w-full flex items-center justify-center gap-[var(--space-1_5)] h-[var(--size-control-md)] rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-transparent text-[var(--text-xs)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-secondary)] transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              {t('settings.providers.addProvider')}
-            </button>
           </div>
         )}
       </div>
