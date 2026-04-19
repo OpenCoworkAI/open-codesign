@@ -32,6 +32,23 @@ describe('classifyError', () => {
     expect(d.retry).toBe(true);
     expect(d.retryAfterMs).toBe(7000);
   });
+  it('treats empty retry-after as no hint (not 0ms)', () => {
+    const d = classifyError(new HttpError('slow', 429, { 'retry-after': '' }));
+    expect(d.retry).toBe(true);
+    expect(d.retryAfterMs).toBeUndefined();
+  });
+  it('treats whitespace-only retry-after as no hint', () => {
+    const d = classifyError(new HttpError('slow', 429, { 'retry-after': '   ' }));
+    expect(d.retry).toBe(true);
+    expect(d.retryAfterMs).toBeUndefined();
+  });
+  it('parses HTTP-date retry-after to a delay relative to now', () => {
+    const future = new Date(Date.now() + 2_000).toUTCString();
+    const d = classifyError(new HttpError('slow', 429, { 'retry-after': future }));
+    expect(d.retry).toBe(true);
+    expect(d.retryAfterMs).toBeGreaterThanOrEqual(0);
+    expect(d.retryAfterMs).toBeLessThanOrEqual(2_500);
+  });
   it('marks AbortError as not retryable', () => {
     const err = new DOMException('Aborted', 'AbortError');
     expect(classifyError(err)).toMatchObject({ retry: false, reason: 'aborted' });

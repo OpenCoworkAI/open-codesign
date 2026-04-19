@@ -119,9 +119,17 @@ function extractRetryAfterMs(err: unknown): number | undefined {
     pickHeader(headers, 'retry-after') ??
     (typeof direct === 'string' || typeof direct === 'number' ? String(direct) : undefined);
   if (raw === undefined) return undefined;
-  const seconds = Number(raw);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
-  const dateMs = Date.parse(raw);
+  const trimmed = raw.trim();
+  // Empty / whitespace-only headers must not coerce to 0 via Number(''),
+  // which would otherwise emit a zero-delay retry hint and defeat backoff.
+  if (trimmed.length === 0) return undefined;
+  // Numeric path first — explicit shape so '7' / '1.5' parse but a
+  // Date-formatted header ('Wed, 21 Oct 2015 …') falls through to Date.parse.
+  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  }
+  const dateMs = Date.parse(trimmed);
   if (Number.isFinite(dateMs)) return Math.max(0, dateMs - Date.now());
   return undefined;
 }
