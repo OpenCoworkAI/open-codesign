@@ -151,25 +151,34 @@ function stripTags(input: string): string {
  * drop the link wrapper. Inline `data:image/*` is permitted for images only.
  */
 export function sanitizeUrl(raw: string, kind: 'link' | 'image'): string | null {
-  let value = raw;
+  const output = stripControlChars(raw).trim();
+  if (!output) return null;
+
+  let probe = output;
   for (let i = 0; i < 3; i += 1) {
-    const next = decodeEntities(value);
-    if (next === value) break;
-    value = next;
+    const next = decodeEntities(probe);
+    if (next === probe) break;
+    probe = next;
   }
-  try {
-    value = decodeURIComponent(value);
-  } catch {
-    return null;
+  const colonIdx = probe.indexOf(':');
+  if (colonIdx > 0) {
+    const schemePart = probe.slice(0, colonIdx);
+    if (/%[0-9a-fA-F]{2}/.test(schemePart)) {
+      try {
+        probe = decodeURIComponent(schemePart) + probe.slice(colonIdx);
+      } catch {
+        // Leave probe untouched — the regex below will catch obviously unsafe forms.
+      }
+    }
   }
-  value = stripControlChars(value).trim();
-  if (!value) return null;
-  if (/^(https?:|mailto:)/i.test(value)) return value;
-  if (kind === 'image' && /^data:image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp);/i.test(value)) {
-    return value;
+  probe = stripControlChars(probe).trim();
+
+  if (/^(https?:|mailto:)/i.test(probe)) return output;
+  if (kind === 'image' && /^data:image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp);/i.test(probe)) {
+    return output;
   }
-  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
-  return value;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(probe)) return null;
+  return output;
 }
 
 function decodeEntities(input: string): string {

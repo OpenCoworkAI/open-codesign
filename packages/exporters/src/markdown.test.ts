@@ -175,4 +175,15 @@ describe('sanitizeUrl encoded-scheme bypass guard', () => {
     expect(out).not.toContain('javascript:');
     expect(out).not.toContain('](');
   });
+
+  it('keeps URLs containing percent-encoded path/query characters as-is', () => {
+    expect(sanitizeUrl('https://example.com/path?q=%2F', 'link')).toBe(
+      'https://example.com/path?q=%2F',
+    );
+    expect(sanitizeUrl('https://example.com/p%C3%A9', 'link')).toBe('https://example.com/p%C3%A9');
+  });
+
+  it('keeps URLs with stray literal % that would break decodeURIComponent', () => {
+    expect(sanitizeUrl('https://x.test/?q=100%', 'link')).toBe('https://x.test/?q=100%');
+  });
 });
