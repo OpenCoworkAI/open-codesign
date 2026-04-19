@@ -41,8 +41,13 @@ interface ParserState {
   content: string;
 }
 
-const OPEN_TAG_RE = /<artifact\s+([^>]*?)>/;
+const OPEN_PREFIX = '<artifact';
 const CLOSE_TAG = '</artifact>';
+
+type OpenTagMatch =
+  | { kind: 'complete'; start: number; end: number; attrs: string }
+  | { kind: 'partial'; start: number }
+  | { kind: 'none' };
 
 export function createArtifactParser() {
   const state: ParserState = {
@@ -75,28 +80,31 @@ export function createArtifactParser() {
 
     while (state.buffer.length > 0) {
       if (!state.inside) {
-        const open = OPEN_TAG_RE.exec(state.buffer);
-        if (!open) {
-          // No open tag in buffer. Emit everything except a possible partial '<artifact'
-          const safeUpTo = findSafeFlushPoint(state.buffer);
-          if (safeUpTo > 0) {
-            yield { type: 'text', delta: state.buffer.slice(0, safeUpTo) };
-            state.buffer = state.buffer.slice(safeUpTo);
+        const open = findOpenTag(state.buffer);
+        if (open.kind === 'none') {
+          yield { type: 'text', delta: state.buffer };
+          state.buffer = '';
+          return;
+        }
+        if (open.kind === 'partial') {
+          if (open.start > 0) {
+            yield { type: 'text', delta: state.buffer.slice(0, open.start) };
+            state.buffer = state.buffer.slice(open.start);
           }
           return;
         }
 
-        if (open.index > 0) {
-          yield { type: 'text', delta: state.buffer.slice(0, open.index) };
+        if (open.start > 0) {
+          yield { type: 'text', delta: state.buffer.slice(0, open.start) };
         }
 
-        const attrs = parseAttrs(open[1] as string);
+        const attrs = parseAttrs(open.attrs);
         state.inside = true;
         state.identifier = attrs['identifier'] ?? '';
         state.artifactType = attrs['type'] ?? '';
         state.title = attrs['title'] ?? '';
         state.content = '';
-        state.buffer = state.buffer.slice(open.index + open[0].length);
+        state.buffer = state.buffer.slice(open.end);
 
         yield {
           type: 'artifact:start',
@@ -157,27 +165,67 @@ export function createArtifactParser() {
 }
 
 /**
- * Find the largest index up to which we can safely emit text without
- * potentially splitting an "<artifact ...>" open tag in two.
+ * Locate the next `<artifact ...>` open tag in `buffer`, scanning attribute
+ * values in a quote-aware manner so that a `>` inside a quoted attribute
+ * value (e.g. `title="a > b"`) does not prematurely terminate the tag.
  *
- * Two cases must hold the tail back:
- *   1. tail is a strict prefix of "<artifact"  (e.g. "<art")
- *   2. tail already begins "<artifact" but the closing ">" hasn't arrived
- *      (e.g. `<artifact identifier="a1" type="html"`) — without this guard
- *      a stream split mid-attribute leaks the open tag into a `text` event
- *      and the artifact is silently lost.
+ * Returns:
+ *   - `complete`: a full open tag is present in the buffer
+ *   - `partial`:  a candidate prefix is present but the closing `>` (or
+ *                 enough of `<artifact` itself) hasn't arrived yet — caller
+ *                 must hold back from `start` and wait for more input
+ *   - `none`:     no candidate; caller may flush the entire buffer as text
  */
-function findSafeFlushPoint(buffer: string): number {
-  const ltIdx = buffer.lastIndexOf('<');
-  if (ltIdx === -1) return buffer.length;
-  const tail = buffer.slice(ltIdx);
-  if ('<artifact'.startsWith(tail)) return ltIdx;
-  if (tail.startsWith('<artifact') && !tail.includes('>')) {
-    // Only hold back when the next char is whitespace (attributes coming) or
-    // we don't yet have a next char to decide. A letter/digit/dash means this
-    // is an unrelated word like `<artifactual` or `<artifact-like` — flush it.
-    const next = tail.charAt('<artifact'.length);
-    if (next === '' || /\s/.test(next)) return ltIdx;
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: quote-aware tag scanning is inherently branchy; splitting hurts clarity
+function findOpenTag(buffer: string): OpenTagMatch {
+  let from = 0;
+  while (from <= buffer.length) {
+    const idx = buffer.indexOf(OPEN_PREFIX, from);
+    if (idx === -1) {
+      // No full `<artifact` left. Maybe a strict prefix at the tail (e.g. `<art`).
+      const tail = buffer.lastIndexOf('<', buffer.length - 1);
+      if (tail !== -1) {
+        const slice = buffer.slice(tail);
+        if (OPEN_PREFIX.startsWith(slice) && slice.length < OPEN_PREFIX.length) {
+          return { kind: 'partial', start: tail };
+        }
+      }
+      return { kind: 'none' };
+    }
+
+    const afterPrefix = idx + OPEN_PREFIX.length;
+    const next = buffer.charAt(afterPrefix);
+    if (next === '') {
+      // Buffer ends exactly at `<artifact`; can't yet decide if it's a real tag.
+      return { kind: 'partial', start: idx };
+    }
+    if (next !== '>' && !/\s/.test(next)) {
+      // `<artifactual`, `<artifact-like`, etc. — not our tag, keep searching.
+      from = afterPrefix;
+      continue;
+    }
+
+    // Scan forward for the closing `>` while respecting quoted attribute values.
+    let i = afterPrefix;
+    let quote: '"' | "'" | null = null;
+    while (i < buffer.length) {
+      const c = buffer.charAt(i);
+      if (quote !== null) {
+        if (c === quote) quote = null;
+      } else if (c === '"' || c === "'") {
+        quote = c;
+      } else if (c === '>') {
+        return {
+          kind: 'complete',
+          start: idx,
+          end: i + 1,
+          attrs: buffer.slice(afterPrefix, i),
+        };
+      }
+      i++;
+    }
+    // Reached end of buffer without finding the closing `>`.
+    return { kind: 'partial', start: idx };
   }
-  return buffer.length;
+  return { kind: 'none' };
 }
