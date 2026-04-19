@@ -646,6 +646,26 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('Customer quotes deserve distinguished treatment');
     expect(prompt).toContain('Single-page structure ladder');
   });
+
+  it('create mode embeds iOS frame starter template', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    expect(prompt).toContain('iOS frame starter');
+    expect(prompt).toContain('.ios-status-bar');
+    expect(prompt).toContain('ios-dynamic-island');
+    expect(prompt).toContain('ios-home-indicator');
+  });
+
+  it('tweak mode does not include iOS frame starter template', () => {
+    const prompt = composeSystemPrompt({ mode: 'tweak' });
+    expect(prompt).not.toContain('iOS frame starter');
+    expect(prompt).not.toContain('.ios-status-bar');
+  });
+
+  it('revise mode does not include iOS frame starter template', () => {
+    const prompt = composeSystemPrompt({ mode: 'revise' });
+    expect(prompt).not.toContain('iOS frame starter');
+    expect(prompt).not.toContain('.ios-status-bar');
+  });
 });
 
 describe('prompt section .txt vs TS drift', () => {
