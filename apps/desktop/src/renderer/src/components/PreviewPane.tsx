@@ -198,9 +198,9 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         }}
         className={
           isMobile
-            ? 'block w-full h-full bg-[var(--color-artifact-bg)] border-0'
-            : 'w-full h-full bg-[var(--color-artifact-bg)] rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]'
-        }
+            ? 'block w-full h-full bg-transparent border-0'
+            : 'w-full h-full bg-transparent rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]'
+}
       />
     );
     const scale = previewZoom / 100;

@@ -6,6 +6,15 @@ export { isIframeErrorMessage } from './iframe-errors';
 export type { IframeErrorMessage } from './iframe-errors';
 
 /**
+ * Baseline white background so the iframe falls back to a neutral surface
+ * when the artifact doesn't set its own body background. Injected before the
+ * artifact's own styles so any explicit `body { background: ... }` in the
+ * artifact wins via cascade order.
+ */
+const BASELINE_STYLE =
+  '<style>html,body{margin:0;padding:0;background:#ffffff;min-height:100%;}</style>';
+
+/**
  * Build a complete srcdoc HTML string for the preview iframe.
  * Strips CSP <meta> tags from user content to allow overlay injection.
  *
@@ -19,7 +28,10 @@ export function buildSrcdoc(userHtml: string): string {
   );
 
   if (/<\/body\s*>/i.test(stripped)) {
-    return stripped.replace(
+    const withBaseline = /<head[^>]*>/i.test(stripped)
+      ? stripped.replace(/<head[^>]*>/i, (match) => `${match}${BASELINE_STYLE}`)
+      : stripped.replace(/<html[^>]*>/i, (match) => `${match}<head>${BASELINE_STYLE}</head>`);
+    return withBaseline.replace(
       /<\/body\s*>(?![\s\S]*<\/body\s*>)/i,
       `<script>${OVERLAY_SCRIPT}</script></body>`,
     );
@@ -30,7 +42,8 @@ export function buildSrcdoc(userHtml: string): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>html,body{margin:0;padding:0;font-family:system-ui,sans-serif;}</style>
+${BASELINE_STYLE}
+<style>html,body{font-family:system-ui,sans-serif;}</style>
 </head>
 <body>
 ${stripped}
