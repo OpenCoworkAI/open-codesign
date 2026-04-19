@@ -298,7 +298,7 @@ Dark does not mean monotone. A dark design that is one near-black plus one accen
 ## Content quality signals
 
 - Photographs: inline SVG abstract compositions or CSS gradient fills. Never hotlinked placeholder images.
-- Data visualizations: hand-coded SVG bar charts or sparklines, not fake progress bars at suspiciously round percentages.
+- Data visualizations: hand-coded SVG bar charts or sparklines, not fake progress bars at suspiciously round percentages. In Mode 2 (React prototype) you may also use Recharts via \`<script src="https://unpkg.com/recharts">\` if charts are complex; in Mode 1 stick to inline SVG.
 - Icon weight: match the overall design weight. Light design = 1.5px stroke icons. Heavy design = filled icons.
 
 ## What "slop" looks like (avoid)
@@ -314,6 +314,47 @@ Dark does not mean monotone. A dark design that is one near-black plus one accen
 - Lorem ipsum, "John Doe", "Acme Corp", "100%" / "1,234" round-number filler.
 
 These patterns are not forbidden — they are forbidden when combined without a distinctive visual angle that makes them feel intentional rather than assembled from a component kit.`;
+
+const RUNTIME_OPTIONS = `# Runtime options
+
+The artifact may use one of two rendering modes. Choose based on the artifact type:
+
+## Mode 1: Static HTML (default)
+
+For landing pages, marketing pages, dashboards with simple charts, documentation, slides:
+
+- Single self-contained \`<!doctype html>\` document
+- Inline \`<style>\` and inline event handlers if needed
+- Inline SVG for icons and charts (preferred)
+- External resources allowed: Google Fonts (one stylesheet link), Tailwind CSS via cdn.tailwindcss.com (one script tag) — these are the only allowed externals
+
+## Mode 2: Interactive React prototype
+
+For interactive prototypes — multi-screen apps, stateful UIs, animations, complex interactions:
+
+- Single HTML document that loads React 18 + Babel via CDN at runtime:
+
+\`\`\`html
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<script type="text/babel">
+  function App() { /* your components */ }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+\`\`\`
+
+- All components inline as \`function ComponentName({...props})\` (no imports, no exports)
+- Use inline styles (\`style={{...}}\`) — no Tailwind or CSS modules in this mode
+- Routing: \`useState\` view switching is fine; no router library
+- Data structures: plain JS arrays/objects defined at top of script
+- Animations: a few \`@keyframes\` defined in \`<style>\`, applied via inline \`animation\`
+
+When in doubt about mode: pick Mode 1 unless the user explicitly wants "interactive prototype", "multi-screen", "with state", or asks for animations beyond CSS transitions.
+
+## Why this matters
+
+Mode 1 produces a portable single-file artifact you can drop anywhere. Mode 2 produces a richer prototype that runs entirely in the browser without a build step. The chart-rendering contract still applies in both modes (real charts with data, never placeholder labels).`;
 
 // Distilled from public discussion of high-quality LLM design output
 // (community write-ups, comparative artifact studies, our own dogfooding).
@@ -544,6 +585,7 @@ export const PROMPT_SECTIONS: Record<string, string> = {
   designMethodology: DESIGN_METHODOLOGY,
   artifactTypes: ARTIFACT_TYPES,
   preFlight: PRE_FLIGHT,
+  runtimeOptions: RUNTIME_OPTIONS,
   tweaksProtocol: TWEAKS_PROTOCOL,
   craftDirectives: CRAFT_DIRECTIVES,
   antiSlop: ANTI_SLOP,
@@ -557,6 +599,7 @@ export const PROMPT_SECTION_FILES: Record<keyof typeof PROMPT_SECTIONS, string> 
   designMethodology: 'design-methodology.v1.txt',
   artifactTypes: 'artifact-types.v1.txt',
   preFlight: 'pre-flight.v1.txt',
+  runtimeOptions: 'runtime-options.v1.txt',
   tweaksProtocol: 'tweaks-protocol.v1.txt',
   craftDirectives: 'craft-directives.v1.txt',
   antiSlop: 'anti-slop.v1.txt',
@@ -604,6 +647,10 @@ export function composeSystemPrompt(opts: PromptComposeOptions): string {
     ARTIFACT_TYPES,
     PRE_FLIGHT,
   ];
+
+  if (opts.mode !== 'tweak') {
+    sections.push(RUNTIME_OPTIONS);
+  }
 
   if (opts.mode === 'tweak') {
     sections.push(TWEAKS_PROTOCOL);

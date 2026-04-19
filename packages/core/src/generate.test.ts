@@ -646,6 +646,21 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('Customer quotes deserve distinguished treatment');
     expect(prompt).toContain('Single-page structure ladder');
   });
+
+  it('create mode includes runtime options allowing React + Babel CDN (Mode 2)', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    expect(prompt).toContain('Runtime options');
+    expect(prompt).toContain('Mode 1: Static HTML');
+    expect(prompt).toContain('Mode 2: Interactive React prototype');
+    expect(prompt).toContain('@babel/standalone');
+    expect(prompt).toContain('react-dom@18.3.1');
+  });
+
+  it('tweak mode excludes runtime options section', () => {
+    const prompt = composeSystemPrompt({ mode: 'tweak' });
+    expect(prompt).not.toContain('Runtime options');
+    expect(prompt).not.toContain('@babel/standalone');
+  });
 });
 
 describe('prompt section .txt vs TS drift', () => {

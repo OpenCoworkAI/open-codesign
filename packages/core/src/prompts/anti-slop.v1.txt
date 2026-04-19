@@ -67,7 +67,7 @@ Dark does not mean monotone. A dark design that is one near-black plus one accen
 ## Content quality signals
 
 - Photographs: inline SVG abstract compositions or CSS gradient fills. Never hotlinked placeholder images.
-- Data visualizations: hand-coded SVG bar charts or sparklines, not fake progress bars at suspiciously round percentages.
+- Data visualizations: hand-coded SVG bar charts or sparklines, not fake progress bars at suspiciously round percentages. In Mode 2 (React prototype) you may also use Recharts via `<script src="https://unpkg.com/recharts">` if charts are complex; in Mode 1 stick to inline SVG.
 - Icon weight: match the overall design weight. Light design = 1.5px stroke icons. Heavy design = filled icons.
 
 ## What "slop" looks like (avoid)

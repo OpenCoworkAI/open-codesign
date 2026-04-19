@@ -1,0 +1,40 @@
+# Runtime options
+
+The artifact may use one of two rendering modes. Choose based on the artifact type:
+
+## Mode 1: Static HTML (default)
+
+For landing pages, marketing pages, dashboards with simple charts, documentation, slides:
+
+- Single self-contained `<!doctype html>` document
+- Inline `<style>` and inline event handlers if needed
+- Inline SVG for icons and charts (preferred)
+- External resources allowed: Google Fonts (one stylesheet link), Tailwind CSS via cdn.tailwindcss.com (one script tag) — these are the only allowed externals
+
+## Mode 2: Interactive React prototype
+
+For interactive prototypes — multi-screen apps, stateful UIs, animations, complex interactions:
+
+- Single HTML document that loads React 18 + Babel via CDN at runtime:
+
+```html
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<script type="text/babel">
+  function App() { /* your components */ }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+```
+
+- All components inline as `function ComponentName({...props})` (no imports, no exports)
+- Use inline styles (`style={{...}}`) — no Tailwind or CSS modules in this mode
+- Routing: `useState` view switching is fine; no router library
+- Data structures: plain JS arrays/objects defined at top of script
+- Animations: a few `@keyframes` defined in `<style>`, applied via inline `animation`
+
+When in doubt about mode: pick Mode 1 unless the user explicitly wants "interactive prototype", "multi-screen", "with state", or asks for animations beyond CSS transitions.
+
+## Why this matters
+
+Mode 1 produces a portable single-file artifact you can drop anywhere. Mode 2 produces a richer prototype that runs entirely in the browser without a build step. The chart-rendering contract still applies in both modes (real charts with data, never placeholder labels).
