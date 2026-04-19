@@ -41,7 +41,14 @@ function resolveBetterSqlite3Dir() {
 }
 
 function resolveElectronVersion() {
-  return require('electron/package.json').version;
+  // Prod-only installs (`npm install --omit=dev`, certain CI bootstraps, end-user
+  // installer build steps) skip devDependencies, so electron may not be present.
+  // Skip the Electron stage rather than hard-failing postinstall.
+  try {
+    return require('electron/package.json').version;
+  } catch {
+    return null;
+  }
 }
 
 function downloadPrebuild({ pkgDir, runtime, target, arch, platform, dest }) {
@@ -107,11 +114,11 @@ function main() {
     lock.nodeVersion === nodeVersion &&
     lock.electronVersion === electronVersion &&
     fs.existsSync(nodeBinary) &&
-    fs.existsSync(electronBinary);
+    (electronVersion === null || fs.existsSync(electronBinary));
 
   if (upToDate) {
     log(
-      `up-to-date (node=${nodeVersion}, electron=${electronVersion}, ${platform}-${arch}) — skipping`,
+      `up-to-date (node=${nodeVersion}, electron=${electronVersion ?? 'skipped'}, ${platform}-${arch}) — skipping`,
     );
     return;
   }
@@ -126,15 +133,19 @@ function main() {
     dest: nodeBinary,
   });
 
-  log(`downloading Electron prebuild (electron=${electronVersion}, ${platform}-${arch})`);
-  downloadPrebuild({
-    pkgDir,
-    runtime: 'electron',
-    target: electronVersion,
-    arch,
-    platform,
-    dest: electronBinary,
-  });
+  if (electronVersion === null) {
+    log('electron not installed; skipping Electron native binding (fine for prod-only installs)');
+  } else {
+    log(`downloading Electron prebuild (electron=${electronVersion}, ${platform}-${arch})`);
+    downloadPrebuild({
+      pkgDir,
+      runtime: 'electron',
+      target: electronVersion,
+      arch,
+      platform,
+      dest: electronBinary,
+    });
+  }
 
   // Leave a default copy in place so any consumer that doesn't pass nativeBinding
   // (e.g. ad-hoc node REPL inside this monorepo) still gets a working module
