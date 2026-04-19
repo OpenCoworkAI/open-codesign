@@ -616,7 +616,6 @@ describe('useCodesignStore previewZoom', () => {
     expect(useCodesignStore.getState().previewZoom).toBe(150);
   });
 });
-
 describe('useCodesignStore artifact persistence', () => {
   beforeAll(async () => {
     await initI18n('en');
@@ -788,5 +787,35 @@ describe('loadDesigns startup', () => {
     expect(state.designs).toHaveLength(2);
     expect(state.designs.map((d) => d.id)).toEqual(['design-1', 'design-2']);
     expect(state.designsLoaded).toBe(true);
+  });
+});
+
+describe('useCodesignStore interaction mode', () => {
+  it('defaults to "default" mode with no selected element', () => {
+    const state = useCodesignStore.getState();
+    expect(state.interactionMode).toBe('default');
+    expect(state.selectedElement).toBeNull();
+  });
+
+  it('setInteractionMode("comment") enters comment mode without touching selectedElement', () => {
+    useCodesignStore.getState().setInteractionMode('comment');
+    expect(useCodesignStore.getState().interactionMode).toBe('comment');
+    expect(useCodesignStore.getState().selectedElement).toBeNull();
+  });
+
+  it('setInteractionMode("default") clears selectedElement when leaving comment mode', () => {
+    const selection: SelectedElement = {
+      selector: '.btn',
+      tag: 'button',
+      outerHTML: '<button class="btn">x</button>',
+      rect: { top: 0, left: 0, width: 10, height: 10 },
+    };
+    useCodesignStore.setState({ interactionMode: 'comment', selectedElement: selection });
+
+    useCodesignStore.getState().setInteractionMode('default');
+
+    const s = useCodesignStore.getState();
+    expect(s.interactionMode).toBe('default');
+    expect(s.selectedElement).toBeNull();
   });
 });

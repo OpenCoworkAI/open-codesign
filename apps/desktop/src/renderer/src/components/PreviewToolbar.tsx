@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { Tooltip } from '@open-codesign/ui';
-import { Download, Monitor, Smartphone, Tablet } from 'lucide-react';
+import { Download, MessageSquare, Monitor, Smartphone, Tablet } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
 import type { PreviewViewport } from '../store';
@@ -31,6 +31,8 @@ export function PreviewToolbar(): ReactElement {
   const setPreviewViewport = useCodesignStore((s) => s.setPreviewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
   const setPreviewZoom = useCodesignStore((s) => s.setPreviewZoom);
+  const interactionMode = useCodesignStore((s) => s.interactionMode);
+  const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
   const [open, setOpen] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -61,6 +63,7 @@ export function PreviewToolbar(): ReactElement {
   }, [toastMessage, dismissToast]);
 
   const disabled = !previewHtml;
+  const commentActive = interactionMode === 'comment';
   const exportItems: ExportItem[] = [
     {
       format: 'html',
@@ -157,6 +160,35 @@ export function PreviewToolbar(): ReactElement {
           );
         })}
       </fieldset>
+
+      <Tooltip
+        label={
+          disabled
+            ? t('disabledReason.noDesignToExport')
+            : commentActive
+              ? t('preview.commentModeHint')
+              : t('preview.commentMode')
+        }
+        side="bottom"
+      >
+        <button
+          type="button"
+          disabled={disabled}
+          aria-pressed={commentActive}
+          onClick={() => setInteractionMode(commentActive ? 'default' : 'comment')}
+          className={`inline-flex items-center gap-1.5 h-[var(--size-control-xs)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border transition-[background-color,border-color,color] duration-[var(--duration-fast)] ease-[var(--ease-out)] disabled:opacity-40 disabled:pointer-events-none ${
+            commentActive
+              ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)]'
+              : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)]'
+          }`}
+        >
+          <MessageSquare
+            className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]"
+            aria-hidden="true"
+          />
+          {t('preview.commentMode')}
+        </button>
+      </Tooltip>
 
       <div className="relative" ref={zoomRef}>
         <Tooltip

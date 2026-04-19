@@ -25,6 +25,13 @@ export const OVERLAY_SCRIPT = `(function() {
     warned[key] = true;
     try { console.warn('[overlay] ' + key, err); } catch (_) { /* noop */ }
   }
+  var currentMode = 'default';
+
+  function clearHover() {
+    if (hovered) { try { hovered.style.outline = ''; } catch (_) {} }
+    hovered = null;
+  }
+
 
   function getXPath(el) {
     if (el.dataset && el.dataset.codesignId) return '[data-codesign-id="' + el.dataset.codesignId + '"]';
@@ -41,15 +48,17 @@ export const OVERLAY_SCRIPT = `(function() {
   }
 
   function onMouseOver(e) {
+    if (currentMode !== 'comment') return;
     if (hovered) hovered.style.outline = '';
     hovered = e.target;
     if (hovered) hovered.style.outline = '2px solid #c96442';
   }
   function onMouseOut() {
-    if (hovered) hovered.style.outline = '';
-    hovered = null;
+    if (currentMode !== 'comment') return;
+    clearHover();
   }
   function onClick(e) {
+    if (currentMode !== 'comment') return;
     e.preventDefault();
     e.stopPropagation();
     var el = e.target;
@@ -64,6 +73,14 @@ export const OVERLAY_SCRIPT = `(function() {
         rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
       }, '*');
     } catch (err) { console.warn('[overlay] postMessage ELEMENT_SELECTED failed:', err); }
+  }
+  function onParentMessage(ev) {
+    var data = ev && ev.data;
+    if (!data || data.__codesign !== true || data.type !== 'SET_MODE') return;
+    var next = data.mode === 'comment' ? 'comment' : 'default';
+    if (next === currentMode) return;
+    currentMode = next;
+    if (currentMode === 'default') clearHover();
   }
   function onError(ev) {
     try {
@@ -114,6 +131,9 @@ export const OVERLAY_SCRIPT = `(function() {
     }
     if (!window.__cs_rej) {
       try { window.addEventListener('unhandledrejection', onRejection, true); window.__cs_rej = true; } catch (err) { warnOnce('attach unhandledrejection listener failed', err); }
+    }
+    if (!window.__cs_msg) {
+      try { window.addEventListener('message', onParentMessage, false); window.__cs_msg = true; } catch (_) {}
     }
   }
   reattach();

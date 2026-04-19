@@ -50,6 +50,8 @@
     "ready": "Preview",
     "noDesign": "No design yet",
     "clickToComment": "Click any element in the preview to leave an inline comment.",
+    "commentMode": "Comment mode",
+    "commentModeHint": "Click any element to comment",
     "runtimeError": "Preview runtime error",
     "dismissErrors": "Dismiss preview errors",
     "zoom": "Zoom",

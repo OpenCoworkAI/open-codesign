@@ -51,6 +51,7 @@ export interface ConnectionStatus {
 export type Theme = 'light' | 'dark';
 export type AppView = 'hub' | 'workspace' | 'settings';
 export type HubTab = 'recent' | 'your' | 'examples' | 'designSystems';
+export type InteractionMode = 'default' | 'comment';
 
 export type PreviewViewport = 'desktop' | 'tablet' | 'mobile';
 
@@ -97,6 +98,7 @@ interface CodesignState {
   lastPromptInput: PromptRequest | null;
   selectedElement: SelectedElement | null;
   previewZoom: number;
+  interactionMode: InteractionMode;
 
   loadConfig: () => Promise<void>;
   completeOnboarding: (next: OnboardingState) => void;
@@ -125,6 +127,7 @@ interface CodesignState {
   selectCanvasElement: (selection: SelectedElement) => void;
   clearCanvasElement: () => void;
   setPreviewZoom: (zoom: number) => void;
+  setInteractionMode: (mode: InteractionMode) => void;
 
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -557,6 +560,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   lastPromptInput: null,
   selectedElement: null,
   previewZoom: 100,
+  interactionMode: 'default' as InteractionMode,
 
   clearIframeErrors() {
     set({ iframeErrors: [] });
@@ -867,6 +871,14 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     set({ previewZoom: zoom });
   },
 
+  setInteractionMode(mode) {
+    if (mode === 'default') {
+      set({ interactionMode: mode, selectedElement: null });
+    } else {
+      set({ interactionMode: mode });
+    }
+  },
+
   setTheme(theme) {
     applyThemeClass(theme);
     persistTheme(theme);
@@ -919,6 +931,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       inputFiles: [],
       referenceUrl: '',
       selectedElement: null,
+      interactionMode: 'default',
       lastPromptInput: null,
       generationStage: 'idle' as GenerationStage,
       isGenerating: false,
@@ -947,6 +960,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       inputFiles: [],
       referenceUrl: '',
       selectedElement: null,
+      interactionMode: 'default',
       lastPromptInput: null,
       generationStage: 'idle' as GenerationStage,
       isGenerating: false,

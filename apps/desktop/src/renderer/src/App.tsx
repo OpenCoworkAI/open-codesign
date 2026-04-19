@@ -36,6 +36,8 @@ export function App() {
   const designToRename = useCodesignStore((s) => s.designToRename);
   const requestDeleteDesign = useCodesignStore((s) => s.requestDeleteDesign);
   const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
+  const interactionMode = useCodesignStore((s) => s.interactionMode);
+  const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
 
   const [prompt, setPrompt] = useState('');
 
@@ -112,6 +114,10 @@ export function App() {
             closeDesignsView();
             return;
           }
+          if (interactionMode !== 'default') {
+            setInteractionMode('default');
+            return;
+          }
           if (view === 'settings') {
             setView('workspace');
             return;
@@ -133,6 +139,8 @@ export function App() {
       designsViewOpen,
       designToDelete,
       designToRename,
+      interactionMode,
+      setInteractionMode,
       setView,
       openCommandPalette,
       closeCommandPalette,

@@ -62,7 +62,18 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
+  const interactionMode = useCodesignStore((s) => s.interactionMode);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage({ __codesign: true, type: 'SET_MODE', mode: interactionMode }, '*');
+    } catch {
+      // iframe gone or cross-origin race; safe to ignore
+    }
+  }, [interactionMode]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
@@ -109,6 +120,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     body = <LoadingState />;
   } else if (previewHtml) {
     const isMobile = previewViewport === 'mobile';
+    const showCommentUi = interactionMode === 'comment';
     const rawIframe = (
       <iframe
         ref={iframeRef}
@@ -116,6 +128,16 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         title="design-preview"
         sandbox="allow-scripts"
         srcDoc={buildSrcdoc(previewHtml)}
+        onLoad={() => {
+          try {
+            iframeRef.current?.contentWindow?.postMessage(
+              { __codesign: true, type: 'SET_MODE', mode: interactionMode },
+              '*',
+            );
+          } catch {
+            // best-effort sync; mode change effect will re-send
+          }
+        }}
         className={
           isMobile
             ? 'block w-full h-full bg-[var(--color-artifact-bg)] border-0'
@@ -146,7 +168,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         <div className="min-h-full p-6 flex flex-col items-center justify-center overflow-auto">
           <div className="relative inline-flex">
             <PhoneFrame>{iframe}</PhoneFrame>
-            <InlineCommentComposer />
+            {showCommentUi && <InlineCommentComposer />}
           </div>
         </div>
       );
@@ -161,9 +183,11 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
               flexShrink: 0,
             }}
           >
-            <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
+            {showCommentUi && (
+              <div className={COMMENT_HINT_CLASS}>{t('preview.commentModeHint')}</div>
+            )}
             {iframe}
-            <InlineCommentComposer />
+            {showCommentUi && <InlineCommentComposer />}
           </div>
         </div>
       );
@@ -178,9 +202,11 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
               flexShrink: 0,
             }}
           >
-            <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
+            {showCommentUi && (
+              <div className={COMMENT_HINT_CLASS}>{t('preview.commentModeHint')}</div>
+            )}
             {iframe}
-            <InlineCommentComposer />
+            {showCommentUi && <InlineCommentComposer />}
           </div>
         </div>
       );
