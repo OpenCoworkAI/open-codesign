@@ -321,17 +321,18 @@ function AddProviderModal({
     if (!window.codesign) return;
     try {
       const trimmedUrl = form.baseUrl.trim();
-      // Mirror the onboarding flow: when the user adds a brand-new provider
-      // through Settings, treat it as the active choice unless one already
-      // exists on disk. The legacy `addProvider` path returned ProviderRow[]
-      // but never synced the Zustand store; the canonical IPC returns the
-      // full state, and we re-read provider rows below for table rendering.
+      // Mirror the legacy add-provider semantics: only flip the active
+      // provider when nothing is configured yet. Adding a backup provider
+      // from Settings should NOT route subsequent generations away from the
+      // user's current choice.
+      const current = await window.codesign.onboarding.getState();
+      const setAsActive = !current.hasKey;
       await window.codesign.config.setProviderAndModels({
         provider: form.provider,
         apiKey: form.apiKey.trim(),
         modelPrimary: form.modelPrimary,
         ...(trimmedUrl.length > 0 ? { baseUrl: trimmedUrl } : {}),
-        setAsActive: true,
+        setAsActive,
       });
       const rows = await window.codesign.settings.listProviders();
       onSave(rows);
