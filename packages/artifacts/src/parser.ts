@@ -158,12 +158,20 @@ export function createArtifactParser() {
 
 /**
  * Find the largest index up to which we can safely emit text without
- * potentially splitting an "<artifact" prefix in two.
+ * potentially splitting an "<artifact ...>" open tag in two.
+ *
+ * Two cases must hold the tail back:
+ *   1. tail is a strict prefix of "<artifact"  (e.g. "<art")
+ *   2. tail already begins "<artifact" but the closing ">" hasn't arrived
+ *      (e.g. `<artifact identifier="a1" type="html"`) — without this guard
+ *      a stream split mid-attribute leaks the open tag into a `text` event
+ *      and the artifact is silently lost.
  */
 function findSafeFlushPoint(buffer: string): number {
   const ltIdx = buffer.lastIndexOf('<');
   if (ltIdx === -1) return buffer.length;
   const tail = buffer.slice(ltIdx);
   if ('<artifact'.startsWith(tail)) return ltIdx;
+  if (tail.startsWith('<artifact') && !tail.includes('>')) return ltIdx;
   return buffer.length;
 }

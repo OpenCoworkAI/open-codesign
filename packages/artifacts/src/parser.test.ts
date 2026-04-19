@@ -48,6 +48,28 @@ describe('artifact parser', () => {
     });
   });
 
+  it('handles open tag split mid-attribute (between attrs, before final ">")', () => {
+    const events = collectEvents([
+      '<artifact identifier="a1" type="html"',
+      ' title="t">body</artifact>',
+    ]);
+    expect(events[0]).toEqual({
+      type: 'artifact:start',
+      identifier: 'a1',
+      artifactType: 'html',
+      title: 't',
+    });
+    const endEvent = events.find(
+      (e): e is { type: 'artifact:end'; identifier: string; fullContent: string } =>
+        (e as { type: string }).type === 'artifact:end',
+    );
+    expect(endEvent?.fullContent).toBe('body');
+    const textLeak = events.find(
+      (e) => (e as { type: string }).type === 'text' && /<artifact/i.test((e as { delta: string }).delta),
+    );
+    expect(textLeak).toBeUndefined();
+  });
+
   it('handles close tag split across deltas', () => {
     const events = collectEvents([
       '<artifact identifier="a1" type="html" title="t">hello</art',
