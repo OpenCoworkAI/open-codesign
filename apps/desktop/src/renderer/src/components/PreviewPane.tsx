@@ -37,6 +37,25 @@ export function isTrustedPreviewMessageSource(
   return source !== null && source === previewWindow;
 }
 
+// Send the SET_MODE control message to the preview iframe. Failures (iframe
+// torn down, cross-origin race) MUST surface — silent catches mask mode-sync
+// bugs that leave the preview stuck in the wrong interaction state.
+export function postModeToPreviewWindow(
+  win: Window | null | undefined,
+  mode: string,
+  onError: (message: string) => void,
+): boolean {
+  if (!win) return false;
+  try {
+    win.postMessage({ __codesign: true, type: 'SET_MODE', mode }, '*');
+    return true;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    onError(`SET_MODE postMessage failed: ${reason}`);
+    return false;
+  }
+}
+
 // Convert a rect reported from inside the sandbox iframe (iframe-internal
 // viewport coords) into the parent renderer's viewport coords. The wrapper
 // applies `transform: scale(zoom/100)` to a div sized at `100/scale %`, so a
@@ -119,14 +138,8 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    try {
-      win.postMessage({ __codesign: true, type: 'SET_MODE', mode: interactionMode }, '*');
-    } catch {
-      // iframe gone or cross-origin race; safe to ignore
-    }
-  }, [interactionMode]);
+    postModeToPreviewWindow(iframeRef.current?.contentWindow, interactionMode, pushIframeError);
+  }, [interactionMode, pushIframeError]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
@@ -177,14 +190,11 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         sandbox="allow-scripts"
         srcDoc={buildSrcdoc(previewHtml)}
         onLoad={() => {
-          try {
-            iframeRef.current?.contentWindow?.postMessage(
-              { __codesign: true, type: 'SET_MODE', mode: interactionMode },
-              '*',
-            );
-          } catch {
-            // best-effort sync; mode change effect will re-send
-          }
+          postModeToPreviewWindow(
+            iframeRef.current?.contentWindow,
+            interactionMode,
+            pushIframeError,
+          );
         }}
         className={
           isMobile

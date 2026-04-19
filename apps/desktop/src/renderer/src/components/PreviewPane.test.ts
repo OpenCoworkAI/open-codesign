@@ -3,6 +3,7 @@ import { useCodesignStore } from '../store';
 import {
   handlePreviewMessage,
   isTrustedPreviewMessageSource,
+  postModeToPreviewWindow,
   scaleRectForZoom,
 } from './PreviewPane';
 
@@ -110,5 +111,38 @@ describe('handlePreviewMessage trust boundary', () => {
     );
     expect(errorOutcome).toEqual({ status: 'handled', type: 'IFRAME_ERROR' });
     expect(handlers.onIframeError).toHaveBeenCalledOnce();
+  });
+});
+
+describe('postModeToPreviewWindow', () => {
+  it('forwards postMessage failures to the error sink instead of swallowing them', () => {
+    const onError = vi.fn();
+    const win = {
+      postMessage: vi.fn(() => {
+        throw new Error('iframe gone');
+      }),
+    } as unknown as Window;
+
+    const ok = postModeToPreviewWindow(win, 'comment', onError);
+
+    expect(ok).toBe(false);
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError.mock.calls[0]?.[0]).toContain('iframe gone');
+  });
+
+  it('returns true and does not call onError on success', () => {
+    const onError = vi.fn();
+    const post = vi.fn();
+    const win = { postMessage: post } as unknown as Window;
+
+    expect(postModeToPreviewWindow(win, 'default', onError)).toBe(true);
+    expect(post).toHaveBeenCalledWith({ __codesign: true, type: 'SET_MODE', mode: 'default' }, '*');
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('returns false silently when the window handle is missing', () => {
+    const onError = vi.fn();
+    expect(postModeToPreviewWindow(null, 'comment', onError)).toBe(false);
+    expect(onError).not.toHaveBeenCalled();
   });
 });
