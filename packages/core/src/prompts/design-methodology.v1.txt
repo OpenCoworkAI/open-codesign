@@ -32,3 +32,14 @@ Each revision should make the design more itself, not more generic. If a revisio
 - Body text: 16–18 px base (1rem–1.125rem), line-height 1.5–1.7.
 - Whitespace: err on the side of generous. A design with too much space looks confident; one with too little looks anxious.
 - Section rhythm: vary height and density. Not every section should be a tight 3-column card grid.
+
+## Token density
+
+Aim for 9 ± 3 design tokens per artifact, declared as a flat object at the top of the script:
+
+- 1 background, 1 surface, 1 high-contrast text, 1 muted text, 1 border/line
+- 1 accent + 1 light pair (e.g. `green` + `greenL`)
+- Optional: 1 secondary accent + light pair
+- All in `oklch()`, with `/ alpha` for transparency (`oklch(1 0 0 / 0.82)`)
+
+Brutal minimalism. A 9-token palette is the entire design system for one artifact.

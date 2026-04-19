@@ -168,7 +168,18 @@ Each revision should make the design more itself, not more generic. If a revisio
 - Headings: large enough to anchor the page, not so large they crowd content.
 - Body text: 16–18 px base (1rem–1.125rem), line-height 1.5–1.7.
 - Whitespace: err on the side of generous. A design with too much space looks confident; one with too little looks anxious.
-- Section rhythm: vary height and density. Not every section should be a tight 3-column card grid.`;
+- Section rhythm: vary height and density. Not every section should be a tight 3-column card grid.
+
+## Token density
+
+Aim for 9 ± 3 design tokens per artifact, declared as a flat object at the top of the script:
+
+- 1 background, 1 surface, 1 high-contrast text, 1 muted text, 1 border/line
+- 1 accent + 1 light pair (e.g. \`green\` + \`greenL\`)
+- Optional: 1 secondary accent + light pair
+- All in \`oklch()\`, with \`/ alpha\` for transparency (\`oklch(1 0 0 / 0.82)\`)
+
+Brutal minimalism. A 9-token palette is the entire design system for one artifact.`;
 
 const EDITMODE_PROTOCOL = `# EDITMODE protocol — declaring tweakable parameters
 
@@ -197,6 +208,16 @@ The host environment will:
 - Place the block early in the document so it's easy to find.
 - Reference the parameters from your code via the named constant (\`TWEAK_DEFAULTS.accentColor\`).
 - Pick 3-6 parameters that meaningfully change the artifact's look. Don't expose every CSS variable.
+
+## Empty block is valid
+
+Even if your artifact has no tunable parameters yet, you may emit an empty block — it signals to the host that this artifact is tweak-aware:
+
+\`\`\`js
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{}/*EDITMODE-END*/;
+\`\`\`
+
+The host scans for the markers regardless of contents.
 
 ## Type detection
 
@@ -434,12 +455,13 @@ Do not bury headline metrics in body paragraphs.
 
 ## Typography ladder
 
-A polished single-page artifact combines three type families:
-- Display / editorial — headlines, hero numbers, section openers
-- Workhorse sans — body, navigation, captions
-- Mono — data, code, tabular numbers, timestamps, kbd-style accents
+Default: **two font families** — display/editorial for hero, headlines, numbers; workhorse sans for body, nav, captions. A third (mono) is used ONLY when the design needs timestamps, code, or tabular numerics — not by default.
 
-Use the mono family sparingly (10–15 % of text surface) so it reads as intentional. Pair selection follows the anti-slop preferred-fonts list.
+- Display / editorial: hero numbers, section openers
+- Workhorse sans: body, navigation, captions
+- Mono (when needed): data, timestamps, code accents — sparingly
+
+Use the bundled display serif (Fraunces) for editorial / case-study / report types; use Geist or another preferred sans for landing / dashboard / pricing.
 
 ## Dark themes need warmth
 
@@ -485,7 +507,18 @@ For dashboard / data / analytics artifacts, include these "live system" cues to 
 - A live clock in the top-right of the page header: HH:MM:SS in tabular-nums font, updated each second via a single \`setInterval(updateClock, 1000)\`. This is the ONE permitted JS interval — do not chain other animations onto it. Clear it on unmount if your code supports lifecycle.
 - KPI cards get a 4px vertical accent bar on the left side. Color varies by metric category (revenue=teal, growth=amber, retention=violet, regions=green) — pick from the artifact palette, not arbitrary.
 
-Slide decks substitute: cover → 3-7 content slides with strong hierarchy each → closing slide.`;
+Slide decks substitute: cover → 3-7 content slides with strong hierarchy each → closing slide.
+
+## Animation budget
+
+Cap your CSS keyframe library at **four named animations** per artifact. The Claude Design canon:
+
+- \`fadeUp\` — entrance (translateY + opacity)
+- \`breathe\` — ambient pulsing (scale 1↔1.08, opacity 0.7↔1)
+- \`pulse-ring\` — emphasis (scale + opacity → 0)
+- \`spin\` — rotation
+
+Apply with staggered \`animation-delay\` (0.1s, 0.2s, 0.3s) for section-by-section reveal. Never script a JS animation loop — CSS only.`;
 
 const CHART_RENDERING = `# Chart rendering contract
 
@@ -753,6 +786,10 @@ Do not produce these. Each one is the tell of an unconsidered, generated-feeling
 
 These patterns are forbidden when combined without a distinctive visual angle that makes them feel intentional rather than assembled from a component kit.`;
 
+const MARKETING_FONT_HINT = `# Marketing typography hint
+
+Marketing / landing / case-study artifacts: prefer **Fraunces** (variable font, optical-size 9..144) for the display family — its 72pt+ optical size unlocks subtle character better than fixed-size DM Serif Display. Pair with **DM Sans** or **Geist** for body, and **JetBrains Mono** for any code / timestamp accents.`;
+
 // Split CRAFT_DIRECTIVES into a Map<subsectionName, "## name\n\nbody"> so the
 // progressive-disclosure composer can include only the subsections relevant to
 // the user's prompt. The intro paragraph (everything before the first `## `)
@@ -798,6 +835,7 @@ export const PROMPT_SECTIONS: Record<string, string> = {
   iosStarterTemplate: IOS_STARTER_TEMPLATE,
   antiSlop: ANTI_SLOP,
   antiSlopDigest: ANTI_SLOP_DIGEST,
+  marketingFontHint: MARKETING_FONT_HINT,
   safety: SAFETY,
 };
 
@@ -815,6 +853,7 @@ export const PROMPT_SECTION_FILES: Record<keyof typeof PROMPT_SECTIONS, string> 
   iosStarterTemplate: 'ios-starter-template.v1.txt',
   antiSlop: 'anti-slop.v1.txt',
   antiSlopDigest: 'anti-slop-digest.v1.txt',
+  marketingFontHint: 'marketing-font-hint.v1.txt',
   safety: 'safety.v1.txt',
 };
 
@@ -959,6 +998,7 @@ function planKeywordMatches(userPrompt: string): KeywordMatchPlan {
     topLevel.push(IOS_STARTER_TEMPLATE);
   }
   if (KEYWORDS_MARKETING.test(userPrompt)) {
+    topLevel.push(MARKETING_FONT_HINT);
     craftSubsectionNames.push(
       'Single-page structure ladder',
       'Big numbers get dedicated visual blocks',
