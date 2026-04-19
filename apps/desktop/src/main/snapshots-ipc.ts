@@ -269,6 +269,7 @@ export function registerSnapshotsIpc(db: Database): void {
       throw new CodesignError('snapshots:v1:rename-design expects { id, name }', 'IPC_BAD_INPUT');
     }
     const r = raw as Record<string, unknown>;
+    requireSchemaV1(r, 'snapshots:v1:rename-design');
     if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
       throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
     }
@@ -293,6 +294,7 @@ export function registerSnapshotsIpc(db: Database): void {
       );
     }
     const r = raw as Record<string, unknown>;
+    requireSchemaV1(r, 'snapshots:v1:set-thumbnail');
     if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
       throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
     }
@@ -327,6 +329,7 @@ export function registerSnapshotsIpc(db: Database): void {
       );
     }
     const r = raw as Record<string, unknown>;
+    requireSchemaV1(r, 'snapshots:v1:duplicate-design');
     if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
       throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
     }
@@ -356,6 +359,7 @@ export function registerSnapshotsIpc(db: Database): void {
       );
     }
     const r = raw as Record<string, unknown>;
+    requireSchemaV1(r, 'snapshots:v1:replace-messages');
     if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
       throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
     }
@@ -369,6 +373,7 @@ function parseIdPayload(raw: unknown, channel: string): string {
     throw new CodesignError(`snapshots:v1:${channel} expects { id }`, 'IPC_BAD_INPUT');
   }
   const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, `snapshots:v1:${channel}`);
   if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
     throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
   }
@@ -380,6 +385,7 @@ function parseDesignIdPayload(raw: unknown, channel: string): string {
     throw new CodesignError(`snapshots:v1:${channel} expects { designId }`, 'IPC_BAD_INPUT');
   }
   const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, `snapshots:v1:${channel}`);
   if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
     throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
   }
