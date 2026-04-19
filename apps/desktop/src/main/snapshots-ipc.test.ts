@@ -628,10 +628,9 @@ describe('snapshots:v1:set-thumbnail', () => {
   it('accepts null to clear', () => {
     const d = createDesign(db);
     call('snapshots:v1:set-thumbnail', v1({ id: d.id, thumbnailText: 'x' }));
-    const cleared = call(
-      'snapshots:v1:set-thumbnail',
-      v1({ id: d.id, thumbnailText: null }),
-    ) as { thumbnailText: string | null };
+    const cleared = call('snapshots:v1:set-thumbnail', v1({ id: d.id, thumbnailText: null })) as {
+      thumbnailText: string | null;
+    };
     expect(cleared.thumbnailText).toBeNull();
   });
 });

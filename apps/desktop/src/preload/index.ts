@@ -195,9 +195,10 @@ const api = {
         name,
       }) as Promise<Design>,
     getDesign: (id: string) =>
-      ipcRenderer.invoke('snapshots:v1:get-design', { schemaVersion: 1, id }) as Promise<
-        Design | null
-      >,
+      ipcRenderer.invoke('snapshots:v1:get-design', {
+        schemaVersion: 1,
+        id,
+      }) as Promise<Design | null>,
     renameDesign: (id: string, name: string) =>
       ipcRenderer.invoke('snapshots:v1:rename-design', {
         schemaVersion: 1,
