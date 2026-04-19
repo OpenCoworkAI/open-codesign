@@ -132,17 +132,53 @@ describe('armGenerationTimeout', () => {
     );
   });
 
-  it('returns a no-op for non-positive or non-finite timeout values', async () => {
+  it('treats 0 as disabled and does not arm a timeout', async () => {
     const controller = new AbortController();
     const logger = { warn: vi.fn() };
 
-    for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      const clear = await armGenerationTimeout('gen-1', controller, async () => value, logger);
-      vi.advanceTimersByTime(60_000);
-      clear();
-    }
+    const clear = await armGenerationTimeout('gen-1', controller, async () => 0, logger);
+    vi.advanceTimersByTime(60_000);
+    clear();
 
     expect(controller.signal.aborted).toBe(false);
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('clamps very large timeout values to Node setTimeout int32 cap so the abort does not fire immediately', async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+    const clear = await armGenerationTimeout('gen-1', controller, async () => 99_999_999, logger);
+
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+    const delay = setTimeoutSpy.mock.calls[0]?.[1];
+    expect(delay).toBe(2_147_483_647);
+
+    vi.advanceTimersByTime(1);
+    expect(controller.signal.aborted).toBe(false);
+
+    setTimeoutSpy.mockRestore();
+    clear();
+  });
+
+  it('throws PREFERENCES_INVALID_TIMEOUT when the timeout value is NaN', async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+
+    await expect(
+      armGenerationTimeout('gen-1', controller, async () => Number.NaN, logger),
+    ).rejects.toMatchObject({ name: 'CodesignError', code: 'PREFERENCES_INVALID_TIMEOUT' });
+    expect(controller.signal.aborted).toBe(false);
+  });
+
+  it('throws PREFERENCES_INVALID_TIMEOUT when the timeout value is negative', async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+
+    await expect(
+      armGenerationTimeout('gen-1', controller, async () => -1, logger),
+    ).rejects.toMatchObject({ name: 'CodesignError', code: 'PREFERENCES_INVALID_TIMEOUT' });
+    expect(controller.signal.aborted).toBe(false);
   });
 });
