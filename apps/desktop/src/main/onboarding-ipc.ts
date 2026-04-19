@@ -27,7 +27,6 @@ interface SaveKeyInput {
   provider: SupportedOnboardingProvider;
   apiKey: string;
   modelPrimary: string;
-  modelFast: string;
   baseUrl?: string;
 }
 
@@ -82,7 +81,6 @@ function toState(cfg: Config | null): OnboardingState {
       hasKey: false,
       provider: null,
       modelPrimary: null,
-      modelFast: null,
       baseUrl: null,
       designSystem: null,
     };
@@ -92,7 +90,6 @@ function toState(cfg: Config | null): OnboardingState {
       hasKey: false,
       provider: null,
       modelPrimary: null,
-      modelFast: null,
       baseUrl: null,
       designSystem: cfg.designSystem ?? null,
     };
@@ -103,7 +100,6 @@ function toState(cfg: Config | null): OnboardingState {
       hasKey: false,
       provider: cfg.provider,
       modelPrimary: null,
-      modelFast: null,
       baseUrl: null,
       designSystem: cfg.designSystem ?? null,
     };
@@ -112,7 +108,6 @@ function toState(cfg: Config | null): OnboardingState {
     hasKey: true,
     provider: cfg.provider,
     modelPrimary: cfg.modelPrimary,
-    modelFast: cfg.modelFast,
     baseUrl: cfg.baseUrls?.[cfg.provider]?.baseUrl ?? null,
     designSystem: cfg.designSystem ?? null,
   };
@@ -153,7 +148,6 @@ function parseSaveKey(raw: unknown): SaveKeyInput {
   const provider = r['provider'];
   const apiKey = r['apiKey'];
   const modelPrimary = r['modelPrimary'];
-  const modelFast = r['modelFast'];
   const baseUrl = r['baseUrl'];
   if (typeof provider !== 'string' || !isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
@@ -167,10 +161,7 @@ function parseSaveKey(raw: unknown): SaveKeyInput {
   if (typeof modelPrimary !== 'string' || modelPrimary.trim().length === 0) {
     throw new CodesignError('modelPrimary must be a non-empty string', 'IPC_BAD_INPUT');
   }
-  if (typeof modelFast !== 'string' || modelFast.trim().length === 0) {
-    throw new CodesignError('modelFast must be a non-empty string', 'IPC_BAD_INPUT');
-  }
-  const out: SaveKeyInput = { provider, apiKey, modelPrimary, modelFast };
+  const out: SaveKeyInput = { provider, apiKey, modelPrimary };
   if (typeof baseUrl === 'string' && baseUrl.trim().length > 0) {
     try {
       new URL(baseUrl);
@@ -213,8 +204,38 @@ function runListProviders(): ProviderRow[] {
   return toProviderRows(getCachedConfig(), decryptSecret);
 }
 
-async function runAddProvider(raw: unknown): Promise<ProviderRow[]> {
-  const input = parseSaveKey(raw);
+interface SetProviderAndModelsInput extends SaveKeyInput {
+  setAsActive: boolean;
+}
+
+function parseSetProviderAndModels(raw: unknown): SetProviderAndModelsInput {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError('set-provider-and-models expects an object payload', 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  const sv = r['schemaVersion'];
+  if (sv !== undefined && sv !== 1) {
+    throw new CodesignError(
+      `Unsupported schemaVersion ${String(sv)} (expected 1)`,
+      'IPC_BAD_INPUT',
+    );
+  }
+  const setAsActive = r['setAsActive'];
+  if (typeof setAsActive !== 'boolean') {
+    throw new CodesignError('setAsActive must be a boolean', 'IPC_BAD_INPUT');
+  }
+  return { ...parseSaveKey(raw), setAsActive };
+}
+
+/**
+ * Canonical "add or update a provider" mutation. Atomic: writes secret +
+ * baseUrl + (optionally) flips active provider in a single writeConfig.
+ *
+ * Returns the full OnboardingState so renderer can hydrate Zustand without a
+ * follow-up read — that store-sync gap is what made TopBar drift out of date
+ * after Settings mutations.
+ */
+async function runSetProviderAndModels(input: SetProviderAndModelsInput): Promise<OnboardingState> {
   const ciphertext = encryptSecret(input.apiKey);
   const nextBaseUrls = { ...(cachedConfig?.baseUrls ?? {}) };
   if (input.baseUrl !== undefined) {
@@ -222,20 +243,40 @@ async function runAddProvider(raw: unknown): Promise<ProviderRow[]> {
   } else {
     delete nextBaseUrls[input.provider];
   }
-  const nextDefaults = getAddProviderDefaults(cachedConfig, input);
-  const next: Config = {
-    version: 1,
-    provider: nextDefaults.activeProvider,
-    modelPrimary: nextDefaults.modelPrimary,
-    modelFast: nextDefaults.modelFast,
-    secrets: {
-      ...(cachedConfig?.secrets ?? {}),
-      [input.provider]: { ciphertext },
-    },
-    baseUrls: nextBaseUrls,
+  const nextSecrets = {
+    ...(cachedConfig?.secrets ?? {}),
+    [input.provider]: { ciphertext },
   };
+  const activate = input.setAsActive || cachedConfig === null;
+  const next: Config = activate
+    ? {
+        version: 2,
+        provider: input.provider,
+        modelPrimary: input.modelPrimary,
+        secrets: nextSecrets,
+        baseUrls: nextBaseUrls,
+      }
+    : {
+        version: 2,
+        provider: cachedConfig?.provider ?? input.provider,
+        modelPrimary: cachedConfig?.modelPrimary ?? input.modelPrimary,
+        secrets: nextSecrets,
+        baseUrls: nextBaseUrls,
+      };
   await writeConfig(next);
   cachedConfig = next;
+  configLoaded = true;
+  return toState(cachedConfig);
+}
+
+async function runAddProvider(raw: unknown): Promise<ProviderRow[]> {
+  const input = parseSaveKey(raw);
+  const defaults = getAddProviderDefaults(cachedConfig, input);
+  await runSetProviderAndModels({
+    ...input,
+    setAsActive: defaults.activeProvider === input.provider,
+    modelPrimary: defaults.modelPrimary,
+  });
   return toProviderRows(cachedConfig, decryptSecret);
 }
 
@@ -250,15 +291,13 @@ async function runDeleteProvider(raw: unknown): Promise<ProviderRow[]> {
   const nextBaseUrls = { ...(cfg.baseUrls ?? {}) };
   delete nextBaseUrls[raw];
 
-  const { nextActive, modelPrimary, modelFast } = computeDeleteProviderResult(cfg, raw);
+  const { nextActive, modelPrimary } = computeDeleteProviderResult(cfg, raw);
 
   if (nextActive === null) {
-    // No providers left — write a tombstone config so onboarding triggers again.
     const emptyNext: Config = {
-      version: 1,
+      version: 2,
       provider: cfg.provider,
       modelPrimary: '',
-      modelFast: '',
       secrets: {},
       baseUrls: {},
     };
@@ -268,10 +307,9 @@ async function runDeleteProvider(raw: unknown): Promise<ProviderRow[]> {
   }
 
   const next: Config = {
-    version: 1,
+    version: 2,
     provider: nextActive,
     modelPrimary,
-    modelFast,
     secrets: nextSecrets,
     baseUrls: nextBaseUrls,
   };
@@ -287,15 +325,11 @@ async function runSetActiveProvider(raw: unknown): Promise<OnboardingState> {
   const r = raw as Record<string, unknown>;
   const provider = r['provider'];
   const modelPrimary = r['modelPrimary'];
-  const modelFast = r['modelFast'];
   if (typeof provider !== 'string' || !isSupportedOnboardingProvider(provider)) {
     throw new CodesignError('provider must be a supported provider string', 'IPC_BAD_INPUT');
   }
   if (typeof modelPrimary !== 'string' || modelPrimary.trim().length === 0) {
     throw new CodesignError('modelPrimary must be a non-empty string', 'IPC_BAD_INPUT');
-  }
-  if (typeof modelFast !== 'string' || modelFast.trim().length === 0) {
-    throw new CodesignError('modelFast must be a non-empty string', 'IPC_BAD_INPUT');
   }
   const cfg = getCachedConfig();
   if (cfg === null) {
@@ -304,10 +338,11 @@ async function runSetActiveProvider(raw: unknown): Promise<OnboardingState> {
   assertProviderHasStoredSecret(cfg, provider);
   const next: Config = {
     ...cfg,
+    version: 2,
     provider,
     modelPrimary,
-    modelFast,
   };
+  next.modelFast = undefined;
   await writeConfig(next);
   cachedConfig = next;
   return toState(cachedConfig);
@@ -348,34 +383,24 @@ export function registerOnboardingIpc(): void {
   });
 
   ipcMain.handle('onboarding:save-key', async (_e, raw: unknown): Promise<OnboardingState> => {
-    const input = parseSaveKey(raw);
-    const ciphertext = encryptSecret(input.apiKey);
-    const nextBaseUrls = { ...(cachedConfig?.baseUrls ?? {}) };
-    if (input.baseUrl !== undefined) {
-      nextBaseUrls[input.provider] = { baseUrl: input.baseUrl };
-    } else {
-      delete nextBaseUrls[input.provider];
-    }
-    const next: Config = {
-      version: 1,
-      provider: input.provider,
-      modelPrimary: input.modelPrimary,
-      modelFast: input.modelFast,
-      secrets: {
-        ...(cachedConfig?.secrets ?? {}),
-        [input.provider]: { ciphertext },
-      },
-      baseUrls: nextBaseUrls,
-    };
-    await writeConfig(next);
-    cachedConfig = next;
-    configLoaded = true;
-    return toState(cachedConfig);
+    // Onboarding always activates the provider it just saved — that's the
+    // whole point of the first-time flow. Delegated to the canonical handler
+    // so behavior matches Settings exactly.
+    return runSetProviderAndModels({ ...parseSaveKey(raw), setAsActive: true });
   });
 
   ipcMain.handle('onboarding:skip', async (): Promise<OnboardingState> => {
     return toState(cachedConfig);
   });
+
+  // ── Canonical config mutation (preferred entry point) ─────────────────────
+
+  ipcMain.handle(
+    'config:v1:set-provider-and-models',
+    async (_e, raw: unknown): Promise<OnboardingState> => {
+      return runSetProviderAndModels(parseSetProviderAndModels(raw));
+    },
+  );
 
   // ── Settings v1 channels ────────────────────────────────────────────────────
 

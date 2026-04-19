@@ -28,7 +28,7 @@ export function Onboarding() {
     setStep('model');
   }
 
-  async function handleConfirm(modelPrimary: string, modelFast: string) {
+  async function handleConfirm(modelPrimary: string) {
     if (provider === null) return;
     if (!window.codesign) {
       setErrorMessage('Renderer is not connected to the main process.');
@@ -41,7 +41,6 @@ export function Onboarding() {
         provider,
         apiKey,
         modelPrimary,
-        modelFast,
         ...(baseUrl !== null ? { baseUrl } : {}),
       });
       completeOnboarding(next);

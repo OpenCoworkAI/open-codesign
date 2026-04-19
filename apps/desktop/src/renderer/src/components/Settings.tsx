@@ -179,7 +179,6 @@ interface AddProviderFormState {
   apiKey: string;
   baseUrl: string;
   modelPrimary: string;
-  modelFast: string;
   validating: boolean;
   error: string | null;
   errorCode: ErrorCode | null;
@@ -193,7 +192,6 @@ function makeDefaultForm(provider: SupportedOnboardingProvider): AddProviderForm
     apiKey: '',
     baseUrl: '',
     modelPrimary: sl.defaultPrimary,
-    modelFast: sl.defaultFast,
     validating: false,
     error: null,
     errorCode: null,
@@ -323,13 +321,19 @@ function AddProviderModal({
     if (!window.codesign) return;
     try {
       const trimmedUrl = form.baseUrl.trim();
-      const rows = await window.codesign.settings.addProvider({
+      // Mirror the onboarding flow: when the user adds a brand-new provider
+      // through Settings, treat it as the active choice unless one already
+      // exists on disk. The legacy `addProvider` path returned ProviderRow[]
+      // but never synced the Zustand store; the canonical IPC returns the
+      // full state, and we re-read provider rows below for table rendering.
+      await window.codesign.config.setProviderAndModels({
         provider: form.provider,
         apiKey: form.apiKey.trim(),
         modelPrimary: form.modelPrimary,
-        modelFast: form.modelFast,
         ...(trimmedUrl.length > 0 ? { baseUrl: trimmedUrl } : {}),
+        setAsActive: true,
       });
+      const rows = await window.codesign.settings.listProviders();
       onSave(rows);
     } catch (err) {
       setForm((prev) => ({
@@ -341,7 +345,6 @@ function AddProviderModal({
 
   const sl = SHORTLIST[form.provider];
   const primaryOptions = sl.primary.map((m) => ({ value: m, label: m }));
-  const fastOptions = sl.fast.map((m) => ({ value: m, label: m }));
   const canSave = canSaveProvider(form);
 
   return (
@@ -476,27 +479,15 @@ function AddProviderModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
-                {t('settings.providers.modal.primaryModel')}
-              </p>
-              <NativeSelect
-                value={form.modelPrimary}
-                onChange={(v) => setField('modelPrimary', v)}
-                options={primaryOptions}
-              />
-            </div>
-            <div>
-              <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
-                {t('settings.providers.modal.fastModel')}
-              </p>
-              <NativeSelect
-                value={form.modelFast}
-                onChange={(v) => setField('modelFast', v)}
-                options={fastOptions}
-              />
-            </div>
+          <div>
+            <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
+              {t('settings.providers.modal.primaryModel')}
+            </p>
+            <NativeSelect
+              value={form.modelPrimary}
+              onChange={(v) => setField('modelPrimary', v)}
+              options={primaryOptions}
+            />
           </div>
         </div>
 
@@ -641,18 +632,15 @@ function ActiveModelSelector({
   const t = useT();
   const sl = SHORTLIST[provider];
   const primaryOptions = sl.primary.map((m) => ({ value: m, label: m }));
-  const fastOptions = sl.fast.map((m) => ({ value: m, label: m }));
   const setConfig = useCodesignStore((s) => s.completeOnboarding);
   const pushToast = useCodesignStore((s) => s.pushToast);
 
   const [primary, setPrimary] = useState(config.modelPrimary ?? sl.defaultPrimary);
-  const [fast, setFast] = useState(config.modelFast ?? sl.defaultFast);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setPrimary(config.modelPrimary ?? sl.defaultPrimary);
-    setFast(config.modelFast ?? sl.defaultFast);
-  }, [config.modelPrimary, config.modelFast, sl.defaultPrimary, sl.defaultFast]);
+  }, [config.modelPrimary, sl.defaultPrimary]);
 
   useEffect(() => {
     return () => {
@@ -663,13 +651,12 @@ function ActiveModelSelector({
     };
   }, []);
 
-  async function save(p: string, f: string) {
+  async function save(p: string) {
     if (!window.codesign) return;
     try {
       const next = await window.codesign.settings.setActiveProvider({
         provider,
         modelPrimary: p,
-        modelFast: f,
       });
       setConfig(next);
     } catch (err) {
@@ -684,29 +671,15 @@ function ActiveModelSelector({
   function handlePrimaryChange(v: string) {
     setPrimary(v);
     if (saveTimeout.current !== null) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => void save(v, fast), 400);
-  }
-
-  function handleFastChange(v: string) {
-    setFast(v);
-    if (saveTimeout.current !== null) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => void save(primary, v), 400);
+    saveTimeout.current = setTimeout(() => void save(v), 400);
   }
 
   return (
-    <div className="mt-[var(--space-2_5)] pt-[var(--space-2_5)] border-t border-[var(--color-border-subtle)] grid grid-cols-2 gap-[var(--space-3)]">
-      <div>
-        <p className="flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)] mb-1.5">
-          <Cpu className="w-3 h-3" /> {t('settings.providers.primary')}
-        </p>
-        <NativeSelect value={primary} onChange={handlePrimaryChange} options={primaryOptions} />
-      </div>
-      <div>
-        <p className="flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)] mb-1.5">
-          <Zap className="w-3 h-3" /> {t('settings.providers.fast')}
-        </p>
-        <NativeSelect value={fast} onChange={handleFastChange} options={fastOptions} />
-      </div>
+    <div className="mt-[var(--space-2_5)] pt-[var(--space-2_5)] border-t border-[var(--color-border-subtle)]">
+      <p className="flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)] mb-1.5">
+        <Cpu className="w-3 h-3" /> {t('settings.providers.primary')}
+      </p>
+      <NativeSelect value={primary} onChange={handlePrimaryChange} options={primaryOptions} />
     </div>
   );
 }
@@ -760,7 +733,6 @@ function ModelsTab() {
       const next = await window.codesign.settings.setActiveProvider({
         provider,
         modelPrimary: sl.defaultPrimary,
-        modelFast: sl.defaultFast,
       });
       setConfig(next);
       const updatedRows = await window.codesign.settings.listProviders();
@@ -778,10 +750,21 @@ function ModelsTab() {
     }
   }
 
-  function handleAddSave(nextRows: ProviderRow[]) {
+  async function handleAddSave(nextRows: ProviderRow[]) {
     setRows(nextRows);
     setShowAdd(false);
     setReEnterProvider(null);
+    // Sync Zustand so TopBar (and any other config-bound surface) reflects
+    // the freshly-added provider immediately. Without this, the active
+    // provider/model display can lag until a manual reload.
+    if (window.codesign) {
+      try {
+        const state = await window.codesign.onboarding.getState();
+        setConfig(state);
+      } catch {
+        // Best-effort sync — toast already fired above.
+      }
+    }
     pushToast({ variant: 'success', title: t('settings.providers.toast.saved') });
   }
 

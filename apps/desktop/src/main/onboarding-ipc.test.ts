@@ -112,6 +112,45 @@ describe('registerOnboardingIpc — channel versioning', () => {
       expect(registeredChannels).toContain(ch);
     }
   });
+
+  it('registers the canonical config:v1:set-provider-and-models handler', async () => {
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    registerOnboardingIpc();
+    expect(registeredChannels).toContain('config:v1:set-provider-and-models');
+  });
+});
+
+describe('config:v1:set-provider-and-models — payload validation', () => {
+  it('rejects payloads without a setAsActive boolean', async () => {
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:set-provider-and-models');
+    expect(handler).toBeDefined();
+    if (!handler) return;
+    await expect(
+      handler({} as never, {
+        provider: 'openrouter',
+        apiKey: 'sk-test',
+        modelPrimary: 'a',
+      }),
+    ).rejects.toThrow(/setAsActive/);
+  });
+
+  it('rejects payloads with an unsupported schemaVersion', async () => {
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:set-provider-and-models');
+    if (!handler) throw new Error('handler missing');
+    await expect(
+      handler({} as never, {
+        schemaVersion: 99,
+        provider: 'openrouter',
+        apiKey: 'sk-test',
+        modelPrimary: 'a',
+        setAsActive: true,
+      }),
+    ).rejects.toThrow(/schemaVersion/);
+  });
 });
 describe('registerOnboardingIpc — validate-key passes baseUrl to pingProvider', () => {
   it('forwards baseUrl to pingProvider when provided', async () => {
@@ -151,10 +190,9 @@ describe('getApiKeyForProvider — API key retrieval', () => {
     // Override readConfig to return a config with an anthropic secret.
     const { readConfig } = await import('./config');
     vi.mocked(readConfig).mockResolvedValueOnce({
-      version: 1,
+      version: 2,
       provider: 'anthropic',
       modelPrimary: 'claude-sonnet-4-6',
-      modelFast: 'claude-haiku-3',
       secrets: { anthropic: { ciphertext: 'enc:sk-ant-test' } },
       baseUrls: {},
     });

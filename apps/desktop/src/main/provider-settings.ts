@@ -27,12 +27,10 @@ export function getAddProviderDefaults(
   input: {
     provider: SupportedOnboardingProvider;
     modelPrimary: string;
-    modelFast: string;
   },
 ): {
   activeProvider: SupportedOnboardingProvider;
   modelPrimary: string;
-  modelFast: string;
 } {
   if (
     cfg === null ||
@@ -42,7 +40,6 @@ export function getAddProviderDefaults(
     return {
       activeProvider: input.provider,
       modelPrimary: input.modelPrimary,
-      modelFast: input.modelFast,
     };
   }
   const activeProvider: SupportedOnboardingProvider = cfg.provider;
@@ -50,7 +47,6 @@ export function getAddProviderDefaults(
   return {
     activeProvider,
     modelPrimary: cfg.modelPrimary,
-    modelFast: cfg.modelFast,
   };
 }
 
@@ -100,7 +96,6 @@ export interface DeleteProviderResult {
   /** null means tombstone: all providers removed, onboarding should re-run. */
   nextActive: SupportedOnboardingProvider | null;
   modelPrimary: string;
-  modelFast: string;
 }
 
 /**
@@ -117,7 +112,7 @@ export function computeDeleteProviderResult(
     .filter(isSupportedOnboardingProvider);
 
   if (remaining.length === 0) {
-    return { nextActive: null, modelPrimary: '', modelFast: '' };
+    return { nextActive: null, modelPrimary: '' };
   }
 
   const keepCurrent = cfg.provider !== toDelete && isSupportedOnboardingProvider(cfg.provider);
@@ -125,17 +120,15 @@ export function computeDeleteProviderResult(
     ? (cfg.provider as SupportedOnboardingProvider)
     : (remaining[0] as SupportedOnboardingProvider);
 
-  // Only reset models when the active provider is the one being deleted.
   if (cfg.provider === toDelete) {
     const defaults = PROVIDER_SHORTLIST[nextActive];
     return {
       nextActive,
       modelPrimary: defaults.defaultPrimary,
-      modelFast: defaults.defaultFast,
     };
   }
 
-  return { nextActive, modelPrimary: cfg.modelPrimary, modelFast: cfg.modelFast };
+  return { nextActive, modelPrimary: cfg.modelPrimary };
 }
 
 /**
@@ -175,10 +168,8 @@ export function resolveActiveModel(
     );
   }
   const overridden = cfg.provider !== hint.provider;
-  // When the hint's provider matches active, trust the modelId (lets the
-  // renderer pick between primary and fast). When it doesn't match, the
-  // hint's modelId likely belongs to the wrong provider's catalog, so snap
-  // to the active provider's primary model to keep the call coherent.
+  // When the hint's provider doesn't match active, snap to the active
+  // provider's primary model to keep the call coherent.
   const modelId = overridden ? cfg.modelPrimary : hint.modelId;
   return {
     model: { provider: cfg.provider, modelId },

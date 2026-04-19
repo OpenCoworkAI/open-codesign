@@ -44,7 +44,6 @@ describe('applyValidateResult', () => {
     apiKey: 'sk-ant-original',
     baseUrl: '',
     modelPrimary: 'claude-sonnet-4-6',
-    modelFast: 'claude-haiku-3',
     validating: true,
     error: null,
     errorCode: null,

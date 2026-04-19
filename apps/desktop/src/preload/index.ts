@@ -142,7 +142,6 @@ const api = {
       provider: SupportedOnboardingProvider;
       apiKey: string;
       modelPrimary: string;
-      modelFast: string;
       baseUrl?: string;
     }) => ipcRenderer.invoke('onboarding:save-key', input) as Promise<OnboardingState>,
     skip: () => ipcRenderer.invoke('onboarding:skip') as Promise<OnboardingState>,
@@ -153,7 +152,6 @@ const api = {
       provider: SupportedOnboardingProvider;
       apiKey: string;
       modelPrimary: string;
-      modelFast: string;
       baseUrl?: string;
     }) => ipcRenderer.invoke('settings:v1:add-provider', input) as Promise<ProviderRow[]>,
     deleteProvider: (provider: SupportedOnboardingProvider) =>
@@ -161,7 +159,6 @@ const api = {
     setActiveProvider: (input: {
       provider: SupportedOnboardingProvider;
       modelPrimary: string;
-      modelFast: string;
     }) => ipcRenderer.invoke('settings:v1:set-active-provider', input) as Promise<OnboardingState>,
     getPaths: () => ipcRenderer.invoke('settings:v1:get-paths') as Promise<AppPaths>,
     openFolder: (path: string) =>
@@ -176,6 +173,19 @@ const api = {
       ipcRenderer.invoke('onboarding:validate-key', input) as Promise<
         ValidateKeyResult | ValidateKeyError
       >,
+  },
+  config: {
+    setProviderAndModels: (input: {
+      provider: SupportedOnboardingProvider;
+      apiKey: string;
+      modelPrimary: string;
+      baseUrl?: string;
+      setAsActive: boolean;
+    }) =>
+      ipcRenderer.invoke('config:v1:set-provider-and-models', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<OnboardingState>,
   },
   preferences: {
     get: () => ipcRenderer.invoke('preferences:v1:get') as Promise<Preferences>,

@@ -376,7 +376,7 @@ function registerIpcHandlers(): void {
     // Inline-comment edits don't need to be tied to whatever provider was
     // pinned in the original generate; resolve fresh against the canonical
     // active provider so a switch in Settings takes effect immediately.
-    const hint = payload.model ?? { provider: cfg.provider, modelId: cfg.modelFast };
+    const hint = payload.model ?? { provider: cfg.provider, modelId: cfg.modelPrimary };
     const active = resolveActiveModel(cfg, hint);
     const apiKey = getApiKeyForProvider(active.model.provider);
     const baseUrl = active.baseUrl ?? undefined;

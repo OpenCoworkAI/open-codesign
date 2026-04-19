@@ -11,7 +11,7 @@ interface ChooseModelProps {
   baseUrl: string | null;
   saving: boolean;
   errorMessage: string | null;
-  onConfirm: (modelPrimary: string, modelFast: string) => void;
+  onConfirm: (modelPrimary: string) => void;
   onBack: () => void;
 }
 
@@ -28,22 +28,16 @@ export function ChooseModel({
   const shortlist = PROVIDER_SHORTLIST[provider];
   const useFreeTierDefaults = provider === 'openrouter' && preferFreeTier;
   const primaryOptions = withFreeTierSuggestion(shortlist.primary, useFreeTierDefaults);
-  const fastOptions = withFreeTierSuggestion(shortlist.fast, useFreeTierDefaults);
   const [modelPrimary, setModelPrimary] = useState(
     getDefaultModel(shortlist.defaultPrimary, useFreeTierDefaults),
-  );
-  const [modelFast, setModelFast] = useState(
-    getDefaultModel(shortlist.defaultFast, useFreeTierDefaults),
   );
 
   useEffect(() => {
     setModelPrimary(getDefaultModel(shortlist.defaultPrimary, useFreeTierDefaults));
-    setModelFast(getDefaultModel(shortlist.defaultFast, useFreeTierDefaults));
-  }, [shortlist.defaultPrimary, shortlist.defaultFast, useFreeTierDefaults]);
+  }, [shortlist.defaultPrimary, useFreeTierDefaults]);
 
   const trimmedPrimary = modelPrimary.trim();
-  const trimmedFast = modelFast.trim();
-  const canFinish = trimmedPrimary.length > 0 && trimmedFast.length > 0 && !saving;
+  const canFinish = trimmedPrimary.length > 0 && !saving;
 
   return (
     <div className="flex flex-col gap-5">
@@ -66,17 +60,6 @@ export function ChooseModel({
         value={modelPrimary}
         options={primaryOptions}
         onChange={setModelPrimary}
-      />
-      <ModelPicker
-        label={t('onboarding.choose.fast')}
-        hint={
-          useFreeTierDefaults
-            ? t('onboarding.choose.fastHintFree')
-            : t('onboarding.choose.fastHint')
-        }
-        value={modelFast}
-        options={fastOptions}
-        onChange={setModelFast}
       />
 
       <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-snug)]">
@@ -114,7 +97,7 @@ export function ChooseModel({
           <Button
             type="button"
             variant="primary"
-            onClick={() => onConfirm(trimmedPrimary, trimmedFast)}
+            onClick={() => onConfirm(trimmedPrimary)}
             disabled={!canFinish}
           >
             {saving ? t('onboarding.choose.saving') : t('onboarding.choose.finish')}

@@ -7,7 +7,6 @@ const READY_CONFIG: OnboardingState = {
   hasKey: true,
   provider: 'anthropic',
   modelPrimary: 'claude-sonnet-4-6',
-  modelFast: 'claude-haiku-3',
   baseUrl: null,
   designSystem: null,
 };
