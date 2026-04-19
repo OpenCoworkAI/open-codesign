@@ -1200,6 +1200,12 @@ describe('composeSystemPrompt()', () => {
     const prompt = composeSystemPrompt({ mode: 'tweak' });
     expect(prompt).not.toContain('Chart rendering contract');
   });
+
+  it('revise mode includes the chart rendering contract', () => {
+    const prompt = composeSystemPrompt({ mode: 'revise' });
+    expect(prompt).toContain('Chart rendering contract');
+    expect(prompt).toContain("project's approved cdnjs whitelist");
+  });
 });
 
 describe('prompt section .txt vs TS drift', () => {
