@@ -75,7 +75,13 @@ export const OVERLAY_SCRIPT = `(function() {
     } catch (err) { console.warn('[overlay] postMessage ELEMENT_SELECTED failed:', err); }
   }
   function onParentMessage(ev) {
-    var data = ev && ev.data;
+    // Trust boundary: control messages must originate from the embedding
+    // window. Untrusted in-iframe scripts can synthesise MessageEvent-shaped
+    // calls into this handler (or, via window.postMessage(self,...), bounce
+    // events off the iframe itself); both paths are rejected here so any
+    // future control type added to the switch is structurally protected.
+    if (!ev || ev.source !== window.parent) return;
+    var data = ev.data;
     if (!data || data.__codesign !== true || data.type !== 'SET_MODE') return;
     var next = data.mode === 'comment' ? 'comment' : 'default';
     if (next === currentMode) return;

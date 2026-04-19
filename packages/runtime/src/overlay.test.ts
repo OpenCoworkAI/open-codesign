@@ -6,6 +6,7 @@ interface FakeWindow {
   parent: { postMessage: (msg: unknown, target: string) => void };
   __cs_err?: boolean;
   __cs_rej?: boolean;
+  __cs_msg?: boolean;
 }
 
 function runOverlay(opts: {
@@ -72,5 +73,120 @@ describe('OVERLAY_SCRIPT reattach loop warning throttle', () => {
     expect(warn.mock.calls.length).toBe(keys.size);
     // should be ≤ 3 (one per event type), well under the 25-tick spam ceiling
     expect(warn.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SET_MODE trust boundary: control messages must come from window.parent.
+// Untrusted in-iframe scripts could synthesise MessageEvent-shaped objects or
+// bounce events off the iframe itself (window.postMessage(self, ...)), which
+// would arrive with ev.source === window. Both paths must be rejected.
+// ---------------------------------------------------------------------------
+
+interface ListenerHarness {
+  documentListeners: Map<string, (e: unknown) => void>;
+  windowListeners: Map<string, (e: unknown) => void>;
+  parent: object;
+  postedToParent: unknown[];
+}
+
+function runOverlayWithHarness(): ListenerHarness {
+  const documentListeners = new Map<string, (e: unknown) => void>();
+  const windowListeners = new Map<string, (e: unknown) => void>();
+  const postedToParent: unknown[] = [];
+  const parent = { postMessage: (msg: unknown) => postedToParent.push(msg) };
+
+  const fakeDocument = {
+    body: {},
+    addEventListener: (type: string, fn: (e: unknown) => void) => {
+      documentListeners.set(type, fn);
+    },
+    removeEventListener: () => {},
+  };
+  const fakeWindow = {
+    addEventListener: (type: string, fn: (e: unknown) => void) => {
+      windowListeners.set(type, fn);
+    },
+    parent,
+  };
+  const fakeSetInterval = () => 1;
+  const sandbox = new Function(
+    'window',
+    'document',
+    'console',
+    'setInterval',
+    `with (window) { ${OVERLAY_SCRIPT} }`,
+  );
+  sandbox(fakeWindow, fakeDocument, { warn: () => {} }, fakeSetInterval);
+  return { documentListeners, windowListeners, parent, postedToParent };
+}
+
+describe('OVERLAY_SCRIPT SET_MODE source validation', () => {
+  it('drops SET_MODE messages whose source is not window.parent (forged)', () => {
+    const h = runOverlayWithHarness();
+    const onMessage = h.windowListeners.get('message');
+    const onClick = h.documentListeners.get('click');
+    expect(onMessage).toBeDefined();
+    expect(onClick).toBeDefined();
+
+    // Forged: source is the iframe itself (e.g. window.postMessage(self,...)),
+    // not the embedding parent. Even though the envelope looks valid, the
+    // mode must NOT switch to 'comment'.
+    const forgedSource = {};
+    onMessage?.({
+      source: forgedSource,
+      data: { __codesign: true, type: 'SET_MODE', mode: 'comment' },
+    });
+
+    // currentMode is internal to the IIFE, so we observe via the click gate:
+    // in default mode, clicks must not be intercepted (no postMessage to parent).
+    onClick?.({
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: { tagName: 'DIV', getBoundingClientRect: () => ({}), outerHTML: '<div/>' },
+    });
+    expect(h.postedToParent).toHaveLength(0);
+  });
+
+  it('accepts SET_MODE only when ev.source === window.parent', () => {
+    const h = runOverlayWithHarness();
+    const onMessage = h.windowListeners.get('message');
+    const onClick = h.documentListeners.get('click');
+
+    onMessage?.({
+      source: h.parent,
+      data: { __codesign: true, type: 'SET_MODE', mode: 'comment' },
+    });
+
+    // Now in comment mode → click should be intercepted and posted to parent.
+    onClick?.({
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: {
+        tagName: 'BUTTON',
+        getBoundingClientRect: () => ({ top: 1, left: 2, width: 3, height: 4 }),
+        outerHTML: '<button/>',
+      },
+    });
+    expect(h.postedToParent).toHaveLength(1);
+    expect((h.postedToParent[0] as { type: string }).type).toBe('ELEMENT_SELECTED');
+  });
+
+  it('drops messages with no source (null) even when envelope matches', () => {
+    const h = runOverlayWithHarness();
+    const onMessage = h.windowListeners.get('message');
+    const onClick = h.documentListeners.get('click');
+
+    onMessage?.({
+      source: null,
+      data: { __codesign: true, type: 'SET_MODE', mode: 'comment' },
+    });
+
+    onClick?.({
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: { tagName: 'DIV', getBoundingClientRect: () => ({}), outerHTML: '<div/>' },
+    });
+    expect(h.postedToParent).toHaveLength(0);
   });
 });
