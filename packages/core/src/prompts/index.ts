@@ -194,7 +194,6 @@ The host environment will:
 | \`true / false\`                               | Toggle switch    |
 | Number (e.g. \`1.0\`, \`16\`, \`0.5\`)             | Slider           |
 | Plain string                                 | Text input       |
-| Enum-like string with comment hint (TBD)     | Select dropdown  |
 
 ## When to use
 
