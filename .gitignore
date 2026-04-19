@@ -27,6 +27,7 @@ test-results/
 .env
 .env.*
 !.env.example
+scripts/.smoke-keys.env
 
 # Editor
 .vscode/*

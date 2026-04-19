@@ -9,6 +9,10 @@
 #   export GOOGLE_API_KEY=...
 #   export GROQ_API_KEY=...
 #
+# Or stash them in a gitignored file and source on demand:
+#   echo 'export OPENROUTER_API_KEY=sk-or-...' > scripts/.smoke-keys.env
+#   set -a && source scripts/.smoke-keys.env && set +a && pnpm smoke
+#
 # Add or remove rows freely. Rows referencing a provider with no key are
 # skipped with a warning, not failed.
 
@@ -28,22 +32,54 @@ text = "Landing page for an indie design tool called Open Codesign. Warm cream t
 name = "settings"
 text = "应用设置页面，含账户、通知、外观三个 tab。深色主题，sidebar 导航 + 右侧表单。"
 
-[[models]]
-provider = "openrouter"
-modelId = "anthropic/claude-sonnet-4.5"
+# ─── Free OpenRouter models worth comparing ───────────────────────
+# These all run on $OPENROUTER_API_KEY. No charge.
 
 [[models]]
 provider = "openrouter"
-modelId = "anthropic/claude-3.5-sonnet"
+modelId = "qwen/qwen3-coder:free"
+# Currently the strongest free coder on OR (480B MoE, 262K ctx).
+
+[[models]]
+provider = "openrouter"
+modelId = "deepseek/deepseek-r1:free"
+# Reasoning-mandatory; exercises our self-healing retry path.
+
+[[models]]
+provider = "openrouter"
+modelId = "nvidia/nemotron-3-super:free"
+# Hybrid Mamba-Transformer MoE — different architecture for comparison.
+
+[[models]]
+provider = "openrouter"
+modelId = "meta-llama/llama-3.3-70b-instruct:free"
+# Solid general baseline.
 
 [[models]]
 provider = "openrouter"
 modelId = "openai/gpt-oss-120b:free"
+# Already verified working with the reasoning self-healing fix.
 
 [[models]]
 provider = "openrouter"
 modelId = "minimax/minimax-m2.5:free"
+# Reasoning-mandatory; another self-healing exercise.
 
 [[models]]
-provider = "anthropic"
-modelId = "claude-sonnet-4-6"
+provider = "openrouter"
+modelId = "mistralai/devstral-2:free"
+# Mistral coding-focused (123B dense).
+
+[[models]]
+provider = "openrouter"
+modelId = "xiaomi/mimo-v2-flash:free"
+# Reportedly matches Sonnet 4.5 on coding benchmarks — useful upper bound for free tier.
+
+# ─── Paid baselines (uncomment if you want a quality ceiling) ─────
+# [[models]]
+# provider = "openrouter"
+# modelId = "anthropic/claude-sonnet-4.5"
+#
+# [[models]]
+# provider = "anthropic"
+# modelId = "claude-sonnet-4-6"
