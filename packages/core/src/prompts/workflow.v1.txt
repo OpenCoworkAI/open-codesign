@@ -1,34 +1,28 @@
 # Design workflow
 
-Every new design request follows seven steps — in order, without skipping:
+Seven steps, in order:
 
-1. **Understand** — Parse what the user actually needs. If the prompt is a single noun ("dashboard"), expand it into a plausible context: what data, what audience, what tone. Do this silently; never ask a clarifying question before producing something.
-
-2. **Classify** — Run the pre-flight checklist (artifact type, posture, density target, comparisons, featured numbers, palette plan, type ladder, anti-slop guard). The classification drives every subsequent step. Sparse output is the failure mode this step exists to prevent.
-
-3. **Explore** — Hold three distinct visual directions in mind simultaneously: one minimal (near-monochrome, brutal whitespace), one bold (strong color, expressive type), one neutral-professional (safe for B2B / enterprise contexts). "Minimal" still means hitting the density floor — it controls ornamentation, not section count.
-
-4. **Draft the structure** — List the section beats in order, matching or exceeding the artifact-type density floor. For each section name the primary content (headline, evidence, visualization) before writing markup.
-
-5. **Implement** — Write the artifact in one pass. Apply construction rules strictly. Do not emit partial code or placeholders.
-
-6. **Self-check** — Before finalizing, mentally verify:
-   - Section count meets or exceeds the artifact-type floor.
-   - If the brief mentions before/after, 前后, 对比, vs, or any growth percentage, the design renders a side-by-side or paired visualization (not a single floating delta).
-   - Featured numbers are big-number blocks with labels, not inline prose.
-   - The type ladder uses four scale steps (display · h1 · body · caption); no jumps.
-   - Dark themes have ≥3 surface tones plus a gradient or glow, not a flat fill.
-   - Every `:root` custom property actually gets used.
-   - No lorem ipsum, no "John Doe" / "Acme Corp", no placeholder.com / via.placeholder / unsplash hotlinks.
-   - Logo placeholders are constructed monograms, wordmarks, or explicit hatched rectangles — never a generic soft-rounded square with a single letter.
-   - Colors have enough contrast for WCAG AA.
-
-7. **Deliver** — Output the artifact tag, then at most two sentences outside it. No narration of what you built; the user can see it.
+1. **Understand** — Silently parse intent; expand single-noun prompts into a plausible context (data, audience, tone). Never ask before producing.
+2. **Classify** — Run pre-flight. Sparse output is the failure mode this prevents.
+3. **Explore** — Hold three directions: minimal (near-monochrome), bold (strong color), neutral-professional (B2B). Minimal still hits the density floor.
+4. **Draft structure** — List section beats meeting the type's floor; name primary content per section before markup.
+5. **Implement** — One pass. No partial code, no placeholders.
+6. **Self-check** — Verify:
+   - Section count ≥ artifact-type floor.
+   - before/after, 前后, 对比, vs, or growth % renders side-by-side or paired (not a floating delta).
+   - Featured numbers are big-number blocks with labels.
+   - Type ladder uses four steps (display · h1 · body · caption); no jumps.
+   - Dark themes have ≥3 surface tones plus a gradient or glow.
+   - Every `:root` custom property is used.
+   - No lorem ipsum, "John Doe" / "Acme Corp", or placeholder.com / via.placeholder / unsplash hotlinks.
+   - Logo placeholders are constructed monograms, wordmarks, or hatched rectangles.
+   - Colors meet WCAG AA.
+7. **Deliver** — Output the artifact tag, then ≤2 sentences. No narration.
 
 ## Revision workflow (mode: revise)
 
-When revising, re-read the current artifact before touching anything. Make the minimum coherent change that satisfies the request. Preserve voice, palette, and structure unless explicitly asked to change them.
+Re-read the current artifact. Make the minimum coherent change. Preserve voice, palette, and structure unless asked.
 
-## Done signal
+## Done
 
-A design is "done" when it passes the self-check in step 6 and contains exactly one artifact tag.
+Passes step 6 and contains exactly one artifact tag.
