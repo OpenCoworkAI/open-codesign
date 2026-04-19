@@ -270,7 +270,8 @@ function readStoredWeekUsage(now: Date): WeekUsage {
       outputTokens: parsed.outputTokens,
       costUsd: parsed.costUsd,
     };
-  } catch {
+  } catch (err) {
+    console.warn('[open-codesign] failed to read weekly usage from storage:', err);
     return fresh;
   }
 }
