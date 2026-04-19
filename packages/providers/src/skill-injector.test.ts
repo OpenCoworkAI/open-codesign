@@ -435,4 +435,39 @@ describe('matchSkillsToPrompt()', () => {
     const matched = matchSkillsToPrompt(all, '做一个移动端原型');
     expect(matched.map((s) => s.id)).toContain('mobile-mock');
   });
+
+  // Regression: broad Chinese aliases 分析 / 应用 / 演示 must not fire their
+  // group on their own. They are demoted to `weak` so substring hits inside
+  // unrelated text (analyse this paragraph, web 应用, 演示一下功能) no longer
+  // over-trigger dashboard / mobile-mock / pitch-deck.
+  it('does NOT match dashboard for generic 分析 prompt — "分析这段文本"', () => {
+    const matched = matchSkillsToPrompt(all, '分析这段文本');
+    expect(matched.map((s) => s.id)).not.toContain('data-viz-recharts');
+  });
+
+  it('does NOT match mobile-mock for generic 应用 prompt — "Web 应用程序员"', () => {
+    const matched = matchSkillsToPrompt(all, 'Web 应用程序员');
+    expect(matched.map((s) => s.id)).not.toContain('mobile-mock');
+  });
+
+  it('does NOT match pitch-deck for generic 演示 prompt — "演示一下功能"', () => {
+    const matched = matchSkillsToPrompt(all, '演示一下功能');
+    expect(matched.map((s) => s.id)).not.toContain('pitch-deck');
+  });
+
+  // True positives for the same buckets must still resolve via strong tokens.
+  it('still matches dashboard for "数据看板"', () => {
+    const matched = matchSkillsToPrompt(all, '做一个数据看板');
+    expect(matched.map((s) => s.id)).toContain('data-viz-recharts');
+  });
+
+  it('still matches mobile-mock for English "iPhone app"', () => {
+    const matched = matchSkillsToPrompt(all, 'design an iPhone app');
+    expect(matched.map((s) => s.id)).toContain('mobile-mock');
+  });
+
+  it('still matches pitch-deck for "做一个 PPT"', () => {
+    const matched = matchSkillsToPrompt(all, '帮我做一个 PPT');
+    expect(matched.map((s) => s.id)).toContain('pitch-deck');
+  });
 });
