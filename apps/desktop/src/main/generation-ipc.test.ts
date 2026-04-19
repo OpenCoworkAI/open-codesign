@@ -107,26 +107,29 @@ describe('armGenerationTimeout', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it('returns a no-op when reading preferences fails — generation must not be blocked', async () => {
+  it('rethrows as PREFERENCES_READ_FAIL when reading preferences fails — never silently unbounded', async () => {
     const controller = new AbortController();
     const logger = { warn: vi.fn() };
 
-    const clear = await armGenerationTimeout(
-      'gen-1',
-      controller,
-      async () => {
-        throw new Error('disk gone');
-      },
-      logger,
-    );
-    vi.advanceTimersByTime(600_000);
+    await expect(
+      armGenerationTimeout(
+        'gen-1',
+        controller,
+        async () => {
+          throw new Error('disk gone');
+        },
+        logger,
+      ),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'PREFERENCES_READ_FAIL',
+    });
 
     expect(controller.signal.aborted).toBe(false);
     expect(logger.warn).toHaveBeenCalledWith(
       'generate.timeout.prefs_read_failed',
       expect.objectContaining({ id: 'gen-1', message: 'disk gone' }),
     );
-    clear();
   });
 
   it('returns a no-op for non-positive or non-finite timeout values', async () => {

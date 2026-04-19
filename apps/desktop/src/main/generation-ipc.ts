@@ -30,6 +30,10 @@ export interface GenerationTimeoutLogger {
  * timeout elapses. Reads prefs lazily per-call so Settings changes apply on
  * the next request without an app restart. Returns `clear()` for the caller
  * to invoke once the request settles so we don't abort a finished controller.
+ *
+ * If the prefs read throws, the failure is surfaced (rethrown as
+ * `PREFERENCES_READ_FAIL`) rather than silently dropping the timeout — an
+ * unbounded LLM call is worse than a visible error the user can act on.
  */
 export async function armGenerationTimeout(
   id: string,
@@ -41,11 +45,12 @@ export async function armGenerationTimeout(
   try {
     timeoutSec = await readTimeoutSec();
   } catch (err) {
-    logger.warn('generate.timeout.prefs_read_failed', {
-      id,
-      message: err instanceof Error ? err.message : String(err),
-    });
-    return () => {};
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('generate.timeout.prefs_read_failed', { id, message });
+    throw new CodesignError(
+      `Could not read generation timeout preference: ${message}`,
+      'PREFERENCES_READ_FAIL',
+    );
   }
   if (!Number.isFinite(timeoutSec) || timeoutSec <= 0) return () => {};
 

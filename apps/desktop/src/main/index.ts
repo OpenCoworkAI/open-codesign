@@ -234,8 +234,9 @@ function registerIpcHandlers(): void {
     });
 
     const t0 = Date.now();
-    const clearTimeoutGuard = await armTimeout(id, controller);
+    let clearTimeoutGuard: () => void = () => {};
     try {
+      clearTimeoutGuard = await armTimeout(id, controller);
       const result = await generate({
         prompt: payload.prompt,
         history: payload.history,
@@ -320,8 +321,9 @@ function registerIpcHandlers(): void {
     });
 
     const t0 = Date.now();
-    const clearTimeoutGuard = await armTimeout(id, controller);
+    let clearTimeoutGuard: () => void = () => {};
     try {
+      clearTimeoutGuard = await armTimeout(id, controller);
       const result = await generate({
         prompt: payload.prompt,
         history: payload.history,
