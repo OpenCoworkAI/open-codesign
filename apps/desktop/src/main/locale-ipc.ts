@@ -12,13 +12,15 @@
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { configDir } from './config';
 import { app, ipcMain } from './electron-runtime';
 
-const CONFIG_DIR = join(homedir(), '.config', 'open-codesign');
-const LOCALE_FILE = join(CONFIG_DIR, 'locale.json');
 const SCHEMA_VERSION = 1;
+
+function localeFile(): string {
+  return join(configDir(), 'locale.json');
+}
 
 interface LocaleFile {
   schemaVersion: number;
@@ -26,8 +28,9 @@ interface LocaleFile {
 }
 
 async function readPersisted(): Promise<string | null> {
+  const file = localeFile();
   try {
-    const raw = await readFile(LOCALE_FILE, 'utf8');
+    const raw = await readFile(file, 'utf8');
     const parsed = JSON.parse(raw) as Partial<LocaleFile>;
     if (typeof parsed.locale === 'string' && parsed.locale.length > 0) {
       return parsed.locale;
@@ -36,15 +39,16 @@ async function readPersisted(): Promise<string | null> {
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') return null;
-    console.warn(`[locale-ipc] failed to read ${LOCALE_FILE}:`, err);
+    console.warn(`[locale-ipc] failed to read ${file}:`, err);
     return null;
   }
 }
 
 async function writePersisted(locale: string): Promise<void> {
-  await mkdir(dirname(LOCALE_FILE), { recursive: true });
+  const file = localeFile();
+  await mkdir(dirname(file), { recursive: true });
   const payload: LocaleFile = { schemaVersion: SCHEMA_VERSION, locale };
-  await writeFile(LOCALE_FILE, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  await writeFile(file, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
 export function registerLocaleIpc(): void {

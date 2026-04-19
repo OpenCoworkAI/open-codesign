@@ -9,17 +9,19 @@
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
 import { ipcMain } from 'electron';
+import { configDir } from './config';
 import { getLogger } from './logger';
 
 const logger = getLogger('preferences-ipc');
 
-const CONFIG_DIR = join(homedir(), '.config', 'open-codesign');
-const PREFS_FILE = join(CONFIG_DIR, 'preferences.json');
 const SCHEMA_VERSION = 1;
+
+function prefsFile(): string {
+  return join(configDir(), 'preferences.json');
+}
 
 export type UpdateChannel = 'stable' | 'beta';
 
@@ -38,8 +40,9 @@ const DEFAULTS: Preferences = {
 };
 
 export async function readPersisted(): Promise<Preferences> {
+  const file = prefsFile();
   try {
-    const raw = await readFile(PREFS_FILE, 'utf8');
+    const raw = await readFile(file, 'utf8');
     const parsed = JSON.parse(raw) as Partial<PreferencesFile>;
     return {
       updateChannel:
@@ -54,16 +57,17 @@ export async function readPersisted(): Promise<Preferences> {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ...DEFAULTS };
     throw new CodesignError(
-      `Failed to read preferences at ${PREFS_FILE}: ${err instanceof Error ? err.message : String(err)}`,
+      `Failed to read preferences at ${file}: ${err instanceof Error ? err.message : String(err)}`,
       'PREFERENCES_READ_FAILED',
     );
   }
 }
 
 async function writePersisted(prefs: Preferences): Promise<void> {
-  await mkdir(dirname(PREFS_FILE), { recursive: true });
+  const file = prefsFile();
+  await mkdir(dirname(file), { recursive: true });
   const payload: PreferencesFile = { schemaVersion: SCHEMA_VERSION, ...prefs };
-  await writeFile(PREFS_FILE, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  await writeFile(file, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
 function parsePreferences(raw: unknown): Partial<Preferences> {

@@ -42,6 +42,23 @@ describe('readPersisted()', () => {
     expect(result).toEqual({ updateChannel: 'stable', generationTimeoutSec: 120 });
   });
 
+  it('honors XDG_CONFIG_HOME when computing the persisted file path', async () => {
+    const prev = process.env['XDG_CONFIG_HOME'];
+    process.env['XDG_CONFIG_HOME'] = '/tmp/xdg-test-home';
+    const notFound = Object.assign(new Error('no such file'), { code: 'ENOENT' });
+    readFileMock.mockRejectedValueOnce(notFound);
+    try {
+      await readPersisted();
+      expect(readFileMock).toHaveBeenLastCalledWith(
+        '/tmp/xdg-test-home/open-codesign/preferences.json',
+        'utf8',
+      );
+    } finally {
+      if (prev === undefined) delete process.env['XDG_CONFIG_HOME'];
+      else process.env['XDG_CONFIG_HOME'] = prev;
+    }
+  });
+
   it('throws CodesignError with PREFERENCES_READ_FAILED on a non-ENOENT error (e.g. EACCES)', async () => {
     const permissionDenied = Object.assign(new Error('permission denied'), { code: 'EACCES' });
     readFileMock.mockRejectedValueOnce(permissionDenied);
