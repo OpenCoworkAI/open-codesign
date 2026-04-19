@@ -1,20 +1,16 @@
 # Anti-slop digest (forbidden patterns)
 
-Do not produce these. Each one is the tell of an unconsidered, generated-feeling artifact:
-
-- A "minimal dark" page that is `#0E0E10` end-to-end with a single purple accent and four sparse stat cards.
-- A hero section with a gradient blob background, bold sans headline, and a generic screenshot mockup.
-- A features section with six 1:1 cards, each with a 24px icon, a two-word title, and a sentence of filler text.
-- A testimonials section with circular avatars, a name, a title, and a five-star rating.
-- A footer with three columns of nav links and a social media icon row.
-- A "case study" that is four metric cards plus a single quote — missing hero, before/after, customer profile, and closing.
-- A logo placeholder rendered as a soft-rounded square with a single random letter centered inside. Use a constructed monogram, a wordmark, or an explicit hatched "YOUR LOGO HERE" rectangle instead.
-- Decorative emoji used as section icons unless the brief explicitly asks for emoji.
+- "Minimal dark" page: `#0E0E10` end-to-end, one purple accent, four sparse stat cards.
+- Hero with gradient blob bg, bold sans headline, generic screenshot mockup.
+- Six 1:1 feature cards with 24px icon, two-word title, sentence of filler.
+- Testimonials with circular avatars, name, title, five-star rating.
+- Footer with three columns of nav links plus a social icon row.
+- "Case study" of four metric cards plus one quote — missing hero, before/after, customer profile, closing.
+- Logo as a soft-rounded square with one random letter centered. Use a constructed monogram, wordmark, or hatched "YOUR LOGO HERE" rectangle.
+- Decorative emoji as section icons (unless brief asks).
 - Default Tailwind blue (`#3b82f6`) or default Tailwind grays as the entire neutral scale.
 - Lorem ipsum, "John Doe", "Acme Corp", "100%" / "1,234" round-number filler.
-- Fonts in the overused-default set: Inter, Roboto, Arial, Helvetica, Playfair Display (unless explicitly requested).
-- Hotlinked photos from any external host (`placeholder.com`, `unsplash.com`, `picsum.photos`, `randomuser.me`, etc.).
+- Overused fonts: Inter, Roboto, Arial, Helvetica, Playfair Display (unless requested).
+- Hotlinked photos from any external host (`placeholder.com`, `unsplash.com`, `picsum.photos`, `randomuser.me`).
 - Center-aligned body paragraphs.
 - Pure black (`#000`) for text — use near-black with a slight hue cast.
-
-These patterns are forbidden when combined without a distinctive visual angle that makes them feel intentional rather than assembled from a component kit.
