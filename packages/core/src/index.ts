@@ -1,9 +1,15 @@
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
 import type { GenerateResult } from '@open-codesign/providers';
-import { type RetryReason, complete, completeWithRetry } from '@open-codesign/providers';
+import {
+  type RetryReason,
+  complete,
+  completeWithRetry,
+  matchSkillsToPrompt,
+} from '@open-codesign/providers';
 import type {
   Artifact,
   ChatMessage,
+  LoadedSkill,
   ModelRef,
   SelectedElement,
   StoredDesignSystem,
@@ -12,6 +18,7 @@ import { CodesignError } from '@open-codesign/shared';
 import { remapProviderError } from './errors.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { type PromptComposeOptions, composeSystemPrompt } from './prompts/index.js';
+import { loadBuiltinSkills } from './skills/loader.js';
 
 export type { PromptComposeOptions };
 export type { CoreLogger } from './logger.js';
@@ -345,6 +352,28 @@ function extractStatus(err: unknown): number | undefined {
   return undefined;
 }
 
+function formatSkillBlob(skill: LoadedSkill): string {
+  return `### Skill: ${skill.frontmatter.name}\n\n${skill.body.trim()}`;
+}
+
+// Skill loading is best-effort: a missing or unreadable builtin directory must
+// not block generation. We log the failure and fall through to a skill-less
+// prompt so the user always gets a response.
+async function collectMatchedSkillBlobs(userPrompt: string, log: CoreLogger): Promise<string[]> {
+  let skills: LoadedSkill[];
+  try {
+    skills = await loadBuiltinSkills();
+  } catch (err) {
+    log.error('[generate] step=load_skills.fail', {
+      errorClass: err instanceof Error ? err.constructor.name : typeof err,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
+  const matched = matchSkillsToPrompt(skills, userPrompt);
+  return matched.map(formatSkillBlob);
+}
+
 export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   const log = input.logger ?? NOOP_LOGGER;
   const ctx = {
@@ -376,6 +405,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
 
   log.info('[generate] step=build_request', ctx);
   const buildStart = Date.now();
+  const skillBlobs = input.systemPrompt ? [] : await collectMatchedSkillBlobs(input.prompt, log);
   const messages: ChatMessage[] = [
     {
       role: 'system',
@@ -383,6 +413,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
         input.systemPrompt ??
         composeSystemPrompt({
           mode: 'create',
+          ...(skillBlobs.length > 0 ? { skills: skillBlobs } : {}),
         }),
     },
     ...input.history,
@@ -392,6 +423,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     ...ctx,
     ms: Date.now() - buildStart,
     messages: messages.length,
+    skills: skillBlobs.length,
   });
 
   return runModel({

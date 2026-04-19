@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { CodesignError } from '@open-codesign/shared';
 import { type LoadedSkill, SkillFrontmatterV1 } from './types.js';
 
@@ -283,4 +284,15 @@ export async function loadAllSkills(opts: LoadAllSkillsOptions): Promise<LoadedS
   }
 
   return [...map.values()];
+}
+
+/**
+ * Load the four builtin skills shipped inside this package
+ * (`packages/core/src/skills/builtin/*.md`). Resolved relative to this file via
+ * `import.meta.url` so it works in ESM, Vite, and Electron main without
+ * hard-coded paths.
+ */
+export async function loadBuiltinSkills(): Promise<LoadedSkill[]> {
+  const builtinDir = fileURLToPath(new URL('./builtin/', import.meta.url));
+  return loadSkillsFromDir(builtinDir, 'builtin');
 }

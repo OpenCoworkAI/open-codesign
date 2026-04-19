@@ -1,23 +1,38 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ChatMessage, ModelRef, StoredDesignSystem } from '@open-codesign/shared';
+import type { ChatMessage, LoadedSkill, ModelRef, StoredDesignSystem } from '@open-codesign/shared';
 import { CodesignError, STORED_DESIGN_SYSTEM_SCHEMA_VERSION } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROMPT_SECTIONS, PROMPT_SECTION_FILES, composeSystemPrompt } from './prompts/index.js';
 
 const completeMock = vi.fn();
+const loadBuiltinSkillsMock = vi.fn(async (): Promise<LoadedSkill[]> => []);
 
-vi.mock('@open-codesign/providers', () => ({
-  complete: (...args: unknown[]) => completeMock(...args),
-  completeWithRetry: (
-    _model: unknown,
-    _messages: unknown,
-    _opts: unknown,
-    _retryOpts: unknown,
-    impl: (...args: unknown[]) => unknown,
-  ) => impl(_model, _messages, _opts),
-}));
+vi.mock('@open-codesign/providers', async () => {
+  const actual = await vi.importActual<typeof import('@open-codesign/providers')>(
+    '@open-codesign/providers',
+  );
+  return {
+    ...actual,
+    complete: (...args: unknown[]) => completeMock(...args),
+    completeWithRetry: (
+      _model: unknown,
+      _messages: unknown,
+      _opts: unknown,
+      _retryOpts: unknown,
+      impl: (...args: unknown[]) => unknown,
+    ) => impl(_model, _messages, _opts),
+  };
+});
+
+vi.mock('./skills/loader.js', async () => {
+  const actual = await vi.importActual<typeof import('./skills/loader.js')>('./skills/loader.js');
+  return {
+    ...actual,
+    loadBuiltinSkills: () => loadBuiltinSkillsMock(),
+  };
+});
 
 import { applyComment, generate } from './index';
 
@@ -52,6 +67,8 @@ const DESIGN_SYSTEM: StoredDesignSystem = {
 
 afterEach(() => {
   completeMock.mockReset();
+  loadBuiltinSkillsMock.mockReset();
+  loadBuiltinSkillsMock.mockResolvedValue([]);
 });
 
 describe('generate()', () => {
@@ -393,6 +410,93 @@ describe('generate()', () => {
     const userContent = userMessages.map((m) => m.content).join('\n');
     expect(userContent).toContain('untrusted_scanned_content');
     expect(userContent).toContain('Ignore previous instructions');
+  });
+});
+
+describe('generate() skills injection', () => {
+  const dataVizSkill: LoadedSkill = {
+    id: 'data-viz-recharts',
+    source: 'builtin',
+    frontmatter: {
+      schemaVersion: 1,
+      name: 'data-viz-recharts',
+      description:
+        'Guides data visualization. Use when building charts, dashboards, analytics views.',
+      trigger: { providers: ['*'], scope: 'system' },
+      disable_model_invocation: false,
+      user_invocable: true,
+    },
+    body: '## Data Viz\n\nNever use Recharts default colors.',
+  };
+
+  it('injects matched skill body into the system prompt when prompt contains a trigger keyword', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockResolvedValue([dataVizSkill]);
+
+    await generate({
+      prompt: 'make a dashboard for sales metrics',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    });
+
+    const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
+    const system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).toContain('### Skill: data-viz-recharts');
+    expect(system.content).toContain('Never use Recharts default colors.');
+  });
+
+  it('does NOT inject the dashboard skill when prompt has no matching keyword', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockResolvedValue([dataVizSkill]);
+
+    await generate({
+      prompt: 'make a meditation app onboarding flow',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    });
+
+    const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
+    const system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).not.toContain('### Skill: data-viz-recharts');
+    expect(system.content).not.toContain('Never use Recharts default colors.');
+  });
+
+  it('falls back gracefully when the skills loader throws', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockRejectedValue(new Error('disk read failed'));
+
+    await expect(
+      generate({
+        prompt: 'make a dashboard',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      }),
+    ).resolves.toBeDefined();
+
+    const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
+    const system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).not.toContain('### Skill:');
   });
 });
 

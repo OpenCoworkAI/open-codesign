@@ -119,3 +119,71 @@ export function injectSkillsIntoMessages(
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Skill matching against a free-form user prompt
+// ---------------------------------------------------------------------------
+
+/**
+ * Trigger keywords harvested from the builtin skill descriptions. We match on
+ * surface-form vocabulary in the user's prompt rather than running a model
+ * call — Tier 1 keeps this purely lexical and zero-cost. Add new entries here
+ * when introducing a skill whose intent isn't covered by an existing keyword.
+ *
+ * Excluded on purpose: "design" — it appears in nearly every open-codesign
+ * prompt and would force-match every skill on every call.
+ */
+const SKILL_TRIGGER_KEYWORDS = [
+  'dashboard',
+  'chart',
+  'graph',
+  'analytics',
+  'kpi',
+  'metric',
+  'data viz',
+  'data-driven',
+  'recharts',
+  'landing',
+  'homepage',
+  'hero',
+  'mobile',
+  'phone',
+  'app screen',
+  'ios',
+  'android',
+  'deck',
+  'slide',
+  'slides',
+  'presentation',
+  'pitch',
+  'keynote',
+] as const;
+
+function extractKeywords(text: string): Set<string> {
+  const lower = text.toLowerCase();
+  const hits = new Set<string>();
+  for (const kw of SKILL_TRIGGER_KEYWORDS) {
+    if (lower.includes(kw)) hits.add(kw);
+  }
+  return hits;
+}
+
+/**
+ * Pick the subset of `skills` whose description shares at least one trigger
+ * keyword with `userPrompt`. Pure function, no provider call, no allocation
+ * per skill beyond the Set lookup. Returns an empty array when the prompt has
+ * no triggering vocabulary.
+ */
+export function matchSkillsToPrompt(skills: LoadedSkill[], userPrompt: string): LoadedSkill[] {
+  if (!userPrompt.trim()) return [];
+  const promptKeywords = extractKeywords(userPrompt);
+  if (promptKeywords.size === 0) return [];
+
+  return skills.filter((s) => {
+    const descKeywords = extractKeywords(s.frontmatter.description);
+    for (const kw of descKeywords) {
+      if (promptKeywords.has(kw)) return true;
+    }
+    return false;
+  });
+}
