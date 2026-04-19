@@ -99,6 +99,86 @@ describe('injectSkillsIntoMessages()', () => {
 });
 
 // ---------------------------------------------------------------------------
+// injectSkillsIntoMessages — explicit coverage for surviving behaviour
+// (replaces invariants previously asserted via the removed keyword matcher)
+// ---------------------------------------------------------------------------
+
+describe('injectSkillsIntoMessages() — surviving behaviour', () => {
+  it('returns the same messages reference when skills array is empty', () => {
+    const result = injectSkillsIntoMessages(BASE_MESSAGES, [], 'anthropic');
+    expect(result).toBe(BASE_MESSAGES);
+  });
+
+  it('appends skill block before existing system message content, preserving order', () => {
+    const skill = makeSkill('ordered');
+    const result = injectSkillsIntoMessages(BASE_MESSAGES, [skill], 'anthropic');
+    expect(result).toHaveLength(BASE_MESSAGES.length);
+    expect(result[0]?.role).toBe('system');
+    const content = result[0]?.content ?? '';
+    const blockIdx = content.indexOf('Body of ordered.');
+    const existingIdx = content.indexOf('You are a helpful assistant.');
+    expect(blockIdx).toBeGreaterThanOrEqual(0);
+    expect(existingIdx).toBeGreaterThan(blockIdx);
+  });
+
+  it('inserts a new system message at position 0 when none exists', () => {
+    const userOnly: ChatMessage[] = [{ role: 'user', content: 'Design a landing page.' }];
+    const skill = makeSkill('fresh');
+    const result = injectSkillsIntoMessages(userOnly, [skill], 'anthropic');
+    expect(result).toHaveLength(userOnly.length + 1);
+    expect(result[0]?.role).toBe('system');
+    expect(result[0]?.content).toContain('Body of fresh.');
+    expect(result[1]).toEqual(userOnly[0]);
+  });
+
+  it('drops a skill whose trigger.providers does not include the current provider', () => {
+    const openaiOnly = makeSkill('openai-only', {
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'openai-only',
+        description: 'OpenAI only.',
+        trigger: { providers: ['openai'], scope: 'system' },
+        disable_model_invocation: false,
+        user_invocable: true,
+      },
+    });
+    const result = injectSkillsIntoMessages(BASE_MESSAGES, [openaiOnly], 'anthropic');
+    expect(result).toBe(BASE_MESSAGES);
+  });
+
+  it('drops skills with disable_model_invocation: true', () => {
+    const muted = makeSkill('muted', {
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'muted',
+        description: 'Muted skill.',
+        trigger: { providers: ['*'], scope: 'system' },
+        disable_model_invocation: true,
+        user_invocable: true,
+      },
+    });
+    const result = injectSkillsIntoMessages(BASE_MESSAGES, [muted], 'anthropic');
+    expect(result).toBe(BASE_MESSAGES);
+  });
+
+  it('includes formatted blobs for every active skill in the system content', () => {
+    const skills: LoadedSkill[] = [
+      makeSkill('one', { body: 'Body of one.' }),
+      makeSkill('two', { body: 'Body of two.' }),
+      makeSkill('three', { body: 'Body of three.' }),
+    ];
+    const result = injectSkillsIntoMessages(BASE_MESSAGES, skills, 'anthropic');
+    const content = result[0]?.content ?? '';
+    expect(content).toContain('## Skill: one');
+    expect(content).toContain('## Skill: two');
+    expect(content).toContain('## Skill: three');
+    expect(content).toContain('Body of one.');
+    expect(content).toContain('Body of two.');
+    expect(content).toContain('Body of three.');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // formatSkillsForPrompt — progressive-disclosure helper used by core/generate
 // ---------------------------------------------------------------------------
 
