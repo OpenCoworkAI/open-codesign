@@ -121,7 +121,7 @@ function Stepper({ current, total }: { current: number; total: number }) {
       className="flex items-center gap-2"
     >
       <span
-        className="text-[var(--text-xs)] text-[var(--color-text-muted)] tracking-[0.05em]"
+        className="text-[var(--text-xs)] text-[var(--color-text-muted)] tracking-[var(--tracking-label)]"
         style={{ fontFamily: 'var(--font-mono)' }}
       >
         {current.toString().padStart(2, '0')} / {total.toString().padStart(2, '0')}
