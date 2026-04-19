@@ -6,13 +6,15 @@ export { isIframeErrorMessage } from './iframe-errors';
 export type { IframeErrorMessage } from './iframe-errors';
 
 /**
- * Baseline white background so the iframe falls back to a neutral surface
- * when the artifact doesn't set its own body background. Injected before the
- * artifact's own styles so any explicit `body { background: ... }` in the
- * artifact wins via cascade order.
+ * Baseline background so the iframe falls back to a neutral surface when the
+ * artifact doesn't set its own body background. Sourced from the
+ * `--color-artifact-bg` design token (packages/ui), with a `#ffffff` fallback
+ * for sandboxed contexts where the parent's CSS vars aren't propagated.
+ * Injected before the artifact's own styles so any explicit
+ * `body { background: ... }` in the artifact wins via cascade order.
  */
 const BASELINE_STYLE =
-  '<style>html,body{margin:0;padding:0;background:#ffffff;min-height:100%;}</style>';
+  '<style>html,body{margin:0;padding:0;background:var(--color-artifact-bg, #ffffff);min-height:100%;}</style>';
 
 /**
  * Build a complete srcdoc HTML string for the preview iframe.
