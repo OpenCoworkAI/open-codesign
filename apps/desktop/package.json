@@ -27,7 +27,7 @@
     "better-sqlite3": "^11.0.0",
     "electron-log": "^5",
     "electron-updater": "^6.3.9",
-    "lucide-react": "^0.460.0",
+    "lucide-react": "^1.8.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zustand": "^5.0.2"
@@ -41,7 +41,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "electron": "^33.2.1",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^2.3.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
