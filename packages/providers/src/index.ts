@@ -202,6 +202,8 @@ export type { ValidateResult } from './validate';
 export { completeWithRetry, classifyError, sleepWithAbort } from './retry';
 export type { CompleteWithRetryOptions, RetryReason } from './retry';
 
+export { injectSkillsIntoMessages } from './skill-injector';
+
 // Tier 2 surface (not yet implemented):
 //   structuredComplete<T>(model, schema, messages, opts): Promise<T>
 //   streamArtifacts(model, messages, opts): AsyncIterable<ArtifactEvent>
