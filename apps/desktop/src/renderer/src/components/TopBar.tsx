@@ -46,7 +46,11 @@ function ByokBadge() {
   const tooltipParts: string[] = [t('topbar.spendTooltip')];
   if (lastUsage) {
     tooltipParts.push(
-      `Last: ${lastUsage.inputTokens.toLocaleString()} in / ${lastUsage.outputTokens.toLocaleString()} out · $${formatCostUsd(lastUsage.costUsd)}`,
+      t('topbar.lastUsageTooltip', {
+        input: lastUsage.inputTokens.toLocaleString(),
+        output: lastUsage.outputTokens.toLocaleString(),
+        cost: formatCostUsd(lastUsage.costUsd),
+      }),
     );
   }
 

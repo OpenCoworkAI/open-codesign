@@ -299,7 +299,8 @@
     },
     "spendThisWeek": "本周",
     "byokTitle": "BYOK — 自带密钥，用量在本机统计。",
-    "spendTooltip": "本周预估花费"
+    "spendTooltip": "本周预估花费",
+    "lastUsageTooltip": "上次：{{input}} 输入 / {{output}} 输出 · ${{cost}}"
   },
   "theme": {
     "toggleAria": "切换主题",
@@ -413,7 +414,8 @@
     "unknown": "未知错误",
     "localePersistFailed": "无法保存语言偏好",
     "projectStorageFailed": "本机的项目数据读写失败，改动可能未保存。",
-    "storageFailed": "本地存储写入失败"
+    "storageFailed": "本地存储写入失败",
+    "weekUsageReadFailed": "无法从本地存储读取本周用量，已重置为新一轮统计。"
   },
   "projects": {
     "untitled": "未命名设计",

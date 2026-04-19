@@ -300,7 +300,8 @@
     },
     "spendThisWeek": "this week",
     "byokTitle": "BYOK — bring-your-own-key. Usage tracked locally.",
-    "spendTooltip": "Estimated spending this week"
+    "spendTooltip": "Estimated spending this week",
+    "lastUsageTooltip": "Last: {{input}} in / {{output}} out · ${{cost}}"
   },
   "theme": {
     "toggleAria": "Toggle theme",
@@ -414,7 +415,8 @@
     "unknown": "Unknown error",
     "localePersistFailed": "Failed to save language preference",
     "projectStorageFailed": "Couldn't read or write projects on this device. Your changes may not persist.",
-    "storageFailed": "Failed to save to local storage"
+    "storageFailed": "Failed to save to local storage",
+    "weekUsageReadFailed": "Couldn't read this week's usage from local storage. Showing fresh totals."
   },
   "projects": {
     "untitled": "Untitled design",

@@ -251,6 +251,7 @@ function readStoredWeekUsage(now: Date): WeekUsage {
     costUsd: 0,
   };
   if (typeof window === 'undefined') return fresh;
+  let warnReason: string | null = null;
   try {
     const raw = window.localStorage.getItem(WEEK_USAGE_STORAGE_KEY);
     if (!raw) return fresh;
@@ -261,19 +262,44 @@ function readStoredWeekUsage(now: Date): WeekUsage {
       typeof parsed.outputTokens !== 'number' ||
       typeof parsed.costUsd !== 'number'
     ) {
-      return fresh;
+      warnReason = 'weekly usage entry has unexpected shape';
+    } else if (parsed.isoWeek === fresh.isoWeek) {
+      return {
+        isoWeek: parsed.isoWeek,
+        inputTokens: parsed.inputTokens,
+        outputTokens: parsed.outputTokens,
+        costUsd: parsed.costUsd,
+      };
     }
-    if (parsed.isoWeek !== fresh.isoWeek) return fresh;
-    return {
-      isoWeek: parsed.isoWeek,
-      inputTokens: parsed.inputTokens,
-      outputTokens: parsed.outputTokens,
-      costUsd: parsed.costUsd,
-    };
+    // else: stale week — silently roll over (not corruption).
   } catch (err) {
-    console.warn('[open-codesign] failed to read weekly usage from storage:', err);
-    return fresh;
+    warnReason = err instanceof Error ? err.message : String(err);
   }
+  if (warnReason !== null) surfaceWeekUsageReadFailure(warnReason);
+  return fresh;
+}
+
+// Surface storage corruption to the user instead of silently dropping their
+// running totals. Deferred via setTimeout because this can run during store
+// initialisation, before the toast queue exists.
+function surfaceWeekUsageReadFailure(reason: string): void {
+  const fallback = () =>
+    console.warn('[open-codesign] failed to read weekly usage from storage:', reason);
+  if (typeof window === 'undefined') {
+    fallback();
+    return;
+  }
+  setTimeout(() => {
+    try {
+      useCodesignStore.getState().pushToast({
+        variant: 'error',
+        title: tr('errors.weekUsageReadFailed'),
+        description: reason,
+      });
+    } catch {
+      fallback();
+    }
+  }, 0);
 }
 
 function persistWeekUsage(usage: WeekUsage): string | null {
