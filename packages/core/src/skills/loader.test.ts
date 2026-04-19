@@ -155,6 +155,39 @@ Body.
     const skills = await loadSkillsFromDir(testDir, 'user');
     expect(skills).toHaveLength(1);
   });
+
+  it('preserves newlines in literal block scalars (|) and folds them in folded scalars (>)', async () => {
+    const content = `---
+schemaVersion: 1
+name: scalars
+description: |
+  line one
+  line two
+  line three
+---
+Body.
+`;
+    await writeSkill(testDir, 'scalars.md', content);
+    const [skill] = await loadSkillsFromDir(testDir, 'user');
+    if (!skill) throw new Error('expected skill');
+    expect(skill.frontmatter.description).toBe('line one\nline two\nline three');
+
+    const folded = `---
+schemaVersion: 1
+name: folded
+description: >
+  line one
+  line two
+  line three
+---
+Body.
+`;
+    await writeSkill(testDir, 'folded.md', folded);
+    const skills = await loadSkillsFromDir(testDir, 'user');
+    const f = skills.find((s) => s.id === 'folded');
+    if (!f) throw new Error('expected folded skill');
+    expect(f.frontmatter.description).toBe('line one line two line three');
+  });
 });
 
 describe('loadAllSkills()', () => {

@@ -43,7 +43,12 @@ function parseInlineSequence(s: string): unknown[] {
     .filter((item) => item.length > 0);
 }
 
-function parseBlockScalar(lines: string[], start: number, baseIndent: number): [string, number] {
+function parseBlockScalar(
+  lines: string[],
+  start: number,
+  baseIndent: number,
+  style: '>' | '|',
+): [string, number] {
   const blockLines: string[] = [];
   let i = start;
   while (i < lines.length) {
@@ -57,7 +62,9 @@ function parseBlockScalar(lines: string[], start: number, baseIndent: number): [
     blockLines.push(next.trim());
     i++;
   }
-  return [blockLines.join(' ').trim(), i];
+  // Folded (>) joins lines with spaces; literal (|) preserves newlines.
+  const joiner = style === '|' ? '\n' : ' ';
+  return [blockLines.join(joiner).trim(), i];
 }
 
 function parseBlockSequence(
@@ -143,7 +150,8 @@ function parseMapping(
     if (afterTrimmed.startsWith('[')) {
       result[key] = parseInlineSequence(afterTrimmed);
     } else if (isBlockScalarIndicator(afterTrimmed)) {
-      const [value, nextI] = parseBlockScalar(lines, i, baseIndent);
+      const style = afterTrimmed.charAt(0) === '|' ? '|' : '>';
+      const [value, nextI] = parseBlockScalar(lines, i, baseIndent, style);
       result[key] = value;
       i = nextI;
     } else if (afterTrimmed === '{}') {
