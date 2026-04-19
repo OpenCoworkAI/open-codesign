@@ -399,20 +399,29 @@ const MAX_OUTPUT_TOKENS = 32000;
 
 /** Match Anthropic's Claude 4.x family, which supports extended thinking. */
 const CLAUDE_4_MODEL_RE = /claude-(?:opus|sonnet)-4/i;
+/** OpenAI reasoning families (o-series and gpt-5). Anchored to the start of
+ *  the modelId so a tenant prefix or pass-through path can't sneak through. */
+const OPENAI_REASONING_MODEL_RE = /^(?:o1|o3|o4|gpt-5)(?:[-.].*)?$/i;
 
 function reasoningForModel(model: ModelRef): ReasoningLevel | undefined {
-  // Whitelist of known reasoning-capable models. Sending `reasoning` to a
-  // non-reasoning model is a silent fallback (OpenAI/OpenRouter drop it,
-  // older Anthropic Claudes get coerced to 'high' and unintentionally enable
-  // extended thinking) — that violates the project's "no silent fallbacks"
-  // rule, so default to undefined unless we are sure the model supports it.
-  if (model.provider === 'anthropic' && CLAUDE_4_MODEL_RE.test(model.modelId)) {
-    return 'high';
+  // Whitelist by (provider, modelId) pair. Substring matches across providers
+  // are unsafe: an OpenRouter or Groq pass-through id like
+  // `anthropic/claude-4` or any third-party id containing "o1"/"r1" would
+  // otherwise silently enable reasoning on a model that does not support it.
+  // The whole point of this gate is to avoid silent fallbacks, so require
+  // both axes to match a first-party provider we trust.
+  switch (model.provider) {
+    case 'anthropic':
+      return CLAUDE_4_MODEL_RE.test(model.modelId) ? 'high' : undefined;
+    case 'openai':
+      return OPENAI_REASONING_MODEL_RE.test(model.modelId) ? 'high' : undefined;
+    default:
+      // openrouter, groq, cerebras, xai, mistral, bedrock, azure, vercel-ai-gateway:
+      // all pass-through or multi-tenant. Even if they serve a reasoning model,
+      // we cannot trust the model id alone, and pi-ai will silently drop or
+      // mistranslate the reasoning knob. Stay conservative.
+      return undefined;
   }
-  if (/\b(o1|o3|o4|gpt-5)/i.test(model.modelId)) return 'high';
-  if (/deepseek.*r1|r1.*deepseek/i.test(model.modelId)) return 'high';
-  if (/\bqwq\b/i.test(model.modelId)) return 'high';
-  return undefined;
 }
 
 export async function generate(input: GenerateInput): Promise<GenerateOutput> {

@@ -190,7 +190,7 @@ describe('generate()', () => {
     expect(opts.reasoning).toBe('high');
   });
 
-  it('passes reasoning=high for DeepSeek R1', async () => {
+  it('omits reasoning for DeepSeek R1 served via Groq pass-through (model id alone is not trustable)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -202,6 +202,82 @@ describe('generate()', () => {
       prompt: 'design a meditation app',
       history: [],
       model: { provider: 'groq', modelId: 'deepseek-r1-distill-llama-70b' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBeUndefined();
+  });
+
+  it('omits reasoning for OpenRouter pass-through claude-4 (cannot trust pass-through ids)', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openrouter', modelId: 'anthropic/claude-sonnet-4' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBeUndefined();
+  });
+
+  it('omits reasoning for OpenRouter id whose substring contains "o1" (no provider trust)', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openrouter', modelId: 'mystery-lab/o1-lookalike' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBeUndefined();
+  });
+
+  it('passes reasoning=high for Anthropic claude-opus-4-7 (first-party provider)', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBe('high');
+  });
+
+  it('passes reasoning=high for OpenAI o3-mini (first-party provider)', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openai', modelId: 'o3-mini' },
       apiKey: 'sk-test',
     });
 
