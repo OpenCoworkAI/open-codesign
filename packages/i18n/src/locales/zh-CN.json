@@ -388,7 +388,7 @@
     "noDesignToExport": "先生成一个设计再导出",
     "enterApiKeyToValidate": "请输入 API Key 进行验证",
     "validateKeyFirst": "请先验证 API Key",
-    "fillAllFieldsToTest": "请填写 provider、key 和 Base URL",
+    "enterKeyToTest": "粘贴 API Key 以测试连接",
     "testingConnection": "正在测试连接…",
     "validateKeyToContinue": "验证 API Key 后才能继续",
     "savingInProgress": "正在保存",

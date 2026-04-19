@@ -279,7 +279,7 @@ export function PasteKey({ onValidated, onBack }: PasteKeyProps) {
   const testDisabledReason = testDisabled
     ? connCheck.status === 'testing'
       ? t('disabledReason.testingConnection')
-      : t('disabledReason.fillAllFieldsToTest')
+      : t('disabledReason.enterKeyToTest')
     : undefined;
   const continueDisabled = connCheck.status !== 'ok';
   const continueDisabledReason = continueDisabled
