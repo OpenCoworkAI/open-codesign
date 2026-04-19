@@ -127,6 +127,7 @@ export function PreviewToolbar(): ReactElement {
               key={item.value}
               type="button"
               title={item.label}
+              aria-label={item.label}
               aria-pressed={active}
               onClick={() => setPreviewViewport(item.value)}
               className={[
