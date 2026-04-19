@@ -655,14 +655,22 @@ function ProviderCard({
 
   async function handleTestConnection() {
     if (!window.codesign) return;
-    const res = await window.codesign.connection.testActive();
-    if (res.ok) {
-      pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
-    } else {
+    try {
+      const res = await window.codesign.connection.testActive();
+      if (res.ok) {
+        pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
+      } else {
+        pushToast({
+          variant: 'error',
+          title: t('settings.providers.toast.connectionFailed'),
+          description: res.hint || res.message,
+        });
+      }
+    } catch (err) {
       pushToast({
         variant: 'error',
         title: t('settings.providers.toast.connectionFailed'),
-        description: res.hint || res.message,
+        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
       });
     }
   }
@@ -756,27 +764,32 @@ function ActiveModelSelector({
     setPrimary(config.modelPrimary ?? sl.defaultPrimary);
   }, [config.modelPrimary, sl.defaultPrimary]);
 
-  async function save(next: string) {
-    if (!window.codesign) return;
+  async function save(next: string): Promise<boolean> {
+    if (!window.codesign) return false;
     try {
       const updated = await window.codesign.settings.setActiveProvider({
         provider,
         modelPrimary: next,
       });
       setConfig(updated);
+      return true;
     } catch (err) {
       pushToast({
         variant: 'error',
         title: t('settings.providers.toast.modelSaveFailed'),
         description: err instanceof Error ? err.message : t('settings.common.unknownError'),
       });
+      return false;
     }
   }
 
   function handleChange(v: string) {
+    const prev = primary;
     setPrimary(v);
     setEditing(false);
-    void save(v);
+    void save(v).then((ok) => {
+      if (!ok) setPrimary(prev);
+    });
   }
 
   return (
