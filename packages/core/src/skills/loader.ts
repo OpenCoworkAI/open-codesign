@@ -1,5 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises';
-import { basename, extname, join } from 'node:path';
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
 import { type LoadedSkill, SkillFrontmatterV1 } from './types.js';
 
@@ -209,11 +209,20 @@ async function appendStarterTemplates(
   skillFile: string,
 ): Promise<string> {
   const blocks: string[] = [];
+  const startersRoot = resolve(startersDir);
   for (const file of templates) {
-    const path = join(startersDir, file);
+    // Reject paths that escape the starters dir (path traversal / absolute paths).
+    const candidate = resolve(startersRoot, file);
+    const rel = relative(startersRoot, candidate);
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
+      console.warn(
+        `[skills] Refusing starter template outside starters dir: "${file}" (referenced by ${skillFile})`,
+      );
+      continue;
+    }
     let content: string;
     try {
-      content = await readFile(path, 'utf-8');
+      content = await readFile(candidate, 'utf-8');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(

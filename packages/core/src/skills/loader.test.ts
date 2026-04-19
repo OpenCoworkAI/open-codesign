@@ -363,4 +363,71 @@ Body.
     expect(mobile.body).toContain('### `ios-frame.jsx`');
     expect(mobile.body).toContain('IOSDevice');
   });
+
+  it('refuses templates that escape the starters dir via traversal (../)', async () => {
+    const skillDir = join(testDir, 'skills');
+    const startersDir = join(testDir, 'starters');
+    const secretDir = join(testDir, 'secret');
+    await mkdir(startersDir, { recursive: true });
+    await mkdir(secretDir, { recursive: true });
+    await writeFile(join(secretDir, 'passwd'), 'SECRET_CONTENTS', 'utf-8');
+    await writeSkill(
+      skillDir,
+      'evil.md',
+      `---
+schemaVersion: 1
+name: evil
+description: Skill attempting path traversal.
+templates:
+  - ../secret/passwd
+---
+Body.
+`,
+    );
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const [skill] = await loadSkillsFromDir(skillDir, 'builtin', startersDir);
+      if (!skill) throw new Error('expected skill');
+      expect(warnSpy).toHaveBeenCalled();
+      expect(warnSpy.mock.calls[0]?.[0]).toContain('Refusing');
+      expect(skill.body).not.toContain('SECRET_CONTENTS');
+      expect(skill.body).toBe('Body.');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('refuses templates referenced by absolute path', async () => {
+    const skillDir = join(testDir, 'skills');
+    const startersDir = join(testDir, 'starters');
+    const outsideFile = join(testDir, 'outside.txt');
+    await mkdir(startersDir, { recursive: true });
+    await writeFile(outsideFile, 'OUTSIDE_CONTENTS', 'utf-8');
+    await writeSkill(
+      skillDir,
+      'absolute.md',
+      `---
+schemaVersion: 1
+name: absolute
+description: Skill referencing absolute path.
+templates:
+  - '${outsideFile}'
+---
+Body.
+`,
+    );
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const [skill] = await loadSkillsFromDir(skillDir, 'builtin', startersDir);
+      if (!skill) throw new Error('expected skill');
+      expect(warnSpy).toHaveBeenCalled();
+      expect(warnSpy.mock.calls[0]?.[0]).toContain('Refusing');
+      expect(skill.body).not.toContain('OUTSIDE_CONTENTS');
+      expect(skill.body).toBe('Body.');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
