@@ -88,4 +88,24 @@ describe('artifact parser', () => {
     expect(last.type).toBe('artifact:end');
     expect(last.fullContent).toBe('unfinished');
   });
+
+  it('does not stall on words that merely start with "<artifact" (letter follows)', () => {
+    const events = collectEvents(['the <artifactual data', ' here']);
+    const text = events
+      .filter((e): e is { type: 'text'; delta: string } => (e as { type: string }).type === 'text')
+      .map((e) => e.delta)
+      .join('');
+    expect(text).toBe('the <artifactual data here');
+    expect(events.some((e) => (e as { type: string }).type === 'artifact:start')).toBe(false);
+  });
+
+  it('does not stall on "<artifact-like" (dash follows)', () => {
+    const events = collectEvents(['something <artifact-like', ' suffix']);
+    const text = events
+      .filter((e): e is { type: 'text'; delta: string } => (e as { type: string }).type === 'text')
+      .map((e) => e.delta)
+      .join('');
+    expect(text).toBe('something <artifact-like suffix');
+    expect(events.some((e) => (e as { type: string }).type === 'artifact:start')).toBe(false);
+  });
 });

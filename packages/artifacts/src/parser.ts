@@ -172,6 +172,12 @@ function findSafeFlushPoint(buffer: string): number {
   if (ltIdx === -1) return buffer.length;
   const tail = buffer.slice(ltIdx);
   if ('<artifact'.startsWith(tail)) return ltIdx;
-  if (tail.startsWith('<artifact') && !tail.includes('>')) return ltIdx;
+  if (tail.startsWith('<artifact') && !tail.includes('>')) {
+    // Only hold back when the next char is whitespace (attributes coming) or
+    // we don't yet have a next char to decide. A letter/digit/dash means this
+    // is an unrelated word like `<artifactual` or `<artifact-like` — flush it.
+    const next = tail.charAt('<artifact'.length);
+    if (next === '' || /\s/.test(next)) return ltIdx;
+  }
   return buffer.length;
 }
