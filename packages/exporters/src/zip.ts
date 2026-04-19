@@ -70,14 +70,19 @@ export async function exportZip(
     zip.addFile(readmePath, 'README.md');
 
     if (opts.assets) {
+      const stagingResolved = path.resolve(stagingDir);
       for (const asset of opts.assets) {
         const safeRel = asset.path.replace(/^\/+/, '');
-        const localPath = path.join(stagingDir, safeRel);
+        const localPath = path.resolve(stagingDir, safeRel);
+        const rel = path.relative(stagingResolved, localPath);
+        if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+          throw new CodesignError(
+            `ZIP export rejected unsafe asset path: ${asset.path}`,
+            'EXPORTER_ZIP_UNSAFE_PATH',
+          );
+        }
         await fs.mkdir(path.dirname(localPath), { recursive: true });
-        await fs.writeFile(
-          localPath,
-          typeof asset.content === 'string' ? asset.content : asset.content,
-        );
+        await fs.writeFile(localPath, asset.content);
         zip.addFile(localPath, safeRel);
       }
     }
@@ -86,6 +91,7 @@ export async function exportZip(
     const stat = await fs.stat(destinationPath);
     return { bytes: stat.size, path: destinationPath };
   } catch (err) {
+    if (err instanceof CodesignError) throw err;
     throw new CodesignError(
       `ZIP export failed: ${err instanceof Error ? err.message : String(err)}`,
       'EXPORTER_ZIP_FAILED',
