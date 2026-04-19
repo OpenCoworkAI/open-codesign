@@ -84,6 +84,41 @@ interface PiModel {
   id: string;
   api: string;
   provider: string;
+  name?: string;
+  baseUrl?: string;
+  reasoning?: boolean;
+  input?: string[];
+  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+/**
+ * OpenRouter is a pass-through gateway whose catalog grows faster than pi-ai's
+ * generated registry. When a model id is unknown to pi-ai, we synthesize a
+ * Model object so the request can still go through. Defaults match pi-ai's
+ * shape for OpenRouter entries (verified against 0.67.68).
+ *
+ * Notes:
+ *  - reasoning: true lets upstream try reasoning; the retry layer self-heals
+ *    on 400 "not supported" responses.
+ *  - contextWindow / maxTokens are best-effort; pi-ai uses them for budgeting,
+ *    not validation.
+ *  - cost zeroed because we don't know it; only display is affected.
+ */
+function synthesizeOpenRouterModel(modelId: string): PiModel {
+  return {
+    id: modelId,
+    name: modelId,
+    api: 'openai-completions',
+    provider: 'openrouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    reasoning: true,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 131072,
+    maxTokens: 131072,
+  };
 }
 
 const EMPTY_USAGE: PiUsage = {
@@ -131,12 +166,16 @@ export async function complete(
     ) => Promise<PiAssistantMessage>;
   };
 
-  const piModel = pi.getModel(model.provider, model.modelId);
+  let piModel = pi.getModel(model.provider, model.modelId);
   if (!piModel) {
-    throw new CodesignError(
-      `Unknown model ${model.provider}:${model.modelId}`,
-      'PROVIDER_MODEL_UNKNOWN',
-    );
+    if (model.provider === 'openrouter') {
+      piModel = synthesizeOpenRouterModel(model.modelId);
+    } else {
+      throw new CodesignError(
+        `Unknown model ${model.provider}:${model.modelId}`,
+        'PROVIDER_MODEL_UNKNOWN',
+      );
+    }
   }
 
   const piOpts: {
