@@ -47,8 +47,20 @@ function renderFrontmatter(meta: MarkdownMeta): string {
   return `${lines.join('\n')}\n`;
 }
 
+// YAML 1.2 reserved indicator chars that, at the start of a plain scalar,
+// change parsing (sequence/flow/anchor/alias/directive/etc). Strings with
+// leading/trailing whitespace also need quoting to round-trip correctly.
+const YAML_LEADING_INDICATOR = /^[-?:,[\]{}#&*!|>'"%@`]/;
+const YAML_NEEDS_QUOTING = /[:#"'\n]/;
+
 function escapeYaml(value: string): string {
-  if (/[:#"'\n]/.test(value)) return JSON.stringify(value);
+  if (
+    YAML_NEEDS_QUOTING.test(value) ||
+    YAML_LEADING_INDICATOR.test(value) ||
+    value !== value.trim()
+  ) {
+    return JSON.stringify(value);
+  }
   return value;
 }
 

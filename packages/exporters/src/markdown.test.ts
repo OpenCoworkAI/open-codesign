@@ -79,6 +79,19 @@ describe('htmlToMarkdown', () => {
     expect(out.length).toBeGreaterThan(0);
   });
 
+  it('quotes titles starting with YAML indicator chars so frontmatter stays valid', () => {
+    const cases = ['- TODO List', '? maybe', '[bracket', '{brace', '> quote', '| pipe', '! bang'];
+    for (const title of cases) {
+      const out = htmlToMarkdown('<p>x</p>', { title, schemaVersion: 1 });
+      expect(out).toContain(`title: ${JSON.stringify(title)}\n`);
+    }
+  });
+
+  it('quotes titles with leading or trailing whitespace', () => {
+    const out = htmlToMarkdown('<p>x</p>', { title: '  padded  ', schemaVersion: 1 });
+    expect(out).toContain('title: "  padded  "\n');
+  });
+
   it('strips javascript: links but keeps the visible text', () => {
     const out = htmlToMarkdown('<p><a href="javascript:alert(1)">x</a></p>', META);
     expect(out).toContain('x');
