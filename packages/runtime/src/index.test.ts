@@ -45,4 +45,30 @@ describe('buildSrcdoc', () => {
     expect(out).toContain('background:#ffffff');
     expect(out.indexOf('background:#ffffff')).toBeLessThan(out.indexOf('background: #000'));
   });
+
+  it('wraps a body-only document (no <html>/<head>) and injects baseline', () => {
+    const html = '<body><style>body { background: #111 }</style><p>x</p></body>';
+    const out = buildSrcdoc(html);
+    expect(out).toContain('background:#ffffff');
+    expect(out).toContain('<p>x</p>');
+    expect(out).toContain('ELEMENT_SELECTED');
+    expect(out.indexOf('background:#ffffff')).toBeLessThan(out.indexOf('background: #111'));
+    // overlay script must land inside the body, before </body>
+    expect(out.indexOf('ELEMENT_SELECTED')).toBeLessThan(out.indexOf('</body>'));
+  });
+
+  it('wraps a plain fragment with no html/head/body and injects baseline', () => {
+    const out = buildSrcdoc('<div>plain</div>');
+    expect(out).toContain('<!doctype html>');
+    expect(out).toContain('background:#ffffff');
+    expect(out).toContain('<div>plain</div>');
+    expect(out).toContain('ELEMENT_SELECTED');
+  });
+
+  it('injects baseline into a full document with <head>', () => {
+    const html = '<!doctype html><html><head><title>t</title></head><body>y</body></html>';
+    const out = buildSrcdoc(html);
+    expect(out).toContain('background:#ffffff');
+    expect(out.indexOf('background:#ffffff')).toBeLessThan(out.indexOf('<title>t</title>'));
+  });
 });

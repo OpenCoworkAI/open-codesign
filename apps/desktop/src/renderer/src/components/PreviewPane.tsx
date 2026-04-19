@@ -200,7 +200,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           isMobile
             ? 'block w-full h-full bg-transparent border-0'
             : 'w-full h-full bg-transparent rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]'
-}
+        }
       />
     );
     const scale = previewZoom / 100;

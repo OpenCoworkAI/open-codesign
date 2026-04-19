@@ -28,9 +28,22 @@ export function buildSrcdoc(userHtml: string): string {
   );
 
   if (/<\/body\s*>/i.test(stripped)) {
-    const withBaseline = /<head[^>]*>/i.test(stripped)
-      ? stripped.replace(/<head[^>]*>/i, (match) => `${match}${BASELINE_STYLE}`)
-      : stripped.replace(/<html[^>]*>/i, (match) => `${match}<head>${BASELINE_STYLE}</head>`);
+    let withBaseline: string;
+    if (/<head[^>]*>/i.test(stripped)) {
+      withBaseline = stripped.replace(/<head[^>]*>/i, (match) => `${match}${BASELINE_STYLE}`);
+    } else if (/<html[^>]*>/i.test(stripped)) {
+      withBaseline = stripped.replace(
+        /<html[^>]*>/i,
+        (match) => `${match}<head>${BASELINE_STYLE}</head>`,
+      );
+    } else if (/<body[^>]*>/i.test(stripped)) {
+      withBaseline = `${stripped.replace(
+        /<body[^>]*>/i,
+        (match) => `<html><head>${BASELINE_STYLE}</head>${match}`,
+      )}</html>`;
+    } else {
+      withBaseline = `<!doctype html><html><head>${BASELINE_STYLE}</head><body>${stripped}</body></html>`;
+    }
     return withBaseline.replace(
       /<\/body\s*>(?![\s\S]*<\/body\s*>)/i,
       `<script>${OVERLAY_SCRIPT}</script></body>`,
