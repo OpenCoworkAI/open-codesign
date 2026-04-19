@@ -29,7 +29,7 @@
     "@testing-library/user-event": "^14.5.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "happy-dom": "^15.11.7",
+    "happy-dom": "^20.9.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.0.0",
