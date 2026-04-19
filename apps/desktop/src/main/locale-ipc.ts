@@ -13,6 +13,7 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { availableLocales, isSupportedLocale, normalizeLocale } from '@open-codesign/i18n';
 import { configDir } from './config';
 import { app, ipcMain } from './electron-runtime';
 
@@ -63,7 +64,25 @@ export function registerLocaleIpc(): void {
     if (typeof raw !== 'string' || raw.length === 0) {
       throw new Error('locale:set expects a non-empty string');
     }
-    await writePersisted(raw);
-    return raw;
+    // Reject unknown tags up-front rather than persisting garbage and relying
+    // on read-time normalization to silently rewrite to "en". A bad write here
+    // would mask renderer bugs and leave users on the wrong language until
+    // they manually clear locale.json.
+    const lower = raw.toLowerCase();
+    const recognized =
+      isSupportedLocale(raw) ||
+      lower === 'zh' ||
+      lower.startsWith('zh-hans') ||
+      lower === 'zh-cn' ||
+      lower === 'zh_cn' ||
+      lower.startsWith('en');
+    if (!recognized) {
+      throw new Error(
+        `locale:set received unsupported locale "${raw}"; expected one of: ${availableLocales.join(', ')}`,
+      );
+    }
+    const canonical = normalizeLocale(raw);
+    await writePersisted(canonical);
+    return canonical;
   });
 }
