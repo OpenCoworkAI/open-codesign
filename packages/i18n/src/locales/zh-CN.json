@@ -113,6 +113,10 @@
       "setActive": "设为当前",
       "reEnterKey": "重新输入 Key",
       "confirm": "确认",
+      "delete": "删除",
+      "testConnection": "测试连接",
+      "moreActions": "更多操作",
+      "editModel": "更改模型",
       "deleteAria": "删除 {{label}} 服务",
       "primary": "主力",
       "fast": "快速",
@@ -139,7 +143,9 @@
         "switchedTo": "已切换到 {{label}}",
         "switchFailed": "切换失败",
         "saved": "服务已保存",
-        "modelSaveFailed": "保存模型选择失败"
+        "modelSaveFailed": "保存模型选择失败",
+        "connectionOk": "连接正常",
+        "connectionFailed": "连接失败"
       }
     },
     "appearance": {
