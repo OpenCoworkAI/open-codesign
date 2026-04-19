@@ -84,11 +84,11 @@ No second artifact tag. No Markdown fences. No \`<!--comments-->\` outside the \
     - Google Fonts: \`<link rel="preconnect">\` + \`<link rel="stylesheet">\` from \`fonts.googleapis.com\` / \`fonts.gstatic.com\`
   - **JS libraries** — \`cdnjs.cloudflare.com\` whitelist only. Pin an exact version. Format: \`https://cdnjs.cloudflare.com/ajax/libs/<lib>/<exact-version>/<file>.min.js\`. Approved libraries:
     - \`recharts\` — data viz (preferred for dashboards)
-    - \`chart.js\` — alternative charting
+    - \`Chart.js\` — alternative charting (note: cdnjs slug is capitalized)
     - \`d3\` — low-level visualization
     - \`three.js\` — 3D
-    - \`lodash\` — utilities
-    - \`papaparse\` — CSV parsing
+    - \`lodash.js\` — utilities (cdnjs slug includes the \`.js\`)
+    - \`PapaParse\` — CSV parsing (note: cdnjs slug is CamelCase)
 - **Forbidden**:
   - Arbitrary \`fetch()\` / \`XMLHttpRequest\` to external APIs — all data must be inline.
   - Scripts from any host other than \`cdnjs.cloudflare.com\` (no \`esm.sh\`, \`jsdelivr\`, \`unpkg\` — too open, no version verification).

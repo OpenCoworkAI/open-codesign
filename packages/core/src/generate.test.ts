@@ -1019,11 +1019,23 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('unpkg');
   });
 
-  it('create mode lists the six approved chart / data libraries', () => {
+  it('create mode lists the six approved chart / data libraries using their exact cdnjs slugs', () => {
     const prompt = composeSystemPrompt({ mode: 'create' });
-    for (const lib of ['recharts', 'chart.js', 'd3', 'three.js', 'lodash', 'papaparse']) {
+    // Verified against https://api.cdnjs.com/libraries/<slug>?fields=name on 2026-04-19.
+    // cdnjs slugs are case-sensitive; using the wrong casing returns 404.
+    for (const lib of ['recharts', 'Chart.js', 'd3', 'three.js', 'lodash.js', 'PapaParse']) {
       expect(prompt, `missing approved cdnjs library: ${lib}`).toContain(lib);
     }
+    // Common wrong slugs must NOT appear as standalone tokens — they 404 on cdnjs.
+    // We check the bullet-list lines specifically (the explanatory parentheticals
+    // legitimately reference, e.g., "the `.js`").
+    const bulletLines = prompt
+      .split('\n')
+      .filter((line) => /^\s*-\s+`[^`]+`/.test(line) && line.includes('—'));
+    const bullets = bulletLines.join('\n');
+    expect(bullets).not.toMatch(/`chart\.js`/);
+    expect(bullets).not.toMatch(/`lodash`/);
+    expect(bullets).not.toMatch(/`papaparse`/);
   });
 
   it('create mode includes the EDITMODE protocol section', () => {

@@ -38,7 +38,8 @@ see it.
      `fonts.googleapis.com` / `fonts.gstatic.com`.
    - **JS libraries**: `cdnjs.cloudflare.com` whitelist only, exact-version
      pinned (`https://cdnjs.cloudflare.com/ajax/libs/<lib>/<exact-version>/<file>.min.js`).
-     Approved: `recharts`, `chart.js`, `d3`, `three.js`, `lodash`, `papaparse`.
+     Approved: `recharts`, `Chart.js`, `d3`, `three.js`, `lodash.js`,
+     `PapaParse` (cdnjs slugs are case-sensitive — use these exactly).
    - Forbidden: arbitrary `fetch()` to external APIs (data must be inline);
      scripts from any other host (no `esm.sh`, `jsdelivr`, `unpkg`).
 2. Tailwind is the styling engine. Compose with utility classes; reach for
