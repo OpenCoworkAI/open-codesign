@@ -748,3 +748,45 @@ describe('useCodesignStore artifact persistence', () => {
     ]);
   });
 });
+
+describe('loadDesigns startup', () => {
+  it('populates designs from listDesigns IPC so persisted work reappears after relaunch', async () => {
+    const designs = [
+      {
+        schemaVersion: 1 as const,
+        id: 'design-1',
+        name: 'Persisted A',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        thumbnailText: null,
+        deletedAt: null,
+      },
+      {
+        schemaVersion: 1 as const,
+        id: 'design-2',
+        name: 'Persisted B',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        thumbnailText: null,
+        deletedAt: null,
+      },
+    ];
+
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: {
+          listDesigns: vi.fn(() => Promise.resolve(designs)),
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({ designs: [], designsLoaded: false });
+    await useCodesignStore.getState().loadDesigns();
+
+    const state = useCodesignStore.getState();
+    expect(state.designs).toHaveLength(2);
+    expect(state.designs.map((d) => d.id)).toEqual(['design-1', 'design-2']);
+    expect(state.designsLoaded).toBe(true);
+  });
+});

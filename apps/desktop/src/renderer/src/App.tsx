@@ -20,6 +20,8 @@ export function App() {
   const config = useCodesignStore((s) => s.config);
   const configLoaded = useCodesignStore((s) => s.configLoaded);
   const loadConfig = useCodesignStore((s) => s.loadConfig);
+  const loadDesigns = useCodesignStore((s) => s.loadDesigns);
+  const switchDesign = useCodesignStore((s) => s.switchDesign);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
   const isGenerating = useCodesignStore((s) => s.isGenerating);
   const setView = useCodesignStore((s) => s.setView);
@@ -38,8 +40,16 @@ export function App() {
   const [prompt, setPrompt] = useState('');
 
   useEffect(() => {
-    void loadConfig();
-  }, [loadConfig]);
+    async function bootstrap(): Promise<void> {
+      await Promise.all([loadConfig(), loadDesigns()]);
+      const state = useCodesignStore.getState();
+      if (state.currentDesignId === null && state.designs.length > 0) {
+        const first = state.designs[0];
+        if (first) await switchDesign(first.id);
+      }
+    }
+    void bootstrap();
+  }, [loadConfig, loadDesigns, switchDesign]);
 
   function submit(): void {
     const trimmed = prompt.trim();
