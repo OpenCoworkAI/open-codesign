@@ -16,7 +16,17 @@ user_invocable: true
 ## Mobile Mock Design Standards
 
 ### Viewport and Frame
-Render mobile screens at **375×812px** (iPhone SE / standard size baseline) or **390×844px** (iPhone 14 standard) inside a device frame when showing a standalone mock. For scrollable content mocks, use `max-width: 390px; margin: 0 auto`. Do not render at desktop width and then scale down — it produces wrong touch target proportions.
+Output **only the screen contents** as if filling a 375×812 viewport (or 390×844 for iPhone 14+). The hosting environment provides the device frame, status bar, and home indicator — DO NOT render them yourself.
+
+Specifically forbidden:
+- Phone-shaped wrapper divs (rounded outer container, "bezel", "notch", "dynamic island")
+- iOS status bar (9:41 time, signal/wifi/battery icons) — the host adds this
+- Home indicator bar at the bottom — the host adds this
+- Any explicit phone chrome rendering
+
+Use `body { max-width: 390px; margin: 0 auto; min-height: 100vh; }` to constrain content width. Touch targets and spacing remain mobile-appropriate (44pt min target, 16-20px side padding).
+
+If the user explicitly asks for a "phone mockup with frame" or "show the iPhone bezel", THEN you may render device chrome — otherwise default to bare screen contents.
 
 ### Touch Targets
 Every interactive element must have a minimum tap target of **44×44px**. This is Apple HIG and Android Material specification. Apply it to buttons, list items, toggle switches, icon buttons, and navigation tabs. Use padding to extend small visual elements to the minimum tap size — do not enlarge the visual.
