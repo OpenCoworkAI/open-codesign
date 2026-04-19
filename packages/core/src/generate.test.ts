@@ -794,6 +794,12 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('Single-page structure ladder');
   });
 
+  it('create mode embeds dashboard ambient signals directive', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    expect(prompt).toContain('Dashboard ambient signals');
+    expect(prompt).toContain('LIVE" pill badge');
+  });
+
   it('revise mode embeds craft directives', () => {
     const prompt = composeSystemPrompt({ mode: 'revise' });
     expect(prompt).toContain('Craft directives');

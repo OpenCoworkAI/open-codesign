@@ -408,6 +408,15 @@ The default skeleton for a marketing or case-study artifact:
 
 Dashboards substitute: top KPI strip → primary chart → secondary charts grid → recent activity / log → quick actions.
 
+## Dashboard ambient signals
+
+For dashboard / data / analytics artifacts, include these "live system" cues to convey active data:
+
+- A "LIVE" pill badge in the top-right corner of any chart card showing real-time data. Pill is small (font 10-11px), accent color border 1px, padding 2x6px, border-radius 999.
+- A status indicator near the page title: a small green dot (8px diameter, accent color, animated pulse keyframe) followed by "SYSTEM ONLINE" or "LIVE" in 11px uppercase tracked text.
+- A live clock in the top-right of the page header: HH:MM:SS in tabular-nums font, updated each second via setInterval, with the current date below in smaller secondary text.
+- KPI cards get a 4px vertical accent bar on the left side. Color varies by metric category (revenue=teal, growth=amber, retention=violet, regions=green) — pick from the artifact palette, not arbitrary.
+
 Slide decks substitute: cover → 3-7 content slides with strong hierarchy each → closing slide.`;
 
 const SAFETY = `# Safety and scope
