@@ -7,10 +7,12 @@ vi.mock('./electron-runtime', () => ({
 
 import { createHash } from 'node:crypto';
 import {
+  CONNECTION_FETCH_TIMEOUT_MS,
   _clearModelsCache,
   classifyHttpError,
   extractIds,
   extractModelIds,
+  fetchWithTimeout,
   getCacheKey,
   normalizeBaseUrl,
 } from './connection-ipc';
@@ -540,5 +542,44 @@ describe('normalizeBaseUrl', () => {
     expect(normalizeBaseUrl('https://generativelanguage.googleapis.com', 'google')).toBe(
       'https://generativelanguage.googleapis.com',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchWithTimeout — aborts when the host hangs past the deadline
+// ---------------------------------------------------------------------------
+
+describe('fetchWithTimeout', () => {
+  it('exports a finite default timeout', () => {
+    expect(Number.isFinite(CONNECTION_FETCH_TIMEOUT_MS)).toBe(true);
+    expect(CONNECTION_FETCH_TIMEOUT_MS).toBeGreaterThan(0);
+  });
+
+  it('aborts the underlying fetch when the timer fires', async () => {
+    vi.useRealTimers();
+    const seenSignals: AbortSignal[] = [];
+    const fakeFetch = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init.signal as AbortSignal;
+          seenSignals.push(signal);
+          signal.addEventListener('abort', () => {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        }),
+    );
+    const originalFetch = globalThis.fetch;
+    (globalThis as { fetch: typeof fetch }).fetch = fakeFetch as unknown as typeof fetch;
+
+    try {
+      await expect(fetchWithTimeout('https://example.test', {}, 5)).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      expect(seenSignals[0]?.aborted).toBe(true);
+    } finally {
+      (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+    }
   });
 });

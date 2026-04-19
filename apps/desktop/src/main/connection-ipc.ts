@@ -168,6 +168,12 @@ export function classifyHttpError(status: number): {
 
 function classifyNetworkError(err: unknown): { code: ConnectionTestError['code']; hint: string } {
   const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof Error && err.name === 'AbortError') {
+    return {
+      code: 'NETWORK',
+      hint: `请求超时（>${CONNECTION_FETCH_TIMEOUT_MS / 1000}s），检查 baseUrl 与网络可达性`,
+    };
+  }
   if (message.includes('ECONNREFUSED') || message.includes('ENOTFOUND')) {
     return {
       code: 'ECONNREFUSED',
@@ -184,6 +190,25 @@ function classifyNetworkError(err: unknown): { code: ConnectionTestError['code']
     code: 'NETWORK',
     hint: `网络错误：${message}。查看日志：~/Library/Logs/open-codesign/main.log`,
   };
+}
+
+// Provider /models endpoints normally return in <1s. Anything past 10s means the
+// host is unreachable or stuck — better to surface a clear NETWORK error than to
+// pin the renderer's "Test connection" spinner forever.
+export const CONNECTION_FETCH_TIMEOUT_MS = 10_000;
+
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number = CONNECTION_FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function extractIds(items: unknown[]): string[] | null {
@@ -327,7 +352,7 @@ export function registerConnectionIpc(): void {
 
       let res: Response;
       try {
-        res = await fetch(ep.url, {
+        res = await fetchWithTimeout(ep.url, {
           method: 'GET',
           headers: { ...ep.headers, ...authHeaders },
         });
@@ -378,7 +403,7 @@ export function registerConnectionIpc(): void {
 
     let res: Response;
     try {
-      res = await fetch(ep.url, {
+      res = await fetchWithTimeout(ep.url, {
         method: 'GET',
         headers: { ...ep.headers, ...authHeaders },
       });
@@ -435,7 +460,10 @@ export function registerConnectionIpc(): void {
 
     let res: Response;
     try {
-      res = await fetch(ep.url, { method: 'GET', headers: { ...ep.headers, ...authHeaders } });
+      res = await fetchWithTimeout(ep.url, {
+        method: 'GET',
+        headers: { ...ep.headers, ...authHeaders },
+      });
     } catch (err) {
       const { code, hint } = classifyNetworkError(err);
       return {
