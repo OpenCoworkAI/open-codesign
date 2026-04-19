@@ -168,6 +168,8 @@
   --size-preview-mobile-height: 812px;
   --size-preview-mobile-notch-width: 120px;
   --size-preview-mobile-notch-height: 30px;
+  --size-preview-mobile-home-indicator-width: 134px;
+  --size-preview-mobile-home-indicator-height: 5px;
   --size-preview-tablet-width: 768px;
   --size-preview-tablet-height: 1024px;
   --size-preview-desktop-width: 1440px;

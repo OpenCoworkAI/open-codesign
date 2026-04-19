@@ -91,12 +91,6 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     body = <LoadingState />;
   } else if (previewHtml) {
     const isMobile = previewViewport === 'mobile';
-    const viewportStyle: React.CSSProperties | undefined = isMobile
-      ? {
-          width: 'var(--size-preview-mobile-width)',
-          height: 'var(--size-preview-mobile-height)',
-        }
-      : undefined;
     const iframe = (
       <iframe
         ref={iframeRef}
@@ -106,17 +100,16 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         srcDoc={buildSrcdoc(previewHtml)}
         className={
           isMobile
-            ? 'w-full h-full bg-[var(--color-artifact-bg)]'
+            ? 'block w-full h-full bg-[var(--color-artifact-bg)] border-0'
             : 'w-full h-full bg-[var(--color-artifact-bg)] rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]'
         }
-        style={viewportStyle}
       />
     );
 
     if (isMobile) {
       body = (
-        <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
-          <div className="relative">
+        <div className="min-h-full p-6 flex flex-col items-center justify-center overflow-auto">
+          <div className="relative inline-flex">
             <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
             <PhoneFrame>{iframe}</PhoneFrame>
             <InlineCommentComposer />
