@@ -508,6 +508,7 @@
       "disableTls": "禁用 TLS 验证"
     },
     "applyFix": "应用此修复",
+    "setBaseUrlFirst": "请先填写 Base URL",
     "testAgain": "再次测试",
     "showLog": "查看完整日志",
     "showLogFailed": "无法打开日志文件夹",

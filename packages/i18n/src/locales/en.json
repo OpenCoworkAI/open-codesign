@@ -513,6 +513,7 @@
       "disableTls": "Disable TLS verify"
     },
     "applyFix": "Apply this fix",
+    "setBaseUrlFirst": "Set a Base URL first",
     "testAgain": "Test again",
     "showLog": "Show full log",
     "showLogFailed": "Failed to open logs folder",

@@ -5,6 +5,12 @@ import { AlertCircle, ExternalLink, FileText, RefreshCw, X } from 'lucide-react'
 import { useState } from 'react';
 import { useCodesignStore } from '../store';
 
+/** A baseUrlTransform suggestion (e.g. append "/v1") only makes sense when
+ * the user already has a real absolute URL — otherwise we'd write "/v1" by itself. */
+export function isAbsoluteHttpUrl(value: string): boolean {
+  return /^https?:\/\/\S+/i.test(value.trim());
+}
+
 export interface ConnectionDiagnosticPanelProps {
   /** The error code returned by connection.test or generate */
   errorCode: ErrorCode;
@@ -46,8 +52,12 @@ export function ConnectionDiagnosticPanel({
   const primary = hypotheses[0];
   const fix = primary?.suggestedFix;
 
+  const canTransformBaseUrl = isAbsoluteHttpUrl(baseUrl);
   const suggestedUrl =
-    fix?.baseUrlTransform !== undefined ? fix.baseUrlTransform(baseUrl) : undefined;
+    fix?.baseUrlTransform !== undefined && canTransformBaseUrl
+      ? fix.baseUrlTransform(baseUrl)
+      : undefined;
+  const canApplyFix = suggestedUrl !== undefined || fix?.externalUrl !== undefined;
 
   function handleApplyFix() {
     if (suggestedUrl !== undefined) {
@@ -133,7 +143,9 @@ export function ConnectionDiagnosticPanel({
           <button
             type="button"
             onClick={handleApplyFix}
-            className="inline-flex items-center gap-1.5 h-7 px-3 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--text-xs)] font-medium hover:opacity-90 transition-opacity"
+            disabled={!canApplyFix}
+            title={canApplyFix ? undefined : t('diagnostics.setBaseUrlFirst')}
+            className="inline-flex items-center gap-1.5 h-7 px-3 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--text-xs)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:opacity-50"
           >
             {fix.externalUrl !== undefined && <ExternalLink className="w-3 h-3" />}
             {t(fix.label)}
