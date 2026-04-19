@@ -110,7 +110,6 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       body = (
         <div className="min-h-full p-6 flex flex-col items-center justify-center overflow-auto">
           <div className="relative inline-flex">
-            <div className={COMMENT_HINT_CLASS}>{t('preview.clickToComment')}</div>
             <PhoneFrame>{iframe}</PhoneFrame>
             <InlineCommentComposer />
           </div>

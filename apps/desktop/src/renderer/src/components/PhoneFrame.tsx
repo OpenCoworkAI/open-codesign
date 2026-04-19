@@ -6,66 +6,58 @@ interface PhoneFrameProps {
 
 /**
  * Pure-data sizing contract for the iPhone-style bezel. Exported so unit
- * tests can verify the frame stays at iPhone-reference dimensions without
- * needing a DOM environment.
+ * tests can verify the frame stays at iPhone-reference dimensions and
+ * uses the correct design tokens without needing a DOM environment.
  */
 export const PHONE_FRAME_SIZING = {
   screenWidthVar: '--size-preview-mobile-width',
   screenHeightVar: '--size-preview-mobile-height',
-  borderWidthVar: '--border-width-strong',
+  bezelWidthVar: '--border-width-phone-bezel',
+  bodyColorVar: '--color-phone-body',
+  islandColorVar: '--color-phone-island',
+  islandWidthVar: '--size-preview-mobile-island-width',
+  islandHeightVar: '--size-preview-mobile-island-height',
   expectedScreenWidthPx: 375,
   expectedScreenHeightPx: 812,
-  expectedBorderWidthPx: 8,
+  expectedBezelWidthPx: 3,
   get expectedFrameWidthPx(): number {
-    return this.expectedScreenWidthPx + this.expectedBorderWidthPx * 2;
+    return this.expectedScreenWidthPx + this.expectedBezelWidthPx * 2;
   },
   get expectedFrameHeightPx(): number {
-    return this.expectedScreenHeightPx + this.expectedBorderWidthPx * 2;
+    return this.expectedScreenHeightPx + this.expectedBezelWidthPx * 2;
   },
 } as const;
 
+export const PHONE_FRAME_TEST_IDS = {
+  body: 'phone-frame-body',
+  dynamicIsland: 'phone-frame-dynamic-island',
+} as const;
+
 /**
- * Renders an iPhone-style bezel around its child iframe.
- * All measurements are derived from design tokens (CSS custom properties).
- * No px or color hard-codes — see packages/ui/src/tokens.css.
+ * Renders an iPhone-style device shell around its child iframe.
  *
- * The screen area has fixed pixel dimensions; child iframes should fill
- * 100% of that area (do not set their own pixel width/height).
+ * Single-layer body in deep space-gray (intentionally distinct from the
+ * cream app background so the device reads as a physical object), a thin
+ * bezel, and a centered Dynamic Island. The screen rounds inward by
+ * (radius-phone − bezel) so artifact content isn't clipped at the corners.
  */
 export function PhoneFrame({ children }: PhoneFrameProps): ReactElement {
   return (
     <div
+      data-testid={PHONE_FRAME_TEST_IDS.body}
       style={{
         display: 'inline-flex',
         flexDirection: 'column',
         position: 'relative',
         flexShrink: 0,
         boxSizing: 'content-box',
+        padding: 'var(--border-width-phone-bezel)',
         borderRadius: 'var(--radius-phone)',
-        border: 'var(--border-width-strong) solid var(--color-border-strong)',
-        boxShadow: 'var(--shadow-elevated), var(--shadow-inset-soft)',
-        background: 'var(--color-surface)',
-        overflow: 'hidden',
+        background: 'var(--color-phone-body)',
+        boxShadow: 'var(--shadow-elevated)',
       }}
     >
-      {/* Notch */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 'var(--size-preview-mobile-notch-width)',
-          height: 'var(--size-preview-mobile-notch-height)',
-          background: 'var(--color-border-strong)',
-          borderBottomLeftRadius: 'var(--radius-lg)',
-          borderBottomRightRadius: 'var(--radius-lg)',
-          zIndex: 2,
-          pointerEvents: 'none',
-        }}
-      />
-      {/* Screen area — fixed dimensions; iframe child fills 100% */}
+      {/* Screen — fixed dimensions; iframe child fills 100% */}
       <div
         style={{
           position: 'relative',
@@ -73,11 +65,29 @@ export function PhoneFrame({ children }: PhoneFrameProps): ReactElement {
           height: 'var(--size-preview-mobile-height)',
           flexShrink: 0,
           overflow: 'hidden',
-          borderRadius: 'calc(var(--radius-phone) - var(--border-width-strong))',
+          background: 'var(--color-artifact-bg)',
+          borderRadius: 'calc(var(--radius-phone) - var(--border-width-phone-bezel))',
         }}
       >
         {children}
       </div>
+      {/* Dynamic Island — pill, floats over the screen top */}
+      <div
+        data-testid={PHONE_FRAME_TEST_IDS.dynamicIsland}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: 'var(--space-2)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'var(--size-preview-mobile-island-width)',
+          height: 'var(--size-preview-mobile-island-height)',
+          background: 'var(--color-phone-island)',
+          borderRadius: 'var(--radius-full)',
+          zIndex: 2,
+          pointerEvents: 'none',
+        }}
+      />
       {/* Home indicator */}
       <div
         aria-hidden="true"
@@ -88,9 +98,9 @@ export function PhoneFrame({ children }: PhoneFrameProps): ReactElement {
           transform: 'translateX(-50%)',
           width: 'var(--size-preview-mobile-home-indicator-width)',
           height: 'var(--size-preview-mobile-home-indicator-height)',
-          background: 'var(--color-border-strong)',
+          background: 'var(--color-phone-island)',
           borderRadius: 'var(--radius-full)',
-          opacity: 0.65,
+          opacity: 0.5,
           zIndex: 2,
           pointerEvents: 'none',
         }}

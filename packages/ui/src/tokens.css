@@ -162,12 +162,18 @@
 
   /* Border width */
   --border-width-strong: 8px;
+  --border-width-phone-bezel: 3px;
+
+  /* Phone body — deep space gray, intentionally distinct from app cream bg
+     so the device reads as a physical object, not melting into the canvas. */
+  --color-phone-body: oklch(0.22 0.005 280);
+  --color-phone-island: oklch(0.08 0 0);
 
   /* Preview viewport sizes */
   --size-preview-mobile-width: 375px;
   --size-preview-mobile-height: 812px;
-  --size-preview-mobile-notch-width: 120px;
-  --size-preview-mobile-notch-height: 30px;
+  --size-preview-mobile-island-width: 95px;
+  --size-preview-mobile-island-height: 28px;
   --size-preview-mobile-home-indicator-width: 134px;
   --size-preview-mobile-home-indicator-height: 5px;
   --size-preview-tablet-width: 768px;
@@ -240,6 +246,10 @@ pre,
   --color-toast-success: #6b9c6e;
   --color-toast-error: #d96050;
   --color-overlay: oklch(0 0 0 / 0.6);
+
+  /* Phone body — slightly lighter than dark bg so the device still reads as an object. */
+  --color-phone-body: oklch(0.32 0.005 280);
+  --color-phone-island: oklch(0.05 0 0);
 
   --shadow-soft: 0 1px 2px oklch(0 0 0 / 0.3);
   --shadow-card: 0 1px 2px oklch(0 0 0 / 0.25), 0 4px 16px oklch(0 0 0 / 0.35);
