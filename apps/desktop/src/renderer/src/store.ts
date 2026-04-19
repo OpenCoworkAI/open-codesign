@@ -283,13 +283,25 @@ function isDefaultDesignName(name: string): boolean {
 }
 
 // Core emits 'html' | 'svg' | 'slides' | 'bundle' but the snapshots schema only
-// stores 'html' | 'react' | 'svg' (see DesignSnapshotV1). 'slides'/'bundle' fall
-// through to 'html' because their on-disk source is HTML — keeping the column
+// stores 'html' | 'react' | 'svg' (see DesignSnapshotV1). 'slides'/'bundle' fold
+// into 'html' because their on-disk source is HTML — keeping the column
 // constraint stable means we don't need a schema migration to persist them.
-function toSnapshotArtifactType(coreType: string | undefined): 'html' | 'react' | 'svg' {
-  if (coreType === 'svg') return 'svg';
-  if (coreType === 'react') return 'react';
-  return 'html';
+// Unknown types throw so a new core ArtifactType doesn't silently round-trip
+// as the wrong renderer.
+export function toSnapshotArtifactType(coreType: string | undefined): 'html' | 'react' | 'svg' {
+  switch (coreType) {
+    case undefined:
+    case 'html':
+    case 'slides':
+    case 'bundle':
+      return 'html';
+    case 'svg':
+      return 'svg';
+    case 'react':
+      return 'react';
+    default:
+      throw new Error(`Unsupported artifact type for snapshot persistence: ${coreType}`);
+  }
 }
 
 interface PersistArtifact {
