@@ -416,6 +416,7 @@
     "localePersistFailed": "Failed to save language preference",
     "projectStorageFailed": "Couldn't read or write projects on this device. Your changes may not persist.",
     "storageFailed": "Failed to save to local storage",
+    "weekUsageInvalid": "Provider returned invalid usage values; ignored to keep weekly totals accurate.",
     "weekUsageReadFailed": "Couldn't read this week's usage from local storage. Showing fresh totals."
   },
   "projects": {

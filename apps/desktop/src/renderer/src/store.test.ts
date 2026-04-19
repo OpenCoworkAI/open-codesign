@@ -2,7 +2,7 @@ import { initI18n } from '@open-codesign/i18n';
 import type { LocalInputFile, OnboardingState, SelectedElement } from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GenerationStage } from './store';
-import { accumulateWeekUsage, isoWeekKey, useCodesignStore } from './store';
+import { accumulateWeekUsage, coerceUsageSnapshot, isoWeekKey, useCodesignStore } from './store';
 
 const READY_CONFIG: OnboardingState = {
   hasKey: true,
@@ -399,6 +399,41 @@ describe('accumulateWeekUsage', () => {
     expect(next.inputTokens).toBe(10);
     expect(next.outputTokens).toBe(10);
     expect(next.costUsd).toBe(1);
+  });
+});
+
+describe('coerceUsageSnapshot', () => {
+  it('rejects NaN inputs and reports the field', () => {
+    const { usage, rejected } = coerceUsageSnapshot({
+      inputTokens: Number.NaN,
+      outputTokens: 200,
+      costUsd: 0.01,
+    });
+    expect(usage.inputTokens).toBe(0);
+    expect(usage.outputTokens).toBe(200);
+    expect(usage.costUsd).toBe(0.01);
+    expect(rejected).toEqual(['inputTokens']);
+  });
+
+  it('rejects Infinity inputs and reports the field', () => {
+    const { usage, rejected } = coerceUsageSnapshot({
+      inputTokens: 100,
+      outputTokens: Number.POSITIVE_INFINITY,
+      costUsd: Number.NEGATIVE_INFINITY,
+    });
+    expect(usage.outputTokens).toBe(0);
+    expect(usage.costUsd).toBe(0);
+    expect(rejected).toEqual(['outputTokens', 'costUsd']);
+  });
+
+  it('accepts finite zero without rejecting', () => {
+    const { usage, rejected } = coerceUsageSnapshot({
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    expect(usage).toEqual({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
+    expect(rejected).toEqual([]);
   });
 });
 

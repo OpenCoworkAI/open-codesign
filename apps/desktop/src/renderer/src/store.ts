@@ -243,6 +243,32 @@ export function isoWeekKey(date: Date): string {
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
+function isFiniteUsageNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0;
+}
+
+export function coerceUsageSnapshot(result: {
+  inputTokens?: unknown;
+  outputTokens?: unknown;
+  costUsd?: unknown;
+}): { usage: UsageSnapshot; rejected: string[] } {
+  const rejected: string[] = [];
+  const pick = (label: string, v: unknown): number => {
+    if (v === undefined) return 0;
+    if (isFiniteUsageNumber(v)) return v;
+    rejected.push(label);
+    return 0;
+  };
+  return {
+    usage: {
+      inputTokens: pick('inputTokens', result.inputTokens),
+      outputTokens: pick('outputTokens', result.outputTokens),
+      costUsd: pick('costUsd', result.costUsd),
+    },
+    rejected,
+  };
+}
+
 function readStoredWeekUsage(now: Date): WeekUsage {
   const fresh: WeekUsage = {
     isoWeek: isoWeekKey(now),
@@ -258,9 +284,9 @@ function readStoredWeekUsage(now: Date): WeekUsage {
     const parsed = JSON.parse(raw) as Partial<WeekUsage>;
     if (
       typeof parsed.isoWeek !== 'string' ||
-      typeof parsed.inputTokens !== 'number' ||
-      typeof parsed.outputTokens !== 'number' ||
-      typeof parsed.costUsd !== 'number'
+      !isFiniteUsageNumber(parsed.inputTokens) ||
+      !isFiniteUsageNumber(parsed.outputTokens) ||
+      !isFiniteUsageNumber(parsed.costUsd)
     ) {
       warnReason = 'weekly usage entry has unexpected shape';
     } else if (parsed.isoWeek === fresh.isoWeek) {
@@ -545,11 +571,7 @@ function applyGenerateSuccess(
 ): void {
   const firstArtifact = result.artifacts[0];
   const assistantMessage = result.message || tr('common.done');
-  const usage: UsageSnapshot = {
-    inputTokens: typeof result.inputTokens === 'number' ? result.inputTokens : 0,
-    outputTokens: typeof result.outputTokens === 'number' ? result.outputTokens : 0,
-    costUsd: typeof result.costUsd === 'number' ? result.costUsd : 0,
-  };
+  const { usage, rejected: rejectedUsageFields } = coerceUsageSnapshot(result);
   let persistError: string | null = null;
   let didApply = false;
   finishIfCurrent(set, generationId, (state) => {
@@ -572,6 +594,15 @@ function applyGenerateSuccess(
     if (designId) {
       const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
       void persistDesignState(get, designId, get().messages, get().previewHtml, artifact);
+    }
+    if (rejectedUsageFields.length > 0) {
+      const detail = rejectedUsageFields.join(', ');
+      console.warn('[open-codesign] dropped non-finite usage values from provider:', detail);
+      get().pushToast({
+        variant: 'error',
+        title: tr('errors.weekUsageInvalid'),
+        description: detail,
+      });
     }
     if (persistError) {
       console.warn('[open-codesign] failed to persist weekly usage:', persistError);
@@ -950,11 +981,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       });
       const firstArtifact = result.artifacts[0];
       const assistantText = result.message || tr('common.applied');
-      const usage: UsageSnapshot = {
-        inputTokens: typeof result.inputTokens === 'number' ? result.inputTokens : 0,
-        outputTokens: typeof result.outputTokens === 'number' ? result.outputTokens : 0,
-        costUsd: typeof result.costUsd === 'number' ? result.costUsd : 0,
-      };
+      const { usage, rejected: rejectedUsageFields } = coerceUsageSnapshot(result);
       let persistError: string | null = null;
       set((s) => {
         const nextWeek = accumulateWeekUsage(s.weekUsage, usage, new Date());
@@ -972,6 +999,15 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       if (designId) {
         const artifact = artifactFromResult(firstArtifact, userMessage.content, assistantText);
         void persistDesignState(get, designId, get().messages, get().previewHtml, artifact);
+      }
+      if (rejectedUsageFields.length > 0) {
+        const detail = rejectedUsageFields.join(', ');
+        console.warn('[open-codesign] dropped non-finite usage values from provider:', detail);
+        get().pushToast({
+          variant: 'error',
+          title: tr('errors.weekUsageInvalid'),
+          description: detail,
+        });
       }
       if (persistError) {
         console.warn('[open-codesign] failed to persist weekly usage:', persistError);
