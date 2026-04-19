@@ -1,6 +1,7 @@
 import { initI18n } from '@open-codesign/i18n';
-import type { OnboardingState } from '@open-codesign/shared';
+import type { LocalInputFile, OnboardingState, SelectedElement } from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GenerationStage } from './store';
 import { useCodesignStore } from './store';
 
 const READY_CONFIG: OnboardingState = {
@@ -375,5 +376,63 @@ describe('useCodesignStore project storage error surfacing', () => {
     expect(warnSpy).toHaveBeenCalled();
 
     warnSpy.mockRestore();
+  });
+
+  it('createProject resets project-scoped workspace state when switching to the new project', () => {
+    vi.stubGlobal('window', {
+      localStorage: {
+        setItem: vi.fn(),
+        getItem: vi.fn(() => null),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      },
+      setTimeout,
+    });
+
+    const staleFile: LocalInputFile = {
+      path: '/tmp/old.png',
+      name: 'old.png',
+      size: 1,
+    };
+    const staleSelection: SelectedElement = {
+      selector: '.stale',
+      tag: 'div',
+      outerHTML: '<div class="stale">old</div>',
+      rect: { top: 0, left: 0, width: 10, height: 10 },
+    };
+
+    useCodesignStore.setState({
+      messages: [{ role: 'user', content: 'old prompt' }],
+      previewHtml: '<html>old</html>',
+      inputFiles: [staleFile],
+      referenceUrl: 'https://example.com/old',
+      selectedElement: staleSelection,
+      lastPromptInput: { prompt: 'old prompt', attachments: [staleFile] },
+      isGenerating: true,
+      activeGenerationId: 'gen-old',
+      errorMessage: 'stale error',
+      lastError: 'stale error',
+      generationStage: 'streaming' as GenerationStage,
+    });
+
+    const project = useCodesignStore
+      .getState()
+      .createProject({ name: 'Fresh Project', type: 'prototype' });
+
+    const state = useCodesignStore.getState();
+    expect(state.currentProjectId).toBe(project.id);
+    expect(state.view).toBe('workspace');
+    expect(state.createProjectModalOpen).toBe(false);
+    expect(state.messages).toEqual([]);
+    expect(state.previewHtml).toBeNull();
+    expect(state.inputFiles).toEqual([]);
+    expect(state.referenceUrl).toBe('');
+    expect(state.selectedElement).toBeNull();
+    expect(state.lastPromptInput).toBeNull();
+    expect(state.isGenerating).toBe(false);
+    expect(state.activeGenerationId).toBeNull();
+    expect(state.errorMessage).toBeNull();
+    expect(state.lastError).toBeNull();
+    expect(state.generationStage).toBe('idle');
   });
 });

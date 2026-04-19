@@ -723,7 +723,15 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       createProjectModalOpen: false,
       messages: [],
       previewHtml: null,
+      inputFiles: [],
+      referenceUrl: '',
+      selectedElement: null,
+      lastPromptInput: null,
       generationStage: 'idle' as GenerationStage,
+      isGenerating: false,
+      activeGenerationId: null,
+      errorMessage: null,
+      lastError: null,
     });
     if (persist.error) {
       get().pushToast({
