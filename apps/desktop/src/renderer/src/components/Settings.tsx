@@ -762,8 +762,13 @@ function ModelsTab() {
       try {
         const state = await window.codesign.onboarding.getState();
         setConfig(state);
-      } catch {
-        // Best-effort sync — toast already fired above.
+      } catch (err) {
+        pushToast({
+          variant: 'error',
+          title: t('settings.providers.toast.modelSaveFailed'),
+          description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        });
+        return;
       }
     }
     pushToast({ variant: 'success', title: t('settings.providers.toast.saved') });
