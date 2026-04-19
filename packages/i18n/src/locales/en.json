@@ -197,6 +197,7 @@
     }
   },
   "onboarding": {
+    "stepperLabel": "Step {{current}} of {{total}}",
     "welcome": {
       "title": "Design with any model.",
       "subtitle": "Pick how you want to power your designs. You can change this later in Settings.",

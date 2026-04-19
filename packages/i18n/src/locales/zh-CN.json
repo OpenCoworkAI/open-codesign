@@ -196,6 +196,7 @@
     }
   },
   "onboarding": {
+    "stepperLabel": "第 {{current}} 步，共 {{total}} 步",
     "welcome": {
       "title": "选择你的设计模型。",
       "subtitle": "选一种方式来驱动你的设计。之后可以在设置里随时更改。",
