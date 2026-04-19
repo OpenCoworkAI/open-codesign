@@ -178,7 +178,7 @@ export function PreviewToolbar(): ReactElement {
           onClick={() => setInteractionMode(commentActive ? 'default' : 'comment')}
           className={`inline-flex items-center gap-1.5 h-[var(--size-control-xs)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border transition-[background-color,border-color,color] duration-[var(--duration-fast)] ease-[var(--ease-out)] disabled:opacity-40 disabled:pointer-events-none ${
             commentActive
-              ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)]'
+              ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-[var(--color-on-accent)] hover:bg-[var(--color-accent-hover)]'
               : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)]'
           }`}
         >
