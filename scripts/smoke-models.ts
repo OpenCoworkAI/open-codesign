@@ -79,8 +79,9 @@ function parseConfig(path: string): SmokeConfig {
 }
 
 function slug(model: SmokeModel, prompt: SmokePrompt): string {
-  const safeModel = `${model.provider}_${model.modelId}`.replace(/[/:]/g, '_');
-  return `${safeModel}__${prompt.name}`;
+  const safeModel = `${model.provider}_${model.modelId}`.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safePrompt = prompt.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  return `${safeModel}__${safePrompt}`;
 }
 
 function qualityCheck(html: string): string[] {
@@ -149,15 +150,18 @@ async function runOne(model: SmokeModel, prompt: SmokePrompt, apiKey: string): P
     });
     const ms = Date.now() - t0;
     const html = result.artifacts[0]?.content ?? '';
-    const path = `${SMOKE_DIR}/${slug(model, prompt)}.html`;
-    writeFileSync(path, html);
+    const artifactPath = resolve(SMOKE_DIR, `${slug(model, prompt)}.html`);
+    if (!artifactPath.startsWith(`${SMOKE_DIR}/`)) {
+      throw new Error(`Refusing to write outside ${SMOKE_DIR}: ${artifactPath}`);
+    }
+    writeFileSync(artifactPath, html);
     return {
       model: `${model.provider}/${model.modelId}`,
       prompt: prompt.name,
       ok: true,
       ms,
       bytes: html.length,
-      artifactPath: path,
+      artifactPath,
       issues: qualityCheck(html),
     };
   } catch (err) {
