@@ -631,6 +631,21 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('Customer quotes deserve distinguished treatment');
     expect(prompt).toContain('Single-page structure ladder');
   });
+
+  it('revise mode embeds craft directives', () => {
+    const prompt = composeSystemPrompt({ mode: 'revise' });
+    expect(prompt).toContain('Craft directives');
+    expect(prompt).toContain('Artifact-type classification');
+    expect(prompt).toContain('Density floor');
+    expect(prompt).toContain('Real, specific content');
+    expect(prompt).toContain('Before / after, side-by-side');
+    expect(prompt).toContain('Big numbers get dedicated visual blocks');
+    expect(prompt).toContain('Typography ladder');
+    expect(prompt).toContain('Dark themes need warmth');
+    expect(prompt).toContain('Logos and brand marks');
+    expect(prompt).toContain('Customer quotes deserve distinguished treatment');
+    expect(prompt).toContain('Single-page structure ladder');
+  });
 });
 
 describe('prompt section .txt vs TS drift', () => {
