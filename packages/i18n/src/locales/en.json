@@ -6,6 +6,7 @@
     "retry": "Retry",
     "save": "Save",
     "close": "Close",
+    "dismissNotification": "Dismiss notification",
     "settings": "Settings",
     "advanced": "Advanced",
     "about": "About",
@@ -323,6 +324,11 @@
     "byokTitle": "BYOK — bring-your-own-key. Full usage tracking coming soon.",
     "spendTooltip": "Spending this week (full tracking coming soon)"
   },
+  "theme": {
+    "toggleAria": "Toggle theme",
+    "switchToLight": "Switch to light",
+    "switchToDark": "Switch to dark"
+  },
   "commands": {
     "title": "Commands",
     "placeholder": "Type a command or search…",
@@ -404,6 +410,20 @@
     "applyButtonBusy": "Applying\u2026",
     "cancel": "Cancel"
   },
+  "disabledReason": {
+    "typePromptToSend": "Type a prompt to start",
+    "generatingInProgress": "Generation in progress",
+    "typeDraftToApply": "Type a comment to apply",
+    "noDesignToExport": "Generate a design first",
+    "enterApiKeyToValidate": "Enter an API key to validate",
+    "validateKeyFirst": "Validate the key first",
+    "fillAllFieldsToTest": "Enter provider, key and base URL to test",
+    "testingConnection": "Testing connection…",
+    "validateKeyToContinue": "Validate your API key to continue",
+    "savingInProgress": "Saving in progress",
+    "enterBothModels": "Both model fields are required",
+    "ollamaComingSoon": "Ollama integration is coming in v0.2"
+  },
   "errors": {
     "generic": "Something went wrong.",
     "providerAuthMissing": "No API key configured. Open Settings to add one.",
@@ -438,6 +458,26 @@
       "description": "Hero + features + CTA, tunable accent color.",
       "prompt": "Design a modern marketing landing page for an AI productivity tool. Include a hero section, three feature cards, social proof, and a call to action. Use a warm neutral palette."
     }
+  },
+  "examples": {
+    "tab": "Examples",
+    "title": "Examples",
+    "subtitle": "Hand-picked starting points. Hover to preview, then drop the prompt into the composer.",
+    "empty": "No examples match your filter.",
+    "useThisPrompt": "Use this prompt",
+    "categories": {
+      "all": "All",
+      "animation": "Animation",
+      "ui": "UI",
+      "marketing": "Marketing",
+      "document": "Document",
+      "dashboard": "Dashboard",
+      "presentation": "Presentation",
+      "email": "Email",
+      "mobile": "Mobile"
+    },
+    "thumbnailAlt": "{{title}} preview",
+    "promptUsedToast": "Prompt loaded — edit and send when ready."
   },
   "emptyState": {
     "heading": "Design with intent.",

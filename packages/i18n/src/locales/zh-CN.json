@@ -6,6 +6,7 @@
     "retry": "重试",
     "save": "保存",
     "close": "关闭",
+    "dismissNotification": "关闭通知",
     "settings": "设置",
     "advanced": "高级",
     "about": "关于",
@@ -322,6 +323,11 @@
     "byokTitle": "BYOK — 自带密钥，完整用量统计即将上线。",
     "spendTooltip": "本周花费（完整统计即将上线）"
   },
+  "theme": {
+    "toggleAria": "切换主题",
+    "switchToLight": "切换到浅色",
+    "switchToDark": "切换到深色"
+  },
   "commands": {
     "title": "命令面板",
     "placeholder": "输入命令或搜索…",
@@ -403,6 +409,20 @@
     "applyButtonBusy": "正在应用\u2026",
     "cancel": "取消"
   },
+  "disabledReason": {
+    "typePromptToSend": "输入提示词以开始",
+    "generatingInProgress": "生成中，请稍候",
+    "typeDraftToApply": "输入评论内容后才能应用",
+    "noDesignToExport": "先生成一个设计再导出",
+    "enterApiKeyToValidate": "请输入 API Key 进行验证",
+    "validateKeyFirst": "请先验证 API Key",
+    "fillAllFieldsToTest": "请填写 provider、key 和 Base URL",
+    "testingConnection": "正在测试连接…",
+    "validateKeyToContinue": "验证 API Key 后才能继续",
+    "savingInProgress": "正在保存",
+    "enterBothModels": "两个模型字段均为必填",
+    "ollamaComingSoon": "Ollama 集成将在 v0.2 中支持"
+  },
   "errors": {
     "generic": "出错了。",
     "providerAuthMissing": "还没配置 API Key。打开设置去添加一个。",
@@ -437,6 +457,26 @@
       "description": "Hero + 特性 + 行动召唤，主色可调。",
       "prompt": "为一款 AI 效率工具设计现代风格的营销落地页。包含 Hero 区、三个特性卡片、社会证明和行动召唤。整体使用暖色调中性配色。"
     }
+  },
+  "examples": {
+    "tab": "范例",
+    "title": "范例",
+    "subtitle": "精选的起点。悬停预览，再把提示词带回输入框。",
+    "empty": "没有匹配该分类的范例。",
+    "useThisPrompt": "使用此提示",
+    "categories": {
+      "all": "全部",
+      "animation": "动画",
+      "ui": "UI",
+      "marketing": "营销",
+      "document": "文档",
+      "dashboard": "看板",
+      "presentation": "演示",
+      "email": "邮件",
+      "mobile": "移动端"
+    },
+    "thumbnailAlt": "{{title}} 预览",
+    "promptUsedToast": "提示词已载入——编辑后即可发送。"
   },
   "emptyState": {
     "heading": "用心设计。",
