@@ -1,5 +1,11 @@
 import { useT } from '@open-codesign/i18n';
-import { buildSrcdoc, isIframeErrorMessage, isOverlayMessage } from '@open-codesign/runtime';
+import {
+  type IframeErrorMessage,
+  type OverlayMessage,
+  buildSrcdoc,
+  isIframeErrorMessage,
+  isOverlayMessage,
+} from '@open-codesign/runtime';
 import { useEffect, useRef } from 'react';
 import { EmptyState } from '../preview/EmptyState';
 import { ErrorState } from '../preview/ErrorState';
@@ -48,6 +54,53 @@ export function scaleRectForZoom(
   };
 }
 
+/**
+ * Trust boundary: parent → iframe is the ONLY direction allowed for control
+ * messages like SET_MODE. The iframe runs untrusted, model-generated code, so
+ * any message it sends back must be matched against an explicit allowlist.
+ * Adding a new accepted type requires updating both the union and the switch.
+ */
+export type AllowedPreviewMessageType = 'ELEMENT_SELECTED' | 'IFRAME_ERROR';
+
+export interface PreviewMessageHandlers {
+  onElementSelected: (msg: OverlayMessage) => void;
+  onIframeError: (msg: IframeErrorMessage) => void;
+}
+
+export type PreviewMessageOutcome =
+  | { status: 'handled'; type: AllowedPreviewMessageType }
+  | { status: 'rejected'; reason: 'envelope' | 'unknown-type' | 'shape'; type?: string };
+
+export function handlePreviewMessage(
+  data: unknown,
+  handlers: PreviewMessageHandlers,
+): PreviewMessageOutcome {
+  if (typeof data !== 'object' || data === null) {
+    return { status: 'rejected', reason: 'envelope' };
+  }
+  const envelope = data as { __codesign?: unknown; type?: unknown };
+  if (envelope.__codesign !== true || typeof envelope.type !== 'string') {
+    return { status: 'rejected', reason: 'envelope' };
+  }
+
+  switch (envelope.type) {
+    case 'ELEMENT_SELECTED':
+      if (isOverlayMessage(data)) {
+        handlers.onElementSelected(data);
+        return { status: 'handled', type: 'ELEMENT_SELECTED' };
+      }
+      return { status: 'rejected', reason: 'shape', type: envelope.type };
+    case 'IFRAME_ERROR':
+      if (isIframeErrorMessage(data)) {
+        handlers.onIframeError(data);
+        return { status: 'handled', type: 'IFRAME_ERROR' };
+      }
+      return { status: 'rejected', reason: 'shape', type: envelope.type };
+    default:
+      return { status: 'rejected', reason: 'unknown-type', type: envelope.type };
+  }
+}
+
 const COMMENT_HINT_CLASS =
   'absolute left-[var(--space-5)] top-[var(--space-5)] z-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur';
 
@@ -79,25 +132,20 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     function onMessage(event: MessageEvent): void {
       if (!isTrustedPreviewMessageSource(event.source, iframeRef.current?.contentWindow)) return;
 
-      if (isOverlayMessage(event.data)) {
-        selectCanvasElement({
-          selector: event.data.selector,
-          tag: event.data.tag,
-          outerHTML: event.data.outerHTML,
-          rect: scaleRectForZoom(event.data.rect, previewZoom),
-        });
-        return;
-      }
+      const outcome = handlePreviewMessage(event.data, {
+        onElementSelected: (msg) =>
+          selectCanvasElement({
+            selector: msg.selector,
+            tag: msg.tag,
+            outerHTML: msg.outerHTML,
+            rect: scaleRectForZoom(msg.rect, previewZoom),
+          }),
+        onIframeError: (msg) =>
+          pushIframeError(formatIframeError(msg.kind, msg.message, msg.source, msg.lineno)),
+      });
 
-      if (isIframeErrorMessage(event.data)) {
-        pushIframeError(
-          formatIframeError(
-            event.data.kind,
-            event.data.message,
-            event.data.source,
-            event.data.lineno,
-          ),
-        );
+      if (outcome.status === 'rejected' && outcome.reason === 'unknown-type') {
+        console.warn('[PreviewPane] rejected iframe message type:', outcome.type);
       }
     }
 

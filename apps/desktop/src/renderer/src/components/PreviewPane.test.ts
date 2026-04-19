@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { isTrustedPreviewMessageSource, scaleRectForZoom } from './PreviewPane';
+import { describe, expect, it, vi } from 'vitest';
+import { useCodesignStore } from '../store';
+import {
+  handlePreviewMessage,
+  isTrustedPreviewMessageSource,
+  scaleRectForZoom,
+} from './PreviewPane';
 
 describe('isTrustedPreviewMessageSource', () => {
   it('accepts only messages from the active preview iframe window', () => {
@@ -34,5 +39,76 @@ describe('scaleRectForZoom', () => {
       width: 75,
       height: 75,
     });
+  });
+});
+
+describe('handlePreviewMessage trust boundary', () => {
+  function makeHandlers() {
+    return {
+      onElementSelected: vi.fn(),
+      onIframeError: vi.fn(),
+    };
+  }
+
+  it('rejects SET_MODE forged from the iframe and never mutates interactionMode', () => {
+    const handlers = makeHandlers();
+    useCodesignStore.setState({ interactionMode: 'default' });
+
+    const outcome = handlePreviewMessage(
+      { __codesign: true, type: 'SET_MODE', mode: 'comment' },
+      handlers,
+    );
+
+    expect(outcome).toEqual({
+      status: 'rejected',
+      reason: 'unknown-type',
+      type: 'SET_MODE',
+    });
+    expect(useCodesignStore.getState().interactionMode).toBe('default');
+    expect(handlers.onElementSelected).not.toHaveBeenCalled();
+    expect(handlers.onIframeError).not.toHaveBeenCalled();
+  });
+
+  it('rejects messages without the __codesign envelope', () => {
+    const handlers = makeHandlers();
+    expect(handlePreviewMessage({ type: 'ELEMENT_SELECTED' }, handlers)).toEqual({
+      status: 'rejected',
+      reason: 'envelope',
+    });
+    expect(handlePreviewMessage(null, handlers)).toEqual({
+      status: 'rejected',
+      reason: 'envelope',
+    });
+  });
+
+  it('accepts well-formed ELEMENT_SELECTED and IFRAME_ERROR payloads', () => {
+    const handlers = makeHandlers();
+
+    const elementOutcome = handlePreviewMessage(
+      {
+        __codesign: true,
+        type: 'ELEMENT_SELECTED',
+        selector: '#root',
+        tag: 'div',
+        outerHTML: '<div></div>',
+        rect: { top: 0, left: 0, width: 1, height: 1 },
+      },
+      handlers,
+    );
+    expect(elementOutcome).toEqual({ status: 'handled', type: 'ELEMENT_SELECTED' });
+    expect(handlers.onElementSelected).toHaveBeenCalledOnce();
+
+    const errorOutcome = handlePreviewMessage(
+      {
+        __codesign: true,
+        type: 'IFRAME_ERROR',
+        kind: 'error',
+        message: 'boom',
+        timestamp: 1,
+      },
+      handlers,
+    );
+    expect(errorOutcome).toEqual({ status: 'handled', type: 'IFRAME_ERROR' });
+    expect(handlers.onIframeError).toHaveBeenCalledOnce();
   });
 });
