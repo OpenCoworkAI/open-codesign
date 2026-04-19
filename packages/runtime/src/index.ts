@@ -27,15 +27,19 @@ const BODY_CLOSE_RE = /<\/body\s*>/i;
  * baseline/overlay injection can rely on them. Handles all four input
  * shapes: both tags, opener only, closer only, neither.
  */
+function closeBody(html: string): string {
+  return /<\/html\s*>/i.test(html)
+    ? html.replace(/<\/html\s*>/i, '</body></html>')
+    : `${html}</body>`;
+}
+
 function normalizeBodyTags(html: string): string {
   const hasOpen = BODY_OPEN_RE.test(html);
   const hasClose = BODY_CLOSE_RE.test(html);
 
   if (hasOpen && hasClose) return html;
 
-  if (hasOpen && !hasClose) {
-    return `${html}</body>`;
-  }
+  if (hasOpen && !hasClose) return closeBody(html);
 
   if (!hasOpen && hasClose) {
     if (HEAD_CLOSE_RE.test(html)) {
@@ -48,12 +52,8 @@ function normalizeBodyTags(html: string): string {
   }
 
   // Neither opener nor closer.
-  if (HEAD_CLOSE_RE.test(html)) {
-    return `${html.replace(HEAD_CLOSE_RE, (m) => `${m}<body>`)}</body>`;
-  }
-  if (HTML_RE.test(html)) {
-    return `${html.replace(HTML_RE, (m) => `${m}<body>`)}</body>`;
-  }
+  if (HEAD_CLOSE_RE.test(html)) return closeBody(html.replace(HEAD_CLOSE_RE, (m) => `${m}<body>`));
+  if (HTML_RE.test(html)) return closeBody(html.replace(HTML_RE, (m) => `${m}<body>`));
   return `<body>${html}</body>`;
 }
 

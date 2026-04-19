@@ -115,6 +115,44 @@ describe('buildSrcdoc', () => {
       expect(bodyOpen).toBeLessThan(contentIdx);
     });
 
+    it('shape 2 with </html>: inserts </body> BEFORE </html>, not after', () => {
+      const html = '<html><head></head><body><p>open only</p></html>';
+      const out = buildSrcdoc(html);
+      const bodyClose = out.indexOf('</body>');
+      const htmlClose = out.indexOf('</html>');
+      expect(bodyClose).toBeGreaterThanOrEqual(0);
+      expect(htmlClose).toBeGreaterThan(bodyClose);
+      expect(out).not.toMatch(/<\/html\s*>[\s\S]*<\/body\s*>/i);
+    });
+
+    it('shape 4 with <html>...</html> shell: <body> after <html>, </body> before </html>', () => {
+      const html = '<html><p>shell only</p></html>';
+      const out = buildSrcdoc(html);
+      const htmlOpen = out.search(/<html[^>]*>/i);
+      const bodyOpen = out.search(BODY_OPEN_RE);
+      const content = out.indexOf('<p>shell only</p>');
+      const bodyClose = out.indexOf('</body>');
+      const htmlClose = out.indexOf('</html>');
+      expect(htmlOpen).toBeLessThan(bodyOpen);
+      expect(bodyOpen).toBeLessThan(content);
+      expect(content).toBeLessThan(bodyClose);
+      expect(bodyClose).toBeLessThan(htmlClose);
+    });
+
+    it('shape 4 with </head> + </html>: <body> after </head>, </body> before </html>', () => {
+      const html = '<html><head><title>t</title></head><p>x</p></html>';
+      const out = buildSrcdoc(html);
+      const headClose = out.indexOf('</head>');
+      const bodyOpen = out.search(BODY_OPEN_RE);
+      const content = out.indexOf('<p>x</p>');
+      const bodyClose = out.indexOf('</body>');
+      const htmlClose = out.indexOf('</html>');
+      expect(headClose).toBeLessThan(bodyOpen);
+      expect(bodyOpen).toBeLessThan(content);
+      expect(content).toBeLessThan(bodyClose);
+      expect(bodyClose).toBeLessThan(htmlClose);
+    });
+
     it('shape 4: wraps content in <body>...</body> when neither tag is present', () => {
       const out = buildSrcdoc('<div>none</div>');
       expect(out).toContain('<body>');
