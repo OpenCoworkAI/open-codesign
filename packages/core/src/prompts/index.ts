@@ -779,7 +779,12 @@ export function composeSystemPrompt(opts: PromptComposeOptions): string {
   sections.push(SAFETY);
 
   if (opts.skills?.length) {
-    sections.push(...opts.skills);
+    const header = [
+      '# Available Skills',
+      '',
+      "You have access to these specialized skills. Use the one that best fits the user's request — multiple skills can apply if the request spans domains.",
+    ].join('\n');
+    sections.push(`${header}\n\n---\n\n${opts.skills.join('\n\n---\n\n')}`);
   }
 
   return sections.join('\n\n---\n\n');

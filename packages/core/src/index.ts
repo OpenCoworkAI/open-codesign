@@ -4,7 +4,7 @@ import {
   type RetryReason,
   complete,
   completeWithRetry,
-  matchSkillsToPrompt,
+  formatSkillsForPrompt,
 } from '@open-codesign/providers';
 import type {
   Artifact,
@@ -361,18 +361,18 @@ function extractStatus(err: unknown): number | undefined {
   return undefined;
 }
 
-function formatSkillBlob(skill: LoadedSkill): string {
-  return `### Skill: ${skill.frontmatter.name}\n\n${skill.body.trim()}`;
-}
-
 // Skill loading is best-effort: a missing or unreadable builtin directory must
 // not block generation, but the failure must surface (logged at error level
 // AND returned as a warning so the UI can show it). This honours
 // PRINCIPLES "no silent fallbacks" without sacrificing the user's response.
-async function collectMatchedSkillBlobs(
-  userPrompt: string,
+//
+// All loaded skills are formatted into blobs unconditionally — the model picks
+// which one applies (progressive disclosure level 1+2). Algorithmic prompt
+// matching has been removed: language-gated keyword tables were the bug.
+async function collectAllSkillBlobs(
   log: CoreLogger,
 ): Promise<{ blobs: string[]; warnings: string[] }> {
+  const start = Date.now();
   let skills: LoadedSkill[];
   try {
     skills = await loadBuiltinSkills();
@@ -386,8 +386,12 @@ async function collectMatchedSkillBlobs(
       warnings: [`Builtin skills unavailable: ${message}`],
     };
   }
-  const matched = matchSkillsToPrompt(skills, userPrompt);
-  return { blobs: matched.map(formatSkillBlob), warnings: [] };
+  const blobs = formatSkillsForPrompt(skills);
+  log.info('[generate] step=load_skills.ok', {
+    ms: Date.now() - start,
+    skills: blobs.length,
+  });
+  return { blobs, warnings: [] };
 }
 
 /**
@@ -457,7 +461,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   const buildStart = Date.now();
   const skillResult = input.systemPrompt
     ? { blobs: [], warnings: [] }
-    : await collectMatchedSkillBlobs(input.prompt, log);
+    : await collectAllSkillBlobs(log);
   const skillBlobs = skillResult.blobs;
   const messages: ChatMessage[] = [
     {
