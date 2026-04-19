@@ -72,8 +72,11 @@ export async function exportZip(
     if (opts.assets) {
       const stagingResolved = path.resolve(stagingDir);
       for (const asset of opts.assets) {
-        const safeRel = asset.path.replace(/^\/+/, '');
-        const localPath = path.resolve(stagingDir, safeRel);
+        // Normalize backslashes first: on POSIX `path.resolve` treats `\` as a
+        // literal char, so a Windows-style ZIP entry like `..\..\etc\passwd`
+        // would slip past the containment check unless rewritten to `/`.
+        const normalized = asset.path.replace(/\\/g, '/').replace(/^\/+/, '');
+        const localPath = path.resolve(stagingDir, normalized);
         const rel = path.relative(stagingResolved, localPath);
         if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
           throw new CodesignError(
@@ -83,7 +86,7 @@ export async function exportZip(
         }
         await fs.mkdir(path.dirname(localPath), { recursive: true });
         await fs.writeFile(localPath, asset.content);
-        zip.addFile(localPath, safeRel);
+        zip.addFile(localPath, normalized);
       }
     }
 
