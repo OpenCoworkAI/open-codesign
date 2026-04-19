@@ -391,7 +391,8 @@
     "onboardingIncomplete": "Onboarding is not complete.",
     "modelListFailed": "Could not load model list.",
     "unknown": "Unknown error",
-    "localePersistFailed": "Failed to save language preference"
+    "localePersistFailed": "Failed to save language preference",
+    "projectStorageFailed": "Couldn't read or write projects on this device. Your changes may not persist."
   },
   "demos": {
     "meditationApp": {
@@ -450,5 +451,78 @@
     "pitch": "Generate the first 3 slides of a pitch deck for a fintech startup. Title slide, problem, solution.",
     "mobile": "Design a 3-screen mobile app onboarding flow. Welcome, permissions, first action.",
     "dashboard": "Build a data dashboard with 3 charts: bar chart for sales, line chart for retention, pie chart for segments. Use a clean dark theme."
+  },
+  "hub": {
+    "newDesign": "New design",
+    "backToHub": "All designs",
+    "tabs": {
+      "recent": "Recent",
+      "your": "Your designs",
+      "examples": "Examples",
+      "designSystems": "Design systems"
+    },
+    "recent": {
+      "title": "Recent",
+      "empty": "Nothing here yet — start a new design to see it pinned at the top."
+    },
+    "your": {
+      "title": "Your designs",
+      "empty": "No designs saved yet. Click \"New design\" to create your first one.",
+      "openAria": "Open {{name}}"
+    },
+    "examples": {
+      "title": "Examples",
+      "comingSoon": "A curated gallery of starter prompts is on the way."
+    },
+    "designSystems": {
+      "title": "Design systems",
+      "comingSoon": "Reusable brand systems and templates are on the way."
+    },
+    "card": {
+      "type": {
+        "prototype": "Prototype",
+        "slideDeck": "Slide deck",
+        "template": "From template",
+        "other": "Other"
+      },
+      "createdAt": "Created {{date}}"
+    }
+  },
+  "create": {
+    "title": "Start a new design",
+    "subtitle": "Pick a type so we can tailor the first prompt.",
+    "close": "Close",
+    "types": {
+      "prototype": "Prototype",
+      "slideDeck": "Slide deck",
+      "template": "From template",
+      "other": "Other"
+    },
+    "typeDescriptions": {
+      "prototype": "Interactive UI mockups with a phone or browser frame.",
+      "slideDeck": "A multi-slide deck for talks, pitches, or summaries.",
+      "template": "Start from one of the bundled starter prompts.",
+      "other": "A blank canvas — describe anything else you have in mind."
+    },
+    "fields": {
+      "name": "Project name",
+      "namePlaceholder": "Untitled design",
+      "fidelity": "Fidelity",
+      "fidelityWireframe": "Wireframe",
+      "fidelityWireframeHint": "Greyscale blocks, no imagery — quick exploration.",
+      "fidelityHigh": "High-fidelity",
+      "fidelityHighHint": "Polished colors, real-looking content.",
+      "fidelityComingSoon": "Wireframe vs. high-fidelity selection ships in a follow-up.",
+      "speakerNotes": "Include speaker notes",
+      "speakerNotesHint": "Adds a notes section under each slide for delivery cues.",
+      "template": "Template",
+      "templateHint": "Choose a starter — the first prompt will be pre-filled."
+    },
+    "cta": "Create",
+    "disabledHint": "Add a project name to continue.",
+    "help": {
+      "share": "Designs stay on this device. Sharing happens through bundle export — no cloud account needed.",
+      "templates": "More starters arrive in a follow-up; this list will keep growing."
+    }
   }
 }

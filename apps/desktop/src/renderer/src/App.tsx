@@ -1,4 +1,5 @@
 import { useT } from '@open-codesign/i18n';
+import { ChevronLeft } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { CommandPalette } from './components/CommandPalette';
 import { PreviewPane } from './components/PreviewPane';
@@ -9,6 +10,7 @@ import { TopBar } from './components/TopBar';
 import { useKeyboard } from './hooks/useKeyboard';
 import { Onboarding } from './onboarding';
 import { useCodesignStore } from './store';
+import { HubView } from './views/HubView';
 
 export function App() {
   const t = useT();
@@ -73,6 +75,10 @@ export function App() {
           }
           if (view === 'settings') {
             setView('workspace');
+            return;
+          }
+          if (view === 'workspace') {
+            setView('hub');
           }
         },
         preventDefault: false,
@@ -110,12 +116,31 @@ export function App() {
       <div className="flex-1 min-h-0">
         {view === 'settings' ? (
           <Settings />
+        ) : view === 'hub' ? (
+          <HubView
+            onUseExamplePrompt={(p) => {
+              setPrompt(p);
+              setView('workspace');
+            }}
+          />
         ) : (
-          <div className="h-full grid grid-cols-[360px_1fr]">
-            <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
-            <main className="flex flex-col min-h-0">
-              <PreviewPane onPickStarter={(p) => setPrompt(p)} />
-            </main>
+          <div className="h-full flex flex-col">
+            <div className="px-[var(--space-5)] py-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)]">
+              <button
+                type="button"
+                onClick={() => setView('hub')}
+                className="inline-flex items-center gap-[var(--space-1)] text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+              >
+                <ChevronLeft className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" />
+                {t('hub.backToHub')}
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 grid grid-cols-[var(--size-hub-sidebar)_1fr]">
+              <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
+              <main className="flex flex-col min-h-0">
+                <PreviewPane onPickStarter={(p) => setPrompt(p)} />
+              </main>
+            </div>
           </div>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { initI18n } from '@open-codesign/i18n';
-import type { OnboardingState } from '@open-codesign/shared';
+import type { LocalInputFile, OnboardingState, SelectedElement } from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GenerationStage } from './store';
 import { useCodesignStore } from './store';
 
 const READY_CONFIG: OnboardingState = {
@@ -231,8 +232,8 @@ describe('useCodesignStore generation cancellation', () => {
 });
 
 describe('useCodesignStore view navigation', () => {
-  it('starts on workspace view', () => {
-    expect(useCodesignStore.getState().view).toBe('workspace');
+  it('starts on hub view', () => {
+    expect(useCodesignStore.getState().view).toBe('hub');
   });
 
   it('setView("settings") switches to settings and closes command palette', () => {
@@ -329,5 +330,109 @@ describe('useCodesignStore active provider routing', () => {
     const payload = call[0];
     expect(payload.model.provider).toBe('openai');
     expect(payload.model.modelId).toBe('gpt-4o');
+  });
+});
+
+describe('useCodesignStore project storage error surfacing', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
+
+  it('createProject pushes a toast when localStorage.setItem throws and keeps the project in memory', () => {
+    const setItem = vi.fn(() => {
+      throw new Error('QuotaExceededError');
+    });
+    const getItem = vi.fn(() => null);
+
+    vi.stubGlobal('window', {
+      localStorage: { setItem, getItem, removeItem: vi.fn(), clear: vi.fn() },
+      setTimeout,
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const projectsBefore = useCodesignStore.getState().projects;
+    const toastsBefore = useCodesignStore.getState().toasts.length;
+
+    const project = useCodesignStore
+      .getState()
+      .createProject({ name: 'My Project', type: 'slideDeck' });
+
+    const state = useCodesignStore.getState();
+
+    // In-memory state stays consistent — the project was added even though persist failed.
+    expect(state.projects[0]).toEqual(project);
+    expect(state.projects).toHaveLength(projectsBefore.length + 1);
+    expect(state.currentProjectId).toBe(project.id);
+
+    // Toast surfaced with the i18n title and the underlying error message.
+    expect(state.toasts.length).toBe(toastsBefore + 1);
+    expect(state.toasts.at(-1)).toMatchObject({
+      variant: 'error',
+      description: 'QuotaExceededError',
+    });
+    expect(state.toasts.at(-1)?.title).toBeTruthy();
+
+    expect(setItem).toHaveBeenCalledOnce();
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it('createProject resets project-scoped workspace state when switching to the new project', () => {
+    vi.stubGlobal('window', {
+      localStorage: {
+        setItem: vi.fn(),
+        getItem: vi.fn(() => null),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      },
+      setTimeout,
+    });
+
+    const staleFile: LocalInputFile = {
+      path: '/tmp/old.png',
+      name: 'old.png',
+      size: 1,
+    };
+    const staleSelection: SelectedElement = {
+      selector: '.stale',
+      tag: 'div',
+      outerHTML: '<div class="stale">old</div>',
+      rect: { top: 0, left: 0, width: 10, height: 10 },
+    };
+
+    useCodesignStore.setState({
+      messages: [{ role: 'user', content: 'old prompt' }],
+      previewHtml: '<html>old</html>',
+      inputFiles: [staleFile],
+      referenceUrl: 'https://example.com/old',
+      selectedElement: staleSelection,
+      lastPromptInput: { prompt: 'old prompt', attachments: [staleFile] },
+      isGenerating: true,
+      activeGenerationId: 'gen-old',
+      errorMessage: 'stale error',
+      lastError: 'stale error',
+      generationStage: 'streaming' as GenerationStage,
+    });
+
+    const project = useCodesignStore
+      .getState()
+      .createProject({ name: 'Fresh Project', type: 'prototype' });
+
+    const state = useCodesignStore.getState();
+    expect(state.currentProjectId).toBe(project.id);
+    expect(state.view).toBe('workspace');
+    expect(state.createProjectModalOpen).toBe(false);
+    expect(state.messages).toEqual([]);
+    expect(state.previewHtml).toBeNull();
+    expect(state.inputFiles).toEqual([]);
+    expect(state.referenceUrl).toBe('');
+    expect(state.selectedElement).toBeNull();
+    expect(state.lastPromptInput).toBeNull();
+    expect(state.isGenerating).toBe(false);
+    expect(state.activeGenerationId).toBeNull();
+    expect(state.errorMessage).toBeNull();
+    expect(state.lastError).toBeNull();
+    expect(state.generationStage).toBe('idle');
   });
 });

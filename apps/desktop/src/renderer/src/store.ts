@@ -1,11 +1,14 @@
 import { i18n } from '@open-codesign/i18n';
-import type {
-  ChatMessage,
-  LocalInputFile,
-  ModelRef,
-  OnboardingState,
-  SelectedElement,
-  SupportedOnboardingProvider,
+import {
+  type ChatMessage,
+  type LocalInputFile,
+  type ModelRef,
+  type OnboardingState,
+  PROJECT_SCHEMA_VERSION,
+  Project,
+  type ProjectDraft,
+  type SelectedElement,
+  type SupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
@@ -45,7 +48,8 @@ export interface ConnectionStatus {
 }
 
 export type Theme = 'light' | 'dark';
-export type AppView = 'workspace' | 'settings';
+export type AppView = 'hub' | 'workspace' | 'settings';
+export type HubTab = 'recent' | 'your' | 'examples' | 'designSystems';
 
 interface PromptRequest {
   prompt: string;
@@ -69,6 +73,10 @@ interface CodesignState {
 
   theme: Theme;
   view: AppView;
+  hubTab: HubTab;
+  projects: Project[];
+  currentProjectId: string | null;
+  createProjectModalOpen: boolean;
   commandPaletteOpen: boolean;
   toasts: Toast[];
   iframeErrors: string[];
@@ -108,6 +116,11 @@ interface CodesignState {
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setView: (view: AppView) => void;
+  setHubTab: (tab: HubTab) => void;
+  openCreateProjectModal: () => void;
+  closeCreateProjectModal: () => void;
+  createProject: (draft: ProjectDraft) => Project;
+  openProject: (id: string) => void;
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
 
@@ -116,6 +129,63 @@ interface CodesignState {
 }
 
 const THEME_STORAGE_KEY = 'open-codesign:theme';
+const PROJECTS_STORAGE_KEY = 'open-codesign:projects:v1';
+
+type ProjectsReadResult = { projects: Project[]; error: string | null };
+
+function readStoredProjects(): ProjectsReadResult {
+  if (typeof window === 'undefined') return { projects: [], error: null };
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[open-codesign] Failed to read projects from storage:', err);
+    return { projects: [], error: msg };
+  }
+  if (!raw) return { projects: [], error: null };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[open-codesign] Failed to parse stored projects:', err);
+    return { projects: [], error: msg };
+  }
+  if (!Array.isArray(parsed)) {
+    const msg = 'Invalid projects storage payload: expected array';
+    console.warn(`[open-codesign] ${msg}`);
+    return { projects: [], error: msg };
+  }
+  const projects: Project[] = [];
+  let invalidCount = 0;
+  for (const item of parsed) {
+    const result = Project.safeParse(item);
+    if (result.success && result.data.schemaVersion === PROJECT_SCHEMA_VERSION) {
+      projects.push(result.data);
+    } else {
+      invalidCount += 1;
+    }
+  }
+  if (invalidCount > 0) {
+    const msg = `Skipped ${invalidCount} invalid project record(s) in storage`;
+    console.warn(`[open-codesign] ${msg}`);
+    return { projects, error: msg };
+  }
+  return { projects, error: null };
+}
+
+function persistProjects(projects: Project[]): { error: string | null } {
+  if (typeof window === 'undefined') return { error: null };
+  try {
+    window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+    return { error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[open-codesign] Failed to persist projects to storage:', err);
+    return { error: msg };
+  }
+}
 
 function readInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'light';
@@ -277,6 +347,8 @@ function buildPromptRequest(
   };
 }
 
+const initialProjectsRead = readStoredProjects();
+
 export const useCodesignStore = create<CodesignState>((set, get) => ({
   messages: [],
   previewHtml: null,
@@ -292,7 +364,11 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   connectionStatus: { state: 'no_provider', lastTestedAt: null, lastError: null },
 
   theme: readInitialTheme(),
-  view: 'workspace' as AppView,
+  view: 'hub' as AppView,
+  hubTab: 'recent' as HubTab,
+  projects: initialProjectsRead.projects,
+  currentProjectId: null,
+  createProjectModalOpen: false,
   commandPaletteOpen: false,
   toasts: [],
   iframeErrors: [],
@@ -613,6 +689,80 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     set({ view, commandPaletteOpen: false });
   },
 
+  setHubTab(tab) {
+    set({ hubTab: tab });
+  },
+
+  openCreateProjectModal() {
+    set({ createProjectModalOpen: true });
+  },
+
+  closeCreateProjectModal() {
+    set({ createProjectModalOpen: false });
+  },
+
+  createProject(draft) {
+    const now = new Date().toISOString();
+    const project: Project = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: newId(),
+      name: draft.name.trim(),
+      type: draft.type,
+      createdAt: now,
+      updatedAt: now,
+      ...(draft.fidelity ? { fidelity: draft.fidelity } : {}),
+      ...(draft.speakerNotes !== undefined ? { speakerNotes: draft.speakerNotes } : {}),
+      ...(draft.templateId ? { templateId: draft.templateId } : {}),
+    };
+    const next = [project, ...get().projects];
+    const persist = persistProjects(next);
+    set({
+      projects: next,
+      currentProjectId: project.id,
+      view: 'workspace',
+      createProjectModalOpen: false,
+      messages: [],
+      previewHtml: null,
+      inputFiles: [],
+      referenceUrl: '',
+      selectedElement: null,
+      lastPromptInput: null,
+      generationStage: 'idle' as GenerationStage,
+      isGenerating: false,
+      activeGenerationId: null,
+      errorMessage: null,
+      lastError: null,
+    });
+    if (persist.error) {
+      get().pushToast({
+        variant: 'error',
+        title: tr('errors.projectStorageFailed'),
+        description: persist.error,
+      });
+    }
+    return project;
+  },
+
+  openProject(id) {
+    const project = get().projects.find((p) => p.id === id);
+    if (!project) return;
+    set({
+      currentProjectId: id,
+      view: 'workspace',
+      messages: [],
+      previewHtml: null,
+      inputFiles: [],
+      referenceUrl: '',
+      selectedElement: null,
+      lastPromptInput: null,
+      generationStage: 'idle' as GenerationStage,
+      isGenerating: false,
+      activeGenerationId: null,
+      errorMessage: null,
+      lastError: null,
+    });
+  },
+
   openCommandPalette() {
     set({ commandPaletteOpen: true });
   },
@@ -635,3 +785,14 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
   },
 }));
+
+if (initialProjectsRead.error && typeof window !== 'undefined') {
+  // Defer so i18n + UI have a chance to mount before the toast renders.
+  setTimeout(() => {
+    useCodesignStore.getState().pushToast({
+      variant: 'error',
+      title: tr('errors.projectStorageFailed'),
+      description: initialProjectsRead.error ?? '',
+    });
+  }, 0);
+}

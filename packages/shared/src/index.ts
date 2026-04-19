@@ -167,6 +167,36 @@ export const BRAND = {
   backgroundColor: '#faf8f3',
 } as const;
 
+export const PROJECT_SCHEMA_VERSION = 1 as const;
+
+export const ProjectType = z.enum(['prototype', 'slideDeck', 'template', 'other']);
+export type ProjectType = z.infer<typeof ProjectType>;
+
+export const ProjectFidelity = z.enum(['wireframe', 'highFidelity']);
+export type ProjectFidelity = z.infer<typeof ProjectFidelity>;
+
+export const Project = z.object({
+  schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
+  id: z.string().min(1),
+  name: z.string().min(1),
+  type: ProjectType,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  fidelity: ProjectFidelity.optional(),
+  speakerNotes: z.boolean().optional(),
+  templateId: z.string().optional(),
+});
+export type Project = z.infer<typeof Project>;
+
+export const ProjectDraft = z.object({
+  name: z.string().min(1),
+  type: ProjectType,
+  fidelity: ProjectFidelity.optional(),
+  speakerNotes: z.boolean().optional(),
+  templateId: z.string().optional(),
+});
+export type ProjectDraft = z.infer<typeof ProjectDraft>;
+
 export class CodesignError extends Error {
   constructor(
     message: string,
