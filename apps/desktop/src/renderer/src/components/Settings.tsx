@@ -654,7 +654,14 @@ function ProviderCard({
       : 'border-[var(--color-border)] bg-[var(--color-surface)]';
 
   async function handleTestConnection() {
-    if (!window.codesign) return;
+    if (!window.codesign) {
+      pushToast({
+        variant: 'error',
+        title: t('settings.providers.toast.connectionFailed'),
+        description: t('settings.common.unknownError'),
+      });
+      return;
+    }
     try {
       const res = await window.codesign.connection.testActive();
       if (res.ok) {
@@ -764,8 +771,20 @@ function ActiveModelSelector({
     setPrimary(config.modelPrimary ?? sl.defaultPrimary);
   }, [config.modelPrimary, sl.defaultPrimary]);
 
+  // Monotonic counter to guard against overlapping save races: if a later
+  // save has already fired, a stale failure from an earlier save must NOT
+  // roll back the UI to the prior-to-earlier value.
+  const saveSeq = useRef(0);
+
   async function save(next: string): Promise<boolean> {
-    if (!window.codesign) return false;
+    if (!window.codesign) {
+      pushToast({
+        variant: 'error',
+        title: t('settings.providers.toast.modelSaveFailed'),
+        description: t('settings.common.unknownError'),
+      });
+      return false;
+    }
     try {
       const updated = await window.codesign.settings.setActiveProvider({
         provider,
@@ -785,10 +804,11 @@ function ActiveModelSelector({
 
   function handleChange(v: string) {
     const prev = primary;
+    const seq = ++saveSeq.current;
     setPrimary(v);
     setEditing(false);
     void save(v).then((ok) => {
-      if (!ok) setPrimary(prev);
+      if (!ok && seq === saveSeq.current) setPrimary(prev);
     });
   }
 
