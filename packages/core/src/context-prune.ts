@@ -3,33 +3,39 @@
  * hook. Invoked before every LLM call to keep the message array from growing
  * unboundedly.
  *
- * The hot path (and the one that has crashed production with a 4M-token
- * request) is:
+ * Two bulk sources dominate context growth in a long tool-using run:
+ *   - `toolResult.content` — view returns of the whole file (15-100 KB each),
+ *     tool result payloads from read_url / done / etc.
  *   - `assistant.toolCall.input` — str_replace old_str / new_str for every
- *     section edit (2-5 KB each, 30+ edits per run = 100+ KB resent every
- *     turn).
- *   - `toolResult.content` — view returns of the whole file (15-100 KB each,
- *     multiple calls per run).
+ *     section edit (2-5 KB each, 30+ edits per run = 100+ KB). The model's
+ *     own output, carried forward across every subsequent LLM call.
  *
- * Strategy: keep the most recent `WINDOW_KEEP` tool-use rounds verbatim so the
- * model has full fidelity for its current reasoning. For older rounds,
- * replace `toolResult.content` with a one-line stub. We intentionally DO NOT
- * rewrite assistant.toolCall.input (tampering with the model's own output
- * history confuses reasoning); the savings from stubbing toolResults alone
- * are ~60-70% of historical bytes in practice.
+ * Conservative v1 only stubbed toolResult content (safer — keeps the model's
+ * self-history intact) but the production 4M-token failure showed that is
+ * not enough. v2 now compacts BOTH:
+ *   - toolResult rows older than WINDOW_KEEP rounds → content replaced with
+ *     a one-line stub that preserves toolCallId pairing.
+ *   - assistant.toolCall.input older than WINDOW_KEEP rounds → args replaced
+ *     with `{_summarized: true, _origBytes: N}`. The tool name + id stay
+ *     intact so pi-ai's tool-use shape validation is happy; the large
+ *     old_str/new_str payload is discarded.
  *
- * User messages and assistant-text-only messages always pass through unchanged.
+ * We keep the tool NAME on compacted toolCalls so the model can still see
+ * "earlier in this run I did str_replace on index.html 10 times" when
+ * reasoning about what's been done.
+ *
+ * User messages and assistant-text-only messages always pass through
+ * unchanged (no loss of user intent or agent commentary).
  *
  * Safety net: if the total estimated size still exceeds `HARD_CAP_BYTES`
- * (~300 KB of assistant + toolResult text), tighten the window to the last 4
- * rounds only.
+ * after the conservative pass, tighten to WINDOW_KEEP_AGGRESSIVE rounds.
  */
 
 import type { AgentMessage } from '@mariozechner/pi-agent-core';
 
-const WINDOW_KEEP = 8;
-const WINDOW_KEEP_AGGRESSIVE = 4;
-const HARD_CAP_BYTES = 300_000;
+const WINDOW_KEEP = 6;
+const WINDOW_KEEP_AGGRESSIVE = 3;
+const HARD_CAP_BYTES = 200_000;
 
 function estimateBytes(messages: AgentMessage[]): number {
   let total = 0;
@@ -90,6 +96,50 @@ function stubToolResult(m: AgentMessage): AgentMessage {
   } as unknown as AgentMessage;
 }
 
+/**
+ * Shrink every `toolCall` block inside an assistant message. Name + id
+ * stay so pi-ai's shape check (toolResult must match a prior toolCall id)
+ * still passes; the `input` args get replaced with a tiny summary.
+ */
+function stubAssistantToolCalls(m: AgentMessage): AgentMessage {
+  const original = m as unknown as {
+    role: 'assistant';
+    content?: Array<Record<string, unknown>>;
+  };
+  if (!Array.isArray(original.content)) return m;
+  let changed = false;
+  const nextContent = original.content.map((block) => {
+    if (block?.['type'] !== 'toolCall') return block;
+    const input = block['input'];
+    let origBytes = 0;
+    try {
+      origBytes = JSON.stringify(input ?? null).length;
+    } catch {
+      /* ignore */
+    }
+    if (origBytes === 0) return block;
+    changed = true;
+    return {
+      ...block,
+      input: { _summarized: true, _origBytes: origBytes },
+    };
+  });
+  if (!changed) return m;
+  return { ...(original as object), content: nextContent } as unknown as AgentMessage;
+}
+
+function applyWindow(messages: AgentMessage[], keep: number): AgentMessage[] {
+  const roundIdxs = findToolUseRoundIndices(messages);
+  const firstKeptRoundIdx =
+    roundIdxs.length > keep ? (roundIdxs[roundIdxs.length - keep] ?? 0) : 0;
+  return messages.map((m, i) => {
+    if (i >= firstKeptRoundIdx) return m; // inside the window — keep verbatim
+    if (isToolResult(m)) return stubToolResult(m);
+    if (isAssistantWithToolCall(m)) return stubAssistantToolCalls(m);
+    return m; // user messages + assistant-text-only stay intact
+  });
+}
+
 export function buildTransformContext(): (
   messages: AgentMessage[],
   signal?: AbortSignal,
@@ -97,28 +147,35 @@ export function buildTransformContext(): (
   return async (messages) => {
     if (messages.length === 0) return messages;
 
-    const roundIdxs = findToolUseRoundIndices(messages);
-    // Decide how many rounds to keep. If we're already tight on bytes, fall
-    // back to the aggressive window.
-    let keep = WINDOW_KEEP;
-    let firstKeptRoundIdx = roundIdxs.length > keep ? (roundIdxs[roundIdxs.length - keep] ?? 0) : 0;
+    const conservative = applyWindow(messages, WINDOW_KEEP);
+    const conservativeSize = estimateBytes(conservative);
 
-    // First pass with the conservative window.
-    const firstPass = messages.map((m, i) => {
-      if (!isToolResult(m)) return m;
-      if (firstKeptRoundIdx !== undefined && i >= firstKeptRoundIdx) return m;
-      return stubToolResult(m);
-    });
+    // Telemetry — surfaces in the Electron main log so we can tell whether
+    // the hook is actually firing and what size we are landing at per turn.
+    if (typeof console !== 'undefined' && typeof console.log === 'function') {
+      try {
+        console.log(
+          `[context-prune] messages=${messages.length} before=${estimateBytes(messages)}B ` +
+            `after=${conservativeSize}B keep=${WINDOW_KEEP}`,
+        );
+      } catch {
+        /* noop */
+      }
+    }
 
-    if (estimateBytes(firstPass) <= HARD_CAP_BYTES) return firstPass;
+    if (conservativeSize <= HARD_CAP_BYTES) return conservative;
 
-    // Safety net: still too big — tighten to the last 4 rounds.
-    keep = WINDOW_KEEP_AGGRESSIVE;
-    firstKeptRoundIdx = roundIdxs.length > keep ? (roundIdxs[roundIdxs.length - keep] ?? 0) : 0;
-    return messages.map((m, i) => {
-      if (!isToolResult(m)) return m;
-      if (firstKeptRoundIdx !== undefined && i >= firstKeptRoundIdx) return m;
-      return stubToolResult(m);
-    });
+    const aggressive = applyWindow(messages, WINDOW_KEEP_AGGRESSIVE);
+    if (typeof console !== 'undefined' && typeof console.log === 'function') {
+      try {
+        console.log(
+          `[context-prune] aggressive fallback: size=${estimateBytes(aggressive)}B ` +
+            `keep=${WINDOW_KEEP_AGGRESSIVE}`,
+        );
+      } catch {
+        /* noop */
+      }
+    }
+    return aggressive;
   };
 }

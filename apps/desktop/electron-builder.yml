@@ -1,5 +1,11 @@
 appId: ai.opencowork.codesign
 productName: open-codesign
+# Auto-update metadata (latest.yml / latest-mac.yml) is intentionally
+# disabled for v0.1: no code-signing, no public update channel. An
+# explicit `publish: null` stops electron-builder from calling
+# `computeChannelNames` on a nonexistent publish config, which crashes
+# packaging with "Cannot read properties of null (reading 'channel')".
+publish: null
 directories:
   buildResources: resources
   output: release
