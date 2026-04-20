@@ -32,6 +32,10 @@ import { preparePromptContext } from './prompt-context';
 import { resolveActiveModel } from './provider-settings';
 import { safeInitSnapshotsDb } from './snapshots-db';
 import { registerSnapshotsIpc, registerSnapshotsUnavailableIpc } from './snapshots-ipc';
+import {
+  registerChatMessagesIpc,
+  registerChatMessagesUnavailableIpc,
+} from './chat-messages-ipc';
 
 let mainWindow: ElectronBrowserWindow | null = null;
 
@@ -460,6 +464,7 @@ void app.whenReady().then(async () => {
   const dbResult = safeInitSnapshotsDb(join(app.getPath('userData'), 'designs.db'));
   if (dbResult.ok) {
     registerSnapshotsIpc(dbResult.db);
+    registerChatMessagesIpc(dbResult.db);
   } else {
     const bootLog = getLogger('main:boot');
     bootLog.error('snapshotsDb.init.fail', {
@@ -470,6 +475,7 @@ void app.whenReady().then(async () => {
     // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
     // "No handler registered" rejection — see snapshots-ipc.ts.
     registerSnapshotsUnavailableIpc(dbResult.error.message);
+    registerChatMessagesUnavailableIpc(dbResult.error.message);
     dialog.showErrorBox(
       'Design history unavailable',
       `Could not open the local snapshots database. Version history will be disabled for this session.\n\n${dbResult.error.message}`,

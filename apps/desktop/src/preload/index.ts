@@ -1,6 +1,8 @@
 import type {
   CancelGenerationPayloadV1,
+  ChatAppendInput,
   ChatMessage,
+  ChatMessageRow,
   Design,
   DesignMessage,
   DesignSnapshot,
@@ -76,6 +78,43 @@ export interface GenerateResponse {
 export interface Preferences {
   updateChannel: UpdateChannel;
   generationTimeoutSec: number;
+}
+
+/**
+ * Streaming events emitted by the (future) Agent runtime. Phase 1 emits
+ * turn_start / text_delta / turn_end. Phase 2 adds tool_call_*. Kept
+ * deliberately loose so Workstream B can evolve the shape without a
+ * lockstep change here — useAgentStream in the renderer tolerates unknown
+ * event types by ignoring them.
+ */
+export interface AgentStreamEvent {
+  type:
+    | 'turn_start'
+    | 'text_delta'
+    | 'turn_end'
+    | 'tool_call_start'
+    | 'tool_call_result'
+    | 'error';
+  designId: string;
+  generationId?: string;
+  // turn_start
+  turnId?: string;
+  // text_delta
+  delta?: string;
+  // turn_end
+  finalText?: string;
+  // tool_call_start
+  toolName?: string;
+  command?: string;
+  args?: Record<string, unknown>;
+  verbGroup?: string;
+  toolCallId?: string;
+  // tool_call_result
+  result?: unknown;
+  durationMs?: number;
+  // error
+  message?: string;
+  code?: string;
 }
 
 const api = {
@@ -276,6 +315,27 @@ const api = {
       }) as Promise<DesignSnapshot>,
     delete: (id: string) =>
       ipcRenderer.invoke('snapshots:v1:delete', { schemaVersion: 1, id }) as Promise<void>,
+  },
+  chat: {
+    list: (designId: string) =>
+      ipcRenderer.invoke('chat:v1:list', { schemaVersion: 1, designId }) as Promise<
+        ChatMessageRow[]
+      >,
+    append: (input: ChatAppendInput) =>
+      ipcRenderer.invoke('chat:v1:append', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<ChatMessageRow>,
+    seedFromSnapshots: (designId: string) =>
+      ipcRenderer.invoke('chat:v1:seed-from-snapshots', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ inserted: number }>,
+    onAgentEvent: (cb: (event: AgentStreamEvent) => void) => {
+      const listener = (_e: unknown, event: AgentStreamEvent) => cb(event);
+      ipcRenderer.on('agent:event:v1', listener);
+      return () => ipcRenderer.removeListener('agent:event:v1', listener);
+    },
   },
 };
 
