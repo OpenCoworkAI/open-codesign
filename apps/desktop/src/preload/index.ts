@@ -3,6 +3,9 @@ import type {
   ChatAppendInput,
   ChatMessage,
   ChatMessageRow,
+  CommentCreateInput,
+  CommentRow,
+  CommentStatus,
   Design,
   DesignMessage,
   DesignSnapshot,
@@ -330,6 +333,41 @@ const api = {
       ipcRenderer.on('agent:event:v1', listener);
       return () => ipcRenderer.removeListener('agent:event:v1', listener);
     },
+  },
+  comments: {
+    add: (input: CommentCreateInput) =>
+      ipcRenderer.invoke('comments:v1:add', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<CommentRow>,
+    list: (designId: string, snapshotId?: string) =>
+      ipcRenderer.invoke('comments:v1:list', {
+        schemaVersion: 1,
+        designId,
+        ...(snapshotId !== undefined ? { snapshotId } : {}),
+      }) as Promise<CommentRow[]>,
+    listPendingEdits: (designId: string) =>
+      ipcRenderer.invoke('comments:v1:list-pending-edits', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<CommentRow[]>,
+    update: (id: string, patch: { text?: string; status?: CommentStatus }) =>
+      ipcRenderer.invoke('comments:v1:update', {
+        schemaVersion: 1,
+        id,
+        ...patch,
+      }) as Promise<CommentRow | null>,
+    remove: (id: string) =>
+      ipcRenderer.invoke('comments:v1:remove', {
+        schemaVersion: 1,
+        id,
+      }) as Promise<{ removed: boolean }>,
+    markApplied: (ids: string[], snapshotId: string) =>
+      ipcRenderer.invoke('comments:v1:mark-applied', {
+        schemaVersion: 1,
+        ids,
+        snapshotId,
+      }) as Promise<CommentRow[]>,
   },
 };
 
