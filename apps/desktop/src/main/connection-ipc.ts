@@ -689,8 +689,8 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
     throw new CodesignError('baseUrl must be a non-empty string', 'IPC_BAD_INPUT');
   }
-  if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
-    throw new CodesignError('apiKey must be a non-empty string', 'IPC_BAD_INPUT');
+  if (typeof apiKey !== 'string') {
+    throw new CodesignError('apiKey must be a string', 'IPC_BAD_INPUT');
   }
   const out: TestEndpointPayload = {
     wire,

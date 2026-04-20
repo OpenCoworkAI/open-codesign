@@ -439,8 +439,8 @@ function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
   } catch {
     throw new CodesignError(`baseUrl "${baseUrl}" is not a valid URL`, 'IPC_BAD_INPUT');
   }
-  if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
-    throw new CodesignError('apiKey must be a non-empty string', 'IPC_BAD_INPUT');
+  if (typeof apiKey !== 'string') {
+    throw new CodesignError('apiKey must be a string', 'IPC_BAD_INPUT');
   }
   if (typeof defaultModel !== 'string' || defaultModel.trim().length === 0) {
     throw new CodesignError('defaultModel must be a non-empty string', 'IPC_BAD_INPUT');

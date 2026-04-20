@@ -86,7 +86,7 @@ export function AddCustomProviderModal({ onSave, onClose, initialSetAsActive = t
     }
   }
 
-  const canTest = baseUrl.trim().length > 0 && apiKey.trim().length > 0 && test.kind !== 'testing';
+  const canTest = baseUrl.trim().length > 0 && test.kind !== 'testing';
   const canSave = canTest && defaultModel.trim().length > 0 && name.trim().length > 0 && !saving;
 
   return (
