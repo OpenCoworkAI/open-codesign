@@ -516,13 +516,16 @@ function artifactFromResult(
   return { type: source.type, content: source.content, prompt, message };
 }
 
-async function persistArtifactSnapshot(designId: string, artifact: PersistArtifact): Promise<void> {
-  if (!window.codesign) return;
+async function persistArtifactSnapshot(
+  designId: string,
+  artifact: PersistArtifact,
+): Promise<string | null> {
+  if (!window.codesign) return null;
   // Look up the latest snapshot to chain parentId; the first generation in a
   // design has no parent and uses type='initial', subsequent ones use 'edit'.
   const existing = await window.codesign.snapshots.list(designId);
   const parent = existing[0] ?? null;
-  await window.codesign.snapshots.create({
+  const created = await window.codesign.snapshots.create({
     designId,
     parentId: parent?.id ?? null,
     type: parent ? 'edit' : 'initial',
@@ -531,6 +534,7 @@ async function persistArtifactSnapshot(designId: string, artifact: PersistArtifa
     artifactSource: artifact.content,
     ...(artifact.message ? { message: artifact.message } : {}),
   });
+  return created?.id ?? null;
 }
 
 async function persistDesignState(
@@ -539,15 +543,16 @@ async function persistDesignState(
   messages: ChatMessage[],
   previewHtml: string | null,
   artifact: PersistArtifact | null,
-): Promise<void> {
-  if (!window.codesign) return;
+): Promise<string | null> {
+  if (!window.codesign) return null;
   try {
     await window.codesign.snapshots.replaceMessages(
       designId,
       messages.map((m) => ({ role: m.role, content: m.content })),
     );
+    let newSnapshotId: string | null = null;
     if (artifact !== null) {
-      await persistArtifactSnapshot(designId, artifact);
+      newSnapshotId = await persistArtifactSnapshot(designId, artifact);
     }
     if (previewHtml !== null) {
       const firstUser = messages.find((m) => m.role === 'user');
@@ -555,6 +560,7 @@ async function persistDesignState(
       await window.codesign.snapshots.setThumbnail(designId, thumbText);
     }
     await get().loadDesigns();
+    return newSnapshotId;
   } catch (err) {
     const msg = err instanceof Error ? err.message : tr('errors.unknown');
     get().pushToast({
@@ -778,6 +784,34 @@ function buildPromptRequest(
   };
 }
 
+/**
+ * Prepend a human-readable summary of the user's pending edit chips to the
+ * prompt so the LLM knows which elements to change. Claude Design pins edits
+ * to specific elements and lets users accumulate a batch before submitting;
+ * this mirrors that "pending changes accumulator" shape.
+ */
+export function buildEnrichedPrompt(
+  userPrompt: string,
+  pendingEdits: Array<{ selector: string; tag: string; outerHTML: string; text: string }>,
+): string {
+  if (pendingEdits.length === 0) return userPrompt;
+  const lines: string[] = [
+    'The user has pinned these elements and requested these changes:',
+    '',
+  ];
+  pendingEdits.forEach((edit, i) => {
+    const html = edit.outerHTML.length > 280 ? `${edit.outerHTML.slice(0, 280)}…` : edit.outerHTML;
+    lines.push(`${i + 1}. [element: ${edit.tag} — ${edit.selector}]`);
+    lines.push(`   outerHTML: ${html}`);
+    lines.push(`   change: ${JSON.stringify(edit.text)}`);
+    lines.push('');
+  });
+  lines.push('---', '');
+  const trailer = userPrompt.trim().length === 0 ? 'Apply the pending changes.' : userPrompt;
+  lines.push(trailer);
+  return lines.join('\n');
+}
+
 const initialProjectsRead = readStoredProjects();
 
 export const useCodesignStore = create<CodesignState>((set, get) => ({
@@ -958,8 +992,25 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       return;
     }
 
-    const request = buildPromptRequest(input, get().inputFiles, get().referenceUrl);
+    // Pending edit chips let the user submit with an empty prompt — we
+    // substitute a default trailer so buildPromptRequest still passes.
+    const pendingEdits = get().comments.filter(
+      (c) => c.kind === 'edit' && c.status === 'pending',
+    );
+    const trimmedInput = input.prompt.trim();
+    if (trimmedInput.length === 0 && pendingEdits.length === 0) return;
+    const effectivePrompt =
+      trimmedInput.length === 0 ? 'Apply the pending changes.' : trimmedInput;
+
+    const request = buildPromptRequest(
+      { ...input, prompt: effectivePrompt },
+      get().inputFiles,
+      get().referenceUrl,
+    );
     if (!request) return;
+
+    const enrichedPrompt = buildEnrichedPrompt(request.prompt, pendingEdits);
+    const pendingEditIds = pendingEdits.map((c) => c.id);
 
     const generationId = newId();
     const history = get().messages;
@@ -998,13 +1049,43 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
     try {
       await runGenerate(get, set, generationId, {
-        prompt: request.prompt,
+        prompt: enrichedPrompt,
         history,
         model: modelRef(cfg.provider, cfg.modelPrimary),
         ...(request.referenceUrl ? { referenceUrl: request.referenceUrl } : {}),
         attachments: request.attachments,
         generationId,
       });
+      // After a successful generate, persistDesignState (called inside
+      // applyGenerateSuccess) creates the new snapshot and updates
+      // currentSnapshotId via loadCommentsForCurrentDesign. Mark any pending
+      // edits that rode along as applied to the newest snapshot, so the pin
+      // overlay + chips flip state consistently with the new preview.
+      if (pendingEditIds.length > 0 && designIdAtStart && window.codesign) {
+        try {
+          // Re-fetch to pick up the freshly-created snapshot id (persist runs
+          // in the background; give it a tick).
+          await new Promise((r) => setTimeout(r, 0));
+          const snaps = await window.codesign.snapshots.list(designIdAtStart);
+          const appliedIn = snaps[0]?.id ?? null;
+          if (appliedIn) {
+            const updated = await window.codesign.comments.markApplied(
+              pendingEditIds,
+              appliedIn,
+            );
+            if (get().currentDesignId === designIdAtStart && updated.length > 0) {
+              set((s) => ({
+                comments: s.comments.map(
+                  (c) => updated.find((u) => u.id === c.id) ?? c,
+                ),
+                currentSnapshotId: appliedIn,
+              }));
+            }
+          }
+        } catch (err) {
+          console.warn('[open-codesign] markApplied failed:', err);
+        }
+      }
     } catch (err) {
       applyGenerateError(get, set, generationId, err);
     }
