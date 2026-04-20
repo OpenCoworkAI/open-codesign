@@ -33,6 +33,7 @@ export type { IframeErrorMessage } from './iframe-errors';
 
 const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
 const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
+const OVERLAY_MARKER = '<!-- CODESIGN_OVERLAY_SCRIPT -->';
 
 function escapeForScriptLiteral(jsx: string): string {
   // JSON.stringify handles quotes/newlines; the </script> escape prevents the
@@ -80,6 +81,24 @@ ${JSX_TEMPLATE_END}
 </html>`;
 }
 
+function overlayScriptTag(): string {
+  return `${OVERLAY_MARKER}<script>${OVERLAY_SCRIPT}</script>`;
+}
+
+function injectOverlayIntoHtmlDocument(html: string): string {
+  if (html.includes(OVERLAY_MARKER) || html.includes("type: 'ELEMENT_SELECTED'")) {
+    return html;
+  }
+  const script = overlayScriptTag();
+  if (/<\/body\s*>/i.test(html)) {
+    return html.replace(/<\/body\s*>/i, `${script}</body>`);
+  }
+  if (/<\/html\s*>/i.test(html)) {
+    return html.replace(/<\/html\s*>/i, `${script}</html>`);
+  }
+  return `${html}${script}`;
+}
+
 /**
  * Wrap an agent artifact in the vendored React + Babel skeleton, ready for
  * use as an iframe `srcdoc`. Already-wrapped payloads pass through unchanged.
@@ -108,7 +127,7 @@ export function buildSrcdoc(userSource: string): string {
   // Legacy HTML document (pre-JSX-only-switchover snapshots) — render as-is.
   const head = stripped.trimStart().slice(0, 2048).toLowerCase();
   if (head.startsWith('<!doctype') || head.startsWith('<html')) {
-    return stripped;
+    return injectOverlayIntoHtmlDocument(stripped);
   }
   return wrapJsxAsSrcdoc(stripped);
 }
