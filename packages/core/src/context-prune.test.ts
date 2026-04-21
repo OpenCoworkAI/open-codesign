@@ -39,7 +39,7 @@ function assistantText(text: string): AgentMessage {
   } as unknown as AgentMessage;
 }
 
-describe('buildTransformContext — size-based block compaction', () => {
+describe('buildTransformContext — size-based block compaction with recent-turn window', () => {
   it('is a no-op when every block is under its cap', async () => {
     const transform = buildTransformContext();
     const messages: AgentMessage[] = [
@@ -53,8 +53,8 @@ describe('buildTransformContext — size-based block compaction', () => {
   });
 
   it('stubs a large assistant text block even on the LATEST message', async () => {
-    // The production bug: model streamed a 9MB artifact as assistant text
-    // on the final turn. v1 window-based prune preserved it verbatim.
+    // Text cap applies to ALL turns. Guards against the `<artifact>` text
+    // dump regression (assistant streamed 9 MB JSX as prose on the final turn).
     const transform = buildTransformContext();
     const huge = 'x'.repeat(50_000);
     const messages: AgentMessage[] = [userMsg('build it'), assistantText(huge)];
@@ -65,7 +65,9 @@ describe('buildTransformContext — size-based block compaction', () => {
     expect(text).toContain('50000B');
   });
 
-  it('summarizes a large toolCall.input, preserving name + id', async () => {
+  it('keeps a large toolCall.input verbatim inside the recent window', async () => {
+    // The model's own just-written str_replace must stay full-fidelity so it
+    // can pick the next old_str from memory instead of guessing.
     const transform = buildTransformContext();
     const bulk = 'a'.repeat(20_000);
     const messages: AgentMessage[] = [
@@ -75,17 +77,39 @@ describe('buildTransformContext — size-based block compaction', () => {
     ];
     const out = await transform(messages);
     const a = out[1] as {
-      content: Array<{ type?: string; id?: string; name?: string; input?: unknown }>;
+      content: Array<{ type?: string; id?: string; input?: { inputArg?: string } }>;
     };
     const tc = a.content.find((c) => c.type === 'toolCall');
     expect(tc?.id).toBe('call-0');
-    expect(tc?.name).toBe('str_replace_based_edit_tool');
-    const input = tc?.input as { _summarized?: boolean; _origBytes?: number };
-    expect(input?._summarized).toBe(true);
-    expect(input?._origBytes).toBeGreaterThan(10_000);
+    expect(tc?.input?.inputArg).toBe(bulk);
   });
 
-  it('stubs a large toolResult body, keeping toolCallId for pi-ai shape', async () => {
+  it('summarizes a large toolCall.input for older turns outside the window', async () => {
+    const transform = buildTransformContext();
+    const bulk = 'a'.repeat(30_000);
+    const messages: AgentMessage[] = [userMsg('build')];
+    messages.push(assistantWithToolCall('call-old', bulk));
+    messages.push(toolResult('call-old', 'ok'));
+    // Three more turns push call-old out of the 3-turn window.
+    for (let i = 0; i < 3; i += 1) {
+      messages.push(assistantWithToolCall(`t${i}`, 'small'));
+      messages.push(toolResult(`t${i}`, 'ok'));
+    }
+    const out = await transform(messages);
+    const oldAssistant = out[1] as {
+      content: Array<{
+        type?: string;
+        id?: string;
+        input?: { _summarized?: boolean; _origBytes?: number };
+      }>;
+    };
+    const tc = oldAssistant.content.find((c) => c.type === 'toolCall');
+    expect(tc?.id).toBe('call-old');
+    expect(tc?.input?._summarized).toBe(true);
+    expect(tc?.input?._origBytes ?? 0).toBeGreaterThan(20_000);
+  });
+
+  it('keeps a large toolResult verbatim inside the recent window', async () => {
     const transform = buildTransformContext();
     const bulk = 'y'.repeat(20_000);
     const messages: AgentMessage[] = [
@@ -96,6 +120,22 @@ describe('buildTransformContext — size-based block compaction', () => {
     const out = await transform(messages);
     const tr = out[2] as { toolCallId?: string; content: Array<{ text?: string }> };
     expect(tr.toolCallId).toBe('call-0');
+    expect(tr.content[0]?.text).toBe(bulk);
+  });
+
+  it('stubs large toolResult bodies for older turns outside the window', async () => {
+    const transform = buildTransformContext();
+    const bulk = 'y'.repeat(20_000);
+    const messages: AgentMessage[] = [userMsg('x')];
+    messages.push(assistantWithToolCall('call-old', 'a'));
+    messages.push(toolResult('call-old', bulk));
+    for (let i = 0; i < 3; i += 1) {
+      messages.push(assistantWithToolCall(`t${i}`, 'small'));
+      messages.push(toolResult(`t${i}`, 'ok'));
+    }
+    const out = await transform(messages);
+    const tr = out[2] as { toolCallId?: string; content: Array<{ text?: string }> };
+    expect(tr.toolCallId).toBe('call-old');
     expect(tr.content[0]?.text?.startsWith('[tool result dropped')).toBe(true);
   });
 
@@ -118,13 +158,9 @@ describe('buildTransformContext — size-based block compaction', () => {
     expect(out[0]).toBe(opening);
   });
 
-  it('tightens to aggressive caps when HARD_CAP_BYTES is exceeded', async () => {
+  it('tightens to aggressive caps (ignoring window) when HARD_CAP_BYTES is exceeded', async () => {
     const transform = buildTransformContext();
     const messages: AgentMessage[] = [userMsg('go')];
-    // 30 rounds with tool input just over the 8KB cap = 30 summarized at first
-    // pass, but the metadata itself adds up. Force the hard cap by also adding
-    // many text blocks between 2KB and 8KB — first pass keeps them, aggressive
-    // compacts them.
     const midText = 'p'.repeat(6_000);
     for (let i = 0; i < 40; i += 1) {
       messages.push(assistantText(midText));
@@ -142,7 +178,6 @@ describe('buildTransformContext — size-based block compaction', () => {
         }
       }
     }
-    // Aggressive cap is 2KB — the 6KB midText blocks should all be stubbed.
     expect(droppedTextCount).toBeGreaterThanOrEqual(35);
   });
 });

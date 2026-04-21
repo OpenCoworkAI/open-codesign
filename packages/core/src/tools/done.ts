@@ -284,7 +284,7 @@ export function makeDoneTool(
       'console errors / load failures, then replies with ' +
       '`{ status: "ok" | "has_errors", errors: [...] }`. If errors come back, ' +
       'fix them with str_replace_based_edit_tool and call `done` again. ' +
-      'Stop calling once status is "ok" or after 3 rounds.',
+      'Stop calling once status is "ok" or after 5 rounds.',
     parameters: DoneParams,
     async execute(_id, params): Promise<AgentToolResult<DoneDetails>> {
       const path = params.path ?? 'index.html';

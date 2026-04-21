@@ -2,48 +2,64 @@
  * Per-message size-based context compaction for pi-agent-core's
  * `transformContext` hook. Runs before every LLM call.
  *
- * Philosophy: **history is intent tracking, not payload storage.**
+ * Philosophy: **history is intent tracking, not payload storage.** The model
+ * needs the decision trail — which tools, in what order, with what shape —
+ * not verbatim 9 MB artifact dumps or whole-file view returns from ten turns
+ * ago. Current file state is always recoverable via ranged `view()`.
  *
- * What the model needs from prior turns is the DECISION trail — which tools
- * it called, in what order, with what shape. What it does NOT need is its own
- * verbatim 9 MB artifact dump, or the full view() return of a 100 KB file it
- * already touched. Current state is always recoverable via view(), so there
- * is no information loss from stubbing prior payloads.
+ * Evolution:
+ *   - v1 (window): kept last N turns verbatim, stubbed older. Missed the
+ *     dominant failure mode — a 9 MB `<artifact>` text dump sat inside the
+ *     keep-verbatim window and shipped 3.97 M tokens.
+ *   - v2 (windowless): stubbed every block over its cap regardless of
+ *     position. Safe, but over-aggressive after the prompt OVERRIDE block
+ *     eliminated the text-dump vector — the model's own latest str_replace
+ *     new_str got summarized, so picking the next old_str required guessing.
+ *   - v3 (this file): split behavior by block type.
+ *        · `assistant.content[*].text` is always capped (8 KB, all turns).
+ *          This is the regression guard: the one class of block that must
+ *          never be allowed to balloon, because a bad prompt interaction
+ *          can resurrect the `<artifact>` dump.
+ *        · `assistant.content[*].toolCall.input` and
+ *          `toolResult.content[*].text` are capped only outside a small
+ *          recent-turn window. Inside the window they stay verbatim so the
+ *          model reads its own just-written section and the latest view()
+ *          output in full fidelity. Outside the window, large payloads
+ *          collapse to a one-line stub.
  *
- * v1 (window-based) failed in production because the 9 MB payload was the
- * LATEST assistant text block (the model streaming out the final artifact as
- * prose right before `done`). It sat inside the "keep verbatim" window, and
- * the request still shipped 3.97 M tokens.
- *
- * v3 (this file) drops the window entirely. Every message is inspected per
- * block; any block whose serialized size exceeds its per-type cap is stubbed.
- * Caps are small on purpose — 8 KB fits any reasonable paragraph of reasoning
- * or normal tool argument, but cannot carry an HTML/JSX artifact, a base64
- * image, or a whole-file view return. The model's most recent decision is
- * still visible at full fidelity for small outputs.
- *
- * Three block-level caps:
- *   - `assistant.content[*].text` — model prose / streamed artifact text.
- *   - `assistant.content[*].toolCall.input` — args the model sent to a tool.
- *   - `toolResult.content[*].text` — host-side tool return payload.
+ * Block-level caps:
+ *   - TEXT_BLOCK_LIMIT     — assistant prose, ALL turns.
+ *   - TOOL_INPUT_LIMIT     — assistant.toolCall.input, older turns only.
+ *   - TOOL_RESULT_LIMIT    — toolResult.text, older turns only.
  *
  * Stub format carries bytes + a short preview so the model can tell what
  * got dropped, and (for tool calls) keeps tool NAME + id so pi-ai's shape
  * validation remains happy.
  *
  * Safety net: after per-block stubbing, if the grand total still exceeds
- * `HARD_CAP_BYTES`, we shrink caps further and re-run. Catches pathological
- * runs with many just-under-threshold blocks.
+ * `HARD_CAP_BYTES`, we shrink caps further (including within the window)
+ * and re-run. Catches pathological runs with many just-under-threshold
+ * blocks.
  */
 
 import type { AgentMessage } from '@mariozechner/pi-agent-core';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 
 const TEXT_BLOCK_LIMIT = 8 * 1024;
-const TOOL_INPUT_LIMIT = 8 * 1024;
+const TOOL_INPUT_LIMIT = 24 * 1024;
 const TOOL_RESULT_LIMIT = 8 * 1024;
 const HARD_CAP_BYTES = 200_000;
 const AGGRESSIVE_BLOCK_LIMIT = 2 * 1024;
+
+/**
+ * Number of most-recent non-user messages whose tool payloads (toolCall.input
+ * and toolResult.text) stay verbatim. Assistant TEXT is still capped inside
+ * this window — see TEXT_BLOCK_LIMIT rationale above.
+ *
+ * 3 covers "current turn is reading the previous turn's str_replace + its
+ * toolResult" in the typical one-section-per-turn polish cadence.
+ */
+const RECENT_WINDOW = 3;
 
 function estimateBytes(messages: AgentMessage[]): number {
   let total = 0;
@@ -66,7 +82,11 @@ function stubText(text: string, label: string): string {
   return `[${label} — ${text.length}B, head: "${preview(text)}"]`;
 }
 
-function compactAssistant(m: AgentMessage, textLimit: number, toolLimit: number): AgentMessage {
+function compactAssistant(
+  m: AgentMessage,
+  textLimit: number,
+  toolLimit: number | null,
+): AgentMessage {
   const original = m as unknown as {
     role: 'assistant';
     content?: Array<Record<string, unknown>>;
@@ -81,7 +101,7 @@ function compactAssistant(m: AgentMessage, textLimit: number, toolLimit: number)
       changed = true;
       return { ...block, text: stubText(text, 'prior assistant output dropped') };
     }
-    if (type === 'toolCall') {
+    if (type === 'toolCall' && toolLimit !== null) {
       const input = block['input'];
       let origBytes = 0;
       let preview = '';
@@ -105,7 +125,8 @@ function compactAssistant(m: AgentMessage, textLimit: number, toolLimit: number)
   return { ...(original as object), content: nextContent } as unknown as AgentMessage;
 }
 
-function compactToolResult(m: AgentMessage, limit: number): AgentMessage {
+function compactToolResult(m: AgentMessage, limit: number | null): AgentMessage {
+  if (limit === null) return m;
   const original = m as unknown as {
     role: 'toolResult';
     content?: Array<{ type: string; text?: string }>;
@@ -123,15 +144,48 @@ function compactToolResult(m: AgentMessage, limit: number): AgentMessage {
   return { ...(original as object), content: nextContent } as unknown as AgentMessage;
 }
 
-function applyCaps(
-  messages: AgentMessage[],
-  textLimit: number,
-  toolInputLimit: number,
-  toolResultLimit: number,
-): AgentMessage[] {
-  return messages.map((m) => {
-    if (m.role === 'assistant') return compactAssistant(m, textLimit, toolInputLimit);
-    if (m.role === 'toolResult') return compactToolResult(m, toolResultLimit);
+/**
+ * Index threshold (inclusive) — messages at or after this index are "recent"
+ * and their tool payloads stay verbatim. Counts assistant + toolResult roles
+ * from the tail; user messages are never a prune target but also don't
+ * consume window slots.
+ */
+function computeWindowStart(messages: AgentMessage[], windowTurns: number): number {
+  if (windowTurns <= 0) return messages.length;
+  let seen = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const role = messages[i]?.role;
+    if (role === 'assistant' || role === 'toolResult') {
+      seen += 1;
+      if (seen >= windowTurns) return i;
+    }
+  }
+  return 0;
+}
+
+interface CapConfig {
+  textLimit: number;
+  toolInputLimitOld: number;
+  toolResultLimitOld: number;
+  toolInputLimitRecent: number | null;
+  toolResultLimitRecent: number | null;
+  windowTurns: number;
+}
+
+function applyCaps(messages: AgentMessage[], cfg: CapConfig): AgentMessage[] {
+  const windowStart = computeWindowStart(messages, cfg.windowTurns);
+  return messages.map((m, idx) => {
+    const isRecent = idx >= windowStart;
+    if (m.role === 'assistant') {
+      return compactAssistant(
+        m,
+        cfg.textLimit,
+        isRecent ? cfg.toolInputLimitRecent : cfg.toolInputLimitOld,
+      );
+    }
+    if (m.role === 'toolResult') {
+      return compactToolResult(m, isRecent ? cfg.toolResultLimitRecent : cfg.toolResultLimitOld);
+    }
     return m;
   });
 }
@@ -143,7 +197,14 @@ export function buildTransformContext(
     if (messages.length === 0) return messages;
 
     const before = estimateBytes(messages);
-    const first = applyCaps(messages, TEXT_BLOCK_LIMIT, TOOL_INPUT_LIMIT, TOOL_RESULT_LIMIT);
+    const first = applyCaps(messages, {
+      textLimit: TEXT_BLOCK_LIMIT,
+      toolInputLimitOld: TOOL_INPUT_LIMIT,
+      toolResultLimitOld: TOOL_RESULT_LIMIT,
+      toolInputLimitRecent: null,
+      toolResultLimitRecent: null,
+      windowTurns: RECENT_WINDOW,
+    });
     const firstSize = estimateBytes(first);
 
     log.info('[context-prune] step=caps', {
@@ -151,17 +212,21 @@ export function buildTransformContext(
       before,
       after: firstSize,
       textLimit: TEXT_BLOCK_LIMIT,
-      toolLimit: TOOL_INPUT_LIMIT,
+      toolInputLimit: TOOL_INPUT_LIMIT,
+      toolResultLimit: TOOL_RESULT_LIMIT,
+      window: RECENT_WINDOW,
     });
 
     if (firstSize <= HARD_CAP_BYTES) return first;
 
-    const aggressive = applyCaps(
-      messages,
-      AGGRESSIVE_BLOCK_LIMIT,
-      AGGRESSIVE_BLOCK_LIMIT,
-      AGGRESSIVE_BLOCK_LIMIT,
-    );
+    const aggressive = applyCaps(messages, {
+      textLimit: AGGRESSIVE_BLOCK_LIMIT,
+      toolInputLimitOld: AGGRESSIVE_BLOCK_LIMIT,
+      toolResultLimitOld: AGGRESSIVE_BLOCK_LIMIT,
+      toolInputLimitRecent: AGGRESSIVE_BLOCK_LIMIT,
+      toolResultLimitRecent: AGGRESSIVE_BLOCK_LIMIT,
+      windowTurns: 0,
+    });
     const aggressiveSize = estimateBytes(aggressive);
     log.info('[context-prune] step=aggressive', {
       messages: messages.length,
