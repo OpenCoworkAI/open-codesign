@@ -61,4 +61,28 @@ export const zhCNExamples: Record<string, ExampleContent> = {
     title: '应用设置页面',
     description: '侧栏导航的设置页：表单、开关、危险操作区。',
   },
+  'auth-signin': {
+    title: '登录页',
+    description: '星空背景中心卡片：邮箱登录、第三方登录、注册入口。',
+  },
+  'kanban-board': {
+    title: '看板项目面板',
+    description: '三列任务面板：卡片、成员头像堆叠、优先级标签。',
+  },
+  'ai-product-hero': {
+    title: 'AI 产品主视觉',
+    description: '渐变背景 + 发光球体 + 闪烁光标标题 + 双 CTA。',
+  },
+  'weather-card': {
+    title: '移动端天气卡片',
+    description: '玻璃拟态天气界面：当前温度、小时预报条、七日概览。',
+  },
+  'timeline-changelog': {
+    title: '版本更新时间线',
+    description: '竖向时间线：配色圆点 + 版本标签 + 分类筛选。',
+  },
+  'stats-counter': {
+    title: '动态数据统计条',
+    description: '三枚滚动计数卡片，霓虹色光晕，纯原生实现。',
+  },
 };

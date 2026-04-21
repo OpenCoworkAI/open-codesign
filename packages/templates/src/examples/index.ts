@@ -15,6 +15,8 @@ import { type Locale, availableLocales, normalizeLocale } from '@open-codesign/i
 import { enExamples } from './locales/en';
 import { zhCNExamples } from './locales/zh-CN';
 import {
+  thumbAiHero,
+  thumbAuth,
   thumbBlog,
   thumbCalendar,
   thumbCaseStudy,
@@ -22,6 +24,7 @@ import {
   thumbCosmic,
   thumbDashboard,
   thumbEmail,
+  thumbKanban,
   thumbLanding,
   thumbMobile,
   thumbOrganic,
@@ -30,6 +33,9 @@ import {
   thumbPricing,
   thumbReceipt,
   thumbSettings,
+  thumbStatsCounter,
+  thumbTimeline,
+  thumbWeather,
 } from './thumbnails';
 
 export type ExampleCategory =
@@ -161,6 +167,48 @@ export const EXAMPLES: Example[] = [
     thumbnail: thumbSettings,
     prompt:
       'Design a settings page for a SaaS application. Left sidebar with setting categories (Profile, Notifications, Security, Billing, Team, Integrations). Main panel shows the active category with form fields: text inputs, toggle switches, dropdown selects, a danger zone with red "Delete account" button. Include a top bar with breadcrumbs and a "Save changes" button. Light theme, clean form layout, proper spacing between sections, accessible focus states on all inputs.',
+  },
+  {
+    id: 'auth-signin',
+    category: 'ui',
+    thumbnail: thumbAuth,
+    prompt:
+      'Design a sign-in screen for a SaaS product called Lumen. A centered card on a dark starry background holds: product wordmark, "Welcome back" headline, email + password inputs, a primary sign-in button in brand indigo, "Forgot password?" link on the right, an OR divider, three social sign-in buttons (Google / GitHub / Apple) with brand glyphs, and a "Don\'t have an account? Sign up" footer link. Rounded inputs, clear focus rings, subtle card elevation.',
+  },
+  {
+    id: 'kanban-board',
+    category: 'ui',
+    thumbnail: thumbKanban,
+    prompt:
+      'Design a kanban board for a product team. Three columns: Backlog, In progress, Done — each with a colored header bar (amber / blue / green) and a count pill. Each column holds 3-5 task cards showing title, a short description, an avatar stack of assignees, and a priority tag. Top bar has the project name, a board/list view toggle, filter chips, and an "Add task" button on the right. Soft gray canvas, white cards, rounded corners, lift-on-hover shadow.',
+  },
+  {
+    id: 'ai-product-hero',
+    category: 'marketing',
+    thumbnail: thumbAiHero,
+    prompt:
+      'Design a hero section for an AI writing assistant called Inkwell. Deep navy → violet gradient background with a soft glowing orb on the right surrounded by concentric rings. Large serif-meets-sans headline, a two-line subhead, an animated caret cursor after the headline (steady blink), and a pair of CTAs (primary gradient button, ghost secondary). Sparse star field, subtle grain overlay, confident editorial feel.',
+  },
+  {
+    id: 'weather-card',
+    category: 'mobile',
+    thumbnail: thumbWeather,
+    prompt:
+      'Design a mobile weather home screen inside a phone frame. Soft sky-blue → indigo gradient background, a large glass-morphism card in the center showing: city name, current temperature in thin 72px weight, condition glyph (sun behind clouds), high/low, and a horizontal 6-hour forecast strip with small icons + temperatures. Below the card, a second smaller card with "Next 7 days" summary bars. Rounded corners everywhere, gentle translucency, generous padding.',
+  },
+  {
+    id: 'timeline-changelog',
+    category: 'document',
+    thumbnail: thumbTimeline,
+    prompt:
+      'Design a product changelog page presented as a vertical timeline. Left spine connects four release dots in different accent colors. Each entry has: a date label, a version tag, a headline, a 2-3 line description, and optional inline mini-tags (feature / fix / breaking). Above the timeline sits a filter row (All / Features / Fixes / Breaking) and a subscribe-to-RSS pill. Warm off-white background, serif headings, restrained typography.',
+  },
+  {
+    id: 'stats-counter',
+    category: 'animation',
+    thumbnail: thumbStatsCounter,
+    prompt:
+      'Design a stats strip section for a landing page with three large animated number counters that count up from 0 to their target on scroll into view (2.4M users, 99.8% uptime, 180 countries). Each stat sits in a translucent card on a deep navy background, with its own neon accent color (sky / violet / green) glowing behind the number. Small all-caps label below each number, tight letter-spacing. Counters ease-out over ~1.2s, no JS libraries — pure IntersectionObserver + requestAnimationFrame.',
   },
 ];
 

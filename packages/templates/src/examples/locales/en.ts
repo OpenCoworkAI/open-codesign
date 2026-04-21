@@ -62,4 +62,28 @@ export const enExamples: Record<string, ExampleContent> = {
     title: 'App settings page',
     description: 'Sidebar-navigated settings with forms, toggles, and danger zone section.',
   },
+  'auth-signin': {
+    title: 'Sign-in screen',
+    description: 'Centered card on a starry backdrop with email, social logins, and sign-up link.',
+  },
+  'kanban-board': {
+    title: 'Kanban project board',
+    description: 'Three-column board with task cards, assignee avatars, and priority tags.',
+  },
+  'ai-product-hero': {
+    title: 'AI product hero',
+    description: 'Gradient hero with glowing orb, blinking caret headline, and dual CTAs.',
+  },
+  'weather-card': {
+    title: 'Mobile weather card',
+    description: 'Glass-morphism weather screen with hourly strip and seven-day summary.',
+  },
+  'timeline-changelog': {
+    title: 'Changelog timeline',
+    description: 'Vertical timeline of releases with color-coded dots and filterable categories.',
+  },
+  'stats-counter': {
+    title: 'Animated stats strip',
+    description: 'Trio of count-up number cards with neon accents and glowing backgrounds.',
+  },
 };

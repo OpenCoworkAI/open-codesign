@@ -81,6 +81,12 @@ export interface GenerateInput {
   /** v3 extra HTTP headers merged into the outbound request (gateway auth). */
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
+  /**
+   * Per-call reasoning level override. Typically sourced from
+   * `ProviderEntry.reasoningLevel`. When absent, core computes a default
+   * via `reasoningForModel`.
+   */
+  reasoningLevel?: ReasoningLevel | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
@@ -106,6 +112,8 @@ export interface ApplyCommentInput {
   wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
+  /** @see GenerateInput.reasoningLevel */
+  reasoningLevel?: ReasoningLevel | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
@@ -140,6 +148,7 @@ interface ModelRunInput {
   wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
+  reasoningLevel?: ReasoningLevel | undefined;
   signal?: AbortSignal | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
   messages: ChatMessage[];
@@ -522,7 +531,7 @@ const OPENROUTER_REASONING_MODEL_RE = new RegExp(
   'i',
 );
 
-function reasoningForModel(model: ModelRef): ReasoningLevel | undefined {
+export function reasoningForModel(model: ModelRef): ReasoningLevel | undefined {
   // Whitelist by (provider, modelId) pair. Substring matches across providers
   // are unsafe: an OpenRouter or Groq pass-through id like
   // `anthropic/claude-4` or any third-party id containing "o1"/"r1" would
@@ -613,6 +622,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     wire: input.wire,
     httpHeaders: input.httpHeaders,
     allowKeyless: input.allowKeyless,
+    reasoningLevel: input.reasoningLevel,
     signal: input.signal,
     onRetry: input.onRetry,
     messages,
@@ -665,6 +675,7 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     wire: input.wire,
     httpHeaders: input.httpHeaders,
     allowKeyless: input.allowKeyless,
+    reasoningLevel: input.reasoningLevel,
     signal: input.signal,
     onRetry: input.onRetry,
     messages,

@@ -6,7 +6,7 @@ import { zhCNExamples } from './locales/zh-CN';
 describe('examples gallery', () => {
   it('ships at least 6 curated examples', () => {
     expect(EXAMPLES.length).toBeGreaterThanOrEqual(6);
-    expect(EXAMPLES.length).toBeLessThanOrEqual(20);
+    expect(EXAMPLES.length).toBeLessThanOrEqual(30);
   });
 
   it('every example has a unique id', () => {

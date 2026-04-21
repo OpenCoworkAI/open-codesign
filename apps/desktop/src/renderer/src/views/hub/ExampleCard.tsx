@@ -105,11 +105,27 @@ export function ExampleCard({ example, onUsePrompt }: ExampleCardProps) {
           color: skin.ink,
         }}
       >
-        {/* Large watermark glyph */}
+        {/* SVG thumbnail — fades in on hover so the default card stays clean
+            and editorial, but hovering reveals the concrete layout preview. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-0 transition-opacity duration-[var(--duration-base)] ease-[var(--ease-out)] group-hover:opacity-100"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: thumbnails are static bundled strings authored in-repo, not user content
+          dangerouslySetInnerHTML={{ __html: example.thumbnail }}
+        />
+        {/* Gradient scrim under the title so text stays legible over the SVG */}
+        <div
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 h-[62%] opacity-0 transition-opacity duration-[var(--duration-base)] ease-[var(--ease-out)] group-hover:opacity-95"
+          style={{
+            background: `linear-gradient(180deg, transparent 0%, ${skin.to} 92%)`,
+          }}
+        />
+        {/* Large watermark glyph — visible on the resting state, fades out on hover */}
         <Icon
           aria-hidden
           strokeWidth={1}
-          className="absolute -right-2 -bottom-4 w-[140px] h-[140px] opacity-[0.07]"
+          className="absolute -right-2 -bottom-4 w-[140px] h-[140px] opacity-[0.07] transition-opacity duration-[var(--duration-base)] ease-[var(--ease-out)] group-hover:opacity-0"
           style={{ color: skin.ink }}
         />
         {/* Accent dot */}

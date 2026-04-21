@@ -47,6 +47,7 @@ import type {
   GenerateOutput,
   ReferenceUrlContext,
 } from './index.js';
+import { reasoningForModel } from './index.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt } from './prompts/index.js';
 import { makeDeclareTweakSchemaTool } from './tools/declare-tweak-schema.js';
@@ -710,6 +711,13 @@ export async function generateViaAgent(
     skillWarnings: skillResult.warnings.length,
   });
 
+  // Resolve reasoning/thinking level: explicit per-call override (sourced
+  // from ProviderEntry.reasoningLevel by the desktop main process) takes
+  // precedence, then the model-family default from reasoningForModel. If
+  // neither yields a value the agent runs with 'off', matching
+  // pi-agent-core's default.
+  const thinkingLevel = input.reasoningLevel ?? reasoningForModel(input.model) ?? 'off';
+
   // Build the Agent. convertToLlm narrows AgentMessage (may include custom
   // types) to the LLM-visible Message subset.
   const agent = new Agent({
@@ -718,6 +726,7 @@ export async function generateViaAgent(
       model: piModel as unknown as PiAiModel<'openai-completions'>,
       messages: historyAsAgentMessages,
       tools,
+      thinkingLevel,
     },
     convertToLlm: (messages) =>
       messages.filter(
