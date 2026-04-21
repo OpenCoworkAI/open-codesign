@@ -172,10 +172,7 @@ function main() {
     hasNodeBinary: fs.existsSync(nodeBinary),
     electronArches,
     hasElectronBinaries: Object.fromEntries(
-      electronArches.map((targetArch) => [
-        targetArch,
-        fs.existsSync(electronBinaries[targetArch]),
-      ]),
+      electronArches.map((targetArch) => [targetArch, fs.existsSync(electronBinaries[targetArch])]),
     ),
   };
 
@@ -192,7 +189,8 @@ function main() {
     (!targetLock.hasNodeBinary || fs.existsSync(nodeBinary)) &&
     electronArches.every(
       (targetArch) =>
-        targetLock.hasElectronBinaries[targetArch] !== true || fs.existsSync(electronBinaries[targetArch]),
+        targetLock.hasElectronBinaries[targetArch] !== true ||
+        fs.existsSync(electronBinaries[targetArch]),
     );
 
   if (upToDate) {
