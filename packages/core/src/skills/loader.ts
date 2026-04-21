@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type LoadedSkill, SkillFrontmatterV1 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -253,7 +253,10 @@ export async function loadSkillsFromDir(
   }
 
   if (errors.length > 0) {
-    throw new CodesignError(`Skill loading failed:\n${errors.join('\n')}`, 'SKILL_LOAD_FAILED');
+    throw new CodesignError(
+      `Skill loading failed:\n${errors.join('\n')}`,
+      ERROR_CODES.SKILL_LOAD_FAILED,
+    );
   }
 
   return skills;

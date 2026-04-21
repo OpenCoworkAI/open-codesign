@@ -7,7 +7,7 @@
  * module graph the first time a user actually exports.
  */
 
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 export const EXPORTER_FORMATS = ['html', 'pdf', 'pptx', 'zip', 'markdown'] as const;
 export type ExporterFormat = (typeof EXPORTER_FORMATS)[number];
@@ -66,5 +66,8 @@ export async function exportArtifact(
     const mod = await import('./markdown');
     return mod.exportMarkdown(htmlContent, destinationPath);
   }
-  throw new CodesignError(`Unknown exporter format: ${format as string}`, 'EXPORTER_UNKNOWN');
+  throw new CodesignError(
+    `Unknown exporter format: ${format as string}`,
+    ERROR_CODES.EXPORTER_UNKNOWN,
+  );
 }

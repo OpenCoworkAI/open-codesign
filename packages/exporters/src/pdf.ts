@@ -1,4 +1,4 @@
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type { ExportResult } from './index';
 
 export interface ExportPdfOptions {
@@ -61,7 +61,7 @@ export async function exportPdf(
     if (err instanceof CodesignError) throw err;
     throw new CodesignError(
       `PDF export failed: ${err instanceof Error ? err.message : String(err)}`,
-      'EXPORTER_PDF_FAILED',
+      ERROR_CODES.EXPORTER_PDF_FAILED,
       { cause: err },
     );
   } finally {

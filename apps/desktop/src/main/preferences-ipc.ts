@@ -10,7 +10,7 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { ipcMain } from 'electron';
 import { configDir } from './config';
 import { getLogger } from './logger';
@@ -91,19 +91,25 @@ async function writePersisted(prefs: Preferences): Promise<void> {
 
 function parsePreferences(raw: unknown): Partial<Preferences> {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('preferences:update expects an object', 'IPC_BAD_INPUT');
+    throw new CodesignError('preferences:update expects an object', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   const out: Partial<Preferences> = {};
   if (r['updateChannel'] !== undefined) {
     if (r['updateChannel'] !== 'stable' && r['updateChannel'] !== 'beta') {
-      throw new CodesignError('updateChannel must be "stable" or "beta"', 'IPC_BAD_INPUT');
+      throw new CodesignError(
+        'updateChannel must be "stable" or "beta"',
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
     }
     out.updateChannel = r['updateChannel'] as UpdateChannel;
   }
   if (r['generationTimeoutSec'] !== undefined) {
     if (typeof r['generationTimeoutSec'] !== 'number' || r['generationTimeoutSec'] <= 0) {
-      throw new CodesignError('generationTimeoutSec must be a positive number', 'IPC_BAD_INPUT');
+      throw new CodesignError(
+        'generationTimeoutSec must be a positive number',
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
     }
     out.generationTimeoutSec = r['generationTimeoutSec'];
   }

@@ -1,4 +1,4 @@
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type { ExportResult } from './index';
 
 export interface ZipAsset {
@@ -81,7 +81,7 @@ export async function exportZip(
         if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
           throw new CodesignError(
             `ZIP export rejected unsafe asset path: ${asset.path}`,
-            'EXPORTER_ZIP_UNSAFE_PATH',
+            ERROR_CODES.EXPORTER_ZIP_UNSAFE_PATH,
           );
         }
         await fs.mkdir(path.dirname(localPath), { recursive: true });
@@ -97,7 +97,7 @@ export async function exportZip(
     if (err instanceof CodesignError) throw err;
     throw new CodesignError(
       `ZIP export failed: ${err instanceof Error ? err.message : String(err)}`,
-      'EXPORTER_ZIP_FAILED',
+      ERROR_CODES.EXPORTER_ZIP_FAILED,
       { cause: err },
     );
   } finally {

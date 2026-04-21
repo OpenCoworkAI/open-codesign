@@ -2,6 +2,7 @@ import {
   BUILTIN_PROVIDERS,
   CodesignError,
   type Config,
+  ERROR_CODES,
   type ModelRef,
   PROVIDER_SHORTLIST,
   type ProviderEntry,
@@ -56,7 +57,10 @@ export function getAddProviderDefaults(
 export function assertProviderHasStoredSecret(cfg: Config, provider: string): void {
   if (cfg.secrets[provider] !== undefined) return;
   if (isKeylessProviderAllowed(provider, resolveEntryFor(cfg, provider))) return;
-  throw new CodesignError(`No API key stored for provider "${provider}".`, 'PROVIDER_KEY_MISSING');
+  throw new CodesignError(
+    `No API key stored for provider "${provider}".`,
+    ERROR_CODES.PROVIDER_KEY_MISSING,
+  );
 }
 
 export function isKeylessProviderAllowed(provider: string, entry?: ProviderEntry | null): boolean {
@@ -204,14 +208,14 @@ export function resolveActiveModel(
   if (entry === null) {
     throw new CodesignError(
       `Active provider "${activeId}" has no provider entry on disk.`,
-      'PROVIDER_NOT_SUPPORTED',
+      ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
   const allowKeyless = isKeylessProviderAllowed(activeId, entry);
   if (cfg.secrets[activeId] === undefined && !allowKeyless) {
     throw new CodesignError(
       `No API key stored for active provider "${activeId}". Re-run onboarding to add one.`,
-      'PROVIDER_KEY_MISSING',
+      ERROR_CODES.PROVIDER_KEY_MISSING,
     );
   }
   const overridden = activeId !== hint.provider;

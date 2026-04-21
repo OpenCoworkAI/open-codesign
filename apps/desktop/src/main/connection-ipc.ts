@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   BUILTIN_PROVIDERS,
   CodesignError,
+  ERROR_CODES,
   type SupportedOnboardingProvider,
   type WireApi,
   isSupportedOnboardingProvider,
@@ -50,17 +51,23 @@ export type ModelsListResponse =
 
 function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('connection:v1:test expects an object payload', 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      'connection:v1:test expects an object payload',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   const r = raw as Record<string, unknown>;
   if (typeof r['provider'] !== 'string' || !isSupportedOnboardingProvider(r['provider'])) {
-    throw new CodesignError(`Unsupported provider: ${String(r['provider'])}`, 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      `Unsupported provider: ${String(r['provider'])}`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   if (typeof r['apiKey'] !== 'string' || r['apiKey'].trim().length === 0) {
-    throw new CodesignError('apiKey must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof r['baseUrl'] !== 'string' || r['baseUrl'].trim().length === 0) {
-    throw new CodesignError('baseUrl must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   return {
     provider: r['provider'],
@@ -71,17 +78,20 @@ function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
 
 function parseModelsListPayload(raw: unknown): ModelsListPayloadV1 {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('models:v1:list expects an object payload', 'IPC_BAD_INPUT');
+    throw new CodesignError('models:v1:list expects an object payload', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   if (typeof r['provider'] !== 'string' || !isSupportedOnboardingProvider(r['provider'])) {
-    throw new CodesignError(`Unsupported provider: ${String(r['provider'])}`, 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      `Unsupported provider: ${String(r['provider'])}`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   if (typeof r['apiKey'] !== 'string' || r['apiKey'].trim().length === 0) {
-    throw new CodesignError('apiKey must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof r['baseUrl'] !== 'string' || r['baseUrl'].trim().length === 0) {
-    throw new CodesignError('baseUrl must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   return {
     provider: r['provider'],
@@ -730,20 +740,20 @@ export type TestEndpointResponse =
 
 function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('config:v1:test-endpoint expects an object', 'IPC_BAD_INPUT');
+    throw new CodesignError('config:v1:test-endpoint expects an object', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   const wire = r['wire'];
   const baseUrl = r['baseUrl'];
   const apiKey = r['apiKey'];
   if (wire !== 'openai-chat' && wire !== 'openai-responses' && wire !== 'anthropic') {
-    throw new CodesignError(`Unsupported wire: ${String(wire)}`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`Unsupported wire: ${String(wire)}`, ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
-    throw new CodesignError('baseUrl must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof apiKey !== 'string') {
-    throw new CodesignError('apiKey must be a string', 'IPC_BAD_INPUT');
+    throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const out: TestEndpointPayload = {
     wire,
@@ -753,7 +763,7 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   const headers = r['httpHeaders'];
   if (headers !== undefined && headers !== null) {
     if (typeof headers !== 'object') {
-      throw new CodesignError('httpHeaders must be an object', 'IPC_BAD_INPUT');
+      throw new CodesignError('httpHeaders must be an object', ERROR_CODES.IPC_BAD_INPUT);
     }
     const map: Record<string, string> = {};
     for (const [k, v] of Object.entries(headers as Record<string, unknown>)) {

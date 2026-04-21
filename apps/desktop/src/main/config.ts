@@ -5,6 +5,7 @@ import {
   CodesignError,
   type Config,
   ConfigV3Schema,
+  ERROR_CODES,
   parseConfigFlexible,
   toPersistedV3,
 } from '@open-codesign/shared';
@@ -34,7 +35,7 @@ export async function readConfig(): Promise<Config | null> {
     raw = await readFile(path, 'utf8');
   } catch (err) {
     if (isNotFound(err)) return null;
-    throw new CodesignError(`Failed to read config at ${path}`, 'CONFIG_READ_FAILED', {
+    throw new CodesignError(`Failed to read config at ${path}`, ERROR_CODES.CONFIG_READ_FAILED, {
       cause: err,
     });
   }
@@ -43,16 +44,20 @@ export async function readConfig(): Promise<Config | null> {
   try {
     parsed = parseToml(raw);
   } catch (err) {
-    throw new CodesignError(`Config at ${path} is not valid TOML`, 'CONFIG_PARSE_FAILED', {
-      cause: err,
-    });
+    throw new CodesignError(
+      `Config at ${path} is not valid TOML`,
+      ERROR_CODES.CONFIG_PARSE_FAILED,
+      {
+        cause: err,
+      },
+    );
   }
 
   const validated = safeParseConfig(parsed);
   if (!validated.ok) {
     throw new CodesignError(
       `Config at ${path} does not match the expected schema: ${validated.error}`,
-      'CONFIG_SCHEMA_INVALID',
+      ERROR_CODES.CONFIG_SCHEMA_INVALID,
       { cause: validated.cause },
     );
   }

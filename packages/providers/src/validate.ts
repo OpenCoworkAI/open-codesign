@@ -1,5 +1,6 @@
 import {
   CodesignError,
+  ERROR_CODES,
   type SupportedOnboardingProvider,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
@@ -81,11 +82,11 @@ export async function pingProvider(
   if (!isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
       `Provider "${provider}" is not supported in v0.1. Supported: anthropic, openai, openrouter.`,
-      'PROVIDER_NOT_SUPPORTED',
+      ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
   if (!apiKey || apiKey.trim().length === 0) {
-    throw new CodesignError('API key is empty', 'PROVIDER_AUTH_MISSING');
+    throw new CodesignError('API key is empty', ERROR_CODES.PROVIDER_AUTH_MISSING);
   }
 
   const ep = endpoint(provider, baseUrl);

@@ -7,7 +7,7 @@
  */
 
 import type { ChatAppendInput, ChatMessageKind, ChatMessageRow } from '@open-codesign/shared';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
@@ -32,38 +32,47 @@ const VALID_KINDS: ChatMessageKind[] = [
 
 function requireSchemaV1(r: Record<string, unknown>, channel: string): void {
   if (r['schemaVersion'] !== 1) {
-    throw new CodesignError(`${channel} requires schemaVersion: 1`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`${channel} requires schemaVersion: 1`, ERROR_CODES.IPC_BAD_INPUT);
   }
 }
 
 function parseDesignId(raw: unknown, channel: string): string {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError(`${channel} expects an object with designId`, 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      `${channel} expects an object with designId`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   const r = raw as Record<string, unknown>;
   requireSchemaV1(r, channel);
   if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
-    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('designId must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   return r['designId'] as string;
 }
 
 function parseAppendInput(raw: unknown): ChatAppendInput {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('chat:v1:append expects an object payload', 'IPC_BAD_INPUT');
+    throw new CodesignError('chat:v1:append expects an object payload', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   requireSchemaV1(r, 'chat:v1:append');
   if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
-    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('designId must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const kind = r['kind'];
   if (typeof kind !== 'string' || !VALID_KINDS.includes(kind as ChatMessageKind)) {
-    throw new CodesignError(`kind must be one of: ${VALID_KINDS.join(', ')}`, 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      `kind must be one of: ${VALID_KINDS.join(', ')}`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   const snapshotId = r['snapshotId'];
   if (snapshotId !== undefined && snapshotId !== null && typeof snapshotId !== 'string') {
-    throw new CodesignError('snapshotId must be a string, null, or absent', 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      'snapshotId must be a string, null, or absent',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   return {
     designId: r['designId'],
@@ -82,24 +91,27 @@ function parseUpdateToolStatus(raw: unknown): {
   if (typeof raw !== 'object' || raw === null) {
     throw new CodesignError(
       'chat:update-tool-status:v1 expects an object payload',
-      'IPC_BAD_INPUT',
+      ERROR_CODES.IPC_BAD_INPUT,
     );
   }
   const r = raw as Record<string, unknown>;
   requireSchemaV1(r, 'chat:update-tool-status:v1');
   if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
-    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('designId must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof r['seq'] !== 'number' || !Number.isInteger(r['seq']) || r['seq'] < 0) {
-    throw new CodesignError('seq must be a non-negative integer', 'IPC_BAD_INPUT');
+    throw new CodesignError('seq must be a non-negative integer', ERROR_CODES.IPC_BAD_INPUT);
   }
   const status = r['status'];
   if (status !== 'done' && status !== 'error') {
-    throw new CodesignError("status must be 'done' or 'error'", 'IPC_BAD_INPUT');
+    throw new CodesignError("status must be 'done' or 'error'", ERROR_CODES.IPC_BAD_INPUT);
   }
   const errorMessage = r['errorMessage'];
   if (errorMessage !== undefined && typeof errorMessage !== 'string') {
-    throw new CodesignError('errorMessage must be a string when present', 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      'errorMessage must be a string when present',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   return {
     designId: r['designId'],
@@ -134,7 +146,9 @@ export function registerChatMessagesIpc(db: Database): void {
         kind: input.kind,
         message: err instanceof Error ? err.message : String(err),
       });
-      throw new CodesignError('Failed to append chat message', 'IPC_DB_ERROR', { cause: err });
+      throw new CodesignError('Failed to append chat message', ERROR_CODES.IPC_DB_ERROR, {
+        cause: err,
+      });
     }
   });
 
@@ -159,7 +173,7 @@ export function registerChatMessagesIpc(db: Database): void {
         seq: input.seq,
         message: err instanceof Error ? err.message : String(err),
       });
-      throw new CodesignError('Failed to update tool call status', 'IPC_DB_ERROR', {
+      throw new CodesignError('Failed to update tool call status', ERROR_CODES.IPC_DB_ERROR, {
         cause: err,
       });
     }
@@ -169,7 +183,7 @@ export function registerChatMessagesIpc(db: Database): void {
 export function registerChatMessagesUnavailableIpc(reason: string): void {
   const message = `Chat history is unavailable. ${reason}`;
   const fail = (): never => {
-    throw new CodesignError(message, 'SNAPSHOTS_UNAVAILABLE');
+    throw new CodesignError(message, ERROR_CODES.SNAPSHOTS_UNAVAILABLE);
   };
   for (const channel of CHAT_MESSAGES_CHANNELS_V1) {
     ipcMain.handle(channel, fail);

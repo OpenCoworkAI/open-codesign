@@ -15,7 +15,7 @@ import type {
   SelectedElement,
   StoredDesignSystem,
 } from '@open-codesign/shared';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { remapProviderError } from './errors.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { type PromptComposeOptions, composeSystemPrompt } from './prompts/index.js';
@@ -577,7 +577,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   } as const;
 
   if (!input.prompt.trim()) {
-    throw new CodesignError('Prompt cannot be empty', 'INPUT_EMPTY_PROMPT');
+    throw new CodesignError('Prompt cannot be empty', ERROR_CODES.INPUT_EMPTY_PROMPT);
   }
 
   // Narrow guard: only 'create' is wired through buildPrompt. Callers passing
@@ -587,7 +587,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   if (!input.systemPrompt && input.mode && input.mode !== 'create') {
     throw new CodesignError(
       'generate() built-in prompt only supports mode "create". Use applyComment() for revise; tweak is not yet wired.',
-      'INPUT_UNSUPPORTED_MODE',
+      ERROR_CODES.INPUT_UNSUPPORTED_MODE,
     );
   }
 
@@ -652,10 +652,10 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
   } as const;
 
   if (!input.comment.trim()) {
-    throw new CodesignError('Comment cannot be empty', 'INPUT_EMPTY_COMMENT');
+    throw new CodesignError('Comment cannot be empty', ERROR_CODES.INPUT_EMPTY_COMMENT);
   }
   if (!input.html.trim()) {
-    throw new CodesignError('Existing HTML cannot be empty', 'INPUT_EMPTY_HTML');
+    throw new CodesignError('Existing HTML cannot be empty', ERROR_CODES.INPUT_EMPTY_HTML);
   }
 
   log.info('[apply_comment] step=resolve_model', ctx);
@@ -739,7 +739,10 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
   const log = input.logger ?? NOOP_LOGGER;
   const trimmed = input.prompt.trim();
   if (trimmed.length === 0) {
-    throw new CodesignError('generateTitle requires a non-empty prompt', 'INPUT_EMPTY_PROMPT');
+    throw new CodesignError(
+      'generateTitle requires a non-empty prompt',
+      ERROR_CODES.INPUT_EMPTY_PROMPT,
+    );
   }
   const messages: ChatMessage[] = [
     { role: 'system', content: TITLE_SYSTEM_PROMPT },
@@ -766,7 +769,7 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
     log.info('[title] step=send_request.ok', { ms: Date.now() - started });
     const title = sanitizeTitle(result.content);
     if (title.length === 0) {
-      throw new CodesignError('Model returned empty title', 'PROVIDER_ERROR');
+      throw new CodesignError('Model returned empty title', ERROR_CODES.PROVIDER_ERROR);
     }
     return title;
   } catch (err) {

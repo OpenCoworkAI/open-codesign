@@ -1,5 +1,5 @@
 import { type ExporterFormat, exportArtifact } from '@open-codesign/exporters';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type { BrowserWindow } from 'electron';
 import { dialog, ipcMain } from './electron-runtime';
 
@@ -25,7 +25,7 @@ export interface ExportResponse {
 
 export function parseRequest(raw: unknown): ExportRequest {
   if (raw === null || typeof raw !== 'object') {
-    throw new CodesignError('export expects an object payload', 'IPC_BAD_INPUT');
+    throw new CodesignError('export expects an object payload', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   const format = r['format'];
@@ -38,10 +38,13 @@ export function parseRequest(raw: unknown): ExportRequest {
     format !== 'zip' &&
     format !== 'markdown'
   ) {
-    throw new CodesignError(`Unknown export format: ${String(format)}`, 'EXPORTER_UNKNOWN');
+    throw new CodesignError(
+      `Unknown export format: ${String(format)}`,
+      ERROR_CODES.EXPORTER_UNKNOWN,
+    );
   }
   if (typeof html !== 'string' || html.length === 0) {
-    throw new CodesignError('export requires non-empty htmlContent', 'IPC_BAD_INPUT');
+    throw new CodesignError('export requires non-empty htmlContent', ERROR_CODES.IPC_BAD_INPUT);
   }
   const out: ExportRequest = { format, htmlContent: html };
   if (typeof defaultFilename === 'string' && defaultFilename.length > 0) {

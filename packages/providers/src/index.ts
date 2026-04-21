@@ -6,7 +6,7 @@
  * Tier 1 implementations: minimum viable. Tier 2 features tracked separately.
  */
 
-import { type ChatMessage, CodesignError, type ModelRef } from '@open-codesign/shared';
+import { type ChatMessage, CodesignError, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
 
 /** Subset of pi-ai's `ThinkingLevel` we expose. Maps directly to its `reasoning`
  * field, which Anthropic adapters translate to extended-thinking effort/budget
@@ -194,7 +194,7 @@ export async function complete(
   opts: GenerateOptions,
 ): Promise<GenerateResult> {
   if (!opts.apiKey && opts.allowKeyless !== true) {
-    throw new CodesignError('Missing API key', 'PROVIDER_AUTH_MISSING');
+    throw new CodesignError('Missing API key', ERROR_CODES.PROVIDER_AUTH_MISSING);
   }
   const apiKey = opts.apiKey || 'open-codesign-keyless';
 
@@ -223,7 +223,7 @@ export async function complete(
     } else {
       throw new CodesignError(
         `Unknown model ${model.provider}:${model.modelId}`,
-        'PROVIDER_MODEL_UNKNOWN',
+        ERROR_CODES.PROVIDER_MODEL_UNKNOWN,
       );
     }
   }
@@ -247,7 +247,10 @@ export async function complete(
   const result = await pi.completeSimple(piModel, toPiContext(messages, piModel), piOpts);
 
   if (result.stopReason === 'error') {
-    throw new CodesignError(result.errorMessage ?? 'Provider returned an error', 'PROVIDER_ERROR');
+    throw new CodesignError(
+      result.errorMessage ?? 'Provider returned an error',
+      ERROR_CODES.PROVIDER_ERROR,
+    );
   }
 
   const text = result.content

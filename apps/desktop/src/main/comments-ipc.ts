@@ -11,7 +11,7 @@ import type {
   CommentRow,
   CommentStatus,
 } from '@open-codesign/shared';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
@@ -33,13 +33,13 @@ const VALID_STATUSES: CommentStatus[] = ['pending', 'applied', 'dismissed'];
 
 function requireSchemaV1(r: Record<string, unknown>, channel: string): void {
   if (r['schemaVersion'] !== 1) {
-    throw new CodesignError(`${channel} requires schemaVersion: 1`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`${channel} requires schemaVersion: 1`, ERROR_CODES.IPC_BAD_INPUT);
   }
 }
 
 function asObject(raw: unknown, channel: string): Record<string, unknown> {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError(`${channel} expects an object payload`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`${channel} expects an object payload`, ERROR_CODES.IPC_BAD_INPUT);
   }
   return raw as Record<string, unknown>;
 }
@@ -47,14 +47,17 @@ function asObject(raw: unknown, channel: string): Record<string, unknown> {
 function parseNonEmptyString(r: Record<string, unknown>, field: string, channel: string): string {
   const v = r[field];
   if (typeof v !== 'string' || v.trim().length === 0) {
-    throw new CodesignError(`${channel}: ${field} must be a non-empty string`, 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      `${channel}: ${field} must be a non-empty string`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   return v;
 }
 
 function parseRect(raw: unknown, channel: string): CommentCreateInput['rect'] {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError(`${channel}: rect must be an object`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`${channel}: rect must be an object`, ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   const fields = ['top', 'left', 'width', 'height'] as const;
@@ -62,7 +65,10 @@ function parseRect(raw: unknown, channel: string): CommentCreateInput['rect'] {
   for (const f of fields) {
     const v = r[f];
     if (typeof v !== 'number' || !Number.isFinite(v)) {
-      throw new CodesignError(`${channel}: rect.${f} must be a finite number`, 'IPC_BAD_INPUT');
+      throw new CodesignError(
+        `${channel}: rect.${f} must be a finite number`,
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
     }
     out[f] = v;
   }
@@ -83,22 +89,25 @@ function parseAddInput(raw: unknown): CommentCreateInput {
   if (typeof kind !== 'string' || !VALID_KINDS.includes(kind as CommentKind)) {
     throw new CodesignError(
       `${channel}: kind must be one of ${VALID_KINDS.join(', ')}`,
-      'IPC_BAD_INPUT',
+      ERROR_CODES.IPC_BAD_INPUT,
     );
   }
   const text = r['text'];
   if (typeof text !== 'string') {
-    throw new CodesignError(`${channel}: text must be a string`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`${channel}: text must be a string`, ERROR_CODES.IPC_BAD_INPUT);
   }
   const outerHTML = r['outerHTML'];
   if (typeof outerHTML !== 'string') {
-    throw new CodesignError(`${channel}: outerHTML must be a string`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`${channel}: outerHTML must be a string`, ERROR_CODES.IPC_BAD_INPUT);
   }
   const scopeRaw = r['scope'];
   let scope: 'element' | 'global' = 'element';
   if (scopeRaw !== undefined) {
     if (scopeRaw !== 'element' && scopeRaw !== 'global') {
-      throw new CodesignError(`${channel}: scope must be 'element' or 'global'`, 'IPC_BAD_INPUT');
+      throw new CodesignError(
+        `${channel}: scope must be 'element' or 'global'`,
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
     }
     scope = scopeRaw;
   }
@@ -106,7 +115,7 @@ function parseAddInput(raw: unknown): CommentCreateInput {
   if (parentRaw !== undefined && parentRaw !== null && typeof parentRaw !== 'string') {
     throw new CodesignError(
       `${channel}: parentOuterHTML must be a string when present`,
-      'IPC_BAD_INPUT',
+      ERROR_CODES.IPC_BAD_INPUT,
     );
   }
   const parentOuterHTML =
@@ -150,7 +159,7 @@ export function registerCommentsIpc(db: Database): void {
         designId: input.designId,
         message: err instanceof Error ? err.message : String(err),
       });
-      throw new CodesignError('Failed to create comment', 'IPC_DB_ERROR', { cause: err });
+      throw new CodesignError('Failed to create comment', ERROR_CODES.IPC_DB_ERROR, { cause: err });
     }
   });
 
@@ -163,7 +172,7 @@ export function registerCommentsIpc(db: Database): void {
     if (snapshotId !== undefined && snapshotId !== null && typeof snapshotId !== 'string') {
       throw new CodesignError(
         `${channel}: snapshotId must be a string, null, or absent`,
-        'IPC_BAD_INPUT',
+        ERROR_CODES.IPC_BAD_INPUT,
       );
     }
     return typeof snapshotId === 'string'
@@ -184,7 +193,7 @@ export function registerCommentsIpc(db: Database): void {
     const patch: { text?: string; status?: CommentStatus } = {};
     if (r['text'] !== undefined) {
       if (typeof r['text'] !== 'string') {
-        throw new CodesignError(`${channel}: text must be a string`, 'IPC_BAD_INPUT');
+        throw new CodesignError(`${channel}: text must be a string`, ERROR_CODES.IPC_BAD_INPUT);
       }
       patch.text = r['text'];
     }
@@ -193,7 +202,7 @@ export function registerCommentsIpc(db: Database): void {
       if (typeof s !== 'string' || !VALID_STATUSES.includes(s as CommentStatus)) {
         throw new CodesignError(
           `${channel}: status must be one of ${VALID_STATUSES.join(', ')}`,
-          'IPC_BAD_INPUT',
+          ERROR_CODES.IPC_BAD_INPUT,
         );
       }
       patch.status = s as CommentStatus;
@@ -220,7 +229,7 @@ export function registerCommentsIpc(db: Database): void {
     if (!Array.isArray(ids) || ids.some((x) => typeof x !== 'string' || x.length === 0)) {
       throw new CodesignError(
         `${channel}: ids must be an array of non-empty strings`,
-        'IPC_BAD_INPUT',
+        ERROR_CODES.IPC_BAD_INPUT,
       );
     }
     const rows = markCommentsApplied(db, ids as string[], snapshotId);
@@ -232,7 +241,7 @@ export function registerCommentsIpc(db: Database): void {
 export function registerCommentsUnavailableIpc(reason: string): void {
   const message = `Comments are unavailable. ${reason}`;
   const fail = (): never => {
-    throw new CodesignError(message, 'SNAPSHOTS_UNAVAILABLE');
+    throw new CodesignError(message, ERROR_CODES.SNAPSHOTS_UNAVAILABLE);
   };
   for (const channel of COMMENTS_CHANNELS_V1) {
     ipcMain.handle(channel, fail);

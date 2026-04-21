@@ -1,4 +1,4 @@
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type { ExportResult } from './index';
 
 export interface ExportPptxOptions {
@@ -80,7 +80,7 @@ export async function exportPptx(
   } catch (err) {
     throw new CodesignError(
       `PPTX export failed: ${err instanceof Error ? err.message : String(err)}`,
-      'EXPORTER_PPTX_FAILED',
+      ERROR_CODES.EXPORTER_PPTX_FAILED,
       { cause: err },
     );
   }

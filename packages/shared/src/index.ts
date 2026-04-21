@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CodesignErrorCode } from './error-codes';
 
 export const ProviderId = z.enum([
   'anthropic',
@@ -211,7 +212,8 @@ export type ProjectDraft = z.infer<typeof ProjectDraft>;
 export class CodesignError extends Error {
   constructor(
     message: string,
-    public readonly code: string,
+    // Accept a known registry code (preferred) or a free-form string (backward compat).
+    public readonly code: CodesignErrorCode | string,
     options?: { cause?: unknown },
   ) {
     super(message, options);
@@ -302,6 +304,9 @@ export type {
   DiagnoseContext,
   ErrorCode,
 } from './diagnostics';
+
+export { ERROR_CODES, ERROR_CODE_DESCRIPTIONS } from './error-codes';
+export type { CodesignErrorCode } from './error-codes';
 
 export {
   ensureEditmodeMarkers,

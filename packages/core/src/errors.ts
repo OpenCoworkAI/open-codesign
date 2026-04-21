@@ -16,7 +16,7 @@
  */
 
 import type { ProviderId } from '@open-codesign/shared';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 export const PROVIDER_KEY_HELP_URL: Partial<Record<ProviderId, string>> = {
   openai: 'https://platform.openai.com/account/api-keys',
@@ -100,11 +100,11 @@ export function rewriteUpstreamMessage(
  */
 export function remapProviderError(err: unknown, provider: string | undefined): unknown {
   if (!(err instanceof Error)) return err;
-  if (err instanceof CodesignError && err.code === 'PROVIDER_ABORTED') return err;
+  if (err instanceof CodesignError && err.code === ERROR_CODES.PROVIDER_ABORTED) return err;
   const status = statusFromError(err);
   if (status === undefined || status < 400 || status >= 500) return err;
   const { message, rewritten } = rewriteUpstreamMessage(err.message, provider, status);
   if (!rewritten) return err;
-  const code = err instanceof CodesignError ? err.code : 'PROVIDER_HTTP_4XX';
+  const code = err instanceof CodesignError ? err.code : ERROR_CODES.PROVIDER_HTTP_4XX;
   return new CodesignError(message, code, { cause: err });
 }

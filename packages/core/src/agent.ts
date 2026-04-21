@@ -35,6 +35,7 @@ import {
   type Artifact,
   type ChatMessage,
   CodesignError,
+  ERROR_CODES,
   type ModelRef,
   type StoredDesignSystem,
 } from '@open-codesign/shared';
@@ -254,7 +255,7 @@ function buildPiModel(
   if (resolvedBaseUrl.length === 0) {
     throw new CodesignError(
       `Provider "${model.provider}" has no baseUrl configured. Add one in Settings or re-import the config.`,
-      'PROVIDER_BASE_URL_MISSING',
+      ERROR_CODES.PROVIDER_BASE_URL_MISSING,
     );
   }
   const out: PiModel = {
@@ -631,12 +632,12 @@ export async function generateViaAgent(
   } as const;
 
   if (!input.prompt.trim()) {
-    throw new CodesignError('Prompt cannot be empty', 'INPUT_EMPTY_PROMPT');
+    throw new CodesignError('Prompt cannot be empty', ERROR_CODES.INPUT_EMPTY_PROMPT);
   }
   if (!input.systemPrompt && input.mode && input.mode !== 'create') {
     throw new CodesignError(
       'generateViaAgent() built-in prompt only supports mode "create".',
-      'INPUT_UNSUPPORTED_MODE',
+      ERROR_CODES.INPUT_UNSUPPORTED_MODE,
     );
   }
 
@@ -773,7 +774,7 @@ export async function generateViaAgent(
 
   const finalAssistant = findFinalAssistantMessage(agent.state.messages);
   if (!finalAssistant) {
-    throw new CodesignError('Agent produced no assistant message', 'PROVIDER_ERROR');
+    throw new CodesignError('Agent produced no assistant message', ERROR_CODES.PROVIDER_ERROR);
   }
   if (finalAssistant.stopReason === 'error' || finalAssistant.stopReason === 'aborted') {
     const message = finalAssistant.errorMessage ?? 'Provider returned an error';
@@ -782,7 +783,10 @@ export async function generateViaAgent(
       ms: Date.now() - sendStart,
       stopReason: finalAssistant.stopReason,
     });
-    throw remapProviderError(new CodesignError(message, 'PROVIDER_ERROR'), input.model.provider);
+    throw remapProviderError(
+      new CodesignError(message, ERROR_CODES.PROVIDER_ERROR),
+      input.model.provider,
+    );
   }
   log.info('[generate] step=send_request.ok', { ...ctx, ms: Date.now() - sendStart });
 

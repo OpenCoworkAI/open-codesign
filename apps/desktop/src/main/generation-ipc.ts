@@ -1,4 +1,4 @@
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 export interface CancellationLogger {
   info: (event: string, payload: { id: string }) => void;
@@ -10,7 +10,10 @@ export function cancelGenerationRequest(
   logIpc: CancellationLogger,
 ): void {
   if (typeof raw !== 'string') {
-    throw new CodesignError('cancel-generation expects a generationId string', 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      'cancel-generation expects a generationId string',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
 
   const controller = inFlight.get(raw);
@@ -51,14 +54,14 @@ export async function armGenerationTimeout(
     logger.warn('generate.timeout.prefs_read_failed', { id, message });
     throw new CodesignError(
       `Could not read generation timeout preference: ${message}`,
-      'PREFERENCES_READ_FAIL',
+      ERROR_CODES.PREFERENCES_READ_FAIL,
     );
   }
   if (!Number.isFinite(timeoutSec) || timeoutSec < 0) {
     logger.warn('generate.timeout.invalid_value', { id, timeoutSec });
     throw new CodesignError(
       `Invalid generation timeout: ${String(timeoutSec)} (must be a non-negative finite number).`,
-      'PREFERENCES_INVALID_TIMEOUT',
+      ERROR_CODES.PREFERENCES_INVALID_TIMEOUT,
     );
   }
   if (timeoutSec === 0) return () => {};
@@ -73,7 +76,7 @@ export async function armGenerationTimeout(
     controller.abort(
       new CodesignError(
         `Generation aborted after ${timeoutSec}s (Settings → Advanced → Generation timeout).`,
-        'GENERATION_TIMEOUT',
+        ERROR_CODES.GENERATION_TIMEOUT,
       ),
     );
   }, ms);

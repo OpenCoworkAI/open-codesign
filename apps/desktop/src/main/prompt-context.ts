@@ -1,7 +1,12 @@
 import { open } from 'node:fs/promises';
 import { extname } from 'node:path';
 import type { AttachmentContext, ReferenceUrlContext } from '@open-codesign/core';
-import { CodesignError, type LocalInputFile, type StoredDesignSystem } from '@open-codesign/shared';
+import {
+  CodesignError,
+  ERROR_CODES,
+  type LocalInputFile,
+  type StoredDesignSystem,
+} from '@open-codesign/shared';
 
 const TEXT_EXTS = new Set([
   '.css',
@@ -57,7 +62,7 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
   if (file.size > MAX_ATTACHMENT_BYTES) {
     throw new CodesignError(
       `Attachment "${file.name}" is too large (${file.size} bytes).`,
-      'ATTACHMENT_TOO_LARGE',
+      ERROR_CODES.ATTACHMENT_TOO_LARGE,
     );
   }
 
@@ -70,9 +75,13 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
     const { bytesRead } = await handle.read(readBuffer, 0, readBuffer.length, 0);
     buffer = readBuffer.subarray(0, bytesRead);
   } catch (error) {
-    throw new CodesignError(`Failed to read attachment "${file.path}"`, 'ATTACHMENT_READ_FAILED', {
-      cause: error,
-    });
+    throw new CodesignError(
+      `Failed to read attachment "${file.path}"`,
+      ERROR_CODES.ATTACHMENT_READ_FAILED,
+      {
+        cause: error,
+      },
+    );
   } finally {
     await handle?.close();
   }
@@ -101,7 +110,7 @@ async function readResponseText(response: Response, url: string): Promise<string
   if (Number.isFinite(contentLength) && contentLength > MAX_URL_RESPONSE_BYTES) {
     throw new CodesignError(
       `Reference URL response is too large (${contentLength} bytes) for ${url}`,
-      'REFERENCE_URL_TOO_LARGE',
+      ERROR_CODES.REFERENCE_URL_TOO_LARGE,
     );
   }
 
@@ -110,7 +119,7 @@ async function readResponseText(response: Response, url: string): Promise<string
     if (Buffer.byteLength(text, 'utf8') > MAX_URL_RESPONSE_BYTES) {
       throw new CodesignError(
         `Reference URL response is too large for ${url}`,
-        'REFERENCE_URL_TOO_LARGE',
+        ERROR_CODES.REFERENCE_URL_TOO_LARGE,
       );
     }
     return text;
@@ -131,7 +140,7 @@ async function readResponseText(response: Response, url: string): Promise<string
       if (totalBytes > MAX_URL_RESPONSE_BYTES) {
         throw new CodesignError(
           `Reference URL response is too large for ${url}`,
-          'REFERENCE_URL_TOO_LARGE',
+          ERROR_CODES.REFERENCE_URL_TOO_LARGE,
         );
       }
 
@@ -155,7 +164,7 @@ async function inspectReferenceUrl(url: string): Promise<ReferenceUrlContext> {
     if (!response.ok) {
       throw new CodesignError(
         `Reference URL fetch failed (${response.status}) for ${url}`,
-        'REFERENCE_URL_FETCH_FAILED',
+        ERROR_CODES.REFERENCE_URL_FETCH_FAILED,
       );
     }
 
@@ -163,7 +172,7 @@ async function inspectReferenceUrl(url: string): Promise<ReferenceUrlContext> {
     if (!REFERENCE_CONTENT_TYPES.some((type) => contentType.includes(type))) {
       throw new CodesignError(
         `Unsupported reference URL content type "${contentType || 'unknown'}" for ${url}`,
-        'REFERENCE_URL_UNSUPPORTED',
+        ERROR_CODES.REFERENCE_URL_UNSUPPORTED,
       );
     }
 

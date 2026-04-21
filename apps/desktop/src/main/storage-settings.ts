@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 export interface AppPaths {
   config: string;
@@ -102,7 +102,7 @@ export async function readPersistedStorageLocations(
       `Failed to read storage settings at ${file}: ${
         err instanceof Error ? err.message : String(err)
       }`,
-      'STORAGE_SETTINGS_READ_FAILED',
+      ERROR_CODES.STORAGE_SETTINGS_READ_FAILED,
     );
   }
 }
@@ -133,7 +133,10 @@ export function patchForStorageKind(kind: StorageKind, dir: string): StorageLoca
 
 function requireBootstrapDir(): string {
   if (bootstrapUserDataDir === null) {
-    throw new CodesignError('Storage settings were read before boot initialization', 'BOOT_ORDER');
+    throw new CodesignError(
+      'Storage settings were read before boot initialization',
+      ERROR_CODES.BOOT_ORDER,
+    );
   }
   return bootstrapUserDataDir;
 }
@@ -157,13 +160,13 @@ function parseStorageSettingsFile(raw: string): StorageLocations {
       `storage-settings.json is not valid JSON: ${
         err instanceof Error ? err.message : String(err)
       }`,
-      'STORAGE_SETTINGS_PARSE_FAILED',
+      ERROR_CODES.STORAGE_SETTINGS_PARSE_FAILED,
     );
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new CodesignError(
       'storage-settings.json must contain an object',
-      'STORAGE_SETTINGS_INVALID',
+      ERROR_CODES.STORAGE_SETTINGS_INVALID,
     );
   }
   return sanitizeStorageLocations(parsed as Record<string, unknown>);
@@ -213,7 +216,7 @@ function normalizeDir(value: string): string {
   if (!isAbsolute(trimmed)) {
     throw new CodesignError(
       `Storage directory must be an absolute path: ${value}`,
-      'STORAGE_SETTINGS_INVALID',
+      ERROR_CODES.STORAGE_SETTINGS_INVALID,
     );
   }
   return resolve(trimmed);

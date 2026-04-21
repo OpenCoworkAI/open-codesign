@@ -3,6 +3,7 @@ import {
   BUILTIN_PROVIDERS,
   CodesignError,
   type Config,
+  ERROR_CODES,
   type OnboardingState,
   type ProviderEntry,
   type ReasoningLevel,
@@ -68,7 +69,10 @@ export async function loadConfigOnBoot(): Promise<void> {
 
 export function getCachedConfig(): Config | null {
   if (!configLoaded) {
-    throw new CodesignError('getCachedConfig called before loadConfigOnBoot', 'CONFIG_NOT_LOADED');
+    throw new CodesignError(
+      'getCachedConfig called before loadConfigOnBoot',
+      ERROR_CODES.CONFIG_NOT_LOADED,
+    );
   }
   return cachedConfig;
 }
@@ -76,13 +80,16 @@ export function getCachedConfig(): Config | null {
 export function getApiKeyForProvider(provider: string): string {
   const cfg = getCachedConfig();
   if (cfg === null) {
-    throw new CodesignError('No configuration found. Complete onboarding first.', 'CONFIG_MISSING');
+    throw new CodesignError(
+      'No configuration found. Complete onboarding first.',
+      ERROR_CODES.CONFIG_MISSING,
+    );
   }
   const ref = cfg.secrets[provider as keyof typeof cfg.secrets];
   if (ref === undefined) {
     throw new CodesignError(
       `No API key stored for provider "${provider}". Re-run onboarding to add one.`,
-      'PROVIDER_KEY_MISSING',
+      ERROR_CODES.PROVIDER_KEY_MISSING,
     );
   }
   return decryptSecret(ref.ciphertext);
@@ -135,7 +142,7 @@ export async function setDesignSystem(
   if (cfg === null) {
     throw new CodesignError(
       'Cannot save a design system before onboarding has completed.',
-      'CONFIG_MISSING',
+      ERROR_CODES.CONFIG_MISSING,
     );
   }
   const next: Config = hydrateConfig({
@@ -154,7 +161,7 @@ export async function setDesignSystem(
 
 function parseSaveKey(raw: unknown): SaveKeyInput {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('save-key expects an object payload', 'IPC_BAD_INPUT');
+    throw new CodesignError('save-key expects an object payload', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   const provider = r['provider'];
@@ -162,20 +169,23 @@ function parseSaveKey(raw: unknown): SaveKeyInput {
   const modelPrimary = r['modelPrimary'];
   const baseUrl = r['baseUrl'];
   if (typeof provider !== 'string' || provider.trim().length === 0) {
-    throw new CodesignError(`Provider "${String(provider)}" is invalid.`, 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      `Provider "${String(provider)}" is invalid.`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
-    throw new CodesignError('apiKey must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof modelPrimary !== 'string' || modelPrimary.trim().length === 0) {
-    throw new CodesignError('modelPrimary must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('modelPrimary must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const out: SaveKeyInput = { provider, apiKey, modelPrimary };
   if (typeof baseUrl === 'string' && baseUrl.trim().length > 0) {
     try {
       new URL(baseUrl);
     } catch {
-      throw new CodesignError(`baseUrl "${baseUrl}" is not a valid URL`, 'IPC_BAD_INPUT');
+      throw new CodesignError(`baseUrl "${baseUrl}" is not a valid URL`, ERROR_CODES.IPC_BAD_INPUT);
     }
     out.baseUrl = baseUrl.trim();
   }
@@ -184,22 +194,22 @@ function parseSaveKey(raw: unknown): SaveKeyInput {
 
 function parseValidateKey(raw: unknown): ValidateKeyInput {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('validate-key expects an object payload', 'IPC_BAD_INPUT');
+    throw new CodesignError('validate-key expects an object payload', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   const provider = r['provider'];
   const apiKey = r['apiKey'];
   const baseUrl = r['baseUrl'];
   if (typeof provider !== 'string') {
-    throw new CodesignError('provider must be a string', 'IPC_BAD_INPUT');
+    throw new CodesignError('provider must be a string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
-    throw new CodesignError('apiKey must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (!isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
       `Provider "${provider}" is not supported in v0.1. Only anthropic, openai, openrouter.`,
-      'PROVIDER_NOT_SUPPORTED',
+      ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
   const out: ValidateKeyInput = { provider, apiKey };
@@ -233,19 +243,22 @@ interface SetProviderAndModelsInput extends SaveKeyInput {
 
 function parseSetProviderAndModels(raw: unknown): SetProviderAndModelsInput {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('set-provider-and-models expects an object payload', 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      'set-provider-and-models expects an object payload',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   const r = raw as Record<string, unknown>;
   const sv = r['schemaVersion'];
   if (sv !== undefined && sv !== 1) {
     throw new CodesignError(
       `Unsupported schemaVersion ${String(sv)} (expected 1)`,
-      'IPC_BAD_INPUT',
+      ERROR_CODES.IPC_BAD_INPUT,
     );
   }
   const setAsActive = r['setAsActive'];
   if (typeof setAsActive !== 'boolean') {
-    throw new CodesignError('setAsActive must be a boolean', 'IPC_BAD_INPUT');
+    throw new CodesignError('setAsActive must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
   }
   return { ...parseSaveKey(raw), setAsActive };
 }
@@ -317,7 +330,7 @@ async function runAddProvider(raw: unknown): Promise<ProviderRow[]> {
 
 async function runDeleteProvider(raw: unknown): Promise<ProviderRow[]> {
   if (typeof raw !== 'string') {
-    throw new CodesignError('delete-provider expects a provider string', 'IPC_BAD_INPUT');
+    throw new CodesignError('delete-provider expects a provider string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const cfg = getCachedConfig();
   if (cfg === null) return [];
@@ -368,20 +381,20 @@ async function runDeleteProvider(raw: unknown): Promise<ProviderRow[]> {
 
 async function runSetActiveProvider(raw: unknown): Promise<OnboardingState> {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('set-active-provider expects an object', 'IPC_BAD_INPUT');
+    throw new CodesignError('set-active-provider expects an object', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   const provider = r['provider'];
   const modelPrimary = r['modelPrimary'];
   if (typeof provider !== 'string' || provider.length === 0) {
-    throw new CodesignError('provider must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('provider must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof modelPrimary !== 'string' || modelPrimary.trim().length === 0) {
-    throw new CodesignError('modelPrimary must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('modelPrimary must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const cfg = getCachedConfig();
   if (cfg === null) {
-    throw new CodesignError('No configuration found', 'CONFIG_MISSING');
+    throw new CodesignError('No configuration found', ERROR_CODES.CONFIG_MISSING);
   }
   assertProviderHasStoredSecret(cfg, provider);
   const next: Config = hydrateConfig({
@@ -416,7 +429,10 @@ async function runGetPaths(): Promise<AppPaths> {
 
 function parseStorageKind(raw: unknown): StorageKind {
   if (raw === 'config' || raw === 'logs' || raw === 'data') return raw;
-  throw new CodesignError('storage kind must be "config", "logs", or "data"', 'IPC_BAD_INPUT');
+  throw new CodesignError(
+    'storage kind must be "config", "logs", or "data"',
+    ERROR_CODES.IPC_BAD_INPUT,
+  );
 }
 
 async function runChooseStorageFolder(raw: unknown): Promise<AppPaths> {
@@ -437,11 +453,11 @@ async function runChooseStorageFolder(raw: unknown): Promise<AppPaths> {
 
 async function runOpenFolder(raw: unknown): Promise<void> {
   if (typeof raw !== 'string') {
-    throw new CodesignError('open-folder expects a path string', 'IPC_BAD_INPUT');
+    throw new CodesignError('open-folder expects a path string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const error = await shell.openPath(raw);
   if (error) {
-    throw new CodesignError(`Could not open ${raw}: ${error}`, 'OPEN_PATH_FAILED');
+    throw new CodesignError(`Could not open ${raw}: ${error}`, ERROR_CODES.OPEN_PATH_FAILED);
   }
 }
 
@@ -478,7 +494,7 @@ interface AddCustomProviderInput {
 
 function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('config:v1:add-provider expects an object', 'IPC_BAD_INPUT');
+    throw new CodesignError('config:v1:add-provider expects an object', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
   const id = r['id'];
@@ -488,28 +504,28 @@ function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
   const apiKey = r['apiKey'];
   const defaultModel = r['defaultModel'];
   if (typeof id !== 'string' || id.trim().length === 0) {
-    throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('id must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof name !== 'string' || name.trim().length === 0) {
-    throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('name must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const parsedWire = WireApiSchema.safeParse(wire);
   if (!parsedWire.success) {
-    throw new CodesignError(`Unsupported wire: ${String(wire)}`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`Unsupported wire: ${String(wire)}`, ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
-    throw new CodesignError('baseUrl must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   try {
     new URL(baseUrl);
   } catch {
-    throw new CodesignError(`baseUrl "${baseUrl}" is not a valid URL`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`baseUrl "${baseUrl}" is not a valid URL`, ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof apiKey !== 'string') {
-    throw new CodesignError('apiKey must be a string', 'IPC_BAD_INPUT');
+    throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof defaultModel !== 'string' || defaultModel.trim().length === 0) {
-    throw new CodesignError('defaultModel must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('defaultModel must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const setAsActive = r['setAsActive'];
   const out: AddCustomProviderInput = {
@@ -590,12 +606,15 @@ interface UpdateProviderInput {
 
 function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('config:v1:update-provider expects an object', 'IPC_BAD_INPUT');
+    throw new CodesignError(
+      'config:v1:update-provider expects an object',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
   const r = raw as Record<string, unknown>;
   const id = r['id'];
   if (typeof id !== 'string' || id.length === 0) {
-    throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+    throw new CodesignError('id must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const out: UpdateProviderInput = { id };
   if (typeof r['name'] === 'string') out.name = r['name'] as string;
@@ -640,11 +659,11 @@ function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
 async function runUpdateProvider(input: UpdateProviderInput): Promise<OnboardingState> {
   const cfg = getCachedConfig();
   if (cfg === null) {
-    throw new CodesignError('No configuration found', 'CONFIG_MISSING');
+    throw new CodesignError('No configuration found', ERROR_CODES.CONFIG_MISSING);
   }
   const existing = cfg.providers[input.id];
   if (existing === undefined) {
-    throw new CodesignError(`Provider "${input.id}" not found`, 'IPC_BAD_INPUT');
+    throw new CodesignError(`Provider "${input.id}" not found`, ERROR_CODES.IPC_BAD_INPUT);
   }
   const updated: ProviderEntry = {
     ...existing,
@@ -684,7 +703,10 @@ interface ExternalConfigsDetection {
 
 async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
   if (imported.providers.length === 0) {
-    throw new CodesignError('Codex config has no providers to bring in', 'CONFIG_MISSING');
+    throw new CodesignError(
+      'Codex config has no providers to bring in',
+      ERROR_CODES.CONFIG_MISSING,
+    );
   }
   const nextProviders: Record<string, ProviderEntry> = { ...(cachedConfig?.providers ?? {}) };
   const nextSecrets = { ...(cachedConfig?.secrets ?? {}) };
@@ -718,7 +740,7 @@ async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
   }
   const fallbackActive = imported.providers[0];
   if (fallbackActive === undefined) {
-    throw new CodesignError('Codex config parse produced no providers', 'CONFIG_MISSING');
+    throw new CodesignError('Codex config parse produced no providers', ERROR_CODES.CONFIG_MISSING);
   }
   const activeProvider =
     imported.activeProvider !== null && nextProviders[imported.activeProvider] !== undefined
@@ -743,7 +765,7 @@ async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
 
 async function runImportClaudeCode(imported: ClaudeCodeImport): Promise<OnboardingState> {
   if (imported.provider === null) {
-    throw new CodesignError('Claude Code config produced no provider', 'CONFIG_MISSING');
+    throw new CodesignError('Claude Code config produced no provider', ERROR_CODES.CONFIG_MISSING);
   }
   const nextProviders: Record<string, ProviderEntry> = { ...(cachedConfig?.providers ?? {}) };
   const nextSecrets = { ...(cachedConfig?.secrets ?? {}) };
@@ -838,7 +860,7 @@ export function registerOnboardingIpc(): void {
     if (!ok) {
       throw new CodesignError(
         '系统钥匙串不可用——请按弹出的说明把 Open CoDesign 拖到「应用程序」文件夹后重启。',
-        'KEYCHAIN_UNAVAILABLE',
+        ERROR_CODES.KEYCHAIN_UNAVAILABLE,
       );
     }
     return op();
@@ -888,7 +910,10 @@ export function registerOnboardingIpc(): void {
     'config:v1:remove-provider',
     async (_e, raw: unknown): Promise<OnboardingState> => {
       if (typeof raw !== 'string' || raw.length === 0) {
-        throw new CodesignError('config:v1:remove-provider expects a provider id', 'IPC_BAD_INPUT');
+        throw new CodesignError(
+          'config:v1:remove-provider expects a provider id',
+          ERROR_CODES.IPC_BAD_INPUT,
+        );
       }
       await runDeleteProvider(raw);
       return toState(cachedConfig);
@@ -923,7 +948,10 @@ export function registerOnboardingIpc(): void {
   ipcMain.handle('config:v1:import-codex-config', async (): Promise<OnboardingState> => {
     const imported = await readCodexConfig();
     if (imported === null) {
-      throw new CodesignError('No Codex config found at ~/.codex/config.toml', 'CONFIG_MISSING');
+      throw new CodesignError(
+        'No Codex config found at ~/.codex/config.toml',
+        ERROR_CODES.CONFIG_MISSING,
+      );
     }
     return withKeychain(() => runImportCodex(imported));
   });
@@ -933,7 +961,7 @@ export function registerOnboardingIpc(): void {
     if (imported === null || imported.provider === null) {
       throw new CodesignError(
         'No Claude Code settings found at ~/.claude/settings.json',
-        'CONFIG_MISSING',
+        ERROR_CODES.CONFIG_MISSING,
       );
     }
     return withKeychain(() => runImportClaudeCode(imported));

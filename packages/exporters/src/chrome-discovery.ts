@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 /**
  * Locate a system Chrome/Chromium binary. We refuse to bundle Chromium —
@@ -49,7 +49,7 @@ export async function findSystemChrome(deps: ChromeDiscoveryDeps = {}): Promise<
 
   throw new CodesignError(
     `System Chrome not found. Install from ${CHROME_INSTALL_URL} (or any Chromium-based browser: Edge, Chromium).`,
-    'EXPORTER_NO_CHROME',
+    ERROR_CODES.EXPORTER_NO_CHROME,
   );
 }
 

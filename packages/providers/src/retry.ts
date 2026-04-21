@@ -13,7 +13,7 @@
  *   - any AbortSignal abort short-circuits immediately, no retry
  */
 
-import { type ChatMessage, CodesignError, type ModelRef } from '@open-codesign/shared';
+import { type ChatMessage, CodesignError, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
 import { type GenerateOptions, type GenerateResult, complete } from './index';
 
 export interface RetryReason {
@@ -217,7 +217,7 @@ export async function completeWithRetry(
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     if (opts.signal?.aborted) {
-      throw new CodesignError('Generation aborted by user', 'PROVIDER_ABORTED');
+      throw new CodesignError('Generation aborted by user', ERROR_CODES.PROVIDER_ABORTED);
     }
     try {
       return await _impl(model, messages, opts);
@@ -226,7 +226,9 @@ export async function completeWithRetry(
       const decision = classifyError(err);
       if (shouldStop(decision, attempt, maxRetries)) {
         if (decision.reason === 'aborted') {
-          throw new CodesignError('Generation aborted by user', 'PROVIDER_ABORTED', { cause: err });
+          throw new CodesignError('Generation aborted by user', ERROR_CODES.PROVIDER_ABORTED, {
+            cause: err,
+          });
         }
         throw err;
       }
@@ -237,5 +239,5 @@ export async function completeWithRetry(
   }
   throw lastError instanceof Error
     ? lastError
-    : new CodesignError('completeWithRetry exhausted', 'PROVIDER_RETRY_EXHAUSTED');
+    : new CodesignError('completeWithRetry exhausted', ERROR_CODES.PROVIDER_RETRY_EXHAUSTED);
 }

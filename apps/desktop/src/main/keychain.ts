@@ -1,11 +1,11 @@
-import { CodesignError, type Config, type SecretRef } from '@open-codesign/shared';
+import { CodesignError, type Config, ERROR_CODES, type SecretRef } from '@open-codesign/shared';
 import { safeStorage } from './electron-runtime';
 
 export function ensureKeychainAvailable(): void {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new CodesignError(
       'OS keychain (safeStorage) is not available. Cannot persist API keys securely.',
-      'KEYCHAIN_UNAVAILABLE',
+      ERROR_CODES.KEYCHAIN_UNAVAILABLE,
     );
   }
 }
@@ -13,7 +13,7 @@ export function ensureKeychainAvailable(): void {
 export function encryptSecret(plaintext: string): string {
   ensureKeychainAvailable();
   if (plaintext.length === 0) {
-    throw new CodesignError('Cannot encrypt empty secret', 'KEYCHAIN_EMPTY_INPUT');
+    throw new CodesignError('Cannot encrypt empty secret', ERROR_CODES.KEYCHAIN_EMPTY_INPUT);
   }
   const buf = safeStorage.encryptString(plaintext);
   return buf.toString('base64');
@@ -22,7 +22,7 @@ export function encryptSecret(plaintext: string): string {
 export function decryptSecret(ciphertextBase64: string): string {
   ensureKeychainAvailable();
   if (ciphertextBase64.length === 0) {
-    throw new CodesignError('Cannot decrypt empty ciphertext', 'KEYCHAIN_EMPTY_INPUT');
+    throw new CodesignError('Cannot decrypt empty ciphertext', ERROR_CODES.KEYCHAIN_EMPTY_INPUT);
   }
   const buf = Buffer.from(ciphertextBase64, 'base64');
   return safeStorage.decryptString(buf);
@@ -68,7 +68,7 @@ export function tryBuildSecretRef(plaintext: string): SecretRef | null {
   try {
     return buildSecretRef(plaintext);
   } catch (err) {
-    if (err instanceof CodesignError && err.code === 'KEYCHAIN_UNAVAILABLE') {
+    if (err instanceof CodesignError && err.code === ERROR_CODES.KEYCHAIN_UNAVAILABLE) {
       return null;
     }
     throw err;
