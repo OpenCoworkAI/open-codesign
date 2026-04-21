@@ -101,7 +101,7 @@ export class CodexTokenStore {
       await this.read();
     }
     if (this.cache === null) {
-      throw new Error('No Codex credentials stored');
+      throw new Error('ChatGPT 订阅未登录或已登出，请重新登录。');
     }
     if (this.now() >= this.cache.expiresAt - EXPIRY_BUFFER_MS) {
       return this.runRefresh();
@@ -114,7 +114,7 @@ export class CodexTokenStore {
       await this.read();
     }
     if (this.cache === null) {
-      throw new Error('No Codex credentials stored');
+      throw new Error('ChatGPT 订阅未登录或已登出，请重新登录。');
     }
     return this.runRefresh();
   }
@@ -133,7 +133,7 @@ export class CodexTokenStore {
       await this.read();
     }
     if (this.cache === null) {
-      throw new Error('No Codex credentials stored');
+      throw new Error('ChatGPT 订阅未登录或已登出，请重新登录。');
     }
     const current = this.cache;
     let next: TokenSet;

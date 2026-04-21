@@ -98,7 +98,7 @@ describe('CodexTokenStore', () => {
 
   it('getValidAccessToken throws when no stored creds', async () => {
     const { store } = makeStore();
-    await expect(store.getValidAccessToken()).rejects.toThrow('No Codex credentials stored');
+    await expect(store.getValidAccessToken()).rejects.toThrow(/ChatGPT 订阅未登录/);
   });
 
   it('proactively refreshes within 5-min buffer', async () => {
@@ -194,7 +194,7 @@ describe('CodexTokenStore', () => {
     await store.write(baseAuth());
     await store.clear();
     await expect(readFile(filePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
-    await expect(store.getValidAccessToken()).rejects.toThrow('No Codex credentials stored');
+    await expect(store.getValidAccessToken()).rejects.toThrow(/ChatGPT 订阅未登录/);
   });
 
   it('read throws on malformed JSON', async () => {
@@ -207,9 +207,7 @@ describe('CodexTokenStore', () => {
   it('clears stored auth and throws Chinese error when refresh hits invalid_grant', async () => {
     const refreshFn = vi
       .fn()
-      .mockRejectedValue(
-        new Error('Codex OAuth refresh failed: 400 {"error":"invalid_grant"}'),
-      );
+      .mockRejectedValue(new Error('Codex OAuth refresh failed: 400 {"error":"invalid_grant"}'));
     const { store, filePath } = makeStore({ refreshFn });
     await store.write(baseAuth({ expiresAt: NOW - 1000 }));
 
