@@ -185,7 +185,7 @@ describe('codex-oauth:v1:login', () => {
     expect(result.email).toBe('user@example.com');
     expect(result.accountId).toBe('acct-xyz');
 
-    expect(writeConfigMock).toHaveBeenCalledTimes(1);
+    expect(writeConfigMock).toHaveBeenCalledTimes(2);
     expect(fakeCachedConfig?.providers['chatgpt-codex']).toMatchObject({
       id: 'chatgpt-codex',
       wire: 'openai-responses',
@@ -225,6 +225,68 @@ describe('codex-oauth:v1:login', () => {
     const { getCodexTokenStore } = await import('./codex-oauth-ipc');
     const stored = await getCodexTokenStore().read();
     expect(stored).toBeNull();
+  });
+
+  it('auto-activates chatgpt-codex when no active provider is set', async () => {
+    waitForCodeMock.mockImplementation(async (expectedState: string) => ({
+      code: 'AUTH_CODE',
+      state: expectedState,
+    }));
+    exchangeCodeMock.mockResolvedValue({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+      idToken: makeIdToken({ email: 'user@example.com' }),
+      expiresAt: 99999,
+      accountId: 'acct-xyz',
+    });
+    fakeCachedConfig = {
+      activeProvider: '',
+      activeModel: '',
+      secrets: {},
+      providers: {},
+    };
+
+    await register();
+    await handlers.get('codex-oauth:v1:login')?.();
+
+    expect(fakeCachedConfig?.activeProvider).toBe('chatgpt-codex');
+    expect(fakeCachedConfig?.activeModel).toBe('gpt-5.3-codex');
+  });
+
+  it('leaves active provider alone when one is already set and valid', async () => {
+    waitForCodeMock.mockImplementation(async (expectedState: string) => ({
+      code: 'AUTH_CODE',
+      state: expectedState,
+    }));
+    exchangeCodeMock.mockResolvedValue({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+      idToken: makeIdToken({ email: 'user@example.com' }),
+      expiresAt: 99999,
+      accountId: 'acct-xyz',
+    });
+    fakeCachedConfig = {
+      activeProvider: 'anthropic',
+      activeModel: 'claude-sonnet-4-6',
+      secrets: {},
+      providers: {
+        anthropic: {
+          id: 'anthropic',
+          name: 'Anthropic Claude',
+          builtin: true,
+          wire: 'anthropic',
+          baseUrl: 'https://api.anthropic.com',
+          defaultModel: 'claude-sonnet-4-6',
+        },
+      },
+    };
+
+    await register();
+    await handlers.get('codex-oauth:v1:login')?.();
+
+    expect(fakeCachedConfig?.activeProvider).toBe('anthropic');
+    expect(fakeCachedConfig?.activeModel).toBe('claude-sonnet-4-6');
+    expect(fakeCachedConfig?.providers['chatgpt-codex']).toBeDefined();
   });
 
   it('rejects login when exchangeCode returns a null accountId', async () => {

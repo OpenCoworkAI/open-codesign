@@ -107,6 +107,28 @@ async function persistProviderMutation(
   setCachedConfig(next);
 }
 
+async function claimActiveProviderIfUnset(): Promise<void> {
+  const cfg = getCachedConfig();
+  if (cfg === null) return;
+  const current = cfg.activeProvider;
+  const hasValidActive =
+    current !== undefined &&
+    current !== null &&
+    current !== '' &&
+    cfg.providers[current] !== undefined;
+  if (hasValidActive) return;
+  const next: Config = hydrateConfig({
+    version: 3,
+    activeProvider: CHATGPT_CODEX_PROVIDER_ID,
+    activeModel: CHATGPT_CODEX_PROVIDER.defaultModel,
+    secrets: cfg.secrets,
+    providers: cfg.providers,
+    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+  });
+  await writeConfig(next);
+  setCachedConfig(next);
+}
+
 async function runLogin(): Promise<CodexOAuthStatus> {
   const pkce = generatePkce();
   const state = randomBytes(16).toString('hex');
@@ -145,6 +167,7 @@ async function runLogin(): Promise<CodexOAuthStatus> {
       providers[CHATGPT_CODEX_PROVIDER_ID] = { ...CHATGPT_CODEX_PROVIDER };
       return providers;
     });
+    await claimActiveProviderIfUnset();
     logger.info('codex.oauth.login.ok', { accountId: stored.accountId, hasEmail: email !== null });
     return toStatus(stored);
   } catch (err) {
