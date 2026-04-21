@@ -204,6 +204,38 @@ describe('CodexTokenStore', () => {
     await expect(store.read()).rejects.toThrow(/Invalid Codex token store/);
   });
 
+  it('clears stored auth and throws Chinese error when refresh hits invalid_grant', async () => {
+    const refreshFn = vi
+      .fn()
+      .mockRejectedValue(
+        new Error('Codex OAuth refresh failed: 400 {"error":"invalid_grant"}'),
+      );
+    const { store, filePath } = makeStore({ refreshFn });
+    await store.write(baseAuth({ expiresAt: NOW - 1000 }));
+
+    await expect(store.getValidAccessToken()).rejects.toThrow(/ChatGPT 订阅已失效/);
+    expect(await store.read()).toBeNull();
+    await expect(readFile(filePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+
+    // Second call must not retry with a stale cache — it should throw the
+    // "no credentials" path instead of invoking refreshFn again.
+    await expect(store.getValidAccessToken()).rejects.toThrow();
+    expect(refreshFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves stored auth when refresh fails with a transient network error', async () => {
+    const refreshFn = vi.fn().mockRejectedValue(new Error('network timeout'));
+    const { store, filePath } = makeStore({ refreshFn });
+    const auth = baseAuth({ expiresAt: NOW - 1000 });
+    await store.write(auth);
+
+    await expect(store.getValidAccessToken()).rejects.toThrow(/network timeout/);
+
+    // File must still be on disk; a fresh store must read the original auth.
+    const store2 = new CodexTokenStore({ filePath, refreshFn: vi.fn(), now: () => NOW });
+    expect(await store2.read()).toEqual(auth);
+  });
+
   it('read throws when schemaVersion is not 1', async () => {
     const { store, filePath } = makeStore();
     await mkdir(dirname(filePath), { recursive: true });

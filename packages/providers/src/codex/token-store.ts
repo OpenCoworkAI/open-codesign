@@ -136,7 +136,22 @@ export class CodexTokenStore {
       throw new Error('No Codex credentials stored');
     }
     const current = this.cache;
-    const next = await this.refreshFn(current.refreshToken);
+    let next: TokenSet;
+    try {
+      next = await this.refreshFn(current.refreshToken);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isBadCredential =
+        /invalid_grant/i.test(msg) ||
+        /invalid_request/i.test(msg) ||
+        /\b400\b/.test(msg) ||
+        /\b401\b/.test(msg);
+      if (isBadCredential) {
+        await this.clear();
+        throw new Error('ChatGPT 订阅已失效，请重新登录', { cause: err });
+      }
+      throw err;
+    }
     const newRefreshToken = next.refreshToken ? next.refreshToken : current.refreshToken;
     const emailFromNew = extractEmail(next.idToken);
     const newAuth: StoredCodexAuth = {
