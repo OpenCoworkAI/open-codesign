@@ -660,7 +660,7 @@ async function runUpdateProvider(input: UpdateProviderInput): Promise<Onboarding
   // a string level means "set it". Handle separately from the spread above
   // because the `...undefined ? {} : {...}` pattern can't express "delete".
   if (input.reasoningLevel === null) {
-    delete updated.reasoningLevel;
+    updated.reasoningLevel = undefined;
   } else if (input.reasoningLevel !== undefined) {
     updated.reasoningLevel = input.reasoningLevel;
   }

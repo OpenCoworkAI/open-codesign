@@ -404,9 +404,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // or chat history), the preview IS coming — we're just waiting on the IPC
   // round-trip for the snapshot. Show a skeleton instead of the new-design
   // welcome screen so users don't read the transient state as "load failed".
-  const currentDesign = currentDesignId
-    ? designs.find((d) => d.id === currentDesignId)
-    : undefined;
+  const currentDesign = currentDesignId ? designs.find((d) => d.id === currentDesignId) : undefined;
   const designHasContent =
     currentDesign !== undefined &&
     ((currentDesign.thumbnailText !== null && currentDesign.thumbnailText.length > 0) ||

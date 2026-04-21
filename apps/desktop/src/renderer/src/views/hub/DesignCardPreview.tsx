@@ -51,8 +51,8 @@ const LS_PREFIX = 'designCardPreview:';
 const LS_MAX_CHARS = 300_000; // ~ 300 KB per entry ceiling; skip caching huge HTML
 const LS_MAX_ENTRIES = 40;
 
-function cacheKey(d: Design): string {
-  return `${d.id}:${d.updatedAt}`;
+function cacheKey(id: string, updatedAt: string): string {
+  return `${id}:${updatedAt}`;
 }
 
 function readCache(key: string): string | null {
@@ -104,7 +104,9 @@ function pruneOldestCacheEntriesIfNeeded(): void {
 }
 
 export function DesignCardPreview({ design }: DesignCardPreviewProps) {
-  const [html, setHtml] = useState<string | null>(() => readCache(cacheKey(design)));
+  const [html, setHtml] = useState<string | null>(() =>
+    readCache(cacheKey(design.id, design.updatedAt)),
+  );
   const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(false);
   const [scale, setScale] = useState(0.22);
@@ -166,7 +168,7 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
 
   useEffect(() => {
     if (!visible) return;
-    const key = cacheKey(design);
+    const key = cacheKey(design.id, design.updatedAt);
     const cached = readCache(key);
     if (cached !== null) {
       setHtml(cached);

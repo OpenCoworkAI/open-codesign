@@ -131,9 +131,7 @@ export function toProviderRows(
       // codex-* providers are treated as no-auth / IP-gated by default —
       // absent secret is a legitimate state, not a "missing key" warning.
       hasKey: ref !== undefined || provider.startsWith('codex-'),
-      ...(entry?.reasoningLevel !== undefined
-        ? { reasoningLevel: entry.reasoningLevel }
-        : {}),
+      ...(entry?.reasoningLevel !== undefined ? { reasoningLevel: entry.reasoningLevel } : {}),
       ...(rowError !== undefined ? { error: rowError } : {}),
     });
   }
