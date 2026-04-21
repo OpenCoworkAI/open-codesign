@@ -106,6 +106,11 @@ vi.mock('./imports/claude-code-config', () => ({
   readClaudeCodeSettings: vi.fn(async () => null),
 }));
 
+vi.mock('./ssh-remote', () => ({
+  testSshConnection: vi.fn(async () => undefined),
+  testSavedSshProfile: vi.fn(async () => undefined),
+}));
+
 vi.mock('@open-codesign/providers', () => ({
   pingProvider: vi.fn(async () => ({ ok: true, modelCount: 1 })),
 }));
@@ -247,6 +252,7 @@ describe('getApiKeyForProvider — API key retrieval', () => {
           defaultModel: 'claude-sonnet-4-6',
         },
       },
+      sshProfiles: {},
       provider: 'anthropic',
       modelPrimary: 'claude-sonnet-4-6',
       baseUrls: {},

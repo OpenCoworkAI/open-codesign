@@ -48,6 +48,7 @@ function makeCfg(input: {
     activeModel: input.modelPrimary,
     secrets: input.secrets ?? {},
     providers,
+    sshProfiles: {},
   });
 }
 

@@ -209,12 +209,19 @@ interface CodesignState {
   clearIframeErrors: () => void;
   pushIframeError: (message: string) => void;
   exportActive: (format: ExportFormat) => Promise<void>;
+  exportRemote: (input: {
+    format: ExportFormat;
+    profileId: string;
+    remotePath: string;
+  }) => Promise<void>;
 
   pickInputFiles: () => Promise<void>;
+  attachRemoteFile: (profileId: string, path: string) => Promise<void>;
   removeInputFile: (path: string) => void;
   clearInputFiles: () => void;
   setReferenceUrl: (value: string) => void;
   pickDesignSystemDirectory: () => Promise<void>;
+  linkRemoteDesignSystem: (profileId: string, path: string) => Promise<void>;
   clearDesignSystem: () => Promise<void>;
 
   selectCanvasElement: (selection: SelectedElement) => void;
@@ -436,11 +443,16 @@ function uniqueFiles(files: LocalInputFile[]): LocalInputFile[] {
   const seen = new Set<string>();
   const result: LocalInputFile[] = [];
   for (const file of files) {
-    if (seen.has(file.path)) continue;
-    seen.add(file.path);
+    const key = getInputFileKey(file);
+    if (seen.has(key)) continue;
+    seen.add(key);
     result.push(file);
   }
   return result;
+}
+
+export function getInputFileKey(file: LocalInputFile): string {
+  return file.kind === 'ssh' ? `ssh:${file.profileId}:${file.path}` : `local:${file.path}`;
 }
 
 function tr(key: string, options?: Record<string, unknown>): string {
@@ -1087,8 +1099,14 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     set((s) => ({ inputFiles: uniqueFiles([...s.inputFiles, ...files]) }));
   },
 
+  async attachRemoteFile(profileId, path) {
+    if (!window.codesign?.remote) return;
+    const file = await window.codesign.remote.attachFile({ profileId, path });
+    set((s) => ({ inputFiles: uniqueFiles([...s.inputFiles, file]) }));
+  },
+
   removeInputFile(path) {
-    set((s) => ({ inputFiles: s.inputFiles.filter((file) => file.path !== path) }));
+    set((s) => ({ inputFiles: s.inputFiles.filter((file) => getInputFileKey(file) !== path) }));
   },
 
   clearInputFiles() {
@@ -1103,6 +1121,28 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     if (!window.codesign) return;
     try {
       const next = await window.codesign.pickDesignSystemDirectory();
+      set({ config: next });
+      if (next.designSystem) {
+        get().pushToast({
+          variant: 'success',
+          title: tr('notifications.designSystemLinked'),
+          description: next.designSystem.summary,
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : tr('errors.generic');
+      get().pushToast({
+        variant: 'error',
+        title: tr('notifications.designSystemScanFailed'),
+        description: message,
+      });
+    }
+  },
+
+  async linkRemoteDesignSystem(profileId, path) {
+    if (!window.codesign?.remote) return;
+    try {
+      const next = await window.codesign.remote.linkDesignSystem({ profileId, path });
       set({ config: next });
       if (next.designSystem) {
         get().pushToast({
@@ -1436,6 +1476,30 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       if (res.status === 'saved' && res.path) {
         set({ toastMessage: tr('notifications.exportedTo', { path: res.path }) });
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      set({ toastMessage: msg, errorMessage: msg, lastError: msg });
+    }
+  },
+
+  async exportRemote(input) {
+    const html = get().previewHtml;
+    if (!html) {
+      set({ toastMessage: tr('notifications.noDesignToExport') });
+      return;
+    }
+    if (!window.codesign?.remote) {
+      set({ errorMessage: tr('errors.rendererDisconnected') });
+      return;
+    }
+    try {
+      const res = await window.codesign.remote.export({
+        format: input.format,
+        htmlContent: html,
+        profileId: input.profileId,
+        remotePath: input.remotePath,
+      });
+      set({ toastMessage: tr('notifications.exportedTo', { path: res.path }) });
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
       set({ toastMessage: msg, errorMessage: msg, lastError: msg });

@@ -6,7 +6,7 @@ import {
   type StoredDesignSystem,
 } from '@open-codesign/shared';
 
-const IGNORED_DIRS = new Set([
+export const IGNORED_DESIGN_SYSTEM_DIRS = new Set([
   '.git',
   '.idea',
   '.next',
@@ -19,7 +19,7 @@ const IGNORED_DIRS = new Set([
   'out',
 ]);
 
-const CANDIDATE_EXTS = new Set([
+export const DESIGN_SYSTEM_CANDIDATE_EXTS = new Set([
   '.css',
   '.scss',
   '.sass',
@@ -53,6 +53,11 @@ interface CandidateFile {
   score: number;
 }
 
+export interface DesignSystemSourceFile {
+  relativePath: string;
+  content: string;
+}
+
 function pushUnique(target: string[], value: string, max: number): void {
   if (!value || target.includes(value) || target.length >= max) return;
   target.push(value);
@@ -65,7 +70,7 @@ function cleanValue(value: string): string {
     .trim();
 }
 
-function scoreCandidate(relativePath: string): number {
+export function scoreDesignSystemCandidate(relativePath: string): number {
   const fileName = basename(relativePath);
   let score = 1;
   for (const pattern of PRIORITY_PATTERNS) {
@@ -75,6 +80,11 @@ function scoreCandidate(relativePath: string): number {
   if (/tailwind/i.test(relativePath)) score += 8;
   if (/src\//i.test(relativePath)) score += 4;
   return score;
+}
+
+export function isDesignSystemCandidateFile(fileName: string): boolean {
+  const extension = extname(fileName).toLowerCase();
+  return DESIGN_SYSTEM_CANDIDATE_EXTS.has(extension) || /tailwind\.config/i.test(fileName);
 }
 
 async function collectCandidateFiles(
@@ -95,16 +105,15 @@ async function collectCandidateFiles(
     if (files.length >= MAX_FILES) return;
     const fullPath = join(dirPath, entry.name);
     if (entry.isDirectory()) {
-      if (!IGNORED_DIRS.has(entry.name)) {
+      if (!IGNORED_DESIGN_SYSTEM_DIRS.has(entry.name)) {
         await collectCandidateFiles(rootPath, fullPath, files);
       }
       continue;
     }
     if (!entry.isFile()) continue;
-    const extension = extname(entry.name).toLowerCase();
-    if (!CANDIDATE_EXTS.has(extension) && !/tailwind\.config/i.test(entry.name)) continue;
+    if (!isDesignSystemCandidateFile(entry.name)) continue;
     const relativePath = relative(rootPath, fullPath).replace(/\\/g, '/');
-    files.push({ fullPath, relativePath, score: scoreCandidate(relativePath) });
+    files.push({ fullPath, relativePath, score: scoreDesignSystemCandidate(relativePath) });
   }
 }
 
@@ -184,35 +193,33 @@ function buildSummary(
   return parts.join(' ');
 }
 
-export async function scanDesignSystem(rootPath: string): Promise<StoredDesignSystem> {
-  const candidates: CandidateFile[] = [];
-  await collectCandidateFiles(rootPath, rootPath, candidates);
-
-  const selected = candidates
-    .sort((a, b) => b.score - a.score || a.relativePath.localeCompare(b.relativePath))
-    .slice(0, MAX_SELECTED_FILES);
-
+export function buildDesignSystemSnapshot(
+  rootPath: string,
+  files: DesignSystemSourceFile[],
+  extra: Partial<
+    Pick<StoredDesignSystem, 'sourceKind' | 'sshProfileId' | 'sshHost' | 'sshPort' | 'sshUsername'>
+  > = {},
+): StoredDesignSystem {
   const colors: string[] = [];
   const fonts: string[] = [];
   const spacing: string[] = [];
   const radius: string[] = [];
   const shadows: string[] = [];
 
-  for (const file of selected) {
-    let raw = '';
-    try {
-      raw = await readFile(file.fullPath, 'utf8');
-    } catch {
-      continue;
-    }
-    const snippet = raw.slice(0, MAX_FILE_CHARS);
+  for (const file of files) {
+    const snippet = file.content.slice(0, MAX_FILE_CHARS);
     collectCssVarValues(snippet, colors, spacing, radius, shadows);
     collectLooseValues(snippet, colors, fonts, spacing, radius, shadows);
   }
 
   const baseSnapshot = {
     rootPath,
-    sourceFiles: selected.map((file) => file.relativePath),
+    sourceKind: extra.sourceKind ?? 'local',
+    ...(extra.sshProfileId !== undefined ? { sshProfileId: extra.sshProfileId } : {}),
+    ...(extra.sshHost !== undefined ? { sshHost: extra.sshHost } : {}),
+    ...(extra.sshPort !== undefined ? { sshPort: extra.sshPort } : {}),
+    ...(extra.sshUsername !== undefined ? { sshUsername: extra.sshUsername } : {}),
+    sourceFiles: files.map((file) => file.relativePath),
     colors,
     fonts,
     spacing,
@@ -226,4 +233,25 @@ export async function scanDesignSystem(rootPath: string): Promise<StoredDesignSy
     summary: buildSummary(baseSnapshot),
     extractedAt: new Date().toISOString(),
   };
+}
+
+export async function scanDesignSystem(rootPath: string): Promise<StoredDesignSystem> {
+  const candidates: CandidateFile[] = [];
+  await collectCandidateFiles(rootPath, rootPath, candidates);
+
+  const selected = candidates
+    .sort((a, b) => b.score - a.score || a.relativePath.localeCompare(b.relativePath))
+    .slice(0, MAX_SELECTED_FILES);
+
+  const files: DesignSystemSourceFile[] = [];
+  for (const file of selected) {
+    try {
+      files.push({
+        relativePath: file.relativePath,
+        content: await readFile(file.fullPath, 'utf8'),
+      });
+    } catch {}
+  }
+
+  return buildDesignSystemSnapshot(rootPath, files);
 }

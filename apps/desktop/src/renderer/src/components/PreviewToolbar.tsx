@@ -2,8 +2,8 @@ import { useT } from '@open-codesign/i18n';
 import { Download, MessageSquare } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
-import type { PreviewViewport } from '../store';
 import { useCodesignStore } from '../store';
+import { RemotePathModal } from './RemotePathModal';
 
 interface ExportItem {
   format: ExportFormat;
@@ -18,15 +18,17 @@ export function PreviewToolbar(): ReactElement {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const exportActive = useCodesignStore((s) => s.exportActive);
+  const exportRemote = useCodesignStore((s) => s.exportRemote);
   const toastMessage = useCodesignStore((s) => s.toastMessage);
   const dismissToast = useCodesignStore((s) => s.dismissToast);
-  const previewViewport = useCodesignStore((s) => s.previewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
   const setPreviewZoom = useCodesignStore((s) => s.setPreviewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
+  const config = useCodesignStore((s) => s.config);
   const [open, setOpen] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [remoteOpen, setRemoteOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef<HTMLDivElement | null>(null);
 
@@ -55,6 +57,7 @@ export function PreviewToolbar(): ReactElement {
   }, [toastMessage, dismissToast]);
 
   const disabled = !previewHtml;
+  const sshProfiles = config?.sshProfiles ?? [];
   const commentActive = interactionMode === 'comment';
   const exportItems: ExportItem[] = [
     {
@@ -154,6 +157,14 @@ export function PreviewToolbar(): ReactElement {
       <div className="relative" ref={ref}>
         <button
           type="button"
+          disabled={disabled || sshProfiles.length === 0}
+          onClick={() => setRemoteOpen(true)}
+          className="inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
+        >
+          推送 SSH
+        </button>
+        <button
+          type="button"
           disabled={disabled}
           onClick={() => setOpen((v) => !v)}
           className="inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
@@ -194,6 +205,20 @@ export function PreviewToolbar(): ReactElement {
           </div>
         )}
       </div>
+      {remoteOpen ? (
+        <RemotePathModal
+          title="推送当前设计到 SSH"
+          actionLabel="推送"
+          pathLabel="远程输出路径"
+          profiles={sshProfiles}
+          defaultPath="index.html"
+          description="当前版本会把正在预览的设计以 HTML 形式写回到服务器。"
+          onClose={() => setRemoteOpen(false)}
+          onConfirm={(profileId, path) =>
+            exportRemote({ format: 'html', profileId, remotePath: path })
+          }
+        />
+      ) : null}
     </div>
   );
 }

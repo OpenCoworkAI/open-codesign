@@ -162,6 +162,7 @@ describe('hydrateConfig / toPersistedV3', () => {
       activeProvider: 'anthropic',
       activeModel: 'claude-sonnet-4-6',
       secrets: {},
+      sshProfiles: {},
       providers: {
         anthropic: { ...BUILTIN_PROVIDERS.anthropic, baseUrl: 'http://localhost:4000' },
       },

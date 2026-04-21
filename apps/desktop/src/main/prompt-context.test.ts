@@ -9,7 +9,7 @@ describe('preparePromptContext', () => {
   it('throws a CodesignError when an attachment cannot be read', async () => {
     await expect(
       preparePromptContext({
-        attachments: [{ path: 'Z:/missing/brief.md', name: 'brief.md', size: 12 }],
+        attachments: [{ kind: 'local', path: 'Z:/missing/brief.md', name: 'brief.md', size: 12 }],
       }),
     ).rejects.toMatchObject({
       name: 'CodesignError',
@@ -20,7 +20,7 @@ describe('preparePromptContext', () => {
   it('throws a CodesignError when an attachment is too large', async () => {
     await expect(
       preparePromptContext({
-        attachments: [{ path: 'C:/repo/huge.txt', name: 'huge.txt', size: 300_000 }],
+        attachments: [{ kind: 'local', path: 'C:/repo/huge.txt', name: 'huge.txt', size: 300_000 }],
       }),
     ).rejects.toMatchObject({
       name: 'CodesignError',
