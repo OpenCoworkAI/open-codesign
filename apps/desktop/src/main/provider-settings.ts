@@ -64,9 +64,8 @@ export function assertProviderHasStoredSecret(cfg: Config, provider: string): vo
 }
 
 export function isKeylessProviderAllowed(provider: string, entry?: ProviderEntry | null): boolean {
-  return (
-    provider.startsWith('codex-') && entry?.requiresApiKey !== true && entry?.envKey === undefined
-  );
+  const isCodexFamily = provider.startsWith('codex-') || provider === 'chatgpt-codex';
+  return isCodexFamily && entry?.requiresApiKey !== true && entry?.envKey === undefined;
 }
 
 function resolveEntryFor(cfg: Config, id: string): ProviderEntry | null {

@@ -25,6 +25,7 @@ import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import type { AgentStreamEvent } from '../preload/index';
 import { registerChatMessagesIpc, registerChatMessagesUnavailableIpc } from './chat-messages-ipc';
+import { runCodexGenerate } from './codex-generate';
 import { registerCodexOAuthIpc } from './codex-oauth-ipc';
 import { registerCommentsIpc, registerCommentsUnavailableIpc } from './comments-ipc';
 import { registerConnectionIpc } from './connection-ipc';
@@ -481,7 +482,8 @@ function registerIpcHandlers(): void {
       modelId: active.model.modelId,
     };
     coreLogger.info('[generate] step=validate_provider', stepCtx);
-    if (apiKey.length === 0 && !allowKeyless) {
+    const isChatgptCodex = active.model.provider === 'chatgpt-codex';
+    if (apiKey.length === 0 && !allowKeyless && !isChatgptCodex) {
       coreLogger.error('[generate] step=validate_provider.fail', {
         provider: active.model.provider,
         reason: 'missing_api_key',
@@ -519,6 +521,34 @@ function registerIpcHandlers(): void {
     let clearTimeoutGuard: () => void = () => {};
     try {
       clearTimeoutGuard = await armTimeout(id, controller);
+      if (isChatgptCodex) {
+        const codex = await runCodexGenerate({
+          prompt: payload.prompt,
+          history: payload.history,
+          model: active.model,
+          attachments: promptContext.attachments,
+          referenceUrl: promptContext.referenceUrl ?? null,
+          designSystem: promptContext.designSystem ?? null,
+          signal: controller.signal,
+          logger: coreLogger,
+        });
+        const result = {
+          message: codex.rawOutput,
+          artifacts: codex.artifacts,
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+          ...(codex.issues.length > 0 ? { warnings: codex.issues } : {}),
+        };
+        logIpc.info('generate.ok', {
+          generationId: id,
+          ms: Date.now() - t0,
+          artifacts: result.artifacts.length,
+          cost: result.costUsd,
+          via: 'codex',
+        });
+        return result;
+      }
       const result = await runGenerate(
         {
           prompt: payload.prompt,
