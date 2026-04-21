@@ -55,6 +55,7 @@ ${SAMPLE_HTML}
 const DESIGN_SYSTEM: StoredDesignSystem = {
   schemaVersion: STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
   rootPath: '/repo',
+  sourceKind: 'local',
   summary: 'Muted neutrals with warm copper accents.',
   extractedAt: '2026-04-18T00:00:00.000Z',
   sourceFiles: ['tailwind.config.ts'],

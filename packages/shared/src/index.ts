@@ -84,11 +84,28 @@ export const ChatMessage = z.object({
 });
 export type ChatMessage = z.infer<typeof ChatMessage>;
 
-export const LocalInputFile = z.object({
+const LocalInputFileLocalShape = z.object({
+  kind: z.literal('local'),
   path: z.string().min(1),
   name: z.string().min(1),
   size: z.number().int().nonnegative(),
 });
+
+const LocalInputFileSshShape = z.object({
+  kind: z.literal('ssh'),
+  profileId: z.string().min(1),
+  path: z.string().min(1),
+  name: z.string().min(1),
+  size: z.number().int().nonnegative(),
+  displayPath: z.string().min(1).optional(),
+});
+
+export const LocalInputFile = z.preprocess((raw) => {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw;
+  const record = raw as Record<string, unknown>;
+  if ('kind' in record) return record;
+  return { kind: 'local', ...record };
+}, z.discriminatedUnion('kind', [LocalInputFileLocalShape, LocalInputFileSshShape]));
 export type LocalInputFile = z.infer<typeof LocalInputFile>;
 
 export const ElementSelectionRect = z.object({
@@ -226,8 +243,12 @@ export {
   ConfigSchema,
   ConfigV3Schema,
   PROVIDER_SHORTLIST,
+  RemoteSourceKindSchema,
   ProviderEntrySchema,
   ReasoningLevelSchema,
+  SshAuthMethodSchema,
+  SshProfileSchema,
+  SshProfileSummarySchema,
   SUPPORTED_ONBOARDING_PROVIDERS,
   SecretRef,
   STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
@@ -238,6 +259,7 @@ export {
   isSupportedOnboardingProvider,
   migrateLegacyToV3,
   parseConfigFlexible,
+  summarizeSshProfile,
   toPersistedV3,
 } from './config';
 export type {
@@ -247,6 +269,10 @@ export type {
   ProviderEntry,
   ProviderShortlist,
   ReasoningLevel,
+  RemoteSourceKind,
+  SshAuthMethod,
+  SshProfile,
+  SshProfileSummary,
   SupportedOnboardingProvider,
   WireApi,
 } from './config';

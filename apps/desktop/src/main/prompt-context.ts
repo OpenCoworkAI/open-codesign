@@ -7,6 +7,7 @@ import {
   type LocalInputFile,
   type StoredDesignSystem,
 } from '@open-codesign/shared';
+import { readRemoteAttachment } from './ssh-remote';
 
 const TEXT_EXTS = new Set([
   '.css',
@@ -67,36 +68,50 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
   }
 
   let buffer: Buffer;
-  let handle: Awaited<ReturnType<typeof open>> | null = null;
-  try {
-    handle = await open(file.path, 'r');
-    const length = Math.max(1, Math.min(file.size || MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_BYTES));
-    const readBuffer = Buffer.alloc(length);
-    const { bytesRead } = await handle.read(readBuffer, 0, readBuffer.length, 0);
-    buffer = readBuffer.subarray(0, bytesRead);
-  } catch (error) {
-    throw new CodesignError(
-      `Failed to read attachment "${file.path}"`,
-      ERROR_CODES.ATTACHMENT_READ_FAILED,
-      {
-        cause: error,
-      },
-    );
-  } finally {
-    await handle?.close();
+  if (file.kind === 'ssh') {
+    try {
+      buffer = await readRemoteAttachment(file.profileId, file.path, MAX_ATTACHMENT_BYTES);
+    } catch (error) {
+      throw new CodesignError(
+        `Failed to read remote attachment "${file.path}"`,
+        ERROR_CODES.ATTACHMENT_READ_FAILED,
+        {
+          cause: error,
+        },
+      );
+    }
+  } else {
+    let handle: Awaited<ReturnType<typeof open>> | null = null;
+    try {
+      handle = await open(file.path, 'r');
+      const length = Math.max(1, Math.min(file.size || MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_BYTES));
+      const readBuffer = Buffer.alloc(length);
+      const { bytesRead } = await handle.read(readBuffer, 0, readBuffer.length, 0);
+      buffer = readBuffer.subarray(0, bytesRead);
+    } catch (error) {
+      throw new CodesignError(
+        `Failed to read attachment "${file.path}"`,
+        ERROR_CODES.ATTACHMENT_READ_FAILED,
+        {
+          cause: error,
+        },
+      );
+    } finally {
+      await handle?.close();
+    }
   }
 
   if (!isProbablyText(buffer, extension)) {
     return {
       name: file.name,
-      path: file.path,
+      path: file.kind === 'ssh' ? (file.displayPath ?? file.path) : file.path,
       note: `Binary or unsupported format (${extension || 'unknown'}). Use the filename as a hint, not quoted content.`,
     };
   }
 
   return {
     name: file.name,
-    path: file.path,
+    path: file.kind === 'ssh' ? (file.displayPath ?? file.path) : file.path,
     excerpt: cleanText(buffer.toString('utf8'), MAX_ATTACHMENT_CHARS),
     note:
       buffer.length > MAX_ATTACHMENT_CHARS

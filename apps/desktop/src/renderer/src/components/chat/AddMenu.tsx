@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { IconButton, Tooltip } from '@open-codesign/ui';
-import { FolderOpen, Link2, Paperclip, Plus } from 'lucide-react';
+import { FolderOpen, HardDriveUpload, Link2, Paperclip, Plus, Server } from 'lucide-react';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -11,10 +11,13 @@ import {
 
 export interface AddMenuProps {
   onAttachFiles: () => void;
+  onAttachRemoteFile: () => void;
   onLinkDesignSystem: () => void;
+  onLinkRemoteDesignSystem: () => void;
   referenceUrl: string;
   onReferenceUrlChange: (value: string) => void;
   hasDesignSystem: boolean;
+  hasRemoteProfiles: boolean;
   disabled?: boolean;
 }
 
@@ -23,14 +26,17 @@ export interface AddMenuProps {
  * link/refresh design system repo, reference URL. Replaces the former inline
  * button row so the composer area stays quiet until the user wants context.
  *
- * Lightweight popover (no Radix dep) — closes on outside click or Escape.
+ * Lightweight popover (no Radix dep) - closes on outside click or Escape.
  */
 export function AddMenu({
   onAttachFiles,
+  onAttachRemoteFile,
   onLinkDesignSystem,
+  onLinkRemoteDesignSystem,
   referenceUrl,
   onReferenceUrlChange,
   hasDesignSystem,
+  hasRemoteProfiles,
   disabled,
 }: AddMenuProps) {
   const t = useT();
@@ -107,6 +113,19 @@ export function AddMenu({
           <button
             type="button"
             role="menuitem"
+            disabled={!hasRemoteProfiles}
+            onClick={handleItem(onAttachRemoteFile)}
+            className="flex w-full items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] px-[var(--space-2_5)] py-[var(--space-2)] text-left text-[var(--text-sm)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Server
+              className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] text-[var(--color-text-secondary)]"
+              aria-hidden
+            />
+            <span className="truncate">添加远程文件</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
             onClick={handleItem(onLinkDesignSystem)}
             className="flex w-full items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] px-[var(--space-2_5)] py-[var(--space-2)] text-left text-[var(--text-sm)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
           >
@@ -119,6 +138,19 @@ export function AddMenu({
                 ? t('sidebar.refreshDesignSystemRepo')
                 : t('sidebar.linkDesignSystemRepo')}
             </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!hasRemoteProfiles}
+            onClick={handleItem(onLinkRemoteDesignSystem)}
+            className="flex w-full items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] px-[var(--space-2_5)] py-[var(--space-2)] text-left text-[var(--text-sm)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <HardDriveUpload
+              className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] text-[var(--color-text-secondary)]"
+              aria-hidden
+            />
+            <span className="truncate">关联远程设计系统</span>
           </button>
           <div className="flex items-center gap-[var(--space-2)] px-[var(--space-2_5)] py-[var(--space-2)]">
             <Link2

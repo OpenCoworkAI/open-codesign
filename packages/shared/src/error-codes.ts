@@ -61,6 +61,13 @@ export const ERROR_CODES = {
   REFERENCE_URL_FETCH_FAILED: 'REFERENCE_URL_FETCH_FAILED',
   REFERENCE_URL_FETCH_TIMEOUT: 'REFERENCE_URL_FETCH_TIMEOUT',
   REFERENCE_URL_UNSUPPORTED: 'REFERENCE_URL_UNSUPPORTED',
+  SSH_PROFILE_NOT_FOUND: 'SSH_PROFILE_NOT_FOUND',
+  SSH_KEY_READ_FAILED: 'SSH_KEY_READ_FAILED',
+  SSH_CONNECT_FAILED: 'SSH_CONNECT_FAILED',
+  SSH_SFTP_FAILED: 'SSH_SFTP_FAILED',
+  SSH_REMOTE_PATH_INVALID: 'SSH_REMOTE_PATH_INVALID',
+  SSH_REMOTE_READ_FAILED: 'SSH_REMOTE_READ_FAILED',
+  SSH_REMOTE_WRITE_FAILED: 'SSH_REMOTE_WRITE_FAILED',
 
   // Preferences
   PREFERENCES_READ_FAIL: 'PREFERENCES_READ_FAIL',
@@ -243,6 +250,34 @@ export const ERROR_CODE_DESCRIPTIONS: Record<CodesignErrorCode, ErrorCodeDescrip
   },
   REFERENCE_URL_UNSUPPORTED: {
     userFacing: 'This type of reference URL is not supported.',
+    category: 'generation',
+  },
+  SSH_PROFILE_NOT_FOUND: {
+    userFacing: 'The selected SSH profile was not found.',
+    category: 'connection',
+  },
+  SSH_KEY_READ_FAILED: {
+    userFacing: 'The SSH private key could not be read.',
+    category: 'connection',
+  },
+  SSH_CONNECT_FAILED: {
+    userFacing: 'Could not connect to the SSH server. Check the host, credentials, and network.',
+    category: 'connection',
+  },
+  SSH_SFTP_FAILED: {
+    userFacing: 'Could not start an SFTP session on the SSH server.',
+    category: 'connection',
+  },
+  SSH_REMOTE_PATH_INVALID: {
+    userFacing: 'The remote path is invalid.',
+    category: 'generation',
+  },
+  SSH_REMOTE_READ_FAILED: {
+    userFacing: 'Could not read the requested remote file.',
+    category: 'generation',
+  },
+  SSH_REMOTE_WRITE_FAILED: {
+    userFacing: 'Could not write the file to the remote server.',
     category: 'generation',
   },
 

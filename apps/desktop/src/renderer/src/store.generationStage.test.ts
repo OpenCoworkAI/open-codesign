@@ -9,6 +9,7 @@ const READY_CONFIG: OnboardingState = {
   modelPrimary: 'claude-sonnet-4-6',
   baseUrl: null,
   designSystem: null,
+  sshProfiles: [],
 };
 
 const initialState = useCodesignStore.getState();

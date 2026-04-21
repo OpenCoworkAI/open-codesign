@@ -9,6 +9,7 @@ const READY_CONFIG: OnboardingState = {
   modelPrimary: 'claude-sonnet-4-6',
   baseUrl: null,
   designSystem: null,
+  sshProfiles: [],
 };
 
 const initialState = useCodesignStore.getState();
@@ -382,6 +383,7 @@ describe('useCodesignStore active provider routing', () => {
       modelPrimary: 'gpt-4o',
       baseUrl: null,
       designSystem: null,
+      sshProfiles: [],
     };
 
     // Simulate setActiveProvider result updating the store config.

@@ -44,11 +44,50 @@ export const BaseUrlRef = z.object({
 });
 export type BaseUrlRef = z.infer<typeof BaseUrlRef>;
 
+export const RemoteSourceKindSchema = z.enum(['local', 'ssh']);
+export type RemoteSourceKind = z.infer<typeof RemoteSourceKindSchema>;
+
+export const SshAuthMethodSchema = z.enum(['password', 'privateKey']);
+export type SshAuthMethod = z.infer<typeof SshAuthMethodSchema>;
+
+export const SshProfileSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  host: z.string().min(1),
+  port: z.number().int().positive().max(65535).default(22),
+  username: z.string().min(1),
+  authMethod: SshAuthMethodSchema,
+  keyPath: z.string().min(1).optional(),
+  password: SecretRef.optional(),
+  passphrase: SecretRef.optional(),
+  basePath: z.string().min(1).optional(),
+});
+export type SshProfile = z.infer<typeof SshProfileSchema>;
+
+export const SshProfileSummarySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  host: z.string().min(1),
+  port: z.number().int().positive().max(65535),
+  username: z.string().min(1),
+  authMethod: SshAuthMethodSchema,
+  keyPath: z.string().min(1).optional(),
+  hasPassword: z.boolean(),
+  hasPassphrase: z.boolean(),
+  basePath: z.string().min(1).optional(),
+});
+export type SshProfileSummary = z.infer<typeof SshProfileSummarySchema>;
+
 export const STORED_DESIGN_SYSTEM_SCHEMA_VERSION = 1 as const;
 
 const StoredDesignSystemShape = z.object({
   schemaVersion: z.literal(STORED_DESIGN_SYSTEM_SCHEMA_VERSION),
   rootPath: z.string().min(1),
+  sourceKind: RemoteSourceKindSchema.default('local'),
+  sshProfileId: z.string().min(1).optional(),
+  sshHost: z.string().min(1).optional(),
+  sshPort: z.number().int().positive().max(65535).optional(),
+  sshUsername: z.string().min(1).optional(),
   summary: z.string().min(1),
   extractedAt: z.string().min(1),
   sourceFiles: z.array(z.string().min(1)).max(24).default([]),
@@ -152,6 +191,7 @@ export const ConfigV3Schema = z.object({
   activeModel: z.string(),
   secrets: z.record(z.string(), SecretRef).default({}),
   providers: z.record(z.string(), ProviderEntrySchema).default({}),
+  sshProfiles: z.record(z.string(), SshProfileSchema).default({}),
   designSystem: StoredDesignSystem.optional(),
 });
 export type ConfigV3 = z.infer<typeof ConfigV3Schema>;
@@ -212,6 +252,7 @@ export function migrateLegacyToV3(legacy: LegacyConfig): ConfigV3 {
     activeModel: legacy.modelPrimary,
     secrets,
     providers,
+    sshProfiles: {},
   };
   if (legacy.designSystem !== undefined) out.designSystem = legacy.designSystem;
   return out;
@@ -265,6 +306,7 @@ export function toPersistedV3(cfg: Config | ConfigV3): ConfigV3 {
     activeModel: cfg.activeModel,
     secrets: cfg.secrets,
     providers: cfg.providers,
+    sshProfiles: cfg.sshProfiles ?? {},
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
   };
 }
@@ -277,6 +319,22 @@ export interface OnboardingState {
   modelPrimary: string | null;
   baseUrl: string | null;
   designSystem: StoredDesignSystem | null;
+  sshProfiles: SshProfileSummary[];
+}
+
+export function summarizeSshProfile(profile: SshProfile): SshProfileSummary {
+  return {
+    id: profile.id,
+    name: profile.name,
+    host: profile.host,
+    port: profile.port,
+    username: profile.username,
+    authMethod: profile.authMethod,
+    ...(profile.keyPath !== undefined ? { keyPath: profile.keyPath } : {}),
+    hasPassword: profile.password !== undefined,
+    hasPassphrase: profile.passphrase !== undefined,
+    ...(profile.basePath !== undefined ? { basePath: profile.basePath } : {}),
+  };
 }
 
 export interface ProviderShortlist {

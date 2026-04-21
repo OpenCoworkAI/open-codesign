@@ -49,6 +49,7 @@ import { preparePromptContext } from './prompt-context';
 import { resolveActiveModel } from './provider-settings';
 import { safeInitSnapshotsDb } from './snapshots-db';
 import { registerSnapshotsIpc, registerSnapshotsUnavailableIpc } from './snapshots-ipc';
+import { createRemoteAttachment, exportToRemote, scanRemoteDesignSystem } from './ssh-remote';
 import { initStorageSettings } from './storage-settings';
 
 // ESM shim: package.json "type": "module" means the built bundle is ESM and
@@ -392,6 +393,20 @@ function registerIpcHandlers(): void {
     );
   });
 
+  ipcMain.handle('remote:v1:attach-file', async (_e, raw: unknown) => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError('remote:v1:attach-file expects an object payload', 'IPC_BAD_INPUT');
+    }
+    const r = raw as Record<string, unknown>;
+    if (typeof r['profileId'] !== 'string' || r['profileId'].trim().length === 0) {
+      throw new CodesignError('profileId must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    if (typeof r['path'] !== 'string' || r['path'].trim().length === 0) {
+      throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    return createRemoteAttachment(r['profileId'].trim(), r['path'].trim());
+  });
+
   ipcMain.handle('codesign:pick-design-system-directory', async () => {
     const result = mainWindow
       ? await dialog.showOpenDialog(mainWindow, {
@@ -415,10 +430,69 @@ function registerIpcHandlers(): void {
     return nextState;
   });
 
+  ipcMain.handle('remote:v1:link-design-system', async (_e, raw: unknown) => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError(
+        'remote:v1:link-design-system expects an object payload',
+        'IPC_BAD_INPUT',
+      );
+    }
+    const r = raw as Record<string, unknown>;
+    if (typeof r['profileId'] !== 'string' || r['profileId'].trim().length === 0) {
+      throw new CodesignError('profileId must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    if (typeof r['path'] !== 'string' || r['path'].trim().length === 0) {
+      throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    const profileId = r['profileId'].trim();
+    const rootPath = r['path'].trim();
+    logIpc.info('designSystem.ssh.scan.start', { profileId, rootPath });
+    const snapshot = await scanRemoteDesignSystem(profileId, rootPath);
+    const nextState = await setDesignSystem(snapshot);
+    logIpc.info('designSystem.ssh.scan.ok', {
+      profileId,
+      rootPath: snapshot.rootPath,
+      sourceFiles: snapshot.sourceFiles.length,
+      colors: snapshot.colors.length,
+      fonts: snapshot.fonts.length,
+    });
+    return nextState;
+  });
+
   ipcMain.handle('codesign:clear-design-system', async () => {
     const nextState = await setDesignSystem(null);
     logIpc.info('designSystem.clear');
     return nextState;
+  });
+
+  ipcMain.handle('remote:v1:export', async (_e, raw: unknown) => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError('remote:v1:export expects an object payload', 'IPC_BAD_INPUT');
+    }
+    const r = raw as Record<string, unknown>;
+    const format = r['format'];
+    const htmlContent = r['htmlContent'];
+    const profileId = r['profileId'];
+    const remotePath = r['remotePath'];
+    if (
+      format !== 'html' &&
+      format !== 'pdf' &&
+      format !== 'pptx' &&
+      format !== 'zip' &&
+      format !== 'markdown'
+    ) {
+      throw new CodesignError(`Unknown export format: ${String(format)}`, 'IPC_BAD_INPUT');
+    }
+    if (typeof htmlContent !== 'string' || htmlContent.length === 0) {
+      throw new CodesignError('htmlContent must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    if (typeof profileId !== 'string' || profileId.trim().length === 0) {
+      throw new CodesignError('profileId must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    if (typeof remotePath !== 'string' || remotePath.trim().length === 0) {
+      throw new CodesignError('remotePath must be a non-empty string', 'IPC_BAD_INPUT');
+    }
+    return exportToRemote(profileId.trim(), remotePath.trim(), format, htmlContent);
   });
 
   ipcMain.handle('codesign:v1:generate', async (_e, raw: unknown) => {

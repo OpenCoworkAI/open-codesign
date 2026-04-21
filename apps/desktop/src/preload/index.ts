@@ -16,6 +16,7 @@ import type {
   ReasoningLevel,
   SelectedElement,
   SnapshotCreateInput,
+  SshAuthMethod,
   SupportedOnboardingProvider,
   WireApi,
 } from '@open-codesign/shared';
@@ -44,6 +45,24 @@ export interface ExportInvokeResponse {
   status: 'saved' | 'cancelled';
   path?: string;
   bytes?: number;
+}
+
+export interface RemoteExportResponse {
+  path: string;
+  bytes: number;
+}
+
+export interface SaveSshProfileInput {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  authMethod: SshAuthMethod;
+  password?: string;
+  keyPath?: string;
+  passphrase?: string;
+  basePath?: string;
 }
 
 export interface ProviderRow {
@@ -213,6 +232,26 @@ const api = {
     const listener = (_e: unknown, info: unknown) => cb(info);
     ipcRenderer.on('codesign:update-available', listener);
     return () => ipcRenderer.removeListener('codesign:update-available', listener);
+  },
+  remote: {
+    testProfile: (input: SaveSshProfileInput) =>
+      ipcRenderer.invoke('remote:v1:test-profile', input) as Promise<{ ok: true }>,
+    testSavedProfile: (id: string) =>
+      ipcRenderer.invoke('remote:v1:test-saved-profile', id) as Promise<{ ok: true }>,
+    saveProfile: (input: SaveSshProfileInput) =>
+      ipcRenderer.invoke('remote:v1:save-profile', input) as Promise<OnboardingState>,
+    deleteProfile: (id: string) =>
+      ipcRenderer.invoke('remote:v1:delete-profile', id) as Promise<OnboardingState>,
+    attachFile: (input: { profileId: string; path: string }) =>
+      ipcRenderer.invoke('remote:v1:attach-file', input) as Promise<LocalInputFile>,
+    linkDesignSystem: (input: { profileId: string; path: string }) =>
+      ipcRenderer.invoke('remote:v1:link-design-system', input) as Promise<OnboardingState>,
+    export: (input: {
+      format: ExportFormat;
+      htmlContent: string;
+      profileId: string;
+      remotePath: string;
+    }) => ipcRenderer.invoke('remote:v1:export', input) as Promise<RemoteExportResponse>,
   },
   onboarding: {
     getState: () => ipcRenderer.invoke('onboarding:get-state') as Promise<OnboardingState>,
