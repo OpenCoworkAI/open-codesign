@@ -61,8 +61,12 @@ features:
     details: HTML（内联 CSS）、PDF（本机 Chrome）、PPTX、ZIP、Markdown——全部本地生成，无需绕道 Canva。
 ---
 
-<div class="codesign-hero-video">
-  <DemoVideo hero src="/demos/app-showcase.mp4" label="Open CoDesign 多视图应用展示" />
+<script setup>
+import { withBase } from 'vitepress'
+</script>
+
+<div class="codesign-hero-shot">
+  <img :src="withBase('/screenshots/product-hero.png')" alt="Open CoDesign — 左侧 chat，右侧 artifact 实时渲染" />
 </div>
 
 <SmartDownload />
@@ -87,6 +91,41 @@ features:
     <h3>打磨、导出、交付</h3>
     <p>元素级评论、AI 滑块、版本时间线。导出 HTML、PDF、PPTX、ZIP 或 Markdown——全部本地生成。</p>
   </div>
+</div>
+
+</div>
+
+<div class="codesign-section">
+
+## 深入看一看
+
+<p class="lede">从首次启动到局部重写——6 个你会真实遇到的画面。</p>
+
+<div class="codesign-gallery">
+  <figure>
+    <img :src="withBase('/screenshots/comment-mode.png')" alt="评论模式 — 点击任意元素落 pin，模型只重写该区域" />
+    <figcaption><b>评论别重写。</b>在预览落 pin，模型只改那一块。</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/tweaks-sliders.png')" alt="AI 生成的调节面板——色板 + RGB 输入" />
+    <figcaption><b>AI 调的滑块。</b>模型主动给出值得调的参数，拖动就能微调。</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/agent-panel.png')" alt="Agent 面板——实时 todos 与流式 tool call" />
+    <figcaption><b>看 agent 干活。</b>Todos、tool call、流式推理全部可见。</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/hub-your-designs.png')" alt="设计主页 — 所有生成过的 artifact" />
+    <figcaption><b>每次迭代都在。</b>本地 SQLite 快照，最近 5 个零延迟切换。</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/hub-examples.png')" alt="内置示例库 — 15 个即可运行的设计命题" />
+    <figcaption><b>15 个 demo brief。</b>落地页、仪表盘、定价、聊天 UI 一键体验。</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/add-provider-menu.png')" alt="添加 provider 菜单——Claude Code、Codex、自定义、预设" />
+    <figcaption><b>自带模型。</b>导入 Claude Code / Codex 配置，或任何 OpenAI 兼容 provider。</figcaption>
+  </figure>
 </div>
 
 </div>

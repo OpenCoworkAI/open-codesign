@@ -286,7 +286,60 @@ body {
 
 /* ── Demo video blocks ──────────────────────────────────────────────────── */
 
-/* Hero autoplay loop — sits between the VitePress hero and SmartDownload. */
+/* Static hero shot — sits between VitePress hero and SmartDownload. */
+.codesign-hero-shot {
+  max-width: 1080px;
+  margin: 2rem auto 0.5rem;
+  padding: 0 1.5rem;
+}
+.codesign-hero-shot img {
+  width: 100%;
+  border-radius: 14px;
+  display: block;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04), 0 16px 40px -16px rgba(26, 26, 26, 0.28);
+}
+
+/* Screenshot gallery — 2×3 grid on desktop, 1 column on mobile. */
+.codesign-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+.codesign-gallery figure {
+  margin: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-muted);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease, border-color
+    0.18s ease;
+}
+.codesign-gallery figure:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-accent-muted);
+  box-shadow: var(--shadow-card);
+}
+.codesign-gallery img {
+  width: 100%;
+  display: block;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: center top;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.codesign-gallery figcaption {
+  padding: 14px 18px 18px;
+  color: var(--color-text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.codesign-gallery figcaption b {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+/* Hero autoplay loop — legacy, kept for pages that still use DemoVideo hero. */
 .codesign-hero-video {
   max-width: 1080px;
   margin: 2rem auto 0.5rem;

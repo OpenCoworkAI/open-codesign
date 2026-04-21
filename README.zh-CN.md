@@ -7,7 +7,7 @@
 [官网](https://opencoworkai.github.io/open-codesign/) · [快速开始](#快速开始) · [对比 Claude Design](https://opencoworkai.github.io/open-codesign/zh/claude-design-alternative) · [贡献指南](./CONTRIBUTING.md) · [安全政策](./SECURITY.md)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/app-showcase.gif" alt="Open CoDesign — 多视图应用展示" width="900" />
+  <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/product-hero.png" alt="Open CoDesign — 左边对话，右边成品" width="1000" />
 </p>
 
 <p align="center">
@@ -29,15 +29,54 @@ Open CoDesign 把自然语言提示词变成精美的 HTML 原型、幻灯片或
 
 ---
 
-## 快速演示
+## 一份 design 从无到有
 
-已经在用 Claude Code？一键把 providers、模型、API key 全部导进来：
-
-![一键导入 Claude Code 配置](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/claude-code-import.gif)
-
-从一条 prompt 到完整 design——看 agent 规划、写代码、自检，最后交回一个 hover / tab / 空状态都已接好的交互式 artifact：
+从一条 prompt 到完整 artifact——agent 规划、写代码、自检，最后交回一个 hover / tab / 空状态都已接好的交互式产物：
 
 ![从零生成一个 design](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/generate-from-scratch.gif)
+
+---
+
+## 亮点
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/comment-mode.png">
+        <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/comment-mode.png" alt="点击任意元素落 pin，模型只重写该区域" />
+      </a>
+      <p><b>评论别重写。</b><br/>在预览里点任意元素落 pin，模型只改那一块。</p>
+    </td>
+    <td width="50%">
+      <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/tweaks-sliders.png">
+        <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/tweaks-sliders.png" alt="AI 生成的调节面板——色板 + RGB 输入" />
+      </a>
+      <p><b>AI 调的滑块。</b><br/>模型主动给出值得调的参数，拖动就能微调。</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/hub-your-designs.png">
+        <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/hub-your-designs.png" alt="设计主页 — 所有生成过的 artifact" />
+      </a>
+      <p><b>每次迭代都在。</b><br/>Design 以 SQLite 快照存在磁盘，最近 5 个零延迟切换。</p>
+    </td>
+    <td width="50%">
+      <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/agent-panel.png">
+        <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/agent-panel.png" alt="Agent 面板——实时 todos 与流式 tool call" />
+      </a>
+      <p><b>看 agent 干活。</b><br/>Todos、tool call、流式推理全部可见，随时可打断。</p>
+    </td>
+  </tr>
+</table>
+
+---
+
+## 已经在用 Claude Code 或 Codex？
+
+一键把 providers、models、API keys 全部导入——不用复制粘贴，不用重配设置：
+
+![一键导入 Claude Code 或 Codex 配置](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/claude-code-import.gif)
 
 ---
 

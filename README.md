@@ -7,7 +7,7 @@
 [Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [vs Claude Design](https://opencoworkai.github.io/open-codesign/claude-design-alternative) · [Docs](https://opencoworkai.github.io/open-codesign/quickstart) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/app-showcase.gif" alt="Open CoDesign — multi-view app tour" width="900" />
+  <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/product-hero.png" alt="Open CoDesign — prompt on the left, live artifact on the right" width="1000" />
 </p>
 
 <p align="center">
@@ -29,15 +29,46 @@ Open CoDesign turns a natural-language prompt into a polished HTML prototype, sl
 
 ---
 
-## Quick demo
+## Watch a design come to life
 
-Already using Claude Code? Your providers, models, and API keys import in one click:
-
-![Import from Claude Code in one click](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/claude-code-import.gif)
-
-From a blank prompt to a finished design — watch the agent plan, write, and self-check, then hand you back an artifact that already has hover states, tabs, and empty states wired up:
+From a blank prompt to a finished artifact — the agent plans, writes, self-checks, and hands you something with hover states, tabs, and empty states already wired up:
 
 ![Generate a design from scratch](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/generate-from-scratch.gif)
+
+---
+
+## Highlights
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/comment-mode.png">
+        <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/comment-mode.png" alt="Click any element, leave a pin, let the model rewrite that region" />
+      </a>
+      <p><b>Comment, don't retype.</b><br/>Click any element, drop a pin, the model rewrites only that region.</p>
+    </td>
+    <td width="50%">
+      <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/tweaks-sliders.png">
+        <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/tweaks-sliders.png" alt="AI-emitted tweaks panel with color pickers and RGB inputs" />
+      </a>
+      <p><b>AI-tuned sliders.</b><br/>The model emits the parameters worth tweaking — drag to refine without a round trip.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/hub-your-designs.png">
+        <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/hub-your-designs.png" alt="Your Designs hub, filled with real generated artifacts" />
+      </a>
+      <p><b>Every iteration, kept.</b><br/>Designs live on disk as SQLite snapshots. Hop between the last five with zero delay.</p>
+    </td>
+    <td width="50%">
+      <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/agent-panel.png">
+        <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/agent-panel.png" alt="Live agent panel showing todos and streaming tool calls" />
+      </a>
+      <p><b>Watch the agent work.</b><br/>Todos, tool calls, and streamed reasoning — fully visible, fully interruptible.</p>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -53,6 +84,14 @@ From a blank prompt to a finished design — watch the agent plan, write, and se
 | Version history | ✅ Local SQLite snapshots | ❌ | ❌ | ❌ |
 | Data privacy | ✅ 100% on-device | ❌ Cloud-processed | ❌ Cloud | ❌ Cloud |
 | Price | ✅ Free, token cost only | 💳 Subscription | 💳 Subscription | 💳 Subscription |
+
+---
+
+## Already using Claude Code or Codex?
+
+Your providers, models, and API keys import in one click — no copy-paste, no re-entering settings:
+
+![Import from Claude Code or Codex in one click](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/claude-code-import.gif)
 
 ---
 

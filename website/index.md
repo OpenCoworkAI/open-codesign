@@ -61,8 +61,12 @@ features:
     details: HTML (inlined CSS), PDF (via your local Chrome), PPTX, ZIP, and Markdown — all generated on-device. No Canva detour.
 ---
 
-<div class="codesign-hero-video">
-  <DemoVideo hero src="/demos/app-showcase.mp4" label="Open CoDesign multi-view app tour" />
+<script setup>
+import { withBase } from 'vitepress'
+</script>
+
+<div class="codesign-hero-shot">
+  <img :src="withBase('/screenshots/product-hero.png')" alt="Open CoDesign — prompt on the left, live artifact on the right" />
 </div>
 
 <SmartDownload />
@@ -87,6 +91,41 @@ features:
     <h3>Refine, export, hand off</h3>
     <p>Inline comments, AI sliders, snapshot timeline. Export to HTML, PDF, PPTX, ZIP, or Markdown — all on-device.</p>
   </div>
+</div>
+
+</div>
+
+<div class="codesign-section">
+
+## Take a closer look
+
+<p class="lede">Six moments from the app — from first launch to region-level rewrites.</p>
+
+<div class="codesign-gallery">
+  <figure>
+    <img :src="withBase('/screenshots/comment-mode.png')" alt="Comment mode — click any element, drop a pin, the model rewrites only that region" />
+    <figcaption><b>Comment, don't retype.</b> Drop pins on the preview; the model rewrites just that region.</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/tweaks-sliders.png')" alt="AI-emitted tweaks panel — color pickers and RGB inputs" />
+    <figcaption><b>AI-tuned sliders.</b> The model emits the parameters worth tweaking. Drag, don't re-prompt.</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/agent-panel.png')" alt="Live agent panel showing todos and streaming tool calls" />
+    <figcaption><b>Watch the agent work.</b> Todos, tool calls, and streamed reasoning — always visible, always interruptible.</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/hub-your-designs.png')" alt="Your Designs hub, filled with real generated artifacts" />
+    <figcaption><b>Every iteration, kept.</b> Designs live on disk as SQLite snapshots; switch between five in zero ms.</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/hub-examples.png')" alt="Built-in example library — fifteen ready-to-run design briefs" />
+    <figcaption><b>Fifteen demo briefs.</b> Landing, dashboard, pricing, pitch deck, chat UI — one click to see Open CoDesign in action.</figcaption>
+  </figure>
+  <figure>
+    <img :src="withBase('/screenshots/add-provider-menu.png')" alt="Add provider menu — Claude Code, Codex, custom, and presets" />
+    <figcaption><b>Bring your own model.</b> Import Claude Code / Codex configs, or pick any OpenAI-compatible provider.</figcaption>
+  </figure>
 </div>
 
 </div>
