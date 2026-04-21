@@ -765,15 +765,31 @@ function registerIpcHandlers(): void {
     }
     const allowKeyless = active.allowKeyless;
     const baseUrl = active.baseUrl ?? undefined;
-    return generateTitle({
-      prompt,
-      model: active.model,
-      apiKey,
-      ...(baseUrl !== undefined ? { baseUrl } : {}),
-      wire: active.wire,
-      ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-      ...(allowKeyless ? { allowKeyless: true } : {}),
-    });
+    const titleLogger: CoreLogger = {
+      info: (event, data) => logIpc.info(event, data),
+      error: (event, data) => logIpc.error(event, data),
+    };
+    try {
+      return await generateTitle({
+        prompt,
+        model: active.model,
+        apiKey,
+        ...(baseUrl !== undefined ? { baseUrl } : {}),
+        wire: active.wire,
+        ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+        ...(allowKeyless ? { allowKeyless: true } : {}),
+        logger: titleLogger,
+      });
+    } catch (err) {
+      logIpc.error('[title] generate-title.fail', {
+        provider: active.model.provider,
+        modelId: active.model.modelId,
+        baseUrl,
+        message: err instanceof Error ? err.message : String(err),
+        code: err instanceof CodesignError ? err.code : undefined,
+      });
+      throw err;
+    }
   });
 
   ipcMain.handle('codesign:open-log-folder', async () => {

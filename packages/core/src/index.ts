@@ -764,7 +764,7 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
       ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
       ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
       ...(input.signal !== undefined ? { signal: input.signal } : {}),
-      maxTokens: 60,
+      maxTokens: 200,
     });
     log.info('[title] step=send_request.ok', { ms: Date.now() - started });
     const title = sanitizeTitle(result.content);

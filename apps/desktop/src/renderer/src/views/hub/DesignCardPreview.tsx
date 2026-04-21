@@ -30,13 +30,19 @@ function injectThumbnailStyle(srcDoc: string): string {
 }
 
 // Lightweight JSX detection — mirrors runtime's isJsxArtifact without importing it.
-function needsJsxRuntime(source: string): boolean {
-  if (/<!doctype/i.test(source) || /<html[^>]*>/i.test(source)) return false;
-  return (
+// JSX markers take priority over HTML tags: our agent always emits
+// `EDITMODE-BEGIN` (and often `ReactDOM.createRoot`) in JSX artifacts, and the
+// JSX body itself commonly includes `<html>`/`<head>` tags inside a
+// `function App(){ return <html>...</html> }` return. Checking HTML first made
+// every JSX thumbnail render as raw source text in the hub grid.
+export function needsJsxRuntime(source: string): boolean {
+  const hasJsxMarker =
     /EDITMODE-BEGIN/.test(source) ||
     /ReactDOM\.createRoot\s*\(/.test(source) ||
-    /^\s*function\s+App\s*\(/m.test(source)
-  );
+    /^\s*function\s+App\s*\(/m.test(source);
+  if (hasJsxMarker) return true;
+  if (/<!doctype/i.test(source) || /<html[^>]*>/i.test(source)) return false;
+  return false;
 }
 
 export interface DesignCardPreviewProps {

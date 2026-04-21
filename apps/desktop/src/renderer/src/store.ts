@@ -17,6 +17,7 @@ import type {
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
 import type { CodesignApi, ExportFormat } from '../../preload/index';
+import { rendererLogger } from './lib/renderer-logger';
 
 declare global {
   interface Window {
@@ -661,9 +662,14 @@ async function maybeAutoRename(
       const trimmed = generated.trim();
       if (trimmed.length > 0) newName = trimmed;
     }
-  } catch {
+  } catch (err) {
     // Fall through to the truncation fallback — don't surface a toast; the
     // name itself is a nice-to-have and the user can always rename manually.
+    // But DO log the failure so we can see why in the main-process log.
+    rendererLogger.warn('store', '[title] generateTitle failed, using prompt fallback', {
+      designId,
+      message: err instanceof Error ? err.message : String(err),
+    });
   }
   try {
     await window.codesign.snapshots.renameDesign(designId, newName);
