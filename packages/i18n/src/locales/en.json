@@ -800,7 +800,15 @@
       "continueAnyway": "Continue anyway",
       "bundleSavedTitle": "Bundle saved",
       "bundleSavedDescription": "Saved to",
-      "revealBundle": "Show in folder"
+      "revealBundle": "Show in folder",
+      "preview": {
+        "code": "Code",
+        "scope": "Scope",
+        "runId": "Run id",
+        "fingerprint": "Fingerprint",
+        "message": "Message",
+        "upstream": "Upstream context"
+      }
     }
   },
   "demos": {

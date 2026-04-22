@@ -1,6 +1,7 @@
 import { useT } from '@open-codesign/i18n';
 import type { DiagnosticEventRow, ReportEventInput } from '@open-codesign/shared';
 import { useEffect, useRef, useState } from 'react';
+import { type RedactOpts, applyRedaction } from '../../lib/redact';
 import { useCodesignStore } from '../../store';
 import { formatRelativeTime } from '../settings/DiagnosticsPanel';
 
@@ -63,6 +64,63 @@ const DEFAULT_INCLUDE: IncludeFlags = {
   urls: false,
   timeline: true,
 };
+
+const BODY_HEAD_MAX = 400;
+
+export interface PreviewLabels {
+  code: string;
+  scope: string;
+  runId: string;
+  fingerprint: string;
+  message: string;
+  upstream: string;
+}
+
+/**
+ * Pure helper: renders the dialog preview as a string. Applies the same
+ * redactions the main process will apply when composing summary.md, and
+ * mirrors the Upstream-context block that `renderUpstream` emits for
+ * provider-scope events. Exported so the shape can be unit-tested without
+ * mounting the dialog — the dialog just wraps this output in <pre>.
+ */
+export function formatPreview(
+  event: DiagnosticEventRow,
+  opts: RedactOpts,
+  labels: PreviewLabels,
+): string {
+  const message = applyRedaction(event.message, opts);
+  const lines: string[] = [
+    `${labels.code}: ${event.code}`,
+    `${labels.scope}: ${event.scope}`,
+    `${labels.runId}: ${event.runId ?? '—'}`,
+    `${labels.fingerprint}: ${event.fingerprint}`,
+    `${labels.message}: ${message}`,
+  ];
+
+  if (event.scope === 'provider' && event.context) {
+    const ctx = event.context;
+    const upstreamRows: string[] = [];
+    const provider = ctx['upstream_provider'];
+    const status = ctx['upstream_status'];
+    const requestId = ctx['upstream_request_id'];
+    const retry = ctx['retry_count'];
+    const bodyHead = ctx['redacted_body_head'];
+    if (provider !== undefined) upstreamRows.push(`Provider: ${String(provider)}`);
+    if (status !== undefined) upstreamRows.push(`Status: ${String(status)}`);
+    if (requestId !== undefined) upstreamRows.push(`Request-Id: ${String(requestId)}`);
+    if (retry !== undefined) upstreamRows.push(`Retry: ${String(retry)}`);
+    if (bodyHead !== undefined) {
+      const redactedBody = applyRedaction(String(bodyHead), opts).slice(0, BODY_HEAD_MAX);
+      upstreamRows.push(`Body head: ${redactedBody}`);
+    }
+    if (upstreamRows.length > 0) {
+      lines.push(`--- ${labels.upstream} ---`);
+      lines.push(...upstreamRows);
+    }
+  }
+
+  return lines.join('\n');
+}
 
 /**
  * Pure helper: returns the focusable elements inside a dialog panel, filtered
@@ -255,11 +313,22 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
         ) : (
           <>
             <pre className="text-[var(--text-xs)] font-mono bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 whitespace-pre-wrap break-words text-[var(--color-text-primary)]">
-              {`${t('diagnostics.report.error')}: ${event.code}
-${t('diagnostics.report.scope')}: ${event.scope}
-${t('diagnostics.report.runId')}: ${event.runId ?? '—'}
-${t('diagnostics.report.fingerprint')}: ${event.fingerprint}
-${t('diagnostics.report.message')}: ${event.message}`}
+              {formatPreview(
+                event,
+                {
+                  includePromptText: include.prompt,
+                  includePaths: include.paths,
+                  includeUrls: include.urls,
+                },
+                {
+                  code: t('diagnostics.report.preview.code'),
+                  scope: t('diagnostics.report.preview.scope'),
+                  runId: t('diagnostics.report.preview.runId'),
+                  fingerprint: t('diagnostics.report.preview.fingerprint'),
+                  message: t('diagnostics.report.preview.message'),
+                  upstream: t('diagnostics.report.preview.upstream'),
+                },
+              )}
             </pre>
 
             {recentWarning && !warningDismissed ? (

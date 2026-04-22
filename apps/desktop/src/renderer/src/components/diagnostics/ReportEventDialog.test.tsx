@@ -1,5 +1,12 @@
+import type { DiagnosticEventRow } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
-import { buildReportInput, pickRecentReport, validateNotes } from './ReportEventDialog';
+import {
+  type PreviewLabels,
+  buildReportInput,
+  formatPreview,
+  pickRecentReport,
+  validateNotes,
+} from './ReportEventDialog';
 
 describe('validateNotes', () => {
   it('accepts empty string', () => {
@@ -65,5 +72,99 @@ describe('pickRecentReport', () => {
       now,
     );
     expect(result).toEqual({ relative: '5m', issueUrl: 'https://x/1' });
+  });
+});
+
+const LABELS: PreviewLabels = {
+  code: 'Code',
+  scope: 'Scope',
+  runId: 'Run id',
+  fingerprint: 'Fingerprint',
+  message: 'Message',
+  upstream: 'Upstream context',
+};
+
+function makeEvent(overrides: Partial<DiagnosticEventRow> = {}): DiagnosticEventRow {
+  return {
+    id: 1,
+    schemaVersion: 1,
+    ts: 1_700_000_000_000,
+    level: 'error',
+    code: 'E.TEST',
+    scope: 'renderer',
+    runId: undefined,
+    fingerprint: 'fp-abc',
+    message: 'hello world',
+    stack: undefined,
+    transient: false,
+    count: 1,
+    context: undefined,
+    ...overrides,
+  };
+}
+
+describe('formatPreview', () => {
+  it('redacts paths in message when includePaths=false', () => {
+    const event = makeEvent({ message: 'failed at /Users/alice/foo.ts' });
+    const out = formatPreview(
+      event,
+      { includePromptText: false, includePaths: false, includeUrls: false },
+      LABELS,
+    );
+    expect(out).toContain('Message: failed at <redacted path>');
+    expect(out).not.toContain('/Users/alice');
+  });
+
+  it('renders upstream block for provider scope with context', () => {
+    const event = makeEvent({
+      scope: 'provider',
+      context: {
+        upstream_provider: 'anthropic',
+        upstream_status: 504,
+        upstream_request_id: 'req_123',
+        retry_count: 2,
+        redacted_body_head: '{"type":"error","message":"timeout"}',
+      },
+    });
+    const out = formatPreview(
+      event,
+      { includePromptText: true, includePaths: true, includeUrls: true },
+      LABELS,
+    );
+    expect(out).toContain('--- Upstream context ---');
+    expect(out).toContain('Provider: anthropic');
+    expect(out).toContain('Status: 504');
+    expect(out).toContain('Request-Id: req_123');
+    expect(out).toContain('Retry: 2');
+    expect(out).toContain('Body head: {"type":"error","message":"timeout"}');
+  });
+
+  it('omits upstream block for non-provider scope even with context', () => {
+    const event = makeEvent({
+      scope: 'renderer',
+      context: { upstream_provider: 'anthropic' },
+    });
+    const out = formatPreview(
+      event,
+      { includePromptText: false, includePaths: false, includeUrls: false },
+      LABELS,
+    );
+    expect(out).not.toContain('Upstream context');
+    expect(out).not.toContain('Provider:');
+  });
+
+  it('redacts the upstream redacted_body_head too', () => {
+    const event = makeEvent({
+      scope: 'provider',
+      context: {
+        redacted_body_head: 'see https://example.com/bug at /Users/alice/x',
+      },
+    });
+    const out = formatPreview(
+      event,
+      { includePromptText: false, includePaths: false, includeUrls: false },
+      LABELS,
+    );
+    expect(out).toContain('Body head: see <redacted url> at <redacted path>');
   });
 });

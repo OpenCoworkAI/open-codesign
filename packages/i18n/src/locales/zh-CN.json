@@ -799,7 +799,15 @@
       "continueAnyway": "仍然继续",
       "bundleSavedTitle": "诊断包已保存",
       "bundleSavedDescription": "已保存至",
-      "revealBundle": "打开所在位置"
+      "revealBundle": "打开所在位置",
+      "preview": {
+        "code": "错误码",
+        "scope": "范围",
+        "runId": "运行 id",
+        "fingerprint": "指纹",
+        "message": "消息",
+        "upstream": "上游上下文"
+      }
     }
   },
   "demos": {
