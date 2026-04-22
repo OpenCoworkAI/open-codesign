@@ -1644,6 +1644,29 @@ export function computeModelOptions(input: {
   return base;
 }
 
+/**
+ * Canonical timeout choices shown in Settings → Advanced. The default prefs
+ * value is 1200s (20 min); long generations (full PDP runs) need 30-60 min,
+ * so the dropdown tops out at 2h. The old 60-300s ceiling silently clamped
+ * the stored value when the UI couldn't represent it.
+ */
+export const TIMEOUT_OPTION_SECONDS = [60, 120, 180, 300, 600, 1200, 1800, 3600, 7200] as const;
+
+/**
+ * Returns the canonical timeout list with `currentSec` merged in when it is a
+ * positive finite value that isn't already present. Prevents the select from
+ * rendering with no selection when the user (or an earlier build) stored a
+ * custom value — and prevents a silent downgrade on the next save.
+ */
+export function resolveTimeoutOptions(currentSec: number): number[] {
+  const base: number[] = [...TIMEOUT_OPTION_SECONDS];
+  if (Number.isFinite(currentSec) && currentSec > 0 && !base.includes(currentSec)) {
+    base.push(currentSec);
+    base.sort((a, b) => a - b);
+  }
+  return base;
+}
+
 function AppearanceTab() {
   const t = useT();
   const theme = useCodesignStore((s) => s.theme);
@@ -2109,12 +2132,10 @@ function AdvancedTab() {
         <NativeSelect
           value={String(prefs.generationTimeoutSec)}
           onChange={(v) => void updatePref({ generationTimeoutSec: Number(v) })}
-          options={[
-            { value: '60', label: t('settings.advanced.timeoutSeconds', { value: 60 }) },
-            { value: '120', label: t('settings.advanced.timeoutSeconds', { value: 120 }) },
-            { value: '180', label: t('settings.advanced.timeoutSeconds', { value: 180 }) },
-            { value: '300', label: t('settings.advanced.timeoutSeconds', { value: 300 }) },
-          ]}
+          options={resolveTimeoutOptions(prefs.generationTimeoutSec).map((sec) => ({
+            value: String(sec),
+            label: t('settings.advanced.timeoutSeconds', { value: sec }),
+          }))}
         />
       </Row>
 

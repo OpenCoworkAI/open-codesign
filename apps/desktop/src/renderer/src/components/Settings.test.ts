@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyLocaleChange, computeModelOptions } from './Settings';
+import {
+  TIMEOUT_OPTION_SECONDS,
+  applyLocaleChange,
+  computeModelOptions,
+  resolveTimeoutOptions,
+} from './Settings';
 
 vi.mock('@open-codesign/i18n', () => ({
   setLocale: vi.fn((locale: string) => Promise.resolve(locale)),
@@ -34,7 +39,6 @@ describe('applyLocaleChange', () => {
     expect(result).toBe('zh-CN');
   });
 });
-
 describe('computeModelOptions', () => {
   const suffix = '(active, not in provider list)';
 
@@ -86,5 +90,36 @@ describe('computeModelOptions', () => {
       { value: 'haiku', label: 'haiku' },
       { value: 'sonnet', label: 'sonnet' },
     ]);
+  });
+});
+
+describe('resolveTimeoutOptions', () => {
+  it('covers the default 1200s stored value and long-generation 30m / 1h / 2h choices so users can configure what they need without hitting the old 300s ceiling', () => {
+    expect(TIMEOUT_OPTION_SECONDS).toContain(1200);
+    expect(TIMEOUT_OPTION_SECONDS).toContain(1800);
+    expect(TIMEOUT_OPTION_SECONDS).toContain(3600);
+    expect(TIMEOUT_OPTION_SECONDS).toContain(7200);
+  });
+
+  it('returns the canonical options unchanged when the stored value is already present', () => {
+    const options = resolveTimeoutOptions(1200);
+    expect(options).toEqual([...TIMEOUT_OPTION_SECONDS]);
+  });
+
+  it("merges a stored value that is not in the canonical list and keeps the list sorted so the select shows the user's existing choice instead of silently downgrading on save", () => {
+    const options = resolveTimeoutOptions(900);
+    expect(options).toContain(900);
+    expect(options).toEqual([...options].sort((a, b) => a - b));
+    // Canonical entries are preserved.
+    for (const sec of TIMEOUT_OPTION_SECONDS) {
+      expect(options).toContain(sec);
+    }
+  });
+
+  it('ignores non-positive or non-finite stored values rather than injecting bogus options', () => {
+    expect(resolveTimeoutOptions(0)).toEqual([...TIMEOUT_OPTION_SECONDS]);
+    expect(resolveTimeoutOptions(-1)).toEqual([...TIMEOUT_OPTION_SECONDS]);
+    expect(resolveTimeoutOptions(Number.NaN)).toEqual([...TIMEOUT_OPTION_SECONDS]);
+    expect(resolveTimeoutOptions(Number.POSITIVE_INFINITY)).toEqual([...TIMEOUT_OPTION_SECONDS]);
   });
 });

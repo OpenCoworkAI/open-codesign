@@ -43,7 +43,11 @@ import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { makeRuntimeVerifier } from './done-verify';
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
-import { armGenerationTimeout, cancelGenerationRequest } from './generation-ipc';
+import {
+  armGenerationTimeout,
+  cancelGenerationRequest,
+  extractGenerationTimeoutError,
+} from './generation-ipc';
 import { maybeAbortIfRunningFromDmg } from './install-check';
 import { registerLocaleIpc } from './locale-ipc';
 import { getLogPath, getLogger, initLogger } from './logger';
@@ -737,6 +741,12 @@ function registerIpcHandlers(db: Database | null): void {
             errAsRec['upstream_wire'] = active.wire;
           }
         }
+        // The SDK catches our AbortController and rethrows a generic
+        // `'Request was aborted.'` that drops signal.reason. Prefer the
+        // CodesignError we stashed on the signal so the user sees the
+        // configured timeout + Settings path instead of an opaque message.
+        const timeoutErr = extractGenerationTimeoutError(controller.signal);
+        const rethrow = timeoutErr ?? err;
         logIpc.error('generate.fail', {
           generationId: id,
           ms: Date.now() - t0,
@@ -744,11 +754,11 @@ function registerIpcHandlers(db: Database | null): void {
           modelId: active.model.modelId,
           baseUrl: baseUrl ?? '<default>',
           status: upstreamStatus,
-          message: err instanceof Error ? err.message : String(err),
-          code: err instanceof CodesignError ? err.code : undefined,
+          message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+          code: rethrow instanceof CodesignError ? rethrow.code : undefined,
         });
-        recordFinalError('generate', id, err);
-        throw err;
+        recordFinalError('generate', id, rethrow);
+        throw rethrow;
       } finally {
         clearTimeoutGuard();
         inFlight.delete(id);
@@ -846,17 +856,23 @@ function registerIpcHandlers(db: Database | null): void {
         });
         return result;
       } catch (err) {
+        // The SDK catches our AbortController and rethrows a generic
+        // `'Request was aborted.'` that drops signal.reason. Prefer the
+        // CodesignError we stashed on the signal so the user sees the
+        // configured timeout + Settings path instead of an opaque message.
+        const timeoutErr = extractGenerationTimeoutError(controller.signal);
+        const rethrow = timeoutErr ?? err;
         logIpc.error('generate.fail', {
           generationId: id,
           ms: Date.now() - t0,
           provider: active.model.provider,
           modelId: active.model.modelId,
           baseUrl: baseUrl ?? '<default>',
-          message: err instanceof Error ? err.message : String(err),
-          code: err instanceof CodesignError ? err.code : undefined,
+          message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+          code: rethrow instanceof CodesignError ? rethrow.code : undefined,
         });
-        recordFinalError('generate', id, err);
-        throw err;
+        recordFinalError('generate', id, rethrow);
+        throw rethrow;
       } finally {
         clearTimeoutGuard();
         inFlight.delete(id);
