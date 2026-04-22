@@ -1,0 +1,1074 @@
+{
+  "common": {
+    "appName": "open-codesign",
+    "send": "Enviar",
+    "cancel": "Cancelar",
+    "retry": "Tentar novamente",
+    "save": "Salvar",
+    "close": "Fechar",
+    "dismissNotification": "Dispensar notificação",
+    "settings": "Configurações",
+    "advanced": "Avançado",
+    "about": "Sobre",
+    "learnMore": "Saiba mais",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "comingSoon": "Em breve",
+    "loading": "Carregando…",
+    "preAlpha": "pré-alfa",
+    "tagline": "BYOK · local-first · multi-modelo",
+    "done": "Pronto.",
+    "applied": "Aplicado.",
+    "working": "Trabalhando"
+  },
+  "toast": {
+    "error": {
+      "report": "Reportar"
+    }
+  },
+  "loading": {
+    "stage": {
+      "sending": "Conectando…",
+      "thinking": "Pensando…",
+      "streaming": "Gerando…",
+      "parsing": "Finalizando…",
+      "rendering": "Renderizando pré-visualização…",
+      "done": "Pronto"
+    },
+    "tokens": "{{count}} tokens"
+  },
+  "canvas": {
+    "filesTab": "Arquivos",
+    "filesTabEmpty": "Nenhum arquivo ainda",
+    "openInTab": "Abrir em nova aba",
+    "previewHint": "Pré-visualização em miniatura · clique duas vezes no arquivo ou use Abrir em nova aba para ver em tela cheia",
+    "tabsAriaLabel": "Arquivos abertos",
+    "closeTab": "Fechar {{name}}",
+    "files": {
+      "sectionTitle": "Arquivos de design",
+      "sectionSubtitle": "{{count}} arquivos",
+      "empty": "Nenhum arquivo ainda. Envie um prompt para o agente gerar um design — os arquivos vão aparecer aqui."
+    },
+    "rail": {
+      "title": "Arquivos",
+      "collapse": "Recolher arquivos",
+      "expand": "Expandir arquivos",
+      "empty": "Nenhum arquivo ainda"
+    }
+  },
+  "preview": {
+    "empty": {
+      "title": "Crie designs com IA",
+      "body": "Escolha um ponto de partida à esquerda ou descreva o que quer criar. O resultado aparece aqui em uma pré-visualização isolada (sandbox).",
+      "starterChip": "Experimente um prompt inicial:"
+    },
+    "loading": {
+      "title": "Gerando seu design…"
+    },
+    "error": {
+      "title": "Falha na geração",
+      "body": "Algo deu errado durante a geração do seu design.",
+      "copyError": "Copiar detalhes do erro",
+      "brokenJsx": "Este design tem um erro de sintaxe, provavelmente um salvamento incompleto. Gere novamente ou edite para corrigir.",
+      "undefinedRef": "O design faz referência a uma variável ou componente indefinido. Provavelmente uma execução interrompida — tente gerar novamente."
+    },
+    "ready": "Pré-visualização",
+    "noDesign": "Nenhum design ainda",
+    "clickToComment": "Clique em qualquer elemento da pré-visualização para deixar um comentário inline.",
+    "commentMode": "Modo de comentário",
+    "commentModeHint": "Clique em qualquer elemento para comentar",
+    "runtimeError": "Erro de execução na pré-visualização",
+    "dismissErrors": "Dispensar erros da pré-visualização",
+    "zoom": "Zoom"
+  },
+  "tweaks": {
+    "title": "Ajustes",
+    "openLabel": "Abrir painel de ajustes",
+    "close": "Fechar",
+    "reset": "Restaurar padrões",
+    "pickColor": "Escolher cor",
+    "swatchAria": "Cor {{key}}",
+    "emptyTitle": "Nenhum token ajustável",
+    "emptyHint": "O agente ainda não declarou um bloco EDITMODE. Gerações futuras disponibilizarão tokens de design aqui."
+  },
+  "chat": {
+    "placeholder": "Descreva o que quer criar…",
+    "sendShortcut": "Enviar (Enter)",
+    "emptyHint": "Comece com um prompt inicial ou sua própria ideia.",
+    "sendAction": "enviar",
+    "sendAnywhere": "em qualquer lugar",
+    "send": "Enviar prompt",
+    "stop": "Parar geração",
+    "placeholderRich": "Descreva um design… tente 'Pitch deck para uma startup fintech'"
+  },
+  "sidebar": {
+    "localContext": "Contexto local",
+    "attachLocalFiles": "Anexar arquivos locais",
+    "linkDesignSystemRepo": "Vincular repositório do design system",
+    "refreshDesignSystemRepo": "Atualizar repositório do design system",
+    "referenceUrl": "URL de referência",
+    "attachedFiles": "Arquivos anexados",
+    "removeFile": "Remover {{name}}",
+    "activeDesignSystem": "Design system ativo",
+    "clear": "Limpar",
+    "designSystemHint": "Vincule um repositório para extrair cores, tipografia, espaçamento e outros elementos de estilo para gerações futuras.",
+    "startHint": "Comece com um resumo e depois adicione arquivos, uma URL ou um repositório local para embasar o resultado.",
+    "empty": {
+      "title": "O que vamos criar?",
+      "subtitle": "Descreva sua ideia abaixo — ou comece por uma destas.",
+      "eyebrow": "Tente"
+    },
+    "ariaLabel": "Painel do chat",
+    "noDesign": "Nenhum design",
+    "newChat": "Novo chat",
+    "collapse": "Recolher barra lateral",
+    "expand": "Expandir barra lateral",
+    "chat": {
+      "youLabel": "Você",
+      "claudeLabel": "Claude",
+      "noModel": "Nenhum modelo selecionado",
+      "thinking": "Pensando",
+      "tokensLine": "~{{count}} tokens",
+      "artifactDelivered": "entregue",
+      "artifactDefaultLabel": "design.html",
+      "tool": {
+        "done": "Pronto"
+      },
+      "working": {
+        "title": "Trabalhando"
+      },
+      "addMenu": {
+        "trigger": "Adicionar contexto"
+      },
+      "streamingLabel": "O assistente está digitando"
+    },
+    "comments": {
+      "title": "Modo de comentário",
+      "body": "Comentários inline no canvas chegam na v0.2.1. Você poderá clicar em qualquer elemento da pré-visualização para deixar uma nota ou instrução de edição."
+    }
+  },
+  "settings": {
+    "title": "Configurações",
+    "tabs": {
+      "models": "Modelos",
+      "appearance": "Aparência",
+      "storage": "Armazenamento",
+      "diagnostics": "Diagnóstico",
+      "advanced": "Avançado"
+    },
+    "shell": {
+      "back": "Área de trabalho",
+      "backAria": "Voltar à área de trabalho"
+    },
+    "common": {
+      "loading": "Carregando…",
+      "cancel": "Cancelar",
+      "copy": "Copiar",
+      "copied": "Copiado!",
+      "open": "Abrir",
+      "unknownError": "Erro desconhecido"
+    },
+    "providers": {
+      "sectionTitle": "Provedores de API",
+      "chatgptLogin": {
+        "title": "Entrar com assinatura do ChatGPT",
+        "description": "Use a cota do seu plano ChatGPT Plus / Pro / Team para chamar modelos Codex (gpt-5.3-codex e afins) — sem precisar de chave de API.",
+        "signIn": "Entrar com ChatGPT",
+        "inProgress": "Navegador aberto. Conclua a autorização e voltamos automaticamente…",
+        "loggedInBadge": "Conectado com ChatGPT",
+        "logout": "Sair",
+        "confirmLogout": "Sair da assinatura do ChatGPT?",
+        "loginFailedTitle": "Falha ao entrar no ChatGPT",
+        "logoutFailedTitle": "Falha ao sair do ChatGPT",
+        "statusFailedTitle": "Falha ao verificar status do ChatGPT",
+        "unknownError": "Erro desconhecido"
+      },
+      "addProvider": "Adicionar provedor",
+      "addCustom": "Adicionar personalizado",
+      "empty": "Nenhum provedor configurado ainda. Adicione um para começar a gerar.",
+      "active": "Ativo",
+      "decryptionFailed": "Falha na descriptografia",
+      "setActive": "Definir como ativo",
+      "reEnterKey": "Redigitar chave",
+      "confirm": "Confirmar",
+      "delete": "Excluir",
+      "edit": "Editar",
+      "testConnection": "Testar conexão",
+      "moreActions": "Mais ações",
+      "editModel": "Trocar modelo",
+      "deleteAria": "Excluir provedor {{label}}",
+      "primary": "Principal",
+      "fast": "Rápido",
+      "custom": {
+        "title": "Adicionar endpoint personalizado",
+        "editTitle": "Editar provedor",
+        "wire": "Protocolo",
+        "wires": {
+          "openai-chat": "OpenAI Chat",
+          "openai-responses": "OpenAI Responses",
+          "anthropic": "Anthropic Messages"
+        },
+        "name": "Rótulo",
+        "baseUrl": "URL base",
+        "apiKey": "Chave de API",
+        "apiKeyEditPlaceholder": "Deixe vazio para manter {{mask}}",
+        "defaultModel": "Modelo padrão",
+        "test": "Testar conexão",
+        "testOk": "OK — {{count}} modelos disponíveis",
+        "save": "Salvar e continuar",
+        "saveEdit": "Salvar alterações",
+        "switchToDropdown": "Escolher da lista",
+        "switchToManual": "Digitar manualmente"
+      },
+      "import": {
+        "action": "Importar",
+        "dismiss": "Dispensar",
+        "codexFound": "Codex detectado — importar {{count}} provedores?",
+        "claudeCodeOAuthTitle": "Assinatura do Claude Code detectada",
+        "claudeCodeOAuthBody": "Sua assinatura Pro/Max só pode ser usada pelo próprio Claude Code. Apps de terceiros não podem reutilizar a cota da assinatura. Gere uma chave de API no Anthropic Console (mesma conta, cobrada por token) para usar Claude aqui.",
+        "claudeCodeOAuthCtaConsole": "Obter chave no Anthropic Console ↗",
+        "claudeCodeHasKeyBody": "Encontramos uma chave em {{source}} para o gateway em {{baseUrl}} — clique em Importar para usá-la aqui.",
+        "claudeCodeHasKeySourceSettings": "~/.claude/settings.json",
+        "claudeCodeHasKeySourceEnv": "env do shell",
+        "claudeCodeLocalProxyBody": "Parece um proxy local em {{baseUrl}}. É a configuração típica para reutilizar uma assinatura OAuth por meio de ferramentas como Claude Code Proxy.",
+        "claudeCodeLocalProxyAction": "Cole a chave para usar o proxy",
+        "claudeCodeRemoteGatewayBody": "O gateway em {{baseUrl}} não tem chave de API na sua configuração do Claude Code. Importe o gateway e depois cole uma chave em Configurações.",
+        "claudeCodeRemoteGatewayAction": "Cole a chave para usar o gateway",
+        "oauthErrorToast": "A assinatura do Claude Code não pode ser compartilhada com apps de terceiros. Gere uma chave de API no Anthropic Console.",
+        "oauthErrorToastCta": "Obter chave ↗",
+        "codexDone": "Provedores do Codex importados",
+        "geminiFound": "Chave da Gemini CLI detectada — importar?",
+        "geminiNoKey": "Configuração da Gemini CLI encontrada, mas sem chave em ~/.gemini/.env ou ~/.env. Cole uma chave manualmente para usar o Gemini aqui.",
+        "geminiBlocked": "Projetos do Google Vertex AI ainda não são suportados — cole uma chave da Gemini Developer API (começa com AIzaSy…) para usar o Gemini aqui.",
+        "geminiDone": "Provedor do Gemini importado",
+        "opencodeFound": "OpenCode detectado — importar {{count}} provedores ({{providers}})?",
+        "opencodeDone": "Provedores do OpenCode importados",
+        "claudeCodeImportedActivated": "Claude Code importado e definido como provedor ativo",
+        "claudeCodeOpenSettings": "Abrir Configurações",
+        "claudeCodeIHaveKey": "Tenho uma chave de API — colar aqui",
+        "claudeCodeShellEnvHint": "Ou: exporte ANTHROPIC_API_KEY no seu shell e reabra pelo Terminal — vamos detectar automaticamente.",
+        "claudeCodeParseErrorTitle": "Configuração do Claude Code inválida",
+        "claudeCodeParseErrorBody": "Não foi possível ler ~/.claude/settings.json: {{reason}}.",
+        "claudeCodeParseErrorReasonNotObject": "o valor no nível superior não é um objeto JSON",
+        "claudeCodeWarningsMore": "+{{count}} a mais",
+        "claudeCodeParseErrorCopyPath": "Copiar caminho do arquivo",
+        "claudeCodeParseErrorPathCopied": "Caminho copiado para a área de transferência",
+        "claudeCodeAnthropicPresetName": "Anthropic",
+        "claudeCodeLocalProxyPresetName": "Claude Code Proxy (local)",
+        "claudeCodeRemoteGatewayPresetName": "Claude Code Gateway",
+        "failed": "Falha na importação",
+        "codexMenu": "Importar do Codex",
+        "codexMenuDesc": "Ler ~/.codex/config.toml",
+        "claudeCodeMenu": "Importar do Claude Code",
+        "claudeCodeMenuDesc": "Ler a sessão autenticada do Claude Code",
+        "customMenu": "Provedor personalizado",
+        "customMenuDesc": "Inserir chave de API e URL manualmente",
+        "alreadyImported": "Já importado",
+        "opencodeBlocked": "Configuração do OpenCode detectada, mas nada pode ser importado. Veja o aviso acima, corrija o auth.json e tente novamente.",
+        "ollamaMenu": "Ollama (local)",
+        "ollamaMenuDesc": "Adicionar o provedor local em localhost:11434",
+        "ollamaDone": "Provedor Ollama adicionado"
+      },
+      "modal": {
+        "title": "Adicionar provedor",
+        "provider": "Provedor",
+        "apiKey": "Chave de API",
+        "getKey": "Obter chave ↗",
+        "apiKeyPlaceholder": "sk-...",
+        "validate": "Validar",
+        "validating": "Validando…",
+        "valid": "Válida",
+        "baseUrl": "URL base",
+        "baseUrlOptional": "(opcional)",
+        "baseUrlPlaceholder": "https://seu-proxy.exemplo.com",
+        "primaryModel": "Modelo principal",
+        "fastModel": "Modelo rápido",
+        "save": "Salvar provedor"
+      },
+      "toast": {
+        "loadFailed": "Falha ao carregar os provedores",
+        "removed": "Provedor removido",
+        "deleteFailed": "Falha ao excluir",
+        "activateFailed": "Não foi possível ativar o provedor",
+        "missingModel": "O provedor não tem modelo padrão — adicione um primeiro.",
+        "switchedTo": "Trocado para {{label}}",
+        "switchFailed": "Falha ao trocar",
+        "saved": "Provedor salvo",
+        "modelSaveFailed": "Falha ao salvar a seleção de modelo",
+        "reasoningSaved": "Profundidade de raciocínio salva",
+        "reasoningSaveFailed": "Falha ao salvar a profundidade de raciocínio",
+        "connectionOk": "Conexão OK",
+        "connectionFailed": "Falha na conexão",
+        "saveFailed": "Falha ao salvar o provedor"
+      },
+      "reasoning": {
+        "label": "Profundidade de raciocínio",
+        "default": "Padrão (automático)",
+        "minimal": "Mínima",
+        "low": "Baixa",
+        "medium": "Média",
+        "high": "Alta",
+        "xhigh": "Muito alta"
+      },
+      "addKey": "Adicionar chave",
+      "missingKey": "Chave ausente",
+      "cliProxyApi": {
+        "presetName": "CLIProxyAPI",
+        "presetDescription": "Proxy local que encapsula assinaturas OAuth do Claude/Codex/Gemini",
+        "apiKeyOptional": "Chave de API só é necessária se você configurou `api-keys` no config.yaml do CPA",
+        "thinkingHint": "Dica: acrescente `(high)` / `(xhigh)` / `(8192)` ao nome do modelo para controlar o orçamento de raciocínio",
+        "discoveringModels": "Descobrindo modelos...",
+        "discoveredModels": "{{count}} modelos encontrados",
+        "discoveryFailed": "Não foi possível conectar ao CPA"
+      }
+    },
+    "appearance": {
+      "themeTitle": "Tema",
+      "themeHint": "A preferência é mantida entre reinicializações.",
+      "lightLabel": "Claro",
+      "lightDesc": "Bege quente, sombras suaves",
+      "darkLabel": "Escuro",
+      "darkDesc": "Neutro profundo, pouco brilho",
+      "languageLabel": "Idioma",
+      "languageHint": "Mudanças de idioma têm efeito imediato.",
+      "languageLoadFailed": "Falha ao carregar o idioma",
+      "langEn": "English",
+      "langZhCN": "中文 (简体)",
+      "langPtBR": "Português (BR)"
+    },
+    "language": {
+      "label": "Idioma",
+      "system": "Padrão do sistema"
+    },
+    "theme": {
+      "label": "Tema",
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema"
+    },
+    "storage": {
+      "pathsTitle": "Caminhos",
+      "config": "Configuração",
+      "logs": "Logs",
+      "data": "Diretório de dados",
+      "change": "Alterar",
+      "restartHint": "Escolha onde o open-codesign guarda configuração, logs e dados locais de design. As alterações são salvas permanentemente e se aplicam depois de reiniciar o app.",
+      "locationSavedToast": "Local de armazenamento salvo. Reinicie o app para aplicar.",
+      "locationSaveFailed": "Não foi possível salvar o local de armazenamento",
+      "onboardingTitle": "Onboarding",
+      "onboardingHint": "Limpa a flag de configuração para que o assistente de onboarding rode novamente na próxima abertura.",
+      "resetConfirm": "Isso vai remover suas chaves salvas. Continuar?",
+      "reset": "Redefinir",
+      "resetButton": "Redefinir onboarding",
+      "pathsLoadFailed": "Falha ao carregar os caminhos do app",
+      "openFolderFailed": "Não foi possível abrir a pasta",
+      "onboardingResetToast": "Onboarding redefinido. Reinicie o app para refazer a configuração.",
+      "diagnosticsTitle": "Diagnóstico",
+      "diagnosticsHint": "Abra a pasta de logs para inspecionar os arquivos ou exporte um pacote com dados sensíveis removidos para reportar bugs.",
+      "openLogFolder": "Abrir pasta de logs",
+      "exportDiagnostics": "Exportar diagnóstico",
+      "diagnosticsExported": "Exportado para {{path}}",
+      "diagnosticsExportFailed": "Não foi possível exportar o diagnóstico"
+    },
+    "diagnostics": {
+      "title": "Diagnóstico",
+      "description": "Revise erros recentes. Reporte um bug com o contexto completo anexado.",
+      "openLogFolder": "Abrir pasta de logs",
+      "exportBundle": "Exportar pacote de diagnóstico",
+      "showTransient": "Mostrar erros corrigidos após nova tentativa",
+      "empty": "Nenhum evento de diagnóstico registrado ainda.",
+      "dbUnavailable": "Armazenamento de diagnóstico indisponível. Os erros continuam sendo gravados em main.log, mas só aparecem aqui após reiniciar o app. Verifique espaço em disco e permissões.",
+      "report": "Reportar",
+      "column": {
+        "time": "Hora",
+        "code": "Código",
+        "scope": "Escopo",
+        "runId": "ID da execução",
+        "message": "Mensagem"
+      },
+      "inMemoryFallback": "Mostrando registros em memória — banco indisponível; eles não serão preservados após reiniciar."
+    },
+    "advanced": {
+      "updateChannel": "Canal de atualização",
+      "updateChannelHint": "Estável: versões testadas. Beta: acesso antecipado (pode ter bugs).",
+      "stable": "Estável",
+      "beta": "Beta",
+      "checkForUpdatesOnStartup": "Verificar atualizações ao iniciar",
+      "checkForUpdatesOnStartupHint": "Verifica automaticamente se há nova versão 30 segundos após iniciar o app.",
+      "timeout": "Tempo limite de geração",
+      "timeoutHint": "Segundos antes de uma geração ser abortada.",
+      "timeoutSeconds": "{{value}} s",
+      "devtools": "Ferramentas de desenvolvedor",
+      "devtoolsHint": "Abre o painel DevTools do Chromium para o renderer.",
+      "toggleDevtools": "Alternar DevTools",
+      "prefsLoadFailed": "Falha ao carregar preferências",
+      "prefsSaveFailed": "Falha ao salvar preferência",
+      "devtoolsFailed": "Não foi possível alternar o DevTools"
+    }
+  },
+  "updates": {
+    "bannerAvailable": "{{appName}} {{version}} está disponível.",
+    "bannerViewRelease": "Ver lançamento",
+    "bannerDismissAria": "Dispensar aviso de atualização"
+  },
+  "onboarding": {
+    "stepperLabel": "Passo {{current}} de {{total}}",
+    "welcome": {
+      "title": "Crie designs com qualquer modelo.",
+      "subtitle": "Escolha como quer impulsionar seus designs. Dá para mudar depois em Configurações.",
+      "tryFree": "Experimentar grátis",
+      "tryFreeSubtitle": "Nível gratuito do OpenRouter — cole uma chave do OpenRouter e comece com openrouter/free ou digite qualquer ID de modelo.",
+      "useKey": "Usar minha chave de API",
+      "useKeySubtitle": "Anthropic, OpenAI ou OpenRouter. Detectado automaticamente pelo prefixo da chave.",
+      "useOllama": "Usar modelo local (Ollama)",
+      "useOllamaSubtitle": "Roda 100% local, sem custo de API. Precisa do Ollama instalado e rodando.",
+      "useOllamaDetected": "Ollama detectado — {{count}} modelos disponíveis localmente.",
+      "useOllamaNotRunning": "Ollama não detectado em localhost:11434. Instale ou inicie e tente novamente.",
+      "useOllamaProbing": "Procurando uma instância local do Ollama...",
+      "useOllamaRetry": "Verificar novamente",
+      "useOllamaInstall": "Instalar Ollama ↗",
+      "whereToGetKey": "Onde conseguir uma chave"
+    },
+    "paste": {
+      "title": "Cole sua chave de API",
+      "description": "O provedor é detectado automaticamente. Clique em Testar para verificar a chave e o endpoint antes de continuar. Sua chave fica armazenada localmente em ~/.config/open-codesign/config.toml (modo 0600).",
+      "placeholder": "sk-…",
+      "recognized": "Provedor detectado: {{provider}}",
+      "connected_one": "{{count}} modelo conectado",
+      "connected_other": "{{count}} modelos conectados",
+      "howToGet": "Como conseguir uma chave",
+      "getKey": "Obter chave",
+      "statusIdle": "Cole uma chave acima — o provedor é detectado pelo prefixo.",
+      "statusDetecting": "Detectando provedor...",
+      "statusValidating": "Reconhecido: {{provider}} — validando...",
+      "statusDetected": "Reconhecido: {{provider}} — clique em Testar para verificar",
+      "statusOk": "Reconhecido: {{provider}} — Conectado ({{count}} modelos)",
+      "errors": {
+        "401": "Chave de API inválida ou não autorizada. Confira no painel do provedor.",
+        "402": "Sua conta não tem crédito. Adicione crédito e tente novamente.",
+        "429": "Limite de requisições atingido. Aguarde um momento e tente novamente.",
+        "network": "Não foi possível acessar a URL base. Verifique domínio/porta/rede.",
+        "unsupported": "Prefixo de chave não reconhecido. Suportados: sk-ant- (Anthropic), sk- (OpenAI), sk-or- (OpenRouter).",
+        "notSupportedProvider": "{{provider}} não é suportado na v0.1. Use Anthropic, OpenAI ou OpenRouter.",
+        "rendererDisconnected": "O renderer não está conectado ao processo principal.",
+        "detectIpc": "Falha na detecção do provedor (processo principal inacessível): {{message}}. Reinicie o app e tente novamente.",
+        "detectNetwork": "Falha na detecção do provedor (erro de rede): {{message}}. Verifique sua conexão e tente novamente."
+      },
+      "advanced": {
+        "toggle": "Avançado — URL base personalizada (proxy / relay)",
+        "title": "Avançado — URL base personalizada",
+        "description": "Sobrescreve o endpoint padrão do seu provedor. Útil para serviços de relay e proxies self-hosted. Deixe vazio para usar o endpoint oficial."
+      },
+      "preset": {
+        "label": "Preset",
+        "placeholder": "-- escolha um preset --",
+        "hint": "Em dúvida? Escolha OpenAI Oficial para o endpoint oficial, ou selecione pelo nome do relay.",
+        "custom": "Personalizado"
+      },
+      "apiKey": {
+        "label": "Chave de API"
+      },
+      "baseUrl": {
+        "label": "URL base"
+      },
+      "connectionTest": {
+        "button": "Testar",
+        "testing": "Testando...",
+        "ok": "Conectado",
+        "okVerified": "Conectado — chave e endpoint verificados",
+        "idleHint": "Clique em Testar para verificar sua chave e conexão antes de continuar.",
+        "runFirst": "Clique em Testar primeiro para verificar sua conexão",
+        "errors": {
+          "401": "Chave de API inválida ou não autorizada.",
+          "404": "Caminho da URL base incorreto. Tente adicionar o sufixo /v1 (ex.: https://seu-host/v1).",
+          "ECONNREFUSED": "Não foi possível acessar a URL base. Verifique domínio/porta/rede.",
+          "NETWORK": "Erro de rede. Verifique sua conexão.",
+          "PARSE": "Resposta inesperada. Veja os logs em ~/Library/Logs/open-codesign/main.log",
+          "IPC_BAD_INPUT": "Entrada inválida enviada ao teste de conexão. Verifique os campos provedor / chave de API / URL base."
+        }
+      },
+      "back": "Voltar",
+      "continue": "Continuar"
+    },
+    "choose": {
+      "title": "Escolha os modelos padrão",
+      "description": "Comece com uma recomendação ou digite qualquer ID de modelo do provedor. Dá para trocar os modelos em cada design depois.",
+      "primary": "Modelo principal de design",
+      "fast": "Modelo rápido de resposta",
+      "primaryHint": "Usado para a geração completa do design.",
+      "fastHint": "Usado para edições rápidas e ajustes inline.",
+      "primaryHintFree": "A opção gratuita começa em openrouter/free, mas você pode digitar qualquer ID de modelo do OpenRouter.",
+      "fastHintFree": "Mantenha openrouter/free para o menor custo, ou troque por uma opção personalizada mais rápida.",
+      "customBaseUrl": "URL base personalizada: {{url}}",
+      "costNote": "O custo estimado varia por provedor, modelo escolhido e tamanho do prompt.",
+      "costNoteFree": "A disponibilidade das rotas gratuitas do OpenRouter pode mudar. Se nenhuma rota gratuita estiver disponível, digite outro ID de modelo aqui.",
+      "estimatedCost": "Custo estimado: {{amount}}",
+      "back": "Voltar",
+      "saving": "Salvando...",
+      "finish": "Concluir"
+    }
+  },
+  "topbar": {
+    "modelSwitcher": {
+      "fromProvider": "Provedor",
+      "searchPlaceholder": "Buscar modelos…",
+      "searchAriaLabel": "Filtrar modelos por nome",
+      "clearSearch": "Limpar busca",
+      "noMatches": "Nenhum modelo corresponde a \"{{query}}\""
+    },
+    "status": {
+      "connected": "Conectado",
+      "untested": "Não testado",
+      "error": "Erro de conexão",
+      "noProvider": "Nenhum provedor configurado",
+      "lastTested": "Último teste {{time}}",
+      "tooltip": {
+        "click": "Clique para testar novamente"
+      }
+    },
+    "openMyDesigns": "Todos os designs",
+    "hubLabel": "Meus designs",
+    "settingsLabel": "Configurações",
+    "closeSettings": "Fechar configurações",
+    "unreadErrors": "{{count}} erro não lido"
+  },
+  "theme": {
+    "toggleAria": "Alternar tema",
+    "switchToLight": "Mudar para claro",
+    "switchToDark": "Mudar para escuro"
+  },
+  "export": {
+    "button": "Exportar",
+    "items": {
+      "html": {
+        "label": "HTML",
+        "hint": "Arquivo .html único e autocontido"
+      },
+      "pdf": {
+        "label": "PDF",
+        "hint": "Renderizado via seu Chrome instalado"
+      },
+      "pptx": {
+        "label": "PPTX",
+        "hint": "Slides editáveis; um por <section>"
+      },
+      "zip": {
+        "label": "Pacote ZIP",
+        "hint": "index.html + assets + README.md"
+      },
+      "markdown": {
+        "label": "Markdown",
+        "hint": "Arquivo .md puro com frontmatter YAML"
+      }
+    }
+  },
+  "notifications": {
+    "designSystemLinked": "Design system vinculado",
+    "designSystemScanFailed": "Falha ao analisar o design system",
+    "designSystemCleared": "Design system removido",
+    "clearDesignSystemFailed": "Não foi possível remover o design system",
+    "generationFailed": "Falha na geração",
+    "cancellationFailed": "Falha no cancelamento",
+    "inlineCommentFailed": "Falha no comentário inline",
+    "commentNeedsSnapshot": "Gere um design antes de deixar um comentário",
+    "commentCreateFailed": "Não foi possível salvar o comentário",
+    "commentUpdateFailed": "Não foi possível atualizar o comentário",
+    "commentDeleteFailed": "Não foi possível excluir o comentário",
+    "noDesignToExport": "Nenhum design para exportar ainda.",
+    "exportedTo": "Exportado para {{path}}"
+  },
+  "inlineComment": {
+    "title": "Comentar em",
+    "closeComposer": "Fechar editor de comentário inline",
+    "description": "Os elementos clicados ficam selecionados no canvas. Descreva a mudança visual ou de conteúdo que você quer, e o open-codesign vai reescrever o artefato focando nesse alvo.",
+    "placeholder": "Deixe esta seção mais compacta, refine o título e alinhe ao design system vinculado…",
+    "applying": "Aplicando…",
+    "applyChange": "Aplicar mudança"
+  },
+  "commentBubble": {
+    "title": "Comentar em",
+    "close": "Fechar balão de comentário",
+    "placeholder": "Descreva a mudança ou deixe uma nota para você…",
+    "saveNote": "Comentar",
+    "sendToClaude": "Enviar para o Claude",
+    "saving": "Salvando…",
+    "sending": "Enviando…",
+    "scope": {
+      "legend": "Escopo deste comentário",
+      "element": "Apenas este elemento",
+      "global": "Design inteiro"
+    }
+  },
+  "pinOverlay": {
+    "note": "Nota {{n}}",
+    "edit": "Editar {{n}}"
+  },
+  "commentChip": {
+    "dismiss": "Dispensar edição pendente",
+    "empty": "Nenhuma edição pendente",
+    "apply": "Aplicar ({{count}})",
+    "applyAll": "Aplicar todas as edições pendentes"
+  },
+  "commentsTab": {
+    "empty": "Com o modo de comentário ativo, clique em qualquer elemento da pré-visualização para deixar uma nota ou instrução de edição.",
+    "pendingEdits": "Edições pendentes",
+    "notes": "Notas",
+    "appliedEdits": "Edições aplicadas",
+    "delete": "Excluir comentário",
+    "atSnapshot": "@ snapshot {{n}}"
+  },
+  "comments": {
+    "panel": {
+      "title": "Comentários",
+      "close": "Fechar painel de comentários",
+      "empty": "Nenhum comentário ainda. Clique em qualquer elemento do canvas para deixar um.",
+      "delete": "Excluir comentário",
+      "untitled": "(sem texto)",
+      "status": {
+        "pending": "Pendente",
+        "applied": "Aplicado"
+      },
+      "scope": {
+        "element": "Elemento",
+        "global": "Global",
+        "tooltip": "Indica se a mudança vale só para este elemento ou para o design inteiro"
+      }
+    },
+    "quickActions": {
+      "label": "Ações rápidas",
+      "spacing": {
+        "more": "+ Espaçamento",
+        "less": "− Espaçamento"
+      },
+      "contrast": {
+        "more": "+ Contraste",
+        "less": "− Contraste"
+      },
+      "font": {
+        "bigger": "+ Fonte",
+        "smaller": "− Fonte"
+      },
+      "radius": {
+        "more": "+ Raio",
+        "less": "− Raio"
+      },
+      "text": {
+        "spacing-more": "aumentar espaçamento deste elemento",
+        "spacing-less": "diminuir espaçamento deste elemento",
+        "contrast-more": "aumentar contraste de cor",
+        "contrast-less": "suavizar o contraste de cor",
+        "font-bigger": "aumentar tamanho da fonte deste elemento",
+        "font-smaller": "diminuir tamanho da fonte deste elemento",
+        "radius-more": "deixar cantos mais arredondados",
+        "radius-less": "deixar cantos mais retos"
+      }
+    }
+  },
+  "disabledReason": {
+    "typePromptToSend": "Digite um prompt para começar",
+    "generatingInProgress": "Geração em andamento",
+    "typeDraftToApply": "Digite um comentário para aplicar",
+    "noDesignToExport": "Gere um design primeiro",
+    "enterApiKeyToValidate": "Insira uma chave de API para validar",
+    "validateKeyFirst": "Valide a chave primeiro",
+    "enterKeyToTest": "Cole uma chave de API para testar a conexão",
+    "detectingProvider": "Detectando provedor — aguarde",
+    "unsupportedKeyForTest": "Formato de chave não suportado — não é possível testar esta chave",
+    "providerDetectIpcForTest": "Falha na detecção do provedor (IPC) — não é possível testar esta chave",
+    "providerDetectNetworkForTest": "Falha na detecção do provedor (rede) — não é possível testar esta chave",
+    "testingConnection": "Testando conexão…",
+    "validateKeyToContinue": "Valide sua chave de API para continuar",
+    "savingInProgress": "Salvamento em andamento",
+    "enterBothModels": "Os dois campos de modelo são obrigatórios",
+    "ollamaComingSoon": "Integração com Ollama chega na v0.2"
+  },
+  "errorBoundary": {
+    "scopeFallback": "esta visualização",
+    "crashedSuffix": "{{scope}} travou",
+    "body": "O restante do app continua rodando. Recarregue esta visualização ou copie o stack para reportar um bug.",
+    "noStack": "(sem stack)",
+    "copyStack": "Copiar stack",
+    "reportOnGitHub": "Reportar no GitHub",
+    "reportViaDiagnostics": "Reportar via Diagnóstico",
+    "reload": "Recarregar"
+  },
+  "errors": {
+    "generic": "Algo deu errado.",
+    "providerAuthMissing": "Nenhuma chave de API configurada. Abra Configurações para adicionar uma.",
+    "providerError": "Erro do provedor: {{message}}",
+    "ipcBadInput": "Entrada inválida enviada ao processo principal.",
+    "exporterNotReady": "O exportador ainda está carregando. Tente novamente em um instante.",
+    "rendererDisconnected": "O renderer não está conectado ao processo principal.",
+    "onboardingIncomplete": "O onboarding não foi concluído.",
+    "providerMissingKey": "O provedor ativo \"{{provider}}\" não tem chave de API. Abra Configurações para adicionar uma.",
+    "modelListFailed": "Não foi possível carregar a lista de modelos.",
+    "unknown": "Erro desconhecido",
+    "localePersistFailed": "Falha ao salvar a preferência de idioma"
+  },
+  "projects": {
+    "untitled": "Design sem título",
+    "untitledNumbered": "Design sem título {{n}}",
+    "duplicateNameTemplate": "{{name}} (cópia)",
+    "switcher": {
+      "currentLabel": "Design atual",
+      "menuLabel": "Trocar design",
+      "newDesign": "Novo design",
+      "renameCurrent": "Renomear",
+      "viewAll": "Ver todos os designs…",
+      "recent": "Recentes",
+      "noOthers": "Nenhum outro design ainda"
+    },
+    "view": {
+      "title": "Designs",
+      "subtitle": "Todos os seus designs salvos. Trocar, renomear, duplicar ou excluir.",
+      "newDesign": "Novo design",
+      "search": "Buscar designs",
+      "empty": "Nenhum design ainda — crie o primeiro para começar.",
+      "noMatches": "Nenhum design corresponde a \"{{query}}\".",
+      "open": "Abrir",
+      "rename": "Renomear",
+      "duplicate": "Duplicar",
+      "delete": "Excluir",
+      "edited": "Editado {{when}}",
+      "snapshotCount_one": "{{count}} versão",
+      "snapshotCount_other": "{{count}} versões",
+      "close": "Fechar visualização de designs"
+    },
+    "rename": {
+      "title": "Renomear design",
+      "label": "Nome do design",
+      "placeholder": "ex.: Hero da landing page",
+      "save": "Salvar",
+      "cancel": "Cancelar"
+    },
+    "delete": {
+      "title": "Excluir este design?",
+      "body": "\"{{name}}\" e todo o seu histórico serão removidos da lista de designs. Isso não pode ser desfeito na v0.",
+      "confirm": "Excluir design",
+      "cancel": "Manter"
+    },
+    "time": {
+      "justNow": "agora mesmo",
+      "minutesAgo_one": "há {{count}} minuto",
+      "minutesAgo_other": "há {{count}} minutos",
+      "hoursAgo_one": "há {{count}} hora",
+      "hoursAgo_other": "há {{count}} horas",
+      "yesterday": "ontem",
+      "daysAgo_one": "há {{count}} dia",
+      "daysAgo_other": "há {{count}} dias"
+    },
+    "notifications": {
+      "createFailed": "Não foi possível criar um novo design",
+      "switchFailed": "Não foi possível trocar de design",
+      "switchBlockedGenerating": "Aguarde a geração terminar antes de trocar",
+      "busyGenerating": "Aguarde a geração atual terminar e tente novamente",
+      "renameFailed": "Não foi possível renomear o design",
+      "duplicated": "Duplicado como \"{{name}}\"",
+      "duplicateFailed": "Não foi possível duplicar o design",
+      "deleted": "Design removido da lista ativa",
+      "deleteFailed": "Não foi possível excluir o design",
+      "deleteBlockedGenerating": "Aguarde a geração terminar antes de excluir",
+      "saveFailed": "Não foi possível salvar as últimas alterações",
+      "snapshotSkipped": "Saída incompleta não foi salva",
+      "snapshotSkippedBody": "O JSX do agente está truncado (ReactDOM.createRoot ausente ou chaves desbalanceadas). A versão boa anterior foi preservada. Envie o prompt novamente.",
+      "loadFailed": "Não foi possível carregar seus designs"
+    }
+  },
+  "diagnostics": {
+    "title": "Falha na conexão",
+    "status": "Status: {{status}}",
+    "attempted": "O que tentamos: {{url}}",
+    "mostLikelyCause": "Causa mais provável:",
+    "cause": {
+      "keyInvalid": "Chave de API inválida ou revogada.",
+      "balanceEmpty": "O saldo da conta está vazio.",
+      "missingV1": "O caminho da URL base provavelmente não tem o sufixo /v1.",
+      "rateLimit": "Limite de requisições excedido.",
+      "hostUnreachable": "Não foi possível acessar o host — verifique domínio, porta ou VPN.",
+      "timedOut": "Tempo da requisição esgotado — verifique firewall ou VPN.",
+      "corsError": "Erro de CORS (não deveria acontecer no processo principal). Isso é um bug.",
+      "sslError": "Erro de SSL / certificado (certificado autoassinado no relay?).",
+      "unknown": "Erro desconhecido — veja o log completo para detalhes."
+    },
+    "fix": {
+      "updateKey": "Atualizar chave",
+      "addCredits": "Adicionar créditos →",
+      "addCreditsGeneric": "Veja a página de faturamento do seu provedor",
+      "addV1": "Adicionar /v1",
+      "waitAndRetry": "Aguardar e tentar novamente",
+      "checkNetwork": "Verificar rede / VPN",
+      "checkVpn": "Verificar VPN / firewall",
+      "reportBug": "Reportar este bug",
+      "disableTls": "Desativar verificação TLS"
+    },
+    "applyFix": "Aplicar esta correção",
+    "setBaseUrlFirst": "Defina uma URL base primeiro",
+    "testAgain": "Testar novamente",
+    "showLog": "Mostrar log completo",
+    "showLogFailed": "Falha ao abrir a pasta de logs",
+    "dismiss": "Dispensar",
+    "report": {
+      "title": "Reportar um bug",
+      "notes": "Passos para reproduzir (opcional)",
+      "include": {
+        "prompt": "Incluir texto do prompt",
+        "paths": "Incluir caminhos de arquivo",
+        "urls": "Incluir URLs",
+        "timeline": "Incluir linha do tempo de 60 s",
+        "promptHint": "Inclui o texto dos prompts enviados durante a sessão.",
+        "pathsHint": "Inclui caminhos de arquivo locais (pode revelar seu usuário / estrutura de diretórios).",
+        "urlsHint": "Inclui URLs de referência que você colou.",
+        "timelineHint": "Log de atividade de 60 segundos — só ações, sem conteúdo."
+      },
+      "disclaimer": "Nada é enviado automaticamente. O pacote de diagnóstico é salvo na sua pasta Downloads; anexe-o manualmente à issue no GitHub.",
+      "openIssue": "Abrir issue",
+      "copySummary": "Copiar resumo",
+      "cancel": "Cancelar",
+      "copied": "Copiado para a área de transferência",
+      "generating": "Criando pacote…",
+      "close": "Fechar",
+      "scope": "Escopo",
+      "runId": "ID da execução",
+      "fingerprint": "Fingerprint",
+      "message": "Mensagem",
+      "recentlyReported": "Você reportou isso {{relative}} como issue #{{issueNumber}}.",
+      "viewPrevious": "Ver issue anterior",
+      "continueAnyway": "Continuar assim mesmo",
+      "bundleSavedTitle": "Pacote salvo",
+      "bundleSavedDescription": "Salvo em",
+      "revealBundle": "Mostrar na pasta",
+      "preview": {
+        "code": "Código",
+        "scope": "Escopo",
+        "runId": "ID da execução",
+        "fingerprint": "Fingerprint",
+        "message": "Mensagem",
+        "upstream": "Contexto upstream",
+        "upstreamProvider": "Provedor",
+        "upstreamStatus": "Status",
+        "upstreamRequestId": "ID da requisição",
+        "upstreamRetry": "Nova tentativa",
+        "upstreamBodyHead": "Início do corpo"
+      },
+      "clipboardFailedHint": "O pacote está no disco — abra manualmente e cole o resumo lá.",
+      "clipboardFailedTitle": "Não foi possível copiar para a área de transferência",
+      "confirmOpenAnyway": "Sim, abrir mesmo assim ({{seconds}}s)",
+      "copyIssueUrl": "Copiar URL",
+      "error": {
+        "generic": "Não foi possível abrir a issue. Verifique a pasta de logs para detalhes.",
+        "notesTooLong": "As notas excedem o limite de 2000 caracteres."
+      },
+      "openFailedCopyHint": "Copie a URL da issue e abra manualmente.",
+      "openFailedTitle": "Não foi possível abrir o navegador",
+      "recentlyReportedNoNumber": "Você reportou isso {{relative}}."
+    }
+  },
+  "demos": {
+    "meditationApp": {
+      "title": "App de meditação Calm Spaces",
+      "description": "Protótipo mobile com moldura de celular, paleta suave, navegação interativa.",
+      "prompt": "Crie o protótipo de um app mobile de meditação chamado Calm Spaces. Mostre uma moldura de celular com tela inicial contendo lista de meditações, botão de play e indicador de progresso. Use tipografia serena, verdes e azuis suaves e muito espaço em branco."
+    },
+    "caseStudy": {
+      "title": "Case de cliente em uma página",
+      "description": "Layout escuro, uma página, pronto para PDF, com métricas de destaque.",
+      "prompt": "Crie um case de cliente em uma página. O cliente aumentou leads qualificados em 40% usando nossa plataforma. Inclua métricas antes/depois, uma citação do CEO e um placeholder de logo. Visual limpo, minimalista, tema escuro."
+    },
+    "pitchDeck": {
+      "title": "Pitch deck B2B SaaS",
+      "description": "8 a 12 slides para um pitch SaaS voltado à saúde.",
+      "prompt": "Crie um pitch deck para uma empresa B2B SaaS voltada a empresas de saúde de médio porte. 8 a 10 slides cobrindo problema, mercado, produto, tração, equipe e pedido."
+    },
+    "marketingLanding": {
+      "title": "Landing page de marketing",
+      "description": "Hero + features + CTA, cor de destaque ajustável.",
+      "prompt": "Crie uma landing page moderna de marketing para uma ferramenta de produtividade com IA. Inclua hero, três feature cards, prova social e uma chamada para ação. Use uma paleta neutra e quente."
+    }
+  },
+  "examples": {
+    "tab": "Exemplos",
+    "title": "Exemplos",
+    "subtitle": "Pontos de partida selecionados a dedo. Passe o cursor para pré-visualizar e depois insira o prompt no editor.",
+    "empty": "Nenhum exemplo corresponde ao seu filtro.",
+    "useThisPrompt": "Usar este prompt",
+    "categories": {
+      "all": "Todos",
+      "animation": "Animação",
+      "ui": "UI",
+      "marketing": "Marketing",
+      "document": "Documento",
+      "dashboard": "Dashboard",
+      "presentation": "Apresentação",
+      "email": "E-mail",
+      "mobile": "Mobile"
+    },
+    "thumbnailAlt": "Pré-visualização de {{title}}",
+    "promptUsedToast": "Prompt carregado — edite e envie quando estiver pronto."
+  },
+  "emptyState": {
+    "heading": "O que você gostaria de criar?",
+    "subline": "Descreva sua ideia no chat, ou escolha um template para começar.",
+    "tryThese": "Sugestões rápidas",
+    "starters": {
+      "landing": "Landing page de startup",
+      "pitch": "Slides de pitch deck",
+      "mobile": "Onboarding mobile",
+      "dashboard": "Dashboard de analytics",
+      "email": "E-mail de boas-vindas",
+      "portfolio": "Portfólio de fotos",
+      "casestudy": "Página de case",
+      "animation": "Showcase de animação CSS"
+    },
+    "starterDesc": {
+      "landing": "Hero + feature cards + prova social + CTA",
+      "pitch": "Título + problema + solução, slides 16:9",
+      "mobile": "Fluxo de 3 telas dentro de moldura de celular",
+      "dashboard": "Gráfico de linha + barras + tabela, tema escuro",
+      "email": "Coluna única de 600px com passos de onboarding",
+      "portfolio": "Grid masonry + filtros + overlays no hover",
+      "casestudy": "Métricas principais + citação + passos de implementação",
+      "animation": "Animações puras em CSS/SVG, 60fps"
+    }
+  },
+  "starterPrompts": {
+    "landing": "Crie uma landing page para uma startup de IA. Hero com tagline forte, 3 feature cards, seção de prova social e CTA. Tipografia editorial, muito espaço em branco.",
+    "pitch": "Gere os 3 primeiros slides de um pitch deck para uma startup fintech: slide de título, problema, solução. Formato 16:9, paleta navy, um detalhe laranja.",
+    "mobile": "Crie um fluxo de onboarding mobile em 3 telas dentro de uma moldura de celular: boas-vindas, permissões, primeira ação. Paleta menta suave.",
+    "dashboard": "Crie um dashboard de analytics com: gráfico de linha de tendência do MRR, barras empilhadas de pipeline, tabela de principais contas e medidor de previsão. Tema escuro, detalhes em azul-petróleo e âmbar, dados mock plausíveis.",
+    "email": "Crie um e-mail transacional de boas-vindas para um produto SaaS. Coluna única, 600px de largura, baseado em tabela. Cabeçalho com logo, saudação, 3 passos de onboarding, botão de CTA, rodapé.",
+    "portfolio": "Crie um portfólio de fotógrafo com grid masonry de imagens usando placeholders de gradiente CSS. Fundo escuro, pílulas de filtro por categoria, overlay no hover com título e configurações da câmera.",
+    "casestudy": "Crie um case em uma página para uma fintech B2B. Hero com nome do cliente, três métricas grandes com variação, uma citação em destaque do CFO, uma seção \"Como fizemos\" em três passos e uma faixa de logos. Tema escuro, títulos com serifa, numerais monoespaçados.",
+    "animation": "Crie uma página de showcase com seis animações de loading orgânicas em CSS. Cada uma em seu card: blob morph, balanço de folha, gota de tinta, círculo respirando, pulso suave, trançado de fita. Fundo creme quente, pastéis suaves, apenas CSS/SVG puro."
+  },
+  "hub": {
+    "newDesign": "Novo design",
+    "newDesignCardTitle": "Começar um novo design",
+    "newDesignCardSub": "Canvas em branco · gerado por IA",
+    "backToHub": "Todos os designs",
+    "tabs": {
+      "recent": "Recentes",
+      "your": "Seus designs",
+      "examples": "Exemplos",
+      "designSystems": "Design systems"
+    },
+    "recent": {
+      "title": "Recentes",
+      "empty": "Nada por aqui ainda — comece um novo design para vê-lo fixado no topo."
+    },
+    "your": {
+      "title": "Seus designs",
+      "empty": "Nenhum design salvo ainda. Clique em \"Novo design\" para criar o primeiro.",
+      "openAria": "Abrir {{name}}"
+    },
+    "examples": {
+      "title": "Exemplos",
+      "comingSoon": "Uma galeria curada de prompts iniciais está a caminho."
+    },
+    "designSystems": {
+      "title": "Design systems",
+      "comingSoon": "Sistemas de marca e templates reutilizáveis estão a caminho."
+    },
+    "card": {
+      "type": {
+        "prototype": "Protótipo",
+        "slideDeck": "Slide deck",
+        "template": "A partir de template",
+        "other": "Outro"
+      },
+      "createdAt": "Criado {{date}}",
+      "moreActions": "Mais ações para {{name}}",
+      "rename": "Renomear",
+      "delete": "Excluir"
+    }
+  },
+  "create": {
+    "title": "Começar um novo design",
+    "subtitle": "Escolha um tipo para ajustarmos o primeiro prompt.",
+    "close": "Fechar",
+    "types": {
+      "prototype": "Protótipo",
+      "slideDeck": "Slide deck",
+      "template": "A partir de template",
+      "other": "Outro"
+    },
+    "typeDescriptions": {
+      "prototype": "Mockups de UI interativos com moldura de celular ou de navegador.",
+      "slideDeck": "Um deck com vários slides para palestras, pitches ou resumos.",
+      "template": "Comece por um dos prompts iniciais já incluídos.",
+      "other": "Um canvas em branco — descreva qualquer outra coisa que você tenha em mente."
+    },
+    "fields": {
+      "name": "Nome do projeto",
+      "namePlaceholder": "Design sem título",
+      "fidelity": "Fidelidade",
+      "fidelityWireframe": "Wireframe",
+      "fidelityWireframeHint": "Blocos em tons de cinza, sem imagens — exploração rápida.",
+      "fidelityHigh": "Alta fidelidade",
+      "fidelityHighHint": "Cores polidas, conteúdo realista.",
+      "fidelityComingSoon": "A escolha entre wireframe e alta fidelidade chega em uma versão futura.",
+      "speakerNotes": "Incluir notas do apresentador",
+      "speakerNotesHint": "Adiciona uma seção de notas sob cada slide com dicas de fala.",
+      "template": "Template",
+      "templateHint": "Escolha um ponto de partida — o primeiro prompt vem pré-preenchido."
+    },
+    "cta": "Criar",
+    "disabledHint": "Adicione um nome de projeto para continuar.",
+    "help": {
+      "share": "Os designs ficam neste dispositivo. O compartilhamento acontece via exportação de pacote — sem precisar de conta na nuvem.",
+      "templates": "Mais pontos de partida chegam em uma versão futura; esta lista vai continuar crescendo."
+    }
+  },
+  "err": {
+    "IPC_BAD_INPUT": "A requisição continha entrada inválida. Tente novamente.",
+    "IPC_DB_ERROR": "Ocorreu um erro no banco de dados local. Reiniciar o app pode ajudar.",
+    "IPC_NOT_FOUND": "O item solicitado não foi encontrado.",
+    "PROVIDER_AUTH_MISSING": "Nenhuma chave de API encontrada para este provedor. Adicione sua chave em Configurações.",
+    "PROVIDER_KEY_MISSING": "Nenhuma chave de API armazenada para este provedor. Adicione uma em Configurações.",
+    "PROVIDER_ACTIVE_MISSING_KEY": "O provedor ativo não tem chave de API. Abra Configurações para adicionar uma.",
+    "PROVIDER_NOT_SUPPORTED": "Este provedor não é suportado. Verifique sua configuração de provedor.",
+    "PROVIDER_MODEL_UNKNOWN": "O modelo selecionado não está disponível para este provedor.",
+    "PROVIDER_BASE_URL_MISSING": "Uma URL base é obrigatória para este provedor. Configure em Configurações.",
+    "PROVIDER_ERROR": "O provedor retornou um erro. Verifique sua chave de API e tente novamente.",
+    "PROVIDER_HTTP_4XX": "O provedor rejeitou a requisição. Verifique sua chave de API e o faturamento.",
+    "PROVIDER_UPSTREAM_ERROR": "O provedor retornou um erro inesperado. Detalhes estão no log.",
+    "PROVIDER_ABORTED": "Geração cancelada.",
+    "PROVIDER_RETRY_EXHAUSTED": "O provedor falhou após várias tentativas. Verifique sua conexão e tente novamente.",
+    "CLAUDE_CODE_OAUTH_ONLY": "Seu login no Claude Code usa uma assinatura Anthropic (Pro/Max). Apps de terceiros não podem reutilizar a cota da assinatura — gere uma chave de API em console.anthropic.com e use aqui.",
+    "INPUT_EMPTY_PROMPT": "O prompt não pode estar vazio.",
+    "INPUT_EMPTY_COMMENT": "O comentário não pode estar vazio.",
+    "INPUT_EMPTY_HTML": "Um HTML existente é obrigatório para esta operação.",
+    "INPUT_UNSUPPORTED_MODE": "Este modo de geração não é suportado.",
+    "GENERATION_TIMEOUT": "A geração excedeu o tempo limite. Tente um prompt mais curto ou aumente o tempo em Configurações.",
+    "CONFIG_READ_FAILED": "Falha ao ler o arquivo de configuração. Verifique as permissões.",
+    "CONFIG_PARSE_FAILED": "O arquivo de configuração não pôde ser lido. Pode estar corrompido.",
+    "CONFIG_SCHEMA_INVALID": "O arquivo de configuração tem um formato não reconhecido. Reconfigure.",
+    "CONFIG_NOT_LOADED": "A configuração ainda não foi carregada. Reinicie o app.",
+    "CONFIG_MISSING": "Nenhuma configuração encontrada. Conclua o onboarding para começar.",
+    "SNAPSHOTS_UNAVAILABLE": "O banco de designs local está indisponível. Reiniciar o app pode ajudar.",
+    "BOOT_ORDER": "Ocorreu um erro interno de inicialização. Reinicie o app.",
+    "STORAGE_SETTINGS_READ_FAILED": "Falha ao ler as configurações de local de armazenamento.",
+    "STORAGE_SETTINGS_PARSE_FAILED": "As configurações de local de armazenamento não puderam ser lidas.",
+    "STORAGE_SETTINGS_INVALID": "As configurações de local de armazenamento contêm dados inválidos.",
+    "KEYCHAIN_UNAVAILABLE": "A keychain do SO (armazenamento seguro) não está disponível. As chaves de API não podem ser armazenadas.",
+    "KEYCHAIN_EMPTY_INPUT": "Não é possível criptografar ou descriptografar um valor vazio.",
+    "ATTACHMENT_TOO_LARGE": "Um ou mais anexos excedem o limite de tamanho.",
+    "ATTACHMENT_READ_FAILED": "Falha ao ler um arquivo anexado. Verifique se o arquivo ainda existe.",
+    "REFERENCE_URL_TOO_LARGE": "O conteúdo da URL de referência é grande demais para incluir.",
+    "REFERENCE_URL_FETCH_FAILED": "Não foi possível buscar a URL de referência. Verifique a URL e sua conexão.",
+    "REFERENCE_URL_FETCH_TIMEOUT": "O tempo para buscar a URL de referência esgotou. Tente novamente ou use outra URL.",
+    "REFERENCE_URL_UNSUPPORTED": "Este tipo de URL de referência não é suportado.",
+    "PREFERENCES_READ_FAIL": "Falha ao ler preferências. As configurações padrão serão usadas.",
+    "PREFERENCES_INVALID_TIMEOUT": "O valor do tempo limite de geração é inválido.",
+    "SKILL_LOAD_FAILED": "Uma ou mais skills falharam ao carregar. Procure erros nos seus arquivos de skill.",
+    "EXPORTER_UNKNOWN": "Formato de exportação desconhecido.",
+    "EXPORTER_NO_CHROME": "Chrome ou Chromium não encontrado. Instale um deles para habilitar a exportação em PDF.",
+    "EXPORTER_PDF_FAILED": "A exportação em PDF falhou. Garanta que o Chrome esteja instalado e tente novamente.",
+    "EXPORTER_PPTX_FAILED": "A exportação em PowerPoint falhou.",
+    "EXPORTER_ZIP_UNSAFE_PATH": "A exportação foi bloqueada: um caminho de asset escaparia dos limites do arquivo ZIP.",
+    "EXPORTER_ZIP_FAILED": "A exportação em ZIP falhou.",
+    "OPEN_PATH_FAILED": "Não foi possível abrir a pasta ou arquivo solicitado.",
+    "RENDERER_ERROR": "Ocorreu um erro no renderer. Detalhes estão no log.",
+    "CODEX_TOKEN_NOT_LOGGED_IN": "Você não fez login na assinatura do ChatGPT. Faça login em Configurações.",
+    "CODEX_TOKEN_PARSE_FAILED": "O login local do ChatGPT está corrompido. Faça login novamente em Configurações."
+  }
+}

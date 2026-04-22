@@ -10,9 +10,10 @@ interface ModelSwitcherProps {
 }
 
 // Below this threshold the search input just adds UI chrome for no real win —
-// a user with 6 models can eyeball the list. Above it, scrolling becomes a
-// chore (community feedback: providers like DeepSeek/Zhipu return 40+ IDs).
-const SEARCH_VISIBILITY_THRESHOLD = 8;
+// a user with ~12 models can eyeball and scroll the list without filtering.
+// Above it, scrolling becomes a chore (community feedback: providers like
+// DeepSeek/Zhipu return 40+ IDs).
+const SEARCH_VISIBILITY_THRESHOLD = 12;
 
 function shortenModelLabel(model: string): string {
   const stripped = model.replace(/^(claude-|gpt-|gemini-)/, '');
@@ -182,20 +183,8 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
               : 'top-full mt-[var(--space-1)] right-0 min-w-[260px]'
           }`}
         >
-          {/* Header — show which provider preset these models belong to */}
-          {!isSidebar && (
-            <div className="px-[var(--space-3)] py-[var(--space-2)] border-b border-[var(--color-border-muted)]">
-              <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-muted)] font-medium">
-                {t('topbar.modelSwitcher.fromProvider', { defaultValue: 'Provider' })}
-              </p>
-              <p className="text-[12px] text-[var(--color-text-primary)] mt-[2px]">
-                {providerLabel}
-              </p>
-            </div>
-          )}
-
           {showSearch && (
-            <div className="relative px-[var(--space-2)] py-[var(--space-1_5)] border-b border-[var(--color-border-muted)]">
+            <div className="relative p-[var(--space-2)] border-b border-[var(--color-border-muted)]">
               <Search
                 className="absolute left-[calc(var(--space-2)+var(--space-2))] top-1/2 -translate-y-1/2 w-[var(--size-icon-xs)] h-[var(--size-icon-xs)] text-[var(--color-text-muted)] pointer-events-none"
                 aria-hidden
@@ -211,7 +200,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
                 aria-label={t('topbar.modelSwitcher.searchAriaLabel', {
                   defaultValue: 'Filter models by name',
                 })}
-                className="w-full h-[var(--size-control-xs)] pl-[calc(var(--space-2)+var(--size-icon-xs)+var(--space-1_5))] pr-[var(--space-2)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-xs)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+                className="w-full h-[var(--size-control-xs)] pl-[calc(var(--space-2)+var(--size-icon-xs)+var(--space-1_5))] pr-[calc(var(--space-2)+var(--size-icon-sm))] rounded-[var(--radius-sm)] bg-transparent border-0 text-[var(--text-xs)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-focus-ring)]"
                 style={{ fontFamily: 'var(--font-mono)' }}
               />
               {query.length > 0 && (
@@ -224,7 +213,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
                   aria-label={t('topbar.modelSwitcher.clearSearch', {
                     defaultValue: 'Clear search',
                   })}
-                  className="absolute right-[calc(var(--space-2)+var(--space-1_5))] top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+                  className="absolute right-[calc(var(--space-2)+var(--space-1))] top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
                 >
                   <X className="w-[var(--size-icon-xs)] h-[var(--size-icon-xs)]" aria-hidden />
                 </button>

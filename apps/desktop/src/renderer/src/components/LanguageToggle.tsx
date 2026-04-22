@@ -6,12 +6,17 @@ import { useEffect, useState } from 'react';
 
 const noDragStyle = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
+const LOCALE_CYCLE: Locale[] = ['en', 'zh-CN', 'pt-BR'];
+
 function nextLocale(locale: Locale): Locale {
-  return locale === 'en' ? 'zh-CN' : 'en';
+  const i = LOCALE_CYCLE.indexOf(locale);
+  return LOCALE_CYCLE[(i + 1) % LOCALE_CYCLE.length] ?? 'en';
 }
 
 function localeLabel(locale: Locale): string {
-  return locale === 'zh-CN' ? 'ZH' : 'EN';
+  if (locale === 'zh-CN') return 'ZH';
+  if (locale === 'pt-BR') return 'PT';
+  return 'EN';
 }
 
 export function LanguageToggle() {

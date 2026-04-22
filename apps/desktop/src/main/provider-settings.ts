@@ -8,7 +8,6 @@ import {
   PROVIDER_SHORTLIST,
   type ProviderEntry,
   type ReasoningLevel,
-  SUPPORTED_ONBOARDING_PROVIDERS,
   type WireApi,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
@@ -101,16 +100,6 @@ export function toProviderRows(
     ...Object.keys(cfg.providers ?? {}),
     ...Object.keys(cfg.secrets ?? {}),
   ]);
-  // Keyless builtins (e.g. Ollama) always surface as rows so users can
-  // discover + enable them without going through onboarding first. Without
-  // this, a fresh v3 install would hide Ollama entirely — the providers
-  // map gets populated lazily during onboarding, but Ollama has no
-  // onboarding step to run.
-  for (const builtinId of SUPPORTED_ONBOARDING_PROVIDERS) {
-    if (BUILTIN_PROVIDERS[builtinId].requiresApiKey === false) {
-      allIds.add(builtinId);
-    }
-  }
   for (const provider of allIds) {
     const ref = cfg.secrets?.[provider];
     const entry = resolveEntryFor(cfg, provider);

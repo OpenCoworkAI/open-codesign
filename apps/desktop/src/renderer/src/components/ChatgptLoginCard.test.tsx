@@ -57,6 +57,7 @@ describe('performLogin', () => {
     const api = {
       status: vi.fn(),
       login: vi.fn().mockResolvedValue(next),
+      cancelLogin: vi.fn(),
       logout: vi.fn(),
     };
     const setStatus = vi.fn();
@@ -85,6 +86,7 @@ describe('performLogin', () => {
     const api = {
       status: vi.fn(),
       login: vi.fn().mockRejectedValue(new Error('network down')),
+      cancelLogin: vi.fn(),
       logout: vi.fn(),
     };
     const setStatus = vi.fn();
@@ -99,6 +101,24 @@ describe('performLogin', () => {
       expect.objectContaining({ variant: 'error', description: 'network down' }),
     );
   });
+
+  it('silently resets loading when login is cancelled by the user', async () => {
+    const api = {
+      status: vi.fn(),
+      login: vi.fn().mockRejectedValue(new Error('Codex login cancelled')),
+      cancelLogin: vi.fn(),
+      logout: vi.fn(),
+    };
+    const setStatus = vi.fn();
+    const setLoading = vi.fn();
+    const pushToast = vi.fn();
+
+    await performLogin({ api, setStatus, setLoading, pushToast, strings: LOGIN_STRINGS });
+
+    expect(setStatus).not.toHaveBeenCalled();
+    expect(pushToast).not.toHaveBeenCalled();
+    expect(setLoading).toHaveBeenNthCalledWith(2, false);
+  });
 });
 
 describe('performLogout', () => {
@@ -106,6 +126,7 @@ describe('performLogout', () => {
     const api = {
       status: vi.fn(),
       login: vi.fn(),
+      cancelLogin: vi.fn(),
       logout: vi.fn().mockResolvedValue(statusLoggedOut()),
     };
     const setStatus = vi.fn();
@@ -130,6 +151,7 @@ describe('performLogout', () => {
     const api = {
       status: vi.fn(),
       login: vi.fn(),
+      cancelLogin: vi.fn(),
       logout: vi.fn().mockResolvedValue(next),
     };
     const setStatus = vi.fn();
@@ -157,6 +179,7 @@ describe('performLogout', () => {
     const api = {
       status: vi.fn(),
       login: vi.fn(),
+      cancelLogin: vi.fn(),
       logout: vi.fn().mockRejectedValue(new Error('revoke failed')),
     };
     const setStatus = vi.fn();
@@ -184,6 +207,7 @@ describe('performFetchStatus', () => {
     const api = {
       status: vi.fn().mockResolvedValue(next),
       login: vi.fn(),
+      cancelLogin: vi.fn(),
       logout: vi.fn(),
     };
     const setStatus = vi.fn();
@@ -209,6 +233,7 @@ describe('performFetchStatus', () => {
     const api = {
       status: vi.fn().mockRejectedValue(new Error('IPC backend crashed')),
       login: vi.fn(),
+      cancelLogin: vi.fn(),
       logout: vi.fn(),
     };
     const setStatus = vi.fn();
@@ -236,6 +261,7 @@ describe('performFetchStatus', () => {
     const api = {
       status: vi.fn().mockResolvedValue(statusLoggedIn()),
       login: vi.fn(),
+      cancelLogin: vi.fn(),
       logout: vi.fn(),
     };
     const setStatus = vi.fn();
@@ -259,6 +285,7 @@ describe('performFetchStatus', () => {
     const api = {
       status: vi.fn().mockRejectedValue(new Error('boom')),
       login: vi.fn(),
+      cancelLogin: vi.fn(),
       logout: vi.fn(),
     };
     const setStatus = vi.fn();
@@ -280,6 +307,7 @@ describe('performFetchStatus', () => {
     const api = {
       status: vi.fn().mockRejectedValue('broken string'),
       login: vi.fn(),
+      cancelLogin: vi.fn(),
       logout: vi.fn(),
     };
     const pushToast = vi.fn();

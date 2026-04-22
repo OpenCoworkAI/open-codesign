@@ -40,7 +40,7 @@ describe('Tooltip', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeDefined();
   });
 
-  it('reveals tooltip on hover via group-hover class', async () => {
+  it('reveals tooltip on hover via named group classes', async () => {
     const user = userEvent.setup();
     render(
       <Tooltip label="Hover me">
@@ -50,7 +50,7 @@ describe('Tooltip', () => {
 
     const tooltip = screen.getByRole('tooltip');
     expect(tooltip.className).toContain('opacity-0');
-    expect(tooltip.className).toContain('group-hover:opacity-100');
+    expect(tooltip.className).toContain('group-hover/tooltip:opacity-100');
 
     await user.hover(screen.getByRole('button', { name: 'Send' }));
     expect(screen.getByRole('tooltip')).toBeDefined();
@@ -168,8 +168,8 @@ describe('Tooltip', () => {
     );
 
     const tooltip = screen.getByRole('tooltip');
-    expect(tooltip.className).toContain('group-focus-within:opacity-100');
-    expect(tooltip.className).toContain('group-focus:opacity-100');
+    expect(tooltip.className).toContain('group-focus-within/tooltip:opacity-100');
+    expect(tooltip.className).toContain('group-focus/tooltip:opacity-100');
 
     screen.getByRole('button', { name: 'Before' }).focus();
     await user.tab();

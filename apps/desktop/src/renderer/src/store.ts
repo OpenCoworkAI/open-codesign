@@ -100,6 +100,13 @@ export interface ReportableErrorToastSpec {
   stack?: string;
   runId?: string;
   context?: Record<string, unknown>;
+  /**
+   * When false, the toast is shown without recording a ReportableError,
+   * so the Toast UI does NOT render the "Report" button. Use this for
+   * expected user-facing errors (missing config files, declined imports)
+   * where prompting the user to file a bug report would just be noise.
+   */
+  reportable?: boolean;
 }
 
 export type Theme = 'light' | 'dark';
@@ -2074,6 +2081,14 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   },
 
   reportableErrorToast(spec) {
+    if (spec.reportable === false) {
+      return get().pushToast({
+        variant: 'error',
+        title: spec.title,
+        ...(spec.description !== undefined ? { description: spec.description } : {}),
+        ...(spec.action !== undefined ? { action: spec.action } : {}),
+      });
+    }
     const localId = get().createReportableError({
       code: spec.code,
       scope: spec.scope,

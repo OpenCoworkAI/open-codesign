@@ -24,6 +24,7 @@ export function resolveViewState(
 interface CodexOAuthApi {
   status(): Promise<CodexOAuthStatus>;
   login(): Promise<CodexOAuthStatus>;
+  cancelLogin(): Promise<boolean>;
   logout(): Promise<CodexOAuthStatus>;
 }
 
@@ -38,6 +39,11 @@ export interface PerformLoginDeps {
   strings: { failedTitle: string; unknownError: string };
 }
 
+function isCodexLoginCancelledError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /Codex login cancelled|Codex OAuth callback aborted/.test(err.message);
+}
+
 export async function performLogin(deps: PerformLoginDeps): Promise<void> {
   deps.setLoading(true);
   try {
@@ -45,6 +51,7 @@ export async function performLogin(deps: PerformLoginDeps): Promise<void> {
     deps.setStatus(next);
     await deps.onStatusChange?.();
   } catch (err) {
+    if (isCodexLoginCancelledError(err)) return;
     deps.pushToast({
       variant: 'error',
       title: deps.strings.failedTitle,
@@ -157,9 +164,12 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
     });
   }, [onStatusChange, pushToast, t]);
 
-  const handleCancel = useCallback(() => {
-    // User manually cancelled after closing browser - reset loading state
-    if (mountedRef.current) setLoading(false);
+  const handleCancel = useCallback(async () => {
+    if (!window.codesign) return;
+    const cancelled = await window.codesign.codexOAuth.cancelLogin();
+    // When cancellation succeeds, the in-flight login promise will settle
+    // immediately and clear loading via performLogin's finally block.
+    if (!cancelled && mountedRef.current) setLoading(false);
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -223,7 +233,7 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
               <Loader2 className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] animate-spin" />
               {t('settings.providers.chatgptLogin.inProgress')}
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleCancel}>
+            <Button variant="secondary" size="sm" onClick={() => void handleCancel()}>
               {t('common.cancel')}
             </Button>
           </>

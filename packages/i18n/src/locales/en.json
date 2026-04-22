@@ -127,7 +127,11 @@
       "youLabel": "You",
       "claudeLabel": "Claude",
       "noModel": "No model selected",
+      "addMenu": {
+        "trigger": "Add context"
+      },
       "thinking": "Thinking",
+      "streamingLabel": "Assistant is typing",
       "tokensLine": "~{{count}} tokens",
       "artifactDelivered": "delivered",
       "artifactDefaultLabel": "design.html",
@@ -211,6 +215,8 @@
         "apiKey": "API Key",
         "apiKeyEditPlaceholder": "Leave empty to keep {{mask}}",
         "defaultModel": "Default model",
+        "switchToManual": "Enter manually",
+        "switchToDropdown": "Pick from list",
         "test": "Test connection",
         "testOk": "OK — {{count}} models available",
         "save": "Save & continue",
@@ -258,6 +264,9 @@
         "codexMenuDesc": "Read ~/.codex/config.toml",
         "claudeCodeMenu": "Import from Claude Code",
         "claudeCodeMenuDesc": "Read the signed-in Claude Code session",
+        "ollamaMenu": "Ollama (local)",
+        "ollamaMenuDesc": "Add the local localhost:11434 provider",
+        "ollamaDone": "Ollama provider added",
         "customMenu": "Custom provider",
         "customMenuDesc": "Enter API key and URL manually",
         "alreadyImported": "Already imported"
@@ -287,11 +296,21 @@
         "switchedTo": "Switched to {{label}}",
         "switchFailed": "Switch failed",
         "saved": "Provider saved",
+        "saveFailed": "Failed to save provider",
         "modelSaveFailed": "Failed to save model selection",
         "reasoningSaved": "Reasoning depth saved",
         "reasoningSaveFailed": "Failed to save reasoning depth",
         "connectionOk": "Connection OK",
         "connectionFailed": "Connection failed"
+      },
+      "cliProxyApi": {
+        "presetName": "CLIProxyAPI",
+        "presetDescription": "Local proxy that wraps Claude/Codex/Gemini OAuth subscriptions",
+        "apiKeyOptional": "API key only required if you configured `api-keys` in CPA config.yaml",
+        "thinkingHint": "Tip: append `(high)` / `(xhigh)` / `(8192)` to model name to control thinking budget",
+        "discoveringModels": "Discovering models...",
+        "discoveredModels": "Found {{count}} models",
+        "discoveryFailed": "Could not connect to CPA"
       },
       "reasoning": {
         "label": "Reasoning depth",
@@ -314,7 +333,8 @@
       "languageHint": "Language changes take effect immediately.",
       "languageLoadFailed": "Failed to load language",
       "langEn": "English",
-      "langZhCN": "中文 (简体)"
+      "langZhCN": "中文 (简体)",
+      "langPtBR": "Português (BR)"
     },
     "language": {
       "label": "Language",
@@ -1014,6 +1034,8 @@
     "PROVIDER_ABORTED": "Generation was cancelled.",
     "PROVIDER_RETRY_EXHAUSTED": "The provider failed after several retries. Check your connection and try again.",
     "CLAUDE_CODE_OAUTH_ONLY": "Your Claude Code login uses an Anthropic subscription (Pro/Max). Third-party apps cannot reuse the subscription quota — generate an API key at console.anthropic.com and use it here.",
+    "CODEX_TOKEN_PARSE_FAILED": "Local ChatGPT login is corrupted. Please re-login in Settings.",
+    "CODEX_TOKEN_NOT_LOGGED_IN": "ChatGPT subscription is not signed in. Please log in via Settings.",
     "INPUT_EMPTY_PROMPT": "The prompt cannot be empty.",
     "INPUT_EMPTY_COMMENT": "The comment cannot be empty.",
     "INPUT_EMPTY_HTML": "Existing HTML is required for this operation.",

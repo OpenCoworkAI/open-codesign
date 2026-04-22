@@ -132,7 +132,7 @@ export async function startCallbackServer(preferredPort?: number): Promise<Callb
       const timeout = setTimeout(() => {
         settle();
         pending = null;
-        reject(new Error('Codex OAuth callback timeout (5 minutes)'));
+        reject(new Error('Codex OAuth callback timeout (2 minutes)'));
       }, CALLBACK_TIMEOUT_MS);
 
       const onAbort = () => {

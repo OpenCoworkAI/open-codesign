@@ -247,13 +247,17 @@ function parseSaveKey(raw: unknown): SaveKeyInput {
       ERROR_CODES.IPC_BAD_INPUT,
     );
   }
-  if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+  const providerId = provider.trim();
+  const isKeylessBuiltin =
+    isSupportedOnboardingProvider(providerId) &&
+    BUILTIN_PROVIDERS[providerId].requiresApiKey === false;
+  if (typeof apiKey !== 'string' || (apiKey.trim().length === 0 && !isKeylessBuiltin)) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof modelPrimary !== 'string' || modelPrimary.trim().length === 0) {
     throw new CodesignError('modelPrimary must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
-  const out: SaveKeyInput = { provider, apiKey, modelPrimary };
+  const out: SaveKeyInput = { provider: providerId, apiKey: apiKey.trim(), modelPrimary };
   if (typeof baseUrl === 'string' && baseUrl.trim().length > 0) {
     try {
       new URL(baseUrl);
@@ -336,7 +340,6 @@ function parseSetProviderAndModels(raw: unknown): SetProviderAndModelsInput {
  * after Settings mutations.
  */
 async function runSetProviderAndModels(input: SetProviderAndModelsInput): Promise<OnboardingState> {
-  const secretRef = buildSecretRef(input.apiKey);
   const nextProviders: Record<string, ProviderEntry> = { ...(cachedConfig?.providers ?? {}) };
   const existing = nextProviders[input.provider];
   const builtin = BUILTIN_PROVIDERS[input.provider as SupportedOnboardingProvider];
@@ -354,10 +357,12 @@ async function runSetProviderAndModels(input: SetProviderAndModelsInput): Promis
     baseUrl: input.baseUrl ?? seed.baseUrl,
     defaultModel: input.modelPrimary || seed.defaultModel,
   };
-  const nextSecrets = {
-    ...(cachedConfig?.secrets ?? {}),
-    [input.provider]: secretRef,
-  };
+  const nextSecrets = { ...(cachedConfig?.secrets ?? {}) };
+  if (input.apiKey.length > 0) {
+    nextSecrets[input.provider] = buildSecretRef(input.apiKey);
+  } else {
+    delete nextSecrets[input.provider];
+  }
   const activate = input.setAsActive || cachedConfig === null;
   const nextActiveProvider = activate
     ? input.provider
