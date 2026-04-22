@@ -341,7 +341,7 @@
     }
   },
   "updates": {
-    "bannerAvailable": "Open CoDesign {{version}} is available.",
+    "bannerAvailable": "{{appName}} {{version}} is available.",
     "bannerViewRelease": "View release",
     "bannerDismissAria": "Dismiss update banner"
   },

@@ -231,16 +231,6 @@ const api = {
     ipcRenderer.on('codesign:update-available', listener);
     return () => ipcRenderer.removeListener('codesign:update-available', listener);
   },
-  onUpdateNotAvailable: (cb: (info: unknown) => void) => {
-    const listener = (_e: unknown, info: unknown) => cb(info);
-    ipcRenderer.on('codesign:update-not-available', listener);
-    return () => ipcRenderer.removeListener('codesign:update-not-available', listener);
-  },
-  onUpdateError: (cb: (message: string) => void) => {
-    const listener = (_e: unknown, message: string) => cb(message);
-    ipcRenderer.on('codesign:update-error', listener);
-    return () => ipcRenderer.removeListener('codesign:update-error', listener);
-  },
   onboarding: {
     getState: () => ipcRenderer.invoke('onboarding:get-state') as Promise<OnboardingState>,
     validateKey: (input: {

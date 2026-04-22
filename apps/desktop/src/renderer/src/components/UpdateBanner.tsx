@@ -1,4 +1,5 @@
 import { useT } from '@open-codesign/i18n';
+import { BRAND } from '@open-codesign/shared';
 import { X } from 'lucide-react';
 import type { StoreApi } from 'zustand';
 import { useStore } from 'zustand';
@@ -38,10 +39,15 @@ export function UpdateBanner({ store }: { store: StoreApi<UpdateState> }) {
   };
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-muted)] px-4 py-2 text-[var(--text-sm)] text-[var(--color-text-secondary)]">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-muted)] px-4 py-2 text-[var(--text-sm)] text-[var(--color-text-secondary)]"
+    >
       <span>
         <strong className="text-[var(--color-text-primary)]">
-          {t('updates.bannerAvailable', { version })}
+          {t('updates.bannerAvailable', { appName: BRAND.appName, version })}
         </strong>{' '}
         <button
           type="button"

@@ -901,15 +901,11 @@ function setupAutoUpdater(): void {
     pendingUpdateAvailable = info;
     mainWindow?.webContents.send('codesign:update-available', info);
   });
-  autoUpdater.on('update-not-available', (info) => {
-    mainWindow?.webContents.send('codesign:update-not-available', info);
-  });
   autoUpdater.on('error', (err) => {
     getLogger('main:updates').error('autoUpdater.error', {
       message: err.message,
       stack: err.stack,
     });
-    mainWindow?.webContents.send('codesign:update-error', err.message);
   });
   ipcMain.handle('codesign:check-for-updates', () => autoUpdater.checkForUpdates());
   ipcMain.handle('codesign:download-update', () => autoUpdater.downloadUpdate());

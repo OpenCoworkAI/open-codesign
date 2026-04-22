@@ -2,6 +2,12 @@ import { useEffect } from 'react';
 import type { StoreApi } from 'zustand';
 import type { UpdateState } from '../state/update-store';
 
+const VERSION_RE = /^\d+\.\d+\.\d+(?:-[\w.]+)?(?:\+[\w.]+)?$/;
+
+export function isValidVersion(v: string): boolean {
+  return VERSION_RE.test(v);
+}
+
 export function useUpdateWiring(store: StoreApi<UpdateState> | null): void {
   useEffect(() => {
     if (!store) return;
@@ -13,19 +19,13 @@ export function useUpdateWiring(store: StoreApi<UpdateState> | null): void {
     const offAvail = window.codesign.onUpdateAvailable((info) => {
       const typed = info as { version?: string };
       const version = typed.version ?? '';
-      if (!version || !/^\d+\.\d+\.\d+(?:-[\w.]+)?(?:\+[\w.]+)?$/.test(version)) return;
+      if (!version || !isValidVersion(version)) return;
       const releaseUrl = `https://github.com/OpenCoworkAI/open-codesign/releases/tag/v${version}`;
       store.getState().setAvailable({ version, releaseUrl });
     });
 
-    const offLatest = window.codesign.onUpdateNotAvailable(() => store.getState().setLatest());
-
-    const offError = window.codesign.onUpdateError((msg) => store.getState().setError(msg));
-
     return () => {
       offAvail();
-      offLatest();
-      offError();
     };
   }, [store]);
 }

@@ -344,7 +344,7 @@
     }
   },
   "updates": {
-    "bannerAvailable": "Open CoDesign {{version}} 可用。",
+    "bannerAvailable": "{{appName}} {{version}} 可用。",
     "bannerViewRelease": "查看版本",
     "bannerDismissAria": "关闭更新提示"
   },
