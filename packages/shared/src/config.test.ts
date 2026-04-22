@@ -38,6 +38,29 @@ describe('config v3 schema', () => {
     };
     expect(() => ConfigV3Schema.parse(bad)).toThrow();
   });
+
+  it('parses schema-versioned image generation settings', () => {
+    const parsed = ConfigV3Schema.parse({
+      version: 3,
+      activeProvider: 'openai',
+      activeModel: 'gpt-4o',
+      secrets: {},
+      providers: {
+        openai: BUILTIN_PROVIDERS.openai,
+      },
+      imageGeneration: {
+        schemaVersion: 1,
+        enabled: true,
+        provider: 'openrouter',
+        credentialMode: 'custom',
+        model: 'openai/gpt-5.4-image-2',
+        apiKey: { ciphertext: 'plain:sk-test', mask: 'sk-***test' },
+      },
+    });
+    expect(parsed.imageGeneration?.enabled).toBe(true);
+    expect(parsed.imageGeneration?.quality).toBe('high');
+    expect(parsed.imageGeneration?.size).toBe('1536x1024');
+  });
 });
 
 describe('migrateLegacyToV3', () => {
@@ -174,5 +197,26 @@ describe('hydrateConfig / toPersistedV3', () => {
     expect(persisted).not.toHaveProperty('provider');
     expect(persisted).not.toHaveProperty('baseUrls');
     expect(persisted.version).toBe(3);
+  });
+
+  it('preserves image generation settings when stripping derived fields', () => {
+    const hydrated = hydrateConfig({
+      version: 3,
+      activeProvider: 'openai',
+      activeModel: 'gpt-4o',
+      secrets: {},
+      providers: { openai: BUILTIN_PROVIDERS.openai },
+      imageGeneration: {
+        schemaVersion: 1,
+        enabled: true,
+        provider: 'openai',
+        credentialMode: 'inherit',
+        model: 'gpt-image-2',
+        quality: 'high',
+        size: '1536x1024',
+        outputFormat: 'png',
+      },
+    });
+    expect(toPersistedV3(hydrated).imageGeneration?.model).toBe('gpt-image-2');
   });
 });

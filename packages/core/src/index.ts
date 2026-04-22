@@ -45,6 +45,13 @@ export { makeSetTodosTool, type SetTodosDetails } from './tools/set-todos.js';
 export { makeListFilesTool, type ListFilesDetails } from './tools/list-files.js';
 export { makeReadUrlTool, type ReadUrlDetails } from './tools/read-url.js';
 export {
+  makeGenerateImageAssetTool,
+  type GenerateImageAssetDetails,
+  type GenerateImageAssetFn,
+  type GenerateImageAssetRequest,
+  type GenerateImageAssetResult,
+} from './tools/generate-image-asset.js';
+export {
   makeReadDesignSystemTool,
   type ReadDesignSystemDetails,
 } from './tools/read-design-system.js';

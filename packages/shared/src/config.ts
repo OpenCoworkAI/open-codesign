@@ -82,6 +82,37 @@ export type StoredDesignSystem = z.infer<typeof StoredDesignSystem>;
 export const ReasoningLevelSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']);
 export type ReasoningLevel = z.infer<typeof ReasoningLevelSchema>;
 
+export const IMAGE_GENERATION_SCHEMA_VERSION = 1 as const;
+
+export const ImageGenerationProviderSchema = z.enum(['openai', 'openrouter']);
+export type ImageGenerationProvider = z.infer<typeof ImageGenerationProviderSchema>;
+
+export const ImageGenerationCredentialModeSchema = z.enum(['inherit', 'custom']);
+export type ImageGenerationCredentialMode = z.infer<typeof ImageGenerationCredentialModeSchema>;
+
+export const ImageGenerationQualitySchema = z.enum(['auto', 'low', 'medium', 'high']);
+export type ImageGenerationQuality = z.infer<typeof ImageGenerationQualitySchema>;
+
+export const ImageGenerationSizeSchema = z.enum(['auto', '1024x1024', '1536x1024', '1024x1536']);
+export type ImageGenerationSize = z.infer<typeof ImageGenerationSizeSchema>;
+
+export const ImageGenerationOutputFormatSchema = z.enum(['png', 'jpeg', 'webp']);
+export type ImageGenerationOutputFormat = z.infer<typeof ImageGenerationOutputFormatSchema>;
+
+export const ImageGenerationSettingsSchema = z.object({
+  schemaVersion: z.literal(IMAGE_GENERATION_SCHEMA_VERSION),
+  enabled: z.boolean().default(false),
+  provider: ImageGenerationProviderSchema.default('openai'),
+  credentialMode: ImageGenerationCredentialModeSchema.default('inherit'),
+  model: z.string().min(1).default('gpt-image-2'),
+  baseUrl: z.string().url().optional(),
+  apiKey: SecretRef.optional(),
+  quality: ImageGenerationQualitySchema.default('high'),
+  size: ImageGenerationSizeSchema.default('1536x1024'),
+  outputFormat: ImageGenerationOutputFormatSchema.default('png'),
+});
+export type ImageGenerationSettings = z.infer<typeof ImageGenerationSettingsSchema>;
+
 export const ProviderEntrySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -172,6 +203,7 @@ export const ConfigV3Schema = z.object({
   secrets: z.record(z.string(), SecretRef).default({}),
   providers: z.record(z.string(), ProviderEntrySchema).default({}),
   designSystem: StoredDesignSystem.optional(),
+  imageGeneration: ImageGenerationSettingsSchema.optional(),
 });
 export type ConfigV3 = z.infer<typeof ConfigV3Schema>;
 
@@ -285,6 +317,7 @@ export function toPersistedV3(cfg: Config | ConfigV3): ConfigV3 {
     secrets: cfg.secrets,
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...(cfg.imageGeneration !== undefined ? { imageGeneration: cfg.imageGeneration } : {}),
   };
 }
 

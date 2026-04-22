@@ -59,6 +59,10 @@ import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt } from './prompts/index.js';
 import { makeDeclareTweakSchemaTool } from './tools/declare-tweak-schema.js';
 import { type DoneRuntimeVerifier, makeDoneTool } from './tools/done.js';
+import {
+  type GenerateImageAssetFn,
+  makeGenerateImageAssetTool,
+} from './tools/generate-image-asset.js';
 import { makeListFilesTool } from './tools/list-files.js';
 import { makeReadDesignSystemTool } from './tools/read-design-system.js';
 import { makeReadUrlTool } from './tools/read-url.js';
@@ -595,6 +599,21 @@ const AGENTIC_TOOL_GUIDANCE = [
   'italic serif numbers visually collide and feel low-quality.',
 ].join('\n');
 
+const IMAGE_ASSET_TOOL_GUIDANCE = [
+  '## Bitmap asset generation',
+  '',
+  'You also have `generate_image_asset` for high-quality bitmap assets.',
+  'Use it when the brief asks for, or clearly benefits from, a generated hero image, product image, poster illustration, painterly/photo background, marketing visual, or brand/logo-like bitmap.',
+  '',
+  'Do NOT call it for simple icons, charts, decorative gradients, UI controls, geometric patterns, or anything better made with HTML/CSS/SVG.',
+  '',
+  'When you use it:',
+  '- Call it with a production-ready visual prompt: subject, medium/style, composition, lighting, palette, and any text constraints.',
+  '- Use the returned local `assets/...` path in `index.html`, e.g. `<img src="assets/hero.png" alt="...">` or `backgroundImage: "url(\'assets/hero.png\')"`. The host resolves those local paths for preview and persistence.',
+  '- Keep alt text concise and meaningful.',
+  '- Prefer one strong asset over many weak assets unless the user explicitly asks for a set.',
+].join('\n');
+
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -635,6 +654,12 @@ export interface GenerateViaAgentDeps {
    * to static lint only.
    */
   runtimeVerify?: DoneRuntimeVerifier | undefined;
+  /**
+   * Optional bitmap asset generator. When provided, the default toolset adds
+   * `generate_image_asset`; the main design agent decides when a hero/product/
+   * poster/background asset is worth generating.
+   */
+  generateImageAsset?: GenerateImageAssetFn | undefined;
 }
 
 /**
@@ -724,10 +749,21 @@ export async function generateViaAgent(
       makeDoneTool(deps.fs, deps.runtimeVerify) as unknown as AgentTool<TSchema, unknown>,
     );
   }
+  if (deps.generateImageAsset) {
+    defaultTools.push(
+      makeGenerateImageAssetTool(deps.generateImageAsset, deps.fs) as unknown as AgentTool<
+        TSchema,
+        unknown
+      >,
+    );
+  }
   const tools = deps.tools ?? defaultTools;
   const encourageToolUse = deps.encourageToolUse ?? tools.length > 0;
+  const activeGuidance = deps.generateImageAsset
+    ? `${AGENTIC_TOOL_GUIDANCE}\n\n${IMAGE_ASSET_TOOL_GUIDANCE}`
+    : AGENTIC_TOOL_GUIDANCE;
   const augmentedSystemPrompt = encourageToolUse
-    ? `${systemPrompt}\n\n${AGENTIC_TOOL_GUIDANCE}`
+    ? `${systemPrompt}\n\n${activeGuidance}`
     : systemPrompt;
 
   // Seed the transcript with prior history (already in ChatMessage shape).
