@@ -18,7 +18,12 @@ export interface ProviderRow {
   maskedKey: string;
   baseUrl: string | null;
   isActive: boolean;
+  /** Human-readable display label. For codex-imported rows this is the
+   *  UI alias "Codex (imported)", not the stored entry name. */
   label: string;
+  /** Actual stored provider name — the value that round-trips through
+   *  updateProvider. Differs from `label` for codex rows. */
+  name: string;
   builtin: boolean;
   wire: WireApi;
   defaultModel: string;
@@ -141,6 +146,10 @@ export function toProviderRows(
       baseUrl: entry?.baseUrl ?? null,
       isActive: cfg.activeProvider === provider,
       label,
+      // The real stored name (or the builtin default) — used by the edit
+      // modal so a codex-imported row doesn't overwrite `entry.name` with
+      // the display alias "Codex (imported)" on save.
+      name: entry?.name ?? label,
       builtin: entry?.builtin ?? isSupportedOnboardingProvider(provider),
       wire: entry?.wire ?? 'openai-chat',
       defaultModel:

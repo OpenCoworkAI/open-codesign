@@ -1146,7 +1146,7 @@ function ModelsTab() {
           onClose={() => setEditingRow(null)}
           editTarget={{
             id: editingRow.provider,
-            name: editingRow.label,
+            name: editingRow.name,
             baseUrl: editingRow.baseUrl ?? '',
             wire: editingRow.wire,
             defaultModel: editingRow.defaultModel,

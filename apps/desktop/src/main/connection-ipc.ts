@@ -249,10 +249,13 @@ export function extractIds(items: unknown[]): string[] | null {
   for (const item of items) {
     if (item && typeof item === 'object') {
       const rec = item as { id?: unknown; name?: unknown };
-      // OpenAI/Anthropic use `id`; Ollama's /api/tags uses `name` (e.g.
-      // "llama3.2:latest"). Accept either so a user who points the custom
-      // provider at http://localhost:11434 (no /v1 suffix) still gets a
-      // model list instead of a PARSE error.
+      // OpenAI/Anthropic/OpenRouter all return a canonical `id` string; we
+      // prefer it unconditionally. The `name` fallback exists solely for
+      // Ollama's /api/tags shape (`{models: [{ name: "llama3.2:latest" }]}`)
+      // which has no `id` field. No known API-key provider returns objects
+      // with `name` but no `id`, so this fallback never silently misroutes
+      // for existing providers — but a future provider that ships display
+      // names without ids would also land here.
       if (typeof rec.id === 'string') {
         ids.push(rec.id);
         continue;
@@ -781,12 +784,30 @@ export type OllamaProbeResponse =
   | { ok: false; code: string; message: string };
 
 function parseOllamaProbePayload(raw: unknown): string {
-  if (raw === undefined || raw === null) return 'http://localhost:11434';
-  if (typeof raw === 'string' && raw.trim().length > 0) {
-    // Strip any /v1 suffix — /api/tags lives at the root.
-    return raw.trim().replace(/\/v1\/?$/, '');
+  const DEFAULT_BASE_URL = 'http://localhost:11434';
+  if (typeof raw !== 'string') return DEFAULT_BASE_URL;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return DEFAULT_BASE_URL;
+  // Auto-prefix scheme so users who paste "localhost:11434" or "[::1]:11434"
+  // don't get a confusing "not running" probe failure. `fetch` requires a
+  // full URL — a missing scheme is a far more common user typo than a real
+  // security-sensitive input.
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  // Reject anything that isn't http(s) — covers file://, ftp://, javascript:,
+  // and accidental paste of an Anthropic key prefix. We deliberately do NOT
+  // restrict to loopback because some users run Ollama on a LAN box; the
+  // threat model is the same as config:v1:test-endpoint (renderer is trusted,
+  // main-process fetch is the intended egress path for BYOK).
+  try {
+    const parsed = new URL(withScheme);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return DEFAULT_BASE_URL;
+    }
+  } catch {
+    return DEFAULT_BASE_URL;
   }
-  return 'http://localhost:11434';
+  // Strip any /v1 suffix — /api/tags lives at the root.
+  return withScheme.replace(/\/+$/, '').replace(/\/v1$/, '');
 }
 
 interface TestEndpointPayload {

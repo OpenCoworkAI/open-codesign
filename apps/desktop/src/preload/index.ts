@@ -58,6 +58,9 @@ export interface ProviderRow {
   baseUrl: string | null;
   isActive: boolean;
   label: string;
+  /** Stored entry name — differs from `label` for codex-imported rows
+   *  where `label` is the localized alias "Codex (imported)". */
+  name: string;
   builtin: boolean;
   wire: WireApi;
   defaultModel: string;
