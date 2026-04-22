@@ -23,7 +23,7 @@ import {
   Sliders,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppPaths, Preferences, ProviderRow, StorageKind } from '../../../preload/index';
 import { recordAction } from '../lib/action-timeline';
 import { useCodesignStore } from '../store';
@@ -483,8 +483,16 @@ function RowModelSelector({
     });
   }
 
-  const options =
-    models !== null && models.length > 0 ? models.map((m) => ({ value: m, label: m })) : null;
+  const notInListSuffix = t('settings.providers.activeNotInList');
+  const options = useMemo(
+    () =>
+      computeModelOptions({
+        models,
+        activeModelId: isActive ? primary : null,
+        notInListSuffix,
+      }),
+    [models, isActive, primary, notInListSuffix],
+  );
 
   return (
     <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
@@ -1591,6 +1599,33 @@ export async function applyLocaleChange(
   const persisted = await localeApi.set(locale);
   const applied = await applyLocale(persisted);
   return applied;
+}
+
+/**
+ * Build the <select> options for the active-provider model dropdown.
+ *
+ * The /models endpoint may return a partial list (or none at all), and the
+ * active model id may have been set via TOML import or a previous list that
+ * the gateway no longer returns. If the active id is not in `models`, the
+ * native <select> would silently fall back to options[0] and lie about which
+ * model is in use (issue #136). Pin the active id at the top with a hint so
+ * the UI always matches reality.
+ *
+ * Returns null when there is nothing to render (loading completed, no models,
+ * no active id) so the caller can fall back to a plain text label.
+ */
+export function computeModelOptions(input: {
+  models: string[] | null;
+  activeModelId: string | null;
+  notInListSuffix: string;
+}): { value: string; label: string }[] | null {
+  const { models, activeModelId, notInListSuffix } = input;
+  if (models === null || models.length === 0) return null;
+  const base = models.map((m) => ({ value: m, label: m }));
+  if (activeModelId && !models.includes(activeModelId)) {
+    return [{ value: activeModelId, label: `${activeModelId} ${notInListSuffix}` }, ...base];
+  }
+  return base;
 }
 
 function AppearanceTab() {

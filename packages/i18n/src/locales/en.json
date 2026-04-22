@@ -187,6 +187,7 @@
       "addCustom": "Add custom",
       "empty": "No providers configured yet. Add one to start generating.",
       "active": "Active",
+      "activeNotInList": "(active, not in provider list)",
       "decryptionFailed": "Decryption failed",
       "setActive": "Set active",
       "reEnterKey": "Re-enter key",

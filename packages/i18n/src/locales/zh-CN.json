@@ -187,6 +187,7 @@
       "addCustom": "添加自定义",
       "empty": "还没有配置任何服务，添加一个即可开始生成。",
       "active": "当前",
+      "activeNotInList": "（当前，不在服务返回的列表中）",
       "decryptionFailed": "解密失败",
       "setActive": "设为当前",
       "reEnterKey": "重新输入 Key",
