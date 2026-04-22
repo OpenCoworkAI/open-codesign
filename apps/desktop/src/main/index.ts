@@ -314,23 +314,59 @@ function registerIpcHandlers(db: Database | null): void {
     }
     const cfg = getCachedConfig();
     const imageConfig = cfg ? resolveImageGenerationConfig(cfg) : null;
+    const imageLog = getLogger('image-generation');
     const generateImageAsset = imageConfig
       ? async (
           request: GenerateImageAssetRequest,
           signal?: AbortSignal,
         ): Promise<GenerateImageAssetResult> => {
-          const image = await generateImage(
-            toGenerateImageOptions(imageConfig, request.prompt, signal),
+          const started = Date.now();
+          const options = toGenerateImageOptions(
+            imageConfig,
+            request.prompt,
+            signal,
+            request.aspectRatio,
           );
-          const path = allocateAssetPath(fsMap, request, image.mimeType);
-          return {
-            path,
-            dataUrl: image.dataUrl,
-            mimeType: image.mimeType,
-            model: image.model,
-            provider: image.provider,
-            ...(image.revisedPrompt !== undefined ? { revisedPrompt: image.revisedPrompt } : {}),
-          };
+          imageLog.info('provider.request', {
+            generationId: id,
+            provider: options.provider,
+            model: options.model,
+            size: options.size,
+            aspectRatio: request.aspectRatio ?? 'default',
+            purpose: request.purpose,
+            quality: options.quality,
+            outputFormat: options.outputFormat,
+            promptChars: options.prompt.length,
+          });
+          try {
+            const image = await generateImage(options);
+            const path = allocateAssetPath(fsMap, request, image.mimeType);
+            imageLog.info('provider.ok', {
+              generationId: id,
+              provider: image.provider,
+              model: image.model,
+              path,
+              ms: Date.now() - started,
+              revised: image.revisedPrompt !== undefined,
+            });
+            return {
+              path,
+              dataUrl: image.dataUrl,
+              mimeType: image.mimeType,
+              model: image.model,
+              provider: image.provider,
+              ...(image.revisedPrompt !== undefined ? { revisedPrompt: image.revisedPrompt } : {}),
+            };
+          } catch (err) {
+            imageLog.warn('provider.fail', {
+              generationId: id,
+              provider: options.provider,
+              model: options.model,
+              ms: Date.now() - started,
+              message: err instanceof Error ? err.message : String(err),
+            });
+            throw err;
+          }
         }
       : undefined;
     // Seed the virtual fs with optional device-frame starter templates. The

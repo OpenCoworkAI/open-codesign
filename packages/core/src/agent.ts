@@ -605,13 +605,29 @@ const IMAGE_ASSET_TOOL_GUIDANCE = [
   'You also have `generate_image_asset` for high-quality bitmap assets.',
   'Use it when the brief asks for, or clearly benefits from, a generated hero image, product image, poster illustration, painterly/photo background, marketing visual, or brand/logo-like bitmap.',
   '',
-  'Do NOT call it for simple icons, charts, decorative gradients, UI controls, geometric patterns, or anything better made with HTML/CSS/SVG.',
+  'MANDATORY asset inventory (do this BEFORE any `str_replace_based_edit_tool` call that writes `index.html`):',
+  '1. Re-read the user brief and list every distinct visual asset it names or strongly implies: background / hero / logo / product / illustration / poster / mascot / texture / avatar, etc.',
+  '2. For each item in that list, decide exactly one of: `generate_image_asset` (bitmap), inline `<svg>` (pure geometric / flat brand-mark / icon), or pure CSS (gradients, patterns). Record the decision.',
+  '3. Emit ALL chosen `generate_image_asset` calls together in a single assistant turn — do NOT start writing or editing `index.html` until every required bitmap asset has been requested.',
   '',
-  'When you use it:',
-  '- Call it with a production-ready visual prompt: subject, medium/style, composition, lighting, palette, and any text constraints.',
+  'When the brief explicitly asks for a bitmap for a given slot (e.g. "生图做 bg 和 logo", "generate a hero image and a product shot"), you MUST call `generate_image_asset` for each of those slots. One call per named asset. Do NOT collapse multiple named assets into a single call, and do NOT silently substitute SVG/CSS for one of them and bitmap for the other — that violates the brief.',
+  '',
+  'Default choices when the brief is ambiguous:',
+  "- Logo: if the user asked for it to be *generated* / *illustrated* / *rendered* / any language implying a painted or photographic mark → `generate_image_asset` with `purpose='logo'`, `aspectRatio='1:1'`. Only fall back to inline SVG when the user clearly wants a flat geometric wordmark or when no logo was requested at all.",
+  '- Background / hero / poster / marketing illustration: always `generate_image_asset` unless the brief explicitly says "no images" or "CSS-only".',
+  '- Decorative gradients, UI chrome, charts, simple icons (search, menu, arrow, etc.): use HTML/CSS/SVG, never `generate_image_asset`.',
+  '',
+  'Timing: each call is synchronous and takes ~20–60 seconds. To minimise wall-clock time:',
+  '- Finish the asset inventory above FIRST, then emit every `generate_image_asset` call in ONE turn before touching `index.html`.',
+  '- The host runs tool calls back-to-back within a turn, so batching N image calls costs ~N × 30s of wall clock, but sprinkling them across turns costs N × (image time + LLM round-trip) which is much slower.',
+  '- Never interleave one image call with HTML edits — that serialises the waits across many LLM round trips.',
+  '',
+  'When you call it:',
+  '- Provide a production-ready visual prompt: subject, medium/style, composition, lighting, palette, and any text constraints.',
+  '- Pick the most accurate `purpose` (hero / product / poster / background / illustration / logo / other) — the host appends structural constraints (composition, overlay-safety, no-text) based on it.',
+  '- Set `aspectRatio` to match where the image lands (16:9 heroes, 9:16 mobile, 1:1 logos, etc.) — the host maps it to a concrete size.',
+  '- Provide a meaningful `alt` and optional `filenameHint` (used as the asset stem).',
   '- Use the returned local `assets/...` path in `index.html`, e.g. `<img src="assets/hero.png" alt="...">` or `backgroundImage: "url(\'assets/hero.png\')"`. The host resolves those local paths for preview and persistence.',
-  '- Keep alt text concise and meaningful.',
-  '- Prefer one strong asset over many weak assets unless the user explicitly asks for a set.',
 ].join('\n');
 
 // ---------------------------------------------------------------------------
@@ -751,7 +767,7 @@ export async function generateViaAgent(
   }
   if (deps.generateImageAsset) {
     defaultTools.push(
-      makeGenerateImageAssetTool(deps.generateImageAsset, deps.fs) as unknown as AgentTool<
+      makeGenerateImageAssetTool(deps.generateImageAsset, deps.fs, log) as unknown as AgentTool<
         TSchema,
         unknown
       >,

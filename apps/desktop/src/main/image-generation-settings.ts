@@ -25,7 +25,10 @@ import {
 import { writeConfig } from './config';
 import { ipcMain } from './electron-runtime';
 import { buildSecretRef, decryptSecret } from './keychain';
+import { getLogger } from './logger';
 import { getApiKeyForProvider, getCachedConfig, setCachedConfig } from './onboarding-ipc';
+
+const log = getLogger('image-generation');
 
 export interface ImageGenerationSettingsView {
   enabled: boolean;
@@ -38,6 +41,7 @@ export interface ImageGenerationSettingsView {
   outputFormat: ImageGenerationOutputFormat;
   hasCustomKey: boolean;
   maskedKey: string | null;
+  inheritedKeyAvailable: boolean;
 }
 
 interface ImageGenerationUpdateInput {
@@ -79,6 +83,13 @@ export function imageSettingsToView(
   settings: ImageGenerationSettings | undefined,
 ): ImageGenerationSettingsView {
   const parsed = ImageGenerationSettingsSchema.parse(settings ?? defaultImageGenerationSettings());
+  let inheritedKeyAvailable = false;
+  try {
+    getApiKeyForProvider(parsed.provider);
+    inheritedKeyAvailable = true;
+  } catch {
+    inheritedKeyAvailable = false;
+  }
   return {
     enabled: parsed.enabled,
     provider: parsed.provider,
@@ -90,26 +101,44 @@ export function imageSettingsToView(
     outputFormat: parsed.outputFormat,
     hasCustomKey: parsed.apiKey !== undefined,
     maskedKey: parsed.apiKey?.mask ?? null,
+    inheritedKeyAvailable,
   };
 }
 
 export function resolveImageGenerationConfig(cfg: Config): ResolvedImageGenerationConfig | null {
   const settings = cfg.imageGeneration;
-  if (settings === undefined || settings.enabled !== true) return null;
+  if (settings === undefined) return null;
+  if (settings.enabled !== true) return null;
   const parsed = ImageGenerationSettingsSchema.parse(settings);
   let apiKey: string;
   if (parsed.credentialMode === 'custom') {
-    if (parsed.apiKey === undefined) return null;
+    if (parsed.apiKey === undefined) {
+      log.warn('resolve.skipped', {
+        reason: 'custom_key_missing',
+        provider: parsed.provider,
+      });
+      return null;
+    }
     apiKey = decryptSecret(parsed.apiKey.ciphertext);
   } else {
     try {
       apiKey = getApiKeyForProvider(parsed.provider);
-    } catch {
+    } catch (err) {
+      log.warn('resolve.skipped', {
+        reason: 'inherit_key_missing',
+        provider: parsed.provider,
+        message: err instanceof Error ? err.message : String(err),
+      });
       return null;
     }
   }
   const inheritedBaseUrl =
     parsed.credentialMode === 'inherit' ? cfg.providers[parsed.provider]?.baseUrl : undefined;
+  log.info('resolve.ok', {
+    provider: parsed.provider,
+    model: parsed.model,
+    credentialMode: parsed.credentialMode,
+  });
   return {
     provider: parsed.provider,
     apiKey,
@@ -121,11 +150,31 @@ export function resolveImageGenerationConfig(cfg: Config): ResolvedImageGenerati
   };
 }
 
+export function isGenerateImageAssetEnabled(cfg: Config): boolean {
+  return resolveImageGenerationConfig(cfg) !== null;
+}
+
+export function imageGenerationKeyAvailable(cfg: Config | null): boolean {
+  if (cfg === null) return false;
+  const settings = cfg.imageGeneration;
+  if (settings === undefined) return false;
+  const parsed = ImageGenerationSettingsSchema.parse(settings);
+  if (parsed.credentialMode === 'custom') return parsed.apiKey !== undefined;
+  try {
+    getApiKeyForProvider(parsed.provider);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function toGenerateImageOptions(
   config: ResolvedImageGenerationConfig,
   prompt: string,
   signal?: AbortSignal,
+  aspectRatio?: '1:1' | '16:9' | '9:16' | '4:3' | '3:4',
 ): GenerateImageOptions {
+  const size = resolveImageSize(config.size, aspectRatio);
   return {
     provider: config.provider,
     apiKey: config.apiKey,
@@ -133,10 +182,28 @@ export function toGenerateImageOptions(
     baseUrl: config.baseUrl,
     prompt,
     quality: config.quality,
-    size: config.size,
+    size,
     outputFormat: config.outputFormat,
+    ...(aspectRatio !== undefined ? { aspectRatio } : {}),
     ...(signal !== undefined ? { signal } : {}),
   };
+}
+
+/**
+ * Map a caller-provided aspectRatio hint onto the OpenAI image API's discrete
+ * `size` enum. When the caller did not supply an aspect ratio we keep the
+ * user-configured default from Settings (`config.size`). The OpenRouter path
+ * also receives `aspect_ratio` directly, so this mapping only matters for
+ * backends that need a fixed bucketed size.
+ */
+export function resolveImageSize(
+  configured: ImageGenerationSize,
+  aspectRatio: '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | undefined,
+): ImageGenerationSize {
+  if (aspectRatio === undefined) return configured;
+  if (aspectRatio === '1:1') return '1024x1024';
+  if (aspectRatio === '16:9' || aspectRatio === '4:3') return '1536x1024';
+  return '1024x1536';
 }
 
 function parseUpdate(raw: unknown): ImageGenerationUpdateInput {

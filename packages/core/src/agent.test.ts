@@ -378,6 +378,31 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     expect(sys).toContain('str_replace_based_edit_tool');
     expect(sys).toContain('Do NOT emit `<artifact>`');
   });
+
+  it('adds explicit bitmap trigger guidance when image asset tool is enabled', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent(
+      {
+        prompt: 'design a landing page with a hand-painted background illustration',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      {
+        generateImageAsset: async () => ({
+          path: 'assets/hero.png',
+          dataUrl: 'data:image/png;base64,aW1n',
+          mimeType: 'image/png',
+          model: 'gpt-image-2',
+          provider: 'openai',
+        }),
+      },
+    );
+    const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
+    expect(sys).toContain('MANDATORY asset inventory');
+    expect(sys).toContain('One call per named asset');
+    expect(sys).toContain("`purpose='logo'`");
+  });
 });
 
 describe('FRAME_TEMPLATES — device frame starter assets', () => {

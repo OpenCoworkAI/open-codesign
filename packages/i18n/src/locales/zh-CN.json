@@ -147,10 +147,38 @@
     "title": "设置",
     "tabs": {
       "models": "模型",
+      "images": "图像 API",
       "appearance": "外观",
       "storage": "存储",
       "diagnostics": "诊断",
       "advanced": "高级"
+    },
+    "imageGen": {
+      "tabTitle": "图像生成",
+      "tabHint": "允许设计 Agent 调用图像模型（如 gpt-image-2）生成 hero、海报或背景位图。凭据仅保存在本机。",
+      "title": "图像生成辅助",
+      "hint": "开启后，Agent 在生成设计时可以调用 generate_image_asset 工具。",
+      "enabled": "启用图像生成辅助",
+      "provider": "服务商",
+      "credentials": "凭据方式",
+      "inherit": "沿用模型服务商",
+      "customKey": "单独设置 Key",
+      "keyPlaceholder": "留空则保留 {{mask}}",
+      "newKeyPlaceholder": "粘贴 API Key",
+      "model": "图像模型",
+      "baseUrl": "接入地址",
+      "quality": "画质",
+      "size": "尺寸",
+      "status": {
+        "ready": "可用",
+        "needsKey": "缺少 API Key",
+        "disabled": "未启用"
+      },
+      "toast": {
+        "loadFailed": "加载图像生成设置失败",
+        "saved": "图像生成设置已保存",
+        "saveFailed": "保存图像生成设置失败"
+      }
     },
     "shell": {
       "back": "工作区",
