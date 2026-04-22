@@ -20,11 +20,12 @@ import {
   type ActionTimelineEntry,
   CodesignError,
   type DiagnosticEventInput,
-  type DiagnosticEventRow,
   type ListEventsInput,
   type ListEventsResult,
+  type RecordRendererErrorResult,
   type ReportEventInput,
   type ReportEventResult,
+  type ReportableError,
 } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
 import type BetterSqlite3 from 'better-sqlite3';
@@ -55,6 +56,13 @@ const ACTUAL_MAX = 1000;
 const LOGS_MAX = 4000;
 const DIAGNOSTICS_MAX = 500;
 const REPORTED_FINGERPRINTS_FILENAME = 'reported-fingerprints.json';
+
+// Defense-in-depth caps on IPC payload strings. A compromised renderer or
+// buggy caller could otherwise flood the main process / SQLite / bundle with
+// multi-MB fields. Keep these generous enough for real stack traces.
+const MESSAGE_MAX = 8_000;
+const STACK_MAX = 16_000;
+const CONTEXT_JSON_MAX = 4_000;
 
 /**
  * Map `process.platform` to the exact labels in `.github/ISSUE_TEMPLATE/bug_report.yml`
@@ -160,6 +168,79 @@ function parseListEventsInput(raw: unknown): ListEventsInput {
   return out;
 }
 
+function parseReportableError(raw: unknown): ReportableError {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError('error payload must be an object', 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  const requireString = (key: string): string => {
+    if (typeof r[key] !== 'string' || (r[key] as string).length === 0) {
+      throw new CodesignError(`${key} must be a non-empty string`, 'IPC_BAD_INPUT');
+    }
+    return r[key] as string;
+  };
+  const optString = (key: string): string | undefined => {
+    if (r[key] === undefined) return undefined;
+    if (typeof r[key] !== 'string') {
+      throw new CodesignError(`${key} must be a string if provided`, 'IPC_BAD_INPUT');
+    }
+    return r[key] as string;
+  };
+  if (typeof r['ts'] !== 'number' || !Number.isFinite(r['ts'])) {
+    throw new CodesignError('error.ts must be a finite number', 'IPC_BAD_INPUT');
+  }
+  if (
+    r['context'] !== undefined &&
+    (typeof r['context'] !== 'object' || r['context'] === null || Array.isArray(r['context']))
+  ) {
+    throw new CodesignError('error.context must be an object if provided', 'IPC_BAD_INPUT');
+  }
+  if (r['persistedEventId'] !== undefined && typeof r['persistedEventId'] !== 'number') {
+    throw new CodesignError('error.persistedEventId must be a number if provided', 'IPC_BAD_INPUT');
+  }
+  const messageField = typeof r['message'] === 'string' ? (r['message'] as string) : '';
+  if (messageField.length > MESSAGE_MAX) {
+    throw new CodesignError(`error.message exceeds ${MESSAGE_MAX} characters`, 'IPC_BAD_INPUT');
+  }
+  const out: ReportableError = {
+    localId: requireString('localId'),
+    code: requireString('code'),
+    scope: requireString('scope'),
+    message: messageField,
+    fingerprint: requireString('fingerprint'),
+    ts: r['ts'] as number,
+  };
+  const stack = optString('stack');
+  if (stack !== undefined) {
+    if (stack.length > STACK_MAX) {
+      throw new CodesignError(`error.stack exceeds ${STACK_MAX} characters`, 'IPC_BAD_INPUT');
+    }
+    out.stack = stack;
+  }
+  const runId = optString('runId');
+  if (runId !== undefined) out.runId = runId;
+  if (r['context'] !== undefined) {
+    const ctx = r['context'] as Record<string, unknown>;
+    let serializedLen: number;
+    try {
+      serializedLen = JSON.stringify(ctx).length;
+    } catch {
+      throw new CodesignError('error.context must be JSON-serializable', 'IPC_BAD_INPUT');
+    }
+    if (serializedLen > CONTEXT_JSON_MAX) {
+      throw new CodesignError(
+        `error.context serialized length exceeds ${CONTEXT_JSON_MAX} characters`,
+        'IPC_BAD_INPUT',
+      );
+    }
+    out.context = ctx;
+  }
+  if (r['persistedEventId'] !== undefined) out.persistedEventId = r['persistedEventId'] as number;
+  const persistedFp = optString('persistedFingerprint');
+  if (persistedFp !== undefined) out.persistedFingerprint = persistedFp;
+  return out;
+}
+
 function parseReportEventInput(raw: unknown): ReportEventInput {
   if (typeof raw !== 'object' || raw === null) {
     throw new CodesignError(
@@ -174,9 +255,7 @@ function parseReportEventInput(raw: unknown): ReportEventInput {
       'IPC_BAD_INPUT',
     );
   }
-  if (typeof r['eventId'] !== 'number' || !Number.isFinite(r['eventId'])) {
-    throw new CodesignError('eventId must be a finite number', 'IPC_BAD_INPUT');
-  }
+  const error = parseReportableError(r['error']);
   for (const key of ['includePromptText', 'includePaths', 'includeUrls', 'includeTimeline']) {
     if (typeof r[key] !== 'boolean') {
       throw new CodesignError(`${key} must be a boolean`, 'IPC_BAD_INPUT');
@@ -196,7 +275,7 @@ function parseReportEventInput(raw: unknown): ReportEventInput {
   }
   return {
     schemaVersion: 1,
-    eventId: r['eventId'] as number,
+    error,
     includePromptText: r['includePromptText'] as boolean,
     includePaths: r['includePaths'] as boolean,
     includeUrls: r['includeUrls'] as boolean,
@@ -256,14 +335,34 @@ function parseRecordRendererErrorInput(raw: unknown): {
   if (typeof r['message'] !== 'string') {
     throw new CodesignError('message must be a string', 'IPC_BAD_INPUT');
   }
+  if ((r['message'] as string).length > MESSAGE_MAX) {
+    throw new CodesignError(`message exceeds ${MESSAGE_MAX} characters`, 'IPC_BAD_INPUT');
+  }
   if (r['stack'] !== undefined && typeof r['stack'] !== 'string') {
     throw new CodesignError('stack must be a string if provided', 'IPC_BAD_INPUT');
+  }
+  if (r['stack'] !== undefined && (r['stack'] as string).length > STACK_MAX) {
+    throw new CodesignError(`stack exceeds ${STACK_MAX} characters`, 'IPC_BAD_INPUT');
   }
   if (r['runId'] !== undefined && typeof r['runId'] !== 'string') {
     throw new CodesignError('runId must be a string if provided', 'IPC_BAD_INPUT');
   }
   if (r['context'] !== undefined && (typeof r['context'] !== 'object' || r['context'] === null)) {
     throw new CodesignError('context must be an object if provided', 'IPC_BAD_INPUT');
+  }
+  if (r['context'] !== undefined) {
+    let serializedLen: number;
+    try {
+      serializedLen = JSON.stringify(r['context']).length;
+    } catch {
+      throw new CodesignError('context must be JSON-serializable', 'IPC_BAD_INPUT');
+    }
+    if (serializedLen > CONTEXT_JSON_MAX) {
+      throw new CodesignError(
+        `context serialized length exceeds ${CONTEXT_JSON_MAX} characters`,
+        'IPC_BAD_INPUT',
+      );
+    }
   }
   const out: {
     code: string;
@@ -516,7 +615,7 @@ async function buildDiagnosticsZip(): Promise<string> {
  * append a pointer to the attached bundle.
  */
 export function buildIssueUrlWithTemplate(params: {
-  event: DiagnosticEventRow;
+  error: ReportableError;
   bundlePath: string;
   appVersion: string;
   platform: NodeJS.Platform;
@@ -528,7 +627,7 @@ export function buildIssueUrlWithTemplate(params: {
   includeUrls?: boolean;
 }): string {
   const {
-    event,
+    error,
     bundlePath,
     appVersion,
     platform,
@@ -541,7 +640,7 @@ export function buildIssueUrlWithTemplate(params: {
   } = params;
   const includeOpts = { includePromptText, includePaths, includeUrls };
 
-  const title = `[Bug]: ${event.code} (fp: ${event.fingerprint})`;
+  const title = `[Bug]: ${error.code} (fp: ${error.fingerprint})`;
 
   // actual — the short human explanation. Combine message + upstream status/code
   // so the triage reader sees the headline without opening the bundle. User
@@ -550,10 +649,10 @@ export function buildIssueUrlWithTemplate(params: {
   // pipeline the summary.md uses so disabled toggles are honored here too —
   // browser history, referrer, and shell history would otherwise retain raw
   // paths / URLs / prompts.
-  const actualParts: string[] = [event.message];
-  if (event.scope === 'provider' && event.context) {
-    const status = event.context['upstream_status'];
-    const requestId = event.context['upstream_request_id'];
+  const actualParts: string[] = [error.message];
+  if (error.scope === 'provider' && error.context) {
+    const status = error.context['upstream_status'];
+    const requestId = error.context['upstream_request_id'];
     if (status != null) actualParts.push(`upstream_status=${String(status)}`);
     if (requestId != null) actualParts.push(`upstream_request_id=${String(requestId)}`);
   }
@@ -580,7 +679,7 @@ export function buildIssueUrlWithTemplate(params: {
   );
 
   const provider =
-    event.scope === 'provider' ? mapProvider(event.context?.['upstream_provider']) : '';
+    error.scope === 'provider' ? mapProvider(error.context?.['upstream_provider']) : '';
 
   function assemble(logsField: string): string {
     const params = new URLSearchParams();
@@ -592,7 +691,7 @@ export function buildIssueUrlWithTemplate(params: {
     if (mappedPlatform) params.set('platform', mappedPlatform);
     if (platformVersion) params.set('platform_version', platformVersion);
     if (provider) params.set('provider', provider);
-    params.set('error_code', event.code);
+    params.set('error_code', error.code);
     params.set('actual', actual);
     params.set('logs', logsField);
     params.set('diagnostics', diagnostics);
@@ -662,7 +761,11 @@ export function registerDiagnosticsIpc(db: Database | null): void {
         code,
         scope: entry.scope,
         runId,
-        fingerprint: computeFingerprint({ errorCode: code, stack: entry.stack }),
+        fingerprint: computeFingerprint({
+          errorCode: code,
+          stack: entry.stack,
+          message: entry.message,
+        }),
         message: entry.message,
         stack: entry.stack,
         transient: false,
@@ -672,12 +775,16 @@ export function registerDiagnosticsIpc(db: Database | null): void {
 
   ipcMain.handle(
     'diagnostics:v1:recordRendererError',
-    (_e: unknown, raw: unknown): { schemaVersion: 1; eventId: number | null } => {
+    (_e: unknown, raw: unknown): RecordRendererErrorResult => {
       const input = parseRecordRendererErrorInput(raw);
       if (db === null) {
-        return { schemaVersion: 1, eventId: null };
+        return { schemaVersion: 1, eventId: null, fingerprint: null };
       }
-      const fingerprint = computeFingerprint({ errorCode: input.code, stack: input.stack });
+      const fingerprint = computeFingerprint({
+        errorCode: input.code,
+        stack: input.stack,
+        message: input.message,
+      });
       const recordInput: DiagnosticEventInput = {
         level: 'error',
         code: input.code,
@@ -690,7 +797,7 @@ export function registerDiagnosticsIpc(db: Database | null): void {
       };
       if (input.context !== undefined) recordInput.context = input.context;
       const eventId = recordDiagnosticEvent(db, recordInput);
-      return { schemaVersion: 1, eventId };
+      return { schemaVersion: 1, eventId, fingerprint };
     },
   );
 
@@ -758,17 +865,29 @@ export function registerDiagnosticsIpc(db: Database | null): void {
     'diagnostics:v1:reportEvent',
     async (_e: unknown, raw: unknown): Promise<ReportEventResult> => {
       const input = parseReportEventInput(raw);
-      if (db === null) {
-        throw new CodesignError('Diagnostics database unavailable', 'IPC_NOT_FOUND');
-      }
-      const event = getDiagnosticEventById(db, input.eventId);
-      if (event === undefined) {
-        throw new CodesignError(`Diagnostic event ${input.eventId} not found`, 'IPC_NOT_FOUND');
+      const error = input.error;
+
+      // If the ReportableError was persisted into diagnostic_events earlier,
+      // surface the DB row's `count` + `context_json` so the bundle carries
+      // the richer repeat-count and any context the renderer didn't ship. All
+      // of this is nice-to-have; Report works end-to-end without the DB.
+      let dbCount = 1;
+      if (db !== null && typeof error.persistedEventId === 'number') {
+        const row = getDiagnosticEventById(db, error.persistedEventId);
+        if (row !== undefined) {
+          dbCount = row.count;
+          if (error.context === undefined && row.context !== undefined) {
+            error.context = row.context;
+          }
+        }
       }
 
       const recentLogTail = await readLogTail(50);
       const summaryMarkdown = composeSummaryMarkdown({
-        event,
+        error,
+        count: dbCount,
+        level: 'error',
+        transient: false,
         appVersion: app.getVersion(),
         platform: process.platform,
         electronVersion: process.versions.electron ?? 'unknown',
@@ -790,7 +909,7 @@ export function registerDiagnosticsIpc(db: Database | null): void {
       });
       const os = await import('node:os');
       const issueUrl = buildIssueUrlWithTemplate({
-        event,
+        error,
         bundlePath,
         appVersion: app.getVersion(),
         platform: process.platform,
@@ -803,7 +922,15 @@ export function registerDiagnosticsIpc(db: Database | null): void {
       });
 
       try {
-        recordReported(reportedFingerprintsPath(), event.fingerprint, issueUrl);
+        // SECURITY: never trust the renderer-supplied fingerprint for dedup.
+        // Recompute main-side from errorCode + stack + message so a compromised
+        // renderer can't spoof or bypass the "recently reported" record.
+        const fp = computeFingerprint({
+          errorCode: error.code,
+          stack: error.stack,
+          message: error.message,
+        });
+        recordReported(reportedFingerprintsPath(), fp, issueUrl);
       } catch (err) {
         logger.warn('diagnostics.reported.dedupWrite.fail', {
           message: err instanceof Error ? err.message : String(err),
@@ -811,9 +938,10 @@ export function registerDiagnosticsIpc(db: Database | null): void {
       }
 
       logger.info('diagnostics.reported', {
-        eventId: event.id,
-        code: event.code,
-        fingerprint: event.fingerprint,
+        localId: error.localId,
+        code: error.code,
+        fingerprint: error.fingerprint,
+        persistedEventId: error.persistedEventId,
         bundlePath,
       });
 

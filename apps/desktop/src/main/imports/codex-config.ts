@@ -1,7 +1,7 @@
-import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { type ProviderEntry, type WireApi, detectWireFromBaseUrl } from '@open-codesign/shared';
+import { safeReadImportFile } from './safe-read';
 
 /**
  * Path resolution for `~/.codex/config.toml`. Exported for testing.
@@ -25,6 +25,37 @@ export interface CodexImport {
   warnings: string[];
 }
 
+/**
+ * Upstream LLM provider env var names we'll honor when Codex's config.toml
+ * declares `env_key = "..."`. Without this allowlist, an attacker who can
+ * drop `~/.codex/config.toml` (malicious dotfile, shared machine, supply
+ * chain) could set `env_key = "AWS_SECRET_ACCESS_KEY"` or `"GITHUB_TOKEN"`
+ * and exfiltrate those values on every subsequent LLM call via our env-var
+ * fallback path in `onboarding-ipc.ts` (`getApiKeyForProvider`).
+ *
+ * Codex's own config field is intended to name the upstream provider's
+ * API-key env var — not arbitrary process env. Anything outside this list
+ * is dropped with a warning.
+ */
+export const ALLOWED_IMPORT_ENV_KEYS: ReadonlySet<string> = new Set([
+  'AI_GATEWAY_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'AZURE_OPENAI_API_KEY',
+  'CEREBRAS_API_KEY',
+  'DEEPSEEK_API_KEY',
+  'FIREWORKS_API_KEY',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  'GROQ_API_KEY',
+  'MISTRAL_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENROUTER_API_KEY',
+  'PERPLEXITY_API_KEY',
+  'TOGETHER_API_KEY',
+  'XAI_API_KEY',
+]);
+
 type CodexProviderBlock = {
   name?: string;
   base_url?: string;
@@ -40,8 +71,9 @@ const FALLBACK_IMPORTED_MODEL = 'gpt-4o';
 
 /**
  * Parse a Codex `config.toml` string and translate each `[model_providers.X]`
- * block into a v3 `ProviderEntry`. Unknown keys are silently ignored (parse
- * leniently — §8 risk mitigation).
+ * block into a v3 `ProviderEntry`. Unknown keys are silently ignored so a
+ * future Codex schema bump doesn't break import — the importer degrades to
+ * "what we recognise" rather than refusing the whole file.
  */
 export async function parseCodexConfig(toml: string): Promise<CodexImport> {
   const warnings: string[] = [];
@@ -115,8 +147,14 @@ export async function parseCodexConfig(toml: string): Promise<CodexImport> {
           defaultModel,
         };
         if (typeof block.env_key === 'string' && block.env_key.length > 0) {
-          entry.envKey = block.env_key;
-          envKeyMap[entry.id] = block.env_key;
+          if (ALLOWED_IMPORT_ENV_KEYS.has(block.env_key)) {
+            entry.envKey = block.env_key;
+            envKeyMap[entry.id] = block.env_key;
+          } else {
+            warnings.push(
+              `Codex provider "${id}" references env_key "${block.env_key}" which isn't a known LLM-provider env var — ignoring to prevent arbitrary env-var exfiltration. Edit ~/.codex/config.toml if this is a legitimate new provider.`,
+            );
+          }
         }
         if (block.requires_openai_auth === true) {
           entry.requiresApiKey = true;
@@ -158,13 +196,8 @@ export async function parseCodexConfig(toml: string): Promise<CodexImport> {
 }
 
 async function readCodexOpenAiApiKey(home: string = homedir()): Promise<string | null> {
-  let raw: string;
-  try {
-    raw = await readFile(codexAuthPath(home), 'utf8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw err;
-  }
+  const raw = await safeReadImportFile(codexAuthPath(home));
+  if (raw === null) return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -179,13 +212,8 @@ async function readCodexOpenAiApiKey(home: string = homedir()): Promise<string |
 
 export async function readCodexConfig(home: string = homedir()): Promise<CodexImport | null> {
   const path = codexConfigPath(home);
-  let raw: string;
-  try {
-    raw = await readFile(path, 'utf8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw err;
-  }
+  const raw = await safeReadImportFile(path);
+  if (raw === null) return null;
   const imported = await parseCodexConfig(raw);
   const openAiApiKey = await readCodexOpenAiApiKey(home);
   if (openAiApiKey === null) return imported;

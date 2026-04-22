@@ -83,6 +83,31 @@ describe('computeFingerprint', () => {
     const b = computeFingerprint({ errorCode: 'RENDERER_ERROR', stack: '', message: 'x' });
     expect(a).toBe(b);
   });
+
+  it('main and renderer computeFingerprint produce identical hashes for the same errorCode+stack+message', () => {
+    // Both main and renderer import this same function, so parity is a
+    // property of the call signature: as long as both sides pass
+    // { errorCode, stack, message } the hash matches. Regression guard
+    // against dropping `message` on one side (see R2 review fingerprint drift).
+    const basis = {
+      errorCode: 'RENDERER_ERROR',
+      stack: 'Error: boom\n    at foo (a.ts:1:1)',
+      message: 'boom',
+    };
+    const fromMain = computeFingerprint(basis);
+    const fromRenderer = computeFingerprint({ ...basis });
+    expect(fromMain).toBe(fromRenderer);
+
+    // And crucially: dropping message from one side yields a DIFFERENT hash
+    // when stack is empty — the original drift bug.
+    const noStackWithMsg = computeFingerprint({
+      errorCode: 'X',
+      stack: undefined,
+      message: 'hi',
+    });
+    const noStackNoMsg = computeFingerprint({ errorCode: 'X', stack: undefined });
+    expect(noStackWithMsg).not.toBe(noStackNoMsg);
+  });
 });
 
 describe('normalizeFrame', () => {

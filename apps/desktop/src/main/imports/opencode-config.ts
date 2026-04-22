@@ -1,12 +1,12 @@
-import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ProviderEntry, WireApi } from '@open-codesign/shared';
+import { safeReadImportFile } from './safe-read';
 
 /**
  * One-click import for the OpenCode CLI (`github.com/sst/opencode`).
  *
- * Schema was verified against the upstream source (April 2026):
+ * Schema was verified against upstream `sst/opencode`:
  *   - `packages/opencode/src/auth/index.ts` defines an Effect.Schema discriminated
  *     union written to `<Global.Path.data>/auth.json`: each top-level key is a
  *     provider ID (e.g. "anthropic", "openai", "google", "openrouter") and the
@@ -188,13 +188,8 @@ async function readAuthJson(path: string): Promise<{
   raw: Record<string, unknown> | null;
   warning: string | null;
 }> {
-  let text: string;
-  try {
-    text = await readFile(path, 'utf8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { raw: null, warning: null };
-    throw err;
-  }
+  const text = await safeReadImportFile(path);
+  if (text === null) return { raw: null, warning: null };
   try {
     const parsed: unknown = JSON.parse(text);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
@@ -258,17 +253,8 @@ async function readActiveModelFromConfig(
   warnings: string[],
 ): Promise<string | null> {
   for (const path of opencodeConfigCandidatePaths(home, env)) {
-    let text: string;
-    try {
-      text = await readFile(path, 'utf8');
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT') continue;
-      // Don't hard-return on EACCES etc. — try the next candidate so a
-      // locked `opencode.jsonc` doesn't shadow a readable `config.json`.
-      warnings.push(`Could not read ${path}: ${code ?? 'unknown error'}`);
-      continue;
-    }
+    const text = await safeReadImportFile(path);
+    if (text === null) continue;
     try {
       const parsed: unknown = JSON.parse(path.endsWith('.jsonc') ? stripJsonComments(text) : text);
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;

@@ -1,12 +1,12 @@
 import { getCurrentLocale, useT } from '@open-codesign/i18n';
-import type { DiagnosticEventRow, ReportEventInput } from '@open-codesign/shared';
+import type { ReportEventInput, ReportableError } from '@open-codesign/shared';
 import { useEffect, useRef, useState } from 'react';
 import { type RedactOpts, applyRedaction } from '../../lib/redact';
 import { useCodesignStore } from '../../store';
 import { formatRelativeTime } from '../settings/DiagnosticsPanel';
 
 export interface ReportEventDialogProps {
-  eventId: number | null;
+  localId: string | null;
   onClose: () => void;
 }
 
@@ -61,12 +61,12 @@ export function validateNotes(notes: string): boolean {
 }
 
 export function buildReportInput(
-  eventId: number,
+  error: ReportableError,
   notes: string,
   include: IncludeFlags,
 ): Omit<ReportEventInput, 'schemaVersion' | 'timeline'> {
   return {
-    eventId,
+    error,
     notes,
     includePromptText: include.prompt,
     includePaths: include.paths,
@@ -106,21 +106,21 @@ export interface PreviewLabels {
  * mounting the dialog — the dialog just wraps this output in <pre>.
  */
 export function formatPreview(
-  event: DiagnosticEventRow,
+  error: ReportableError,
   opts: RedactOpts,
   labels: PreviewLabels,
 ): string {
-  const message = applyRedaction(event.message, opts);
+  const message = applyRedaction(error.message, opts);
   const lines: string[] = [
-    `${labels.code}: ${event.code}`,
-    `${labels.scope}: ${event.scope}`,
-    `${labels.runId}: ${event.runId ?? '—'}`,
-    `${labels.fingerprint}: ${event.fingerprint}`,
+    `${labels.code}: ${error.code}`,
+    `${labels.scope}: ${error.scope}`,
+    `${labels.runId}: ${error.runId ?? '—'}`,
+    `${labels.fingerprint}: ${error.fingerprint}`,
     `${labels.message}: ${message}`,
   ];
 
-  if (event.scope === 'provider' && event.context) {
-    const ctx = event.context;
+  if (error.scope === 'provider' && error.context) {
+    const ctx = error.context;
     const upstreamRows: string[] = [];
     const provider = ctx['upstream_provider'];
     const status = ctx['upstream_status'];
@@ -162,10 +162,11 @@ export function pickFocusTargets(dialog: HTMLElement): HTMLElement[] {
   ).filter((el) => !el.hasAttribute('aria-hidden'));
 }
 
-export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) {
+export function ReportEventDialog({ localId, onClose }: ReportEventDialogProps) {
   const t = useT();
-  const recentEvents = useCodesignStore((s) => s.recentEvents);
-  const refreshDiagnosticEvents = useCodesignStore((s) => s.refreshDiagnosticEvents);
+  const error = useCodesignStore((s) =>
+    localId !== null ? s.reportableErrors.find((r) => r.localId === localId) : undefined,
+  );
   const reportDiagnosticEvent = useCodesignStore((s) => s.reportDiagnosticEvent);
   const pushToast = useCodesignStore((s) => s.pushToast);
 
@@ -174,8 +175,6 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [triedRefresh, setTriedRefresh] = useState(false);
   const [recentWarning, setRecentWarning] = useState<RecentReportWarning | null>(null);
   const [warningDismissed, setWarningDismissed] = useState(false);
   // Two-step confirmation when the same fingerprint was reported recently.
@@ -189,15 +188,14 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
   const dialogRef = useRef<HTMLDivElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
-  // Reset state whenever the dialog opens on a new event.
+  // Reset state whenever the dialog opens on a new error.
   useEffect(() => {
-    if (eventId !== null) {
+    if (localId !== null) {
       setNotes('');
       setInclude(DEFAULT_INCLUDE);
       setBusy(false);
       setErr(null);
       setCopied(false);
-      setTriedRefresh(false);
       setRecentWarning(null);
       setWarningDismissed(false);
       setConfirmingDuplicate(false);
@@ -211,18 +209,15 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
       }
       setConfirmSecondsLeft(CONFIRM_SECONDS);
     }
-  }, [eventId]);
-
-  const event: DiagnosticEventRow | undefined =
-    eventId !== null ? recentEvents.find((e) => e.id === eventId) : undefined;
+  }, [localId]);
 
   // Pre-submit dedup check — best-effort. If the IPC fails we proceed silently.
   useEffect(() => {
-    if (!event) return;
+    if (!error) return;
     const check = window.codesign?.diagnostics?.isFingerprintRecentlyReported;
     if (!check) return;
     let cancelled = false;
-    void check(event.fingerprint)
+    void check(error.fingerprint)
       .then((result) => {
         if (cancelled) return;
         setRecentWarning(pickRecentReport(result, Date.now(), getCurrentLocale()));
@@ -233,29 +228,19 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
     return () => {
       cancelled = true;
     };
-  }, [event]);
+  }, [error]);
 
-  // If the event isn't in the store yet, refresh once and retry.
+  // Auto-focus the notes textarea when the dialog opens.
   useEffect(() => {
-    if (eventId === null) return;
-    if (event) return;
-    if (triedRefresh) return;
-    setLoading(true);
-    setTriedRefresh(true);
-    void refreshDiagnosticEvents().finally(() => setLoading(false));
-  }, [eventId, event, triedRefresh, refreshDiagnosticEvents]);
-
-  // Auto-focus the notes textarea when the dialog opens on an event.
-  useEffect(() => {
-    if (eventId === null) return;
-    if (!event) return;
+    if (localId === null) return;
+    if (!error) return;
     notesRef.current?.focus();
-  }, [eventId, event]);
+  }, [localId, error]);
 
   // Trap Tab / Shift-Tab inside the dialog so focus can't escape to the
   // underlying panel while the modal is open.
   useEffect(() => {
-    if (eventId === null) return;
+    if (localId === null) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
     function onKeyDown(e: KeyboardEvent) {
@@ -275,12 +260,12 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
     }
     dialog.addEventListener('keydown', onKeyDown);
     return () => dialog.removeEventListener('keydown', onKeyDown);
-  }, [eventId]);
+  }, [localId]);
 
-  if (eventId === null) return null;
+  if (localId === null || !error) return null;
 
   async function submit(kind: 'open' | 'copy') {
-    if (eventId === null) return;
+    if (!error) return;
     if (!validateNotes(notes)) {
       setErr(t('diagnostics.report.error.notesTooLong'));
       return;
@@ -310,11 +295,12 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
     setBusy(true);
     setErr(null);
     try {
-      const result = await reportDiagnosticEvent(buildReportInput(eventId, notes, include));
-      if (kind === 'open') {
-        // Await the external open BEFORE surfacing the "bundle saved" toast so
-        // a failing `openExternal` doesn't pair a green "saved" with a red error.
-        await window.codesign?.openExternal?.(result.issueUrl);
+      const result = await reportDiagnosticEvent(buildReportInput(error, notes, include));
+      // Bundle is on disk regardless of whether the follow-up (browser open /
+      // clipboard write) succeeds. Show the "bundle saved" toast first so the
+      // user always has a path to the file, then do the side-effect — if the
+      // side-effect fails, append a helper toast with the recovery step.
+      const bundleToast = () =>
         pushToast({
           variant: 'info',
           title: t('diagnostics.report.bundleSavedTitle'),
@@ -326,20 +312,43 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
             },
           },
         });
+      if (kind === 'open') {
+        let openFailed = false;
+        try {
+          await window.codesign?.openExternal?.(result.issueUrl);
+        } catch {
+          openFailed = true;
+        }
+        bundleToast();
+        if (openFailed) {
+          pushToast({
+            variant: 'error',
+            title: t('diagnostics.report.openFailedTitle'),
+            description: t('diagnostics.report.openFailedCopyHint'),
+            action: {
+              label: t('diagnostics.report.copyIssueUrl'),
+              onClick: () => {
+                void navigator.clipboard?.writeText?.(result.issueUrl);
+              },
+            },
+          });
+        }
         onClose();
       } else {
-        await navigator.clipboard.writeText(result.summaryMarkdown);
-        pushToast({
-          variant: 'info',
-          title: t('diagnostics.report.bundleSavedTitle'),
-          description: `${t('diagnostics.report.bundleSavedDescription')} ${result.bundlePath}`,
-          action: {
-            label: t('diagnostics.report.revealBundle'),
-            onClick: () => {
-              void window.codesign?.diagnostics?.showItemInFolder?.(result.bundlePath);
-            },
-          },
-        });
+        let clipboardFailed = false;
+        try {
+          await navigator.clipboard.writeText(result.summaryMarkdown);
+        } catch {
+          clipboardFailed = true;
+        }
+        bundleToast();
+        if (clipboardFailed) {
+          pushToast({
+            variant: 'error',
+            title: t('diagnostics.report.clipboardFailedTitle'),
+            description: t('diagnostics.report.clipboardFailedHint'),
+          });
+        }
         setCopied(true);
         setTimeout(() => onClose(), 800);
       }
@@ -376,188 +385,165 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
           {t('diagnostics.report.title')}
         </h3>
 
-        {loading && !event ? (
-          <p className="text-[var(--text-sm)] text-[var(--color-text-secondary)]">
-            {t('diagnostics.report.loading')}
-          </p>
-        ) : !event ? (
-          <div className="space-y-3">
-            <p className="text-[var(--text-sm)] text-[var(--color-text-secondary)]">
-              {t('diagnostics.report.eventNotFound')}
+        <pre className="text-[var(--text-xs)] font-mono bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 whitespace-pre-wrap break-words text-[var(--color-text-primary)] max-h-48 overflow-auto">
+          {formatPreview(
+            error,
+            {
+              includePromptText: include.prompt,
+              includePaths: include.paths,
+              includeUrls: include.urls,
+            },
+            {
+              code: t('diagnostics.report.preview.code'),
+              scope: t('diagnostics.report.preview.scope'),
+              runId: t('diagnostics.report.preview.runId'),
+              fingerprint: t('diagnostics.report.preview.fingerprint'),
+              message: t('diagnostics.report.preview.message'),
+              upstream: t('diagnostics.report.preview.upstream'),
+              upstreamProvider: t('diagnostics.report.preview.upstreamProvider'),
+              upstreamStatus: t('diagnostics.report.preview.upstreamStatus'),
+              upstreamRequestId: t('diagnostics.report.preview.upstreamRequestId'),
+              upstreamRetry: t('diagnostics.report.preview.upstreamRetry'),
+              upstreamBodyHead: t('diagnostics.report.preview.upstreamBodyHead'),
+            },
+          )}
+        </pre>
+
+        {recentWarning && !warningDismissed ? (
+          <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 space-y-2">
+            <p className="text-[var(--text-sm)] text-[var(--color-text-primary)]">
+              <span aria-hidden="true">⚠️ </span>
+              {recentWarning.issueNumber
+                ? t('diagnostics.report.recentlyReported', {
+                    relative: recentWarning.relative,
+                    issueNumber: recentWarning.issueNumber,
+                  })
+                : t('diagnostics.report.recentlyReportedNoNumber', {
+                    relative: recentWarning.relative,
+                  })}
             </p>
-            <div className="flex justify-end">
+            <div className="flex items-center gap-3 text-[var(--text-sm)]">
+              <a
+                href={recentWarning.issueUrl}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void window.codesign?.openExternal?.(recentWarning.issueUrl);
+                }}
+                className="text-[var(--color-accent)] hover:underline"
+              >
+                {t('diagnostics.report.viewPrevious')}
+              </a>
               <button
                 type="button"
-                onClick={onClose}
-                className="h-9 px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors"
+                onClick={() => setWarningDismissed(true)}
+                className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               >
-                {t('diagnostics.report.close')}
+                {t('diagnostics.report.continueAnyway')}
               </button>
             </div>
           </div>
-        ) : (
-          <>
-            <pre className="text-[var(--text-xs)] font-mono bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 whitespace-pre-wrap break-words text-[var(--color-text-primary)] max-h-48 overflow-auto">
-              {formatPreview(
-                event,
-                {
-                  includePromptText: include.prompt,
-                  includePaths: include.paths,
-                  includeUrls: include.urls,
-                },
-                {
-                  code: t('diagnostics.report.preview.code'),
-                  scope: t('diagnostics.report.preview.scope'),
-                  runId: t('diagnostics.report.preview.runId'),
-                  fingerprint: t('diagnostics.report.preview.fingerprint'),
-                  message: t('diagnostics.report.preview.message'),
-                  upstream: t('diagnostics.report.preview.upstream'),
-                  upstreamProvider: t('diagnostics.report.preview.upstreamProvider'),
-                  upstreamStatus: t('diagnostics.report.preview.upstreamStatus'),
-                  upstreamRequestId: t('diagnostics.report.preview.upstreamRequestId'),
-                  upstreamRetry: t('diagnostics.report.preview.upstreamRetry'),
-                  upstreamBodyHead: t('diagnostics.report.preview.upstreamBodyHead'),
-                },
-              )}
-            </pre>
+        ) : null}
 
-            {recentWarning && !warningDismissed ? (
-              <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 space-y-2">
-                <p className="text-[var(--text-sm)] text-[var(--color-text-primary)]">
-                  <span aria-hidden="true">⚠️ </span>
-                  {recentWarning.issueNumber
-                    ? t('diagnostics.report.recentlyReported', {
-                        relative: recentWarning.relative,
-                        issueNumber: recentWarning.issueNumber,
-                      })
-                    : t('diagnostics.report.recentlyReportedNoNumber', {
-                        relative: recentWarning.relative,
-                      })}
-                </p>
-                <div className="flex items-center gap-3 text-[var(--text-sm)]">
-                  <a
-                    href={recentWarning.issueUrl}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      void window.codesign?.openExternal?.(recentWarning.issueUrl);
-                    }}
-                    className="text-[var(--color-accent)] hover:underline"
-                  >
-                    {t('diagnostics.report.viewPrevious')}
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setWarningDismissed(true)}
-                    className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-                  >
-                    {t('diagnostics.report.continueAnyway')}
-                  </button>
-                </div>
-              </div>
-            ) : null}
+        <label className="block space-y-1">
+          <span className="text-[var(--text-sm)] text-[var(--color-text-secondary)]">
+            {t('diagnostics.report.notes')}
+          </span>
+          <textarea
+            ref={notesRef}
+            rows={3}
+            maxLength={MAX_NOTES}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            disabled={busy}
+            className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+          />
+          <div
+            className={`text-[var(--text-xs)] text-right mt-1 ${
+              notes.length > MAX_NOTES * 0.95
+                ? 'text-[var(--color-error)]'
+                : 'text-[var(--color-text-muted)]'
+            }`}
+            aria-live="polite"
+          >
+            {notes.length}/{MAX_NOTES}
+          </div>
+        </label>
 
-            <label className="block space-y-1">
-              <span className="text-[var(--text-sm)] text-[var(--color-text-secondary)]">
-                {t('diagnostics.report.notes')}
-              </span>
-              <textarea
-                ref={notesRef}
-                rows={3}
-                maxLength={MAX_NOTES}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                disabled={busy}
-                className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-              />
-              <div
-                className={`text-[var(--text-xs)] text-right mt-1 ${
-                  notes.length > MAX_NOTES * 0.95
-                    ? 'text-[var(--color-error)]'
-                    : 'text-[var(--color-text-muted)]'
-                }`}
-                aria-live="polite"
-              >
-                {notes.length}/{MAX_NOTES}
-              </div>
-            </label>
+        <fieldset className="space-y-2.5" disabled={busy}>
+          <Toggle
+            label={t('diagnostics.report.include.prompt')}
+            hint={t('diagnostics.report.include.promptHint')}
+            checked={include.prompt}
+            onChange={(v) => setInclude((p) => ({ ...p, prompt: v }))}
+          />
+          <Toggle
+            label={t('diagnostics.report.include.paths')}
+            hint={t('diagnostics.report.include.pathsHint')}
+            checked={include.paths}
+            onChange={(v) => setInclude((p) => ({ ...p, paths: v }))}
+          />
+          <Toggle
+            label={t('diagnostics.report.include.urls')}
+            hint={t('diagnostics.report.include.urlsHint')}
+            checked={include.urls}
+            onChange={(v) => setInclude((p) => ({ ...p, urls: v }))}
+          />
+          <Toggle
+            label={t('diagnostics.report.include.timeline')}
+            hint={t('diagnostics.report.include.timelineHint')}
+            checked={include.timeline}
+            onChange={(v) => setInclude((p) => ({ ...p, timeline: v }))}
+          />
+        </fieldset>
 
-            <fieldset className="space-y-2.5" disabled={busy}>
-              <Toggle
-                label={t('diagnostics.report.include.prompt')}
-                hint={t('diagnostics.report.include.promptHint')}
-                checked={include.prompt}
-                onChange={(v) => setInclude((p) => ({ ...p, prompt: v }))}
-              />
-              <Toggle
-                label={t('diagnostics.report.include.paths')}
-                hint={t('diagnostics.report.include.pathsHint')}
-                checked={include.paths}
-                onChange={(v) => setInclude((p) => ({ ...p, paths: v }))}
-              />
-              <Toggle
-                label={t('diagnostics.report.include.urls')}
-                hint={t('diagnostics.report.include.urlsHint')}
-                checked={include.urls}
-                onChange={(v) => setInclude((p) => ({ ...p, urls: v }))}
-              />
-              <Toggle
-                label={t('diagnostics.report.include.timeline')}
-                hint={t('diagnostics.report.include.timelineHint')}
-                checked={include.timeline}
-                onChange={(v) => setInclude((p) => ({ ...p, timeline: v }))}
-              />
-            </fieldset>
+        <p className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
+          {t('diagnostics.report.disclaimer')}
+        </p>
 
-            <p className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
-              {t('diagnostics.report.disclaimer')}
-            </p>
+        {err ? <p className="text-[var(--text-sm)] text-[var(--color-error)]">{err}</p> : null}
+        {copied ? (
+          <p className="text-[var(--text-sm)] text-[var(--color-text-secondary)]">
+            {t('diagnostics.report.copied')}
+          </p>
+        ) : null}
 
-            {err ? <p className="text-[var(--text-sm)] text-[var(--color-error)]">{err}</p> : null}
-            {copied ? (
-              <p className="text-[var(--text-sm)] text-[var(--color-text-secondary)]">
-                {t('diagnostics.report.copied')}
-              </p>
-            ) : null}
-
-            <div className="flex items-center justify-end gap-2">
-              {busy ? (
-                <span
-                  role="status"
-                  aria-live="polite"
-                  className="text-[var(--text-xs)] text-[var(--color-text-muted)] mr-auto"
-                >
-                  {t('diagnostics.report.generating')}
-                </span>
-              ) : null}
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={busy}
-                className="h-9 px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50"
-              >
-                {t('diagnostics.report.cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={() => void submit('copy')}
-                disabled={busy}
-                className="h-9 px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] text-[var(--color-text-primary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50"
-              >
-                {t('diagnostics.report.copySummary')}
-              </button>
-              <button
-                type="button"
-                onClick={() => void submit('open')}
-                disabled={busy}
-                className="h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--text-sm)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                {confirmingDuplicate
-                  ? t('diagnostics.report.confirmOpenAnyway', { seconds: confirmSecondsLeft })
-                  : t('diagnostics.report.openIssue')}
-              </button>
-            </div>
-          </>
-        )}
+        <div className="flex items-center justify-end gap-2">
+          {busy ? (
+            <span
+              role="status"
+              aria-live="polite"
+              className="text-[var(--text-xs)] text-[var(--color-text-muted)] mr-auto"
+            >
+              {t('diagnostics.report.generating')}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="h-9 px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50"
+          >
+            {t('diagnostics.report.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void submit('copy')}
+            disabled={busy}
+            className="h-9 px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] text-[var(--color-text-primary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50"
+          >
+            {t('diagnostics.report.copySummary')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void submit('open')}
+            disabled={busy}
+            className="h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--text-sm)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {confirmingDuplicate
+              ? t('diagnostics.report.confirmOpenAnyway', { seconds: confirmSecondsLeft })
+              : t('diagnostics.report.openIssue')}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -44,7 +44,7 @@ export function ConnectionDiagnosticPanel({
   logsPath,
 }: ConnectionDiagnosticPanelProps) {
   const t = useT();
-  const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const [fixApplied, setFixApplied] = useState(false);
 
   const ctx: DiagnoseContext = { provider, baseUrl };
@@ -74,10 +74,12 @@ export function ConnectionDiagnosticPanel({
       await window.codesign.settings.openFolder(logsPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to open logs folder';
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'OPEN_LOG_FOLDER_FAILED',
+        scope: 'settings',
         title: t('diagnostics.showLogFailed'),
         description: message,
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
       });
     }
   }

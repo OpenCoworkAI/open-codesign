@@ -24,7 +24,7 @@ export function Tooltip({ label, side = 'bottom', children }: TooltipProps) {
     isValidElement<{ disabled?: boolean }>(children) && Boolean(children.props.disabled);
   return (
     <span
-      className="relative inline-flex group focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] rounded-[var(--radius-sm)]"
+      className="relative inline-flex group/tooltip focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] rounded-[var(--radius-sm)]"
       tabIndex={childDisabled ? 0 : undefined}
       aria-describedby={tooltipId}
     >
@@ -32,7 +32,7 @@ export function Tooltip({ label, side = 'bottom', children }: TooltipProps) {
       <span
         id={tooltipId}
         role="tooltip"
-        className={`pointer-events-none absolute ${sideClass[side]} z-50 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--color-text-primary)] px-2 py-1 text-[11px] font-medium text-[var(--color-background)] opacity-0 transition-opacity duration-150 delay-[400ms] group-hover:opacity-100 group-focus-within:opacity-100 group-focus:opacity-100 shadow-[var(--shadow-card)]`}
+        className={`pointer-events-none absolute ${sideClass[side]} z-50 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--color-text-primary)] px-2 py-1 text-[11px] font-medium text-[var(--color-background)] opacity-0 transition-opacity duration-150 delay-[400ms] group-hover/tooltip:opacity-100 group-focus-within/tooltip:opacity-100 group-focus/tooltip:opacity-100 shadow-[var(--shadow-card)]`}
       >
         {label}
       </span>

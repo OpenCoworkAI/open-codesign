@@ -15,8 +15,10 @@ import type {
   OnboardingState,
   ReportEventInput,
   ReportEventResult,
+  ReportableError,
   SelectedElement,
 } from '@open-codesign/shared';
+import { computeFingerprint } from '@open-codesign/shared/fingerprint';
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
 import type { CodesignApi, ExportFormat } from '../../preload/index';
@@ -41,32 +43,37 @@ export type GenerationStage =
 
 export type ToastVariant = 'success' | 'error' | 'info';
 
+/** Cap on the in-memory ReportableError ring. Dropping the oldest entries keeps
+ *  the store bounded during long sessions while still covering every recent
+ *  user-visible error — the Report dialog only needs whatever is on-screen. */
+export const MAX_REPORTABLE = 100;
+
+/**
+ * Input to `createReportableError`. Mirrors ReportableError minus the fields
+ * the store fills in synchronously (`localId`, `ts`, `fingerprint`,
+ * `persistedEventId`, `persistedFingerprint`).
+ */
+export interface CreateReportableErrorInput {
+  code: string;
+  scope: string;
+  message: string;
+  stack?: string;
+  runId?: string;
+  context?: Record<string, unknown>;
+}
+
 export interface Toast {
   id: string;
   variant: ToastVariant;
   title: string;
   description?: string;
   /**
-   * Optional id of a DiagnosticEventRow — attached by the store when an
-   * error becomes a toast so the "Report" button inside an error toast
-   * can open the exact event in ReportEventDialog. If absent the Report
-   * button falls back to resolving via `runId`, then to the most recent
-   * diagnostic event.
+   * Pointer into `reportableErrors` for the Report button. Set when a
+   * ReportableError was constructed alongside this toast (every error toast
+   * should have one — see `createReportableError`). Missing for info/success
+   * toasts that don't need a Report affordance.
    */
-  eventId?: number;
-  /**
-   * Optional generation / run id the toast was emitted for. Used by
-   * `findDiagnosticEventIdByRunId` so each toast's Report button opens
-   * the event that corresponds to *this* toast rather than the globally
-   * most recent one — critical when multiple errors fire in quick
-   * succession.
-   */
-  runId?: string;
-  /**
-   * Optional error code used when the store auto-records this toast as a
-   * diagnostic event (error toasts only). Defaults to 'RENDERER_ERROR'.
-   */
-  code?: string;
+  localId?: string;
   /**
    * Optional secondary action rendered as a button inside the toast. Used
    * to turn diagnostic toasts into actionable ones — e.g. a "no API key"
@@ -77,6 +84,29 @@ export interface Toast {
     label: string;
     onClick: () => void;
   };
+}
+
+/**
+ * Input to `reportableErrorToast`. Mirrors `Toast` minus the auto-filled
+ * fields (id, variant, localId) plus the ReportableError triage fields
+ * the store uses to build a richer record than pushToast's auto-wrap.
+ */
+export interface ReportableErrorToastSpec {
+  title: string;
+  description?: string;
+  action?: Toast['action'];
+  code: string;
+  scope: string;
+  stack?: string;
+  runId?: string;
+  context?: Record<string, unknown>;
+  /**
+   * When false, the toast is shown without recording a ReportableError,
+   * so the Toast UI does NOT render the "Report" button. Use this for
+   * expected user-facing errors (missing config files, declined imports)
+   * where prompting the user to file a bug report would just be noise.
+   */
+  reportable?: boolean;
 }
 
 export type Theme = 'light' | 'dark';
@@ -225,19 +255,32 @@ interface CodesignState {
   refreshDiagnosticEvents: () => Promise<void>;
   markDiagnosticsRead: () => void;
   reportDiagnosticEvent: (
-    input: Omit<ReportEventInput, 'schemaVersion' | 'timeline'>,
+    input: Omit<ReportEventInput, 'schemaVersion' | 'timeline' | 'error'> & {
+      error: ReportableError;
+    },
   ) => Promise<ReportEventResult>;
-  /** Resolve the diagnostic event id a toast's Report button should open.
-   *  Returns toast.eventId if set, otherwise looks up by toast.runId after
-   *  refreshing events, otherwise null. No last-event fallback — an unrelated
-   *  event would be worse than disabling the button. */
-  resolveToastEventId: (toast: Toast) => Promise<number | null>;
 
-  /** Id of the diagnostic event whose Report dialog is currently open, or null
-   *  if no dialog is active. Hoisted to the store so only one dialog ever
-   *  mounts — multiple error toasts can't stack overlapping modals. */
-  activeReportEventId: number | null;
-  openReportDialog: (eventId: number) => void;
+  /**
+   * Canonical in-memory registry of every error the renderer has surfaced to
+   * the user. Capped at MAX_REPORTABLE; oldest entries drop first. The Report
+   * dialog reads from here directly so it opens instantly, without an IPC
+   * round-trip to the diagnostic_events DB.
+   */
+  reportableErrors: ReportableError[];
+  /**
+   * Register a ReportableError in-memory (synchronous) and kick off a fire-
+   * and-forget `recordRendererError` IPC to persist it into diagnostic_events.
+   * Returns the newly minted `localId` so callers can stamp it on the toast
+   * or dialog invocation.
+   */
+  createReportableError: (partial: CreateReportableErrorInput) => string;
+  getReportableError: (localId: string) => ReportableError | undefined;
+
+  /** localId of the ReportableError whose Report dialog is currently open, or
+   *  null if no dialog is active. Hoisted to the store so only one dialog
+   *  ever mounts — multiple error toasts can't stack overlapping modals. */
+  activeReportLocalId: string | null;
+  openReportDialog: (localId: string) => void;
   closeReportDialog: () => void;
 
   loadConfig: () => Promise<void>;
@@ -314,6 +357,15 @@ interface CodesignState {
   requestRenameDesign: (design: Design | null) => void;
 
   pushToast: (toast: Omit<Toast, 'id'>) => string;
+  /**
+   * Convenience wrapper that pairs `createReportableError` with `pushToast`
+   * so callers don't have to stitch them together. Prefer this over raw
+   * `pushToast({ variant: 'error', ... })` at any site where a meaningful
+   * `code` + `scope` can be supplied — the Report dialog then gets real
+   * triage fields instead of the generic RENDERER_ERROR / renderer pair
+   * that `pushToast`'s auto-wrap falls back to.
+   */
+  reportableErrorToast: (spec: ReportableErrorToastSpec) => string;
   dismissToast: (id?: string) => void;
 
   // Sidebar v2 chat actions
@@ -882,6 +934,46 @@ function applyGenerateSuccess(
   }
 }
 
+/**
+ * Read a `code` string off a CodesignError-shaped value crossing IPC. Structured-
+ * clone strips the prototype but preserves own enumerable properties in Electron
+ * 28+; we read defensively. Returns undefined for anything that doesn't carry a
+ * non-empty string code so callers can fall back to their scope-specific default.
+ */
+export function extractCodesignErrorCode(err: unknown): string | undefined {
+  if (err === null || typeof err !== 'object') return undefined;
+  const code = (err as { code?: unknown }).code;
+  if (typeof code === 'string' && code.length > 0) return code;
+  return undefined;
+}
+
+/**
+ * Pull NormalizedProviderError-shaped upstream fields off a caught error so the
+ * Report dialog's "Upstream context" block can render them. Returns undefined
+ * when none of the expected keys are present — callers then omit `context`
+ * rather than attaching an empty object.
+ */
+export function extractUpstreamContext(err: unknown): Record<string, unknown> | undefined {
+  if (err === null || typeof err !== 'object') return undefined;
+  const rec = err as Record<string, unknown>;
+  const keys = [
+    'upstream_provider',
+    'upstream_status',
+    'upstream_code',
+    'upstream_message',
+    'upstream_request_id',
+    'retry_count',
+    'redacted_body_head',
+    'original_error_name',
+  ];
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = rec[key];
+    if (value !== undefined && value !== null) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function applyGenerateError(
   get: GetState,
   set: SetState,
@@ -915,11 +1007,20 @@ function applyGenerateError(
       payload: { message: msg },
     });
   }
+  const code = extractCodesignErrorCode(err) ?? 'GENERATION_FAILED';
+  const upstream = extractUpstreamContext(err);
   get().pushToast({
     variant: 'error',
     title: tr('notifications.generationFailed'),
     description: msg,
-    runId: generationId,
+    localId: get().createReportableError({
+      code,
+      scope: 'generate',
+      message: msg,
+      ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
+      runId: generationId,
+      ...(upstream !== undefined ? { context: upstream } : {}),
+    }),
   });
 }
 
@@ -1130,7 +1231,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   unreadErrorCount: 0,
   lastReadTs: 0,
   diagnosticsPrefsHydrated: false,
-  activeReportEventId: null,
+  reportableErrors: [],
+  activeReportLocalId: null,
 
   clearIframeErrors() {
     set({ iframeErrors: [] });
@@ -1393,7 +1495,12 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         variant: 'error',
         title: tr('notifications.cancellationFailed'),
         description: msg,
-        runId: id,
+        localId: get().createReportableError({
+          code: 'CANCEL_FAILED',
+          scope: 'generate',
+          message: msg,
+          runId: id,
+        }),
       });
       return;
     }
@@ -1416,7 +1523,13 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
           variant: 'error',
           title: tr('notifications.cancellationFailed'),
           description: msg,
-          runId: id,
+          localId: get().createReportableError({
+            code: 'CANCEL_FAILED',
+            scope: 'generate',
+            message: msg,
+            ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
+            runId: id,
+          }),
         });
       });
   },
@@ -1926,7 +2039,20 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   pushToast(toast) {
     const id = newId();
-    const next: Toast = { id, ...toast };
+    // Every error toast without an explicit `localId` gets one here: the
+    // Report button must always have a live ReportableError to open,
+    // regardless of which error path produced the toast. Callers that want
+    // richer context (stack, runId, structured context) should construct
+    // the ReportableError explicitly via `createReportableError` first.
+    let localId = toast.localId;
+    if (toast.variant === 'error' && localId === undefined) {
+      localId = get().createReportableError({
+        code: 'RENDERER_ERROR',
+        scope: 'renderer',
+        message: toast.description ?? toast.title,
+      });
+    }
+    const next: Toast = { id, ...toast, ...(localId ? { localId } : {}) };
     set((s) => {
       let toasts = s.toasts;
       // Error toasts are sticky (AUTO_DISMISS_MS.error is null) so they can
@@ -1943,44 +2069,6 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       }
       return { toasts: [...toasts, next] };
     });
-    // Auto-record error toasts that don't already carry an eventId so the
-    // Report button always has a matching diagnostic row to open. Without
-    // this, toasts from non-generation paths (onboarding imports, settings
-    // failures, etc.) would make Report resolve to null and do nothing.
-    if (
-      toast.variant === 'error' &&
-      toast.eventId === undefined &&
-      typeof window !== 'undefined' &&
-      window.codesign?.diagnostics?.recordRendererError
-    ) {
-      const payload: {
-        schemaVersion: 1;
-        code: string;
-        scope: string;
-        message: string;
-        runId?: string;
-      } = {
-        schemaVersion: 1,
-        code: toast.code ?? 'RENDERER_ERROR',
-        scope: 'renderer',
-        message: toast.description ?? toast.title,
-      };
-      if (toast.runId !== undefined) payload.runId = toast.runId;
-      void window.codesign.diagnostics
-        .recordRendererError(payload)
-        .then((res) => {
-          if (res.eventId === null) return;
-          const eventId = res.eventId;
-          set((s) => ({
-            toasts: s.toasts.map((existing) =>
-              existing.id === id ? { ...existing, eventId } : existing,
-            ),
-          }));
-        })
-        .catch(() => {
-          // Swallow — Report button will fall back to the "no event" path.
-        });
-    }
     return id;
   },
 
@@ -1990,6 +2078,32 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       return;
     }
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+  },
+
+  reportableErrorToast(spec) {
+    if (spec.reportable === false) {
+      return get().pushToast({
+        variant: 'error',
+        title: spec.title,
+        ...(spec.description !== undefined ? { description: spec.description } : {}),
+        ...(spec.action !== undefined ? { action: spec.action } : {}),
+      });
+    }
+    const localId = get().createReportableError({
+      code: spec.code,
+      scope: spec.scope,
+      message: spec.description ?? spec.title,
+      ...(spec.stack !== undefined ? { stack: spec.stack } : {}),
+      ...(spec.runId !== undefined ? { runId: spec.runId } : {}),
+      ...(spec.context !== undefined ? { context: spec.context } : {}),
+    });
+    return get().pushToast({
+      variant: 'error',
+      title: spec.title,
+      ...(spec.description !== undefined ? { description: spec.description } : {}),
+      ...(spec.action !== undefined ? { action: spec.action } : {}),
+      localId,
+    });
   },
 
   async loadChatForCurrentDesign() {
@@ -2434,23 +2548,100 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     }
     return api.reportEvent({
       schemaVersion: 1,
-      ...input,
+      error: input.error,
+      includePromptText: input.includePromptText,
+      includePaths: input.includePaths,
+      includeUrls: input.includeUrls,
+      includeTimeline: input.includeTimeline,
+      notes: input.notes,
       timeline: snapshotTimeline(),
     });
   },
 
-  async resolveToastEventId(toast) {
-    if (typeof toast.eventId === 'number') return toast.eventId;
-    if (!toast.runId) return null;
-    await get().refreshDiagnosticEvents();
-    const match = get().recentEvents.find((e) => e.runId === toast.runId);
-    return match?.id ?? null;
+  createReportableError(partial) {
+    const localId = newId();
+    const ts = Date.now();
+    const fingerprint = computeFingerprint({
+      errorCode: partial.code,
+      stack: partial.stack,
+      message: partial.message,
+    });
+    const record: ReportableError = {
+      localId,
+      code: partial.code,
+      scope: partial.scope,
+      message: partial.message,
+      fingerprint,
+      ts,
+    };
+    if (partial.stack !== undefined) record.stack = partial.stack;
+    if (partial.runId !== undefined) record.runId = partial.runId;
+    if (partial.context !== undefined) record.context = partial.context;
+
+    set((s) => {
+      const next = [...s.reportableErrors, record];
+      if (next.length > MAX_REPORTABLE) next.splice(0, next.length - MAX_REPORTABLE);
+      return { reportableErrors: next };
+    });
+
+    // Fire-and-forget DB persistence. Report UX does not depend on this.
+    const api =
+      typeof window !== 'undefined' ? window.codesign?.diagnostics?.recordRendererError : undefined;
+    if (api) {
+      const payload: {
+        schemaVersion: 1;
+        code: string;
+        scope: string;
+        message: string;
+        stack?: string;
+        runId?: string;
+        context?: Record<string, unknown>;
+      } = {
+        schemaVersion: 1,
+        code: partial.code,
+        scope: partial.scope,
+        message: partial.message,
+      };
+      if (partial.stack !== undefined) payload.stack = partial.stack;
+      if (partial.runId !== undefined) payload.runId = partial.runId;
+      if (partial.context !== undefined) payload.context = partial.context;
+      void api(payload)
+        .then((res) => {
+          if (res.eventId === null) return;
+          const eventId = res.eventId;
+          // Batch A echoes `fingerprint` alongside eventId so the renderer
+          // stops trusting its own FNV estimate once the DB row has been
+          // written. Guarded on type for the transition window while Batch A's
+          // type extension is landing.
+          const echoed = (res as { fingerprint?: unknown }).fingerprint;
+          const persistedFingerprint = typeof echoed === 'string' ? echoed : undefined;
+          set((s) => ({
+            reportableErrors: s.reportableErrors.map((existing) =>
+              existing.localId === localId
+                ? {
+                    ...existing,
+                    persistedEventId: eventId,
+                    ...(persistedFingerprint !== undefined ? { persistedFingerprint } : {}),
+                  }
+                : existing,
+            ),
+          }));
+        })
+        .catch(() => {
+          // DB persistence is nice-to-have; Report still works without it.
+        });
+    }
+    return localId;
   },
 
-  openReportDialog(eventId) {
-    set({ activeReportEventId: eventId });
+  getReportableError(localId) {
+    return get().reportableErrors.find((r) => r.localId === localId);
+  },
+
+  openReportDialog(localId) {
+    set({ activeReportLocalId: localId });
   },
   closeReportDialog() {
-    set({ activeReportEventId: null });
+    set({ activeReportLocalId: null });
   },
 }));

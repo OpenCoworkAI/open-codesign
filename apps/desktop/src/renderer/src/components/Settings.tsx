@@ -1,4 +1,4 @@
-import { setLocale as applyLocale, useT } from '@open-codesign/i18n';
+import { setLocale as applyLocale, getCurrentLocale, useT } from '@open-codesign/i18n';
 import type { OnboardingState, ReasoningLevel, WireApi } from '@open-codesign/shared';
 import {
   PROVIDER_SHORTLIST as SHORTLIST,
@@ -284,6 +284,7 @@ function ProviderCard({
 }) {
   const t = useT();
   const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const label = row.label ?? row.provider;
   const hasError = row.error !== undefined;
 
@@ -295,8 +296,9 @@ function ProviderCard({
 
   async function handleTestConnection() {
     if (!window.codesign) {
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'CONNECTION_TEST_FAILED',
+        scope: 'settings',
         title: t('settings.providers.toast.connectionFailed'),
         description: t('settings.common.unknownError'),
       });
@@ -308,17 +310,22 @@ function ProviderCard({
       if (res.ok) {
         pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
       } else {
-        pushToast({
-          variant: 'error',
+        reportableErrorToast({
+          code: 'CONNECTION_TEST_FAILED',
+          scope: 'settings',
           title: t('settings.providers.toast.connectionFailed'),
           description: res.hint || res.message,
+          context: { provider: row.provider },
         });
       }
     } catch (err) {
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'CONNECTION_TEST_FAILED',
+        scope: 'settings',
         title: t('settings.providers.toast.connectionFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
+        context: { provider: row.provider },
       });
     }
   }
@@ -377,8 +384,8 @@ function ProviderCard({
         </div>
       </div>
 
-      {row.isActive && !hasError && config !== null && (
-        <ActiveModelSelector config={config} provider={row.provider} />
+      {!hasError && row.hasKey !== false && config !== null && (
+        <RowModelSelector config={config} row={row} onRowChanged={onRowChanged} />
       )}
       {!hasError && row.hasKey !== false && (
         <ReasoningDepthSelector
@@ -391,24 +398,34 @@ function ProviderCard({
   );
 }
 
-function ActiveModelSelector({
+function RowModelSelector({
   config,
-  provider,
+  row,
+  onRowChanged,
 }: {
   config: OnboardingState;
-  provider: string;
+  row: ProviderRow;
+  onRowChanged: (row: ProviderRow) => void;
 }) {
   const t = useT();
   const setConfig = useCodesignStore((s) => s.completeOnboarding);
-  const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
 
-  const [primary, setPrimary] = useState(config.modelPrimary ?? '');
+  const provider = row.provider;
+  const isActive = row.isActive;
+
+  const initial = isActive
+    ? (config.modelPrimary ?? row.defaultModel ?? '')
+    : (row.defaultModel ?? '');
+  const [primary, setPrimary] = useState(initial);
   const [models, setModels] = useState<string[] | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
 
   useEffect(() => {
-    setPrimary(config.modelPrimary ?? '');
-  }, [config.modelPrimary]);
+    setPrimary(
+      isActive ? (config.modelPrimary ?? row.defaultModel ?? '') : (row.defaultModel ?? ''),
+    );
+  }, [isActive, config.modelPrimary, row.defaultModel]);
 
   // Fetch models immediately on mount
   useEffect(() => {
@@ -430,18 +447,28 @@ function ActiveModelSelector({
   async function save(next: string): Promise<boolean> {
     if (!window.codesign) return false;
     try {
-      const updated = await window.codesign.settings.setActiveProvider({
-        provider,
-        modelPrimary: next,
-      });
-      recordAction({ type: 'provider.switch', data: { provider, modelId: next } });
-      setConfig(updated);
+      if (isActive) {
+        const updated = await window.codesign.settings.setActiveProvider({
+          provider,
+          modelPrimary: next,
+        });
+        recordAction({ type: 'provider.switch', data: { provider, modelId: next } });
+        setConfig(updated);
+      } else {
+        // Inactive row: persist the per-provider default so that clicking
+        // "Set as current" later picks it up (see handleActivate → currentRow.defaultModel).
+        await window.codesign.config.updateProvider({ id: provider, defaultModel: next });
+        onRowChanged({ ...row, defaultModel: next });
+      }
       return true;
     } catch (err) {
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'PROVIDER_MODEL_SAVE_FAILED',
+        scope: 'settings',
         title: t('settings.providers.toast.modelSaveFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
+        context: { provider },
       });
       return false;
     }
@@ -490,6 +517,7 @@ function ReasoningDepthSelector({
 }) {
   const t = useT();
   const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const [saving, setSaving] = useState(false);
   // Controlled local state — optimistic so the dropdown reflects the user's
   // choice immediately, before the IPC round-trip resolves. Without this,
@@ -522,10 +550,13 @@ function ReasoningDepthSelector({
       // Roll back the optimistic update only if this is still the latest
       // in-flight save — otherwise a newer pick is about to land.
       if (seq === saveSeq.current) setCurrent(prev);
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'PROVIDER_REASONING_SAVE_FAILED',
+        scope: 'settings',
         title: t('settings.providers.toast.reasoningSaveFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
+        context: { provider },
       });
     } finally {
       if (seq === saveSeq.current) setSaving(false);
@@ -566,6 +597,24 @@ const PARSE_REASON_NOT_JSON_OBJECT = '__parse_reason_not_json_object__';
 const DISMISSED_BANNER_PREFIX = 'open-codesign:settings:dismissed-import-banner:';
 
 /**
+ * Electron IPC wraps thrown errors as
+ * `Error invoking remote method '<channel>': <ErrorName>: <message>`.
+ * Strip the wrapper and, for bilingual messages formatted as `en / zh`,
+ * pick the side matching the active locale so toast descriptions read
+ * like natural sentences instead of framework tracebacks.
+ */
+function cleanIpcError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err ?? '');
+  const raw = err.message;
+  const stripped = raw.replace(/^Error invoking remote method '[^']*':\s*[A-Za-z]*Error:\s*/, '');
+  const parts = stripped.split(' / ');
+  if (parts.length >= 2) {
+    return getCurrentLocale() === 'zh-CN' ? (parts[1] ?? stripped) : (parts[0] ?? stripped);
+  }
+  return stripped;
+}
+
+/**
  * Strip any user:pass@ credentials from a URL before putting it into
  * visible copy (banner, toast, screenshot). Preserves the full URL for
  * anything the renderer passes back into the modal preset — we don't want
@@ -578,9 +627,10 @@ function maskBaseUrlCreds(raw: string): string {
     if (u.username === '' && u.password === '') return raw;
     u.username = '';
     u.password = '';
-    // URL.toString() adds a trailing slash on bare-host URLs; strip it so
-    // "https://proxy.local/" doesn't become "https://proxy.local/" while
-    // the raw was "https://proxy.local".
+    // URL.toString() always appends a trailing slash on bare-host URLs.
+    // Preserve the input's original slash/no-slash shape so
+    // `https://proxy.local` round-trips unchanged — only the credentials
+    // get stripped.
     return u.toString().replace(/\/$/, raw.endsWith('/') ? '/' : '');
   } catch {
     return raw;
@@ -803,6 +853,7 @@ function ModelsTab() {
   const config = useCodesignStore((s) => s.config);
   const setConfig = useCodesignStore((s) => s.completeOnboarding);
   const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const [rows, setRows] = useState<ProviderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddCustom, setShowAddCustom] = useState(false);
@@ -867,7 +918,7 @@ function ModelsTab() {
         pushToast({
           variant: 'error',
           title: t('settings.providers.toast.loadFailed'),
-          description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+          description: cleanIpcError(err) || t('settings.common.unknownError'),
         });
       })
       .finally(() => setLoading(false));
@@ -953,10 +1004,34 @@ function ModelsTab() {
       await reloadRows();
       pushToast({ variant: 'success', title: t('settings.providers.import.codexDone') });
     } catch (err) {
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'CODEX_IMPORT_FAILED',
+        scope: 'onboarding',
         title: t('settings.providers.import.failed'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        reportable: false,
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
+      });
+    }
+  }
+
+  async function handleAddOllama() {
+    if (!window.codesign) return;
+    try {
+      await window.codesign.settings.addProvider({
+        provider: 'ollama',
+        apiKey: '',
+        modelPrimary: SHORTLIST.ollama.defaultPrimary,
+      });
+      await reloadRows();
+      pushToast({ variant: 'success', title: t('settings.providers.import.ollamaDone') });
+    } catch (err) {
+      reportableErrorToast({
+        code: 'OLLAMA_ADD_FAILED',
+        scope: 'settings',
+        title: t('settings.providers.toast.saveFailed'),
         description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
       });
     }
   }
@@ -980,10 +1055,13 @@ function ModelsTab() {
         ...(description !== undefined ? { description } : {}),
       });
     } catch (err) {
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'GEMINI_IMPORT_FAILED',
+        scope: 'onboarding',
         title: t('settings.providers.import.failed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        reportable: false,
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
       });
     }
   }
@@ -1009,10 +1087,13 @@ function ModelsTab() {
         ...(description !== undefined ? { description } : {}),
       });
     } catch (err) {
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'OPENCODE_IMPORT_FAILED',
+        scope: 'onboarding',
         title: t('settings.providers.import.failed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        reportable: false,
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
       });
     }
   }
@@ -1050,10 +1131,13 @@ function ModelsTab() {
         });
         return;
       }
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'CLAUDECODE_IMPORT_FAILED',
+        scope: 'onboarding',
         title: t('settings.providers.import.failed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        reportable: false,
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
       });
     }
   }
@@ -1118,10 +1202,12 @@ function ModelsTab() {
         }
       }
     } catch (err) {
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'PROVIDER_DELETE_FAILED',
+        scope: 'settings',
         title: t('settings.providers.toast.deleteFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
       });
     }
   }
@@ -1158,10 +1244,12 @@ function ModelsTab() {
         title: t('settings.providers.toast.switchedTo', { label }),
       });
     } catch (err) {
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'PROVIDER_ACTIVATE_FAILED',
+        scope: 'settings',
         title: t('settings.providers.toast.switchFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
       });
     }
   }
@@ -1445,6 +1533,7 @@ function ModelsTab() {
             open={showAddMenu}
             setOpen={setShowAddMenu}
             hasClaudeCodeImported={rows.some((r) => r.provider === 'claude-code-imported')}
+            hasOllamaImported={rows.some((r) => r.provider === 'ollama')}
             onImportCodex={() => {
               setShowAddMenu(false);
               void handleImportCodex();
@@ -1453,8 +1542,22 @@ function ModelsTab() {
               setShowAddMenu(false);
               void handleImportClaudeCode();
             }}
+            onAddOllama={() => {
+              setShowAddMenu(false);
+              void handleAddOllama();
+            }}
             onAddCustom={() => {
               setShowAddMenu(false);
+              setShowAddCustom(true);
+            }}
+            onAddCliProxyApi={() => {
+              setShowAddMenu(false);
+              setCustomProviderPreset({
+                name: 'CLIProxyAPI',
+                baseUrl: 'http://127.0.0.1:8317',
+                wire: 'anthropic',
+                defaultModel: '',
+              });
               setShowAddCustom(true);
             }}
           />
@@ -1532,7 +1635,7 @@ function AppearanceTab() {
         pushToast({
           variant: 'error',
           title: t('settings.appearance.languageLoadFailed'),
-          description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+          description: cleanIpcError(err) || t('settings.common.unknownError'),
         });
       });
   }, [pushToast, t]);
@@ -1553,7 +1656,7 @@ function AppearanceTab() {
       pushToast({
         variant: 'error',
         title: t('errors.localePersistFailed'),
-        description: err instanceof Error ? err.message : t('errors.unknown'),
+        description: cleanIpcError(err) || t('errors.unknown'),
       });
     }
   }
@@ -1709,7 +1812,7 @@ function StorageTab() {
         pushToast({
           variant: 'error',
           title: t('settings.storage.pathsLoadFailed'),
-          description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+          description: cleanIpcError(err) || t('settings.common.unknownError'),
         });
       });
   }, [pushToast, t]);
@@ -1721,7 +1824,7 @@ function StorageTab() {
       pushToast({
         variant: 'error',
         title: t('settings.storage.openFolderFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
       });
     }
   }
@@ -1737,7 +1840,7 @@ function StorageTab() {
       pushToast({
         variant: 'error',
         title: t('settings.storage.locationSaveFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
       });
     } finally {
       setChoosing(null);
@@ -1762,7 +1865,7 @@ function StorageTab() {
       pushToast({
         variant: 'error',
         title: t('settings.storage.openFolderFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
       });
     }
   }
@@ -1781,7 +1884,7 @@ function StorageTab() {
       pushToast({
         variant: 'error',
         title: t('settings.storage.diagnosticsExportFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
       });
     } finally {
       setExporting(false);
@@ -1916,7 +2019,7 @@ function AdvancedTab() {
         pushToast({
           variant: 'error',
           title: t('settings.advanced.prefsLoadFailed'),
-          description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+          description: cleanIpcError(err) || t('settings.common.unknownError'),
         });
       });
   }, [pushToast, t]);
@@ -1930,7 +2033,7 @@ function AdvancedTab() {
       pushToast({
         variant: 'error',
         title: t('settings.advanced.prefsSaveFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
       });
     }
   }
@@ -1943,7 +2046,7 @@ function AdvancedTab() {
       pushToast({
         variant: 'error',
         title: t('settings.advanced.devtoolsFailed'),
-        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
       });
     }
   }
@@ -2060,18 +2163,24 @@ interface AddProviderMenuProps {
   open: boolean;
   setOpen: (v: boolean) => void;
   hasClaudeCodeImported: boolean;
+  hasOllamaImported: boolean;
   onImportCodex: () => void;
   onImportClaudeCode: () => void;
+  onAddOllama: () => void;
   onAddCustom: () => void;
+  onAddCliProxyApi: () => void;
 }
 
 function AddProviderMenu({
   open,
   setOpen,
   hasClaudeCodeImported,
+  hasOllamaImported,
   onImportCodex,
   onImportClaudeCode,
+  onAddOllama,
   onAddCustom,
+  onAddCliProxyApi,
 }: AddProviderMenuProps) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -2120,6 +2229,13 @@ function AddProviderMenu({
       onClick: onImportClaudeCode,
     },
     {
+      key: 'ollama',
+      label: t('settings.providers.import.ollamaMenu'),
+      desc: t('settings.providers.import.ollamaMenuDesc'),
+      disabled: hasOllamaImported,
+      onClick: onAddOllama,
+    },
+    {
       key: 'custom',
       label: t('settings.providers.import.customMenu', { defaultValue: '自定义服务' }),
       desc: t('settings.providers.import.customMenuDesc', {
@@ -2127,6 +2243,15 @@ function AddProviderMenu({
       }),
       disabled: false,
       onClick: onAddCustom,
+    },
+    {
+      key: 'cli-proxy-api',
+      label: t('settings.providers.cliProxyApi.presetName', { defaultValue: 'CLIProxyAPI' }),
+      desc: t('settings.providers.cliProxyApi.presetDescription', {
+        defaultValue: 'Local proxy that wraps Claude/Codex/Gemini OAuth subscriptions',
+      }),
+      disabled: false,
+      onClick: onAddCliProxyApi,
     },
   ];
 

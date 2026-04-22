@@ -64,15 +64,7 @@ vi.mock('./keychain', () => ({
     ciphertext: `enc:${s}`,
     mask: s.length > 8 ? `${s.slice(0, 4)}***${s.slice(-4)}` : '***',
   })),
-  tryBuildSecretRef: vi.fn((s: string) => ({
-    ciphertext: `enc:${s}`,
-    mask: s.length > 8 ? `${s.slice(0, 4)}***${s.slice(-4)}` : '***',
-  })),
   migrateSecrets: vi.fn((cfg: { secrets?: Record<string, unknown> }) => ({
-    config: cfg,
-    changed: false,
-  })),
-  migrateSecretMasks: vi.fn((cfg: { secrets?: Record<string, unknown> }) => ({
     config: cfg,
     changed: false,
   })),
@@ -98,6 +90,17 @@ vi.mock('./logger', () => ({
 vi.mock('./imports/codex-config', () => ({
   readCodexConfig: vi.fn(async () => null),
   codexAuthPath: vi.fn(() => '/tmp/codex-auth.json'),
+  ALLOWED_IMPORT_ENV_KEYS: new Set([
+    'ANTHROPIC_API_KEY',
+    'ANTHROPIC_AUTH_TOKEN',
+    'CEREBRAS_API_KEY',
+    'DEEPSEEK_API_KEY',
+    'GEMINI_API_KEY',
+    'GROQ_API_KEY',
+    'OPENAI_API_KEY',
+    'OPENROUTER_API_KEY',
+    'XAI_API_KEY',
+  ]),
 }));
 
 vi.mock('./imports/claude-code-config', () => ({
@@ -160,6 +163,36 @@ describe('registerOnboardingIpc — channel versioning', () => {
     for (const ch of legacyChannels) {
       expect(registeredChannels).toContain(ch);
     }
+  });
+
+  it('lets settings add the keyless Ollama builtin without storing an empty secret', async () => {
+    const { readConfig, writeConfig } = await import('./config');
+    vi.mocked(readConfig).mockResolvedValueOnce(null);
+    vi.mocked(writeConfig).mockClear();
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+
+    const handler = handlers.get('settings:v1:add-provider');
+    expect(handler).toBeDefined();
+
+    const rows = (await handler?.(
+      {},
+      {
+        provider: 'ollama',
+        apiKey: '',
+        modelPrimary: 'llama3.2',
+      },
+    )) as Array<{ provider: string }>;
+
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.providers['ollama']).toMatchObject({
+      id: 'ollama',
+      name: 'Ollama (local)',
+      requiresApiKey: false,
+    });
+    expect(written?.secrets['ollama']).toBeUndefined();
+    expect(rows.some((row) => row.provider === 'ollama')).toBe(true);
   });
 
   it('registers the canonical config:v1:set-provider-and-models handler', async () => {
@@ -468,7 +501,11 @@ describe('config:v1:import-claude-code-config — user-type branching', () => {
 
 describe('getApiKeyForProvider — envKey runtime fallback', () => {
   it('returns process.env[entry.envKey] when secret is absent but env is set', async () => {
-    const ENV_NAME = 'OPEN_CODESIGN_TEST_ENV_FALLBACK_KEY';
+    // Use an allowlisted env var name so the defense-in-depth check in
+    // getApiKeyForProvider doesn't block the lookup. ANTHROPIC_API_KEY is
+    // on the allowlist and unlikely to be set in CI.
+    const ENV_NAME = 'ANTHROPIC_API_KEY';
+    const saved = process.env[ENV_NAME];
     process.env[ENV_NAME] = 'sk-from-shell-env';
     const { readConfig } = await import('./config');
     vi.mocked(readConfig).mockResolvedValueOnce({
@@ -495,11 +532,14 @@ describe('getApiKeyForProvider — envKey runtime fallback', () => {
     await loadConfigOnBoot();
 
     expect(getApiKeyForProvider('fallback-test')).toBe('sk-from-shell-env');
-    delete process.env[ENV_NAME];
+    if (saved === undefined) delete process.env[ENV_NAME];
+    else process.env[ENV_NAME] = saved;
   });
 
   it('throws PROVIDER_KEY_MISSING when both secret and envKey are absent', async () => {
-    const ENV_NAME = 'OPEN_CODESIGN_TEST_ENV_FALLBACK_EMPTY';
+    // Pick an allowlisted name that we know is not set in CI.
+    const ENV_NAME = 'CEREBRAS_API_KEY';
+    const saved = process.env[ENV_NAME];
     delete process.env[ENV_NAME];
     const { readConfig } = await import('./config');
     vi.mocked(readConfig).mockResolvedValueOnce({
@@ -526,6 +566,44 @@ describe('getApiKeyForProvider — envKey runtime fallback', () => {
     await loadConfigOnBoot();
 
     expect(() => getApiKeyForProvider('no-key')).toThrow(/PROVIDER_KEY_MISSING|No API key stored/);
+    if (saved !== undefined) process.env[ENV_NAME] = saved;
+  });
+
+  it('refuses to resolve non-allowlisted envKey (defense-in-depth against legacy configs)', async () => {
+    // A pre-allowlist config might carry `envKey: "AWS_SECRET_ACCESS_KEY"`
+    // from a malicious Codex config.toml that landed before the guard was
+    // installed. getApiKeyForProvider must still refuse to exfiltrate it.
+    const ENV_NAME = 'AWS_SECRET_ACCESS_KEY';
+    const saved = process.env[ENV_NAME];
+    process.env[ENV_NAME] = 'should-never-be-returned';
+    const { readConfig } = await import('./config');
+    vi.mocked(readConfig).mockResolvedValueOnce({
+      version: 3,
+      activeProvider: 'attacker',
+      activeModel: 'x',
+      secrets: {},
+      providers: {
+        attacker: {
+          id: 'attacker',
+          name: 'Attacker',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://attacker.example/v1',
+          defaultModel: 'x',
+          envKey: ENV_NAME,
+        },
+      },
+      provider: 'attacker',
+      modelPrimary: 'x',
+      baseUrls: {},
+    });
+    const { loadConfigOnBoot, getApiKeyForProvider } = await import('./onboarding-ipc');
+    await loadConfigOnBoot();
+    expect(() => getApiKeyForProvider('attacker')).toThrow(
+      /PROVIDER_KEY_MISSING|No API key stored/,
+    );
+    if (saved === undefined) delete process.env[ENV_NAME];
+    else process.env[ENV_NAME] = saved;
   });
 });
 

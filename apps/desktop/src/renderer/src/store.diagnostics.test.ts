@@ -124,7 +124,14 @@ describe('diagnostics slice', () => {
     recordAction({ type: 'prompt.submit' });
 
     const result = await useCodesignStore.getState().reportDiagnosticEvent({
-      eventId: 42,
+      error: {
+        localId: 'local-42',
+        code: 'TEST',
+        scope: 'renderer',
+        message: 'boom',
+        fingerprint: 'fp-42',
+        ts: Date.now(),
+      },
       includePromptText: false,
       includePaths: false,
       includeUrls: false,
@@ -135,7 +142,7 @@ describe('diagnostics slice', () => {
     expect(reportEvent).toHaveBeenCalledTimes(1);
     const payload = reportEvent.mock.calls[0]?.[0] as ReportEventInput;
     expect(payload.schemaVersion).toBe(1);
-    expect(payload.eventId).toBe(42);
+    expect(payload.error.localId).toBe('local-42');
     expect(payload.timeline).toHaveLength(1);
     expect(payload.timeline[0]?.type).toBe('prompt.submit');
     expect(result.issueUrl).toBe('https://example.com/issue');

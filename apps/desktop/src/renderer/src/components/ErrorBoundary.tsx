@@ -16,7 +16,6 @@ import { useT } from '@open-codesign/i18n';
 import { Button } from '@open-codesign/ui';
 import { Component, type ErrorInfo, type ReactNode, useState } from 'react';
 import { useCodesignStore } from '../store';
-import { ReportEventDialog } from './diagnostics/ReportEventDialog';
 
 // Source: apps/desktop/package.json → repository.url
 // Kept as a constant here so the ErrorBoundary has no runtime dependency on
@@ -149,16 +148,18 @@ function ErrorBoundaryFallback({
   onReportOnGitHub,
 }: ErrorBoundaryFallbackProps): ReactNode {
   const t = useT();
-  const recentEvents = useCodesignStore((s) => s.recentEvents);
-  const [reportId, setReportId] = useState<number | null>(null);
-  // Capture when the fallback first mounted. We only treat events logged at
-  // or shortly before this moment as "belonging to" this crash — otherwise
-  // the button opens an unrelated historical event.
-  const [errorCapturedAt] = useState<number>(() => Date.now());
-  const matchingEvent = recentEvents.find(
-    (e) => e.level === 'error' && e.ts >= errorCapturedAt - 2000,
+  const openReportDialog = useCodesignStore((s) => s.openReportDialog);
+  const createReportableError = useCodesignStore((s) => s.createReportableError);
+  // Construct the ReportableError once per mount — the localId is stable across
+  // re-renders so repeat clicks open the same dialog.
+  const [localId] = useState<string>(() =>
+    createReportableError({
+      code: error.name || 'RENDERER_ERROR',
+      scope: scope ?? 'renderer',
+      message: error.message,
+      ...(error.stack !== undefined ? { stack: error.stack } : {}),
+    }),
   );
-  const matchingEventId = matchingEvent?.id ?? null;
   const scopeLabel = scope ?? t('errorBoundary.scopeFallback');
   return (
     <div className="h-full w-full flex items-center justify-center p-6 bg-[var(--color-background)]">
@@ -181,11 +182,7 @@ function ErrorBoundaryFallback({
             type="button"
             variant="secondary"
             size="md"
-            disabled={matchingEventId === null}
-            title={
-              matchingEventId === null ? t('errorBoundary.reportDiagnosticsUnavailable') : undefined
-            }
-            onClick={() => setReportId(matchingEventId)}
+            onClick={() => openReportDialog(localId)}
           >
             {t('errorBoundary.reportViaDiagnostics')}
           </Button>
@@ -197,7 +194,6 @@ function ErrorBoundaryFallback({
           </Button>
         </div>
       </div>
-      <ReportEventDialog eventId={reportId} onClose={() => setReportId(null)} />
     </div>
   );
 }

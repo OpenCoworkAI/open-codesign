@@ -5,11 +5,22 @@
  * process-level state (no Date.now, no app.getPath, etc.).
  */
 
-import type { ActionTimelineEntry, DiagnosticEventRow } from '@open-codesign/shared';
+import type { ActionTimelineEntry, ReportableError } from '@open-codesign/shared';
 import { normalizeFrame } from '@open-codesign/shared/fingerprint';
 
 export interface SummaryInput {
-  event: DiagnosticEventRow;
+  /** The canonical in-memory error record. Since the Report flow no longer
+   *  requires a diagnostic_events row to exist, the composer works off the
+   *  ReportableError payload the renderer sent. */
+  error: ReportableError;
+  /** Optional DB row count for this fingerprint. Falls back to 1 when the row
+   *  was never persisted (Report still works without it). */
+  count?: number;
+  /** Optional level label — defaults to "error" for ReportableError callers. */
+  level?: 'info' | 'warn' | 'error';
+  /** Optional — "retried and succeeded". Legacy DB rows carry this flag;
+   *  in-memory ReportableErrors default to false. */
+  transient?: boolean;
   appVersion: string;
   platform: string;
   electronVersion: string;
@@ -33,25 +44,28 @@ const PATH_REGEX =
 const URL_REGEX = /(?:https?|wss?|file):\/\/[^\s'"<>]+/g;
 
 export function composeSummaryMarkdown(input: SummaryInput): string {
-  const { event } = input;
-  const occurredAt = new Date(event.ts).toISOString();
-  const runId = event.runId ?? '(none)';
-  const transient = event.transient ? 'yes' : 'no';
+  const { error } = input;
+  const count = input.count ?? 1;
+  const level = input.level ?? 'error';
+  const transientFlag = input.transient === true;
+  const occurredAt = new Date(error.ts).toISOString();
+  const runId = error.runId ?? '(none)';
+  const transient = transientFlag ? 'yes' : 'no';
 
-  const message = redact(event.message, input);
-  const stackSection = renderStack(event.stack, input);
-  const upstreamSection = renderUpstream(event, input);
+  const message = redact(error.message, input);
+  const stackSection = renderStack(error.stack, input);
+  const upstreamSection = renderUpstream(error, input);
   const timelineSection = renderTimeline(input);
   const logSection = renderLogTail(input);
   const notesSection = renderNotes(input.notes);
 
   const lines: string[] = [];
-  lines.push(`# Diagnostic Report — ${event.code}`);
+  lines.push(`# Diagnostic Report — ${error.code}`);
   lines.push('');
-  lines.push(`**Fingerprint:** \`${event.fingerprint}\`  (seen ${event.count} times)`);
+  lines.push(`**Fingerprint:** \`${error.fingerprint}\`  (seen ${count} times)`);
   lines.push(`**Occurred at:** ${occurredAt}`);
   lines.push(`**Run id:** \`${runId}\``);
-  lines.push(`**Scope:** \`${event.scope}\``);
+  lines.push(`**Scope:** \`${error.scope}\``);
   lines.push('');
   lines.push('## Environment');
   lines.push(`- App: ${input.appVersion}`);
@@ -59,9 +73,9 @@ export function composeSummaryMarkdown(input: SummaryInput): string {
   lines.push(`- Electron: ${input.electronVersion} / Node: ${input.nodeVersion}`);
   lines.push('');
   lines.push('## Error');
-  lines.push(`- Code: \`${event.code}\``);
+  lines.push(`- Code: \`${error.code}\``);
   lines.push(`- Message: ${mdInlineCode(message)}`);
-  lines.push(`- Level: ${event.level}`);
+  lines.push(`- Level: ${level}`);
   lines.push(`- Transient (retried and succeeded): ${transient}`);
   lines.push('');
   lines.push('### Stack (top 5 frames)');
@@ -116,9 +130,9 @@ function renderStack(stack: string | undefined, input?: SummaryInput): string {
   return ['```', ...redacted, '```'].join('\n');
 }
 
-function renderUpstream(event: DiagnosticEventRow, input: SummaryInput): string | undefined {
-  if (event.scope !== 'provider') return undefined;
-  const ctx = event.context;
+function renderUpstream(error: ReportableError, input: SummaryInput): string | undefined {
+  if (error.scope !== 'provider') return undefined;
+  const ctx = error.context;
   if (ctx === undefined) return undefined;
   const provider = asString(ctx['upstream_provider']);
   const status = asString(ctx['upstream_status']);
@@ -161,7 +175,7 @@ function renderTimeline(input: SummaryInput): string {
   rows.push('| Offset | Type | Details |');
   rows.push('|---|---|---|');
   for (const entry of sorted) {
-    const offset = Math.round((entry.ts - input.event.ts) / 1000);
+    const offset = Math.round((entry.ts - input.error.ts) / 1000);
     const offsetLabel = `${offset} s`;
     let details = formatTimelineData(entry.data);
     if (!input.includePromptText) details = scrubPromptInLine(details);

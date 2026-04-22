@@ -19,7 +19,7 @@ export function CommentChipBar() {
   const removeComment = useCodesignStore((s) => s.removeComment);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
-  const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const config = useCodesignStore((s) => s.config);
   const isGenerating = useCodesignStore(
     (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
@@ -36,8 +36,9 @@ export function CommentChipBar() {
     // The button disables during `isGenerating`, but onboarding-incomplete
     // users would otherwise click Apply to no effect. Surface it explicitly.
     if (!isReady) {
-      pushToast({
-        variant: 'error',
+      reportableErrorToast({
+        code: 'COMMENT_APPLY_BLOCKED_ONBOARDING',
+        scope: 'apply-comment',
         title: t('notifications.onboardingIncomplete'),
       });
       return;

@@ -188,8 +188,8 @@ describe('codex-oauth:v1:login', () => {
     expect(writeConfigMock).toHaveBeenCalledTimes(2);
     expect(fakeCachedConfig?.providers['chatgpt-codex']).toMatchObject({
       id: 'chatgpt-codex',
-      wire: 'openai-responses',
-      baseUrl: 'https://chatgpt.com/backend-api/codex',
+      wire: 'openai-codex-responses',
+      baseUrl: 'https://chatgpt.com/backend-api',
       defaultModel: 'gpt-5.3-codex',
       requiresApiKey: false,
     });
@@ -359,5 +359,86 @@ describe('codex-oauth:v1:logout', () => {
     expect(fakeCachedConfig?.activeModel).toBe('');
     const stored = await getCodexTokenStore().read();
     expect(stored).toBeNull();
+  });
+});
+
+describe('migrateStaleCodexEntryIfNeeded', () => {
+  it('rewrites Phase-1-shaped codex entry with current wire + baseUrl', async () => {
+    fakeCachedConfig = {
+      activeProvider: 'chatgpt-codex',
+      activeModel: 'gpt-5.3-codex',
+      secrets: {},
+      providers: {
+        'chatgpt-codex': {
+          id: 'chatgpt-codex',
+          name: 'ChatGPT 订阅',
+          builtin: false,
+          // Phase 1 stale shape
+          wire: 'openai-responses',
+          baseUrl: 'https://chatgpt.com/backend-api/codex',
+          defaultModel: 'gpt-5.3-codex',
+          modelsHint: ['gpt-5.3-codex'],
+          requiresApiKey: false,
+        },
+      },
+    };
+
+    const { migrateStaleCodexEntryIfNeeded } = await import('./codex-oauth-ipc');
+    await migrateStaleCodexEntryIfNeeded();
+
+    const rewritten = fakeCachedConfig?.providers['chatgpt-codex'] as Record<string, unknown>;
+    expect(rewritten['wire']).toBe('openai-codex-responses');
+    expect(rewritten['baseUrl']).toBe('https://chatgpt.com/backend-api');
+    expect(writeConfigMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op when the codex entry is already canonical', async () => {
+    fakeCachedConfig = {
+      activeProvider: 'chatgpt-codex',
+      activeModel: 'gpt-5.3-codex',
+      secrets: {},
+      providers: {
+        'chatgpt-codex': {
+          id: 'chatgpt-codex',
+          name: 'ChatGPT 订阅',
+          builtin: false,
+          wire: 'openai-codex-responses',
+          baseUrl: 'https://chatgpt.com/backend-api',
+          defaultModel: 'gpt-5.3-codex',
+          requiresApiKey: false,
+        },
+      },
+    };
+    writeConfigMock.mockClear();
+
+    const { migrateStaleCodexEntryIfNeeded } = await import('./codex-oauth-ipc');
+    await migrateStaleCodexEntryIfNeeded();
+
+    expect(writeConfigMock).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when no codex entry exists', async () => {
+    fakeCachedConfig = {
+      activeProvider: 'anthropic',
+      activeModel: 'claude-sonnet-4-6',
+      secrets: {},
+      providers: {},
+    };
+    writeConfigMock.mockClear();
+
+    const { migrateStaleCodexEntryIfNeeded } = await import('./codex-oauth-ipc');
+    await migrateStaleCodexEntryIfNeeded();
+
+    expect(writeConfigMock).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when cachedConfig is null (pre-onboarding boot)', async () => {
+    fakeCachedConfig = null;
+    writeConfigMock.mockClear();
+
+    const { migrateStaleCodexEntryIfNeeded } = await import('./codex-oauth-ipc');
+    await migrateStaleCodexEntryIfNeeded();
+
+    expect(writeConfigMock).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,7 @@ import {
   stripInferenceEndpointSuffix,
 } from '@open-codesign/shared';
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
+import { getCodexTokenStore } from './codex-oauth-ipc';
 import { ipcMain } from './electron-runtime';
 import { getApiKeyForProvider, getCachedConfig } from './onboarding-ipc';
 import { isKeylessProviderAllowed } from './provider-settings';
@@ -414,7 +415,47 @@ function resolveActiveCredentials(): ActiveProviderCredentials | ConnectionTestE
   return resolveCredentialsForProvider(active);
 }
 
+async function testChatGPTCodexOAuth(): Promise<ConnectionTestResponse> {
+  let stored: Awaited<ReturnType<ReturnType<typeof getCodexTokenStore>['read']>>;
+  try {
+    stored = await getCodexTokenStore().read();
+  } catch (err) {
+    return {
+      ok: false,
+      code: '401',
+      message: err instanceof Error ? err.message : String(err),
+      hint: 'ChatGPT 订阅凭证读取失败，请到 Settings 重新登录',
+    };
+  }
+  if (stored === null) {
+    return {
+      ok: false,
+      code: '401',
+      message: 'No ChatGPT OAuth token stored',
+      hint: 'ChatGPT 订阅未登录，请到 Settings 登录',
+    };
+  }
+  if (stored.expiresAt < Date.now()) {
+    return {
+      ok: false,
+      code: '401',
+      message: 'ChatGPT OAuth token expired',
+      hint: 'ChatGPT 订阅登录已过期，请重新登录',
+    };
+  }
+  return { ok: true };
+}
+
 async function runProviderTest(creds: ActiveProviderCredentials): Promise<ConnectionTestResponse> {
+  // ChatGPT subscription uses OAuth + ChatGPT-Account-Id headers; its host
+  // has no `/models` endpoint that a generic Bearer probe can reach. A plain
+  // HTTP probe would return 401 here and render as the misleading "API key
+  // 错误或权限不足" hint — so we check the OAuth token store directly and
+  // surface a login-specific hint instead.
+  if (creds.wire === 'openai-codex-responses') {
+    return testChatGPTCodexOAuth();
+  }
+
   const { url } = buildEndpointForWire(creds.wire, creds.baseUrl);
   const headers = buildAuthHeadersForWire(
     creds.wire,

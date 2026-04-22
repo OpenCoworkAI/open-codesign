@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
-import { CheckCircle2, Info, Loader2, X, XCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { useEffect } from 'react';
 import { useCodesignStore } from '../store';
 import type { Toast as ToastModel, ToastVariant } from '../store';
 
@@ -42,15 +42,10 @@ export function scheduleAutoDismiss(
 
 function ToastItem({ toast }: { toast: ToastModel }) {
   const dismiss = useCodesignStore((s) => s.dismissToast);
-  const resolveToastEventId = useCodesignStore((s) => s.resolveToastEventId);
-  const openReportDialog = useCodesignStore((s) => s.openReportDialog);
   const t = useT();
   const Icon = iconFor[toast.variant];
   const isError = toast.variant === 'error';
   const autoMs = AUTO_DISMISS_MS[toast.variant];
-  const [resolving, setResolving] = useState(false);
-  // `null` = not attempted yet; `number` = resolved; `'none'` = resolved to no match.
-  const [resolved, setResolved] = useState<number | 'none' | null>(null);
 
   useEffect(() => {
     const cleanup = scheduleAutoDismiss(toast.variant, () => {
@@ -59,40 +54,14 @@ function ToastItem({ toast }: { toast: ToastModel }) {
     return cleanup ?? undefined;
   }, [toast.id, toast.variant, dismiss]);
 
-  async function openReport(): Promise<void> {
-    setResolving(true);
-    try {
-      const id = await resolveToastEventId(toast);
-      if (id === null) {
-        setResolved('none');
-        // Give the user concrete feedback + a way to recover — without this,
-        // the button appears to do nothing and the app looks frozen.
-        useCodesignStore.getState().pushToast({
-          variant: 'info',
-          title: t('diagnostics.toast.noEventFallbackTitle'),
-          description: t('diagnostics.toast.noEventFallbackDescription'),
-          action: {
-            label: t('diagnostics.toast.openLogFolder'),
-            onClick: () => {
-              void window.codesign?.diagnostics?.openLogFolder?.();
-            },
-          },
-        });
-        return;
-      }
-      setResolved(id);
-      openReportDialog(id);
-    } finally {
-      setResolving(false);
-    }
+  // Synchronous — the ReportableError was already registered in the store
+  // when the toast was pushed, so Report opens instantly without an IPC
+  // round-trip or DB lookup.
+  function openReport(): void {
+    const localId = toast.localId;
+    if (!localId) return;
+    useCodesignStore.getState().openReportDialog(localId);
   }
-
-  const disableReport = resolving || resolved === 'none';
-  const reportTitle = resolving
-    ? t('diagnostics.toast.resolving')
-    : resolved === 'none'
-      ? t('diagnostics.toast.noEvent')
-      : undefined;
 
   return (
     <div
@@ -124,15 +93,12 @@ function ToastItem({ toast }: { toast: ToastModel }) {
         ) : null}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        {isError ? (
+        {isError && toast.localId ? (
           <button
             type="button"
-            onClick={() => void openReport()}
-            disabled={disableReport}
-            title={reportTitle}
-            className="h-6 px-2 inline-flex items-center gap-1 rounded-[var(--radius-sm)] text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[var(--color-text-secondary)]"
+            onClick={openReport}
+            className="h-6 px-2 inline-flex items-center gap-1 rounded-[var(--radius-sm)] text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors"
           >
-            {resolving ? <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" /> : null}
             {t('toast.error.report')}
           </button>
         ) : null}

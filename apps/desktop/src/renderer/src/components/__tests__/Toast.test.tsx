@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCodesignStore } from '../../store';
-import type { Toast } from '../../store';
 import { AUTO_DISMISS_MS, scheduleAutoDismiss } from '../Toast';
 
 describe('Toast auto-dismiss', () => {
@@ -51,106 +50,28 @@ describe('Toast auto-dismiss', () => {
   });
 });
 
-describe('resolveToastEventId', () => {
-  const baseToast = (over: Partial<Toast> = {}): Toast => ({
-    id: 't1',
-    variant: 'error',
-    title: 'boom',
-    ...over,
-  });
-
+describe('pushToast always registers a ReportableError for error toasts', () => {
   beforeEach(() => {
-    useCodesignStore.setState({ recentEvents: [] });
+    useCodesignStore.setState({ toasts: [], reportableErrors: [] });
   });
 
-  it('returns toast.eventId when set (no store lookup needed)', async () => {
-    // Also ensure it does not accidentally hit a recentEvents fallback.
-    useCodesignStore.setState({
-      recentEvents: [
-        {
-          id: 999,
-          schemaVersion: 1,
-          ts: Date.now(),
-          level: 'error',
-          code: 'x',
-          scope: 's',
-          runId: 'other',
-          fingerprint: 'f',
-          message: 'm',
-          stack: undefined,
-          transient: false,
-          count: 1,
-          context: undefined,
-        },
-      ],
+  it('error toast without an explicit localId gets one minted from the store', () => {
+    useCodesignStore.getState().pushToast({
+      variant: 'error',
+      title: 'Boom',
+      description: 'Something broke',
     });
-    const id = await useCodesignStore
-      .getState()
-      .resolveToastEventId(baseToast({ eventId: 42, runId: 'other' }));
-    expect(id).toBe(42);
+    const toasts = useCodesignStore.getState().toasts;
+    const errors = useCodesignStore.getState().reportableErrors;
+    expect(toasts).toHaveLength(1);
+    expect(errors).toHaveLength(1);
+    expect(toasts[0]?.localId).toBe(errors[0]?.localId);
+    expect(errors[0]?.code).toBe('RENDERER_ERROR');
+    expect(errors[0]?.message).toBe('Something broke');
   });
 
-  it('looks up by runId after refreshing events', async () => {
-    useCodesignStore.setState({
-      recentEvents: [
-        {
-          id: 100,
-          schemaVersion: 1,
-          ts: Date.now(),
-          level: 'error',
-          code: 'x',
-          scope: 's',
-          runId: 'run-xyz',
-          fingerprint: 'f',
-          message: 'm',
-          stack: undefined,
-          transient: false,
-          count: 1,
-          context: undefined,
-        },
-      ],
-      // Stub refreshDiagnosticEvents so it doesn't require window.codesign.
-      refreshDiagnosticEvents: async () => {
-        /* noop — test provides recentEvents directly */
-      },
-    });
-    const id = await useCodesignStore
-      .getState()
-      .resolveToastEventId(baseToast({ runId: 'run-xyz' }));
-    expect(id).toBe(100);
-  });
-
-  it('returns null when runId has no match', async () => {
-    useCodesignStore.setState({
-      recentEvents: [
-        {
-          id: 100,
-          schemaVersion: 1,
-          ts: Date.now(),
-          level: 'error',
-          code: 'x',
-          scope: 's',
-          runId: 'run-other',
-          fingerprint: 'f',
-          message: 'm',
-          stack: undefined,
-          transient: false,
-          count: 1,
-          context: undefined,
-        },
-      ],
-      refreshDiagnosticEvents: async () => {
-        /* noop */
-      },
-    });
-    const id = await useCodesignStore
-      .getState()
-      .resolveToastEventId(baseToast({ runId: 'run-missing' }));
-    expect(id).toBeNull();
-  });
-
-  it('returns null when neither eventId nor runId is set', async () => {
-    const id = await useCodesignStore.getState().resolveToastEventId(baseToast());
-    expect(id).toBeNull();
+  it('info toasts do not register a ReportableError', () => {
+    useCodesignStore.getState().pushToast({ variant: 'info', title: 'hello' });
+    expect(useCodesignStore.getState().reportableErrors).toHaveLength(0);
   });
 });

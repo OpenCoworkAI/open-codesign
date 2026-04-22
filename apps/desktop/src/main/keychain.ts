@@ -78,20 +78,6 @@ export function buildSecretRef(plaintext: string): SecretRef {
 }
 
 /**
- * Kept for call-site compat. The new plaintext store can't fail the way
- * safeStorage used to (no keychain dependency), so this is really just an
- * alias for `buildSecretRef`. Callers that previously got `null` should
- * now always get a valid ref.
- */
-export function tryBuildSecretRef(plaintext: string): SecretRef | null {
-  try {
-    return buildSecretRef(plaintext);
-  } catch {
-    return null;
-  }
-}
-
-/**
  * One-shot migration run on boot:
  *   1. Any secret stored in legacy safeStorage base64 format → decrypt
  *      once (last keychain prompt ever) → rewrite as `plain:<apikey>`.
@@ -136,6 +122,3 @@ export function migrateSecrets(cfg: Config): { config: Config; changed: boolean 
   }
   return { config: { ...cfg, secrets: nextSecrets }, changed };
 }
-
-/** @deprecated Use `migrateSecrets`. Kept as alias for a few callers. */
-export const migrateSecretMasks = migrateSecrets;

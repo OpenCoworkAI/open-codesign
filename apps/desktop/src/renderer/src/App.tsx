@@ -42,7 +42,7 @@ export function App() {
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
   const sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
-  const activeReportEventId = useCodesignStore((s) => s.activeReportEventId);
+  const activeReportLocalId = useCodesignStore((s) => s.activeReportLocalId);
   const closeReportDialog = useCodesignStore((s) => s.closeReportDialog);
 
   const [prompt, setPrompt] = useState('');
@@ -258,7 +258,7 @@ export function App() {
       <DeleteDesignDialog />
       <ToastViewport />
       <CommentsPanel />
-      <ReportEventDialog eventId={activeReportEventId} onClose={closeReportDialog} />
+      <ReportEventDialog localId={activeReportLocalId} onClose={closeReportDialog} />
     </div>
   );
 }

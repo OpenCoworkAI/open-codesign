@@ -1,5 +1,6 @@
 @import "@open-codesign/ui/tokens.css";
 @import "tailwindcss";
+@source "../../../../../packages/ui/src";
 
 html,
 body {

@@ -5,6 +5,7 @@ import {
   handleExportBundle,
   handleOpenLogFolder,
   loadDiagnosticEvents,
+  reportableToRow,
   truncateMessage,
 } from './DiagnosticsPanel';
 
@@ -135,5 +136,48 @@ describe('formatting helpers', () => {
     expect(out).toContain('3');
     expect(out).toContain('分');
     expect(out).not.toBe('3m');
+  });
+});
+
+describe('reportableToRow', () => {
+  it('projects a ReportableError into the DB-row shape used by the table', () => {
+    const row = reportableToRow({
+      localId: 'local-7',
+      code: 'CONNECTION_TEST_FAILED',
+      scope: 'settings',
+      message: 'HTTP 401',
+      fingerprint: 'fp-client',
+      ts: 1_700_000_000_000,
+      runId: 'abc',
+      context: { provider: 'openai' },
+    });
+    expect(row).toMatchObject({
+      level: 'error',
+      code: 'CONNECTION_TEST_FAILED',
+      scope: 'settings',
+      message: 'HTTP 401',
+      fingerprint: 'fp-client',
+      ts: 1_700_000_000_000,
+      runId: 'abc',
+      context: { provider: 'openai' },
+      transient: false,
+    });
+    // Missing persistedEventId collapses to -1 so the React key is still unique.
+    expect(row.id).toBe(-1);
+  });
+
+  it('prefers the main-side persisted fingerprint when present', () => {
+    const row = reportableToRow({
+      localId: 'local-8',
+      code: 'X',
+      scope: 'y',
+      message: 'm',
+      fingerprint: 'client-fp',
+      persistedFingerprint: 'main-fp',
+      persistedEventId: 42,
+      ts: 1,
+    });
+    expect(row.fingerprint).toBe('main-fp');
+    expect(row.id).toBe(42);
   });
 });

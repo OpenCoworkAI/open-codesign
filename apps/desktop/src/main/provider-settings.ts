@@ -1,5 +1,6 @@
 import {
   BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   type Config,
   ERROR_CODES,
@@ -7,7 +8,6 @@ import {
   PROVIDER_SHORTLIST,
   type ProviderEntry,
   type ReasoningLevel,
-  SUPPORTED_ONBOARDING_PROVIDERS,
   type WireApi,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
@@ -74,7 +74,7 @@ export function isKeylessProviderAllowed(provider: string, entry?: ProviderEntry
   // self-hosted LiteLLM fronting IP-whitelisted models). The flag lets any
   // provider — builtin or custom — declare keyless-ness at config time.
   if (entry?.requiresApiKey === false) return true;
-  const isCodexFamily = provider.startsWith('codex-') || provider === 'chatgpt-codex';
+  const isCodexFamily = provider.startsWith('codex-') || provider === CHATGPT_CODEX_PROVIDER_ID;
   return isCodexFamily && entry?.requiresApiKey !== true && entry?.envKey === undefined;
 }
 
@@ -100,16 +100,6 @@ export function toProviderRows(
     ...Object.keys(cfg.providers ?? {}),
     ...Object.keys(cfg.secrets ?? {}),
   ]);
-  // Keyless builtins (e.g. Ollama) always surface as rows so users can
-  // discover + enable them without going through onboarding first. Without
-  // this, a fresh v3 install would hide Ollama entirely — the providers
-  // map gets populated lazily during onboarding, but Ollama has no
-  // onboarding step to run.
-  for (const builtinId of SUPPORTED_ONBOARDING_PROVIDERS) {
-    if (BUILTIN_PROVIDERS[builtinId].requiresApiKey === false) {
-      allIds.add(builtinId);
-    }
-  }
   for (const provider of allIds) {
     const ref = cfg.secrets?.[provider];
     const entry = resolveEntryFor(cfg, provider);
@@ -120,7 +110,7 @@ export function toProviderRows(
       // Prefer the persisted mask — avoids triggering a keychain password
       // prompt on unsigned macOS builds just to render the Settings row.
       // Fall back to decrypting once for legacy configs that pre-date the
-      // mask field; `migrateSecretMasks` should have rewritten them, but
+      // mask field; `migrateSecrets` should have rewritten them, but
       // we stay resilient in case migration didn't complete.
       if (ref.mask !== undefined && ref.mask.length > 0) {
         maskedKey = ref.mask;

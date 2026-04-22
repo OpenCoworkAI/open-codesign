@@ -139,7 +139,7 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="group relative rounded-[16px] bg-[var(--color-surface)] border border-[var(--color-border-muted)] focus-within:border-[var(--color-accent)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_12%,transparent)] transition-all duration-150 ease-out">
+      <div className="relative rounded-[16px] bg-[var(--color-surface)] border-[1.5px] border-[var(--color-border-muted)] focus-within:border-[var(--color-accent)] transition-colors duration-150 ease-out">
         {contextSummary ? (
           <div className="border-b border-[var(--color-border-subtle)] px-[12px] py-[10px]">
             {contextSummary}
@@ -155,7 +155,7 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
           onKeyDown={handleKeyDown}
           placeholder={t('chat.placeholderRich')}
           rows={1}
-          className="codesign-prompt-textarea block w-full resize-none bg-transparent px-[14px] pt-[12px] pb-[44px] text-[14px] leading-[1.55] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none min-h-[24px] overflow-y-auto"
+          className="codesign-prompt-textarea block w-full resize-none appearance-none border-0 bg-transparent px-[14px] pt-[12px] pb-[44px] text-[14px] leading-[1.55] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] shadow-none outline-none focus:outline-none focus:ring-0 min-h-[24px] overflow-y-auto"
           style={{ fontFamily: 'var(--font-sans)' }}
         />
 

@@ -234,6 +234,7 @@ export class CodesignError extends Error {
 
 export {
   BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
   ConfigSchema,
   ConfigV3Schema,
   PROVIDER_SHORTLIST,
@@ -420,9 +421,50 @@ export interface ListEventsResult {
   dbAvailable: boolean;
 }
 
+/**
+ * Always-reportable error record. Constructed synchronously in the renderer
+ * at the moment an error is surfaced to the user (toast, ErrorBoundary,
+ * async rejection). The `localId` is the canonical handle — the Report
+ * dialog opens purely from in-memory state so Report works even when the
+ * DB is unavailable or the event was never persisted.
+ *
+ * Persistence into `diagnostic_events` is a nice-to-have enhancement that
+ * runs fire-and-forget from `createReportableError`. If it succeeds, the
+ * caller patches `persistedEventId` / `persistedFingerprint` onto the
+ * in-memory record. Nothing downstream depends on that.
+ */
+export interface ReportableError {
+  /** Client-side id — stable across the app lifetime, no DB required. */
+  localId: string;
+  /** CodesignError code / err.name / 'RENDERER_ERROR' default. */
+  code: string;
+  /** 'generate' / 'apply-comment' / 'title' / 'onboarding' / 'settings' / etc. */
+  scope: string;
+  /** Human-readable message. */
+  message: string;
+  /** Stack if an Error instance had one. */
+  stack?: string;
+  /** Correlation id when known (generationId for gen paths). */
+  runId?: string;
+  /** Optional structured payload — normalized provider error, design-system
+   *  scan stats, whatever the caller has handy. Arbitrary JSON-safe object. */
+  context?: Record<string, unknown>;
+  /** SHA / FNV fingerprint — computed client-side so Report works without DB. */
+  fingerprint: string;
+  /** Unix ms at creation. */
+  ts: number;
+  /** If DB persistence succeeded (nice-to-have), caller patches this after the
+   *  fire-and-forget IPC completes. NOT required for Report to work. */
+  persistedEventId?: number;
+  /** Mirrors persistedEventId — the SHA1 fingerprint from the DB row. */
+  persistedFingerprint?: string;
+}
+
 export interface ReportEventInput {
   schemaVersion: 1;
-  eventId: number;
+  /** The full ReportableError payload — Report works from in-memory data alone,
+   *  no DB lookup required. */
+  error: ReportableError;
   includePromptText: boolean;
   includePaths: boolean;
   includeUrls: boolean;
@@ -436,6 +478,22 @@ export interface ReportEventResult {
   issueUrl: string;
   bundlePath: string;
   summaryMarkdown: string;
+}
+
+/**
+ * Result of `diagnostics:v1:recordRendererError`.
+ *
+ * `fingerprint` is the main-recomputed fingerprint stored on the DB row (or
+ * the in-flight fingerprint when db is unavailable). Renderer patches both
+ * `persistedEventId` and `persistedFingerprint` onto the in-memory
+ * ReportableError record after the fire-and-forget settles, so Report's
+ * dedup lookup uses the canonical main-side value instead of the
+ * client-side estimate.
+ */
+export interface RecordRendererErrorResult {
+  schemaVersion: 1;
+  eventId: number | null;
+  fingerprint: string | null;
 }
 
 export {

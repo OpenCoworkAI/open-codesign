@@ -1,7 +1,7 @@
-import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ProviderEntry } from '@open-codesign/shared';
+import { safeReadImportFile } from './safe-read';
 
 /**
  * One-click import for the Gemini CLI (`github.com/google-gemini/gemini-cli`).
@@ -142,13 +142,9 @@ export function parseDotEnv(content: string): Record<string, string> {
 async function readEnvFileIfPresent(
   path: string,
 ): Promise<{ vars: Record<string, string>; skipped: string[] } | null> {
-  try {
-    const raw = await readFile(path, 'utf8');
-    return parseDotEnvLines(raw);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw err;
-  }
+  const raw = await safeReadImportFile(path);
+  if (raw === null) return null;
+  return parseDotEnvLines(raw);
 }
 
 /** Look through the skipped-lines output of parseDotEnvLines for entries
@@ -196,7 +192,7 @@ export async function readGeminiCliConfig(
     return {
       kind: 'blocked',
       warnings: [
-        'Vertex AI detected (GOOGLE_GENAI_USE_VERTEXAI=true). This importer only supports Gemini Developer API keys (AIzaSy…). Configure Vertex manually.',
+        "Google Vertex AI projects aren't supported yet — paste a Gemini Developer API key (starts with AIzaSy…) to use Gemini here.",
       ],
     };
   }

@@ -1,4 +1,9 @@
-import { CodesignError, type Config, hydrateConfig } from '@open-codesign/shared';
+import {
+  BUILTIN_PROVIDERS,
+  CodesignError,
+  type Config,
+  hydrateConfig,
+} from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import {
   assertProviderHasStoredSecret,
@@ -116,6 +121,39 @@ describe('toProviderRows', () => {
     expect(anthropicRow).toBeDefined();
     expect(anthropicRow?.hasKey).toBe(false);
     expect(anthropicRow?.maskedKey).toBe('');
+  });
+
+  it('does not surface Ollama until the user has persisted it', () => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      secrets: { openai: { ciphertext: 'enc' } },
+    });
+
+    const rows = toProviderRows(cfg, () => 'sk-test-token-1234567890');
+
+    expect(rows.some((row) => row.provider === 'ollama')).toBe(false);
+  });
+
+  it('surfaces Ollama after it has been persisted', () => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      secrets: { openai: { ciphertext: 'enc' } },
+      providers: {
+        ollama: { ...BUILTIN_PROVIDERS.ollama },
+      },
+    });
+
+    const rows = toProviderRows(cfg, () => 'sk-test-token-1234567890');
+    const ollamaRow = rows.find((row) => row.provider === 'ollama');
+
+    expect(ollamaRow).toMatchObject({
+      provider: 'ollama',
+      label: 'Ollama (local)',
+      hasKey: true,
+      maskedKey: '',
+    });
   });
 });
 

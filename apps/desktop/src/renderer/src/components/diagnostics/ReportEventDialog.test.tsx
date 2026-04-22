@@ -1,4 +1,4 @@
-import type { DiagnosticEventRow } from '@open-codesign/shared';
+import type { ReportableError } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import {
   type PreviewLabels,
@@ -8,6 +8,18 @@ import {
   pickRecentReport,
   validateNotes,
 } from './ReportEventDialog';
+
+function makeError(overrides: Partial<ReportableError> = {}): ReportableError {
+  return {
+    localId: 'local-1',
+    ts: 1_700_000_000_000,
+    code: 'E.TEST',
+    scope: 'renderer',
+    fingerprint: 'fp-abc',
+    message: 'hello world',
+    ...overrides,
+  };
+}
 
 describe('validateNotes', () => {
   it('accepts empty string', () => {
@@ -25,14 +37,15 @@ describe('validateNotes', () => {
 
 describe('buildReportInput', () => {
   it('returns a correctly shaped object with the 4 toggles', () => {
-    const result = buildReportInput(42, 'repro steps', {
+    const error = makeError();
+    const result = buildReportInput(error, 'repro steps', {
       prompt: true,
       paths: false,
       urls: true,
       timeline: false,
     });
     expect(result).toEqual({
-      eventId: 42,
+      error,
       notes: 'repro steps',
       includePromptText: true,
       includePaths: false,
@@ -42,7 +55,8 @@ describe('buildReportInput', () => {
   });
 
   it('passes all-default flags through', () => {
-    const result = buildReportInput(1, '', {
+    const error = makeError({ localId: 'local-2' });
+    const result = buildReportInput(error, '', {
       prompt: false,
       paths: false,
       urls: false,
@@ -52,7 +66,7 @@ describe('buildReportInput', () => {
     expect(result.includePaths).toBe(false);
     expect(result.includeUrls).toBe(false);
     expect(result.includeTimeline).toBe(true);
-    expect(result.eventId).toBe(1);
+    expect(result.error.localId).toBe('local-2');
     expect(result.notes).toBe('');
   });
 });
@@ -175,23 +189,8 @@ const LABELS_ZH: PreviewLabels = {
   upstreamBodyHead: '响应体开头',
 };
 
-function makeEvent(overrides: Partial<DiagnosticEventRow> = {}): DiagnosticEventRow {
-  return {
-    id: 1,
-    schemaVersion: 1,
-    ts: 1_700_000_000_000,
-    level: 'error',
-    code: 'E.TEST',
-    scope: 'renderer',
-    runId: undefined,
-    fingerprint: 'fp-abc',
-    message: 'hello world',
-    stack: undefined,
-    transient: false,
-    count: 1,
-    context: undefined,
-    ...overrides,
-  };
+function makeEvent(overrides: Partial<ReportableError> = {}): ReportableError {
+  return makeError(overrides);
 }
 
 describe('formatPreview', () => {

@@ -27,7 +27,12 @@ import { buildAuthHeadersForWire } from './auth-headers';
 import { defaultConfigDir, readConfig, writeConfig } from './config';
 import { dialog, ipcMain, shell } from './electron-runtime';
 import { type ClaudeCodeImport, readClaudeCodeSettings } from './imports/claude-code-config';
-import { type CodexImport, codexAuthPath, readCodexConfig } from './imports/codex-config';
+import {
+  ALLOWED_IMPORT_ENV_KEYS,
+  type CodexImport,
+  codexAuthPath,
+  readCodexConfig,
+} from './imports/codex-config';
 import { type GeminiImport, readGeminiCliConfig } from './imports/gemini-cli-config';
 import { type OpencodeImport, readOpencodeConfig } from './imports/opencode-config';
 import { buildSecretRef, decryptSecret, migrateSecrets } from './keychain';
@@ -141,8 +146,20 @@ export function getApiKeyForProvider(provider: string): string {
   //      throwing a misleading "key missing" error.
   const entry = cfg.providers[provider];
   if (entry?.envKey !== undefined) {
-    const fromEnv = process.env[entry.envKey]?.trim();
-    if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv;
+    // Defense in depth against legacy configs: Codex's config.toml env_key
+    // field is now allowlisted at import time, but older configs may have
+    // stored arbitrary env-var names (pre-allowlist). Re-check here so a
+    // stale `envKey: "AWS_SECRET_ACCESS_KEY"` can't still exfiltrate on
+    // every LLM call.
+    if (!ALLOWED_IMPORT_ENV_KEYS.has(entry.envKey)) {
+      logger.warn('get_api_key.envKey_blocked', {
+        provider,
+        envKey: entry.envKey,
+      });
+    } else {
+      const fromEnv = process.env[entry.envKey]?.trim();
+      if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv;
+    }
   }
 
   throw new CodesignError(
@@ -230,13 +247,17 @@ function parseSaveKey(raw: unknown): SaveKeyInput {
       ERROR_CODES.IPC_BAD_INPUT,
     );
   }
-  if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+  const providerId = provider.trim();
+  const isKeylessBuiltin =
+    isSupportedOnboardingProvider(providerId) &&
+    BUILTIN_PROVIDERS[providerId].requiresApiKey === false;
+  if (typeof apiKey !== 'string' || (apiKey.trim().length === 0 && !isKeylessBuiltin)) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof modelPrimary !== 'string' || modelPrimary.trim().length === 0) {
     throw new CodesignError('modelPrimary must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
-  const out: SaveKeyInput = { provider, apiKey, modelPrimary };
+  const out: SaveKeyInput = { provider: providerId, apiKey: apiKey.trim(), modelPrimary };
   if (typeof baseUrl === 'string' && baseUrl.trim().length > 0) {
     try {
       new URL(baseUrl);
@@ -319,7 +340,6 @@ function parseSetProviderAndModels(raw: unknown): SetProviderAndModelsInput {
  * after Settings mutations.
  */
 async function runSetProviderAndModels(input: SetProviderAndModelsInput): Promise<OnboardingState> {
-  const secretRef = buildSecretRef(input.apiKey);
   const nextProviders: Record<string, ProviderEntry> = { ...(cachedConfig?.providers ?? {}) };
   const existing = nextProviders[input.provider];
   const builtin = BUILTIN_PROVIDERS[input.provider as SupportedOnboardingProvider];
@@ -337,10 +357,12 @@ async function runSetProviderAndModels(input: SetProviderAndModelsInput): Promis
     baseUrl: input.baseUrl ?? seed.baseUrl,
     defaultModel: input.modelPrimary || seed.defaultModel,
   };
-  const nextSecrets = {
-    ...(cachedConfig?.secrets ?? {}),
-    [input.provider]: secretRef,
-  };
+  const nextSecrets = { ...(cachedConfig?.secrets ?? {}) };
+  if (input.apiKey.length > 0) {
+    nextSecrets[input.provider] = buildSecretRef(input.apiKey);
+  } else {
+    delete nextSecrets[input.provider];
+  }
   const activate = input.setAsActive || cachedConfig === null;
   const nextActiveProvider = activate
     ? input.provider
@@ -822,7 +844,7 @@ async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
       const envValue = process.env[entry.envKey]?.trim();
       if (envValue !== undefined && envValue.length > 0) {
         // buildSecretRef throws only on empty input — length is already
-        // guarded. Bare call instead of `tryBuildSecretRef` so any future
+        // guarded. Bare call instead of wrapping in try/catch so any future
         // invariant break fails loudly rather than quietly writing a row
         // with no key and reporting success.
         nextSecrets[entry.id] = buildSecretRef(envValue);
@@ -1037,7 +1059,15 @@ async function runListEndpointModels(raw: unknown): Promise<ListEndpointModelsRe
   if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
     return { ok: false, error: 'apiKey required' };
   }
-  const url = modelsEndpointUrl(baseUrl, parsedWire.data);
+  let url: string;
+  try {
+    url = modelsEndpointUrl(baseUrl, parsedWire.data);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'unsupported wire for /models lookup',
+    };
+  }
   const headers = buildAuthHeadersForWire(parsedWire.data, apiKey, undefined, baseUrl);
   try {
     const res = await fetch(url, {

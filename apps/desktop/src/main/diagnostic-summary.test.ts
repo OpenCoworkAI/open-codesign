@@ -1,4 +1,4 @@
-import type { ActionTimelineEntry, DiagnosticEventRow } from '@open-codesign/shared';
+import type { ActionTimelineEntry, ReportableError } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import {
   type SummaryInput,
@@ -7,28 +7,25 @@ import {
   redactPathsAndUrls,
 } from './diagnostic-summary';
 
-function baseEvent(overrides: Partial<DiagnosticEventRow> = {}): DiagnosticEventRow {
+function baseEvent(overrides: Partial<ReportableError> = {}): ReportableError {
   return {
-    id: 1,
-    schemaVersion: 1,
+    localId: 'local-1',
     ts: Date.UTC(2026, 0, 1, 12, 0, 0),
-    level: 'error',
     code: 'E_PROVIDER_TIMEOUT',
     scope: 'provider',
     runId: 'run-abc',
     fingerprint: 'deadbeef',
     message: 'Request timed out',
-    stack: undefined,
-    transient: false,
-    count: 3,
-    context: undefined,
     ...overrides,
   };
 }
 
 function baseInput(overrides: Partial<SummaryInput> = {}): SummaryInput {
   return {
-    event: baseEvent(),
+    error: baseEvent(),
+    count: 3,
+    level: 'error',
+    transient: false,
     appVersion: '0.4.0',
     platform: 'darwin-arm64',
     electronVersion: '33.2.1',
@@ -69,7 +66,7 @@ describe('composeSummaryMarkdown', () => {
       '    at c (/x/c.ts:1:1)',
       '    at d (/x/d.ts:1:1)',
     ].join('\n');
-    const md = composeSummaryMarkdown(baseInput({ event: baseEvent({ stack }) }));
+    const md = composeSummaryMarkdown(baseInput({ error: baseEvent({ stack }) }));
     expect(md).toContain('at generate (index.ts)');
     expect(md).toContain('at Object.submit (submit.ts)');
     expect(md).toContain('at step (step.ts)');
@@ -84,7 +81,7 @@ describe('composeSummaryMarkdown', () => {
       '    at /Users/hq/Documents/Github/codesign/dist/main.js:12:7',
     ].join('\n');
     const md = composeSummaryMarkdown(
-      baseInput({ event: baseEvent({ stack }), includePaths: false }),
+      baseInput({ error: baseEvent({ stack }), includePaths: false }),
     );
     expect(md).not.toContain('/Users/hq');
     expect(md).not.toContain('/dist/main.js');
@@ -97,7 +94,7 @@ describe('composeSummaryMarkdown', () => {
       { ts: eventTs - 12_000, type: 'prompt.cancel' },
       { ts: eventTs - 30_000, type: 'provider.switch', data: { to: 'anthropic' } },
     ];
-    const md = composeSummaryMarkdown(baseInput({ event: baseEvent({ ts: eventTs }), timeline }));
+    const md = composeSummaryMarkdown(baseInput({ error: baseEvent({ ts: eventTs }), timeline }));
     expect(md).toContain('| Offset | Type | Details |');
     const tableStart = md.indexOf('| -12 s |');
     const middle = md.indexOf('| -30 s |');
@@ -125,7 +122,7 @@ describe('composeSummaryMarkdown', () => {
       },
     ];
     const md = composeSummaryMarkdown(
-      baseInput({ event: baseEvent({ ts: eventTs }), timeline, includePaths: false }),
+      baseInput({ error: baseEvent({ ts: eventTs }), timeline, includePaths: false }),
     );
     expect(md).not.toContain('/Users/alice/secret.md');
     expect(md).toContain('[path omitted]');
@@ -143,7 +140,7 @@ describe('composeSummaryMarkdown', () => {
       },
     ];
     const md = composeSummaryMarkdown(
-      baseInput({ event: baseEvent({ ts: eventTs }), timeline, includePromptText: false }),
+      baseInput({ error: baseEvent({ ts: eventTs }), timeline, includePromptText: false }),
     );
     expect(md).not.toContain('super secret body');
     expect(md).toContain('[prompt omitted]');
@@ -159,7 +156,7 @@ describe('composeSummaryMarkdown', () => {
       },
     ];
     const md = composeSummaryMarkdown(
-      baseInput({ event: baseEvent({ ts: eventTs }), timeline, includeUrls: false }),
+      baseInput({ error: baseEvent({ ts: eventTs }), timeline, includeUrls: false }),
     );
     expect(md).not.toContain('https://example.com/private');
     expect(md).toContain('[url omitted]');
@@ -168,7 +165,7 @@ describe('composeSummaryMarkdown', () => {
   it('renders upstream context for provider scope with all 4 fields', () => {
     const md = composeSummaryMarkdown(
       baseInput({
-        event: baseEvent({
+        error: baseEvent({
           scope: 'provider',
           context: {
             upstream_provider: 'anthropic',
@@ -191,7 +188,7 @@ describe('composeSummaryMarkdown', () => {
   it('does not render upstream context for non-provider scope', () => {
     const md = composeSummaryMarkdown(
       baseInput({
-        event: baseEvent({
+        error: baseEvent({
           scope: 'ipc',
           context: { upstream_provider: 'anthropic' },
         }),
@@ -203,7 +200,7 @@ describe('composeSummaryMarkdown', () => {
   it('redacts paths and URLs when includePaths/includeUrls are false', () => {
     const md = composeSummaryMarkdown(
       baseInput({
-        event: baseEvent({
+        error: baseEvent({
           message: 'Failed at /Users/alice/foo/bar.ts see https://example.com/x',
         }),
         recentLogTail: ['/Users/alice/app.log https://example.com/y'],
@@ -221,7 +218,7 @@ describe('composeSummaryMarkdown', () => {
     const jsonPrompt = `generate.request data={"prompt":"${'x'.repeat(250)}"}`;
     const md = composeSummaryMarkdown(
       baseInput({
-        event: baseEvent({ message: jsonPrompt }),
+        error: baseEvent({ message: jsonPrompt }),
         includePromptText: false,
       }),
     );
@@ -233,7 +230,7 @@ describe('composeSummaryMarkdown', () => {
     const longChinese = `请检查网络连接后重试。${'错'.repeat(300)}`;
     const md = composeSummaryMarkdown(
       baseInput({
-        event: baseEvent({ message: longChinese }),
+        error: baseEvent({ message: longChinese }),
         includePromptText: false,
       }),
     );
@@ -283,7 +280,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts Windows drive-letter paths', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'fail at C:\\Users\\alice\\project\\foo.ts line 10' }),
+          error: baseEvent({ message: 'fail at C:\\Users\\alice\\project\\foo.ts line 10' }),
           includePaths: false,
         }),
       );
@@ -294,7 +291,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts Windows forward-slash drive-letter paths (Electron/Node style)', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'fail at C:/Users/alice/project/foo.ts line 10' }),
+          error: baseEvent({ message: 'fail at C:/Users/alice/project/foo.ts line 10' }),
           includePaths: false,
         }),
       );
@@ -305,7 +302,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts UNC paths', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'read \\\\server\\share\\file.txt bad' }),
+          error: baseEvent({ message: 'read \\\\server\\share\\file.txt bad' }),
           includePaths: false,
         }),
       );
@@ -316,7 +313,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts ~/ home-relative paths', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'missing ~/foo/bar config' }),
+          error: baseEvent({ message: 'missing ~/foo/bar config' }),
           includePaths: false,
         }),
       );
@@ -327,7 +324,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts /opt/homebrew and /root paths', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'install /opt/homebrew/bin/x then /root/cfg fails' }),
+          error: baseEvent({ message: 'install /opt/homebrew/bin/x then /root/cfg fails' }),
           includePaths: false,
         }),
       );
@@ -338,7 +335,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts file:// URLs when includeUrls=false', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'load file:///Users/x/data.json failed' }),
+          error: baseEvent({ message: 'load file:///Users/x/data.json failed' }),
           includePaths: true,
           includeUrls: false,
         }),
@@ -350,7 +347,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts ws:// and wss:// URLs when includeUrls=false', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'ws://localhost:3000 down, wss://api.x.io/stream' }),
+          error: baseEvent({ message: 'ws://localhost:3000 down, wss://api.x.io/stream' }),
           includeUrls: false,
         }),
       );
@@ -361,7 +358,7 @@ describe('composeSummaryMarkdown', () => {
     it('does NOT redact dates or simple ratios as paths', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'on 2026/04/22 got 1/2/3 reasons' }),
+          error: baseEvent({ message: 'on 2026/04/22 got 1/2/3 reasons' }),
           includePaths: false,
         }),
       );
@@ -373,7 +370,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts macOS /var/folders temp paths', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'ENOENT /var/folders/xy/abc/T/cache broken' }),
+          error: baseEvent({ message: 'ENOENT /var/folders/xy/abc/T/cache broken' }),
           includePaths: false,
         }),
       );
@@ -384,7 +381,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts /tmp paths', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'wrote /tmp/open-codesign-cache/foo then failed' }),
+          error: baseEvent({ message: 'wrote /tmp/open-codesign-cache/foo then failed' }),
           includePaths: false,
         }),
       );
@@ -395,7 +392,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts /etc paths', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'ENOENT /etc/hosts missing' }),
+          error: baseEvent({ message: 'ENOENT /etc/hosts missing' }),
           includePaths: false,
         }),
       );
@@ -406,7 +403,7 @@ describe('composeSummaryMarkdown', () => {
     it('redacts /private/var paths', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'failed at /private/var/folders/abc end' }),
+          error: baseEvent({ message: 'failed at /private/var/folders/abc end' }),
           includePaths: false,
         }),
       );
@@ -417,7 +414,7 @@ describe('composeSummaryMarkdown', () => {
     it('does NOT redact API-style paths like generate/v1/endpoint', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'POST generate/v1/endpoint returned 500' }),
+          error: baseEvent({ message: 'POST generate/v1/endpoint returned 500' }),
           includePaths: false,
         }),
       );
@@ -428,7 +425,7 @@ describe('composeSummaryMarkdown', () => {
     it('does NOT redact "10/30 ratio" style fractions', () => {
       const md = composeSummaryMarkdown(
         baseInput({
-          event: baseEvent({ message: 'success 10/30 ratio observed' }),
+          error: baseEvent({ message: 'success 10/30 ratio observed' }),
           includePaths: false,
         }),
       );
@@ -489,7 +486,7 @@ describe('composeSummaryMarkdown — Message field backtick safety', () => {
   it('wraps Message in a code span even when it contains backticks, preserving Level and Transient', () => {
     const md = composeSummaryMarkdown(
       baseInput({
-        event: baseEvent({ message: 'error at `foo.bar()` in handler' }),
+        error: baseEvent({ message: 'error at `foo.bar()` in handler' }),
       }),
     );
     expect(md).toContain('- Level: error');

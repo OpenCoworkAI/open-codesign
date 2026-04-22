@@ -1,7 +1,8 @@
-import { access, readFile } from 'node:fs/promises';
+import { access } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ProviderEntry } from '@open-codesign/shared';
+import { safeReadImportFile } from './safe-read';
 
 export function claudeCodeSettingsPath(home: string = homedir()): string {
   return join(home, '.claude', 'settings.json');
@@ -268,14 +269,12 @@ export async function readClaudeCodeSettings(
   const path = claudeCodeSettingsPath(home);
   const oauthEvidence = await checkClaudeCodeOAuthEvidence(home);
 
-  let raw: string;
-  try {
-    raw = await readFile(path, 'utf8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    // settings.json absent. If OAuth evidence is present, synthesize a
-    // minimal ClaudeCodeImport so the Settings banner still offers the
-    // subscription-user guidance — otherwise return null and stay silent.
+  const raw = await safeReadImportFile(path);
+  if (raw === null) {
+    // settings.json absent or rejected by size/type guard. If OAuth evidence
+    // is present, synthesize a minimal ClaudeCodeImport so the Settings
+    // banner still offers the subscription-user guidance — otherwise
+    // return null and stay silent.
     if (!oauthEvidence) return null;
     return {
       provider: null,

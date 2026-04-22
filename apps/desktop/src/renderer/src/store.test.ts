@@ -1,7 +1,12 @@
 import { initI18n } from '@open-codesign/i18n';
 import type { OnboardingState, SelectedElement } from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { coerceUsageSnapshot, useCodesignStore } from './store';
+import {
+  coerceUsageSnapshot,
+  extractCodesignErrorCode,
+  extractUpstreamContext,
+  useCodesignStore,
+} from './store';
 
 const READY_CONFIG: OnboardingState = {
   hasKey: true,
@@ -780,7 +785,7 @@ describe('useCodesignStore pushToast -> recordRendererError', () => {
     await initI18n('en');
   });
 
-  it('records the error toast via IPC with code + message + runId', async () => {
+  it('pushToast for an error auto-creates a ReportableError and fires recordRendererError', async () => {
     const recordRendererError = vi.fn().mockResolvedValue({ eventId: 42 });
     vi.stubGlobal('window', {
       codesign: {
@@ -788,12 +793,11 @@ describe('useCodesignStore pushToast -> recordRendererError', () => {
       },
     });
 
+    useCodesignStore.setState({ reportableErrors: [] });
     useCodesignStore.getState().pushToast({
       variant: 'error',
       title: 'Boom',
       description: 'Something broke',
-      code: 'PROVIDER_ERROR',
-      runId: 'run-xyz',
     });
 
     // Allow the fire-and-forget promise to flush.
@@ -801,16 +805,17 @@ describe('useCodesignStore pushToast -> recordRendererError', () => {
     await Promise.resolve();
 
     expect(recordRendererError).toHaveBeenCalledTimes(1);
-    expect(recordRendererError).toHaveBeenCalledWith({
+    const payload = recordRendererError.mock.calls[0]?.[0];
+    expect(payload).toMatchObject({
       schemaVersion: 1,
-      code: 'PROVIDER_ERROR',
+      code: 'RENDERER_ERROR',
       scope: 'renderer',
       message: 'Something broke',
-      runId: 'run-xyz',
     });
+    expect(useCodesignStore.getState().reportableErrors).toHaveLength(1);
   });
 
-  it('defaults code to RENDERER_ERROR and uses title when description is absent', async () => {
+  it('uses toast.title as the message when description is absent', async () => {
     const recordRendererError = vi.fn().mockResolvedValue({ eventId: null });
     vi.stubGlobal('window', {
       codesign: {
@@ -818,6 +823,7 @@ describe('useCodesignStore pushToast -> recordRendererError', () => {
       },
     });
 
+    useCodesignStore.setState({ reportableErrors: [] });
     useCodesignStore.getState().pushToast({
       variant: 'error',
       title: 'Plain failure',
@@ -826,12 +832,14 @@ describe('useCodesignStore pushToast -> recordRendererError', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(recordRendererError).toHaveBeenCalledWith({
-      schemaVersion: 1,
-      code: 'RENDERER_ERROR',
-      scope: 'renderer',
-      message: 'Plain failure',
-    });
+    expect(recordRendererError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schemaVersion: 1,
+        code: 'RENDERER_ERROR',
+        scope: 'renderer',
+        message: 'Plain failure',
+      }),
+    );
   });
 
   it('does not call recordRendererError for non-error toasts', async () => {
@@ -849,11 +857,171 @@ describe('useCodesignStore pushToast -> recordRendererError', () => {
 });
 
 describe('useCodesignStore report dialog slice', () => {
-  it('openReportDialog sets activeReportEventId and closeReportDialog clears it', () => {
-    useCodesignStore.setState({ activeReportEventId: null });
-    useCodesignStore.getState().openReportDialog(7);
-    expect(useCodesignStore.getState().activeReportEventId).toBe(7);
+  it('openReportDialog sets activeReportLocalId and closeReportDialog clears it', () => {
+    useCodesignStore.setState({ activeReportLocalId: null });
+    useCodesignStore.getState().openReportDialog('local-7');
+    expect(useCodesignStore.getState().activeReportLocalId).toBe('local-7');
     useCodesignStore.getState().closeReportDialog();
-    expect(useCodesignStore.getState().activeReportEventId).toBeNull();
+    expect(useCodesignStore.getState().activeReportLocalId).toBeNull();
+  });
+
+  it('createReportableError caps the ring at MAX_REPORTABLE (100)', () => {
+    vi.stubGlobal('window', { codesign: undefined });
+    useCodesignStore.setState({ reportableErrors: [] });
+    const state = useCodesignStore.getState();
+    for (let i = 0; i < 105; i += 1) {
+      state.createReportableError({
+        code: 'X',
+        scope: 'test',
+        message: `msg-${i}`,
+      });
+    }
+    expect(useCodesignStore.getState().reportableErrors).toHaveLength(100);
+    expect(useCodesignStore.getState().reportableErrors[0]?.message).toBe('msg-5');
+  });
+
+  it('getReportableError returns the record by localId', () => {
+    vi.stubGlobal('window', { codesign: undefined });
+    useCodesignStore.setState({ reportableErrors: [] });
+    const id = useCodesignStore.getState().createReportableError({
+      code: 'IMPORT_FAILED',
+      scope: 'onboarding',
+      message: 'could not read opencode config',
+    });
+    const found = useCodesignStore.getState().getReportableError(id);
+    expect(found?.code).toBe('IMPORT_FAILED');
+    expect(found?.message).toBe('could not read opencode config');
+    expect(found?.fingerprint).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('patches persistedEventId + persistedFingerprint after recordRendererError resolves', async () => {
+    const recordRendererError = vi
+      .fn()
+      .mockResolvedValue({ schemaVersion: 1, eventId: 123, fingerprint: 'main-side-fp' });
+    vi.stubGlobal('window', { codesign: { diagnostics: { recordRendererError } } });
+    useCodesignStore.setState({ reportableErrors: [] });
+    const id = useCodesignStore.getState().createReportableError({
+      code: 'X',
+      scope: 'y',
+      message: 'boom',
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    const record = useCodesignStore.getState().getReportableError(id);
+    expect(record?.persistedEventId).toBe(123);
+    expect(record?.persistedFingerprint).toBe('main-side-fp');
+  });
+
+  it('omits persistedFingerprint when main does not echo one back', async () => {
+    const recordRendererError = vi.fn().mockResolvedValue({ schemaVersion: 1, eventId: 7 });
+    vi.stubGlobal('window', { codesign: { diagnostics: { recordRendererError } } });
+    useCodesignStore.setState({ reportableErrors: [] });
+    const id = useCodesignStore.getState().createReportableError({
+      code: 'X',
+      scope: 'y',
+      message: 'boom',
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    const record = useCodesignStore.getState().getReportableError(id);
+    expect(record?.persistedEventId).toBe(7);
+    expect(record?.persistedFingerprint).toBeUndefined();
+  });
+});
+
+describe('extractCodesignErrorCode', () => {
+  it('returns the code property when it is a non-empty string', () => {
+    expect(extractCodesignErrorCode({ code: 'ATTACHMENT_TOO_LARGE' })).toBe('ATTACHMENT_TOO_LARGE');
+  });
+
+  it('returns undefined for missing / empty / non-string code', () => {
+    expect(extractCodesignErrorCode({})).toBeUndefined();
+    expect(extractCodesignErrorCode({ code: '' })).toBeUndefined();
+    expect(extractCodesignErrorCode({ code: 42 })).toBeUndefined();
+    expect(extractCodesignErrorCode(null)).toBeUndefined();
+    expect(extractCodesignErrorCode('string')).toBeUndefined();
+  });
+
+  it('reads code off a real Error with a .code property', () => {
+    const err = new Error('boom') as Error & { code?: string };
+    err.code = 'CONFIG_MISSING';
+    expect(extractCodesignErrorCode(err)).toBe('CONFIG_MISSING');
+  });
+});
+
+describe('extractUpstreamContext', () => {
+  it('picks up NormalizedProviderError fields off a caught error', () => {
+    const err = Object.assign(new Error('http 429'), {
+      upstream_provider: 'openai',
+      upstream_status: 429,
+      upstream_request_id: 'req-7',
+      retry_count: 3,
+    });
+    expect(extractUpstreamContext(err)).toEqual({
+      upstream_provider: 'openai',
+      upstream_status: 429,
+      upstream_request_id: 'req-7',
+      retry_count: 3,
+    });
+  });
+
+  it('returns undefined when no upstream fields are present', () => {
+    expect(extractUpstreamContext(new Error('plain'))).toBeUndefined();
+    expect(extractUpstreamContext({})).toBeUndefined();
+    expect(extractUpstreamContext(null)).toBeUndefined();
+  });
+});
+
+describe('applyGenerateError via sendPrompt', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
+
+  async function runFailingGenerate(err: unknown): Promise<void> {
+    const recordRendererError = vi.fn().mockResolvedValue({ eventId: null });
+    vi.stubGlobal('window', {
+      codesign: {
+        generate: vi.fn().mockRejectedValue(err),
+        diagnostics: { recordRendererError },
+      },
+    });
+    resetStore();
+    useCodesignStore.setState({ reportableErrors: [] });
+    await useCodesignStore.getState().sendPrompt({ prompt: 'hello' });
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it('preserves CodesignError.code from a rejected generate IPC', async () => {
+    const err = Object.assign(new Error('file too big'), { code: 'ATTACHMENT_TOO_LARGE' });
+    await runFailingGenerate(err);
+    const records = useCodesignStore.getState().reportableErrors;
+    expect(records).toHaveLength(1);
+    expect(records[0]?.code).toBe('ATTACHMENT_TOO_LARGE');
+    expect(records[0]?.scope).toBe('generate');
+  });
+
+  it('falls back to GENERATION_FAILED when no code is present', async () => {
+    await runFailingGenerate(new Error('opaque network blip'));
+    const records = useCodesignStore.getState().reportableErrors;
+    expect(records).toHaveLength(1);
+    expect(records[0]?.code).toBe('GENERATION_FAILED');
+  });
+
+  it('attaches upstream context from a NormalizedProviderError-shaped error', async () => {
+    const err = Object.assign(new Error('http 502'), {
+      code: 'PROVIDER_HTTP_5XX',
+      upstream_provider: 'anthropic',
+      upstream_status: 502,
+      retry_count: 2,
+    });
+    await runFailingGenerate(err);
+    const records = useCodesignStore.getState().reportableErrors;
+    expect(records[0]?.code).toBe('PROVIDER_HTTP_5XX');
+    expect(records[0]?.context).toEqual({
+      upstream_provider: 'anthropic',
+      upstream_status: 502,
+      retry_count: 2,
+    });
   });
 });

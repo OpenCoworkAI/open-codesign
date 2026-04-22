@@ -1,6 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CodexOAuthStatus } from '../../../preload/index';
-import { performLogin, performLogout, resolveViewState } from './ChatgptLoginCard';
+import {
+  performFetchStatus,
+  performLogin,
+  performLogout,
+  resolveViewState,
+} from './ChatgptLoginCard';
+
+const LOGIN_STRINGS = { failedTitle: 'login failed', unknownError: 'unknown' };
+const LOGOUT_STRINGS = {
+  confirmMessage: 'sign out?',
+  failedTitle: 'logout failed',
+  unknownError: 'unknown',
+};
+const STATUS_STRINGS = { failedTitle: 'status read failed', unknownError: 'unknown' };
 
 function statusLoggedIn(overrides: Partial<CodexOAuthStatus> = {}): CodexOAuthStatus {
   return {
@@ -51,7 +64,14 @@ describe('performLogin', () => {
     const onStatusChange = vi.fn().mockResolvedValue(undefined);
     const pushToast = vi.fn();
 
-    await performLogin({ api, setStatus, setLoading, pushToast, onStatusChange });
+    await performLogin({
+      api,
+      setStatus,
+      setLoading,
+      pushToast,
+      onStatusChange,
+      strings: LOGIN_STRINGS,
+    });
 
     expect(api.login).toHaveBeenCalledTimes(1);
     expect(setStatus).toHaveBeenCalledWith(next);
@@ -71,7 +91,7 @@ describe('performLogin', () => {
     const setLoading = vi.fn();
     const pushToast = vi.fn();
 
-    await performLogin({ api, setStatus, setLoading, pushToast });
+    await performLogin({ api, setStatus, setLoading, pushToast, strings: LOGIN_STRINGS });
 
     expect(setStatus).not.toHaveBeenCalled();
     expect(setLoading).toHaveBeenNthCalledWith(2, false);
@@ -92,7 +112,13 @@ describe('performLogout', () => {
     const pushToast = vi.fn();
     const confirm = vi.fn().mockReturnValue(false);
 
-    const result = await performLogout({ api, setStatus, pushToast, confirm });
+    const result = await performLogout({
+      api,
+      setStatus,
+      pushToast,
+      confirm,
+      strings: LOGOUT_STRINGS,
+    });
 
     expect(result).toBe(false);
     expect(api.logout).not.toHaveBeenCalled();
@@ -117,6 +143,7 @@ describe('performLogout', () => {
       pushToast,
       confirm,
       onStatusChange,
+      strings: LOGOUT_STRINGS,
     });
 
     expect(result).toBe(true);
@@ -136,11 +163,135 @@ describe('performLogout', () => {
     const pushToast = vi.fn();
     const confirm = vi.fn().mockReturnValue(true);
 
-    const result = await performLogout({ api, setStatus, pushToast, confirm });
+    const result = await performLogout({
+      api,
+      setStatus,
+      pushToast,
+      confirm,
+      strings: LOGOUT_STRINGS,
+    });
 
     expect(result).toBe(false);
     expect(pushToast).toHaveBeenCalledWith(
       expect.objectContaining({ variant: 'error', description: 'revoke failed' }),
     );
+  });
+});
+
+describe('performFetchStatus', () => {
+  it('updates status when the IPC resolves', async () => {
+    const next = statusLoggedIn();
+    const api = {
+      status: vi.fn().mockResolvedValue(next),
+      login: vi.fn(),
+      logout: vi.fn(),
+    };
+    const setStatus = vi.fn();
+    const pushToast = vi.fn();
+
+    await performFetchStatus({
+      api,
+      setStatus,
+      pushToast,
+      isMounted: () => true,
+      strings: STATUS_STRINGS,
+    });
+
+    expect(setStatus).toHaveBeenCalledWith(next);
+    expect(pushToast).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a toast and sets status to null when the IPC rejects', async () => {
+    // Regression for the round-7 bot review: silently catching the status
+    // fetch and rendering logged-out hides backend / keychain failures.
+    // Users must see a toast so they can distinguish "not logged in" from
+    // "something broke reading the login state".
+    const api = {
+      status: vi.fn().mockRejectedValue(new Error('IPC backend crashed')),
+      login: vi.fn(),
+      logout: vi.fn(),
+    };
+    const setStatus = vi.fn();
+    const pushToast = vi.fn();
+
+    await performFetchStatus({
+      api,
+      setStatus,
+      pushToast,
+      isMounted: () => true,
+      strings: STATUS_STRINGS,
+    });
+
+    expect(setStatus).toHaveBeenCalledWith(null);
+    expect(pushToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variant: 'error',
+        title: 'status read failed',
+        description: 'IPC backend crashed',
+      }),
+    );
+  });
+
+  it('skips setState + toast after unmount (race guard)', async () => {
+    const api = {
+      status: vi.fn().mockResolvedValue(statusLoggedIn()),
+      login: vi.fn(),
+      logout: vi.fn(),
+    };
+    const setStatus = vi.fn();
+    const pushToast = vi.fn();
+
+    await performFetchStatus({
+      api,
+      setStatus,
+      pushToast,
+      // User switched tabs before the IPC resolved — neither side-effect
+      // should fire.
+      isMounted: () => false,
+      strings: STATUS_STRINGS,
+    });
+
+    expect(setStatus).not.toHaveBeenCalled();
+    expect(pushToast).not.toHaveBeenCalled();
+  });
+
+  it('skips setState + toast on reject after unmount', async () => {
+    const api = {
+      status: vi.fn().mockRejectedValue(new Error('boom')),
+      login: vi.fn(),
+      logout: vi.fn(),
+    };
+    const setStatus = vi.fn();
+    const pushToast = vi.fn();
+
+    await performFetchStatus({
+      api,
+      setStatus,
+      pushToast,
+      isMounted: () => false,
+      strings: STATUS_STRINGS,
+    });
+
+    expect(setStatus).not.toHaveBeenCalled();
+    expect(pushToast).not.toHaveBeenCalled();
+  });
+
+  it('uses the generic unknown-error string for non-Error rejections', async () => {
+    const api = {
+      status: vi.fn().mockRejectedValue('broken string'),
+      login: vi.fn(),
+      logout: vi.fn(),
+    };
+    const pushToast = vi.fn();
+
+    await performFetchStatus({
+      api,
+      setStatus: vi.fn(),
+      pushToast,
+      isMounted: () => true,
+      strings: STATUS_STRINGS,
+    });
+
+    expect(pushToast).toHaveBeenCalledWith(expect.objectContaining({ description: 'unknown' }));
   });
 });

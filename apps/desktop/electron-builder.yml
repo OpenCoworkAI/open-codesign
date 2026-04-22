@@ -28,11 +28,12 @@ mac:
       arch: [arm64, x64]
 dmg:
   # Custom window layout guides users to drag the app into /Applications.
-  # Running from the DMG mount leaves safeStorage unavailable (the volume
-  # is read-only so macOS can't establish a keychain trust entry), which
-  # breaks API key save / import. The background, arrow, and in-app boot
-  # check (install-check.ts) work together to steer users to the right
-  # flow.
+  # Running Open CoDesign from a mounted DMG instead of /Applications
+  # breaks (1) the auto-update code path (read-only volume can't receive
+  # electron-updater's staged binary), and (2) XDG-style user-data-dir
+  # resolution (Electron falls back to a path inside the mounted image
+  # which disappears when the volume ejects). The background, arrow, and
+  # in-app boot check (install-check.ts) steer users to the right flow.
   background: build/dmg-background.png
   iconSize: 92
   window:

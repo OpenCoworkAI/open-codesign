@@ -106,20 +106,37 @@ describe('diagnostics:v1:recordRendererError', () => {
       code: 'X',
       scope: 'y',
       message: 'z',
-    }) as { schemaVersion: 1; eventId: number | null };
-    expect(result).toEqual({ schemaVersion: 1, eventId: null });
+    }) as { schemaVersion: 1; eventId: number | null; fingerprint: string | null };
+    expect(result).toEqual({ schemaVersion: 1, eventId: null, fingerprint: null });
+  });
+
+  it('echoes back the main-recomputed fingerprint', () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    const result = invoke('diagnostics:v1:recordRendererError', {
+      schemaVersion: 1,
+      code: 'FP_ECHO',
+      scope: 'toast',
+      message: 'hello',
+      stack: 'Error\n    at foo (a.ts:1:1)',
+    }) as { eventId: number | null; fingerprint: string | null };
+    expect(typeof result.fingerprint).toBe('string');
+    expect(result.fingerprint).toMatch(/^[0-9a-f]{8}$/);
   });
 
   it('dedups fingerprint within 200ms and returns the existing id', () => {
     const db = initInMemoryDb();
     registerDiagnosticsIpc(db);
 
+    // Stack must contain `at ` frames so extractTopFrames drives the
+    // fingerprint basis (message is only consulted when there are no frames).
+    const stack = 'Error\n    at foo (a.ts:1:1)\n    at bar (b.ts:2:2)';
     const first = invoke('diagnostics:v1:recordRendererError', {
       schemaVersion: 1,
       code: 'SAME_CODE',
       scope: 'toast',
       message: 'first',
-      stack: 'same-stack',
+      stack,
     }) as { eventId: number | null };
 
     const second = invoke('diagnostics:v1:recordRendererError', {
@@ -127,7 +144,7 @@ describe('diagnostics:v1:recordRendererError', () => {
       code: 'SAME_CODE',
       scope: 'toast',
       message: 'second',
-      stack: 'same-stack',
+      stack,
     }) as { eventId: number | null };
 
     expect(first.eventId).not.toBeNull();
@@ -146,6 +163,37 @@ describe('diagnostics:v1:recordRendererError', () => {
         message: 'z',
       }),
     ).toThrow(/code/);
+  });
+
+  it('recordRendererError rejects oversized fields', () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    expect(() =>
+      invoke('diagnostics:v1:recordRendererError', {
+        schemaVersion: 1,
+        code: 'X',
+        scope: 'y',
+        message: 'x'.repeat(8001),
+      }),
+    ).toThrow(/message exceeds 8000/);
+    expect(() =>
+      invoke('diagnostics:v1:recordRendererError', {
+        schemaVersion: 1,
+        code: 'X',
+        scope: 'y',
+        message: 'ok',
+        stack: 'x'.repeat(16001),
+      }),
+    ).toThrow(/stack exceeds 16000/);
+    expect(() =>
+      invoke('diagnostics:v1:recordRendererError', {
+        schemaVersion: 1,
+        code: 'X',
+        scope: 'y',
+        message: 'ok',
+        context: { huge: 'x'.repeat(4100) },
+      }),
+    ).toThrow(/context serialized length exceeds 4000/);
   });
 });
 
@@ -279,10 +327,21 @@ describe('diagnostics:v1:listEvents', () => {
 });
 
 describe('diagnostics:v1:reportEvent', () => {
-  function baseReportInput(eventId: number, overrides: Record<string, unknown> = {}) {
+  function baseError(overrides: Record<string, unknown> = {}) {
+    return {
+      localId: 'local-report-1',
+      code: 'SOMETHING_BROKE',
+      scope: 'renderer:app',
+      fingerprint: 'fp-deadbeef',
+      message: 'it broke',
+      ts: Date.now(),
+      ...overrides,
+    };
+  }
+  function baseReportInput(overrides: Record<string, unknown> = {}) {
     return {
       schemaVersion: 1 as const,
-      eventId,
+      error: baseError(overrides['error'] as Record<string, unknown> | undefined),
       includePromptText: false,
       includePaths: false,
       includeUrls: false,
@@ -293,24 +352,13 @@ describe('diagnostics:v1:reportEvent', () => {
     };
   }
 
-  it('returns issueUrl + bundlePath + summaryMarkdown', async () => {
+  it('returns issueUrl + bundlePath + summaryMarkdown without any DB row', async () => {
+    // The Report flow no longer requires a diagnostic_events row — the
+    // ReportableError payload alone is enough to build the bundle.
     const db = initInMemoryDb();
-    recordDiagnosticEvent(db, {
-      level: 'error',
-      code: 'SOMETHING_BROKE',
-      scope: 'renderer:app',
-      fingerprint: 'fp-deadbeef',
-      message: 'it broke',
-      runId: undefined,
-      stack: undefined,
-      transient: false,
-    });
-    const rows = listDiagnosticEvents(db, { includeTransient: true });
-    const eventId = rows[0]?.id ?? 0;
-
     registerDiagnosticsIpc(db);
 
-    const result = (await invoke('diagnostics:v1:reportEvent', baseReportInput(eventId))) as {
+    const result = (await invoke('diagnostics:v1:reportEvent', baseReportInput())) as {
       schemaVersion: 1;
       issueUrl: string;
       bundlePath: string;
@@ -328,26 +376,17 @@ describe('diagnostics:v1:reportEvent', () => {
     expect(url.searchParams.get('title')).toBe('[Bug]: SOMETHING_BROKE (fp: fp-deadbeef)');
     expect(url.searchParams.get('error_code')).toBe('SOMETHING_BROKE');
     expect(url.searchParams.get('version')).toBe('0.0.0-test');
-    // process.platform is darwin|linux|win32 in CI — one of the three mapped labels.
     expect(['macOS', 'Windows', 'Linux']).toContain(url.searchParams.get('platform'));
     const diagnostics = url.searchParams.get('diagnostics') ?? '';
     expect(diagnostics).toContain('Bundle saved locally at');
     expect(diagnostics).toContain(result.bundlePath);
   });
 
-  it('throws IPC_NOT_FOUND when event id missing', async () => {
-    const db = initInMemoryDb();
-    registerDiagnosticsIpc(db);
-    await expect(invoke('diagnostics:v1:reportEvent', baseReportInput(9999))).rejects.toThrow(
-      /not found/i,
-    );
-  });
-
   it('throws IPC_BAD_INPUT on bad payload shape', async () => {
     const db = initInMemoryDb();
     registerDiagnosticsIpc(db);
     await expect(
-      invoke('diagnostics:v1:reportEvent', { schemaVersion: 1, eventId: 'nope' }),
+      invoke('diagnostics:v1:reportEvent', { schemaVersion: 1, error: { bogus: true } }),
     ).rejects.toThrow();
   });
 
@@ -355,7 +394,7 @@ describe('diagnostics:v1:reportEvent', () => {
     const db = initInMemoryDb();
     registerDiagnosticsIpc(db);
     await expect(
-      invoke('diagnostics:v1:reportEvent', baseReportInput(1, { notes: 'x'.repeat(4001) })),
+      invoke('diagnostics:v1:reportEvent', baseReportInput({ notes: 'x'.repeat(4001) })),
     ).rejects.toThrow(/4000 characters/);
   });
 
@@ -367,27 +406,85 @@ describe('diagnostics:v1:reportEvent', () => {
       type: 'prompt.submit' as const,
     }));
     await expect(
-      invoke('diagnostics:v1:reportEvent', baseReportInput(1, { timeline })),
+      invoke('diagnostics:v1:reportEvent', baseReportInput({ timeline })),
     ).rejects.toThrow(/100 entries/);
+  });
+
+  it('reportEvent rejects error.message longer than 8KB', async () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    await expect(
+      invoke(
+        'diagnostics:v1:reportEvent',
+        baseReportInput({ error: baseError({ message: 'm'.repeat(8001) }) }),
+      ),
+    ).rejects.toThrow(/error\.message exceeds 8000/);
+  });
+
+  it('reportEvent rejects error.stack longer than 16KB', async () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    await expect(
+      invoke(
+        'diagnostics:v1:reportEvent',
+        baseReportInput({ error: baseError({ stack: 's'.repeat(16001) }) }),
+      ),
+    ).rejects.toThrow(/error\.stack exceeds 16000/);
+  });
+
+  it('reportEvent rejects error.context larger than 4KB when serialized', async () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    await expect(
+      invoke(
+        'diagnostics:v1:reportEvent',
+        baseReportInput({ error: baseError({ context: { huge: 'x'.repeat(4100) } }) }),
+      ),
+    ).rejects.toThrow(/error\.context serialized length exceeds 4000/);
+  });
+
+  it('recordReported ignores renderer-supplied fingerprint and recomputes', async () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+
+    await invoke(
+      'diagnostics:v1:reportEvent',
+      baseReportInput({
+        error: baseError({
+          localId: 'local-fp',
+          code: 'FP_CODE',
+          // Renderer claims these fingerprints (lie / stale / bug):
+          fingerprint: 'ffffffff',
+          persistedFingerprint: 'eeeeeeee',
+          message: 'fp check',
+          stack: 'Error: fp\n    at foo (a.ts:1:1)',
+        }),
+      }),
+    );
+
+    const recomputed = (await import('@open-codesign/shared/fingerprint')).computeFingerprint({
+      errorCode: 'FP_CODE',
+      stack: 'Error: fp\n    at foo (a.ts:1:1)',
+      message: 'fp check',
+    });
+    const { readReported } = await import('./reported-fingerprints');
+    const store = readReported('/tmp/reported-fingerprints.json');
+    const fps = store.entries.map((e) => e.fingerprint);
+    expect(fps).toContain(recomputed);
+    expect(fps).not.toContain('ffffffff');
+    expect(fps).not.toContain('eeeeeeee');
   });
 
   it('trims logs when total URL would exceed 7KB', () => {
     // Drive the helper directly so we can force an oversized tail without
     // fighting the 50-line cap in readLogTail.
-    const event = {
-      id: 1,
-      schemaVersion: 1 as const,
+    const error = {
+      localId: 'huge',
       ts: 0,
-      level: 'error' as const,
       code: 'HUGE',
       scope: 'renderer:app',
-      runId: undefined,
       fingerprint: 'fp-huge',
       message: 'A'.repeat(2000),
-      stack: undefined,
-      transient: false,
-      count: 1,
-      context: undefined,
     };
     // Lines contain `\n`-heavy payload so URL encoding of %0A inflates the
     // encoded logs field past the 7KB URL cap and forces the trim path.
@@ -396,7 +493,7 @@ describe('diagnostics:v1:reportEvent', () => {
       (_, i) => `line ${i}:\n\n\n${'X'.repeat(20)}\n\n\n`,
     );
     const url = buildIssueUrlWithTemplate({
-      event,
+      error,
       bundlePath: '/tmp/open-codesign-diagnostics-test.zip',
       appVersion: '9.9.9-test',
       platform: 'darwin',
@@ -410,22 +507,22 @@ describe('diagnostics:v1:reportEvent', () => {
 
   it('issueUrl uses bug_report.yml template with pre-filled error_code + version + platform', async () => {
     const db = initInMemoryDb();
-    recordDiagnosticEvent(db, {
-      level: 'error',
-      code: 'PROVIDER_HTTP_4XX',
-      scope: 'provider',
-      fingerprint: 'fp-prov',
-      message: 'upstream 400',
-      runId: undefined,
-      stack: undefined,
-      transient: false,
-      context: { upstream_provider: 'anthropic', upstream_status: 400 },
-    });
-    const rows = listDiagnosticEvents(db, { includeTransient: true });
-    const eventId = rows[0]?.id ?? 0;
     registerDiagnosticsIpc(db);
 
-    const result = (await invoke('diagnostics:v1:reportEvent', baseReportInput(eventId))) as {
+    const result = (await invoke(
+      'diagnostics:v1:reportEvent',
+      baseReportInput({
+        error: {
+          localId: 'local-prov',
+          code: 'PROVIDER_HTTP_4XX',
+          scope: 'provider',
+          fingerprint: 'fp-prov',
+          message: 'upstream 400',
+          ts: Date.now(),
+          context: { upstream_provider: 'anthropic', upstream_status: 400 },
+        },
+      }),
+    )) as {
       issueUrl: string;
     };
     const url = new URL(result.issueUrl);
@@ -439,21 +536,21 @@ describe('diagnostics:v1:reportEvent', () => {
 
   it('issueUrl encodes special characters correctly', async () => {
     const db = initInMemoryDb();
-    recordDiagnosticEvent(db, {
-      level: 'error',
-      code: 'WEIRD_CODE',
-      scope: 'renderer:app',
-      fingerprint: 'fp-weird',
-      message: 'boom & spaces + "quotes" / slashes',
-      runId: undefined,
-      stack: undefined,
-      transient: false,
-    });
-    const rows = listDiagnosticEvents(db, { includeTransient: true });
-    const eventId = rows[0]?.id ?? 0;
     registerDiagnosticsIpc(db);
 
-    const result = (await invoke('diagnostics:v1:reportEvent', baseReportInput(eventId))) as {
+    const result = (await invoke(
+      'diagnostics:v1:reportEvent',
+      baseReportInput({
+        error: {
+          localId: 'local-weird',
+          code: 'WEIRD_CODE',
+          scope: 'renderer:app',
+          fingerprint: 'fp-weird',
+          message: 'boom & spaces + "quotes" / slashes',
+          ts: Date.now(),
+        },
+      }),
+    )) as {
       issueUrl: string;
     };
     // URL parsing must succeed and round-trip the message.
@@ -470,23 +567,17 @@ describe('diagnostics bundle main.log scrubbing', () => {
 
   async function recordAndReport(overrides: Record<string, unknown>): Promise<{ mainLog: string }> {
     const db = initInMemoryDb();
-    recordDiagnosticEvent(db, {
-      level: 'error',
-      code: 'BUNDLE_TEST',
-      scope: 'renderer:app',
-      fingerprint: 'fp-bundle',
-      message: 'bundle check',
-      runId: undefined,
-      stack: undefined,
-      transient: false,
-    });
-    const rows = listDiagnosticEvents(db, { includeTransient: true });
-    const eventId = rows[0]?.id ?? 0;
-
     registerDiagnosticsIpc(db);
     await invoke('diagnostics:v1:reportEvent', {
       schemaVersion: 1,
-      eventId,
+      error: {
+        localId: 'local-bundle',
+        code: 'BUNDLE_TEST',
+        scope: 'renderer:app',
+        fingerprint: 'fp-bundle',
+        message: 'bundle check',
+        ts: Date.now(),
+      },
       includePromptText: false,
       includePaths: false,
       includeUrls: false,
@@ -607,25 +698,18 @@ describe('buildIssueUrlWithTemplate privacy pipeline', () => {
     overrides: Partial<{ message: string; code: string; fingerprint: string }> = {},
   ) {
     return {
-      id: 1,
-      schemaVersion: 1 as const,
+      localId: 'local-test',
       ts: 0,
-      level: 'error' as const,
       code: overrides.code ?? 'TEST_CODE',
       scope: 'renderer:app',
-      runId: undefined,
       fingerprint: overrides.fingerprint ?? 'fp-test',
       message: overrides.message ?? 'boom',
-      stack: undefined,
-      transient: false,
-      count: 1,
-      context: undefined,
     };
   }
 
   it('redacts paths from the actual field when includePaths=false', () => {
     const url = buildIssueUrlWithTemplate({
-      event: makeEvent({ message: 'failed to read /Users/alice/secret/file.ts' }),
+      error: makeEvent({ message: 'failed to read /Users/alice/secret/file.ts' }),
       bundlePath: '/tmp/bundle.zip',
       appVersion: '1.0.0',
       platform: 'darwin',
@@ -641,7 +725,7 @@ describe('buildIssueUrlWithTemplate privacy pipeline', () => {
 
   it('redacts prompt JSON from the logs field when includePromptText=false', () => {
     const url = buildIssueUrlWithTemplate({
-      event: makeEvent(),
+      error: makeEvent(),
       bundlePath: '/tmp/bundle.zip',
       appVersion: '1.0.0',
       platform: 'darwin',
@@ -659,7 +743,7 @@ describe('buildIssueUrlWithTemplate privacy pipeline', () => {
     const os = await import('node:os');
     const home = os.homedir();
     const url = buildIssueUrlWithTemplate({
-      event: makeEvent(),
+      error: makeEvent(),
       bundlePath: `${home}/Downloads/open-codesign-diagnostics-abc.zip`,
       appVersion: '1.0.0',
       platform: 'darwin',
@@ -672,7 +756,7 @@ describe('buildIssueUrlWithTemplate privacy pipeline', () => {
 
   it('includes user notes in the actual field when provided', () => {
     const url = buildIssueUrlWithTemplate({
-      event: makeEvent({ message: 'boom' }),
+      error: makeEvent({ message: 'boom' }),
       bundlePath: '/tmp/bundle.zip',
       appVersion: '1.0.0',
       platform: 'darwin',
