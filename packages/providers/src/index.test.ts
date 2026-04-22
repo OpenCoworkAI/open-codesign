@@ -304,3 +304,135 @@ describe('complete', () => {
     ).rejects.toMatchObject({ code: 'ATTACHMENT_TOO_LARGE' });
   });
 });
+
+describe('complete — openai-responses strict instructions', () => {
+  it('injects top-level instructions and strips system/developer input items via onPayload', async () => {
+    getModelMock.mockReturnValue({
+      id: 'gpt-5.1',
+      api: 'openai-responses',
+      provider: 'openai',
+    });
+
+    let capturedOnPayload:
+      | ((payload: unknown) => unknown | Promise<unknown | undefined>)
+      | undefined;
+
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
+      capturedOnPayload = opts.onPayload;
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-responses',
+        provider: 'openai',
+        model: 'gpt-5.1',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'openai', modelId: 'gpt-5.1' },
+      [
+        { role: 'system', content: 'You are open-codesign.' },
+        { role: 'user', content: 'hi' },
+      ],
+      { apiKey: 'sk-test' },
+    );
+
+    expect(capturedOnPayload).toBeDefined();
+
+    const params = {
+      input: [
+        { role: 'system', content: 'ignored' },
+        { role: 'developer', content: 'ignored' },
+        { role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+      ],
+    };
+    const mutated = (await capturedOnPayload?.(params)) as {
+      instructions?: string;
+      input: Array<{ role: string }>;
+    };
+
+    expect(mutated.instructions).toBe('You are open-codesign.');
+    expect(mutated.input.map((entry) => entry.role)).toEqual(['user']);
+  });
+
+  it('does not attach onPayload when systemPrompt is empty', async () => {
+    getModelMock.mockReturnValue({
+      id: 'gpt-5.1',
+      api: 'openai-responses',
+      provider: 'openai',
+    });
+
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
+      expect(opts.onPayload).toBeUndefined();
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-responses',
+        provider: 'openai',
+        model: 'gpt-5.1',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete({ provider: 'openai', modelId: 'gpt-5.1' }, [{ role: 'user', content: 'hi' }], {
+      apiKey: 'sk-test',
+    });
+  });
+
+  it('does not attach onPayload for anthropic-messages wire even with systemPrompt', async () => {
+    getModelMock.mockReturnValue({
+      id: 'claude-4.7-sonnet',
+      api: 'anthropic-messages',
+      provider: 'anthropic',
+    });
+
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
+      expect(opts.onPayload).toBeUndefined();
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'anthropic-messages',
+        provider: 'anthropic',
+        model: 'claude-4.7-sonnet',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'anthropic', modelId: 'claude-4.7-sonnet' },
+      [
+        { role: 'system', content: 'You are open-codesign.' },
+        { role: 'user', content: 'hi' },
+      ],
+      { apiKey: 'sk-ant-test' },
+    );
+  });
+});
