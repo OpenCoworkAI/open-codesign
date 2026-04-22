@@ -15,7 +15,7 @@ export const ptBRExamples: Record<string, ExampleContent> = {
   },
   'case-study': {
     title: 'Case de cliente',
-    description: 'Case em uma página, pronto para impressão, com métricas em destaque e citação do CFO.',
+    description: 'Case em uma página, pronto para impressão, com métricas em destaque e citação em destaque do CFO.',
   },
   dashboard: {
     title: 'Dashboard de receita',
@@ -32,7 +32,7 @@ export const ptBRExamples: Record<string, ExampleContent> = {
   },
   'mobile-app': {
     title: 'Tela mobile de rastreador de hábitos',
-    description: 'Tela inicial em moldura de celular com contador de sequência, lista de hábitos e barra inferior.',
+    description: 'Tela inicial em moldura de celular com contador de sequência, lista de hábitos e barra de abas inferior.',
   },
   'pricing-page': {
     title: 'Página de preços SaaS',
@@ -40,7 +40,7 @@ export const ptBRExamples: Record<string, ExampleContent> = {
   },
   'blog-article': {
     title: 'Artigo de blog editorial',
-    description: 'Artigo longo com sidebar de índice, pull quotes e grade de artigos relacionados.',
+    description: 'Artigo longo com sidebar de índice, citações em destaque e grade de artigos relacionados.',
   },
   'event-calendar': {
     title: 'Calendário de equipe',
@@ -52,11 +52,11 @@ export const ptBRExamples: Record<string, ExampleContent> = {
   },
   'portfolio-gallery': {
     title: 'Galeria de portfólio fotográfico',
-    description: 'Grid masonry escuro com overlays no hover, filtros de categoria e sensação de lightbox.',
+    description: 'Grid masonry escuro com overlays no hover, filtros de categoria e visual de lightbox.',
   },
   'receipt-invoice': {
-    title: 'Nota fiscal para impressão',
-    description: 'Nota fiscal A4 limpa com tabela de itens, detalhamento de impostos e condições de pagamento.',
+    title: 'Fatura para impressão',
+    description: 'Fatura A4 limpa com tabela de itens, detalhamento de impostos e condições de pagamento.',
   },
   'settings-panel': {
     title: 'Página de configurações de app',

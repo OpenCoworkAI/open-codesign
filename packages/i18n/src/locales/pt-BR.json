@@ -3,7 +3,7 @@
     "appName": "open-codesign",
     "send": "Enviar",
     "cancel": "Cancelar",
-    "retry": "Tentar de novo",
+    "retry": "Tentar novamente",
     "save": "Salvar",
     "close": "Fechar",
     "dismissNotification": "Dispensar notificação",
@@ -40,8 +40,8 @@
   "canvas": {
     "filesTab": "Arquivos",
     "filesTabEmpty": "Nenhum arquivo ainda",
-    "openInTab": "Abrir em aba",
-    "previewHint": "Pré-visualização em miniatura · clique duas vezes no arquivo ou use Abrir em aba para ver inteiro",
+    "openInTab": "Abrir em nova aba",
+    "previewHint": "Pré-visualização em miniatura · clique duas vezes no arquivo ou use Abrir em nova aba para ver em tela cheia",
     "tabsAriaLabel": "Arquivos abertos",
     "closeTab": "Fechar {{name}}",
     "files": {
@@ -58,8 +58,8 @@
   },
   "preview": {
     "empty": {
-      "title": "Crie com IA",
-      "body": "Escolha um ponto de partida à esquerda ou descreva o que quer criar. O resultado é renderizado aqui numa pré-visualização em sandbox.",
+      "title": "Crie designs com IA",
+      "body": "Escolha um ponto de partida à esquerda ou descreva o que quer criar. O resultado aparece aqui em uma pré-visualização isolada (sandbox).",
       "starterChip": "Experimente um prompt inicial:"
     },
     "loading": {
@@ -67,10 +67,10 @@
     },
     "error": {
       "title": "Falha na geração",
-      "body": "Algo deu errado enquanto gerávamos seu design.",
+      "body": "Algo deu errado durante a geração do seu design.",
       "copyError": "Copiar detalhes do erro",
-      "brokenJsx": "Este design tem um erro de sintaxe, provavelmente um salvamento incompleto. Gere de novo ou edite para corrigir.",
-      "undefinedRef": "O design referencia uma variável ou componente indefinido. Provavelmente uma execução interrompida — tente gerar de novo."
+      "brokenJsx": "Este design tem um erro de sintaxe, provavelmente um salvamento incompleto. Gere novamente ou edite para corrigir.",
+      "undefinedRef": "O design faz referência a uma variável ou componente indefinido. Provavelmente uma execução interrompida — tente gerar novamente."
     },
     "ready": "Pré-visualização",
     "noDesign": "Nenhum design ainda",
@@ -89,10 +89,10 @@
     "pickColor": "Escolher cor",
     "swatchAria": "Cor {{key}}",
     "emptyTitle": "Nenhum token ajustável",
-    "emptyHint": "O agente ainda não declarou um bloco EDITMODE. Gerações futuras vão expor tokens de design aqui."
+    "emptyHint": "O agente ainda não declarou um bloco EDITMODE. Gerações futuras disponibilizarão tokens de design aqui."
   },
   "chat": {
-    "placeholder": "Descreva o que criar…",
+    "placeholder": "Descreva o que quer criar…",
     "sendShortcut": "Enviar (Enter)",
     "emptyHint": "Comece com um prompt inicial ou sua própria ideia.",
     "sendAction": "enviar",
@@ -111,7 +111,7 @@
     "removeFile": "Remover {{name}}",
     "activeDesignSystem": "Design system ativo",
     "clear": "Limpar",
-    "designSystemHint": "Vincule um repositório para extrair cores, tipografia, espaçamento e outras pistas de estilo para gerações futuras.",
+    "designSystemHint": "Vincule um repositório para extrair cores, tipografia, espaçamento e outros elementos de estilo para gerações futuras.",
     "startHint": "Comece com um resumo e depois adicione arquivos, uma URL ou um repositório local para embasar o resultado.",
     "empty": {
       "title": "O que vamos criar?",
@@ -140,7 +140,7 @@
       "addMenu": {
         "trigger": "Adicionar contexto"
       },
-      "streamingLabel": "O assistente está escrevendo"
+      "streamingLabel": "O assistente está digitando"
     },
     "comments": {
       "title": "Modo de comentário",
@@ -180,7 +180,7 @@
         "confirmLogout": "Sair da assinatura do ChatGPT?",
         "loginFailedTitle": "Falha ao entrar no ChatGPT",
         "logoutFailedTitle": "Falha ao sair do ChatGPT",
-        "statusFailedTitle": "Falha ao checar status do ChatGPT",
+        "statusFailedTitle": "Falha ao verificar status do ChatGPT",
         "unknownError": "Erro desconhecido"
       },
       "addProvider": "Adicionar provedor",
@@ -223,33 +223,33 @@
       "import": {
         "action": "Importar",
         "dismiss": "Dispensar",
-        "codexFound": "Configuração do Codex detectada — importar {{count}} provedores?",
+        "codexFound": "Codex detectado — importar {{count}} provedores?",
         "claudeCodeOAuthTitle": "Assinatura do Claude Code detectada",
         "claudeCodeOAuthBody": "Sua assinatura Pro/Max só pode ser usada pelo próprio Claude Code. Apps de terceiros não podem reutilizar a cota da assinatura. Gere uma chave de API no Anthropic Console (mesma conta, cobrada por token) para usar Claude aqui.",
-        "claudeCodeOAuthCtaConsole": "Gerar chave no Anthropic Console ↗",
+        "claudeCodeOAuthCtaConsole": "Obter chave no Anthropic Console ↗",
         "claudeCodeHasKeyBody": "Encontramos uma chave em {{source}} para o gateway em {{baseUrl}} — clique em Importar para usá-la aqui.",
         "claudeCodeHasKeySourceSettings": "~/.claude/settings.json",
         "claudeCodeHasKeySourceEnv": "env do shell",
-        "claudeCodeLocalProxyBody": "Parece um proxy local em {{baseUrl}}. É a configuração típica para reaproveitar uma assinatura OAuth via ferramenta como Claude Code Proxy.",
+        "claudeCodeLocalProxyBody": "Parece um proxy local em {{baseUrl}}. É a configuração típica para reutilizar uma assinatura OAuth por meio de ferramentas como Claude Code Proxy.",
         "claudeCodeLocalProxyAction": "Cole a chave para usar o proxy",
         "claudeCodeRemoteGatewayBody": "O gateway em {{baseUrl}} não tem chave de API na sua configuração do Claude Code. Importe o gateway e depois cole uma chave em Configurações.",
         "claudeCodeRemoteGatewayAction": "Cole a chave para usar o gateway",
         "oauthErrorToast": "A assinatura do Claude Code não pode ser compartilhada com apps de terceiros. Gere uma chave de API no Anthropic Console.",
-        "oauthErrorToastCta": "Gerar chave ↗",
+        "oauthErrorToastCta": "Obter chave ↗",
         "codexDone": "Provedores do Codex importados",
         "geminiFound": "Chave da Gemini CLI detectada — importar?",
         "geminiNoKey": "Configuração da Gemini CLI encontrada, mas sem chave em ~/.gemini/.env ou ~/.env. Cole uma chave manualmente para usar o Gemini aqui.",
-        "geminiBlocked": "Vertex AI detectado. O importador do Gemini só suporta chaves da Gemini Developer API (AIzaSy…) — configure o Vertex manualmente.",
+        "geminiBlocked": "Projetos do Google Vertex AI ainda não são suportados — cole uma chave da Gemini Developer API (começa com AIzaSy…) para usar o Gemini aqui.",
         "geminiDone": "Provedor do Gemini importado",
         "opencodeFound": "OpenCode detectado — importar {{count}} provedores ({{providers}})?",
         "opencodeDone": "Provedores do OpenCode importados",
         "claudeCodeImportedActivated": "Claude Code importado e definido como provedor ativo",
         "claudeCodeOpenSettings": "Abrir Configurações",
-        "claudeCodeIHaveKey": "Tenho uma chave de API — colar",
+        "claudeCodeIHaveKey": "Tenho uma chave de API — colar aqui",
         "claudeCodeShellEnvHint": "Ou: exporte ANTHROPIC_API_KEY no seu shell e reabra pelo Terminal — vamos detectar automaticamente.",
         "claudeCodeParseErrorTitle": "Configuração do Claude Code inválida",
         "claudeCodeParseErrorBody": "Não foi possível ler ~/.claude/settings.json: {{reason}}.",
-        "claudeCodeParseErrorReasonNotObject": "o valor do topo não é um objeto JSON",
+        "claudeCodeParseErrorReasonNotObject": "o valor no nível superior não é um objeto JSON",
         "claudeCodeWarningsMore": "+{{count}} a mais",
         "claudeCodeParseErrorCopyPath": "Copiar caminho do arquivo",
         "claudeCodeParseErrorPathCopied": "Caminho copiado para a área de transferência",
@@ -264,7 +264,7 @@
         "customMenu": "Provedor personalizado",
         "customMenuDesc": "Inserir chave de API e URL manualmente",
         "alreadyImported": "Já importado",
-        "opencodeBlocked": "Configuração do OpenCode detectada, mas nada pode ser importado. Veja o aviso acima, corrija o auth.json e tente de novo."
+        "opencodeBlocked": "Configuração do OpenCode detectada, mas nada pode ser importado. Veja o aviso acima, corrija o auth.json e tente novamente."
       },
       "modal": {
         "title": "Adicionar provedor",
@@ -287,7 +287,7 @@
         "removed": "Provedor removido",
         "deleteFailed": "Falha ao excluir",
         "activateFailed": "Não foi possível ativar o provedor",
-        "missingModel": "O provedor não tem modelo padrão — adicione um antes.",
+        "missingModel": "O provedor não tem modelo padrão — adicione um primeiro.",
         "switchedTo": "Trocado para {{label}}",
         "switchFailed": "Falha ao trocar",
         "saved": "Provedor salvo",
@@ -320,7 +320,7 @@
     },
     "appearance": {
       "themeTitle": "Tema",
-      "themeHint": "A escolha é mantida entre reinicializações.",
+      "themeHint": "A preferência é mantida entre reinicializações.",
       "lightLabel": "Claro",
       "lightDesc": "Bege quente, sombras suaves",
       "darkLabel": "Escuro",
@@ -348,11 +348,11 @@
       "logs": "Logs",
       "data": "Diretório de dados",
       "change": "Alterar",
-      "restartHint": "Escolha onde o open-codesign guarda configuração, logs e dados locais de design. As alterações ficam salvas permanentemente e entram em vigor após reiniciar o app.",
+      "restartHint": "Escolha onde o open-codesign guarda configuração, logs e dados locais de design. As alterações são salvas permanentemente e se aplicam depois de reiniciar o app.",
       "locationSavedToast": "Local de armazenamento salvo. Reinicie o app para aplicar.",
       "locationSaveFailed": "Não foi possível salvar o local de armazenamento",
       "onboardingTitle": "Onboarding",
-      "onboardingHint": "Limpa o flag de configuração para que o assistente de onboarding rode de novo na próxima abertura.",
+      "onboardingHint": "Limpa a flag de configuração para que o assistente de onboarding rode novamente na próxima abertura.",
       "resetConfirm": "Isso vai remover suas chaves salvas. Continuar?",
       "reset": "Redefinir",
       "resetButton": "Redefinir onboarding",
@@ -360,7 +360,7 @@
       "openFolderFailed": "Não foi possível abrir a pasta",
       "onboardingResetToast": "Onboarding redefinido. Reinicie o app para refazer a configuração.",
       "diagnosticsTitle": "Diagnóstico",
-      "diagnosticsHint": "Abra a pasta de logs para inspecionar os arquivos ou exporte um pacote redigido para reportar bugs.",
+      "diagnosticsHint": "Abra a pasta de logs para inspecionar os arquivos ou exporte um pacote com dados sensíveis removidos para reportar bugs.",
       "openLogFolder": "Abrir pasta de logs",
       "exportDiagnostics": "Exportar diagnóstico",
       "diagnosticsExported": "Exportado para {{path}}",
@@ -371,9 +371,9 @@
       "description": "Revise erros recentes. Reporte um bug com o contexto completo anexado.",
       "openLogFolder": "Abrir pasta de logs",
       "exportBundle": "Exportar pacote de diagnóstico",
-      "showTransient": "Mostrar erros que foram corrigidos em nova tentativa",
+      "showTransient": "Mostrar erros corrigidos após nova tentativa",
       "empty": "Nenhum evento de diagnóstico registrado ainda.",
-      "dbUnavailable": "Armazenamento de diagnóstico indisponível. Os erros continuam sendo gravados em main.log, mas só aparecem aqui depois que o app for reiniciado. Verifique espaço em disco e permissões.",
+      "dbUnavailable": "Armazenamento de diagnóstico indisponível. Os erros continuam sendo gravados em main.log, mas só aparecem aqui após reiniciar o app. Verifique espaço em disco e permissões.",
       "report": "Reportar",
       "column": {
         "time": "Hora",
@@ -382,7 +382,7 @@
         "runId": "ID da execução",
         "message": "Mensagem"
       },
-      "inMemoryFallback": "Mostrando registros em memória — banco indisponível, não persistem após reiniciar."
+      "inMemoryFallback": "Mostrando registros em memória — banco indisponível; eles não serão preservados após reiniciar."
     },
     "advanced": {
       "updateChannel": "Canal de atualização",
@@ -390,7 +390,7 @@
       "stable": "Estável",
       "beta": "Beta",
       "checkForUpdatesOnStartup": "Verificar atualizações ao iniciar",
-      "checkForUpdatesOnStartupHint": "Verifica automaticamente se há nova versão 30 segundos após abrir.",
+      "checkForUpdatesOnStartupHint": "Verifica automaticamente se há nova versão 30 segundos após iniciar o app.",
       "timeout": "Tempo limite de geração",
       "timeoutHint": "Segundos antes de uma geração ser abortada.",
       "timeoutSeconds": "{{value}} s",
@@ -410,7 +410,7 @@
   "onboarding": {
     "stepperLabel": "Passo {{current}} de {{total}}",
     "welcome": {
-      "title": "Crie com qualquer modelo.",
+      "title": "Crie designs com qualquer modelo.",
       "subtitle": "Escolha como quer impulsionar seus designs. Dá para mudar depois em Configurações.",
       "tryFree": "Experimentar grátis",
       "tryFreeSubtitle": "Nível gratuito do OpenRouter — cole uma chave do OpenRouter e comece com openrouter/free ou digite qualquer ID de modelo.",
@@ -419,15 +419,15 @@
       "useOllama": "Usar modelo local (Ollama)",
       "useOllamaSubtitle": "Roda 100% local, sem custo de API. Precisa do Ollama instalado e rodando.",
       "useOllamaDetected": "Ollama detectado — {{count}} modelos disponíveis localmente.",
-      "useOllamaNotRunning": "Ollama não detectado em localhost:11434. Instale ou inicie e tente de novo.",
+      "useOllamaNotRunning": "Ollama não detectado em localhost:11434. Instale ou inicie e tente novamente.",
       "useOllamaProbing": "Procurando uma instância local do Ollama...",
-      "useOllamaRetry": "Verificar de novo",
+      "useOllamaRetry": "Verificar novamente",
       "useOllamaInstall": "Instalar Ollama ↗",
       "whereToGetKey": "Onde conseguir uma chave"
     },
     "paste": {
       "title": "Cole sua chave de API",
-      "description": "O provedor é detectado automaticamente. Clique em Testar para verificar a chave e o endpoint antes de continuar. Sua chave fica guardada localmente em ~/.config/open-codesign/config.toml (modo 0600).",
+      "description": "O provedor é detectado automaticamente. Clique em Testar para verificar a chave e o endpoint antes de continuar. Sua chave fica armazenada localmente em ~/.config/open-codesign/config.toml (modo 0600).",
       "placeholder": "sk-…",
       "recognized": "Provedor detectado: {{provider}}",
       "connected_one": "{{count}} modelo conectado",
@@ -441,14 +441,14 @@
       "statusOk": "Reconhecido: {{provider}} — Conectado ({{count}} modelos)",
       "errors": {
         "401": "Chave de API inválida ou não autorizada. Confira no painel do provedor.",
-        "402": "Sua conta não tem crédito. Adicione crédito e tente de novo.",
-        "429": "Limite de requisições atingido. Aguarde um momento e tente de novo.",
+        "402": "Sua conta não tem crédito. Adicione crédito e tente novamente.",
+        "429": "Limite de requisições atingido. Aguarde um momento e tente novamente.",
         "network": "Não foi possível acessar a URL base. Verifique domínio/porta/rede.",
         "unsupported": "Prefixo de chave não reconhecido. Suportados: sk-ant- (Anthropic), sk- (OpenAI), sk-or- (OpenRouter).",
         "notSupportedProvider": "{{provider}} não é suportado na v0.1. Use Anthropic, OpenAI ou OpenRouter.",
         "rendererDisconnected": "O renderer não está conectado ao processo principal.",
-        "detectIpc": "Falha na detecção do provedor (processo principal inacessível): {{message}}. Reinicie o app e tente de novo.",
-        "detectNetwork": "Falha na detecção do provedor (erro de rede): {{message}}. Verifique sua conexão e tente de novo."
+        "detectIpc": "Falha na detecção do provedor (processo principal inacessível): {{message}}. Reinicie o app e tente novamente.",
+        "detectNetwork": "Falha na detecção do provedor (erro de rede): {{message}}. Verifique sua conexão e tente novamente."
       },
       "advanced": {
         "toggle": "Avançado — URL base personalizada (proxy / relay)",
@@ -472,8 +472,8 @@
         "testing": "Testando...",
         "ok": "Conectado",
         "okVerified": "Conectado — chave e endpoint verificados",
-        "idleHint": "Rode Testar para verificar sua chave e conexão antes de continuar.",
-        "runFirst": "Rode Testar primeiro para verificar sua conexão",
+        "idleHint": "Clique em Testar para verificar sua chave e conexão antes de continuar.",
+        "runFirst": "Clique em Testar primeiro para verificar sua conexão",
         "errors": {
           "401": "Chave de API inválida ou não autorizada.",
           "404": "Caminho da URL base incorreto. Tente adicionar o sufixo /v1 (ex.: https://seu-host/v1).",
@@ -488,13 +488,13 @@
     },
     "choose": {
       "title": "Escolha os modelos padrão",
-      "description": "Comece com uma recomendação ou digite qualquer ID de modelo do provedor. Dá para trocar por design depois.",
+      "description": "Comece com uma recomendação ou digite qualquer ID de modelo do provedor. Dá para trocar os modelos em cada design depois.",
       "primary": "Modelo principal de design",
-      "fast": "Modelo rápido de completamento",
+      "fast": "Modelo rápido de resposta",
       "primaryHint": "Usado para a geração completa do design.",
       "fastHint": "Usado para edições rápidas e ajustes inline.",
-      "primaryHintFree": "O caminho gratuito começa em openrouter/free, mas você pode digitar qualquer ID de modelo do OpenRouter.",
-      "fastHintFree": "Mantenha openrouter/free para o menor custo, ou troque por uma escolha personalizada mais rápida.",
+      "primaryHintFree": "A opção gratuita começa em openrouter/free, mas você pode digitar qualquer ID de modelo do OpenRouter.",
+      "fastHintFree": "Mantenha openrouter/free para o menor custo, ou troque por uma opção personalizada mais rápida.",
       "customBaseUrl": "URL base personalizada: {{url}}",
       "costNote": "O custo estimado varia por provedor, modelo escolhido e tamanho do prompt.",
       "costNoteFree": "A disponibilidade das rotas gratuitas do OpenRouter pode mudar. Se nenhuma rota gratuita estiver disponível, digite outro ID de modelo aqui.",
@@ -519,7 +519,7 @@
       "noProvider": "Nenhum provedor configurado",
       "lastTested": "Último teste {{time}}",
       "tooltip": {
-        "click": "Clique para testar de novo"
+        "click": "Clique para testar novamente"
       }
     },
     "openMyDesigns": "Todos os designs",
@@ -560,7 +560,7 @@
   },
   "notifications": {
     "designSystemLinked": "Design system vinculado",
-    "designSystemScanFailed": "Falha ao escanear o design system",
+    "designSystemScanFailed": "Falha ao analisar o design system",
     "designSystemCleared": "Design system removido",
     "clearDesignSystemFailed": "Não foi possível remover o design system",
     "generationFailed": "Falha na geração",
@@ -576,7 +576,7 @@
   "inlineComment": {
     "title": "Comentar em",
     "closeComposer": "Fechar editor de comentário inline",
-    "description": "Os elementos clicados ficam selecionados no canvas. Descreva a mudança visual ou de conteúdo que você quer, e o open-codesign vai reescrever o artefato em torno desse alvo.",
+    "description": "Os elementos clicados ficam selecionados no canvas. Descreva a mudança visual ou de conteúdo que você quer, e o open-codesign vai reescrever o artefato focando nesse alvo.",
     "placeholder": "Deixe esta seção mais compacta, refine o título e alinhe ao design system vinculado…",
     "applying": "Aplicando…",
     "applyChange": "Aplicar mudança"
@@ -591,7 +591,7 @@
     "sending": "Enviando…",
     "scope": {
       "legend": "Escopo deste comentário",
-      "element": "Só este elemento",
+      "element": "Apenas este elemento",
       "global": "Design inteiro"
     }
   },
@@ -606,12 +606,12 @@
     "applyAll": "Aplicar todas as edições pendentes"
   },
   "commentsTab": {
-    "empty": "Clique em qualquer elemento da pré-visualização com o modo de comentário ligado para deixar uma nota ou uma instrução de edição.",
+    "empty": "Com o modo de comentário ativo, clique em qualquer elemento da pré-visualização para deixar uma nota ou instrução de edição.",
     "pendingEdits": "Edições pendentes",
     "notes": "Notas",
     "appliedEdits": "Edições aplicadas",
     "delete": "Excluir comentário",
-    "atSnapshot": "no snapshot {{n}}"
+    "atSnapshot": "@ snapshot {{n}}"
   },
   "comments": {
     "panel": {
@@ -627,7 +627,7 @@
       "scope": {
         "element": "Elemento",
         "global": "Global",
-        "tooltip": "Se a mudança vale só para este elemento ou para o design inteiro"
+        "tooltip": "Indica se a mudança vale só para este elemento ou para o design inteiro"
       }
     },
     "quickActions": {
@@ -669,9 +669,9 @@
     "validateKeyFirst": "Valide a chave primeiro",
     "enterKeyToTest": "Cole uma chave de API para testar a conexão",
     "detectingProvider": "Detectando provedor — aguarde",
-    "unsupportedKeyForTest": "Formato de chave não suportado — não dá para testar esta chave",
-    "providerDetectIpcForTest": "Falha na detecção do provedor (IPC) — não dá para testar esta chave",
-    "providerDetectNetworkForTest": "Falha na detecção do provedor (rede) — não dá para testar esta chave",
+    "unsupportedKeyForTest": "Formato de chave não suportado — não é possível testar esta chave",
+    "providerDetectIpcForTest": "Falha na detecção do provedor (IPC) — não é possível testar esta chave",
+    "providerDetectNetworkForTest": "Falha na detecção do provedor (rede) — não é possível testar esta chave",
     "testingConnection": "Testando conexão…",
     "validateKeyToContinue": "Valide sua chave de API para continuar",
     "savingInProgress": "Salvamento em andamento",
@@ -680,8 +680,8 @@
   },
   "errorBoundary": {
     "scopeFallback": "esta visualização",
-    "crashedSuffix": "{{scope}} quebrou",
-    "body": "O restante do app continua rodando. Recarregue esta visualização ou copie o stack para abrir um bug.",
+    "crashedSuffix": "{{scope}} travou",
+    "body": "O restante do app continua rodando. Recarregue esta visualização ou copie o stack para reportar um bug.",
     "noStack": "(sem stack)",
     "copyStack": "Copiar stack",
     "reportOnGitHub": "Reportar no GitHub",
@@ -692,7 +692,7 @@
     "generic": "Algo deu errado.",
     "providerAuthMissing": "Nenhuma chave de API configurada. Abra Configurações para adicionar uma.",
     "providerError": "Erro do provedor: {{message}}",
-    "ipcBadInput": "Entrada inválida passada ao processo principal.",
+    "ipcBadInput": "Entrada inválida enviada ao processo principal.",
     "exporterNotReady": "O exportador ainda está carregando. Tente novamente em um instante.",
     "rendererDisconnected": "O renderer não está conectado ao processo principal.",
     "onboardingIncomplete": "O onboarding não foi concluído.",
@@ -704,7 +704,7 @@
   "projects": {
     "untitled": "Design sem título",
     "untitledNumbered": "Design sem título {{n}}",
-    "duplicateNameTemplate": "{{name}} cópia",
+    "duplicateNameTemplate": "{{name}} (cópia)",
     "switcher": {
       "currentLabel": "Design atual",
       "menuLabel": "Trocar design",
@@ -757,7 +757,7 @@
       "createFailed": "Não foi possível criar um novo design",
       "switchFailed": "Não foi possível trocar de design",
       "switchBlockedGenerating": "Aguarde a geração terminar antes de trocar",
-      "busyGenerating": "Aguarde a geração atual terminar e tente de novo",
+      "busyGenerating": "Aguarde a geração atual terminar e tente novamente",
       "renameFailed": "Não foi possível renomear o design",
       "duplicated": "Duplicado como \"{{name}}\"",
       "duplicateFailed": "Não foi possível duplicar o design",
@@ -765,8 +765,8 @@
       "deleteFailed": "Não foi possível excluir o design",
       "deleteBlockedGenerating": "Aguarde a geração terminar antes de excluir",
       "saveFailed": "Não foi possível salvar as últimas alterações",
-      "snapshotSkipped": "Saída incompleta mantida sem salvar",
-      "snapshotSkippedBody": "O JSX do agente está truncado (ReactDOM.createRoot ausente ou chaves desbalanceadas). A versão boa anterior foi preservada. Envie o prompt de novo para tentar outra vez.",
+      "snapshotSkipped": "Saída incompleta não foi salva",
+      "snapshotSkippedBody": "O JSX do agente está truncado (ReactDOM.createRoot ausente ou chaves desbalanceadas). A versão boa anterior foi preservada. Envie o prompt novamente.",
       "loadFailed": "Não foi possível carregar seus designs"
     }
   },
@@ -777,7 +777,7 @@
     "mostLikelyCause": "Causa mais provável:",
     "cause": {
       "keyInvalid": "Chave de API inválida ou revogada.",
-      "balanceEmpty": "Saldo da conta está vazio.",
+      "balanceEmpty": "O saldo da conta está vazio.",
       "missingV1": "O caminho da URL base provavelmente não tem o sufixo /v1.",
       "rateLimit": "Limite de requisições excedido.",
       "hostUnreachable": "Não foi possível acessar o host — verifique domínio, porta ou VPN.",
@@ -791,7 +791,7 @@
       "addCredits": "Adicionar créditos →",
       "addCreditsGeneric": "Veja a página de faturamento do seu provedor",
       "addV1": "Adicionar /v1",
-      "waitAndRetry": "Aguardar e tentar de novo",
+      "waitAndRetry": "Aguardar e tentar novamente",
       "checkNetwork": "Verificar rede / VPN",
       "checkVpn": "Verificar VPN / firewall",
       "reportBug": "Reportar este bug",
@@ -799,7 +799,7 @@
     },
     "applyFix": "Aplicar esta correção",
     "setBaseUrlFirst": "Defina uma URL base primeiro",
-    "testAgain": "Testar de novo",
+    "testAgain": "Testar novamente",
     "showLog": "Mostrar log completo",
     "showLogFailed": "Falha ao abrir a pasta de logs",
     "dismiss": "Dispensar",
@@ -862,7 +862,7 @@
   "demos": {
     "meditationApp": {
       "title": "App de meditação Calm Spaces",
-      "description": "Protótipo mobile com moldura de celular, paleta suave, nav interativa.",
+      "description": "Protótipo mobile com moldura de celular, paleta suave, navegação interativa.",
       "prompt": "Crie o protótipo de um app mobile de meditação chamado Calm Spaces. Mostre uma moldura de celular com tela inicial contendo lista de meditações, botão de play e indicador de progresso. Use tipografia serena, verdes e azuis suaves e muito espaço em branco."
     },
     "caseStudy": {
@@ -884,7 +884,7 @@
   "examples": {
     "tab": "Exemplos",
     "title": "Exemplos",
-    "subtitle": "Pontos de partida selecionados a dedo. Passe o cursor para pré-visualizar e depois solte o prompt no editor.",
+    "subtitle": "Pontos de partida selecionados a dedo. Passe o cursor para pré-visualizar e depois insira o prompt no editor.",
     "empty": "Nenhum exemplo corresponde ao seu filtro.",
     "useThisPrompt": "Usar este prompt",
     "categories": {
@@ -904,7 +904,7 @@
   "emptyState": {
     "heading": "O que você gostaria de criar?",
     "subline": "Descreva sua ideia no chat, ou escolha um template para começar.",
-    "tryThese": "Inícios rápidos",
+    "tryThese": "Sugestões rápidas",
     "starters": {
       "landing": "Landing page de startup",
       "pitch": "Slides de pitch deck",
@@ -1000,8 +1000,8 @@
       "fidelityWireframe": "Wireframe",
       "fidelityWireframeHint": "Blocos em tons de cinza, sem imagens — exploração rápida.",
       "fidelityHigh": "Alta fidelidade",
-      "fidelityHighHint": "Cores polidas, conteúdo com cara de real.",
-      "fidelityComingSoon": "A escolha entre wireframe e alta fidelidade chega num follow-up.",
+      "fidelityHighHint": "Cores polidas, conteúdo realista.",
+      "fidelityComingSoon": "A escolha entre wireframe e alta fidelidade chega em uma versão futura.",
       "speakerNotes": "Incluir notas do apresentador",
       "speakerNotesHint": "Adiciona uma seção de notas sob cada slide com dicas de fala.",
       "template": "Template",
@@ -1011,28 +1011,28 @@
     "disabledHint": "Adicione um nome de projeto para continuar.",
     "help": {
       "share": "Os designs ficam neste dispositivo. O compartilhamento acontece via exportação de pacote — sem precisar de conta na nuvem.",
-      "templates": "Mais pontos de partida chegam num follow-up; esta lista vai continuar crescendo."
+      "templates": "Mais pontos de partida chegam em uma versão futura; esta lista vai continuar crescendo."
     }
   },
   "err": {
-    "IPC_BAD_INPUT": "A requisição continha entrada inválida. Tente de novo.",
+    "IPC_BAD_INPUT": "A requisição continha entrada inválida. Tente novamente.",
     "IPC_DB_ERROR": "Ocorreu um erro no banco de dados local. Reiniciar o app pode ajudar.",
     "IPC_NOT_FOUND": "O item solicitado não foi encontrado.",
     "PROVIDER_AUTH_MISSING": "Nenhuma chave de API encontrada para este provedor. Adicione sua chave em Configurações.",
-    "PROVIDER_KEY_MISSING": "Nenhuma chave de API guardada para este provedor. Adicione uma em Configurações.",
+    "PROVIDER_KEY_MISSING": "Nenhuma chave de API armazenada para este provedor. Adicione uma em Configurações.",
     "PROVIDER_ACTIVE_MISSING_KEY": "O provedor ativo não tem chave de API. Abra Configurações para adicionar uma.",
     "PROVIDER_NOT_SUPPORTED": "Este provedor não é suportado. Verifique sua configuração de provedor.",
     "PROVIDER_MODEL_UNKNOWN": "O modelo selecionado não está disponível para este provedor.",
     "PROVIDER_BASE_URL_MISSING": "Uma URL base é obrigatória para este provedor. Configure em Configurações.",
-    "PROVIDER_ERROR": "O provedor retornou um erro. Verifique sua chave de API e tente de novo.",
+    "PROVIDER_ERROR": "O provedor retornou um erro. Verifique sua chave de API e tente novamente.",
     "PROVIDER_HTTP_4XX": "O provedor rejeitou a requisição. Verifique sua chave de API e o faturamento.",
     "PROVIDER_UPSTREAM_ERROR": "O provedor retornou um erro inesperado. Detalhes estão no log.",
     "PROVIDER_ABORTED": "Geração cancelada.",
-    "PROVIDER_RETRY_EXHAUSTED": "O provedor falhou após várias tentativas. Verifique sua conexão e tente de novo.",
+    "PROVIDER_RETRY_EXHAUSTED": "O provedor falhou após várias tentativas. Verifique sua conexão e tente novamente.",
     "CLAUDE_CODE_OAUTH_ONLY": "Seu login no Claude Code usa uma assinatura Anthropic (Pro/Max). Apps de terceiros não podem reutilizar a cota da assinatura — gere uma chave de API em console.anthropic.com e use aqui.",
     "INPUT_EMPTY_PROMPT": "O prompt não pode estar vazio.",
     "INPUT_EMPTY_COMMENT": "O comentário não pode estar vazio.",
-    "INPUT_EMPTY_HTML": "HTML existente é obrigatório para esta operação.",
+    "INPUT_EMPTY_HTML": "Um HTML existente é obrigatório para esta operação.",
     "INPUT_UNSUPPORTED_MODE": "Este modo de geração não é suportado.",
     "GENERATION_TIMEOUT": "A geração excedeu o tempo limite. Tente um prompt mais curto ou aumente o tempo em Configurações.",
     "CONFIG_READ_FAILED": "Falha ao ler o arquivo de configuração. Verifique as permissões.",
@@ -1045,26 +1045,26 @@
     "STORAGE_SETTINGS_READ_FAILED": "Falha ao ler as configurações de local de armazenamento.",
     "STORAGE_SETTINGS_PARSE_FAILED": "As configurações de local de armazenamento não puderam ser lidas.",
     "STORAGE_SETTINGS_INVALID": "As configurações de local de armazenamento contêm dados inválidos.",
-    "KEYCHAIN_UNAVAILABLE": "A keychain do SO (armazenamento seguro) não está disponível. As chaves de API não podem ser guardadas.",
+    "KEYCHAIN_UNAVAILABLE": "A keychain do SO (armazenamento seguro) não está disponível. As chaves de API não podem ser armazenadas.",
     "KEYCHAIN_EMPTY_INPUT": "Não é possível criptografar ou descriptografar um valor vazio.",
     "ATTACHMENT_TOO_LARGE": "Um ou mais anexos excedem o limite de tamanho.",
     "ATTACHMENT_READ_FAILED": "Falha ao ler um arquivo anexado. Verifique se o arquivo ainda existe.",
     "REFERENCE_URL_TOO_LARGE": "O conteúdo da URL de referência é grande demais para incluir.",
     "REFERENCE_URL_FETCH_FAILED": "Não foi possível buscar a URL de referência. Verifique a URL e sua conexão.",
-    "REFERENCE_URL_FETCH_TIMEOUT": "O tempo para buscar a URL de referência esgotou. Tente de novo ou use outra URL.",
+    "REFERENCE_URL_FETCH_TIMEOUT": "O tempo para buscar a URL de referência esgotou. Tente novamente ou use outra URL.",
     "REFERENCE_URL_UNSUPPORTED": "Este tipo de URL de referência não é suportado.",
     "PREFERENCES_READ_FAIL": "Falha ao ler preferências. As configurações padrão serão usadas.",
     "PREFERENCES_INVALID_TIMEOUT": "O valor do tempo limite de geração é inválido.",
-    "SKILL_LOAD_FAILED": "Uma ou mais skills falharam ao carregar. Verifique seus arquivos de skill por erros.",
-    "EXPORTER_UNKNOWN": "Formato de exportação solicitado desconhecido.",
-    "EXPORTER_NO_CHROME": "Chrome ou Chromium não encontrado. Instale para habilitar a exportação em PDF.",
-    "EXPORTER_PDF_FAILED": "A exportação em PDF falhou. Garanta que o Chrome esteja instalado e tente de novo.",
+    "SKILL_LOAD_FAILED": "Uma ou mais skills falharam ao carregar. Procure erros nos seus arquivos de skill.",
+    "EXPORTER_UNKNOWN": "Formato de exportação desconhecido.",
+    "EXPORTER_NO_CHROME": "Chrome ou Chromium não encontrado. Instale um deles para habilitar a exportação em PDF.",
+    "EXPORTER_PDF_FAILED": "A exportação em PDF falhou. Garanta que o Chrome esteja instalado e tente novamente.",
     "EXPORTER_PPTX_FAILED": "A exportação em PowerPoint falhou.",
-    "EXPORTER_ZIP_UNSAFE_PATH": "A exportação foi bloqueada: um caminho de asset escaparia do arquivo ZIP.",
+    "EXPORTER_ZIP_UNSAFE_PATH": "A exportação foi bloqueada: um caminho de asset escaparia dos limites do arquivo ZIP.",
     "EXPORTER_ZIP_FAILED": "A exportação em ZIP falhou.",
     "OPEN_PATH_FAILED": "Não foi possível abrir a pasta ou arquivo solicitado.",
     "RENDERER_ERROR": "Ocorreu um erro no renderer. Detalhes estão no log.",
-    "CODEX_TOKEN_NOT_LOGGED_IN": "A assinatura do ChatGPT não está conectada. Faça login em Configurações.",
+    "CODEX_TOKEN_NOT_LOGGED_IN": "Você não fez login na assinatura do ChatGPT. Faça login em Configurações.",
     "CODEX_TOKEN_PARSE_FAILED": "O login local do ChatGPT está corrompido. Faça login novamente em Configurações."
   }
 }
