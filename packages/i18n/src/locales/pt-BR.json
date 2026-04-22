@@ -34,7 +34,8 @@
       "parsing": "Finalizando…",
       "rendering": "Renderizando pré-visualização…",
       "done": "Pronto"
-    }
+    },
+    "tokens": "{{count}} tokens"
   },
   "canvas": {
     "filesTab": "Arquivos",
@@ -135,7 +136,11 @@
       },
       "working": {
         "title": "Trabalhando"
-      }
+      },
+      "addMenu": {
+        "trigger": "Adicionar contexto"
+      },
+      "streamingLabel": "O assistente está escrevendo"
     },
     "comments": {
       "title": "Modo de comentário",
@@ -167,8 +172,16 @@
       "sectionTitle": "Provedores de API",
       "chatgptLogin": {
         "title": "Entrar com assinatura do ChatGPT",
-        "description": "Use a cota do seu plano ChatGPT Plus / Pro / Team para chamar modelos Codex (gpt-5.3-codex e afins) — sem precisar de chave de API. Ainda em polimento, sai na próxima versão.",
-        "comingSoon": "Em breve"
+        "description": "Use a cota do seu plano ChatGPT Plus / Pro / Team para chamar modelos Codex (gpt-5.3-codex e afins) — sem precisar de chave de API.",
+        "signIn": "Entrar com ChatGPT",
+        "inProgress": "Navegador aberto. Conclua a autorização e voltamos automaticamente…",
+        "loggedInBadge": "Conectado com ChatGPT",
+        "logout": "Sair",
+        "confirmLogout": "Sair da assinatura do ChatGPT?",
+        "loginFailedTitle": "Falha ao entrar no ChatGPT",
+        "logoutFailedTitle": "Falha ao sair do ChatGPT",
+        "statusFailedTitle": "Falha ao checar status do ChatGPT",
+        "unknownError": "Erro desconhecido"
       },
       "addProvider": "Adicionar provedor",
       "addCustom": "Adicionar personalizado",
@@ -203,30 +216,27 @@
         "test": "Testar conexão",
         "testOk": "OK — {{count}} modelos disponíveis",
         "save": "Salvar e continuar",
-        "saveEdit": "Salvar alterações"
+        "saveEdit": "Salvar alterações",
+        "switchToDropdown": "Escolher da lista",
+        "switchToManual": "Digitar manualmente"
       },
       "import": {
         "action": "Importar",
         "dismiss": "Dispensar",
         "codexFound": "Configuração do Codex detectada — importar {{count}} provedores?",
-        "claudeCodeFound": "Gateway do Claude Code detectado em {{baseUrl}} — importar?",
         "claudeCodeOAuthTitle": "Assinatura do Claude Code detectada",
         "claudeCodeOAuthBody": "Sua assinatura Pro/Max só pode ser usada pelo próprio Claude Code. Apps de terceiros não podem reutilizar a cota da assinatura. Gere uma chave de API no Anthropic Console (mesma conta, cobrada por token) para usar Claude aqui.",
         "claudeCodeOAuthCtaConsole": "Gerar chave no Anthropic Console ↗",
-        "claudeCodeHasKeyTitle": "Chave de API do Claude Code pronta para importar",
         "claudeCodeHasKeyBody": "Encontramos uma chave em {{source}} para o gateway em {{baseUrl}} — clique em Importar para usá-la aqui.",
         "claudeCodeHasKeySourceSettings": "~/.claude/settings.json",
         "claudeCodeHasKeySourceEnv": "env do shell",
-        "claudeCodeLocalProxyTitle": "Proxy local do Claude Code detectado",
         "claudeCodeLocalProxyBody": "Parece um proxy local em {{baseUrl}}. É a configuração típica para reaproveitar uma assinatura OAuth via ferramenta como Claude Code Proxy.",
         "claudeCodeLocalProxyAction": "Cole a chave para usar o proxy",
-        "claudeCodeRemoteGatewayTitle": "Gateway do Claude Code detectado",
         "claudeCodeRemoteGatewayBody": "O gateway em {{baseUrl}} não tem chave de API na sua configuração do Claude Code. Importe o gateway e depois cole uma chave em Configurações.",
         "claudeCodeRemoteGatewayAction": "Cole a chave para usar o gateway",
         "oauthErrorToast": "A assinatura do Claude Code não pode ser compartilhada com apps de terceiros. Gere uma chave de API no Anthropic Console.",
         "oauthErrorToastCta": "Gerar chave ↗",
         "codexDone": "Provedores do Codex importados",
-        "claudeCodeDone": "Provedor do Claude Code importado",
         "geminiFound": "Chave da Gemini CLI detectada — importar?",
         "geminiNoKey": "Configuração da Gemini CLI encontrada, mas sem chave em ~/.gemini/.env ou ~/.env. Cole uma chave manualmente para usar o Gemini aqui.",
         "geminiBlocked": "Vertex AI detectado. O importador do Gemini só suporta chaves da Gemini Developer API (AIzaSy…) — configure o Vertex manualmente.",
@@ -253,7 +263,8 @@
         "claudeCodeMenuDesc": "Ler a sessão autenticada do Claude Code",
         "customMenu": "Provedor personalizado",
         "customMenuDesc": "Inserir chave de API e URL manualmente",
-        "alreadyImported": "Já importado"
+        "alreadyImported": "Já importado",
+        "opencodeBlocked": "Configuração do OpenCode detectada, mas nada pode ser importado. Veja o aviso acima, corrija o auth.json e tente de novo."
       },
       "modal": {
         "title": "Adicionar provedor",
@@ -294,6 +305,17 @@
         "medium": "Média",
         "high": "Alta",
         "xhigh": "Muito alta"
+      },
+      "addKey": "Adicionar chave",
+      "missingKey": "Chave ausente",
+      "cliProxyApi": {
+        "presetName": "CLIProxyAPI",
+        "presetDescription": "Proxy local que encapsula assinaturas OAuth do Claude/Codex/Gemini",
+        "apiKeyOptional": "Chave de API só é necessária se você configurou `api-keys` no config.yaml do CPA",
+        "thinkingHint": "Dica: acrescente `(high)` / `(xhigh)` / `(8192)` ao nome do modelo para controlar o orçamento de raciocínio",
+        "discoveringModels": "Descobrindo modelos...",
+        "discoveredModels": "{{count}} modelos encontrados",
+        "discoveryFailed": "Não foi possível conectar ao CPA"
       }
     },
     "appearance": {
@@ -359,7 +381,8 @@
         "scope": "Escopo",
         "runId": "ID da execução",
         "message": "Mensagem"
-      }
+      },
+      "inMemoryFallback": "Mostrando registros em memória — banco indisponível, não persistem após reiniciar."
     },
     "advanced": {
       "updateChannel": "Canal de atualização",
@@ -663,8 +686,6 @@
     "copyStack": "Copiar stack",
     "reportOnGitHub": "Reportar no GitHub",
     "reportViaDiagnostics": "Reportar via Diagnóstico",
-    "reportViaDiagnosticsEmpty": "Nenhum evento de diagnóstico foi registrado ainda.",
-    "reportDiagnosticsUnavailable": "Nenhum evento de diagnóstico correspondente. Copie o stack e abra uma issue manualmente.",
     "reload": "Recarregar"
   },
   "errors": {
@@ -754,13 +775,6 @@
     "status": "Status: {{status}}",
     "attempted": "O que tentamos: {{url}}",
     "mostLikelyCause": "Causa mais provável:",
-    "toast": {
-      "resolving": "Preparando relatório…",
-      "noEvent": "Nenhum evento de diagnóstico correspondente",
-      "noEventFallbackTitle": "Não dá para reportar automaticamente",
-      "noEventFallbackDescription": "Este erro não foi registrado no armazenamento de diagnóstico. Abra a pasta de logs e anexe as linhas relevantes a uma nova issue no GitHub.",
-      "openLogFolder": "Abrir pasta de logs"
-    },
     "cause": {
       "keyInvalid": "Chave de API inválida ou revogada.",
       "balanceEmpty": "Saldo da conta está vazio.",
@@ -808,15 +822,12 @@
       "cancel": "Cancelar",
       "copied": "Copiado para a área de transferência",
       "generating": "Criando pacote…",
-      "eventNotFound": "Evento não encontrado — pode ter sido removido.",
-      "loading": "Carregando evento…",
       "close": "Fechar",
-      "error": "Erro",
       "scope": "Escopo",
       "runId": "ID da execução",
       "fingerprint": "Fingerprint",
       "message": "Mensagem",
-      "recentlyReported": "Você reportou o mesmo problema {{relative}}.",
+      "recentlyReported": "Você reportou isso {{relative}} como issue #{{issueNumber}}.",
       "viewPrevious": "Ver issue anterior",
       "continueAnyway": "Continuar assim mesmo",
       "bundleSavedTitle": "Pacote salvo",
@@ -834,7 +845,18 @@
         "upstreamRequestId": "ID da requisição",
         "upstreamRetry": "Nova tentativa",
         "upstreamBodyHead": "Início do corpo"
-      }
+      },
+      "clipboardFailedHint": "O pacote está no disco — abra manualmente e cole o resumo lá.",
+      "clipboardFailedTitle": "Não foi possível copiar para a área de transferência",
+      "confirmOpenAnyway": "Sim, abrir mesmo assim ({{seconds}}s)",
+      "copyIssueUrl": "Copiar URL",
+      "error": {
+        "generic": "Não foi possível abrir a issue. Verifique a pasta de logs para detalhes.",
+        "notesTooLong": "As notas excedem o limite de 2000 caracteres."
+      },
+      "openFailedCopyHint": "Copie a URL da issue e abra manualmente.",
+      "openFailedTitle": "Não foi possível abrir o navegador",
+      "recentlyReportedNoNumber": "Você reportou isso {{relative}}."
     }
   },
   "demos": {
@@ -1041,6 +1063,8 @@
     "EXPORTER_ZIP_UNSAFE_PATH": "A exportação foi bloqueada: um caminho de asset escaparia do arquivo ZIP.",
     "EXPORTER_ZIP_FAILED": "A exportação em ZIP falhou.",
     "OPEN_PATH_FAILED": "Não foi possível abrir a pasta ou arquivo solicitado.",
-    "RENDERER_ERROR": "Ocorreu um erro no renderer. Detalhes estão no log."
+    "RENDERER_ERROR": "Ocorreu um erro no renderer. Detalhes estão no log.",
+    "CODEX_TOKEN_NOT_LOGGED_IN": "A assinatura do ChatGPT não está conectada. Faça login em Configurações.",
+    "CODEX_TOKEN_PARSE_FAILED": "O login local do ChatGPT está corrompido. Faça login novamente em Configurações."
   }
 }
