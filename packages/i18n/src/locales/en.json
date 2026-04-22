@@ -333,7 +333,8 @@
       "languageHint": "Language changes take effect immediately.",
       "languageLoadFailed": "Failed to load language",
       "langEn": "English",
-      "langZhCN": "中文 (简体)"
+      "langZhCN": "中文 (简体)",
+      "langPtBR": "Português (BR)"
     },
     "language": {
       "label": "Language",

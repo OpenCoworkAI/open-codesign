@@ -215,6 +215,7 @@ export const EXAMPLES: Example[] = [
 const REGISTRY: Record<Locale, Record<string, ExampleContent>> = {
   en: enExamples,
   'zh-CN': zhCNExamples,
+  'pt-BR': enExamples,
 };
 
 function getRegistry(locale: string | undefined): Record<string, ExampleContent> {

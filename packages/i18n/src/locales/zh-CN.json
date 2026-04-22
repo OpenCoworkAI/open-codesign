@@ -333,7 +333,8 @@
       "languageHint": "切换语言会立即生效。",
       "languageLoadFailed": "加载语言设置失败",
       "langEn": "English",
-      "langZhCN": "中文 (简体)"
+      "langZhCN": "中文 (简体)",
+      "langPtBR": "Português (BR)"
     },
     "language": {
       "label": "语言",
