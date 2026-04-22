@@ -115,7 +115,6 @@ function resolveEmptyValue(lines: string[], start: number, baseIndent: number): 
  * Parse a sequence of YAML lines into a plain object.
  * `baseIndent` is the expected indentation level of keys in this mapping.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: minimal YAML-subset parser; splitting it would scatter token-state across helpers and obscure the grammar
 function parseMapping(
   lines: string[],
   start: number,
@@ -190,7 +189,6 @@ function parseFrontmatter(content: string): ParsedMd {
 // Loader
 // ---------------------------------------------------------------------------
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: directory walk + per-file validation flow is awkward to split without obscuring control flow
 export async function loadSkillsFromDir(
   dir: string,
   source: LoadedSkill['source'],
