@@ -13,7 +13,7 @@ export function DesignSwitcher() {
   const designs = useCodesignStore((s) => s.designs);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const switchDesign = useCodesignStore((s) => s.switchDesign);
-  const createNewDesign = useCodesignStore((s) => s.createNewDesign);
+  const openNewDesignDialog = useCodesignStore((s) => s.openNewDesignDialog);
   const openDesignsView = useCodesignStore((s) => s.openDesignsView);
   const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
 
@@ -116,7 +116,7 @@ export function DesignSwitcher() {
               shortcut="Ctrl/Cmd+N"
               onClick={() => {
                 setOpen(false);
-                void createNewDesign();
+                openNewDesignDialog();
               }}
             />
             <MenuRow

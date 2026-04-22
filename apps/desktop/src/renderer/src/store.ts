@@ -198,6 +198,7 @@ interface CodesignState {
   currentDesignId: string | null;
   designsLoaded: boolean;
   designsViewOpen: boolean;
+  newDesignDialogOpen: boolean;
   designToDelete: Design | null;
   designToRename: Design | null;
   /** Workspace rebind confirmation state: { design, newPath } when user picks a different folder */
@@ -349,7 +350,9 @@ interface CodesignState {
 
   loadDesigns: () => Promise<void>;
   ensureCurrentDesign: () => Promise<void>;
-  createNewDesign: () => Promise<Design | null>;
+  openNewDesignDialog: () => void;
+  closeNewDesignDialog: () => void;
+  createNewDesign: (workspacePath?: string | null) => Promise<Design | null>;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string) => Promise<void>;
@@ -1365,6 +1368,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   currentDesignId: null,
   designsLoaded: false,
   designsViewOpen: false,
+  newDesignDialogOpen: false,
   designToDelete: null,
   designToRename: null,
   workspaceRebindPending: null,
@@ -1922,7 +1926,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     await get().createNewDesign();
   },
 
-  async createNewDesign() {
+  async createNewDesign(workspacePath?: string | null) {
     if (!window.codesign) return null;
     if (get().isGenerating) {
       // Don't silently drop the request — callers like the Examples flow
@@ -1962,6 +1966,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       await get().loadDesigns();
       void get().loadChatForCurrentDesign();
       void get().loadCommentsForCurrentDesign();
+      if (workspacePath) {
+        await window.codesign.snapshots.updateWorkspace(design.id, workspacePath, false);
+        await get().loadDesigns();
+      }
       return design;
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
@@ -2191,6 +2199,12 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   },
   closeDesignsView() {
     set({ designsViewOpen: false });
+  },
+  openNewDesignDialog() {
+    set({ newDesignDialogOpen: true });
+  },
+  closeNewDesignDialog() {
+    set({ newDesignDialogOpen: false });
   },
   requestDeleteDesign(design) {
     set({ designToDelete: design });

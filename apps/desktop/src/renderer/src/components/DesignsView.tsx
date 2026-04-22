@@ -27,7 +27,7 @@ export function DesignsView() {
   const designs = useCodesignStore((s) => s.designs);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const switchDesign = useCodesignStore((s) => s.switchDesign);
-  const createNewDesign = useCodesignStore((s) => s.createNewDesign);
+  const openNewDesignDialog = useCodesignStore((s) => s.openNewDesignDialog);
   const duplicateDesign = useCodesignStore((s) => s.duplicateDesign);
   const requestDeleteDesign = useCodesignStore((s) => s.requestDeleteDesign);
   const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
@@ -92,7 +92,7 @@ export function DesignsView() {
           />
           <button
             type="button"
-            onClick={() => void createNewDesign()}
+            onClick={() => openNewDesignDialog()}
             className="inline-flex items-center gap-2 h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--text-sm)] font-medium hover:bg-[var(--color-accent-hover)] transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />

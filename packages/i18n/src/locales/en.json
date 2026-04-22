@@ -49,6 +49,13 @@
       "sectionSubtitle": "{{count}} files",
       "empty": "No files yet. Send a prompt to have the agent generate a design — files will show up here."
     },
+    "newDesignDialog": {
+      "title": "New design",
+      "subtitle": "Optionally choose a local folder to sync your design files.",
+      "noWorkspace": "No folder selected",
+      "skip": "Skip",
+      "confirm": "Create"
+    },
     "workspace": {
       "sectionTitle": "Workspace",
       "label": "Folder",

@@ -3,6 +3,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
+import { NewDesignDialog } from './components/NewDesignDialog';
 import { PreviewPane } from './components/PreviewPane';
 import { RebindWorkspaceDialog } from './components/RebindWorkspaceDialog';
 import { RenameDesignDialog } from './components/RenameDesignDialog';
@@ -258,6 +259,7 @@ export function App() {
       <RenameDesignDialog />
       <DeleteDesignDialog />
       <RebindWorkspaceDialog />
+      <NewDesignDialog />
       <ToastViewport />
       <CommentsPanel />
       <ReportEventDialog localId={activeReportLocalId} onClose={closeReportDialog} />

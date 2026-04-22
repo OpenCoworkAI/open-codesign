@@ -482,7 +482,9 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       try {
         exists = await checkWorkspaceFolderExists(design.workspacePath);
       } catch (cause) {
-        throw new CodesignError('Failed to check workspace folder existence', 'IPC_DB_ERROR', { cause });
+        throw new CodesignError('Failed to check workspace folder existence', 'IPC_DB_ERROR', {
+          cause,
+        });
       }
       return { exists };
     },

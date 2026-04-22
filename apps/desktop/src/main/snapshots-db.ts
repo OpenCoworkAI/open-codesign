@@ -11,7 +11,6 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { getLogger } from './logger';
 import type {
   ChatAppendInput,
   ChatMessageKind,
@@ -32,6 +31,7 @@ import type {
   SnapshotCreateInput,
 } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
+import { getLogger } from './logger';
 
 // better-sqlite3 is a native module — require() instead of import.
 const require = createRequire(import.meta.url);
@@ -309,7 +309,7 @@ export function initSnapshotsDb(dbPath: string): Database {
     try {
       db.close();
     } catch (closeErr) {
-      const logger = getLogger();
+      const logger = getLogger('snapshots-db');
       logger.warn('db.init.close_failed', { cause: closeErr });
     }
     throw cause;

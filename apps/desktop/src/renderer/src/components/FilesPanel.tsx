@@ -39,8 +39,9 @@ export function FilesPanel() {
       setFolderExists(null);
       return;
     }
-    window.codesign?.snapshots.checkWorkspaceFolder?.(currentDesignId)
-      .then(r => setFolderExists(r.exists))
+    window.codesign?.snapshots
+      .checkWorkspaceFolder?.(currentDesignId)
+      .then((r) => setFolderExists(r.exists))
       .catch(() => setFolderExists(null));
   }, [currentDesignId, workspacePath]);
 
@@ -218,7 +219,10 @@ export function FilesPanel() {
           {files.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-[var(--space-3)] px-[var(--space-6)] text-center py-[var(--space-8)]">
               <div className="w-12 h-12 rounded-full border border-dashed border-[var(--color-border)] flex items-center justify-center">
-                <FileCode2 className="w-5 h-5 text-[var(--color-text-muted)] opacity-70" aria-hidden />
+                <FileCode2
+                  className="w-5 h-5 text-[var(--color-text-muted)] opacity-70"
+                  aria-hidden
+                />
               </div>
               <p className="text-[var(--text-sm)] text-[var(--color-text-muted)] max-w-sm leading-[var(--leading-body)]">
                 {t('canvas.files.empty')}
