@@ -1,19 +1,28 @@
 import { initI18n } from '@open-codesign/i18n';
 import type { Design } from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CodesignApi } from '../../../preload';
 import { useCodesignStore } from '../store';
+
+declare global {
+  interface Window {
+    codesign?: CodesignApi;
+  }
+}
 
 beforeAll(async () => {
   await initI18n('en');
 });
 
 const mockDesign = (overrides?: Partial<Design>): Design => ({
+  schemaVersion: 1,
   id: 'design-1',
   name: 'Test Design',
-  prompt: 'Test prompt',
-  createdAt: new Date('2026-01-01'),
-  updatedAt: new Date('2026-01-01'),
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
   workspacePath: null,
+  thumbnailText: null,
+  deletedAt: null,
   ...overrides,
 });
 
@@ -76,44 +85,44 @@ describe('FilesPanel workspace integration', () => {
   describe('workspace action handlers', () => {
     it('pickWorkspaceFolder returns path or null', async () => {
       const mockPick = vi.fn().mockResolvedValue('/home/user/workspace');
-      vi.mocked(window.codesign.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
+      vi.mocked(window.codesign!.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
 
-      const result = await window.codesign.snapshots.pickWorkspaceFolder();
+      const result = await window.codesign!.snapshots.pickWorkspaceFolder();
       expect(result).toBe('/home/user/workspace');
       expect(mockPick).toHaveBeenCalledOnce();
     });
 
     it('pickWorkspaceFolder returns null when user cancels', async () => {
       const mockPick = vi.fn().mockResolvedValue(null);
-      vi.mocked(window.codesign.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
+      vi.mocked(window.codesign!.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
 
-      const result = await window.codesign.snapshots.pickWorkspaceFolder();
+      const result = await window.codesign!.snapshots.pickWorkspaceFolder();
       expect(result).toBeNull();
     });
 
     it('updateWorkspace accepts designId, path, and migrateFiles parameters', async () => {
       const mockUpdate = vi.fn().mockResolvedValue(mockDesign({ workspacePath: '/home/user/workspace' }));
-      vi.mocked(window.codesign.snapshots.updateWorkspace).mockImplementation(mockUpdate);
+      vi.mocked(window.codesign!.snapshots.updateWorkspace).mockImplementation(mockUpdate);
 
-      await window.codesign.snapshots.updateWorkspace('design-1', '/home/user/workspace', false);
+      await window.codesign!.snapshots.updateWorkspace('design-1', '/home/user/workspace', false);
 
       expect(mockUpdate).toHaveBeenCalledWith('design-1', '/home/user/workspace', false);
     });
 
     it('updateWorkspace accepts null path to clear workspace', async () => {
       const mockUpdate = vi.fn().mockResolvedValue(mockDesign({ workspacePath: null }));
-      vi.mocked(window.codesign.snapshots.updateWorkspace).mockImplementation(mockUpdate);
+      vi.mocked(window.codesign!.snapshots.updateWorkspace).mockImplementation(mockUpdate);
 
-      await window.codesign.snapshots.updateWorkspace('design-1', null, false);
+      await window.codesign!.snapshots.updateWorkspace('design-1', null, false);
 
       expect(mockUpdate).toHaveBeenCalledWith('design-1', null, false);
     });
 
     it('openWorkspaceFolder accepts designId parameter', async () => {
       const mockOpen = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(window.codesign.snapshots.openWorkspaceFolder).mockImplementation(mockOpen);
+      vi.mocked(window.codesign!.snapshots.openWorkspaceFolder).mockImplementation(mockOpen);
 
-      await window.codesign.snapshots.openWorkspaceFolder('design-1');
+      await window.codesign!.snapshots.openWorkspaceFolder('design-1');
 
       expect(mockOpen).toHaveBeenCalledWith('design-1');
     });
@@ -121,9 +130,9 @@ describe('FilesPanel workspace integration', () => {
     it('listDesigns returns updated design list after workspace change', async () => {
       const updatedDesign = mockDesign({ workspacePath: '/home/user/workspace' });
       const mockList = vi.fn().mockResolvedValue([updatedDesign]);
-      vi.mocked(window.codesign.snapshots.listDesigns).mockImplementation(mockList);
+      vi.mocked(window.codesign!.snapshots.listDesigns).mockImplementation(mockList);
 
-      const result = await window.codesign.snapshots.listDesigns();
+      const result = await window.codesign!.snapshots.listDesigns();
 
       expect(result).toEqual([updatedDesign]);
       expect(result[0]?.workspacePath).toBe('/home/user/workspace');
@@ -136,18 +145,18 @@ describe('FilesPanel workspace integration', () => {
       const mockUpdate = vi.fn().mockResolvedValue(mockDesign({ workspacePath: '/home/user/workspace' }));
       const mockList = vi.fn().mockResolvedValue([mockDesign({ workspacePath: '/home/user/workspace' })]);
 
-      vi.mocked(window.codesign.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
-      vi.mocked(window.codesign.snapshots.updateWorkspace).mockImplementation(mockUpdate);
-      vi.mocked(window.codesign.snapshots.listDesigns).mockImplementation(mockList);
+      vi.mocked(window.codesign!.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
+      vi.mocked(window.codesign!.snapshots.updateWorkspace).mockImplementation(mockUpdate);
+      vi.mocked(window.codesign!.snapshots.listDesigns).mockImplementation(mockList);
 
-      const path = await window.codesign.snapshots.pickWorkspaceFolder();
+      const path = await window.codesign!.snapshots.pickWorkspaceFolder();
       expect(path).toBe('/home/user/workspace');
 
       if (path) {
-        const updated = await window.codesign.snapshots.updateWorkspace('design-1', path, false);
+        const updated = await window.codesign!.snapshots.updateWorkspace('design-1', path, false);
         expect(updated.workspacePath).toBe('/home/user/workspace');
 
-        const designs = await window.codesign.snapshots.listDesigns();
+        const designs = await window.codesign!.snapshots.listDesigns();
         useCodesignStore.setState({ designs });
         expect(useCodesignStore.getState().designs[0]?.workspacePath).toBe('/home/user/workspace');
       }
@@ -161,13 +170,13 @@ describe('FilesPanel workspace integration', () => {
       const mockUpdate = vi.fn().mockResolvedValue(mockDesign({ workspacePath: null }));
       const mockList = vi.fn().mockResolvedValue([mockDesign({ workspacePath: null })]);
 
-      vi.mocked(window.codesign.snapshots.updateWorkspace).mockImplementation(mockUpdate);
-      vi.mocked(window.codesign.snapshots.listDesigns).mockImplementation(mockList);
+      vi.mocked(window.codesign!.snapshots.updateWorkspace).mockImplementation(mockUpdate);
+      vi.mocked(window.codesign!.snapshots.listDesigns).mockImplementation(mockList);
 
-      const updated = await window.codesign.snapshots.updateWorkspace('design-1', null, false);
+      const updated = await window.codesign!.snapshots.updateWorkspace('design-1', null, false);
       expect(updated.workspacePath).toBeNull();
 
-      const designs = await window.codesign.snapshots.listDesigns();
+      const designs = await window.codesign!.snapshots.listDesigns();
       useCodesignStore.setState({ designs });
       expect(useCodesignStore.getState().designs[0]?.workspacePath).toBeNull();
     });
@@ -181,18 +190,18 @@ describe('FilesPanel workspace integration', () => {
       const mockUpdate = vi.fn().mockResolvedValue(mockDesign({ workspacePath: '/home/user/new-workspace' }));
       const mockList = vi.fn().mockResolvedValue([mockDesign({ workspacePath: '/home/user/new-workspace' })]);
 
-      vi.mocked(window.codesign.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
-      vi.mocked(window.codesign.snapshots.updateWorkspace).mockImplementation(mockUpdate);
-      vi.mocked(window.codesign.snapshots.listDesigns).mockImplementation(mockList);
+      vi.mocked(window.codesign!.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
+      vi.mocked(window.codesign!.snapshots.updateWorkspace).mockImplementation(mockUpdate);
+      vi.mocked(window.codesign!.snapshots.listDesigns).mockImplementation(mockList);
 
-      const path = await window.codesign.snapshots.pickWorkspaceFolder();
+      const path = await window.codesign!.snapshots.pickWorkspaceFolder();
       expect(path).toBe('/home/user/new-workspace');
 
       if (path) {
-        const updated = await window.codesign.snapshots.updateWorkspace('design-1', path, false);
+        const updated = await window.codesign!.snapshots.updateWorkspace('design-1', path, false);
         expect(updated.workspacePath).toBe('/home/user/new-workspace');
 
-        const designs = await window.codesign.snapshots.listDesigns();
+        const designs = await window.codesign!.snapshots.listDesigns();
         useCodesignStore.setState({ designs });
         expect(useCodesignStore.getState().designs[0]?.workspacePath).toBe('/home/user/new-workspace');
       }
@@ -203,15 +212,15 @@ describe('FilesPanel workspace integration', () => {
       const mockUpdate = vi.fn();
       const mockList = vi.fn();
 
-      vi.mocked(window.codesign.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
-      vi.mocked(window.codesign.snapshots.updateWorkspace).mockImplementation(mockUpdate);
-      vi.mocked(window.codesign.snapshots.listDesigns).mockImplementation(mockList);
+      vi.mocked(window.codesign!.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
+      vi.mocked(window.codesign!.snapshots.updateWorkspace).mockImplementation(mockUpdate);
+      vi.mocked(window.codesign!.snapshots.listDesigns).mockImplementation(mockList);
 
-      const path = await window.codesign.snapshots.pickWorkspaceFolder();
+      const path = await window.codesign!.snapshots.pickWorkspaceFolder();
       expect(path).toBeNull();
 
       if (path) {
-        await window.codesign.snapshots.updateWorkspace('design-1', path, false);
+        await window.codesign!.snapshots.updateWorkspace('design-1', path, false);
       }
 
       expect(mockUpdate).not.toHaveBeenCalled();
@@ -222,32 +231,32 @@ describe('FilesPanel workspace integration', () => {
   describe('workspace API error handling', () => {
     it('handles pickWorkspaceFolder rejection', async () => {
       const mockPick = vi.fn().mockRejectedValue(new Error('Dialog error'));
-      vi.mocked(window.codesign.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
+      vi.mocked(window.codesign!.snapshots.pickWorkspaceFolder).mockImplementation(mockPick);
 
-      await expect(window.codesign.snapshots.pickWorkspaceFolder()).rejects.toThrow('Dialog error');
+      await expect(window.codesign!.snapshots.pickWorkspaceFolder()).rejects.toThrow('Dialog error');
     });
 
     it('handles updateWorkspace rejection', async () => {
       const mockUpdate = vi.fn().mockRejectedValue(new Error('Update failed'));
-      vi.mocked(window.codesign.snapshots.updateWorkspace).mockImplementation(mockUpdate);
+      vi.mocked(window.codesign!.snapshots.updateWorkspace).mockImplementation(mockUpdate);
 
-      await expect(window.codesign.snapshots.updateWorkspace('design-1', '/path', false)).rejects.toThrow(
+      await expect(window.codesign!.snapshots.updateWorkspace('design-1', '/path', false)).rejects.toThrow(
         'Update failed',
       );
     });
 
     it('handles openWorkspaceFolder rejection', async () => {
       const mockOpen = vi.fn().mockRejectedValue(new Error('Open failed'));
-      vi.mocked(window.codesign.snapshots.openWorkspaceFolder).mockImplementation(mockOpen);
+      vi.mocked(window.codesign!.snapshots.openWorkspaceFolder).mockImplementation(mockOpen);
 
-      await expect(window.codesign.snapshots.openWorkspaceFolder('design-1')).rejects.toThrow('Open failed');
+      await expect(window.codesign!.snapshots.openWorkspaceFolder('design-1')).rejects.toThrow('Open failed');
     });
 
     it('handles listDesigns rejection', async () => {
       const mockList = vi.fn().mockRejectedValue(new Error('List failed'));
-      vi.mocked(window.codesign.snapshots.listDesigns).mockImplementation(mockList);
+      vi.mocked(window.codesign!.snapshots.listDesigns).mockImplementation(mockList);
 
-      await expect(window.codesign.snapshots.listDesigns()).rejects.toThrow('List failed');
+      await expect(window.codesign!.snapshots.listDesigns()).rejects.toThrow('List failed');
     });
   });
 

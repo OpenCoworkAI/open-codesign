@@ -49,6 +49,23 @@
       "sectionSubtitle": "共 {{count}} 个文件",
       "empty": "还没有文件。发送一个 prompt 让 AI 生成设计后，文件会出现在这里。"
     },
+    "workspace": {
+      "sectionTitle": "工作区",
+      "label": "文件夹",
+      "default": "默认内部存储",
+      "choose": "选择文件夹",
+      "change": "更改",
+      "open": "打开文件夹",
+      "clear": "清除工作区",
+      "busyGenerating": "生成中无法更改工作区",
+      "updated": "工作区已更新",
+      "updateFailed": "更新工作区失败",
+      "rebindTitle": "更改工作区文件夹？",
+      "rebindDescription": "此设计已有工作区文件夹。请选择如何继续：",
+      "rebindCancel": "取消",
+      "rebindSwitchOnly": "仅切换（不复制文件）",
+      "rebindSwitchAndCopy": "切换并复制文件"
+    },
     "rail": {
       "title": "文件",
       "collapse": "折叠文件",

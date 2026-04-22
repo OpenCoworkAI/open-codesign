@@ -1026,3 +1026,191 @@ describe('applyGenerateError via sendPrompt', () => {
     });
   });
 });
+
+describe('useCodesignStore workspace rebind confirmation flow', () => {
+  const mockDesign = {
+    schemaVersion: 1 as const,
+    id: 'design-1',
+    name: 'Test Design',
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: '2024-01-01T00:00:00.000Z',
+    thumbnailText: null,
+    deletedAt: null,
+    workspacePath: '/old/path',
+  };
+
+  it('requestWorkspaceRebind sets pending state with design and new path', () => {
+    useCodesignStore.setState({ designs: [mockDesign], currentDesignId: 'design-1' });
+
+    useCodesignStore.getState().requestWorkspaceRebind(mockDesign, '/new/path');
+
+    const state = useCodesignStore.getState();
+    expect(state.workspaceRebindPending).toEqual({
+      design: mockDesign,
+      newPath: '/new/path',
+    });
+  });
+
+  it('cancelWorkspaceRebind clears pending state', () => {
+    useCodesignStore.setState({
+      workspaceRebindPending: {
+        design: mockDesign,
+        newPath: '/new/path',
+      },
+    });
+
+    useCodesignStore.getState().cancelWorkspaceRebind();
+
+    expect(useCodesignStore.getState().workspaceRebindPending).toBeNull();
+  });
+
+  it('confirmWorkspaceRebind(false) calls updateWorkspace with migrateFiles=false, refreshes designs, and clears pending', async () => {
+    const updatedDesign = { ...mockDesign, workspacePath: '/new/path' };
+    const updateWorkspace = vi.fn().mockResolvedValue(updatedDesign);
+    const listDesigns = vi.fn().mockResolvedValue([updatedDesign]);
+
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: {
+          updateWorkspace,
+          listDesigns,
+        },
+      },
+    });
+
+    useCodesignStore.setState({
+      designs: [mockDesign],
+      currentDesignId: 'design-1',
+      workspaceRebindPending: {
+        design: mockDesign,
+        newPath: '/new/path',
+      },
+    });
+
+    await useCodesignStore.getState().confirmWorkspaceRebind(false);
+
+    expect(updateWorkspace).toHaveBeenCalledWith('design-1', '/new/path', false);
+    expect(listDesigns).toHaveBeenCalledOnce();
+    expect(useCodesignStore.getState().workspaceRebindPending).toBeNull();
+    expect(useCodesignStore.getState().designs[0]?.workspacePath).toBe('/new/path');
+  });
+
+  it('confirmWorkspaceRebind(true) calls updateWorkspace with migrateFiles=true, refreshes designs, and clears pending', async () => {
+    const updatedDesign = { ...mockDesign, workspacePath: '/new/path' };
+    const updateWorkspace = vi.fn().mockResolvedValue(updatedDesign);
+    const listDesigns = vi.fn().mockResolvedValue([updatedDesign]);
+
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: {
+          updateWorkspace,
+          listDesigns,
+        },
+      },
+    });
+
+    useCodesignStore.setState({
+      designs: [mockDesign],
+      currentDesignId: 'design-1',
+      workspaceRebindPending: {
+        design: mockDesign,
+        newPath: '/new/path',
+      },
+    });
+
+    await useCodesignStore.getState().confirmWorkspaceRebind(true);
+
+    expect(updateWorkspace).toHaveBeenCalledWith('design-1', '/new/path', true);
+    expect(listDesigns).toHaveBeenCalledOnce();
+    expect(useCodesignStore.getState().workspaceRebindPending).toBeNull();
+    expect(useCodesignStore.getState().designs[0]?.workspacePath).toBe('/new/path');
+  });
+
+  it('confirmWorkspaceRebind handles updateWorkspace errors gracefully', async () => {
+    const updateWorkspace = vi.fn().mockRejectedValue(new Error('Update failed'));
+
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: {
+          updateWorkspace,
+        },
+      },
+    });
+
+    useCodesignStore.setState({
+      designs: [mockDesign],
+      currentDesignId: 'design-1',
+      workspaceRebindPending: {
+        design: mockDesign,
+        newPath: '/new/path',
+      },
+    });
+
+    await expect(useCodesignStore.getState().confirmWorkspaceRebind(false)).rejects.toThrow('Update failed');
+    // Pending state should still be cleared on error
+    expect(useCodesignStore.getState().workspaceRebindPending).toBeNull();
+  });
+});
+
+describe('useCodesignStore generation-blocking workspace guards', () => {
+  const mockDesign = {
+    schemaVersion: 1 as const,
+    id: 'design-1',
+    name: 'Test Design',
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: '2024-01-01T00:00:00.000Z',
+    thumbnailText: null,
+    deletedAt: null,
+    workspacePath: null,
+  };
+
+  it('blocks requestWorkspaceRebind when current design is generating', () => {
+    useCodesignStore.setState({
+      designs: [mockDesign],
+      currentDesignId: 'design-1',
+      isGenerating: true,
+      generatingDesignId: 'design-1',
+      workspaceRebindPending: null,
+    });
+
+    useCodesignStore.getState().requestWorkspaceRebind(mockDesign, '/new/path');
+
+    // Should not set pending state when generation is active
+    expect(useCodesignStore.getState().workspaceRebindPending).toBeNull();
+  });
+
+  it('allows requestWorkspaceRebind when a different design is generating', () => {
+    useCodesignStore.setState({
+      designs: [mockDesign, { ...mockDesign, id: 'design-2' }],
+      currentDesignId: 'design-1',
+      isGenerating: true,
+      generatingDesignId: 'design-2',
+      workspaceRebindPending: null,
+    });
+
+    useCodesignStore.getState().requestWorkspaceRebind(mockDesign, '/new/path');
+
+    // Should allow rebind when generation is for a different design
+    expect(useCodesignStore.getState().workspaceRebindPending).toEqual({
+      design: mockDesign,
+      newPath: '/new/path',
+    });
+  });
+
+  it('allows requestWorkspaceRebind when not generating', () => {
+    useCodesignStore.setState({
+      designs: [mockDesign],
+      currentDesignId: 'design-1',
+      isGenerating: false,
+      generatingDesignId: null,
+      workspaceRebindPending: null,
+    });
+
+    useCodesignStore.getState().requestWorkspaceRebind(mockDesign, '/new/path');
+
+    expect(useCodesignStore.getState().workspaceRebindPending).toEqual({
+      design: mockDesign,
+      newPath: '/new/path',
+    });
+  });
+});

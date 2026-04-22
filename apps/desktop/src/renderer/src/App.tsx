@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
 import { PreviewPane } from './components/PreviewPane';
+import { RebindWorkspaceDialog } from './components/RebindWorkspaceDialog';
 import { RenameDesignDialog } from './components/RenameDesignDialog';
 import { Settings } from './components/Settings';
 import { Sidebar } from './components/Sidebar';
@@ -256,6 +257,7 @@ export function App() {
       <DesignsView />
       <RenameDesignDialog />
       <DeleteDesignDialog />
+      <RebindWorkspaceDialog />
       <ToastViewport />
       <CommentsPanel />
       <ReportEventDialog localId={activeReportLocalId} onClose={closeReportDialog} />

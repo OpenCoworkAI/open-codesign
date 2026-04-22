@@ -22,22 +22,37 @@ export function FilesPanel() {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
+  const isGenerating = useCodesignStore((s) => s.isGenerating);
+  const generatingDesignId = useCodesignStore((s) => s.generatingDesignId);
   const openFileTab = useCodesignStore((s) => s.openCanvasFileTab);
+  const requestWorkspaceRebind = useCodesignStore((s) => s.requestWorkspaceRebind);
   const { files, loading } = useDesignFiles(currentDesignId);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
 
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const workspacePath = currentDesign?.workspacePath ?? null;
+  const isCurrentDesignGenerating = isGenerating && generatingDesignId === currentDesignId;
 
   async function handlePickWorkspace() {
     if (!window.codesign?.snapshots.pickWorkspaceFolder) return;
+    if (isCurrentDesignGenerating) {
+      useCodesignStore.getState().pushToast({
+        variant: 'info',
+        title: t('canvas.workspace.busyGenerating'),
+      });
+      return;
+    }
     try {
       setWorkspaceLoading(true);
       const path = await window.codesign.snapshots.pickWorkspaceFolder();
-      if (path && currentDesignId) {
-        await window.codesign.snapshots.updateWorkspace(currentDesignId, path, false);
-        const updated = await window.codesign.snapshots.listDesigns();
-        useCodesignStore.setState({ designs: updated });
+      if (path && currentDesign && currentDesignId) {
+        if (currentDesign.workspacePath && currentDesign.workspacePath !== path) {
+          requestWorkspaceRebind(currentDesign, path);
+        } else if (!currentDesign.workspacePath) {
+          await window.codesign.snapshots.updateWorkspace(currentDesignId, path, false);
+          const updated = await window.codesign.snapshots.listDesigns();
+          useCodesignStore.setState({ designs: updated });
+        }
       }
     } catch (err) {
       console.error('Failed to pick workspace:', err);
@@ -48,6 +63,13 @@ export function FilesPanel() {
 
   async function handleOpenWorkspace() {
     if (!currentDesignId || !window.codesign?.snapshots.openWorkspaceFolder) return;
+    if (isCurrentDesignGenerating) {
+      useCodesignStore.getState().pushToast({
+        variant: 'info',
+        title: t('canvas.workspace.busyGenerating'),
+      });
+      return;
+    }
     try {
       setWorkspaceLoading(true);
       await window.codesign.snapshots.openWorkspaceFolder(currentDesignId);
@@ -60,6 +82,13 @@ export function FilesPanel() {
 
   async function handleClearWorkspace() {
     if (!currentDesignId || !window.codesign?.snapshots.updateWorkspace) return;
+    if (isCurrentDesignGenerating) {
+      useCodesignStore.getState().pushToast({
+        variant: 'info',
+        title: t('canvas.workspace.busyGenerating'),
+      });
+      return;
+    }
     try {
       setWorkspaceLoading(true);
       await window.codesign.snapshots.updateWorkspace(currentDesignId, null, false);
@@ -137,7 +166,7 @@ export function FilesPanel() {
               <button
                 type="button"
                 onClick={handlePickWorkspace}
-                disabled={workspaceLoading}
+                disabled={workspaceLoading || isCurrentDesignGenerating}
                 className="flex-1 h-8 px-3 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Folder className="w-3 h-3 inline mr-1" aria-hidden />
@@ -149,7 +178,7 @@ export function FilesPanel() {
                   <button
                     type="button"
                     onClick={handleOpenWorkspace}
-                    disabled={workspaceLoading}
+                    disabled={workspaceLoading || isCurrentDesignGenerating}
                     className="h-8 px-3 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <FolderOpen className="w-3 h-3" aria-hidden />
@@ -158,7 +187,7 @@ export function FilesPanel() {
                   <button
                     type="button"
                     onClick={handleClearWorkspace}
-                    disabled={workspaceLoading}
+                    disabled={workspaceLoading || isCurrentDesignGenerating}
                     className="h-8 px-3 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <X className="w-3 h-3" aria-hidden />
