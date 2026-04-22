@@ -107,7 +107,10 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
 
     if (!looksText) {
       if (imageMimeType) {
-        const length = Math.max(1, Math.min(file.size || MAX_BINARY_ATTACHMENT_BYTES, maxFileBytes));
+        const length = Math.max(
+          1,
+          Math.min(file.size || MAX_BINARY_ATTACHMENT_BYTES, maxFileBytes),
+        );
         const fullBuffer = Buffer.alloc(length);
         const { bytesRead } = await handle.read(fullBuffer, 0, fullBuffer.length, 0);
         buffer = fullBuffer.subarray(0, bytesRead);

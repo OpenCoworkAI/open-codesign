@@ -56,7 +56,9 @@ describe('preparePromptContext', () => {
       name: 'shot.png',
       mediaType: 'image/png',
     });
-    expect(result.attachments[0]?.imageDataUrl).toBe(`data:image/png;base64,${pngBytes.toString('base64')}`);
+    expect(result.attachments[0]?.imageDataUrl).toBe(
+      `data:image/png;base64,${pngBytes.toString('base64')}`,
+    );
     expect(result.attachments[0]?.excerpt).toBeUndefined();
   });
 
