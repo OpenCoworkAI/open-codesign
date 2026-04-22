@@ -29,6 +29,8 @@ export const ERROR_CODES = {
   PROVIDER_ABORTED: 'PROVIDER_ABORTED',
   PROVIDER_RETRY_EXHAUSTED: 'PROVIDER_RETRY_EXHAUSTED',
   CLAUDE_CODE_OAUTH_ONLY: 'CLAUDE_CODE_OAUTH_ONLY',
+  CODEX_TOKEN_PARSE_FAILED: 'CODEX_TOKEN_PARSE_FAILED',
+  CODEX_TOKEN_NOT_LOGGED_IN: 'CODEX_TOKEN_NOT_LOGGED_IN',
 
   // Generation / input
   INPUT_EMPTY_PROMPT: 'INPUT_EMPTY_PROMPT',
@@ -175,6 +177,16 @@ export const ERROR_CODE_DESCRIPTIONS: Record<CodesignErrorCode, ErrorCodeDescrip
     userFacing:
       'Your Claude Code login uses an Anthropic subscription (Pro/Max). Third-party apps cannot reuse the subscription quota — generate an API key at console.anthropic.com and use it here.',
     userFacingKey: 'err.CLAUDE_CODE_OAUTH_ONLY',
+    category: 'provider',
+  },
+  CODEX_TOKEN_PARSE_FAILED: {
+    userFacing: 'Local ChatGPT login is corrupted. Please re-login in Settings.',
+    userFacingKey: 'err.CODEX_TOKEN_PARSE_FAILED',
+    category: 'provider',
+  },
+  CODEX_TOKEN_NOT_LOGGED_IN: {
+    userFacing: 'ChatGPT subscription is not signed in. Please log in via Settings.',
+    userFacingKey: 'err.CODEX_TOKEN_NOT_LOGGED_IN',
     category: 'provider',
   },
 
