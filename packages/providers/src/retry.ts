@@ -15,6 +15,7 @@
 
 import { type ChatMessage, CodesignError, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
 import { normalizeProviderError } from './errors';
+import { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
 import { type GenerateOptions, type GenerateResult, complete } from './index';
 
 export interface RetryReason {
@@ -58,6 +59,14 @@ function classifyByStatus(status: number, err: unknown): RetryDecision | undefin
     return decision;
   }
   if (status >= 500 && status <= 599) {
+    // Third-party Anthropic relays (sub2api, claude2api, anyrouter…) often
+    // return 5xx + "not implemented" for POST /v1/messages even though their
+    // /v1/models endpoint works. Retrying wastes 3 rounds of exponential
+    // backoff on an endpoint that will never respond; short-circuit so the
+    // user sees the actionable error immediately.
+    if (looksLikeGatewayMissingMessagesApi(err)) {
+      return { retry: false, reason: 'gateway does not implement Messages API' };
+    }
     return { retry: true, reason: `server error (${status})` };
   }
   if (status >= 400 && status <= 499) {

@@ -1026,6 +1026,7 @@
     "PROVIDER_ERROR": "provider 返回错误，请检查 API key 后重试。",
     "PROVIDER_HTTP_4XX": "provider 拒绝请求，请检查 API key 和账户余额。",
     "PROVIDER_UPSTREAM_ERROR": "provider 返回未知错误，详情见日志。",
+    "PROVIDER_GATEWAY_INCOMPATIBLE": "网关对 Messages API 返回 “not implemented”。请到设置中把 wire 切换为 openai-chat，或更换支持 Anthropic Messages API 的网关。",
     "PROVIDER_ABORTED": "生成已取消。",
     "PROVIDER_RETRY_EXHAUSTED": "多次重试后 provider 仍然失败，请检查网络后重试。",
     "CLAUDE_CODE_OAUTH_ONLY": "你的 Claude Code 使用的是 Anthropic 订阅（Pro/Max），第三方应用无法复用订阅额度——请到 console.anthropic.com 生成 API key 后填入。",

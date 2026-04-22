@@ -83,6 +83,20 @@ describe('remapProviderError', () => {
     expect(out).toBe(err);
   });
 
+  it('tags 5xx "not implemented" bodies as PROVIDER_GATEWAY_INCOMPATIBLE', () => {
+    const err = httpError(500, 'not implemented');
+    const out = remapProviderError(err, 'anthropic');
+    expect(out).toBeInstanceOf(CodesignError);
+    expect((out as CodesignError).code).toBe('PROVIDER_GATEWAY_INCOMPATIBLE');
+    expect((out as CodesignError).message).toContain('not implemented');
+  });
+
+  it('tags status-less errors whose message mentions 501 as PROVIDER_GATEWAY_INCOMPATIBLE', () => {
+    const out = remapProviderError(new Error('HTTP 501 from gateway'), 'anthropic');
+    expect(out).toBeInstanceOf(CodesignError);
+    expect((out as CodesignError).code).toBe('PROVIDER_GATEWAY_INCOMPATIBLE');
+  });
+
   it('extracts status code from CodesignError messages that embed it', () => {
     const err = new CodesignError(
       'HTTP 401 — see https://platform.openai.com/account/api-keys',

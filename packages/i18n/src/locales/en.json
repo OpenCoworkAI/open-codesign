@@ -1030,6 +1030,7 @@
     "PROVIDER_ERROR": "The provider returned an error. Check your API key and try again.",
     "PROVIDER_HTTP_4XX": "The provider rejected the request. Verify your API key and billing.",
     "PROVIDER_UPSTREAM_ERROR": "The provider returned an unexpected error. Details are in the log.",
+    "PROVIDER_GATEWAY_INCOMPATIBLE": "Your gateway returned 'not implemented' for the Messages API. Try switching wire to openai-chat in Settings, or use a gateway that supports the Anthropic Messages API.",
     "PROVIDER_ABORTED": "Generation was cancelled.",
     "PROVIDER_RETRY_EXHAUSTED": "The provider failed after several retries. Check your connection and try again.",
     "CLAUDE_CODE_OAUTH_ONLY": "Your Claude Code login uses an Anthropic subscription (Pro/Max). Third-party apps cannot reuse the subscription quota — generate an API key at console.anthropic.com and use it here.",

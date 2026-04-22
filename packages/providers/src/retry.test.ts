@@ -24,6 +24,11 @@ describe('classifyError', () => {
   it('marks 5xx as retryable', () => {
     expect(classifyError(new HttpError('boom', 503))).toMatchObject({ retry: true });
   });
+  it('does not retry 5xx when body says Messages API is not implemented', () => {
+    const d = classifyError(new HttpError('500 not implemented', 500));
+    expect(d.retry).toBe(false);
+    expect(d.reason).toMatch(/gateway does not implement Messages API/);
+  });
   it('marks 4xx (non-429) as non-retryable', () => {
     expect(classifyError(new HttpError('bad', 400))).toMatchObject({ retry: false });
   });

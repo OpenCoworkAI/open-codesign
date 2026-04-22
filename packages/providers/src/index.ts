@@ -419,6 +419,8 @@ export type {
   RetryReason,
 } from './retry';
 
+export { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
+
 export { injectSkillsIntoMessages, formatSkillsForPrompt, filterActive } from './skill-injector';
 
 // Tier 2 surface (not yet implemented):

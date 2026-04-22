@@ -15,6 +15,7 @@
  * layer logs them with `reason`.
  */
 
+import { looksLikeGatewayMissingMessagesApi } from '@open-codesign/providers';
 import type { ProviderId } from '@open-codesign/shared';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
@@ -101,6 +102,18 @@ export function rewriteUpstreamMessage(
 export function remapProviderError(err: unknown, provider: string | undefined): unknown {
   if (!(err instanceof Error)) return err;
   if (err instanceof CodesignError && err.code === ERROR_CODES.PROVIDER_ABORTED) return err;
+  // Third-party Anthropic relays often reply to POST /v1/messages with 5xx +
+  // "not implemented" while their /v1/models endpoint works. Catch that shape
+  // before any other classification so the UI can suggest switching wire
+  // instead of the misleading default "check your API key" message.
+  if (
+    !(err instanceof CodesignError && err.code === ERROR_CODES.PROVIDER_GATEWAY_INCOMPATIBLE) &&
+    looksLikeGatewayMissingMessagesApi(err)
+  ) {
+    return new CodesignError(err.message, ERROR_CODES.PROVIDER_GATEWAY_INCOMPATIBLE, {
+      cause: err,
+    });
+  }
   const status = statusFromError(err);
   if (status === undefined || status < 400 || status >= 500) return err;
   const { message, rewritten } = rewriteUpstreamMessage(err.message, provider, status);

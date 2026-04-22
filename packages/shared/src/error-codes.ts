@@ -26,6 +26,7 @@ export const ERROR_CODES = {
   PROVIDER_ERROR: 'PROVIDER_ERROR',
   PROVIDER_HTTP_4XX: 'PROVIDER_HTTP_4XX',
   PROVIDER_UPSTREAM_ERROR: 'PROVIDER_UPSTREAM_ERROR',
+  PROVIDER_GATEWAY_INCOMPATIBLE: 'PROVIDER_GATEWAY_INCOMPATIBLE',
   PROVIDER_ABORTED: 'PROVIDER_ABORTED',
   PROVIDER_RETRY_EXHAUSTED: 'PROVIDER_RETRY_EXHAUSTED',
   CLAUDE_CODE_OAUTH_ONLY: 'CLAUDE_CODE_OAUTH_ONLY',
@@ -161,6 +162,13 @@ export const ERROR_CODE_DESCRIPTIONS: Record<CodesignErrorCode, ErrorCodeDescrip
   PROVIDER_UPSTREAM_ERROR: {
     userFacing: 'The provider returned an unexpected error. Details are in the log.',
     userFacingKey: 'err.PROVIDER_UPSTREAM_ERROR',
+    category: 'provider',
+  },
+  PROVIDER_GATEWAY_INCOMPATIBLE: {
+    userFacing:
+      "Your gateway returned 'not implemented' for the Messages API. " +
+      'Try switching wire to openai-chat in Settings, or use a gateway that supports the Anthropic Messages API.',
+    userFacingKey: 'err.PROVIDER_GATEWAY_INCOMPATIBLE',
     category: 'provider',
   },
   PROVIDER_ABORTED: {
