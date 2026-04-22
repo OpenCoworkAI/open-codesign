@@ -193,6 +193,50 @@ describe('runCodexGenerate', () => {
     });
   });
 
+  it('rejects image attachments whose combined size exceeds the codex limit', async () => {
+    const { runCodexGenerate } = await import('./codex-generate');
+    const store = makeStore();
+    await store.write({
+      schemaVersion: 1,
+      accessToken: 'at',
+      refreshToken: 'rt',
+      idToken: 'id',
+      expiresAt: Date.now() + 3_600_000,
+      accountId: 'acc-1',
+      email: 'a@b.com',
+      updatedAt: Date.now(),
+    });
+
+    const imagePayload = `data:image/png;base64,${'A'.repeat(2_700_000)}`;
+
+    await expect(
+      runCodexGenerate({
+        prompt: 'match these screenshots',
+        history: [],
+        model: MODEL,
+        attachments: [
+          {
+            name: 'shot-1.png',
+            path: 'C:/tmp/shot-1.png',
+            mediaType: 'image/png',
+            imageDataUrl: imagePayload,
+          },
+          {
+            name: 'shot-2.png',
+            path: 'C:/tmp/shot-2.png',
+            mediaType: 'image/png',
+            imageDataUrl: imagePayload,
+          },
+        ],
+        referenceUrl: null,
+        designSystem: null,
+        tokenStore: store,
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.ATTACHMENT_TOO_LARGE,
+    });
+  });
+
   it('allows plain-text replies for non-design prompts', async () => {
     const { runCodexGenerate } = await import('./codex-generate');
     const store = makeStore();

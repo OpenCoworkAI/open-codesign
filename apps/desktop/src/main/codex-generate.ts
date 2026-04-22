@@ -65,6 +65,8 @@ interface ParserEvent {
   identifier?: string;
 }
 
+const MAX_TOTAL_IMAGE_ATTACHMENT_BYTES = 4_000_000;
+
 function escapeUntrustedXml(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
@@ -136,6 +138,13 @@ function buildUserPrompt(prompt: string, sections: string[]): string {
   ].join('\n\n');
 }
 
+function estimateImageBytesFromDataUrl(dataUrl: string): number {
+  const commaIndex = dataUrl.indexOf(',');
+  const base64 = commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+  const normalized = base64.replace(/=+$/, '');
+  return Math.floor((normalized.length * 3) / 4);
+}
+
 function buildInput(input: CodexGenerateInput): {
   instructions: string;
   items: ResponsesInputItem[];
@@ -154,8 +163,16 @@ function buildInput(input: CodexGenerateInput): {
   const userContent: ResponsesInputItem['content'] = [
     { type: 'input_text', text: buildUserPrompt(input.prompt, sections) },
   ];
+  let totalImageBytes = 0;
   for (const attachment of input.attachments) {
     if (attachment.imageDataUrl) {
+      totalImageBytes += estimateImageBytesFromDataUrl(attachment.imageDataUrl);
+      if (totalImageBytes > MAX_TOTAL_IMAGE_ATTACHMENT_BYTES) {
+        throw new CodesignError(
+          'Attached images are too large in total for ChatGPT Codex. Reduce image count or image size.',
+          ERROR_CODES.ATTACHMENT_TOO_LARGE,
+        );
+      }
       userContent.push({
         type: 'input_image',
         image_url: attachment.imageDataUrl,
