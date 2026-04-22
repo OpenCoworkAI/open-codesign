@@ -305,8 +305,15 @@ export async function complete(
 function validateCodexImageInputs(opts: GenerateOptions): void {
   if (opts.wire !== 'openai-codex-responses' || (opts.userImages?.length ?? 0) === 0) return;
   const totalImageBytes = (opts.userImages ?? []).reduce((sum, image) => {
-    const normalized = image.data.replace(/=+$/, '');
-    return sum + Math.floor((normalized.length * 3) / 4);
+    // Count trailing = padding to avoid regex ReDoS warning from CodeQL
+    // base64: 4 chars -> 3 bytes, each = padding represents 1 byte less
+    let len = image.data.length;
+    if (len >= 2 && image.data[len - 1] === '=' && image.data[len - 2] === '=') {
+      len -= 2;
+    } else if (len >= 1 && image.data[len - 1] === '=') {
+      len -= 1;
+    }
+    return sum + Math.floor((len * 3) / 4);
   }, 0);
   if (totalImageBytes > MAX_TOTAL_CODEX_IMAGE_BYTES) {
     throw new CodesignError(
