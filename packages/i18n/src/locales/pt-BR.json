@@ -241,7 +241,7 @@
         "geminiNoKey": "Configuração da Gemini CLI encontrada, mas sem chave em ~/.gemini/.env ou ~/.env. Cole uma chave manualmente para usar o Gemini aqui.",
         "geminiBlocked": "Vertex AI detectado. O importador do Gemini só suporta chaves da Gemini Developer API (AIzaSy…) — configure o Vertex manualmente.",
         "geminiDone": "Provedor do Gemini importado",
-        "opencodeFound": "Configuração do OpenCode detectada — importar {{count}} provedores?",
+        "opencodeFound": "OpenCode detectado — importar {{count}} provedores ({{providers}})?",
         "opencodeDone": "Provedores do OpenCode importados",
         "claudeCodeImportedActivated": "Claude Code importado e definido como provedor ativo",
         "claudeCodeOpenSettings": "Abrir Configurações",
@@ -863,22 +863,22 @@
     "meditationApp": {
       "title": "App de meditação Calm Spaces",
       "description": "Protótipo mobile com moldura de celular, paleta suave, nav interativa.",
-      "prompt": "Design a mobile app prototype for a meditation app called Calm Spaces. Show a phone frame containing a home screen with a meditation list, play button, and progress tracker. Use serene typography, soft greens and blues, and lots of white space."
+      "prompt": "Crie o protótipo de um app mobile de meditação chamado Calm Spaces. Mostre uma moldura de celular com tela inicial contendo lista de meditações, botão de play e indicador de progresso. Use tipografia serena, verdes e azuis suaves e muito espaço em branco."
     },
     "caseStudy": {
       "title": "Case de cliente em uma página",
       "description": "Layout escuro, uma página, pronto para PDF, com métricas de destaque.",
-      "prompt": "Create a one-page client case study. The client increased qualified leads 40% using our platform. Include before/after metrics, a CEO quote, and a logo placeholder. Clean, minimal, dark theme."
+      "prompt": "Crie um case de cliente em uma página. O cliente aumentou leads qualificados em 40% usando nossa plataforma. Inclua métricas antes/depois, uma citação do CEO e um placeholder de logo. Visual limpo, minimalista, tema escuro."
     },
     "pitchDeck": {
       "title": "Pitch deck B2B SaaS",
       "description": "8 a 12 slides para um pitch SaaS voltado à saúde.",
-      "prompt": "Design a pitch deck for a B2B SaaS company targeting mid-market healthcare. 8 to 10 slides covering problem, market, product, traction, team, and ask."
+      "prompt": "Crie um pitch deck para uma empresa B2B SaaS voltada a empresas de saúde de médio porte. 8 a 10 slides cobrindo problema, mercado, produto, tração, equipe e pedido."
     },
     "marketingLanding": {
       "title": "Landing page de marketing",
       "description": "Hero + features + CTA, cor de destaque ajustável.",
-      "prompt": "Design a modern marketing landing page for an AI productivity tool. Include a hero section, three feature cards, social proof, and a call to action. Use a warm neutral palette."
+      "prompt": "Crie uma landing page moderna de marketing para uma ferramenta de produtividade com IA. Inclua hero, três feature cards, prova social e uma chamada para ação. Use uma paleta neutra e quente."
     }
   },
   "examples": {
@@ -916,7 +916,7 @@
       "animation": "Showcase de animação CSS"
     },
     "starterDesc": {
-      "landing": "Hero + feature cards + social proof + CTA",
+      "landing": "Hero + feature cards + prova social + CTA",
       "pitch": "Título + problema + solução, slides 16:9",
       "mobile": "Fluxo de 3 telas dentro de moldura de celular",
       "dashboard": "Gráfico de linha + barras + tabela, tema escuro",
@@ -927,14 +927,14 @@
     }
   },
   "starterPrompts": {
-    "landing": "Build a landing page for an AI startup. Hero with a strong tagline, 3 feature cards, social proof section, CTA. Editorial typography, generous whitespace.",
-    "pitch": "Generate the first 3 slides of a pitch deck for a fintech startup: title slide, problem, solution. 16:9 format, navy palette, one orange accent.",
-    "mobile": "Design a 3-screen mobile app onboarding flow inside a phone frame: welcome, permissions, first action. Soft mint palette.",
-    "dashboard": "Build an analytics dashboard with: MRR trend line chart, pipeline stacked bars, top accounts table, and forecast gauge. Dark theme, teal + amber accents, plausible mock data.",
-    "email": "Design a transactional welcome email for a SaaS product. Single column, 600px wide, table-based. Logo header, greeting, 3 onboarding steps, CTA button, footer.",
-    "portfolio": "Design a photographer portfolio with masonry image grid using CSS gradient placeholders. Dark background, category filter pills, hover overlay with title and camera settings.",
-    "casestudy": "Create a one-page customer case study for a B2B fintech. Hero with client name, three large metrics with deltas, a CFO pull quote, a three-step 'How we did it' section, and a logo strip. Dark theme, serif headings, monospace numerals.",
-    "animation": "Build a showcase page with six organic CSS loading animations. Each in its own card: blob morph, leaf sway, ink drop, breathing circle, soft pulse, ribbon weave. Warm cream background, muted pastels, pure CSS/SVG only."
+    "landing": "Crie uma landing page para uma startup de IA. Hero com tagline forte, 3 feature cards, seção de prova social e CTA. Tipografia editorial, muito espaço em branco.",
+    "pitch": "Gere os 3 primeiros slides de um pitch deck para uma startup fintech: slide de título, problema, solução. Formato 16:9, paleta navy, um detalhe laranja.",
+    "mobile": "Crie um fluxo de onboarding mobile em 3 telas dentro de uma moldura de celular: boas-vindas, permissões, primeira ação. Paleta menta suave.",
+    "dashboard": "Crie um dashboard de analytics com: gráfico de linha de tendência do MRR, barras empilhadas de pipeline, tabela de principais contas e medidor de previsão. Tema escuro, detalhes em azul-petróleo e âmbar, dados mock plausíveis.",
+    "email": "Crie um e-mail transacional de boas-vindas para um produto SaaS. Coluna única, 600px de largura, baseado em tabela. Cabeçalho com logo, saudação, 3 passos de onboarding, botão de CTA, rodapé.",
+    "portfolio": "Crie um portfólio de fotógrafo com grid masonry de imagens usando placeholders de gradiente CSS. Fundo escuro, pílulas de filtro por categoria, overlay no hover com título e configurações da câmera.",
+    "casestudy": "Crie um case em uma página para uma fintech B2B. Hero com nome do cliente, três métricas grandes com variação, uma citação em destaque do CFO, uma seção \"Como fizemos\" em três passos e uma faixa de logos. Tema escuro, títulos com serifa, numerais monoespaçados.",
+    "animation": "Crie uma página de showcase com seis animações de loading orgânicas em CSS. Cada uma em seu card: blob morph, balanço de folha, gota de tinta, círculo respirando, pulso suave, trançado de fita. Fundo creme quente, pastéis suaves, apenas CSS/SVG puro."
   },
   "hub": {
     "newDesign": "Novo design",
