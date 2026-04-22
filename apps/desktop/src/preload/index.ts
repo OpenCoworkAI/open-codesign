@@ -3,11 +3,13 @@ import type {
   ChatAppendInput,
   ChatMessage,
   ChatMessageRow,
+  ClaudeCodeUserType,
   CommentCreateInput,
   CommentRow,
   CommentStatus,
   Design,
   DesignSnapshot,
+  ExternalConfigsDetection,
   GeneratePayloadV1,
   ListEventsInput,
   ListEventsResult,
@@ -33,6 +35,7 @@ import type {
 } from '../main/connection-ipc';
 
 export type { ConnectionTestError, ConnectionTestResult, ModelsListResponse, TestEndpointResponse };
+export type { ClaudeCodeUserType, ExternalConfigsDetection };
 export type { CodexOAuthStatus };
 
 export interface ValidateKeyResult {
@@ -69,51 +72,11 @@ export interface ProviderRow {
   error?: 'decryption_failed' | string;
 }
 
-export type ClaudeCodeUserType =
-  | 'has-api-key'
-  | 'oauth-only'
-  | 'local-proxy'
-  | 'remote-gateway'
-  | 'parse-error'
-  | 'no-config';
-
-export interface ExternalConfigsDetection {
-  codex?: {
-    providers: ProviderEntry[];
-    activeProvider: string | null;
-    activeModel: string | null;
-    warnings: string[];
-  };
-  claudeCode?: {
-    userType: ClaudeCodeUserType;
-    baseUrl: string;
-    defaultModel: string;
-    hasApiKey: boolean;
-    apiKeySource: 'settings-json' | 'shell-env' | 'none';
-    settingsPath: string;
-    /** Parser-emitted notes for the user (malformed apiKeyHelper, partial
-     * data, etc.). Rendered as muted one-liners under the banner. */
-    warnings: string[];
-  };
-  gemini?: {
-    hasApiKey: boolean;
-    apiKeySource: 'gemini-env' | 'home-env' | 'shell-env' | 'none';
-    /** Absolute path of the `.env` that supplied the key, if any. */
-    keyPath: string | null;
-    baseUrl: string;
-    defaultModel: string;
-    warnings: string[];
-    /** True when we detected Gemini config but can't import (e.g. Vertex AI).
-     *  UI should show a warning-style banner with no import button. */
-    blocked: boolean;
-  };
-  opencode?: {
-    providers: ProviderEntry[];
-    activeProvider: string | null;
-    activeModel: string | null;
-    warnings: string[];
-  };
-}
+// `ClaudeCodeUserType` and `ExternalConfigsDetection` now live in
+// `packages/shared/src/detection.ts` so main and preload stay in lockstep —
+// see that file for the drift-risk background. The inline definitions that
+// used to live here are gone; re-exports above keep downstream imports
+// from breaking.
 
 export interface AppPaths {
   config: string;

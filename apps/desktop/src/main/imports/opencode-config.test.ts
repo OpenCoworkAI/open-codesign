@@ -6,6 +6,7 @@ import {
   opencodeAuthPath,
   opencodeConfigCandidatePaths,
   readOpencodeConfig,
+  stripJsonComments,
 } from './opencode-config';
 
 async function makeHome(): Promise<string> {
@@ -232,5 +233,125 @@ describe('readOpencodeConfig', () => {
     );
     const out = await readOpencodeConfig(home, { XDG_DATA_HOME: xdgData });
     expect(out?.apiKeyMap['opencode-openai']).toBe('sk-xdg');
+  });
+
+  it('sets envKey per provider so the runtime env-fallback can rescue the row', async () => {
+    const home = await makeHome();
+    await writeAuth(home, {
+      anthropic: { type: 'api', key: 'sk-ant' },
+      openai: { type: 'api', key: 'sk-oa' },
+      google: { type: 'api', key: 'AIzaSy-g' },
+    });
+    const out = await readOpencodeConfig(home, {});
+    const envKeyById = Object.fromEntries(out?.providers.map((p) => [p.id, p.envKey]) ?? []);
+    expect(envKeyById['opencode-anthropic']).toBe('ANTHROPIC_API_KEY');
+    expect(envKeyById['opencode-openai']).toBe('OPENAI_API_KEY');
+    expect(envKeyById['opencode-google']).toBe('GEMINI_API_KEY');
+  });
+
+  it('warns with the actual unknown type string instead of a generic "unknown"', async () => {
+    const home = await makeHome();
+    await writeAuth(home, { anthropic: { type: 'cli-auth-v2', key: 'sk-future' } });
+    const out = await readOpencodeConfig(home, {});
+    expect(out?.providers).toEqual([]);
+    expect(out?.warnings.join('\n')).toMatch(/cli-auth-v2/);
+  });
+
+  it.each([
+    ['array top-level', '[{}]'],
+    ['number top-level', '42'],
+    ['string top-level', '"hello"'],
+  ])('surfaces a warning for %s in auth.json', async (_label, body) => {
+    const home = await makeHome();
+    const dir = join(home, '.local', 'share', 'opencode');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'auth.json'), body, 'utf8');
+    const out = await readOpencodeConfig(home, {});
+    expect(out?.providers).toEqual([]);
+    expect(out?.warnings[0]).toMatch(/unexpected top-level shape|not valid JSON/);
+  });
+
+  it('skips provider entries that are strings instead of objects', async () => {
+    const home = await makeHome();
+    await writeAuth(home, { anthropic: 'sk-ant-literal-string' as unknown });
+    const out = await readOpencodeConfig(home, {});
+    expect(out?.providers).toEqual([]);
+    expect(out?.warnings.join('\n')).toMatch(/invalid entry shape/);
+  });
+
+  it('skips api entries whose key is a number rather than a string', async () => {
+    const home = await makeHome();
+    await writeAuth(home, { anthropic: { type: 'api', key: 12345 } });
+    const out = await readOpencodeConfig(home, {});
+    expect(out?.providers).toEqual([]);
+    expect(out?.warnings.join('\n')).toMatch(/no API key/);
+  });
+
+  it.each([
+    [
+      'openrouter/anthropic/claude-sonnet-4.6',
+      'opencode-openrouter',
+      'anthropic/claude-sonnet-4.6',
+    ],
+  ])(
+    'treats the first slash as provider/model boundary for nested-path model %s',
+    async (modelString, expectedProvider, expectedModel) => {
+      const home = await makeHome();
+      await writeAuth(home, { openrouter: { type: 'api', key: 'sk-or' } });
+      await writeConfig(home, 'opencode.json', JSON.stringify({ model: modelString }));
+      const out = await readOpencodeConfig(home, {});
+      expect(out?.activeProvider).toBe(expectedProvider);
+      expect(out?.activeModel).toBe(expectedModel);
+    },
+  );
+
+  it.each([['/leading'], ['trailing/'], ['no-slash-at-all']])(
+    'ignores malformed active-model string "%s"',
+    async (modelString) => {
+      const home = await makeHome();
+      await writeAuth(home, { anthropic: { type: 'api', key: 'sk-ant' } });
+      await writeConfig(home, 'opencode.json', JSON.stringify({ model: modelString }));
+      const out = await readOpencodeConfig(home, {});
+      expect(out?.activeProvider).toBeNull();
+      expect(out?.activeModel).toBeNull();
+    },
+  );
+
+  it('surfaces a warning when opencode.jsonc has a parse error', async () => {
+    const home = await makeHome();
+    await writeAuth(home, { anthropic: { type: 'api', key: 'sk-ant' } });
+    await writeConfig(home, 'opencode.jsonc', '// comment\n{"model": "anthropic/x",}'); // trailing comma
+    const out = await readOpencodeConfig(home, {});
+    expect(out?.warnings.some((w) => /Could not parse/.test(w))).toBe(true);
+  });
+});
+
+describe('stripJsonComments', () => {
+  it('strips a trailing // line comment', () => {
+    expect(stripJsonComments('{"a": 1} // note')).toBe('{"a": 1} ');
+  });
+
+  it('strips a /* block */ comment', () => {
+    expect(stripJsonComments('{/*drop*/"a": 1}')).toBe('{"a": 1}');
+  });
+
+  it('preserves // inside strings (URLs)', () => {
+    expect(stripJsonComments('{"url": "https://example.com/path"}')).toBe(
+      '{"url": "https://example.com/path"}',
+    );
+  });
+
+  it('preserves /* inside strings', () => {
+    expect(stripJsonComments('{"x": "a /* not-a-comment */ b"}')).toBe(
+      '{"x": "a /* not-a-comment */ b"}',
+    );
+  });
+
+  it('handles escaped quotes inside strings', () => {
+    expect(stripJsonComments('{"x": "a\\"b"} // tail')).toBe('{"x": "a\\"b"} ');
+  });
+
+  it('stays safe on an unterminated block comment', () => {
+    expect(stripJsonComments('before /* never closes')).toBe('before ');
   });
 });

@@ -29,104 +29,110 @@ import type { ProviderEntry, WireApi } from '@open-codesign/shared';
  * with the user's OpenCode session.
  */
 
-type OpencodeProviderKey =
-  | 'anthropic'
-  | 'openai'
-  | 'google'
-  | 'openrouter'
-  | 'mistral'
-  | 'groq'
-  | 'deepseek'
-  | 'xai'
-  | 'together'
-  | 'fireworks'
-  | 'cerebras'
-  | 'vercel-ai-gateway';
-
 interface ProviderMapping {
   wire: WireApi;
   baseUrl: string;
   defaultModel: string;
-  /** Display name used in the Settings list. Falls back to the capitalized
-   *  providerId if missing — but we set it explicitly for the common ones
-   *  so users see "OpenCode · Anthropic" rather than "OpenCode · anthropic". */
+  /** Display name used in the Settings list — "OpenCode · Anthropic" etc. */
   label: string;
+  /** Upstream env var the provider's native CLI honors. Set so our runtime's
+   *  env-key fallback (`getApiKeyForProvider`) can rescue the row when the
+   *  stored secret is wiped or the user exports the key after import —
+   *  symmetric with how Claude Code sets `ANTHROPIC_AUTH_TOKEN` and Gemini
+   *  sets `GEMINI_API_KEY`. */
+  envKey: string;
 }
 
-const PROVIDER_MAP: Record<OpencodeProviderKey, ProviderMapping> = {
+const PROVIDER_MAP = {
   anthropic: {
     wire: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
     defaultModel: 'claude-sonnet-4-6',
     label: 'Anthropic',
+    envKey: 'ANTHROPIC_API_KEY',
   },
   openai: {
     wire: 'openai-chat',
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-4o',
     label: 'OpenAI',
+    envKey: 'OPENAI_API_KEY',
   },
   google: {
     wire: 'openai-chat',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     defaultModel: 'gemini-2.5-flash',
     label: 'Google',
+    envKey: 'GEMINI_API_KEY',
   },
   openrouter: {
     wire: 'openai-chat',
     baseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'anthropic/claude-sonnet-4.6',
     label: 'OpenRouter',
+    envKey: 'OPENROUTER_API_KEY',
   },
   mistral: {
     wire: 'openai-chat',
     baseUrl: 'https://api.mistral.ai/v1',
     defaultModel: 'mistral-large-latest',
     label: 'Mistral',
+    envKey: 'MISTRAL_API_KEY',
   },
   groq: {
     wire: 'openai-chat',
     baseUrl: 'https://api.groq.com/openai/v1',
     defaultModel: 'llama-3.3-70b-versatile',
     label: 'Groq',
+    envKey: 'GROQ_API_KEY',
   },
   deepseek: {
     wire: 'openai-chat',
     baseUrl: 'https://api.deepseek.com/v1',
     defaultModel: 'deepseek-chat',
     label: 'DeepSeek',
+    envKey: 'DEEPSEEK_API_KEY',
   },
   xai: {
     wire: 'openai-chat',
     baseUrl: 'https://api.x.ai/v1',
     defaultModel: 'grok-2',
     label: 'xAI',
+    envKey: 'XAI_API_KEY',
   },
   together: {
     wire: 'openai-chat',
     baseUrl: 'https://api.together.xyz/v1',
     defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
     label: 'Together',
+    envKey: 'TOGETHER_API_KEY',
   },
   fireworks: {
     wire: 'openai-chat',
     baseUrl: 'https://api.fireworks.ai/inference/v1',
     defaultModel: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
     label: 'Fireworks',
+    envKey: 'FIREWORKS_API_KEY',
   },
   cerebras: {
     wire: 'openai-chat',
     baseUrl: 'https://api.cerebras.ai/v1',
     defaultModel: 'llama-3.3-70b',
     label: 'Cerebras',
+    envKey: 'CEREBRAS_API_KEY',
   },
   'vercel-ai-gateway': {
     wire: 'openai-chat',
     baseUrl: 'https://gateway.ai.vercel.app/v1',
     defaultModel: 'openai/gpt-4o',
     label: 'Vercel AI Gateway',
+    envKey: 'AI_GATEWAY_API_KEY',
   },
-};
+} as const satisfies Record<string, ProviderMapping>;
+
+/** Derived from `PROVIDER_MAP` so the union and the map can never drift.
+ *  Adding a new provider means exactly one edit in one place. */
+type OpencodeProviderKey = keyof typeof PROVIDER_MAP;
 
 function opencodeDataDir(home: string, env: NodeJS.ProcessEnv): string {
   const xdgData = env['XDG_DATA_HOME'];
@@ -163,10 +169,16 @@ export interface OpencodeImport {
   warnings: string[];
 }
 
-interface AuthEntry {
-  type?: unknown;
-  key?: unknown;
-}
+/** Discriminated union for the known shapes of opencode `auth.json` entries.
+ *  The final arm catches any future `type` strings opencode might add so we
+ *  can narrow-and-warn rather than silently dropping them as "unknown". All
+ *  arms carry an optional `key` since TS can't narrow `string` literal from
+ *  the wide `string` fallback on a negative check like `type !== 'api'`. */
+type AuthEntry =
+  | { type: 'api'; key?: unknown; metadata?: unknown }
+  | { type: 'oauth'; refresh?: unknown; access?: unknown; expires?: unknown; key?: unknown }
+  | { type: 'wellknown'; key?: unknown; token?: unknown }
+  | { type: string; key?: unknown };
 
 function isKnownProvider(id: string): id is OpencodeProviderKey {
   return Object.hasOwn(PROVIDER_MAP, id);
@@ -197,8 +209,8 @@ async function readAuthJson(path: string): Promise<{
 
 /** Strip `//` and `/* ... *\/` comments so `opencode.jsonc` can be parsed as
  *  JSON. Good enough for the narrow case where we only read one string field;
- *  we intentionally don't pull in a jsonc dep. */
-function stripJsonComments(input: string): string {
+ *  we intentionally don't pull in a jsonc dep. Exported for direct testing. */
+export function stripJsonComments(input: string): string {
   let out = '';
   let i = 0;
   let inString = false;
@@ -243,14 +255,19 @@ function stripJsonComments(input: string): string {
 async function readActiveModelFromConfig(
   home: string,
   env: NodeJS.ProcessEnv,
+  warnings: string[],
 ): Promise<string | null> {
   for (const path of opencodeConfigCandidatePaths(home, env)) {
     let text: string;
     try {
       text = await readFile(path, 'utf8');
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      return null;
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') continue;
+      // Don't hard-return on EACCES etc. — try the next candidate so a
+      // locked `opencode.jsonc` doesn't shadow a readable `config.json`.
+      warnings.push(`Could not read ${path}: ${code ?? 'unknown error'}`);
+      continue;
     }
     try {
       const parsed: unknown = JSON.parse(path.endsWith('.jsonc') ? stripJsonComments(text) : text);
@@ -258,7 +275,9 @@ async function readActiveModelFromConfig(
       const model = (parsed as Record<string, unknown>)['model'];
       if (typeof model === 'string' && model.length > 0) return model;
       return null;
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      warnings.push(`Could not parse ${path}: ${msg}`);
       return null;
     }
   }
@@ -299,7 +318,9 @@ export async function readOpencodeConfig(
         continue;
       }
       if (auth.type !== 'api') {
-        warnings.push(`OpenCode provider "${providerId}" has unknown auth type; skipping`);
+        warnings.push(
+          `OpenCode provider "${providerId}" has unknown auth type "${String(auth.type)}"; skipping`,
+        );
         continue;
       }
       if (typeof auth.key !== 'string' || auth.key.trim().length === 0) {
@@ -321,12 +342,13 @@ export async function readOpencodeConfig(
         wire: mapping.wire,
         baseUrl: mapping.baseUrl,
         defaultModel: mapping.defaultModel,
+        envKey: mapping.envKey,
       });
       apiKeyMap[importedId] = auth.key.trim();
     }
   }
 
-  const rawActiveModel = await readActiveModelFromConfig(home, env);
+  const rawActiveModel = await readActiveModelFromConfig(home, env, warnings);
   let activeProvider: string | null = null;
   let activeModel: string | null = null;
   if (rawActiveModel !== null) {

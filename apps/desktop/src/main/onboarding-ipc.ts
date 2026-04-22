@@ -2,10 +2,15 @@ import { readFile } from 'node:fs/promises';
 import { type ValidateResult, pingProvider } from '@open-codesign/providers';
 import {
   BUILTIN_PROVIDERS,
+  type ClaudeCodeDetectionMeta,
   CodesignError,
+  type CodexDetectionMeta,
   type Config,
   ERROR_CODES,
+  type ExternalConfigsDetection,
+  type GeminiDetectionMeta,
   type OnboardingState,
+  type OpencodeDetectionMeta,
   type ProviderEntry,
   type ReasoningLevel,
   ReasoningLevelSchema,
@@ -25,7 +30,7 @@ import { type ClaudeCodeImport, readClaudeCodeSettings } from './imports/claude-
 import { type CodexImport, codexAuthPath, readCodexConfig } from './imports/codex-config';
 import { type GeminiImport, readGeminiCliConfig } from './imports/gemini-cli-config';
 import { type OpencodeImport, readOpencodeConfig } from './imports/opencode-config';
-import { buildSecretRef, decryptSecret, migrateSecrets, tryBuildSecretRef } from './keychain';
+import { buildSecretRef, decryptSecret, migrateSecrets } from './keychain';
 import { defaultLogsDir, getLogger } from './logger';
 import {
   type ProviderRow,
@@ -761,54 +766,10 @@ async function runUpdateProvider(input: UpdateProviderInput): Promise<Onboarding
   return toState(cachedConfig);
 }
 
-interface ClaudeCodeDetectionMeta {
-  userType: ClaudeCodeImport['userType'];
-  baseUrl: string;
-  defaultModel: string;
-  hasApiKey: boolean;
-  apiKeySource: ClaudeCodeImport['apiKeySource'];
-  settingsPath: string;
-  warnings: string[];
-}
-
-interface CodexDetectionMeta {
-  /** Provider ids + basic metadata the banner needs. Does NOT include keys;
-   *  `apiKeyMap` stays in the main process and is re-read from disk at
-   *  import time. */
-  providers: ProviderEntry[];
-  activeProvider: string | null;
-  activeModel: string | null;
-  warnings: string[];
-}
-
-interface OpencodeDetectionMeta {
-  /** Same contract as CodexDetectionMeta: provider metadata only, no keys. */
-  providers: ProviderEntry[];
-  activeProvider: string | null;
-  activeModel: string | null;
-  warnings: string[];
-}
-
-interface ExternalConfigsDetection {
-  codex?: CodexDetectionMeta;
-  claudeCode?: ClaudeCodeDetectionMeta;
-  gemini?: GeminiDetectionMeta;
-  opencode?: OpencodeDetectionMeta;
-}
-
-interface GeminiDetectionMeta {
-  hasApiKey: boolean;
-  apiKeySource: GeminiImport['apiKeySource'];
-  /** Absolute path of the `.env` that supplied the key, if any. */
-  keyPath: string | null;
-  baseUrl: string;
-  defaultModel: string;
-  warnings: string[];
-  /** Vertex AI users land here: provider=null, hasApiKey=false, warning set.
-   *  Banner should render a "Vertex detected — manual config required" note
-   *  rather than an import button. */
-  blocked: boolean;
-}
+// `ExternalConfigsDetection` and its four `*DetectionMeta` satellites now
+// live in `packages/shared/src/detection.ts` so the main process and the
+// preload facade can import one source — see that file's header for the
+// "we were drifting silently" background.
 
 async function detectChatgptSubscription(): Promise<boolean> {
   try {
@@ -816,7 +777,17 @@ async function detectChatgptSubscription(): Promise<boolean> {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return false;
     return (parsed as Record<string, unknown>)['auth_mode'] === 'chatgpt';
-  } catch {
+  } catch (err) {
+    // ENOENT is the "no Codex installed" case; every other error (EACCES,
+    // corrupt JSON, etc.) drives the wrong error-message branch for the
+    // caller, so log it instead of swallowing silently.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') {
+      logger.warn('detect_chatgpt_subscription.failed', {
+        code: code ?? 'unknown',
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
     return false;
   }
 }
@@ -844,8 +815,11 @@ async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
     if (entry.envKey !== undefined) {
       const envValue = process.env[entry.envKey]?.trim();
       if (envValue !== undefined && envValue.length > 0) {
-        const ref = tryBuildSecretRef(envValue);
-        if (ref !== null) nextSecrets[entry.id] = ref;
+        // buildSecretRef throws only on empty input — length is already
+        // guarded. Bare call instead of `tryBuildSecretRef` so any future
+        // invariant break fails loudly rather than quietly writing a row
+        // with no key and reporting success.
+        nextSecrets[entry.id] = buildSecretRef(envValue);
         continue;
       }
     }
@@ -856,8 +830,7 @@ async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
           ? process.env['OPENAI_API_KEY']?.trim()
           : undefined;
     if (fallbackApiKey !== undefined && fallbackApiKey.length > 0) {
-      const ref = tryBuildSecretRef(fallbackApiKey);
-      if (ref !== null) nextSecrets[entry.id] = ref;
+      nextSecrets[entry.id] = buildSecretRef(fallbackApiKey);
     }
   }
   const fallbackActive = imported.providers[0];
@@ -911,8 +884,7 @@ async function runImportClaudeCode(imported: ClaudeCodeImport): Promise<Onboardi
   const importedApiKey = imported.apiKey?.trim();
   const keySaved = importedApiKey !== undefined && importedApiKey.length > 0;
   if (keySaved) {
-    const ref = tryBuildSecretRef(importedApiKey);
-    if (ref !== null) nextSecrets[imported.provider.id] = ref;
+    nextSecrets[imported.provider.id] = buildSecretRef(importedApiKey);
   }
 
   // Flip active only when we have a key the new provider can actually use,
@@ -944,10 +916,9 @@ async function runImportClaudeCode(imported: ClaudeCodeImport): Promise<Onboardi
 }
 
 async function runImportGemini(imported: GeminiImport): Promise<OnboardingState> {
-  // Vertex AI and malformed shells land here with provider=null. The renderer
-  // catches CONFIG_MISSING and surfaces the warning in a toast — we do not
-  // want to create an empty provider entry that would then fail validation.
-  if (imported.provider === null) {
+  // Blocked state: Vertex detection etc. — no provider to write. The
+  // renderer catches CONFIG_MISSING and surfaces the warning in a toast.
+  if (imported.kind === 'blocked') {
     throw new CodesignError(
       imported.warnings[0] ?? 'Gemini CLI config produced no provider',
       ERROR_CODES.CONFIG_MISSING,
@@ -962,11 +933,10 @@ async function runImportGemini(imported: GeminiImport): Promise<OnboardingState>
     }
   }
   nextProviders[imported.provider.id] = imported.provider;
-  const importedApiKey = imported.apiKey?.trim();
-  const keySaved = importedApiKey !== undefined && importedApiKey.length > 0;
+  const importedApiKey = imported.apiKey.trim();
+  const keySaved = importedApiKey.length > 0;
   if (keySaved) {
-    const ref = tryBuildSecretRef(importedApiKey);
-    if (ref !== null) nextSecrets[imported.provider.id] = ref;
+    nextSecrets[imported.provider.id] = buildSecretRef(importedApiKey);
   }
 
   const shouldActivate = keySaved || cachedConfig === null;
@@ -1011,8 +981,7 @@ async function runImportOpencode(imported: OpencodeImport): Promise<OnboardingSt
     nextProviders[entry.id] = entry;
     const importedApiKey = imported.apiKeyMap[entry.id]?.trim();
     if (importedApiKey !== undefined && importedApiKey.length > 0) {
-      const ref = tryBuildSecretRef(importedApiKey);
-      if (ref !== null) nextSecrets[entry.id] = ref;
+      nextSecrets[entry.id] = buildSecretRef(importedApiKey);
     }
   }
   const fallbackActive = imported.providers[0];
@@ -1151,11 +1120,26 @@ export function registerOnboardingIpc(): void {
   ipcMain.handle(
     'config:v1:detect-external-configs',
     async (): Promise<ExternalConfigsDetection> => {
+      // Log non-ENOENT failures so an unreadable config (EACCES, EISDIR,
+      // corrupted file) leaves a diagnostic trail instead of silently
+      // degrading into "no config found". The file-not-present case
+      // (ENOENT) is the common one and stays noiseless.
+      const logDetectFailure = (source: string) => (err: unknown) => {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT') {
+          logger.warn('detect_external_configs.read_failed', {
+            source,
+            code: code ?? 'unknown',
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
+        return null;
+      };
       const [codex, claudeCode, gemini, opencode] = await Promise.all([
-        readCodexConfig().catch(() => null),
-        readClaudeCodeSettings().catch(() => null),
-        readGeminiCliConfig().catch(() => null),
-        readOpencodeConfig().catch(() => null),
+        readCodexConfig().catch(logDetectFailure('codex')),
+        readClaudeCodeSettings().catch(logDetectFailure('claude-code')),
+        readGeminiCliConfig().catch(logDetectFailure('gemini')),
+        readOpencodeConfig().catch(logDetectFailure('opencode')),
       ]);
       const providerIds = Object.keys(cachedConfig?.providers ?? {});
       const alreadyHasCodex = providerIds.some((id) => id.startsWith('codex-'));
@@ -1191,33 +1175,44 @@ export function registerOnboardingIpc(): void {
         };
       }
       // Gemini: surface whenever we found either a usable key OR a Vertex AI
-      // signal (provider=null with warning). `alreadyHasGemini` gates the
-      // regular import path; Vertex users see the banner regardless since
-      // their config was already imported by a previous Gemini session — the
-      // banner tells them what they need to do manually.
+      // signal (kind='blocked'). `alreadyHasGemini` gates the regular import
+      // path; Vertex users see the banner regardless since their config was
+      // already imported by a previous Gemini session — the banner tells
+      // them what they need to do manually.
       if (gemini !== null) {
-        const blocked = gemini.provider === null;
+        const blocked = gemini.kind === 'blocked';
         if (!alreadyHasGemini || blocked) {
           out.gemini = {
-            hasApiKey: gemini.apiKey !== null,
-            apiKeySource: gemini.apiKeySource,
-            keyPath: gemini.keyPath,
+            hasApiKey: gemini.kind === 'found',
+            apiKeySource: gemini.kind === 'found' ? gemini.apiKeySource : 'none',
+            keyPath: gemini.kind === 'found' ? gemini.keyPath : null,
             baseUrl:
-              gemini.provider?.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta/openai',
-            defaultModel: gemini.provider?.defaultModel ?? 'gemini-2.5-flash',
+              gemini.kind === 'found'
+                ? gemini.provider.baseUrl
+                : 'https://generativelanguage.googleapis.com/v1beta/openai',
+            defaultModel:
+              gemini.kind === 'found' ? gemini.provider.defaultModel : 'gemini-2.5-flash',
             warnings: gemini.warnings,
             blocked,
           };
         }
       }
-      if (opencode !== null && opencode.providers.length > 0 && !alreadyHasOpencode) {
-        // Same key-stripping projection as Codex above.
-        out.opencode = {
-          providers: opencode.providers,
-          activeProvider: opencode.activeProvider,
-          activeModel: opencode.activeModel,
-          warnings: opencode.warnings,
-        };
+      if (opencode !== null && !alreadyHasOpencode) {
+        // Surface whenever we found opencode evidence — either (a) there's
+        // at least one importable provider (happy path), or (b) auth.json
+        // exists but produced no usable entries (corrupt JSON, all OAuth,
+        // all unsupported). Case (b) gets a warning-only banner so the
+        // user at least sees we detected their setup.
+        const blocked = opencode.providers.length === 0;
+        if (!blocked || opencode.warnings.length > 0) {
+          out.opencode = {
+            providers: opencode.providers,
+            activeProvider: opencode.activeProvider,
+            activeModel: opencode.activeModel,
+            warnings: opencode.warnings,
+            blocked,
+          };
+        }
       }
       return out;
     },

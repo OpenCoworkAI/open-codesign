@@ -262,6 +262,15 @@ export type {
   WireApi,
 } from './config';
 
+export type {
+  ClaudeCodeDetectionMeta,
+  ClaudeCodeUserType,
+  CodexDetectionMeta,
+  ExternalConfigsDetection,
+  GeminiDetectionMeta,
+  OpencodeDetectionMeta,
+} from './detection';
+
 export {
   PROXY_PRESET_SCHEMA_VERSION,
   PROXY_PRESETS,

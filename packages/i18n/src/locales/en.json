@@ -231,6 +231,7 @@
         "geminiNoKey": "Gemini CLI config found, but no API key in ~/.gemini/.env or ~/.env. Paste a key manually to use Gemini here.",
         "geminiBlocked": "Vertex AI detected. The Gemini importer only supports Gemini Developer API keys (AIzaSy…) — configure Vertex manually.",
         "geminiDone": "Gemini provider imported",
+        "opencodeBlocked": "OpenCode config detected but nothing is importable. Check the warning above, fix auth.json, and try again.",
         "opencodeFound": "OpenCode config detected — import {{count}} providers?",
         "opencodeDone": "OpenCode providers imported",
         "claudeCodeImportedActivated": "Claude Code imported and set as the active model provider",

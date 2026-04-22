@@ -829,7 +829,7 @@ function ModelsTab() {
           blocked: boolean;
         }
       | undefined;
-    opencode?: { count: number } | undefined;
+    opencode?: { count: number; warnings: string[]; blocked: boolean } | undefined;
   } | null>(null);
   /**
    * When set, `AddCustomProviderModal` mounts with these fields pre-filled.
@@ -914,7 +914,13 @@ function ModelsTab() {
               }
             : {}),
           ...(detected.opencode !== undefined && !dismissedOpencode
-            ? { opencode: { count: detected.opencode.providers.length } }
+            ? {
+                opencode: {
+                  count: detected.opencode.providers.length,
+                  warnings: detected.opencode.warnings ?? [],
+                  blocked: detected.opencode.blocked,
+                },
+              }
             : {}),
         });
       })
@@ -951,11 +957,22 @@ function ModelsTab() {
 
   async function handleImportGemini() {
     if (!window.codesign) return;
+    // Capture pre-import warnings (e.g. "AIzaSy pattern mismatch") so a
+    // soft-validation failure surfaces in the toast description instead
+    // of silently shipping an invalid key the user will only discover on
+    // first request.
+    const geminiWarnings = externalConfigs?.gemini?.warnings ?? [];
     try {
       await window.codesign.config.importGeminiConfig();
       setExternalConfigs((prev) => (prev === null ? null : { ...prev, gemini: undefined }));
       await reloadRows();
-      pushToast({ variant: 'success', title: t('settings.providers.import.geminiDone') });
+      const description =
+        geminiWarnings.length > 0 ? geminiWarnings.slice(0, 2).join('\n') : undefined;
+      pushToast({
+        variant: 'success',
+        title: t('settings.providers.import.geminiDone'),
+        ...(description !== undefined ? { description } : {}),
+      });
     } catch (err) {
       pushToast({
         variant: 'error',
@@ -967,11 +984,24 @@ function ModelsTab() {
 
   async function handleImportOpencode() {
     if (!window.codesign) return;
+    // Capture pre-import warnings: OpenCode commonly has OAuth entries that
+    // we skip, and without surfacing those reasons the user sees "imported
+    // 3 providers" success toast but the other 2 entries vanish silently.
+    const skippedSummary = externalConfigs?.opencode?.warnings ?? [];
     try {
       await window.codesign.config.importOpencodeConfig();
       setExternalConfigs((prev) => (prev === null ? null : { ...prev, opencode: undefined }));
       await reloadRows();
-      pushToast({ variant: 'success', title: t('settings.providers.import.opencodeDone') });
+      const description =
+        skippedSummary.length > 0
+          ? skippedSummary.slice(0, 3).join('\n') +
+            (skippedSummary.length > 3 ? `\n+${skippedSummary.length - 3} more` : '')
+          : undefined;
+      pushToast({
+        variant: 'success',
+        title: t('settings.providers.import.opencodeDone'),
+        ...(description !== undefined ? { description } : {}),
+      });
     } catch (err) {
       pushToast({
         variant: 'error',
@@ -1201,20 +1231,35 @@ function ModelsTab() {
                   }}
                 />
               )}
-              {externalConfigs.opencode !== undefined && (
-                <ImportBanner
-                  label={t('settings.providers.import.opencodeFound', {
-                    count: externalConfigs.opencode.count,
-                  })}
-                  onImport={handleImportOpencode}
-                  onDismiss={() => {
+              {externalConfigs.opencode !== undefined &&
+                (() => {
+                  const oc = externalConfigs.opencode;
+                  const dismiss = () => {
                     writeDismissed('opencode');
                     setExternalConfigs((prev) =>
                       prev === null ? null : { ...prev, opencode: undefined },
                     );
-                  }}
-                />
-              )}
+                  };
+                  if (oc.blocked) {
+                    // Corrupt auth.json / all OAuth / all unsupported —
+                    // surface what we saw so the user doesn't think nothing
+                    // was detected. No import button because there's
+                    // nothing importable.
+                    return (
+                      <ImportBanner
+                        label={oc.warnings[0] ?? t('settings.providers.import.opencodeBlocked')}
+                        onDismiss={dismiss}
+                      />
+                    );
+                  }
+                  return (
+                    <ImportBanner
+                      label={t('settings.providers.import.opencodeFound', { count: oc.count })}
+                      onImport={handleImportOpencode}
+                      onDismiss={dismiss}
+                    />
+                  );
+                })()}
               {externalConfigs.gemini !== undefined &&
                 (() => {
                   const g = externalConfigs.gemini;
