@@ -297,6 +297,15 @@ const modelsCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export function getCacheKey(provider: string, baseUrl: string, apiKey: string): string {
+  // SHA-256 here is a cache-key discriminator, not a password hash — the
+  // Map lives in-process with a 5-minute TTL, never persists, and never
+  // leaves the main process. Using bcrypt/scrypt (as CodeQL's default
+  // rule suggests) would make every cache lookup take hundreds of ms
+  // and defeat the purpose of caching. Hashing apiKey (rather than
+  // embedding it verbatim in the Map key) is defense-in-depth so plaintext
+  // keys don't end up in memory-dump strings a third-party crash reporter
+  // might pick up.
+  // codeql[js/insufficient-password-hash]
   const keyHash = createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
   return `${provider}::${baseUrl}::${keyHash}`;
 }
