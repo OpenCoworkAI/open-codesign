@@ -552,6 +552,8 @@
     "designSystemCleared": "Design system cleared",
     "clearDesignSystemFailed": "Unable to clear design system",
     "generationFailed": "Generation failed",
+    "generationFailedApplyFix": "Apply fix",
+    "generationFailedBaseUrlUpdated": "Base URL updated. Try the request again.",
     "cancellationFailed": "Cancellation failed",
     "inlineCommentFailed": "Inline comment failed",
     "commentNeedsSnapshot": "Generate a design first before leaving a comment",
@@ -772,6 +774,9 @@
       "timedOut": "Request timed out — check firewall or VPN.",
       "corsError": "CORS error (should not happen in main process). This is a bug.",
       "sslError": "SSL / certificate error (self-signed cert on relay?).",
+      "gatewayIncompatible": "The gateway accepted the connection but does not implement this provider's API. Try switching wire (e.g. openai-chat).",
+      "openaiResponsesMisconfigured": "The endpoint rejected the request shape. The wire may be wrong — try switching to openai-chat.",
+      "serverError": "Upstream server error. May be transient — try again.",
       "unknown": "Unknown error — check the full log for details."
     },
     "fix": {
@@ -783,7 +788,8 @@
       "checkNetwork": "Check network / VPN",
       "checkVpn": "Check VPN / firewall",
       "reportBug": "Report this bug",
-      "disableTls": "Disable TLS verify"
+      "disableTls": "Disable TLS verify",
+      "switchWire": "Switch wire in Settings"
     },
     "applyFix": "Apply this fix",
     "setBaseUrlFirst": "Set a Base URL first",

@@ -146,3 +146,86 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
     },
   ];
 }
+
+export interface GenerateFailureContext {
+  /** Active provider ID at the time of failure. */
+  provider: string;
+  /** Per-provider baseUrl override. Empty / undefined means "vendor default". */
+  baseUrl?: string;
+  /** Wire protocol the request was sent over (anthropic / openai-chat / openai-responses). */
+  wire?: string;
+  /** HTTP status code, if the failure came from an HTTP response. */
+  status?: number;
+  /** Error message — inspected for heuristic hints (e.g. "page not found", "instructions"). */
+  message?: string;
+}
+
+/**
+ * Map a generate-time failure to the same DiagnosticHypothesis shape the
+ * connection-test path uses, so renderer toast / panel code can render
+ * identical "most likely cause + suggested fix" affordances.
+ *
+ * Cases covered today:
+ *   - 400 with "instructions" in body → openai-responses misconfigured,
+ *     suggest switching wire to openai-chat
+ *   - 5xx with "not implemented" / "page not found" in body → gateway
+ *     does not implement the upstream Messages API, suggest switching wire
+ *   - 404 → delegates to diagnose('404') for the missing-/v1 hint
+ *   - 401 / 402 / 403 / 429 → delegates to diagnose(String(status))
+ *   - 404-shaped message even when no status is attached (e.g. a raw
+ *     "404 page not found" body surfaced as message text)
+ *   - Everything else → generic unknown hypothesis
+ */
+export function diagnoseGenerateFailure(ctx: GenerateFailureContext): DiagnosticHypothesis[] {
+  const message = (ctx.message ?? '').toLowerCase();
+  const status = ctx.status;
+
+  if (status === 400 && message.includes('instructions')) {
+    return [
+      {
+        cause: 'diagnostics.cause.openaiResponsesMisconfigured',
+        suggestedFix: { label: 'diagnostics.fix.switchWire' },
+      },
+    ];
+  }
+
+  if (status !== undefined && status >= 500 && status < 600) {
+    if (
+      message.includes('not implemented') ||
+      message.includes('page not found') ||
+      message.includes('404 page')
+    ) {
+      return [
+        {
+          cause: 'diagnostics.cause.gatewayIncompatible',
+          suggestedFix: { label: 'diagnostics.fix.switchWire' },
+        },
+      ];
+    }
+    return [
+      {
+        cause: 'diagnostics.cause.serverError',
+        suggestedFix: { label: 'diagnostics.fix.waitAndRetry' },
+      },
+    ];
+  }
+
+  if (status !== undefined) {
+    return diagnose(String(status), {
+      provider: ctx.provider,
+      baseUrl: ctx.baseUrl ?? '',
+    });
+  }
+
+  // No status attached — the Win11 gateway case surfaces as a plain
+  // "404 page not found" message with no HTTP metadata. Fall back to
+  // pattern-matching so #130 reaches a helpful hypothesis anyway.
+  if (message.includes('404') && message.includes('page not found')) {
+    return diagnose('404', {
+      provider: ctx.provider,
+      baseUrl: ctx.baseUrl ?? '',
+    });
+  }
+
+  return [{ cause: 'diagnostics.cause.unknown' }];
+}

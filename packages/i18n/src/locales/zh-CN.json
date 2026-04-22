@@ -552,6 +552,8 @@
     "designSystemCleared": "设计系统已清除",
     "clearDesignSystemFailed": "无法清除设计系统",
     "generationFailed": "生成失败",
+    "generationFailedApplyFix": "应用修复",
+    "generationFailedBaseUrlUpdated": "Base URL 已更新，请重试。",
     "cancellationFailed": "取消失败",
     "inlineCommentFailed": "局部修改失败",
     "commentNeedsSnapshot": "请先生成一个设计，再添加批注",
@@ -768,6 +770,9 @@
       "timedOut": "请求超时——检查防火墙或 VPN。",
       "corsError": "CORS 跨域错误（主进程中不应出现此错误，这是一个 Bug）。",
       "sslError": "SSL / 证书错误（中转服务使用了自签证书？）。",
+      "gatewayIncompatible": "网关接受了连接但没有实现该 Provider 的 API。尝试切换 wire（例如改为 openai-chat）。",
+      "openaiResponsesMisconfigured": "端点拒绝了请求格式。wire 可能配错了——尝试切换到 openai-chat。",
+      "serverError": "上游服务错误。可能是暂时性的，稍后重试。",
       "unknown": "未知错误——请查看完整日志以获取详情。"
     },
     "fix": {
@@ -779,7 +784,8 @@
       "checkNetwork": "检查网络 / VPN",
       "checkVpn": "检查 VPN / 防火墙",
       "reportBug": "报告此 Bug",
-      "disableTls": "禁用 TLS 验证"
+      "disableTls": "禁用 TLS 验证",
+      "switchWire": "到设置页切换 wire"
     },
     "applyFix": "应用此修复",
     "setBaseUrlFirst": "请先填写 Base URL",
