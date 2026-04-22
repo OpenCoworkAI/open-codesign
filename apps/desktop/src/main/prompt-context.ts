@@ -29,7 +29,8 @@ const TEXT_EXTS = new Set([
 ]);
 
 const MAX_ATTACHMENT_CHARS = 6_000;
-const MAX_ATTACHMENT_BYTES = 256_000;
+const MAX_TEXT_ATTACHMENT_BYTES = 256_000;
+const MAX_BINARY_ATTACHMENT_BYTES = 10_000_000; // 10MB - binary attachments only need filename, not content
 const MAX_URL_EXCERPT_CHARS = 1_200;
 const MAX_URL_RESPONSE_BYTES = 256_000;
 const REFERENCE_CONTENT_TYPES = ['text/html', 'application/xhtml+xml'];
@@ -59,9 +60,16 @@ function isProbablyText(buffer: Buffer, extension: string): boolean {
 
 async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> {
   const extension = extname(file.name).toLowerCase();
-  if (file.size > MAX_ATTACHMENT_BYTES) {
+
+  // Binary attachments (images, etc) only need filename - we don't send content to LLM
+  // So allow much larger size limit
+  const isKnownTextExtension = TEXT_EXTS.has(extension);
+  const maxFileBytes = isKnownTextExtension ? MAX_TEXT_ATTACHMENT_BYTES : MAX_BINARY_ATTACHMENT_BYTES;
+  if (file.size > maxFileBytes) {
     throw new CodesignError(
-      `Attachment "${file.name}" is too large (${file.size} bytes).`,
+      isKnownTextExtension
+        ? `Text attachment "${file.name}" is too large (${file.size} bytes). Maximum is ${MAX_TEXT_ATTACHMENT_BYTES} bytes.`
+        : `Binary attachment "${file.name}" is too large (${file.size} bytes). Maximum is ${MAX_BINARY_ATTACHMENT_BYTES / 1_000_000}MB.`,
       ERROR_CODES.ATTACHMENT_TOO_LARGE,
     );
   }
@@ -70,10 +78,31 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
   let handle: Awaited<ReturnType<typeof open>> | null = null;
   try {
     handle = await open(file.path, 'r');
-    const length = Math.max(1, Math.min(file.size || MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_BYTES));
-    const readBuffer = Buffer.alloc(length);
-    const { bytesRead } = await handle.read(readBuffer, 0, readBuffer.length, 0);
-    buffer = readBuffer.subarray(0, bytesRead);
+
+    // Always read a small probe first to detect if it's actually text
+    const probeBytes = 512;
+    const probeBuffer = Buffer.alloc(probeBytes);
+    const { bytesRead: probeRead } = await handle.read(probeBuffer, 0, probeBytes, 0);
+    const probe = probeBuffer.subarray(0, probeRead);
+
+    if (!isProbablyText(probe, extension)) {
+      // Definitely binary - we don't need any more content
+      buffer = probe;
+    } else if (file.size <= MAX_TEXT_ATTACHMENT_BYTES) {
+      // It looks like text and fits within limit - read the whole thing
+      const length = Math.max(1, Math.min(file.size || MAX_TEXT_ATTACHMENT_BYTES, MAX_TEXT_ATTACHMENT_BYTES));
+      const fullBuffer = Buffer.alloc(length);
+      // Read from start (we already have the probe, but just re-read for simplicity)
+      const { bytesRead } = await handle.read(fullBuffer, 0, fullBuffer.length, 0);
+      buffer = fullBuffer.subarray(0, bytesRead);
+    } else {
+      // Looks like text but exceeds text limit - this can only happen for unknown extensions
+      // Already checked overall file size against MAX_BINARY_ATTACHMENT_BYTES
+      // Read up to the text limit
+      const fullBuffer = Buffer.alloc(MAX_TEXT_ATTACHMENT_BYTES);
+      const { bytesRead } = await handle.read(fullBuffer, 0, fullBuffer.length, 0);
+      buffer = fullBuffer.subarray(0, bytesRead);
+    }
   } catch (error) {
     throw new CodesignError(
       `Failed to read attachment "${file.path}"`,
@@ -94,12 +123,13 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
     };
   }
 
+  const fullText = buffer.toString('utf8');
   return {
     name: file.name,
     path: file.path,
-    excerpt: cleanText(buffer.toString('utf8'), MAX_ATTACHMENT_CHARS),
+    excerpt: cleanText(fullText, MAX_ATTACHMENT_CHARS),
     note:
-      buffer.length > MAX_ATTACHMENT_CHARS
+      Buffer.byteLength(fullText, 'utf8') > MAX_ATTACHMENT_CHARS
         ? 'Excerpt truncated to the most relevant leading content.'
         : undefined,
   };
