@@ -87,10 +87,19 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
     const { bytesRead: probeRead } = await handle.read(probeBuffer, 0, probeBytes, 0);
     const probe = probeBuffer.subarray(0, probeRead);
 
-    if (!isProbablyText(probe, extension)) {
+    const looksText = isProbablyText(probe, extension);
+    if (looksText && file.size > MAX_TEXT_ATTACHMENT_BYTES) {
+      // Any file that looks like text must obey the text size limit regardless of extension
+      throw new CodesignError(
+        `Text attachment "${file.name}" is too large (${file.size} bytes). Maximum is ${MAX_TEXT_ATTACHMENT_BYTES} bytes.`,
+        ERROR_CODES.ATTACHMENT_TOO_LARGE,
+      );
+    }
+
+    if (!looksText) {
       // Definitely binary - we don't need any more content
       buffer = probe;
-    } else if (file.size <= MAX_TEXT_ATTACHMENT_BYTES) {
+    } else {
       // It looks like text and fits within limit - read the whole thing
       const length = Math.max(
         1,
@@ -98,13 +107,6 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
       );
       const fullBuffer = Buffer.alloc(length);
       // Read from start (we already have the probe, but just re-read for simplicity)
-      const { bytesRead } = await handle.read(fullBuffer, 0, fullBuffer.length, 0);
-      buffer = fullBuffer.subarray(0, bytesRead);
-    } else {
-      // Looks like text but exceeds text limit - this can only happen for unknown extensions
-      // Already checked overall file size against MAX_BINARY_ATTACHMENT_BYTES
-      // Read up to the text limit
-      const fullBuffer = Buffer.alloc(MAX_TEXT_ATTACHMENT_BYTES);
       const { bytesRead } = await handle.read(fullBuffer, 0, fullBuffer.length, 0);
       buffer = fullBuffer.subarray(0, bytesRead);
     }
