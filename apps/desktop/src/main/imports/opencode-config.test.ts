@@ -288,7 +288,11 @@ describe('readOpencodeConfig', () => {
   });
 
   it.each([
-    ['openrouter/anthropic/claude-sonnet-4.6', 'opencode-openrouter', 'anthropic/claude-sonnet-4.6'],
+    [
+      'openrouter/anthropic/claude-sonnet-4.6',
+      'opencode-openrouter',
+      'anthropic/claude-sonnet-4.6',
+    ],
   ])(
     'treats the first slash as provider/model boundary for nested-path model %s',
     async (modelString, expectedProvider, expectedModel) => {

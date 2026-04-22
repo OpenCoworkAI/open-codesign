@@ -52,16 +52,34 @@ export const GEMINI_API_KEY_PATTERN = /^AIzaSy[A-Za-z0-9_-]{33}$/;
 
 export type GeminiKeySource = 'gemini-env' | 'home-env' | 'shell-env' | 'none';
 
-export interface GeminiImport {
-  /** Null when no usable key was found anywhere. */
-  provider: ProviderEntry | null;
-  apiKey: string | null;
-  apiKeySource: GeminiKeySource;
-  /** Absolute path of the .env file that supplied the key, if any. Surfaced
-   *  to the UI so we can show a clickable path on the import banner. */
-  keyPath: string | null;
-  warnings: string[];
-}
+/** Tagged union over the three states readGeminiCliConfig can produce
+ *  (plus `null` at the top level for "no gemini-cli config present at all"):
+ *
+ *    `found`   — we located an API key and built a ProviderEntry.
+ *    `blocked` — we found evidence of Gemini CLI (currently: Vertex AI env
+ *                flag) but refuse to import because the key format we'd
+ *                need isn't available here. UI should show a warning
+ *                banner with no import button.
+ *
+ *  The previous product-type shape (`provider: X | null` + `apiKey: X | null`
+ *  + `apiKeySource` + …) allowed semantically-illegal combinations like
+ *  `{provider: entry, apiKey: null}`. The union eliminates those by making
+ *  the state transitions explicit. */
+export type GeminiImport =
+  | {
+      kind: 'found';
+      provider: ProviderEntry;
+      apiKey: string;
+      apiKeySource: Exclude<GeminiKeySource, 'none'>;
+      /** Absolute path of the .env file that supplied the key, if any —
+       *  null only when the key came from the shell env directly. */
+      keyPath: string | null;
+      warnings: string[];
+    }
+  | {
+      kind: 'blocked';
+      warnings: string[];
+    };
 
 export interface ReadGeminiCliOptions {
   /** Defaults to `process.env`. Tests inject a stub. */
@@ -145,10 +163,7 @@ export async function readGeminiCliConfig(
   const vertexFlag = env['GOOGLE_GENAI_USE_VERTEXAI']?.trim().toLowerCase();
   if (vertexFlag !== undefined && VERTEX_TRUTHY.has(vertexFlag)) {
     return {
-      provider: null,
-      apiKey: null,
-      apiKeySource: 'none',
-      keyPath: null,
+      kind: 'blocked',
       warnings: [
         'Vertex AI detected (GOOGLE_GENAI_USE_VERTEXAI=true). This importer only supports Gemini Developer API keys (AIzaSy…). Configure Vertex manually.',
       ],
@@ -156,7 +171,7 @@ export async function readGeminiCliConfig(
   }
 
   let apiKey: string | null = null;
-  let apiKeySource: GeminiKeySource = 'none';
+  let apiKeySource: Exclude<GeminiKeySource, 'none'> | null = null;
   let keyPath: string | null = null;
 
   const geminiEnvPath = geminiDotEnvPath(home);
@@ -191,7 +206,7 @@ export async function readGeminiCliConfig(
     }
   }
 
-  if (apiKey === null) return null;
+  if (apiKey === null || apiKeySource === null) return null;
 
   const warnings: string[] = [];
   if (!GEMINI_API_KEY_PATTERN.test(apiKey)) {
@@ -211,6 +226,7 @@ export async function readGeminiCliConfig(
   };
 
   return {
+    kind: 'found',
     provider,
     apiKey,
     apiKeySource,

@@ -804,7 +804,7 @@ interface ExternalConfigsDetection {
 
 interface GeminiDetectionMeta {
   hasApiKey: boolean;
-  apiKeySource: GeminiImport['apiKeySource'];
+  apiKeySource: 'gemini-env' | 'home-env' | 'shell-env' | 'none';
   /** Absolute path of the `.env` that supplied the key, if any. */
   keyPath: string | null;
   baseUrl: string;
@@ -961,10 +961,9 @@ async function runImportClaudeCode(imported: ClaudeCodeImport): Promise<Onboardi
 }
 
 async function runImportGemini(imported: GeminiImport): Promise<OnboardingState> {
-  // Vertex AI and malformed shells land here with provider=null. The renderer
-  // catches CONFIG_MISSING and surfaces the warning in a toast — we do not
-  // want to create an empty provider entry that would then fail validation.
-  if (imported.provider === null) {
+  // Blocked state: Vertex detection etc. — no provider to write. The
+  // renderer catches CONFIG_MISSING and surfaces the warning in a toast.
+  if (imported.kind === 'blocked') {
     throw new CodesignError(
       imported.warnings[0] ?? 'Gemini CLI config produced no provider',
       ERROR_CODES.CONFIG_MISSING,
@@ -979,8 +978,8 @@ async function runImportGemini(imported: GeminiImport): Promise<OnboardingState>
     }
   }
   nextProviders[imported.provider.id] = imported.provider;
-  const importedApiKey = imported.apiKey?.trim();
-  const keySaved = importedApiKey !== undefined && importedApiKey.length > 0;
+  const importedApiKey = imported.apiKey.trim();
+  const keySaved = importedApiKey.length > 0;
   if (keySaved) {
     nextSecrets[imported.provider.id] = buildSecretRef(importedApiKey);
   }
@@ -1221,20 +1220,23 @@ export function registerOnboardingIpc(): void {
         };
       }
       // Gemini: surface whenever we found either a usable key OR a Vertex AI
-      // signal (provider=null with warning). `alreadyHasGemini` gates the
-      // regular import path; Vertex users see the banner regardless since
-      // their config was already imported by a previous Gemini session — the
-      // banner tells them what they need to do manually.
+      // signal (kind='blocked'). `alreadyHasGemini` gates the regular import
+      // path; Vertex users see the banner regardless since their config was
+      // already imported by a previous Gemini session — the banner tells
+      // them what they need to do manually.
       if (gemini !== null) {
-        const blocked = gemini.provider === null;
+        const blocked = gemini.kind === 'blocked';
         if (!alreadyHasGemini || blocked) {
           out.gemini = {
-            hasApiKey: gemini.apiKey !== null,
-            apiKeySource: gemini.apiKeySource,
-            keyPath: gemini.keyPath,
+            hasApiKey: gemini.kind === 'found',
+            apiKeySource: gemini.kind === 'found' ? gemini.apiKeySource : 'none',
+            keyPath: gemini.kind === 'found' ? gemini.keyPath : null,
             baseUrl:
-              gemini.provider?.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta/openai',
-            defaultModel: gemini.provider?.defaultModel ?? 'gemini-2.5-flash',
+              gemini.kind === 'found'
+                ? gemini.provider.baseUrl
+                : 'https://generativelanguage.googleapis.com/v1beta/openai',
+            defaultModel:
+              gemini.kind === 'found' ? gemini.provider.defaultModel : 'gemini-2.5-flash',
             warnings: gemini.warnings,
             blocked,
           };

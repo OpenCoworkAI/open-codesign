@@ -656,6 +656,7 @@ describe('config:v1:import-gemini-config — merge logic', () => {
     const { writeConfig } = await import('./config');
     vi.mocked(writeConfig).mockClear();
     vi.mocked(readGeminiCliConfig).mockResolvedValueOnce({
+      kind: 'found',
       provider: {
         id: 'gemini-import',
         name: 'Gemini (imported)',
@@ -692,10 +693,7 @@ describe('config:v1:import-gemini-config — merge logic', () => {
   it('throws CONFIG_MISSING when the parser returns a Vertex-blocked result', async () => {
     const { readGeminiCliConfig } = await import('./imports/gemini-cli-config');
     vi.mocked(readGeminiCliConfig).mockResolvedValueOnce({
-      provider: null,
-      apiKey: null,
-      apiKeySource: 'none',
-      keyPath: null,
+      kind: 'blocked',
       warnings: ['Vertex AI detected (GOOGLE_GENAI_USE_VERTEXAI=true). ...'],
     });
 
@@ -707,6 +705,7 @@ describe('config:v1:import-gemini-config — merge logic', () => {
     const { readGeminiCliConfig } = await import('./imports/gemini-cli-config');
     const { writeConfig } = await import('./config');
     const fresh = {
+      kind: 'found' as const,
       provider: {
         id: 'gemini-import',
         name: 'Gemini (imported)',
@@ -719,7 +718,7 @@ describe('config:v1:import-gemini-config — merge logic', () => {
       apiKey: `AIzaSy${'z'.repeat(33)}`,
       apiKeySource: 'gemini-env' as const,
       keyPath: '/home/alice/.gemini/.env',
-      warnings: [],
+      warnings: [] as string[],
     };
     vi.mocked(readGeminiCliConfig).mockResolvedValueOnce(fresh);
     vi.mocked(writeConfig).mockClear();
