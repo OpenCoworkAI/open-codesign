@@ -13,7 +13,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "^0.67.68",
+    "@mariozechner/pi-agent-core": "^0.68.1",
     "@mariozechner/pi-ai": "^0.67.68",
     "@open-codesign/artifacts": "workspace:*",
     "@open-codesign/providers": "workspace:*",
