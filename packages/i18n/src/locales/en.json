@@ -472,6 +472,12 @@
     }
   },
   "topbar": {
+    "modelSwitcher": {
+      "fromProvider": "Provider",
+      "searchPlaceholder": "Search models…",
+      "searchAriaLabel": "Filter models by name",
+      "noMatches": "No models match \"{{query}}\""
+    },
     "status": {
       "connected": "Connected",
       "untested": "Not tested",
