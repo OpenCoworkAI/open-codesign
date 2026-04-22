@@ -258,6 +258,9 @@
         "codexMenuDesc": "Read ~/.codex/config.toml",
         "claudeCodeMenu": "Import from Claude Code",
         "claudeCodeMenuDesc": "Read the signed-in Claude Code session",
+        "ollamaMenu": "Ollama (local)",
+        "ollamaMenuDesc": "Add the local localhost:11434 provider",
+        "ollamaDone": "Ollama provider added",
         "customMenu": "Custom provider",
         "customMenuDesc": "Enter API key and URL manually",
         "alreadyImported": "Already imported"
@@ -287,6 +290,7 @@
         "switchedTo": "Switched to {{label}}",
         "switchFailed": "Switch failed",
         "saved": "Provider saved",
+        "saveFailed": "Failed to save provider",
         "modelSaveFailed": "Failed to save model selection",
         "reasoningSaved": "Reasoning depth saved",
         "reasoningSaveFailed": "Failed to save reasoning depth",

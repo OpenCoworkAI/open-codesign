@@ -165,6 +165,36 @@ describe('registerOnboardingIpc — channel versioning', () => {
     }
   });
 
+  it('lets settings add the keyless Ollama builtin without storing an empty secret', async () => {
+    const { readConfig, writeConfig } = await import('./config');
+    vi.mocked(readConfig).mockResolvedValueOnce(null);
+    vi.mocked(writeConfig).mockClear();
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+
+    const handler = handlers.get('settings:v1:add-provider');
+    expect(handler).toBeDefined();
+
+    const rows = (await handler?.(
+      {},
+      {
+        provider: 'ollama',
+        apiKey: '',
+        modelPrimary: 'llama3.2',
+      },
+    )) as Array<{ provider: string }>;
+
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.providers['ollama']).toMatchObject({
+      id: 'ollama',
+      name: 'Ollama (local)',
+      requiresApiKey: false,
+    });
+    expect(written?.secrets['ollama']).toBeUndefined();
+    expect(rows.some((row) => row.provider === 'ollama')).toBe(true);
+  });
+
   it('registers the canonical config:v1:set-provider-and-models handler', async () => {
     const { registerOnboardingIpc } = await import('./onboarding-ipc');
     registerOnboardingIpc();

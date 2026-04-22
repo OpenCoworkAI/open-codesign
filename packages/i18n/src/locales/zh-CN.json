@@ -258,6 +258,9 @@
         "codexMenuDesc": "读取 ~/.codex/config.toml",
         "claudeCodeMenu": "从 Claude Code 导入",
         "claudeCodeMenuDesc": "读取已登录的 Claude Code 会话",
+        "ollamaMenu": "Ollama（本地）",
+        "ollamaMenuDesc": "添加 localhost:11434 本地模型服务",
+        "ollamaDone": "已添加 Ollama 服务",
         "customMenu": "自定义服务",
         "customMenuDesc": "手动填写 API key 和 URL",
         "alreadyImported": "已导入"
@@ -287,6 +290,7 @@
         "switchedTo": "已切换到 {{label}}",
         "switchFailed": "切换失败",
         "saved": "服务已保存",
+        "saveFailed": "保存服务失败",
         "modelSaveFailed": "保存模型选择失败",
         "reasoningSaved": "已保存推理深度",
         "reasoningSaveFailed": "保存推理深度失败",
