@@ -72,15 +72,22 @@ function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
       ERROR_CODES.IPC_BAD_INPUT,
     );
   }
-  if (typeof r['apiKey'] !== 'string' || r['apiKey'].trim().length === 0) {
+  if (typeof r['apiKey'] !== 'string') {
+    throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  // Keyless builtins (Ollama) legitimately send an empty apiKey from the
+  // onboarding form. Non-keyless providers still require a non-empty key.
+  const provider = r['provider'] as SupportedOnboardingProvider;
+  const apiKey = r['apiKey'].trim();
+  if (apiKey.length === 0 && BUILTIN_PROVIDERS[provider].requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof r['baseUrl'] !== 'string' || r['baseUrl'].trim().length === 0) {
     throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   return {
-    provider: r['provider'],
-    apiKey: r['apiKey'].trim(),
+    provider,
+    apiKey,
     baseUrl: r['baseUrl'].trim(),
   };
 }
@@ -96,15 +103,20 @@ function parseModelsListPayload(raw: unknown): ModelsListPayloadV1 {
       ERROR_CODES.IPC_BAD_INPUT,
     );
   }
-  if (typeof r['apiKey'] !== 'string' || r['apiKey'].trim().length === 0) {
+  if (typeof r['apiKey'] !== 'string') {
+    throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  const provider = r['provider'] as SupportedOnboardingProvider;
+  const apiKey = r['apiKey'].trim();
+  if (apiKey.length === 0 && BUILTIN_PROVIDERS[provider].requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof r['baseUrl'] !== 'string' || r['baseUrl'].trim().length === 0) {
     throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   return {
-    provider: r['provider'],
-    apiKey: r['apiKey'].trim(),
+    provider,
+    apiKey,
     baseUrl: r['baseUrl'].trim(),
   };
 }
@@ -235,12 +247,22 @@ export async function fetchWithTimeout(
 export function extractIds(items: unknown[]): string[] | null {
   const ids: string[] = [];
   for (const item of items) {
-    if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
-      ids.push((item as { id: string }).id);
-    } else {
-      // Any item missing a string id field means the shape is unexpected — reject entirely.
-      return null;
+    if (item && typeof item === 'object') {
+      const rec = item as { id?: unknown; name?: unknown };
+      // OpenAI/Anthropic use `id`; Ollama's /api/tags uses `name` (e.g.
+      // "llama3.2:latest"). Accept either so a user who points the custom
+      // provider at http://localhost:11434 (no /v1 suffix) still gets a
+      // model list instead of a PARSE error.
+      if (typeof rec.id === 'string') {
+        ids.push(rec.id);
+        continue;
+      }
+      if (typeof rec.name === 'string') {
+        ids.push(rec.name);
+        continue;
+      }
     }
+    return null;
   }
   return ids;
 }
@@ -717,6 +739,47 @@ export function registerConnectionIpc(): void {
       return { ok: true, modelCount: ids?.length ?? 0, models: ids ?? [] };
     },
   );
+
+  // ── Ollama probe — used by onboarding to show "detected/not running" ─────
+  // We intentionally don't reuse the /v1/models endpoint because /api/tags is
+  // Ollama's canonical liveness probe, returns faster, and survives users who
+  // disabled the OpenAI-compat server. Short 2s timeout because the user is
+  // staring at a spinner in the onboarding flow.
+  ipcMain.handle('ollama:v1:probe', async (_e, raw: unknown): Promise<OllamaProbeResponse> => {
+    const baseUrl = parseOllamaProbePayload(raw);
+    const url = `${baseUrl.replace(/\/+$/, '')}/api/tags`;
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(url, { method: 'GET' }, 2000);
+    } catch (err) {
+      const { code } = classifyNetworkError(err);
+      return { ok: false, code, message: err instanceof Error ? err.message : String(err) };
+    }
+    if (!res.ok) {
+      return { ok: false, code: 'HTTP', message: `HTTP ${res.status}` };
+    }
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      return { ok: false, code: 'PARSE', message: 'Non-JSON response' };
+    }
+    const models = extractModelIds(body) ?? [];
+    return { ok: true, models };
+  });
+}
+
+export type OllamaProbeResponse =
+  | { ok: true; models: string[] }
+  | { ok: false; code: string; message: string };
+
+function parseOllamaProbePayload(raw: unknown): string {
+  if (raw === undefined || raw === null) return 'http://localhost:11434';
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    // Strip any /v1 suffix — /api/tags lives at the root.
+    return raw.trim().replace(/\/v1\/?$/, '');
+  }
+  return 'http://localhost:11434';
 }
 
 interface TestEndpointPayload {

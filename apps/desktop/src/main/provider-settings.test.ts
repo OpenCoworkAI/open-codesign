@@ -4,6 +4,7 @@ import {
   assertProviderHasStoredSecret,
   computeDeleteProviderResult,
   getAddProviderDefaults,
+  isKeylessProviderAllowed,
   resolveActiveModel,
   toProviderRows,
 } from './provider-settings';
@@ -166,6 +167,45 @@ describe('assertProviderHasStoredSecret', () => {
     });
 
     expect(() => assertProviderHasStoredSecret(cfg, 'codex-custom')).toThrow(CodesignError);
+  });
+});
+
+describe('isKeylessProviderAllowed', () => {
+  it('allows any provider whose entry declares requiresApiKey: false (e.g. Ollama)', () => {
+    const entry = {
+      id: 'ollama',
+      name: 'Ollama',
+      builtin: true,
+      wire: 'openai-chat',
+      baseUrl: 'http://localhost:11434/v1',
+      defaultModel: 'llama3.2',
+      requiresApiKey: false,
+    } as const;
+    expect(isKeylessProviderAllowed('ollama', entry)).toBe(true);
+  });
+
+  it('allows codex-family providers without an envKey (legacy contract)', () => {
+    const entry = {
+      id: 'codex-oss',
+      name: 'Codex (imported)',
+      builtin: false,
+      wire: 'openai-chat',
+      baseUrl: 'https://proxy.example.com/v1',
+      defaultModel: 'gpt-5-codex',
+    } as const;
+    expect(isKeylessProviderAllowed('codex-oss', entry)).toBe(true);
+  });
+
+  it('rejects generic custom providers that never opted out of API keys', () => {
+    const entry = {
+      id: 'custom-foo',
+      name: 'Foo',
+      builtin: false,
+      wire: 'openai-chat',
+      baseUrl: 'https://foo.example.com/v1',
+      defaultModel: 'foo-large',
+    } as const;
+    expect(isKeylessProviderAllowed('custom-foo', entry)).toBe(false);
   });
 });
 

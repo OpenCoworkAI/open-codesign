@@ -7,6 +7,7 @@ import {
   PROVIDER_SHORTLIST,
   type ProviderEntry,
   type ReasoningLevel,
+  SUPPORTED_ONBOARDING_PROVIDERS,
   type WireApi,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
@@ -64,6 +65,10 @@ export function assertProviderHasStoredSecret(cfg: Config, provider: string): vo
 }
 
 export function isKeylessProviderAllowed(provider: string, entry?: ProviderEntry | null): boolean {
+  // Providers that explicitly opt out of API keys (e.g. local Ollama, a
+  // self-hosted LiteLLM fronting IP-whitelisted models). The flag lets any
+  // provider — builtin or custom — declare keyless-ness at config time.
+  if (entry?.requiresApiKey === false) return true;
   const isCodexFamily = provider.startsWith('codex-') || provider === 'chatgpt-codex';
   return isCodexFamily && entry?.requiresApiKey !== true && entry?.envKey === undefined;
 }
@@ -90,6 +95,16 @@ export function toProviderRows(
     ...Object.keys(cfg.providers ?? {}),
     ...Object.keys(cfg.secrets ?? {}),
   ]);
+  // Keyless builtins (e.g. Ollama) always surface as rows so users can
+  // discover + enable them without going through onboarding first. Without
+  // this, a fresh v3 install would hide Ollama entirely — the providers
+  // map gets populated lazily during onboarding, but Ollama has no
+  // onboarding step to run.
+  for (const builtinId of SUPPORTED_ONBOARDING_PROVIDERS) {
+    if (BUILTIN_PROVIDERS[builtinId].requiresApiKey === false) {
+      allIds.add(builtinId);
+    }
+  }
   for (const provider of allIds) {
     const ref = cfg.secrets?.[provider];
     const entry = resolveEntryFor(cfg, provider);

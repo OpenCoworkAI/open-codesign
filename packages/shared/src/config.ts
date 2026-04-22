@@ -16,8 +16,18 @@ const ProviderIdEnum = z.enum([
   'vercel-ai-gateway',
 ]);
 
-export const SUPPORTED_ONBOARDING_PROVIDERS = ['anthropic', 'openai', 'openrouter'] as const;
+export const SUPPORTED_ONBOARDING_PROVIDERS = [
+  'anthropic',
+  'openai',
+  'openrouter',
+  'ollama',
+] as const;
 export type SupportedOnboardingProvider = (typeof SUPPORTED_ONBOARDING_PROVIDERS)[number];
+
+/** Default Ollama local endpoint. Users override via Settings if they run
+ *  Ollama on a different host/port. */
+export const OLLAMA_DEFAULT_BASE_URL = 'http://localhost:11434/v1';
+export const OLLAMA_DEFAULT_MODEL = 'llama3.2';
 
 // ── Wire types (v3) ──────────────────────────────────────────────────────────
 
@@ -124,6 +134,15 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     wire: 'openai-chat',
     baseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'anthropic/claude-sonnet-4.6',
+  },
+  ollama: {
+    id: 'ollama',
+    name: 'Ollama (local)',
+    builtin: true,
+    wire: 'openai-chat',
+    baseUrl: OLLAMA_DEFAULT_BASE_URL,
+    defaultModel: OLLAMA_DEFAULT_MODEL,
+    requiresApiKey: false,
   },
 } as const;
 
@@ -308,6 +327,13 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     keyHelpUrl: 'https://openrouter.ai/keys',
     primary: ['anthropic/claude-sonnet-4.6', 'openai/gpt-4o'],
     defaultPrimary: 'anthropic/claude-sonnet-4.6',
+  },
+  ollama: {
+    provider: 'ollama',
+    label: 'Ollama (local)',
+    keyHelpUrl: 'https://ollama.com/download',
+    primary: [OLLAMA_DEFAULT_MODEL, 'llama3.1', 'qwen2.5'],
+    defaultPrimary: OLLAMA_DEFAULT_MODEL,
   },
 };
 

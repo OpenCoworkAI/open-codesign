@@ -328,6 +328,9 @@ const api = {
       /** `null` explicitly clears the override and falls back to the model
        *  default; a level string sets it; omit to leave untouched. */
       reasoningLevel?: ReasoningLevel | null;
+      /** Non-empty string rotates the stored secret; empty string clears it
+       *  (keyless providers); omit to leave the existing secret untouched. */
+      apiKey?: string;
     }) => ipcRenderer.invoke('config:v1:update-provider', input) as Promise<OnboardingState>,
     removeProvider: (id: string) =>
       ipcRenderer.invoke('config:v1:remove-provider', id) as Promise<OnboardingState>,
@@ -391,6 +394,12 @@ const api = {
     }) => ipcRenderer.invoke('models:v1:list', input) as Promise<ModelsListResponse>,
     listForProvider: (providerId: string) =>
       ipcRenderer.invoke('models:v1:list-for-provider', providerId) as Promise<ModelsListResponse>,
+  },
+  ollama: {
+    probe: (baseUrl?: string) =>
+      ipcRenderer.invoke('ollama:v1:probe', baseUrl) as Promise<
+        { ok: true; models: string[] } | { ok: false; code: string; message: string }
+      >,
   },
   snapshots: {
     listDesigns: () =>

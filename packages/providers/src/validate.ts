@@ -56,6 +56,16 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
         headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
       };
     }
+    case 'ollama': {
+      // Local Ollama — OpenAI-compat endpoint at /v1. No auth header; the
+      // caller (renderer) may still pass a non-empty apiKey as a sentinel
+      // that we harmlessly drop here.
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'http://localhost:11434';
+      return {
+        url: `${root}/v1/models`,
+        headers: () => ({}),
+      };
+    }
   }
 }
 

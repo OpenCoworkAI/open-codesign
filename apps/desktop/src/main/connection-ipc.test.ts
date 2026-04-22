@@ -219,6 +219,21 @@ describe('extractIds', () => {
   it('returns null when an id is a number instead of a string', () => {
     expect(extractIds([{ id: 'a' }, { id: 123 }])).toBeNull();
   });
+
+  // Ollama's /api/tags returns `{ models: [{ name: "llama3.2:latest" }] }`
+  // instead of OpenAI/Anthropic's `id` field. Without this fallback, a user
+  // who points a custom provider at `http://localhost:11434` (no /v1 suffix)
+  // would silently get a PARSE error from the model list endpoint.
+  it('accepts items with a `name` field for Ollama /api/tags shape', () => {
+    expect(extractIds([{ name: 'llama3.2:latest' }, { name: 'qwen2.5' }])).toEqual([
+      'llama3.2:latest',
+      'qwen2.5',
+    ]);
+  });
+
+  it('prefers `id` over `name` when both are present', () => {
+    expect(extractIds([{ id: 'official-id', name: 'display-name' }])).toEqual(['official-id']);
+  });
 });
 
 // ---------------------------------------------------------------------------
