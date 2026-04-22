@@ -1,6 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { CodesignError } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadAllSkills, loadSkillsFromDir } from './loader.js';
@@ -55,7 +56,7 @@ Full skill body here.
 
 describe('loadSkillsFromDir()', () => {
   it('loads 4 builtin skills from the real builtin directory', async () => {
-    const builtinDir = new URL('./builtin', import.meta.url).pathname;
+    const builtinDir = fileURLToPath(new URL('./builtin', import.meta.url));
     const skills = await loadSkillsFromDir(builtinDir, 'builtin');
     expect(skills.length).toBe(4);
     const ids = skills.map((s) => s.id).sort();

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -54,12 +54,20 @@ describe('writeBootErrorSync', () => {
   });
 
   it('falls back to the OS tmpdir when the primary path is unwritable', () => {
-    // Give a path we cannot create (under /dev/null). mkdirSync will throw,
-    // and writeBootErrorSync must catch and redirect to tmpdir.
-    const bogus = '/dev/null/does-not-exist/logs';
-    const out = writeBootErrorSync(mkCtx({ logsDir: bogus }));
-    expect(out).toBe(join(tmpdir(), 'boot-errors.log'));
-    expect(existsSync(out)).toBe(true);
+    // Build a path whose parent is a regular file — mkdirSync then throws
+    // ENOTDIR on both POSIX and Windows, exercising the tmpdir fallback in a
+    // platform-agnostic way.
+    const scratchDir = mkdtempSync(join(tmpdir(), 'boot-fallback-bad-'));
+    const blocker = join(scratchDir, 'not-a-dir');
+    writeFileSync(blocker, 'blocker');
+    try {
+      const bogus = join(blocker, 'logs');
+      const out = writeBootErrorSync(mkCtx({ logsDir: bogus }));
+      expect(out).toBe(join(tmpdir(), 'boot-errors.log'));
+      expect(existsSync(out)).toBe(true);
+    } finally {
+      rmSync(scratchDir, { recursive: true, force: true });
+    }
   });
 });
 
