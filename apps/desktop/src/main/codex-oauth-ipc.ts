@@ -222,18 +222,18 @@ async function runLogin(): Promise<CodexOAuthStatus> {
   const abortController = new AbortController();
   activeLoginAbortController = abortController;
 
-  let promise: Promise<CodexOAuthStatus>;
-  promise = runLoginFlow(abortController).finally(() => {
+  const promise = runLoginFlow(abortController);
+  const trackedPromise = promise.finally(() => {
     if (activeLoginAbortController === abortController) {
       activeLoginAbortController = null;
     }
-    if (activeLoginPromise === promise) {
+    if (activeLoginPromise === trackedPromise) {
       activeLoginPromise = null;
     }
   });
 
-  activeLoginPromise = promise;
-  return promise;
+  activeLoginPromise = trackedPromise;
+  return trackedPromise;
 }
 
 async function runCancelLogin(): Promise<boolean> {
