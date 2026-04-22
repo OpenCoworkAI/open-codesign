@@ -264,7 +264,10 @@
         "customMenu": "Provedor personalizado",
         "customMenuDesc": "Inserir chave de API e URL manualmente",
         "alreadyImported": "Já importado",
-        "opencodeBlocked": "Configuração do OpenCode detectada, mas nada pode ser importado. Veja o aviso acima, corrija o auth.json e tente novamente."
+        "opencodeBlocked": "Configuração do OpenCode detectada, mas nada pode ser importado. Veja o aviso acima, corrija o auth.json e tente novamente.",
+        "ollamaMenu": "Ollama (local)",
+        "ollamaMenuDesc": "Adicionar o provedor local em localhost:11434",
+        "ollamaDone": "Provedor Ollama adicionado"
       },
       "modal": {
         "title": "Adicionar provedor",
@@ -295,7 +298,8 @@
         "reasoningSaved": "Profundidade de raciocínio salva",
         "reasoningSaveFailed": "Falha ao salvar a profundidade de raciocínio",
         "connectionOk": "Conexão OK",
-        "connectionFailed": "Falha na conexão"
+        "connectionFailed": "Falha na conexão",
+        "saveFailed": "Falha ao salvar o provedor"
       },
       "reasoning": {
         "label": "Profundidade de raciocínio",
