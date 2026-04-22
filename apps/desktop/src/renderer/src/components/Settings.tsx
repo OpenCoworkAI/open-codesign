@@ -563,9 +563,7 @@ function ReasoningDepthSelector({
  */
 const PARSE_REASON_NOT_JSON_OBJECT = '__parse_reason_not_json_object__';
 
-export const DISMISSED_BANNER_PREFIX = 'open-codesign:settings:dismissed-import-banner:';
-
-export type DismissedBannerKind = 'codex' | 'claudeCode' | 'gemini' | 'opencode';
+const DISMISSED_BANNER_PREFIX = 'open-codesign:settings:dismissed-import-banner:';
 
 /**
  * Strip any user:pass@ credentials from a URL before putting it into
@@ -589,97 +587,19 @@ function maskBaseUrlCreds(raw: string): string {
   }
 }
 
-export function readDismissed(kind: DismissedBannerKind): boolean {
+function readDismissed(kind: 'codex' | 'claudeCode' | 'gemini' | 'opencode'): boolean {
   try {
     return window.localStorage.getItem(DISMISSED_BANNER_PREFIX + kind) === '1';
   } catch {
     return false;
   }
 }
-export function writeDismissed(kind: DismissedBannerKind): void {
+function writeDismissed(kind: 'codex' | 'claudeCode' | 'gemini' | 'opencode'): void {
   try {
     window.localStorage.setItem(DISMISSED_BANNER_PREFIX + kind, '1');
   } catch {
     // localStorage may be unavailable in tests; non-fatal
   }
-}
-
-/**
- * Pure view-model for the Gemini import banner. The component is a thin
- * switch on `kind`, so all branching logic lives here and is unit-testable
- * without mounting React.
- */
-export type GeminiBannerView =
-  | { kind: 'blocked'; warning: string }
-  | { kind: 'importable'; labelKey: 'settings.providers.import.geminiFound' }
-  | { kind: 'no-key'; labelKey: 'settings.providers.import.geminiNoKey' };
-
-export function resolveGeminiBanner(g: {
-  hasApiKey: boolean;
-  blocked: boolean;
-  warnings: string[];
-}): GeminiBannerView {
-  if (g.blocked) {
-    return {
-      kind: 'blocked',
-      warning: g.warnings[0] ?? 'settings.providers.import.geminiBlocked',
-    };
-  }
-  return g.hasApiKey
-    ? { kind: 'importable', labelKey: 'settings.providers.import.geminiFound' }
-    : { kind: 'no-key', labelKey: 'settings.providers.import.geminiNoKey' };
-}
-
-export type OpencodeBannerView =
-  | { kind: 'blocked'; warning: string }
-  | {
-      kind: 'importable';
-      count: number;
-      /** First 3 provider labels joined by comma, with "+N more" overflow.
-       *  Single string so the i18n template just interpolates one arg. */
-      providers: string;
-      labelKey: 'settings.providers.import.opencodeFound';
-    };
-
-export function resolveOpencodeBanner(o: {
-  count: number;
-  providerLabels: string[];
-  blocked: boolean;
-  warnings: string[];
-}): OpencodeBannerView {
-  if (o.blocked) {
-    return {
-      kind: 'blocked',
-      warning: o.warnings[0] ?? 'settings.providers.import.opencodeBlocked',
-    };
-  }
-  // First 3 labels inline, then "+N more" for the overflow. Keeps the banner
-  // one-line even for a user with 7+ keys configured in opencode.
-  const head = o.providerLabels.slice(0, 3).join(', ');
-  const overflow = o.providerLabels.length - 3;
-  const providers = overflow > 0 ? `${head} +${overflow} more` : head;
-  return {
-    kind: 'importable',
-    count: o.count,
-    providers,
-    labelKey: 'settings.providers.import.opencodeFound',
-  };
-}
-
-/**
- * IPC thin-wrappers so the handler logic in `ModelsTab` is testable without
- * mounting the component. Matches the `performLogin`/`performLogout` pattern
- * in `ChatgptLoginCard.tsx`.
- */
-export async function performImportGemini(api: {
-  importGeminiConfig: () => Promise<unknown>;
-}): Promise<void> {
-  await api.importGeminiConfig();
-}
-export async function performImportOpencode(api: {
-  importOpencodeConfig: () => Promise<unknown>;
-}): Promise<void> {
-  await api.importOpencodeConfig();
 }
 
 function ImportBanner({
@@ -1049,7 +969,7 @@ function ModelsTab() {
     // first request.
     const geminiWarnings = externalConfigs?.gemini?.warnings ?? [];
     try {
-      await performImportGemini(window.codesign.config);
+      await window.codesign.config.importGeminiConfig();
       setExternalConfigs((prev) => (prev === null ? null : { ...prev, gemini: undefined }));
       await reloadRows();
       const description =
@@ -1075,7 +995,7 @@ function ModelsTab() {
     // 3 providers" success toast but the other 2 entries vanish silently.
     const skippedSummary = externalConfigs?.opencode?.warnings ?? [];
     try {
-      await performImportOpencode(window.codesign.config);
+      await window.codesign.config.importOpencodeConfig();
       setExternalConfigs((prev) => (prev === null ? null : { ...prev, opencode: undefined }));
       await reloadRows();
       const description =
@@ -1326,19 +1246,29 @@ function ModelsTab() {
                       prev === null ? null : { ...prev, opencode: undefined },
                     );
                   };
-                  const view = resolveOpencodeBanner(oc);
-                  if (view.kind === 'blocked') {
+                  if (oc.blocked) {
                     // Corrupt auth.json / all OAuth / all unsupported —
                     // surface what we saw so the user doesn't think nothing
                     // was detected. No import button because there's
                     // nothing importable.
-                    return <ImportBanner label={view.warning} onDismiss={dismiss} />;
+                    return (
+                      <ImportBanner
+                        label={oc.warnings[0] ?? t('settings.providers.import.opencodeBlocked')}
+                        onDismiss={dismiss}
+                      />
+                    );
                   }
+                  // First 3 provider labels inline, then "+N more" for
+                  // the overflow. Keeps the banner one-line even for a
+                  // user with 7 keys configured in opencode.
+                  const head = oc.providerLabels.slice(0, 3).join(', ');
+                  const overflow = oc.providerLabels.length - 3;
+                  const providerSummary = overflow > 0 ? `${head} +${overflow} more` : head;
                   return (
                     <ImportBanner
-                      label={t(view.labelKey, {
-                        count: view.count,
-                        providers: view.providers,
+                      label={t('settings.providers.import.opencodeFound', {
+                        count: oc.count,
+                        providers: providerSummary,
                       })}
                       onImport={handleImportOpencode}
                       onDismiss={dismiss}
@@ -1354,16 +1284,23 @@ function ModelsTab() {
                       prev === null ? null : { ...prev, gemini: undefined },
                     );
                   };
-                  const view = resolveGeminiBanner(g);
-                  if (view.kind === 'blocked') {
+                  if (g.blocked) {
                     // Vertex AI (or other non-importable Gemini setup).
                     // Render a warning-only banner — no import button.
-                    return <ImportBanner label={view.warning} onDismiss={dismiss} />;
+                    return (
+                      <ImportBanner
+                        label={g.warnings[0] ?? t('settings.providers.import.geminiBlocked')}
+                        onDismiss={dismiss}
+                      />
+                    );
                   }
+                  const label = g.hasApiKey
+                    ? t('settings.providers.import.geminiFound')
+                    : t('settings.providers.import.geminiNoKey');
                   return (
                     <ImportBanner
-                      label={t(view.labelKey)}
-                      {...(view.kind === 'importable' ? { onImport: handleImportGemini } : {})}
+                      label={label}
+                      {...(g.hasApiKey ? { onImport: handleImportGemini } : {})}
                       onDismiss={dismiss}
                     />
                   );

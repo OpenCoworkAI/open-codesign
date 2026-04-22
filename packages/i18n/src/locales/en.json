@@ -168,8 +168,16 @@
       "sectionTitle": "API Providers",
       "chatgptLogin": {
         "title": "Sign in with ChatGPT subscription",
-        "description": "Use your ChatGPT Plus / Pro / Team plan quota to call Codex models (gpt-5.3-codex and friends) — no API key needed. Still polishing, shipping in the next release.",
-        "comingSoon": "Coming soon"
+        "description": "Use your ChatGPT Plus / Pro / Team plan quota to call Codex models (gpt-5.3-codex and friends) — no API key needed.",
+        "signIn": "Sign in with ChatGPT",
+        "inProgress": "Browser opened. Complete the authorization and we'll return automatically…",
+        "loggedInBadge": "Signed in with ChatGPT",
+        "logout": "Sign out",
+        "confirmLogout": "Sign out of ChatGPT subscription?",
+        "loginFailedTitle": "ChatGPT sign-in failed",
+        "logoutFailedTitle": "ChatGPT sign-out failed",
+        "statusFailedTitle": "ChatGPT status check failed",
+        "unknownError": "Unknown error"
       },
       "addProvider": "Add provider",
       "addCustom": "Add custom",

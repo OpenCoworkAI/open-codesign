@@ -14,6 +14,7 @@ import type {
   ModelRef,
   SelectedElement,
   StoredDesignSystem,
+  WireApi,
 } from '@open-codesign/shared';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { remapProviderError } from './errors.js';
@@ -74,10 +75,17 @@ export interface GenerateInput {
   history: ChatMessage[];
   model: ModelRef;
   apiKey: string;
+  /**
+   * Optional async getter invoked once per agent turn so OAuth tokens can be
+   * refreshed over a long tool-using run. Returns the current bearer token.
+   * When omitted, the agent reuses the static `apiKey` captured at request
+   * start — fine for providers with long-lived API keys.
+   */
+  getApiKey?: (() => Promise<string>) | undefined;
   baseUrl?: string | undefined;
   /** v3 wire — when set, pi-ai synthesizes a model for the wire protocol so
    * custom endpoints route correctly even if the provider id is unknown. */
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  wire?: WireApi | undefined;
   /** v3 extra HTTP headers merged into the outbound request (gateway auth). */
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
@@ -109,7 +117,7 @@ export interface ApplyCommentInput {
   model: ModelRef;
   apiKey: string;
   baseUrl?: string | undefined;
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
   /** @see GenerateInput.reasoningLevel */
@@ -145,7 +153,7 @@ interface ModelRunInput {
   model: ModelRef;
   apiKey: string;
   baseUrl?: string | undefined;
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
@@ -707,7 +715,7 @@ export interface GenerateTitleInput {
   model: ModelRef;
   apiKey: string;
   baseUrl?: string | undefined;
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
   signal?: AbortSignal | undefined;

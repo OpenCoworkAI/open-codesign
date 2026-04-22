@@ -43,6 +43,7 @@ import {
   ERROR_CODES,
   type ModelRef,
   type StoredDesignSystem,
+  type WireApi,
   canonicalBaseUrl,
 } from '@open-codesign/shared';
 import type { TSchema } from '@sinclair/typebox';
@@ -229,9 +230,10 @@ interface PiModel {
   headers?: Record<string, string>;
 }
 
-function apiForWire(wire: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined): string {
+function apiForWire(wire: WireApi | undefined): string {
   if (wire === 'anthropic') return 'anthropic-messages';
   if (wire === 'openai-responses') return 'openai-responses';
+  if (wire === 'openai-codex-responses') return 'openai-codex-responses';
   // openai-chat is the canonical fallback for everything else that uses the
   // openai chat-completions wire format (openai, openrouter, deepseek, etc.).
   return 'openai-completions';
@@ -245,7 +247,7 @@ const BUILTIN_PUBLIC_BASE_URLS: Record<string, string> = {
 
 function buildPiModel(
   model: ModelRef,
-  wire: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined,
+  wire: WireApi | undefined,
   baseUrl: string | undefined,
   httpHeaders?: Record<string, string> | undefined,
   apiKey?: string,
@@ -268,6 +270,8 @@ function buildPiModel(
   // Defensive: canonicalize stored baseUrl before handing to pi-ai. Rescues
   // legacy configs that persisted pre-normalization (e.g. raw `/v1/chat/completions`
   // pasted in an older build). No-op for configs saved post-fix.
+  // For openai-codex-responses, canonicalBaseUrl only strips trailing slashes
+  // — pi-ai's codex wire appends `/codex/responses` from the bare base itself.
   const canonicalBase = wire ? canonicalBaseUrl(resolvedBaseUrl, wire) : resolvedBaseUrl;
   const out: PiModel = {
     id: model.modelId,
@@ -752,6 +756,15 @@ export async function generateViaAgent(
 
   // Build the Agent. convertToLlm narrows AgentMessage (may include custom
   // types) to the LLM-visible Message subset.
+  //
+  // `capturedGetApiKeyError` preserves structured errors thrown by the
+  // per-turn async getter (e.g. `CodesignError(PROVIDER_AUTH_MISSING)` when
+  // the user signs out mid-run). pi-agent-core flattens thrown errors into a
+  // plain `errorMessage: string` on the failure AgentMessage, which would
+  // otherwise cause us to re-wrap as `PROVIDER_ERROR` below. Stashing the
+  // original lets the post-agent branch rethrow it as-is, so the renderer
+  // sees the same code the initial IPC-level resolution would emit.
+  let capturedGetApiKeyError: unknown = null;
   const agent = new Agent({
     initialState: {
       systemPrompt: augmentedSystemPrompt,
@@ -771,7 +784,25 @@ export async function generateViaAgent(
     // in LLM-facing size across a long tool-using run and blow past 1 M
     // tokens. See context-prune.ts for the full strategy.
     transformContext: buildTransformContext(log),
-    getApiKey: () => input.apiKey || 'open-codesign-keyless',
+    // Async getter so OAuth tokens can be refreshed between agent turns. On a
+    // long tool-using run, `input.apiKey` captured at start-of-request would
+    // eventually expire; the caller passes `input.getApiKey` for codex so each
+    // LLM round-trip calls into the token store (which auto-refreshes inside
+    // its 5-min buffer). We stash any throw in `capturedGetApiKeyError` so
+    // the post-agent branch below can rethrow the original structured error
+    // — otherwise pi-agent-core's plain-string failure shape would cause us
+    // to downgrade to PROVIDER_ERROR, hiding the sign-in-again affordance.
+    getApiKey: input.getApiKey
+      ? async () => {
+          try {
+            const key = await input.getApiKey?.();
+            return key && key.length > 0 ? key : input.apiKey || 'open-codesign-keyless';
+          } catch (err) {
+            capturedGetApiKeyError = err;
+            throw err;
+          }
+        }
+      : () => input.apiKey || 'open-codesign-keyless',
   });
 
   if (deps.onEvent) {
@@ -808,6 +839,19 @@ export async function generateViaAgent(
     throw new CodesignError('Agent produced no assistant message', ERROR_CODES.PROVIDER_ERROR);
   }
   if (finalAssistant.stopReason === 'error' || finalAssistant.stopReason === 'aborted') {
+    // Prefer the original `getApiKey` throw (e.g. PROVIDER_AUTH_MISSING after
+    // mid-run logout) over pi-agent-core's flattened plain-string failure,
+    // so the renderer's error-code routing stays consistent with the path
+    // that would have fired if the same error had been raised at IPC entry.
+    if (capturedGetApiKeyError !== null) {
+      log.error('[generate] step=send_request.fail', {
+        ...ctx,
+        ms: Date.now() - sendStart,
+        stopReason: finalAssistant.stopReason,
+        reason: 'getApiKey_threw',
+      });
+      throw capturedGetApiKeyError;
+    }
     const message = finalAssistant.errorMessage ?? 'Provider returned an error';
     log.error('[generate] step=send_request.fail', {
       ...ctx,

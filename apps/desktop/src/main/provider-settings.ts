@@ -1,5 +1,6 @@
 import {
   BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   type Config,
   ERROR_CODES,
@@ -74,7 +75,7 @@ export function isKeylessProviderAllowed(provider: string, entry?: ProviderEntry
   // self-hosted LiteLLM fronting IP-whitelisted models). The flag lets any
   // provider — builtin or custom — declare keyless-ness at config time.
   if (entry?.requiresApiKey === false) return true;
-  const isCodexFamily = provider.startsWith('codex-') || provider === 'chatgpt-codex';
+  const isCodexFamily = provider.startsWith('codex-') || provider === CHATGPT_CODEX_PROVIDER_ID;
   return isCodexFamily && entry?.requiresApiKey !== true && entry?.envKey === undefined;
 }
 

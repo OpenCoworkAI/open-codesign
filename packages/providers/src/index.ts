@@ -6,7 +6,13 @@
  * Tier 1 implementations: minimum viable. Tier 2 features tracked separately.
  */
 
-import { type ChatMessage, CodesignError, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
+import {
+  type ChatMessage,
+  CodesignError,
+  ERROR_CODES,
+  type ModelRef,
+  type WireApi,
+} from '@open-codesign/shared';
 import {
   claudeCodeIdentityHeaders,
   looksLikeClaudeOAuthToken,
@@ -37,7 +43,7 @@ export interface GenerateOptions {
    *  custom endpoints (DeepSeek, Ollama, LiteLLM, Azure, …) route through
    *  the correct pi-ai adapter even if the provider id isn't in pi-ai's
    *  registry. */
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic';
+  wire?: WireApi;
   /** Extra HTTP headers (merged last). Supports Codex-style static headers
    *  for gateways that require custom auth keys. */
   httpHeaders?: Record<string, string>;
@@ -171,7 +177,9 @@ function synthesizeWireModel(
       ? 'anthropic-messages'
       : wire === 'openai-responses'
         ? 'openai-responses'
-        : 'openai-completions';
+        : wire === 'openai-codex-responses'
+          ? 'openai-codex-responses'
+          : 'openai-completions';
   const base: PiModel = {
     id: modelId,
     name: modelId,

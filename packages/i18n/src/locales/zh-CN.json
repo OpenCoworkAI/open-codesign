@@ -168,8 +168,16 @@
       "sectionTitle": "API 服务",
       "chatgptLogin": {
         "title": "用 ChatGPT 订阅登录",
-        "description": "直接用你的 ChatGPT Plus / Pro / Team 订阅额度调用 Codex 模型（gpt-5.3-codex 等），无需 API key。功能仍在打磨中，下个版本开放。",
-        "comingSoon": "正在支持中"
+        "description": "直接用你的 ChatGPT Plus / Pro / Team 订阅额度调用 Codex 模型（gpt-5.3-codex 等），无需 API key。",
+        "signIn": "用 ChatGPT 订阅登录",
+        "inProgress": "已打开浏览器，完成授权后自动返回…",
+        "loggedInBadge": "已登录 ChatGPT",
+        "logout": "登出",
+        "confirmLogout": "确定登出 ChatGPT 订阅吗？",
+        "loginFailedTitle": "ChatGPT 登录失败",
+        "logoutFailedTitle": "ChatGPT 登出失败",
+        "statusFailedTitle": "ChatGPT 登录状态读取失败",
+        "unknownError": "未知错误"
       },
       "addProvider": "添加服务",
       "addCustom": "添加自定义",
