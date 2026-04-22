@@ -67,7 +67,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.check_bot.outputs.has_review_for_current_head != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           fetch-depth: 0

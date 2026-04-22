@@ -50,7 +50,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.check_bot.outputs.has_bot != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

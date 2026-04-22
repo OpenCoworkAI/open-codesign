@@ -37,7 +37,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -76,7 +76,7 @@ jobs:
     outputs:
       changelog: ${{ steps.build.outputs.changelog }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -140,7 +140,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -198,7 +198,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -255,7 +255,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -316,7 +316,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -368,7 +368,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Check out the default branch (not the tag) so the commit lands
           # on main. We pass the version explicitly to the script.
