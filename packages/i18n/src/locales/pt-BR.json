@@ -99,6 +99,8 @@
     "sendAnywhere": "em qualquer lugar",
     "send": "Enviar prompt",
     "stop": "Parar geração",
+    "expand": "Expandir prompt",
+    "collapse": "Recolher prompt",
     "placeholderRich": "Descreva um design… tente 'Pitch deck para uma startup fintech'"
   },
   "sidebar": {

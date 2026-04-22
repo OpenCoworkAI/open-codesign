@@ -44,6 +44,8 @@ export function App() {
   const sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
   const activeReportLocalId = useCodesignStore((s) => s.activeReportLocalId);
   const closeReportDialog = useCodesignStore((s) => s.closeReportDialog);
+  const isPromptExpanded = useCodesignStore((s) => s.isPromptExpanded);
+  const setPromptExpanded = useCodesignStore((s) => s.setPromptExpanded);
 
   const [prompt, setPrompt] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(() =>
@@ -84,27 +86,32 @@ export function App() {
     if (view === 'workspace') setWorkspaceMounted(true);
   }, [view]);
 
-  const onResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-
-    const onMove = (ev: MouseEvent) => {
+  const onResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
       const maxW = Math.round(window.innerWidth * 0.55);
-      const clamped = Math.min(Math.max(ev.clientX, 280), maxW);
-      setSidebarWidth(clamped);
-    };
-    const onUp = () => {
-      setIsResizing(false);
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }, []);
+      setSidebarWidth(Math.min(Math.max(e.clientX, 280), maxW));
+      setPromptExpanded(false);
+      setIsResizing(true);
+
+      const onMove = (ev: MouseEvent) => {
+        const clamped = Math.min(Math.max(ev.clientX, 280), Math.round(window.innerWidth * 0.55));
+        setSidebarWidth(clamped);
+      };
+      const onUp = () => {
+        setIsResizing(false);
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [setPromptExpanded],
+  );
 
   useEffect(() => {
     async function bootstrap(): Promise<void> {
@@ -236,7 +243,17 @@ export function App() {
           <div hidden={view !== 'workspace'} className="h-full flex flex-col">
             <div className="flex-1 min-h-0 flex relative">
               {isResizing && <div className="absolute inset-0 z-20 cursor-col-resize" />}
-              <div className="relative shrink-0" style={{ width: sidebarWidth }}>
+              <div
+                className={`relative shrink-0 ${isResizing ? '' : 'transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]'}`}
+                style={{
+                  width: isPromptExpanded
+                    ? Math.min(
+                        Math.max(600, Math.round(window.innerWidth * 0.45)),
+                        Math.round(window.innerWidth * 0.55),
+                      )
+                    : sidebarWidth,
+                }}
+              >
                 <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
                 <div
                   role="separator"
