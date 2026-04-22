@@ -4,6 +4,7 @@ import {
   type PreviewLabels,
   buildReportInput,
   formatPreview,
+  parseIssueNumber,
   pickRecentReport,
   validateNotes,
 } from './ReportEventDialog';
@@ -68,11 +69,29 @@ describe('pickRecentReport', () => {
   it('returns a warning view model for a fresh report', () => {
     const now = 1_000_000;
     const result = pickRecentReport(
-      { reported: true, ts: now - 5 * 60_000, issueUrl: 'https://x/1' },
+      {
+        reported: true,
+        ts: now - 5 * 60_000,
+        issueUrl: 'https://github.com/owner/repo/issues/42',
+      },
       now,
       'en',
     );
-    expect(result).toEqual({ relative: '5 minutes ago', issueUrl: 'https://x/1' });
+    expect(result).toEqual({
+      relative: '5 minutes ago',
+      issueUrl: 'https://github.com/owner/repo/issues/42',
+      issueNumber: '42',
+    });
+  });
+
+  it('returns null issueNumber when URL has no /issues/ segment', () => {
+    const now = 1_000_000;
+    const result = pickRecentReport(
+      { reported: true, ts: now - 60_000, issueUrl: 'https://x/1' },
+      now,
+      'en',
+    );
+    expect(result?.issueNumber).toBeNull();
   });
 
   it('localizes the relative time into zh-CN', () => {
@@ -87,6 +106,44 @@ describe('pickRecentReport', () => {
     // it isn't Latin shorthand and isn't English.
     expect(result?.relative).not.toBe('5m');
     expect(result?.relative).not.toBe('5 minutes ago');
+  });
+});
+
+describe('parseIssueNumber', () => {
+  it('extracts the numeric id from a standard GitHub issue URL', () => {
+    expect(parseIssueNumber('https://github.com/owner/repo/issues/123')).toBe('123');
+  });
+
+  it('extracts the id even when trailing query/hash fragments are present', () => {
+    expect(parseIssueNumber('https://github.com/o/r/issues/7#comment-1')).toBe('7');
+    expect(parseIssueNumber('https://github.com/o/r/issues/7?foo=bar')).toBe('7');
+  });
+
+  it('returns null when the URL has no /issues/ segment', () => {
+    expect(parseIssueNumber('https://example.com/bug/1')).toBeNull();
+  });
+});
+
+describe('confirm-step translation', () => {
+  it('interpolates the seconds placeholder in both locales', async () => {
+    const en = (await import('@open-codesign/i18n/locales/en')).default as unknown as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const zh = (await import('@open-codesign/i18n/locales/zh-CN')).default as unknown as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const enValue = (en['diagnostics'] as Record<string, Record<string, unknown>>)['report']?.[
+      'confirmOpenAnyway'
+    ];
+    const zhValue = (zh['diagnostics'] as Record<string, Record<string, unknown>>)['report']?.[
+      'confirmOpenAnyway'
+    ];
+    expect(typeof enValue).toBe('string');
+    expect(typeof zhValue).toBe('string');
+    expect(String(enValue)).toContain('{{seconds}}');
+    expect(String(zhValue)).toContain('{{seconds}}');
   });
 });
 
@@ -145,7 +202,7 @@ describe('formatPreview', () => {
       { includePromptText: false, includePaths: false, includeUrls: false },
       LABELS,
     );
-    expect(out).toContain('Message: failed at <path omitted>');
+    expect(out).toContain('Message: failed at [path omitted]');
     expect(out).not.toContain('/Users/alice');
   });
 
@@ -199,7 +256,7 @@ describe('formatPreview', () => {
       { includePromptText: false, includePaths: false, includeUrls: false },
       LABELS,
     );
-    expect(out).toContain('Body head: see <url omitted> at <path omitted>');
+    expect(out).toContain('Body head: see [url omitted] at [path omitted]');
   });
 
   it('omits status row when upstream_status is null', () => {

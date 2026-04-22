@@ -844,3 +844,49 @@ describe('config:v1:import-opencode-config — merge logic', () => {
     await expect(handler?.({} as unknown)).rejects.toThrow(/importable API provider/i);
   });
 });
+
+describe('detectChatgptSubscription — non-ENOENT failure handling', () => {
+  it('returns true when auth.json has auth_mode: chatgpt', async () => {
+    const { detectChatgptSubscription } = await import('./onboarding-ipc');
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = join(tmpdir(), `codesign-subscription-${Date.now()}-${Math.random()}`);
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, 'auth.json');
+    await writeFile(path, JSON.stringify({ auth_mode: 'chatgpt' }), 'utf8');
+    await expect(detectChatgptSubscription(path)).resolves.toBe(true);
+  });
+
+  it('returns false when auth.json has a different auth_mode', async () => {
+    const { detectChatgptSubscription } = await import('./onboarding-ipc');
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = join(tmpdir(), `codesign-subscription-${Date.now()}-${Math.random()}`);
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, 'auth.json');
+    await writeFile(path, JSON.stringify({ OPENAI_API_KEY: 'sk-...' }), 'utf8');
+    await expect(detectChatgptSubscription(path)).resolves.toBe(false);
+  });
+
+  it('returns false when auth.json is absent (ENOENT is silent)', async () => {
+    const { detectChatgptSubscription } = await import('./onboarding-ipc');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const path = join(tmpdir(), `codesign-nonexistent-${Date.now()}-${Math.random()}.json`);
+    await expect(detectChatgptSubscription(path)).resolves.toBe(false);
+  });
+
+  it('returns false on malformed JSON without throwing', async () => {
+    const { detectChatgptSubscription } = await import('./onboarding-ipc');
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = join(tmpdir(), `codesign-malformed-${Date.now()}-${Math.random()}`);
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, 'auth.json');
+    await writeFile(path, '{"auth_mode":', 'utf8');
+    await expect(detectChatgptSubscription(path)).resolves.toBe(false);
+  });
+});

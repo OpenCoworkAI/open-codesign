@@ -11,6 +11,7 @@ import { ToastViewport } from './components/Toast';
 import { TopBar } from './components/TopBar';
 import { UpdateBanner } from './components/UpdateBanner';
 import { CommentsPanel } from './components/comment/CommentsPanel';
+import { ReportEventDialog } from './components/diagnostics/ReportEventDialog';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useUpdateWiring } from './hooks/useUpdateWiring';
 import { createUpdateStore } from './state/update-store';
@@ -41,6 +42,8 @@ export function App() {
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
   const sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
+  const activeReportEventId = useCodesignStore((s) => s.activeReportEventId);
+  const closeReportDialog = useCodesignStore((s) => s.closeReportDialog);
 
   const [prompt, setPrompt] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(() =>
@@ -255,6 +258,7 @@ export function App() {
       <DeleteDesignDialog />
       <ToastViewport />
       <CommentsPanel />
+      <ReportEventDialog eventId={activeReportEventId} onClose={closeReportDialog} />
     </div>
   );
 }

@@ -11,7 +11,8 @@
  * lines is fine", the duplication is intentional.
  */
 
-const API_KEY_RE = /(sk-[A-Za-z0-9]{20,}|[A-Fa-f0-9]{32,}|Bearer\s+[A-Za-z0-9._~+/=-]+)/g;
+const API_KEY_RE =
+  /(sk-[A-Za-z0-9-_]{20,}|AIzaSy[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|[A-Za-z0-9+/]{43}=|[A-Fa-f0-9]{32,}|Bearer\s+[A-Za-z0-9._~+/=-]+)/g;
 const REDACTION = '***REDACTED***';
 const BODY_HEAD_LIMIT = 512;
 

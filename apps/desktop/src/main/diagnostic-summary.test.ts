@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type SummaryInput,
   composeSummaryMarkdown,
+  mdInlineCode,
   redactPathsAndUrls,
 } from './diagnostic-summary';
 
@@ -127,7 +128,7 @@ describe('composeSummaryMarkdown', () => {
       baseInput({ event: baseEvent({ ts: eventTs }), timeline, includePaths: false }),
     );
     expect(md).not.toContain('/Users/alice/secret.md');
-    expect(md).toContain('<path omitted>');
+    expect(md).toContain('[path omitted]');
   });
 
   it('timeline data is scrubbed for prompt JSON when includePromptText=false', () => {
@@ -145,7 +146,7 @@ describe('composeSummaryMarkdown', () => {
       baseInput({ event: baseEvent({ ts: eventTs }), timeline, includePromptText: false }),
     );
     expect(md).not.toContain('super secret body');
-    expect(md).toContain('<prompt omitted>');
+    expect(md).toContain('[prompt omitted]');
   });
 
   it('timeline data is scrubbed for urls when includeUrls=false', () => {
@@ -161,7 +162,7 @@ describe('composeSummaryMarkdown', () => {
       baseInput({ event: baseEvent({ ts: eventTs }), timeline, includeUrls: false }),
     );
     expect(md).not.toContain('https://example.com/private');
-    expect(md).toContain('<url omitted>');
+    expect(md).toContain('[url omitted]');
   });
 
   it('renders upstream context for provider scope with all 4 fields', () => {
@@ -212,8 +213,8 @@ describe('composeSummaryMarkdown', () => {
     );
     expect(md).not.toContain('/Users/alice');
     expect(md).not.toContain('https://example.com');
-    expect(md).toContain('<path omitted>');
-    expect(md).toContain('<url omitted>');
+    expect(md).toContain('[path omitted]');
+    expect(md).toContain('[url omitted]');
   });
 
   it('redacts prompt-looking message when includePromptText is false', () => {
@@ -224,7 +225,7 @@ describe('composeSummaryMarkdown', () => {
         includePromptText: false,
       }),
     );
-    expect(md).toContain('<prompt omitted>');
+    expect(md).toContain('[prompt omitted]');
     expect(md).not.toContain('x'.repeat(250));
   });
 
@@ -236,7 +237,7 @@ describe('composeSummaryMarkdown', () => {
         includePromptText: false,
       }),
     );
-    expect(md).not.toContain('<prompt omitted>');
+    expect(md).not.toContain('[prompt omitted]');
     expect(md).toContain('请检查网络连接后重试');
   });
 
@@ -252,7 +253,7 @@ describe('composeSummaryMarkdown', () => {
     );
     expect(md).not.toContain('help me build X');
     expect(md).not.toContain('another secret body');
-    expect(md).toContain('<prompt omitted>');
+    expect(md).toContain('[prompt omitted]');
     expect(md).toContain('"model":"sonnet"');
   });
 
@@ -287,7 +288,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).not.toContain('C:\\Users\\alice');
-      expect(md).toContain('<path omitted>');
+      expect(md).toContain('[path omitted]');
     });
 
     it('redacts Windows forward-slash drive-letter paths (Electron/Node style)', () => {
@@ -298,7 +299,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).not.toContain('C:/Users/alice');
-      expect(md).toContain('<path omitted>');
+      expect(md).toContain('[path omitted]');
     });
 
     it('redacts UNC paths', () => {
@@ -309,7 +310,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).not.toContain('\\\\server\\share');
-      expect(md).toContain('<path omitted>');
+      expect(md).toContain('[path omitted]');
     });
 
     it('redacts ~/ home-relative paths', () => {
@@ -320,7 +321,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).not.toContain('~/foo/bar');
-      expect(md).toContain('<path omitted>');
+      expect(md).toContain('[path omitted]');
     });
 
     it('redacts /opt/homebrew and /root paths', () => {
@@ -343,7 +344,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).not.toContain('file:///Users/x');
-      expect(md).toContain('<url omitted>');
+      expect(md).toContain('[url omitted]');
     });
 
     it('redacts ws:// and wss:// URLs when includeUrls=false', () => {
@@ -366,7 +367,7 @@ describe('composeSummaryMarkdown', () => {
       );
       expect(md).toContain('2026/04/22');
       expect(md).toContain('1/2/3');
-      expect(md).not.toContain('<path omitted>');
+      expect(md).not.toContain('[path omitted]');
     });
 
     it('redacts macOS /var/folders temp paths', () => {
@@ -377,7 +378,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).not.toContain('/var/folders');
-      expect(md).toContain('<path omitted>');
+      expect(md).toContain('[path omitted]');
     });
 
     it('redacts /tmp paths', () => {
@@ -388,7 +389,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).not.toContain('/tmp/open-codesign-cache');
-      expect(md).toContain('<path omitted>');
+      expect(md).toContain('[path omitted]');
     });
 
     it('redacts /etc paths', () => {
@@ -399,7 +400,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).not.toContain('/etc/hosts');
-      expect(md).toContain('<path omitted>');
+      expect(md).toContain('[path omitted]');
     });
 
     it('redacts /private/var paths', () => {
@@ -410,7 +411,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).not.toContain('/private/var');
-      expect(md).toContain('<path omitted>');
+      expect(md).toContain('[path omitted]');
     });
 
     it('does NOT redact API-style paths like generate/v1/endpoint', () => {
@@ -421,7 +422,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).toContain('generate/v1/endpoint');
-      expect(md).not.toContain('<path omitted>');
+      expect(md).not.toContain('[path omitted]');
     });
 
     it('does NOT redact "10/30 ratio" style fractions', () => {
@@ -432,7 +433,7 @@ describe('composeSummaryMarkdown', () => {
         }),
       );
       expect(md).toContain('10/30 ratio');
-      expect(md).not.toContain('<path omitted>');
+      expect(md).not.toContain('[path omitted]');
     });
   });
 });
@@ -448,19 +449,56 @@ describe('redactPathsAndUrls granular toggles', () => {
     const out = redactPathsAndUrls(sample, { includePaths: false, includeUrls: true });
     expect(out).not.toContain('/Users/alice');
     expect(out).toContain('https://example.com/y');
-    expect(out).toContain('<path omitted>');
+    expect(out).toContain('[path omitted]');
   });
 
   it('redacts only urls when includePaths=true, includeUrls=false', () => {
     const out = redactPathsAndUrls(sample, { includePaths: true, includeUrls: false });
     expect(out).toContain('/Users/alice/x.ts');
     expect(out).not.toContain('https://example.com');
-    expect(out).toContain('<url omitted>');
+    expect(out).toContain('[url omitted]');
   });
 
   it('redacts both when both flags are false', () => {
     const out = redactPathsAndUrls(sample, { includePaths: false, includeUrls: false });
-    expect(out).toContain('<path omitted>');
-    expect(out).toContain('<url omitted>');
+    expect(out).toContain('[path omitted]');
+    expect(out).toContain('[url omitted]');
+  });
+});
+
+describe('mdInlineCode', () => {
+  it('wraps a plain string in single backticks', () => {
+    expect(mdInlineCode('hello world')).toBe('`hello world`');
+  });
+
+  it('escapes a single-backtick string by using double-backtick delimiters', () => {
+    expect(mdInlineCode('has `tick` inside')).toBe('``has `tick` inside``');
+  });
+
+  it('picks a delimiter longer than the longest embedded run', () => {
+    expect(mdInlineCode('pre ``` post')).toBe('````pre ``` post````');
+  });
+
+  it('pads when content starts or ends with a backtick', () => {
+    expect(mdInlineCode('`leading')).toBe('`` `leading ``');
+    expect(mdInlineCode('trailing`')).toBe('`` trailing` ``');
+  });
+});
+
+describe('composeSummaryMarkdown — Message field backtick safety', () => {
+  it('wraps Message in a code span even when it contains backticks, preserving Level and Transient', () => {
+    const md = composeSummaryMarkdown(
+      baseInput({
+        event: baseEvent({ message: 'error at `foo.bar()` in handler' }),
+      }),
+    );
+    expect(md).toContain('- Level: error');
+    expect(md).toContain('- Transient (retried and succeeded): no');
+    expect(md).toContain('- Message: ``error at `foo.bar()` in handler``');
+  });
+
+  it('still wraps a plain Message in a simple code span', () => {
+    const md = composeSummaryMarkdown(baseInput());
+    expect(md).toContain('- Message: `Request timed out`');
   });
 });

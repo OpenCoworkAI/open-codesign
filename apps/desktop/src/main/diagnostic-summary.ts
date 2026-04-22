@@ -25,9 +25,9 @@ export interface SummaryInput {
 
 const MAX_BYTES = 20 * 1024;
 const TRUNCATION_SUFFIX = '\n\n_(summary truncated to 20 KB — full bundle attached as zip)_';
-const PROMPT_OMITTED = '<prompt omitted>';
-const PATH_OMITTED = '<path omitted>';
-const URL_OMITTED = '<url omitted>';
+const PROMPT_OMITTED = '[prompt omitted]';
+const PATH_OMITTED = '[path omitted]';
+const URL_OMITTED = '[url omitted]';
 const PATH_REGEX =
   /(?:(?:\b[A-Za-z]:[\\/]|\\\\)[^\s'"<>`]+|(?:[/\\](?:Users|home|root|opt|Applications|var|tmp|etc|private))[/\\][^\s'"<>`]+|~[/\\][^\s'"<>`]+)/g;
 const URL_REGEX = /(?:https?|wss?|file):\/\/[^\s'"<>]+/g;
@@ -60,7 +60,7 @@ export function composeSummaryMarkdown(input: SummaryInput): string {
   lines.push('');
   lines.push('## Error');
   lines.push(`- Code: \`${event.code}\``);
-  lines.push(`- Message: ${message}`);
+  lines.push(`- Message: ${mdInlineCode(message)}`);
   lines.push(`- Level: ${event.level}`);
   lines.push(`- Transient (retried and succeeded): ${transient}`);
   lines.push('');
@@ -204,9 +204,9 @@ function renderLogTail(input: SummaryInput): string {
 
 export function scrubPromptInLine(line: string): string {
   return line
-    .replace(/("prompt"\s*:\s*)"(?:[^"\\]|\\.)*"/g, '$1"<prompt omitted>"')
-    .replace(/(\bprompt\s*[:=]\s*)"(?:[^"\\]|\\.)*"/g, '$1"<prompt omitted>"')
-    .replace(/(\bprompt\s*[:=]\s*)`(?:[^`\\]|\\.)*`/g, '$1`<prompt omitted>`');
+    .replace(/("prompt"\s*:\s*)"(?:[^"\\]|\\.)*"/g, '$1"[prompt omitted]"')
+    .replace(/(\bprompt\s*[:=]\s*)"(?:[^"\\]|\\.)*"/g, '$1"[prompt omitted]"')
+    .replace(/(\bprompt\s*[:=]\s*)`(?:[^`\\]|\\.)*`/g, '$1`[prompt omitted]`');
 }
 
 function renderNotes(notes: string): string {
@@ -249,6 +249,21 @@ function looksLikePrompt(text: string): boolean {
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return `${text.slice(0, max)}…`;
+}
+
+/**
+ * Wrap a string in a markdown inline-code span using a backtick run that
+ * doesn't collide with anything inside the string. Prevents a stray
+ * backtick in a raw error message from opening a code span that eats the
+ * lines below it on GitHub.
+ */
+export function mdInlineCode(s: string): string {
+  if (!s.includes('`')) return `\`${s}\``;
+  const runs = s.match(/`+/g) ?? [];
+  const longest = runs.reduce((n, r) => Math.max(n, r.length), 0);
+  const delim = '`'.repeat(longest + 1);
+  const pad = s.startsWith('`') || s.endsWith('`') ? ' ' : '';
+  return `${delim}${pad}${s}${pad}${delim}`;
 }
 
 function asString(value: unknown): string | undefined {

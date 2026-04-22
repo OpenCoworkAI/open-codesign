@@ -71,6 +71,18 @@ describe('computeFingerprint', () => {
     expect(() => computeFingerprint({ errorCode: 'X', stack: undefined })).not.toThrow();
     expect(() => computeFingerprint({ errorCode: 'X', stack: '' })).not.toThrow();
   });
+
+  it('distinct messages without stack produce distinct fingerprints', () => {
+    const a = computeFingerprint({ errorCode: 'RENDERER_ERROR', stack: undefined, message: 'a' });
+    const b = computeFingerprint({ errorCode: 'RENDERER_ERROR', stack: undefined, message: 'b' });
+    expect(a).not.toBe(b);
+  });
+
+  it('same message without stack produces the same fingerprint', () => {
+    const a = computeFingerprint({ errorCode: 'RENDERER_ERROR', stack: undefined, message: 'x' });
+    const b = computeFingerprint({ errorCode: 'RENDERER_ERROR', stack: '', message: 'x' });
+    expect(a).toBe(b);
+  });
 });
 
 describe('normalizeFrame', () => {

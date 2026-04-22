@@ -25,9 +25,9 @@ const PATH_REGEX =
 const URL_REGEX = /(?:https?|wss?|file):\/\/[^\s'"<>]+/g;
 
 /** Byte-identical to main's diagnostic-summary.ts constants. */
-export const PROMPT_OMITTED = '<prompt omitted>';
-export const PATH_OMITTED = '<path omitted>';
-export const URL_OMITTED = '<url omitted>';
+export const PROMPT_OMITTED = '[prompt omitted]';
+export const PATH_OMITTED = '[path omitted]';
+export const URL_OMITTED = '[url omitted]';
 
 export function scrubPromptInLine(s: string): string {
   return s

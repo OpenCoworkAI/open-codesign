@@ -29,11 +29,17 @@
 export interface FingerprintInput {
   errorCode: string;
   stack: string | undefined;
+  /** Used as a fallback signal when stack is empty, to avoid collapsing
+      all stack-less errors to the same fingerprint. */
+  message?: string;
 }
 
 export function computeFingerprint(input: FingerprintInput): string {
   const frames = extractTopFrames(input.stack, 3).map(normalizeFrame);
-  const basis = `${input.errorCode}|${frames.join('\n')}`;
+  const basis =
+    frames.length > 0
+      ? `${input.errorCode}|${frames.join('\n')}`
+      : `${input.errorCode}|msg:${input.message ?? ''}`;
   return hash32Hex(basis);
 }
 

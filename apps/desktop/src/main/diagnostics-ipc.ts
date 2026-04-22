@@ -14,7 +14,8 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { join, sep as pathSep } from 'node:path';
 import {
   type ActionTimelineEntry,
   CodesignError,
@@ -285,8 +286,63 @@ function parseRecordRendererErrorInput(raw: unknown): {
 /** Regex that matches common API key shapes; used as a secondary pass so keys
  *  that leak into unexpected fields (e.g. `notes = "my sk-abcdef..."`) still
  *  get masked. Format-based so it is necessarily narrow — the primary defense
- *  is field-based redaction below. */
-const API_KEY_RE = /(sk-[a-zA-Z0-9]{20,}|[a-f0-9]{32,})/g;
+ *  is field-based redaction below. The alternation covers:
+ *    - OpenAI/Anthropic-style `sk-...`
+ *    - Google Gemini `AIzaSy...`
+ *    - AWS access key `AKIA...`
+ *    - Azure-shape 43-char base64 ending in `=` (slightly greedy but rare)
+ *    - Hex-32+ (generic hash/token)
+ *    - `Bearer <token>` headers
+ */
+export const API_KEY_RE =
+  /(sk-[A-Za-z0-9-_]{20,}|AIzaSy[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|[A-Za-z0-9+/]{43}=|[a-f0-9]{32,}|Bearer\s+[A-Za-z0-9._~+/=-]+)/g;
+
+/**
+ * Replace the user's home directory prefix in a path with `~` so bug reports
+ * don't leak the OS account name. Handles both POSIX and Windows separators.
+ */
+export function aliasHome(p: string): string {
+  const home = homedir();
+  if (!home) return p;
+  if (p === home) return '~';
+  if (p.startsWith(`${home}/`)) return `~${p.slice(home.length)}`;
+  if (p.startsWith(`${home}\\`)) return `~${p.slice(home.length)}`;
+  return p;
+}
+
+/**
+ * Convert `os.release()` into a user-recognizable marketing name when we can.
+ *   - Windows NT build → "Windows 10" / "Windows 11" + the raw build in parens.
+ *   - macOS / Linux: leave as-is (Darwin kernel version is what maintainers
+ *     are used to, and Linux distro mapping is a rabbit hole).
+ */
+export function prettyPlatformVersion(platform: NodeJS.Platform, osRelease: string): string {
+  if (platform !== 'win32') return osRelease;
+  const match = /^10\.0\.(\d+)/.exec(osRelease);
+  if (!match) return osRelease;
+  const build = Number(match[1]);
+  if (build >= 22000) return `Windows 11 (${osRelease})`;
+  if (build >= 10240) return `Windows 10 (${osRelease})`;
+  return osRelease;
+}
+
+/**
+ * Apply the user's redaction toggles to free-form text — the same pipeline
+ * `summary.md` uses — so fields pre-filled into a GitHub issue URL honor the
+ * toggles rather than dumping raw log tails into browser history / referrer.
+ */
+function redactForIssueUrl(
+  text: string,
+  opts: { includePromptText: boolean; includePaths: boolean; includeUrls: boolean },
+): string {
+  let out = text;
+  if (!opts.includePromptText) out = scrubPromptInLine(out);
+  out = redactPathsAndUrls(out, {
+    includePaths: opts.includePaths,
+    includeUrls: opts.includeUrls,
+  });
+  return out;
+}
 
 /** Mask the VALUE of any TOML line whose key looks sensitive, regardless of
  *  the value's format. Google (AIzaSy...), Azure base64, DeepSeek, and future
@@ -302,7 +358,10 @@ export function redactSensitiveTomlFields(s: string): string {
   );
 }
 
-async function readConfigRedacted(): Promise<string> {
+export async function readConfigRedacted(opts: {
+  includePaths: boolean;
+  includeUrls: boolean;
+}): Promise<string> {
   try {
     const raw = await readFile(configPath(), 'utf8');
     // Strip prompt / history fields first (multi-line values between quotes).
@@ -310,7 +369,11 @@ async function readConfigRedacted(): Promise<string> {
     // Field-based redaction is the primary defense; format-based is a fallback
     // for keys that leak into non-sensitive-looking fields.
     const fieldMasked = redactSensitiveTomlFields(noPrompts);
-    return fieldMasked.replace(API_KEY_RE, '***REDACTED***');
+    const keyMasked = fieldMasked.replace(API_KEY_RE, '***REDACTED***');
+    // Paths (baseUrl, designSystem.rootPath, …) and URLs (including ones with
+    // embedded credentials) only get omitted if the caller hasn't explicitly
+    // opted in. The filename says "redacted" — we must not lie about it.
+    return redactPathsAndUrls(keyMasked, opts);
   } catch {
     return '(config not readable)';
   }
@@ -376,7 +439,10 @@ export async function buildBundle(opts: {
     })
     .join('\n');
 
-  const configContent = await readConfigRedacted();
+  const configContent = await readConfigRedacted({
+    includePaths: opts.includePaths,
+    includeUrls: opts.includeUrls,
+  });
 
   const meta = JSON.stringify(
     {
@@ -456,13 +522,34 @@ export function buildIssueUrlWithTemplate(params: {
   platform: NodeJS.Platform;
   platformVersion?: string;
   logTail: string[];
+  notes?: string;
+  includePromptText?: boolean;
+  includePaths?: boolean;
+  includeUrls?: boolean;
 }): string {
-  const { event, bundlePath, appVersion, platform, platformVersion, logTail } = params;
+  const {
+    event,
+    bundlePath,
+    appVersion,
+    platform,
+    platformVersion,
+    logTail,
+    notes,
+    includePromptText = false,
+    includePaths = false,
+    includeUrls = false,
+  } = params;
+  const includeOpts = { includePromptText, includePaths, includeUrls };
 
   const title = `[Bug]: ${event.code} (fp: ${event.fingerprint})`;
 
   // actual — the short human explanation. Combine message + upstream status/code
-  // so the triage reader sees the headline without opening the bundle.
+  // so the triage reader sees the headline without opening the bundle. User
+  // notes (if any) ride along so triagers see them in the form without needing
+  // to unzip the bundle. Every component is pushed through the same redaction
+  // pipeline the summary.md uses so disabled toggles are honored here too —
+  // browser history, referrer, and shell history would otherwise retain raw
+  // paths / URLs / prompts.
   const actualParts: string[] = [event.message];
   if (event.scope === 'provider' && event.context) {
     const status = event.context['upstream_status'];
@@ -470,14 +557,25 @@ export function buildIssueUrlWithTemplate(params: {
     if (status != null) actualParts.push(`upstream_status=${String(status)}`);
     if (requestId != null) actualParts.push(`upstream_request_id=${String(requestId)}`);
   }
-  const actual = truncate(actualParts.join(' — '), ACTUAL_MAX);
+  const trimmedNotes = typeof notes === 'string' ? notes.trim() : '';
+  if (trimmedNotes.length > 0) {
+    actualParts.push(`user notes: ${trimmedNotes}`);
+  }
+  const actual = truncate(redactForIssueUrl(actualParts.join(' — '), includeOpts), ACTUAL_MAX);
 
-  // logs — fenced so GitHub renders them as a code block. Capped at LOGS_MAX
-  // up front; may be trimmed further below if the whole URL is too long.
-  let logs = fenceLogs(logTail, LOGS_MAX);
+  // logs — fenced so GitHub renders them as a code block. Redact per-line
+  // BEFORE joining so path/url scrubbers can match on whole lines. Capped at
+  // LOGS_MAX up front; may be trimmed further below if the whole URL is too
+  // long.
+  const redactedLogTail = logTail.map((line) => redactForIssueUrl(line, includeOpts));
+  let logs = fenceLogs(redactedLogTail, LOGS_MAX);
 
+  // Alias the user's home directory out of the bundle path — the `diagnostics`
+  // field ends up in browser history and referrer, and `/Users/<username>/...`
+  // leaks the OS account name on every click-through.
+  const displayBundlePath = aliasHome(bundlePath);
   const diagnostics = truncate(
-    `Bundle saved locally at ${bundlePath}. Attach it to this issue after submitting.`,
+    `Bundle saved locally at ${displayBundlePath}. Attach it to this issue after submitting.`,
     DIAGNOSTICS_MAX,
   );
 
@@ -624,7 +722,24 @@ export function registerDiagnosticsIpc(db: Database | null): void {
         'IPC_BAD_INPUT',
       );
     }
-    shell.showItemInFolder(raw);
+    // Renderer can only reveal paths the app itself produces: config files,
+    // log files, and diagnostic bundles saved to Downloads. Without this gate
+    // a compromised renderer could point Finder/Explorer at `/etc/shadow` or
+    // `~/.ssh/id_rsa`.
+    const target = raw;
+    const allowedRoots = [configDir(), logsDir(), app.getPath('downloads')];
+    const isAllowed = allowedRoots.some((root) => {
+      if (!root) return false;
+      if (target === root) return true;
+      return target.startsWith(`${root}${pathSep}`) || target.startsWith(`${root}/`);
+    });
+    if (!isAllowed) {
+      throw new CodesignError(
+        'diagnostics:v1:showItemInFolder path outside allowlist',
+        'IPC_BAD_INPUT',
+      );
+    }
+    shell.showItemInFolder(target);
   });
 
   ipcMain.handle('diagnostics:v1:listEvents', (_e: unknown, raw: unknown): ListEventsResult => {
@@ -679,8 +794,12 @@ export function registerDiagnosticsIpc(db: Database | null): void {
         bundlePath,
         appVersion: app.getVersion(),
         platform: process.platform,
-        platformVersion: os.release(),
+        platformVersion: prettyPlatformVersion(process.platform, os.release()),
         logTail: recentLogTail,
+        notes: input.notes,
+        includePromptText: input.includePromptText,
+        includePaths: input.includePaths,
+        includeUrls: input.includeUrls,
       });
 
       try {

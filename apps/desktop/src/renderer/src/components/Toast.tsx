@@ -1,9 +1,8 @@
 import { useT } from '@open-codesign/i18n';
-import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { CheckCircle2, Info, Loader2, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useCodesignStore } from '../store';
 import type { Toast as ToastModel, ToastVariant } from '../store';
-import { ReportEventDialog } from './diagnostics/ReportEventDialog';
 
 export function useToast() {
   const push = useCodesignStore((s) => s.pushToast);
@@ -44,11 +43,11 @@ export function scheduleAutoDismiss(
 function ToastItem({ toast }: { toast: ToastModel }) {
   const dismiss = useCodesignStore((s) => s.dismissToast);
   const resolveToastEventId = useCodesignStore((s) => s.resolveToastEventId);
+  const openReportDialog = useCodesignStore((s) => s.openReportDialog);
   const t = useT();
   const Icon = iconFor[toast.variant];
   const isError = toast.variant === 'error';
   const autoMs = AUTO_DISMISS_MS[toast.variant];
-  const [reportId, setReportId] = useState<number | null>(null);
   const [resolving, setResolving] = useState(false);
   // `null` = not attempted yet; `number` = resolved; `'none'` = resolved to no match.
   const [resolved, setResolved] = useState<number | 'none' | null>(null);
@@ -82,7 +81,7 @@ function ToastItem({ toast }: { toast: ToastModel }) {
         return;
       }
       setResolved(id);
-      setReportId(id);
+      openReportDialog(id);
     } finally {
       setResolving(false);
     }
@@ -131,8 +130,9 @@ function ToastItem({ toast }: { toast: ToastModel }) {
             onClick={() => void openReport()}
             disabled={disableReport}
             title={reportTitle}
-            className="h-6 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[var(--color-text-secondary)]"
+            className="h-6 px-2 inline-flex items-center gap-1 rounded-[var(--radius-sm)] text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[var(--color-text-secondary)]"
           >
+            {resolving ? <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" /> : null}
             {t('toast.error.report')}
           </button>
         ) : null}
@@ -154,7 +154,6 @@ function ToastItem({ toast }: { toast: ToastModel }) {
           style={{ animationDuration: `${autoMs}ms` }}
         />
       ) : null}
-      {isError ? <ReportEventDialog eventId={reportId} onClose={() => setReportId(null)} /> : null}
     </div>
   );
 }

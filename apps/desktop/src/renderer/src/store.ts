@@ -233,6 +233,13 @@ interface CodesignState {
    *  event would be worse than disabling the button. */
   resolveToastEventId: (toast: Toast) => Promise<number | null>;
 
+  /** Id of the diagnostic event whose Report dialog is currently open, or null
+   *  if no dialog is active. Hoisted to the store so only one dialog ever
+   *  mounts — multiple error toasts can't stack overlapping modals. */
+  activeReportEventId: number | null;
+  openReportDialog: (eventId: number) => void;
+  closeReportDialog: () => void;
+
   loadConfig: () => Promise<void>;
   completeOnboarding: (next: OnboardingState) => void;
   sendPrompt: (input: {
@@ -1123,6 +1130,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   unreadErrorCount: 0,
   lastReadTs: 0,
   diagnosticsPrefsHydrated: false,
+  activeReportEventId: null,
 
   clearIframeErrors() {
     set({ iframeErrors: [] });
@@ -2437,5 +2445,12 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     await get().refreshDiagnosticEvents();
     const match = get().recentEvents.find((e) => e.runId === toast.runId);
     return match?.id ?? null;
+  },
+
+  openReportDialog(eventId) {
+    set({ activeReportEventId: eventId });
+  },
+  closeReportDialog() {
+    set({ activeReportEventId: null });
   },
 }));

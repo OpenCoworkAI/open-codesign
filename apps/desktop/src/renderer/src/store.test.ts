@@ -774,3 +774,86 @@ describe('useCodesignStore liveRects', () => {
     expect(useCodesignStore.getState().liveRects).toBe(map);
   });
 });
+
+describe('useCodesignStore pushToast -> recordRendererError', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
+
+  it('records the error toast via IPC with code + message + runId', async () => {
+    const recordRendererError = vi.fn().mockResolvedValue({ eventId: 42 });
+    vi.stubGlobal('window', {
+      codesign: {
+        diagnostics: { recordRendererError },
+      },
+    });
+
+    useCodesignStore.getState().pushToast({
+      variant: 'error',
+      title: 'Boom',
+      description: 'Something broke',
+      code: 'PROVIDER_ERROR',
+      runId: 'run-xyz',
+    });
+
+    // Allow the fire-and-forget promise to flush.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(recordRendererError).toHaveBeenCalledTimes(1);
+    expect(recordRendererError).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      code: 'PROVIDER_ERROR',
+      scope: 'renderer',
+      message: 'Something broke',
+      runId: 'run-xyz',
+    });
+  });
+
+  it('defaults code to RENDERER_ERROR and uses title when description is absent', async () => {
+    const recordRendererError = vi.fn().mockResolvedValue({ eventId: null });
+    vi.stubGlobal('window', {
+      codesign: {
+        diagnostics: { recordRendererError },
+      },
+    });
+
+    useCodesignStore.getState().pushToast({
+      variant: 'error',
+      title: 'Plain failure',
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(recordRendererError).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      code: 'RENDERER_ERROR',
+      scope: 'renderer',
+      message: 'Plain failure',
+    });
+  });
+
+  it('does not call recordRendererError for non-error toasts', async () => {
+    const recordRendererError = vi.fn();
+    vi.stubGlobal('window', {
+      codesign: {
+        diagnostics: { recordRendererError },
+      },
+    });
+
+    useCodesignStore.getState().pushToast({ variant: 'info', title: 'hello' });
+    await Promise.resolve();
+    expect(recordRendererError).not.toHaveBeenCalled();
+  });
+});
+
+describe('useCodesignStore report dialog slice', () => {
+  it('openReportDialog sets activeReportEventId and closeReportDialog clears it', () => {
+    useCodesignStore.setState({ activeReportEventId: null });
+    useCodesignStore.getState().openReportDialog(7);
+    expect(useCodesignStore.getState().activeReportEventId).toBe(7);
+    useCodesignStore.getState().closeReportDialog();
+    expect(useCodesignStore.getState().activeReportEventId).toBeNull();
+  });
+});

@@ -20,6 +20,17 @@ interface IncludeFlags {
 export interface RecentReportWarning {
   relative: string;
   issueUrl: string;
+  issueNumber: string | null;
+}
+
+/**
+ * Extract the GitHub issue number from a URL like
+ * `https://github.com/owner/repo/issues/123`. Returns null when the URL
+ * doesn't match — callers fall back to the no-number warning variant.
+ */
+export function parseIssueNumber(issueUrl: string): string | null {
+  const match = issueUrl.match(/\/issues\/(\d+)/);
+  return match?.[1] ?? null;
 }
 
 /**
@@ -35,10 +46,15 @@ export function pickRecentReport(
 ): RecentReportWarning | null {
   if (!result || !result.reported) return null;
   if (typeof result.ts !== 'number' || typeof result.issueUrl !== 'string') return null;
-  return { relative: formatRelativeTime(result.ts, now, locale), issueUrl: result.issueUrl };
+  return {
+    relative: formatRelativeTime(result.ts, now, locale),
+    issueUrl: result.issueUrl,
+    issueNumber: parseIssueNumber(result.issueUrl),
+  };
 }
 
 const MAX_NOTES = 2000;
+const CONFIRM_SECONDS = 60;
 
 export function validateNotes(notes: string): boolean {
   return notes.length <= MAX_NOTES;
@@ -167,7 +183,9 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
   // within 60s actually submits. Prevents the repeat-submit pattern we saw in
   // the field (6 reported entries for one fingerprint in minutes).
   const [confirmingDuplicate, setConfirmingDuplicate] = useState(false);
+  const [confirmSecondsLeft, setConfirmSecondsLeft] = useState(CONFIRM_SECONDS);
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
@@ -187,6 +205,11 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
         clearTimeout(confirmTimeoutRef.current);
         confirmTimeoutRef.current = null;
       }
+      if (confirmIntervalRef.current !== null) {
+        clearInterval(confirmIntervalRef.current);
+        confirmIntervalRef.current = null;
+      }
+      setConfirmSecondsLeft(CONFIRM_SECONDS);
     }
   }, [eventId]);
 
@@ -259,7 +282,7 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
   async function submit(kind: 'open' | 'copy') {
     if (eventId === null) return;
     if (!validateNotes(notes)) {
-      setErr(`notes > ${MAX_NOTES} chars`);
+      setErr(t('diagnostics.report.error.notesTooLong'));
       return;
     }
     // Two-step confirm for 'open' when a recent duplicate exists. The first
@@ -267,38 +290,66 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
     // click within 60s actually submits.
     if (kind === 'open' && recentWarning && !confirmingDuplicate) {
       setConfirmingDuplicate(true);
+      setConfirmSecondsLeft(CONFIRM_SECONDS);
       if (confirmTimeoutRef.current !== null) clearTimeout(confirmTimeoutRef.current);
+      if (confirmIntervalRef.current !== null) clearInterval(confirmIntervalRef.current);
       confirmTimeoutRef.current = setTimeout(() => {
         setConfirmingDuplicate(false);
+        setConfirmSecondsLeft(CONFIRM_SECONDS);
         confirmTimeoutRef.current = null;
-      }, 60_000);
+        if (confirmIntervalRef.current !== null) {
+          clearInterval(confirmIntervalRef.current);
+          confirmIntervalRef.current = null;
+        }
+      }, CONFIRM_SECONDS * 1000);
+      confirmIntervalRef.current = setInterval(() => {
+        setConfirmSecondsLeft((s) => (s > 1 ? s - 1 : 1));
+      }, 1000);
       return;
     }
     setBusy(true);
     setErr(null);
     try {
       const result = await reportDiagnosticEvent(buildReportInput(eventId, notes, include));
-      pushToast({
-        variant: 'info',
-        title: t('diagnostics.report.bundleSavedTitle'),
-        description: `${t('diagnostics.report.bundleSavedDescription')} ${result.bundlePath}`,
-        action: {
-          label: t('diagnostics.report.revealBundle'),
-          onClick: () => {
-            void window.codesign?.diagnostics?.showItemInFolder?.(result.bundlePath);
-          },
-        },
-      });
       if (kind === 'open') {
+        // Await the external open BEFORE surfacing the "bundle saved" toast so
+        // a failing `openExternal` doesn't pair a green "saved" with a red error.
         await window.codesign?.openExternal?.(result.issueUrl);
+        pushToast({
+          variant: 'info',
+          title: t('diagnostics.report.bundleSavedTitle'),
+          description: `${t('diagnostics.report.bundleSavedDescription')} ${result.bundlePath}`,
+          action: {
+            label: t('diagnostics.report.revealBundle'),
+            onClick: () => {
+              void window.codesign?.diagnostics?.showItemInFolder?.(result.bundlePath);
+            },
+          },
+        });
         onClose();
       } else {
         await navigator.clipboard.writeText(result.summaryMarkdown);
+        pushToast({
+          variant: 'info',
+          title: t('diagnostics.report.bundleSavedTitle'),
+          description: `${t('diagnostics.report.bundleSavedDescription')} ${result.bundlePath}`,
+          action: {
+            label: t('diagnostics.report.revealBundle'),
+            onClick: () => {
+              void window.codesign?.diagnostics?.showItemInFolder?.(result.bundlePath);
+            },
+          },
+        });
         setCopied(true);
         setTimeout(() => onClose(), 800);
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      const raw = e instanceof Error ? e.message : String(e);
+      if (raw.includes('notes') && raw.includes('2000')) {
+        setErr(t('diagnostics.report.error.notesTooLong'));
+      } else {
+        setErr(t('diagnostics.report.error.generic'));
+      }
       setBusy(false);
     }
   }
@@ -319,7 +370,7 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
       <div
         ref={dialogRef}
         role="document"
-        className="w-full max-w-lg rounded-[var(--radius-2xl)] bg-[var(--color-background)] border border-[var(--color-border)] shadow-[var(--shadow-elevated)] p-6 space-y-4 animate-[panel-in_160ms_ease-out]"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-[var(--radius-2xl)] bg-[var(--color-background)] border border-[var(--color-border)] shadow-[var(--shadow-elevated)] p-6 space-y-4 animate-[panel-in_160ms_ease-out]"
       >
         <h3 className="text-[var(--text-md)] font-medium text-[var(--color-text-primary)]">
           {t('diagnostics.report.title')}
@@ -374,7 +425,14 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
               <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 space-y-2">
                 <p className="text-[var(--text-sm)] text-[var(--color-text-primary)]">
                   <span aria-hidden="true">⚠️ </span>
-                  {t('diagnostics.report.recentlyReported', { relative: recentWarning.relative })}
+                  {recentWarning.issueNumber
+                    ? t('diagnostics.report.recentlyReported', {
+                        relative: recentWarning.relative,
+                        issueNumber: recentWarning.issueNumber,
+                      })
+                    : t('diagnostics.report.recentlyReportedNoNumber', {
+                        relative: recentWarning.relative,
+                      })}
                 </p>
                 <div className="flex items-center gap-3 text-[var(--text-sm)]">
                   <a
@@ -494,7 +552,7 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
                 className="h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--text-sm)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 {confirmingDuplicate
-                  ? t('diagnostics.report.confirmOpenAnyway')
+                  ? t('diagnostics.report.confirmOpenAnyway', { seconds: confirmSecondsLeft })
                   : t('diagnostics.report.openIssue')}
               </button>
             </div>

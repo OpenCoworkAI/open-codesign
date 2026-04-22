@@ -128,7 +128,13 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }: { url: string }) => {
-    void shell.openExternal(url);
+    // Gate `window.open(...)` through the same allowlist as
+    // `codesign:v1:open-external`, otherwise any renderer path that triggers
+    // a new-window event could coerce the main process into opening an
+    // attacker-controlled URL.
+    if (isAllowedExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
     return { action: 'deny' };
   });
 

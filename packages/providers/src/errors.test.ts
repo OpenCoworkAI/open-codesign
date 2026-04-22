@@ -87,4 +87,21 @@ describe('normalizeProviderError', () => {
     const result = normalizeProviderError(err, 'openai', 0);
     expect(result.upstream_request_id).toBe('req_xyz');
   });
+
+  it('redacts Google / AWS / Azure key shapes in messages', () => {
+    // Obviously-fake placeholder shapes — matched by the regex, won't trigger
+    // GitHub push-protection on realistic-looking secrets.
+    const samples = [
+      'error: AIzaSy000000000000000000000000000000000000 leaked',
+      'aws key AKIA0000000000000000 in the body',
+      `azure token ${'A'.repeat(43)}= found`,
+    ];
+    for (const raw of samples) {
+      const err = { message: raw };
+      const result = normalizeProviderError(err, 'generic', 0);
+      expect(result.upstream_message).toContain('***REDACTED***');
+      expect(result.upstream_message).not.toContain('AIzaSy0000');
+      expect(result.upstream_message).not.toContain('AKIA0000');
+    }
+  });
 });

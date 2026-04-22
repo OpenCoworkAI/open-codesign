@@ -48,7 +48,11 @@ vi.mock('zip-lib', async () => {
 });
 
 import {
+  API_KEY_RE,
+  aliasHome,
   buildIssueUrlWithTemplate,
+  prettyPlatformVersion,
+  readConfigRedacted,
   redactSensitiveTomlFields,
   registerDiagnosticsIpc,
 } from './diagnostics-ipc';
@@ -508,8 +512,8 @@ describe('diagnostics bundle main.log scrubbing', () => {
     expect(mainLog).not.toContain('/Users/alice');
     expect(mainLog).not.toContain('/var/folders');
     expect(mainLog).not.toContain('https://example.com');
-    expect(mainLog).toContain('<path omitted>');
-    expect(mainLog).toContain('<url omitted>');
+    expect(mainLog).toContain('[path omitted]');
+    expect(mainLog).toContain('[url omitted]');
   });
 
   it('bundle main.log preserves prompt JSON when includePromptText=true', async () => {
@@ -520,7 +524,7 @@ describe('diagnostics bundle main.log scrubbing', () => {
       includeUrls: true,
     });
     expect(mainLog).toContain('"prompt":"build me a rocket"');
-    expect(mainLog).not.toContain('<prompt omitted>');
+    expect(mainLog).not.toContain('[prompt omitted]');
   });
 
   it('bundle main.log scrubs prompt JSON when includePromptText=false', async () => {
@@ -531,13 +535,15 @@ describe('diagnostics bundle main.log scrubbing', () => {
       includeUrls: true,
     });
     expect(mainLog).not.toContain('build me a rocket');
-    expect(mainLog).toContain('<prompt omitted>');
+    expect(mainLog).toContain('[prompt omitted]');
   });
 });
 
 describe('redactSensitiveTomlFields', () => {
   it('masks google api_key=AIzaSy...', () => {
-    const input = 'api_key = "AIzaSyA1B2C3D4E5F6G7H8I9J0KLMNOPQRSTUVWX"';
+    // Obviously-fake shape (all Z/0/9 placeholders) — still matches the regex,
+    // doesn't trip GitHub secret scanning.
+    const input = 'api_key = "AIzaSy000000000000000000000000000000000000"';
     expect(redactSensitiveTomlFields(input)).toBe('api_key = "***REDACTED***"');
   });
 
@@ -593,5 +599,192 @@ describe('redactSensitiveTomlFields', () => {
   it('masks auth_token and credential field aliases', () => {
     expect(redactSensitiveTomlFields('auth_token = "x"')).toBe('auth_token = "***REDACTED***"');
     expect(redactSensitiveTomlFields('credential = "y"')).toBe('credential = "***REDACTED***"');
+  });
+});
+
+describe('buildIssueUrlWithTemplate privacy pipeline', () => {
+  function makeEvent(
+    overrides: Partial<{ message: string; code: string; fingerprint: string }> = {},
+  ) {
+    return {
+      id: 1,
+      schemaVersion: 1 as const,
+      ts: 0,
+      level: 'error' as const,
+      code: overrides.code ?? 'TEST_CODE',
+      scope: 'renderer:app',
+      runId: undefined,
+      fingerprint: overrides.fingerprint ?? 'fp-test',
+      message: overrides.message ?? 'boom',
+      stack: undefined,
+      transient: false,
+      count: 1,
+      context: undefined,
+    };
+  }
+
+  it('redacts paths from the actual field when includePaths=false', () => {
+    const url = buildIssueUrlWithTemplate({
+      event: makeEvent({ message: 'failed to read /Users/alice/secret/file.ts' }),
+      bundlePath: '/tmp/bundle.zip',
+      appVersion: '1.0.0',
+      platform: 'darwin',
+      logTail: [],
+      includePromptText: false,
+      includePaths: false,
+      includeUrls: false,
+    });
+    const actual = new URL(url).searchParams.get('actual') ?? '';
+    expect(actual).not.toContain('/Users/alice');
+    expect(actual).toContain('[path omitted]');
+  });
+
+  it('redacts prompt JSON from the logs field when includePromptText=false', () => {
+    const url = buildIssueUrlWithTemplate({
+      event: makeEvent(),
+      bundlePath: '/tmp/bundle.zip',
+      appVersion: '1.0.0',
+      platform: 'darwin',
+      logTail: ['[00:00] generate data={"prompt":"build me a rocket"}'],
+      includePromptText: false,
+      includePaths: true,
+      includeUrls: true,
+    });
+    const logs = new URL(url).searchParams.get('logs') ?? '';
+    expect(logs).not.toContain('build me a rocket');
+    expect(logs).toContain('[prompt omitted]');
+  });
+
+  it('aliases bundlePath under $HOME to ~/Downloads in the diagnostics field', async () => {
+    const os = await import('node:os');
+    const home = os.homedir();
+    const url = buildIssueUrlWithTemplate({
+      event: makeEvent(),
+      bundlePath: `${home}/Downloads/open-codesign-diagnostics-abc.zip`,
+      appVersion: '1.0.0',
+      platform: 'darwin',
+      logTail: [],
+    });
+    const diagnostics = new URL(url).searchParams.get('diagnostics') ?? '';
+    expect(diagnostics).toContain('~/Downloads/open-codesign-diagnostics-abc.zip');
+    expect(diagnostics).not.toContain(home);
+  });
+
+  it('includes user notes in the actual field when provided', () => {
+    const url = buildIssueUrlWithTemplate({
+      event: makeEvent({ message: 'boom' }),
+      bundlePath: '/tmp/bundle.zip',
+      appVersion: '1.0.0',
+      platform: 'darwin',
+      logTail: [],
+      notes: 'happened when I clicked the blue button',
+    });
+    const actual = new URL(url).searchParams.get('actual') ?? '';
+    expect(actual).toContain('user notes: happened when I clicked the blue button');
+  });
+});
+
+describe('aliasHome', () => {
+  it('aliases a path under $HOME to ~', async () => {
+    const os = await import('node:os');
+    expect(aliasHome(`${os.homedir()}/Downloads/foo.zip`)).toBe('~/Downloads/foo.zip');
+  });
+  it('leaves paths outside $HOME untouched', () => {
+    expect(aliasHome('/etc/hosts')).toBe('/etc/hosts');
+  });
+});
+
+describe('prettyPlatformVersion', () => {
+  it('maps Windows 11 build to marketing name', () => {
+    expect(prettyPlatformVersion('win32', '10.0.22631')).toBe('Windows 11 (10.0.22631)');
+  });
+  it('maps Windows 10 build to marketing name', () => {
+    expect(prettyPlatformVersion('win32', '10.0.19045')).toBe('Windows 10 (10.0.19045)');
+  });
+  it('leaves Darwin kernel string alone', () => {
+    expect(prettyPlatformVersion('darwin', '24.0.0')).toBe('24.0.0');
+  });
+  it('leaves Linux kernel string alone', () => {
+    expect(prettyPlatformVersion('linux', '6.1.0')).toBe('6.1.0');
+  });
+});
+
+describe('API_KEY_RE broadened coverage', () => {
+  it('catches Google Gemini AIzaSy keys', () => {
+    // Obviously-fake AIzaSy placeholder — matches the regex shape, avoids
+    // GitHub push-protection alerts on realistic-looking secrets.
+    const input = 'key=AIzaSy000000000000000000000000000000000000';
+    expect(input.replace(API_KEY_RE, '***')).not.toContain('AIzaSy');
+  });
+  it('catches AWS access key IDs', () => {
+    const input = 'aws AKIA0000000000000000 leaked';
+    expect(input.replace(API_KEY_RE, '***')).not.toContain('AKIA0000');
+  });
+  it('catches 43-char base64 ending in = (Azure-shape)', () => {
+    const input = `azure ${'A'.repeat(43)}=`;
+    expect(input.replace(API_KEY_RE, '***')).not.toContain('A'.repeat(43));
+  });
+});
+
+describe('readConfigRedacted honors include toggles', () => {
+  async function writeConfig(content: string): Promise<void> {
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile('/tmp/__codesign-test-config.toml', content, 'utf8');
+  }
+
+  it('scrubs baseUrl / rootPath when includePaths=false and includeUrls=false', async () => {
+    await writeConfig(
+      [
+        '[provider.anthropic]',
+        'baseUrl = "http://13.70.85.156:8536"',
+        '[designSystem]',
+        'rootPath = "/Users/alice/project"',
+      ].join('\n'),
+    );
+    const out = await readConfigRedacted({ includePaths: false, includeUrls: false });
+    expect(out).not.toContain('13.70.85.156');
+    expect(out).not.toContain('/Users/alice/project');
+    expect(out).toContain('[url omitted]');
+    expect(out).toContain('[path omitted]');
+  });
+
+  it('keeps baseUrl when includeUrls=true', async () => {
+    await writeConfig('baseUrl = "https://api.example.com"');
+    const out = await readConfigRedacted({ includePaths: true, includeUrls: true });
+    expect(out).toContain('https://api.example.com');
+  });
+
+  it('omits credentials-in-URL when includeUrls=false', async () => {
+    await writeConfig('baseUrl = "https://admin:hunter2@host.example.com/api"');
+    const out = await readConfigRedacted({ includePaths: true, includeUrls: false });
+    expect(out).not.toContain('hunter2');
+    expect(out).not.toContain('admin:');
+  });
+});
+
+describe('diagnostics:v1:showItemInFolder allowlist', () => {
+  it('rejects paths outside configDir / logsDir / downloads', () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    expect(() => invoke('diagnostics:v1:showItemInFolder', '/etc/passwd')).toThrow(
+      /path outside allowlist/,
+    );
+  });
+
+  it('allows paths under configDir (mocked to /tmp)', () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    expect(() =>
+      invoke('diagnostics:v1:showItemInFolder', '/tmp/open-codesign-diagnostics-2025-01-01.zip'),
+    ).not.toThrow();
+  });
+
+  it('rejects path with prefix that falsely matches configDir', () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    // "/tmpXYZ/evil" starts with "/tmp" textually but is not *under* /tmp.
+    expect(() => invoke('diagnostics:v1:showItemInFolder', '/tmpXYZ/evil')).toThrow(
+      /path outside allowlist/,
+    );
   });
 });
