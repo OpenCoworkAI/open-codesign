@@ -111,6 +111,10 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
       buffer = fullBuffer.subarray(0, bytesRead);
     }
   } catch (error) {
+    if (error instanceof CodesignError) {
+      // Already a properly coded error - rethrow directly
+      throw error;
+    }
     throw new CodesignError(
       `Failed to read attachment "${file.path}"`,
       ERROR_CODES.ATTACHMENT_READ_FAILED,
