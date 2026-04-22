@@ -35,6 +35,7 @@ import {
   claudeCodeIdentityHeaders,
   looksLikeClaudeOAuthToken,
   shouldForceClaudeCodeIdentity,
+  withBackoff,
 } from '@open-codesign/providers';
 import {
   type Artifact,
@@ -822,9 +823,36 @@ export async function generateViaAgent(
 
   log.info('[generate] step=send_request', ctx);
   const sendStart = Date.now();
-  try {
+  // First-turn-only retry. Multi-turn requests carry half-complete agent
+  // state (tool calls mid-flight, transcript accumulated in pi-agent-core's
+  // internal loop) — retrying would replay partial progress and corrupt the
+  // session. `input.history.length === 0` is the cleanest signal that this
+  // call starts a fresh agent, so retry there and only there.
+  const isFirstTurn = input.history.length === 0;
+  const sendOnce = async (): Promise<void> => {
     await agent.prompt(userContent);
     await agent.waitForIdle();
+  };
+  try {
+    if (isFirstTurn) {
+      const retryOpts: Parameters<typeof withBackoff>[1] = {
+        maxRetries: 3,
+        onRetry: (info: RetryReason) => {
+          log.warn('[generate] step=send_request.retry', {
+            ...ctx,
+            attempt: info.attempt,
+            totalAttempts: info.totalAttempts,
+            delayMs: info.delayMs,
+            reason: info.reason,
+          });
+          deps.onRetry?.(info);
+        },
+      };
+      if (input.signal) retryOpts.signal = input.signal;
+      await withBackoff(sendOnce, retryOpts);
+    } else {
+      await sendOnce();
+    }
   } catch (err) {
     log.error('[generate] step=send_request.fail', {
       ...ctx,

@@ -38,6 +38,12 @@ interface AgentScript {
   errorMessage?: string;
   promptThrows?: Error;
   /**
+   * When > 0, `promptThrows` is thrown only on the first N prompt() calls;
+   * subsequent calls resolve normally. Lets tests script "transient failure
+   * then success" sequences for first-turn retry coverage.
+   */
+  promptThrowsTimes?: number;
+  /**
    * When set, the mock invokes `options.getApiKey` before emitting the
    * assistant response and — if it throws — converts the throw into an
    * 'error' AgentMessage (matching pi-agent-core's `handleRunFailure`
@@ -64,7 +70,10 @@ vi.mock('@mariozechner/pi-agent-core', () => {
     }
     async prompt(message: unknown): Promise<void> {
       this.call.prompts.push({ message });
-      if (scriptedAgent.promptThrows) throw scriptedAgent.promptThrows;
+      if (scriptedAgent.promptThrows) {
+        const limit = scriptedAgent.promptThrowsTimes ?? Number.POSITIVE_INFINITY;
+        if (this.call.prompts.length <= limit) throw scriptedAgent.promptThrows;
+      }
 
       // Simulate pi-agent-core's per-turn getApiKey invocation. Real
       // runAgentLoop calls `await config.getApiKey(provider)` (line 156 of
@@ -406,9 +415,14 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
       signal: controller.signal,
     });
     controller.abort();
-    // Mock's prompt() is synchronous enough to complete; just verify the wire-up
-    // registered by confirming the Agent.abort() call counter after settlement.
-    await promise;
+    // With first-turn withBackoff the pre-call signal check may short-circuit
+    // the prompt entirely (throwing PROVIDER_ABORTED), or the prompt may have
+    // already completed; either way the `signal → agent.abort()` listener
+    // registered before sending should have fired.
+    await promise.catch(() => {
+      // Expected when abort arrives before the withBackoff loop enters its
+      // first iteration.
+    });
     expect(agentCalls[0]?.aborted).toBe(true);
   });
 
@@ -471,6 +485,109 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
     expect(sys).toContain('str_replace_based_edit_tool');
     expect(sys).toContain('Do NOT emit `<artifact>`');
+  });
+});
+
+describe('generateViaAgent() — first-turn retry', () => {
+  class HttpError extends Error {
+    constructor(
+      message: string,
+      public readonly status: number,
+    ) {
+      super(message);
+      this.name = 'HttpError';
+    }
+  }
+
+  it('retries a transient 500 on the first turn and resolves on the second attempt', async () => {
+    vi.useFakeTimers();
+    try {
+      scriptedAgent = {
+        assistantText: RESPONSE_WITH_ARTIFACT,
+        promptThrows: new HttpError('upstream 500', 500),
+        promptThrowsTimes: 1,
+      };
+      const onRetry = vi.fn();
+      const promise = generateViaAgent(
+        {
+          prompt: 'design a meditation app',
+          history: [],
+          model: MODEL,
+          apiKey: 'sk-test',
+        },
+        { onRetry },
+      );
+      await vi.runAllTimersAsync();
+      const result = await promise;
+      expect(result.artifacts).toHaveLength(1);
+      expect(agentCalls[0]?.prompts.length).toBe(2);
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      expect(onRetry.mock.calls[0]?.[0].reason).toMatch(/server error/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('throws after three consecutive 500s on the first turn (retries exhausted)', async () => {
+    vi.useFakeTimers();
+    try {
+      scriptedAgent = {
+        assistantText: '',
+        promptThrows: new HttpError('still down', 500),
+      };
+      const promise = generateViaAgent({
+        prompt: 'design a dashboard',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      });
+      // Swallow the expected rejection while we drain timers so the test
+      // does not surface it as an unhandled promise.
+      const settled = promise.catch((err: unknown) => ({ rejected: err }));
+      await vi.runAllTimersAsync();
+      const outcome = (await settled) as { rejected?: unknown };
+      expect(outcome.rejected).toBeDefined();
+      expect(agentCalls[0]?.prompts.length).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry 4xx client errors (no 401 replay)', async () => {
+    scriptedAgent = {
+      assistantText: '',
+      promptThrows: new HttpError('unauthorized', 401),
+    };
+    await expect(
+      generateViaAgent({
+        prompt: 'design a dashboard',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      }),
+    ).rejects.toBeTruthy();
+    expect(agentCalls[0]?.prompts.length).toBe(1);
+  });
+
+  it('does not retry when history is non-empty (protects multi-turn agent state)', async () => {
+    scriptedAgent = {
+      assistantText: '',
+      promptThrows: new HttpError('upstream 500', 500),
+    };
+    await expect(
+      generateViaAgent({
+        prompt: 'refine this',
+        history: [
+          { role: 'user', content: 'first request' },
+          { role: 'assistant', content: 'first reply' },
+        ],
+        model: MODEL,
+        apiKey: 'sk-test',
+      }),
+    ).rejects.toBeTruthy();
+    // Single attempt: replaying a partial multi-turn session would corrupt
+    // tool state, so the second+ turn must surface transient errors directly.
+    expect(agentCalls[0]?.prompts.length).toBe(1);
   });
 });
 
