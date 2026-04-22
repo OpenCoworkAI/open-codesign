@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CodesignError } from '@open-codesign/shared';
-import { preparePromptContext } from './prompt-context';
-import * as fs from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
+import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { CodesignError } from '@open-codesign/shared';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { preparePromptContext } from './prompt-context';
 
 afterEach(() => {
   vi.unstubAllGlobals();
