@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { ChevronDown, Loader2, Search } from 'lucide-react';
+import { ChevronDown, Loader2, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProviderRow } from '../../../preload/index';
 import { recordAction } from '../lib/action-timeline';
@@ -194,7 +194,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
           {showSearch && (
             <div className="relative px-[var(--space-2)] py-[var(--space-1_5)] border-b border-[var(--color-border-muted)]">
               <Search
-                className="absolute left-[calc(var(--space-2)+8px)] top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--color-text-muted)] pointer-events-none"
+                className="absolute left-[calc(var(--space-2)+var(--space-2))] top-1/2 -translate-y-1/2 w-[var(--size-icon-xs)] h-[var(--size-icon-xs)] text-[var(--color-text-muted)] pointer-events-none"
                 aria-hidden
               />
               <input
@@ -208,9 +208,24 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
                 aria-label={t('topbar.modelSwitcher.searchAriaLabel', {
                   defaultValue: 'Filter models by name',
                 })}
-                className="w-full h-7 pl-7 pr-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[12px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+                className="w-full h-[var(--size-control-xs)] pl-[calc(var(--space-2)+var(--size-icon-xs)+var(--space-1_5))] pr-[var(--space-2)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-xs)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
                 style={{ fontFamily: 'var(--font-mono)' }}
               />
+              {query.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery('');
+                    searchInputRef.current?.focus();
+                  }}
+                  aria-label={t('topbar.modelSwitcher.clearSearch', {
+                    defaultValue: 'Clear search',
+                  })}
+                  className="absolute right-[calc(var(--space-2)+var(--space-1_5))] top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+                >
+                  <X className="w-[var(--size-icon-xs)] h-[var(--size-icon-xs)]" aria-hidden />
+                </button>
+              )}
             </div>
           )}
 

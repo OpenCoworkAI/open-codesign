@@ -476,6 +476,7 @@
       "fromProvider": "Provider",
       "searchPlaceholder": "Search models…",
       "searchAriaLabel": "Filter models by name",
+      "clearSearch": "Clear search",
       "noMatches": "No models match \"{{query}}\""
     },
     "status": {

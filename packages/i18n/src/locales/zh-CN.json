@@ -479,6 +479,7 @@
       "fromProvider": "服务",
       "searchPlaceholder": "搜索模型…",
       "searchAriaLabel": "按名称筛选模型",
+      "clearSearch": "清除搜索",
       "noMatches": "没有匹配 \"{{query}}\" 的模型"
     },
     "status": {
