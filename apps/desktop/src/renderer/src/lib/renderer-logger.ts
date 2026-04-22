@@ -77,6 +77,34 @@ function safeStringify(value: unknown): string {
   }
 }
 
+/**
+ * Apply printf-style `%s / %d / %o / %O / %f` substitution. React DevTools and
+ * many libraries use these format strings in `console.warn('%s\n...', text)`;
+ * without substitution the log tail ends up littered with literal `%s` tokens
+ * and the payload split across fields where the triage reader can't stitch it
+ * back together.
+ */
+export function formatConsoleArgs(args: unknown[]): string {
+  if (args.length === 0) return '';
+  const first = args[0];
+  if (typeof first !== 'string' || !/%[sdoOf]/.test(first)) {
+    return args.map(safeStringify).join(' ');
+  }
+  let i = 1;
+  const formatted = first.replace(/%[sdoOf]/g, (match) => {
+    if (i >= args.length) return match;
+    const value = args[i++];
+    if (match === '%o' || match === '%O') return safeStringify(value);
+    if (match === '%d') return String(Number(value as never));
+    if (match === '%f') return String(Number(value as never));
+    // %s — safeStringify would JSON-encode objects; for %s we prefer
+    // the loose String() coercion a browser console would emit.
+    return typeof value === 'string' ? value : safeStringify(value);
+  });
+  const rest = args.slice(i);
+  return rest.length === 0 ? formatted : `${formatted} ${rest.map(safeStringify).join(' ')}`;
+}
+
 let bridgeInstalled = false;
 
 export function installRendererLogBridge(): void {
@@ -89,7 +117,7 @@ export function installRendererLogBridge(): void {
   console.warn = (...args: unknown[]): void => {
     originalWarn(...args);
     try {
-      forward('warn', 'console', args.map(safeStringify).join(' '));
+      forward('warn', 'console', formatConsoleArgs(args));
     } catch {
       // swallow — never recurse
     }
@@ -98,7 +126,7 @@ export function installRendererLogBridge(): void {
   console.error = (...args: unknown[]): void => {
     originalError(...args);
     try {
-      forward('error', 'console', args.map(safeStringify).join(' '));
+      forward('error', 'console', formatConsoleArgs(args));
     } catch {
       // swallow — never recurse
     }

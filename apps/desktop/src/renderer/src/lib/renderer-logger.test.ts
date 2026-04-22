@@ -164,4 +164,40 @@ describe('installRendererLogBridge', () => {
     expect(entry?.message).toContain('…[truncated');
     expect(entry?.message.length).toBeLessThan(10_000);
   });
+
+  it('forwards %s format placeholder with substitution', async () => {
+    const { installRendererLogBridge } = await import('./renderer-logger');
+    installRendererLogBridge();
+
+    // React DevTools shape: console.warn('%s\n\nAn error occurred in the <%s> ...', 'Error text', 'ProviderCard')
+    console.warn('%s\nAn error occurred in the <%s> component', 'Error text', 'ProviderCard');
+
+    const entry = logSpy.mock.calls[0]?.[0] as { message: string } | undefined;
+    expect(entry?.message).toContain('Error text');
+    expect(entry?.message).toContain('<ProviderCard>');
+    expect(entry?.message).not.toContain('%s');
+  });
+
+  it('forwards %o with JSON serialization', async () => {
+    const { installRendererLogBridge } = await import('./renderer-logger');
+    installRendererLogBridge();
+
+    console.error('state = %o', { id: 42, name: 'alice' });
+
+    const entry = logSpy.mock.calls[0]?.[0] as { message: string } | undefined;
+    expect(entry?.message).toContain('"id":42');
+    expect(entry?.message).toContain('"name":"alice"');
+    expect(entry?.message).not.toContain('%o');
+  });
+
+  it('falls back to concatenation when first arg is not a string', async () => {
+    const { installRendererLogBridge } = await import('./renderer-logger');
+    installRendererLogBridge();
+
+    console.error({ code: 'X' }, 'ohno');
+
+    const entry = logSpy.mock.calls[0]?.[0] as { message: string } | undefined;
+    expect(entry?.message).toContain('"code":"X"');
+    expect(entry?.message).toContain('ohno');
+  });
 });
