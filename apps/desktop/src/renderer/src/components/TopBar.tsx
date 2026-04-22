@@ -148,7 +148,9 @@ export function TopBar() {
             className="inline-flex items-center gap-1 h-7 px-2 rounded-[var(--radius-sm)] border border-[var(--color-error)]/30 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
           >
             <AlertCircle className="w-3.5 h-3.5" aria-hidden />
-            <span className="text-[var(--text-xs)] font-semibold">{unreadErrorCount}</span>
+            <span className="text-[var(--text-xs)] font-semibold">
+              {unreadErrorCount > 99 ? '99+' : unreadErrorCount}
+            </span>
           </button>
         ) : null}
         <div className="flex items-center gap-[2px]" style={{ marginLeft: 'var(--space-1)' }}>
