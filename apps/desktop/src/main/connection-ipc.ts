@@ -749,7 +749,19 @@ export function registerConnectionIpc(): void {
   // disabled the OpenAI-compat server. Short 2s timeout because the user is
   // staring at a spinner in the onboarding flow.
   ipcMain.handle('ollama:v1:probe', async (_e, raw: unknown): Promise<OllamaProbeResponse> => {
-    const baseUrl = parseOllamaProbePayload(raw);
+    let baseUrl: string;
+    try {
+      baseUrl = parseOllamaProbePayload(raw);
+    } catch (err) {
+      // Surface invalid URL / unsupported scheme as an explicit IPC error
+      // instead of silently coercing back to localhost — the renderer needs
+      // to see the mistake to let the user fix their typed baseUrl.
+      return {
+        ok: false,
+        code: 'IPC_BAD_INPUT',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
     const url = `${baseUrl.replace(/\/+$/, '')}/api/tags`;
     let res: Response;
     try {
@@ -784,28 +796,55 @@ export type OllamaProbeResponse =
   | { ok: false; code: string; message: string };
 
 function parseOllamaProbePayload(raw: unknown): string {
+  return normalizeOllamaBaseUrl(typeof raw === 'string' ? raw : '');
+}
+
+/**
+ * Exported for unit tests. Turns whatever string the renderer sent into the
+ * base URL for the /api/tags probe. Returns the default `http://localhost:11434`
+ * ONLY when the input is empty — any other garbage (malformed URL,
+ * `file://`, `javascript:` etc.) throws a `CodesignError` so the IPC handler
+ * can surface the mistake instead of silently probing localhost.
+ */
+export function normalizeOllamaBaseUrl(raw: string): string {
   const DEFAULT_BASE_URL = 'http://localhost:11434';
-  if (typeof raw !== 'string') return DEFAULT_BASE_URL;
   const trimmed = raw.trim();
   if (trimmed.length === 0) return DEFAULT_BASE_URL;
-  // Auto-prefix scheme so users who paste "localhost:11434" or "[::1]:11434"
-  // don't get a confusing "not running" probe failure. `fetch` requires a
-  // full URL — a missing scheme is a far more common user typo than a real
-  // security-sensitive input.
-  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
-  // Reject anything that isn't http(s) — covers file://, ftp://, javascript:,
-  // and accidental paste of an Anthropic key prefix. We deliberately do NOT
-  // restrict to loopback because some users run Ollama on a LAN box; the
-  // threat model is the same as config:v1:test-endpoint (renderer is trusted,
-  // main-process fetch is the intended egress path for BYOK).
+
+  // Treat the input as "already has a scheme" only if it starts with a
+  // recognizable `scheme://` prefix. That lets us reject `file://` /
+  // `ftp://` without also misclassifying `localhost:11434` (which the
+  // plain `URL()` constructor parses as scheme="localhost:" because of
+  // the host:port shape). `javascript:alert(1)` and similar scheme-only
+  // tricks fail the `://` gate and instead get `http://` prepended, which
+  // then fails URL parsing in the second pass and is rejected below.
+  const hasScheme = /^[a-z][a-z0-9+.\-]*:\/\//i.test(trimmed);
+  const withScheme = hasScheme ? trimmed : `http://${trimmed}`;
+
+  let parsed: URL;
   try {
-    const parsed = new URL(withScheme);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return DEFAULT_BASE_URL;
-    }
+    parsed = new URL(withScheme);
   } catch {
-    return DEFAULT_BASE_URL;
+    throw new CodesignError(
+      `Ollama baseUrl "${trimmed}" is not a valid URL`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
   }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new CodesignError(
+      `Ollama baseUrl must use http(s), got "${parsed.protocol}"`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  if (parsed.hostname.length === 0) {
+    throw new CodesignError(
+      `Ollama baseUrl "${trimmed}" is not a valid URL`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  // We deliberately do NOT restrict to loopback because some users run
+  // Ollama on a LAN box; the threat model matches config:v1:test-endpoint
+  // (renderer is trusted, main-process fetch is the intended egress path).
   // Strip any /v1 suffix — /api/tags lives at the root.
   return withScheme.replace(/\/+$/, '').replace(/\/v1$/, '');
 }
