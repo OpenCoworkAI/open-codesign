@@ -151,10 +151,38 @@
     "title": "Settings",
     "tabs": {
       "models": "Models",
+      "images": "Image API",
       "appearance": "Appearance",
       "storage": "Storage",
       "diagnostics": "Diagnostics",
       "advanced": "Advanced"
+    },
+    "imageGen": {
+      "tabTitle": "Image generation",
+      "tabHint": "Let the design agent call an image model (e.g. gpt-image-2) for heroes, posters, and background bitmaps. Credentials stay local.",
+      "title": "Image generation assist",
+      "hint": "When enabled, the agent can invoke generate_image_asset during a run.",
+      "enabled": "Enable image generation assist",
+      "provider": "Provider",
+      "credentials": "Credentials",
+      "inherit": "Inherit from model provider",
+      "customKey": "Use a separate key",
+      "keyPlaceholder": "Leave empty to keep {{mask}}",
+      "newKeyPlaceholder": "Paste API key",
+      "model": "Image model",
+      "baseUrl": "Base URL",
+      "quality": "Quality",
+      "size": "Size",
+      "status": {
+        "ready": "Ready",
+        "needsKey": "Needs API key",
+        "disabled": "Disabled"
+      },
+      "toast": {
+        "loadFailed": "Failed to load image generation settings",
+        "saved": "Image generation settings saved",
+        "saveFailed": "Failed to save image generation settings"
+      }
     },
     "shell": {
       "back": "Workspace",

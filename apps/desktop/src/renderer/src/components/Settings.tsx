@@ -38,10 +38,11 @@ import { AddCustomProviderModal } from './AddCustomProviderModal';
 import { ChatgptLoginCard } from './ChatgptLoginCard';
 import { DiagnosticsPanel } from './settings/DiagnosticsPanel';
 
-type Tab = 'models' | 'appearance' | 'storage' | 'diagnostics' | 'advanced';
+type Tab = 'models' | 'images' | 'appearance' | 'storage' | 'diagnostics' | 'advanced';
 
 const TABS: ReadonlyArray<{ id: Tab; icon: typeof Cpu }> = [
   { id: 'models', icon: Cpu },
+  { id: 'images', icon: ImageIcon },
   { id: 'appearance', icon: Palette },
   { id: 'storage', icon: FolderOpen },
   { id: 'diagnostics', icon: AlertCircle },
@@ -934,37 +935,56 @@ function ImageGenerationPanel() {
     );
   }
 
+  const keyAvailable =
+    settings.credentialMode === 'custom' ? settings.hasCustomKey : settings.inheritedKeyAvailable;
+  const status: 'ready' | 'needsKey' | 'disabled' = !settings.enabled
+    ? 'disabled'
+    : keyAvailable
+      ? 'ready'
+      : 'needsKey';
+
+  const statusStyles: Record<typeof status, string> = {
+    ready:
+      'bg-[color-mix(in_oklab,var(--color-success,#16a34a)_14%,transparent)] text-[var(--color-success,#16a34a)] border-[color-mix(in_oklab,var(--color-success,#16a34a)_32%,transparent)]',
+    needsKey:
+      'bg-[color-mix(in_oklab,var(--color-warning,#d97706)_14%,transparent)] text-[var(--color-warning,#d97706)] border-[color-mix(in_oklab,var(--color-warning,#d97706)_32%,transparent)]',
+    disabled:
+      'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border-[var(--color-border-muted)]',
+  };
+
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] p-[var(--space-4)] space-y-[var(--space-3)]">
-      <div className="flex items-center justify-between gap-[var(--space-3)]">
-        <div className="min-w-0 flex items-center gap-[var(--space-2)]">
-          <ImageIcon className="w-4 h-4 text-[var(--color-text-secondary)]" aria-hidden />
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] p-[var(--space-4)] space-y-[var(--space-4)]">
+      <div className="flex items-start justify-between gap-[var(--space-3)]">
+        <div className="min-w-0 flex items-start gap-[var(--space-2)]">
+          <ImageIcon className="w-4 h-4 mt-0.5 text-[var(--color-text-secondary)]" aria-hidden />
           <div className="min-w-0">
-            <SectionTitle>
-              {t('settings.imageGen.title', { defaultValue: 'Image generation assist' })}
-            </SectionTitle>
+            <div className="flex items-center gap-[var(--space-2)]">
+              <SectionTitle>{t('settings.imageGen.title')}</SectionTitle>
+              <span
+                className={`inline-flex items-center h-5 px-1.5 rounded-full border text-[10px] font-medium tracking-wide uppercase ${statusStyles[status]}`}
+              >
+                {t(`settings.imageGen.status.${status}`)}
+              </span>
+            </div>
             <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] mt-0.5 leading-[var(--leading-body)]">
-              {t('settings.imageGen.hint', {
-                defaultValue:
-                  'Let the agent call GPT Image for hero, product, poster, logo, and background bitmap assets.',
-              })}
+              {t('settings.imageGen.hint')}
             </p>
           </div>
         </div>
-        <input
-          type="checkbox"
-          checked={settings.enabled}
-          disabled={saving}
-          onChange={(e) => void save({ enabled: e.target.checked })}
-          className="h-4 w-4 accent-[var(--color-accent)]"
-          aria-label={t('settings.imageGen.enabled', {
-            defaultValue: 'Enable image generation assist',
-          })}
-        />
+        <label className="inline-flex items-center gap-[var(--space-2)] shrink-0 text-[var(--text-xs)] text-[var(--color-text-secondary)] select-none">
+          <span>{t('settings.imageGen.enabled')}</span>
+          <input
+            type="checkbox"
+            checked={settings.enabled}
+            disabled={saving}
+            onChange={(e) => void save({ enabled: e.target.checked })}
+            className="h-4 w-4 accent-[var(--color-accent)]"
+          />
+        </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-[var(--space-3)]">
-        <Row label={t('settings.imageGen.provider', { defaultValue: 'Provider' })}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-3)]">
+        <Row label={t('settings.imageGen.provider')}>
           <NativeSelect
             value={settings.provider}
             disabled={saving}
@@ -982,19 +1002,13 @@ function ImageGenerationPanel() {
             }}
           />
         </Row>
-        <Row label={t('settings.imageGen.credentials', { defaultValue: 'Credentials' })}>
+        <Row label={t('settings.imageGen.credentials')}>
           <SegmentedControl
             value={settings.credentialMode}
             disabled={saving}
             options={[
-              {
-                value: 'inherit',
-                label: t('settings.imageGen.inherit', { defaultValue: 'Inherit' }),
-              },
-              {
-                value: 'custom',
-                label: t('settings.imageGen.customKey', { defaultValue: 'Custom key' }),
-              },
+              { value: 'inherit', label: t('settings.imageGen.inherit') },
+              { value: 'custom', label: t('settings.imageGen.customKey') },
             ]}
             onChange={(credentialMode) => void save({ credentialMode })}
           />
@@ -1010,13 +1024,8 @@ function ImageGenerationPanel() {
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={
               settings.maskedKey
-                ? t('settings.imageGen.keyPlaceholder', {
-                    defaultValue: 'Leave empty to keep {{mask}}',
-                    mask: settings.maskedKey,
-                  })
-                : t('settings.imageGen.newKeyPlaceholder', {
-                    defaultValue: 'Paste API key',
-                  })
+                ? t('settings.imageGen.keyPlaceholder', { mask: settings.maskedKey })
+                : t('settings.imageGen.newKeyPlaceholder')
             }
             className="min-w-0 flex-1 h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
           />
@@ -1031,9 +1040,9 @@ function ImageGenerationPanel() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-[1fr_1fr_auto] gap-[var(--space-3)] items-end">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-3)]">
         <label className="min-w-0">
-          <Label>{t('settings.imageGen.model', { defaultValue: 'Image model' })}</Label>
+          <Label>{t('settings.imageGen.model')}</Label>
           <input
             type="text"
             value={model}
@@ -1043,7 +1052,7 @@ function ImageGenerationPanel() {
           />
         </label>
         <label className="min-w-0">
-          <Label>{t('settings.imageGen.baseUrl', { defaultValue: 'Base URL' })}</Label>
+          <Label>{t('settings.imageGen.baseUrl')}</Label>
           <input
             type="url"
             value={baseUrl}
@@ -1052,18 +1061,10 @@ function ImageGenerationPanel() {
             className="mt-1 w-full h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
           />
         </label>
-        <button
-          type="button"
-          disabled={saving || model.trim().length === 0 || baseUrl.trim().length === 0}
-          onClick={() => void save({ model, baseUrl })}
-          className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {t('common.save')}
-        </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-[var(--space-3)]">
-        <Row label={t('settings.imageGen.quality', { defaultValue: 'Quality' })}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-3)]">
+        <Row label={t('settings.imageGen.quality')}>
           <NativeSelect
             value={settings.quality}
             disabled={saving}
@@ -1078,7 +1079,7 @@ function ImageGenerationPanel() {
             }
           />
         </Row>
-        <Row label={t('settings.imageGen.size', { defaultValue: 'Size' })}>
+        <Row label={t('settings.imageGen.size')}>
           <NativeSelect
             value={settings.size}
             disabled={saving}
@@ -1092,6 +1093,37 @@ function ImageGenerationPanel() {
           />
         </Row>
       </div>
+
+      <div className="flex justify-end pt-[var(--space-1)] border-t border-[var(--color-border-muted)]">
+        <button
+          type="button"
+          disabled={
+            saving ||
+            model.trim().length === 0 ||
+            baseUrl.trim().length === 0 ||
+            (model === settings.model && baseUrl === settings.baseUrl)
+          }
+          onClick={() => void save({ model, baseUrl })}
+          className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {t('common.save')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ImageGenerationTab() {
+  const t = useT();
+  return (
+    <div className="space-y-[var(--space-4)]">
+      <div>
+        <SectionTitle>{t('settings.imageGen.tabTitle')}</SectionTitle>
+        <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] mt-1 leading-[var(--leading-body)]">
+          {t('settings.imageGen.tabHint')}
+        </p>
+      </div>
+      <ImageGenerationPanel />
     </div>
   );
 }
@@ -1553,7 +1585,6 @@ function ModelsTab() {
 
       <div className="space-y-[var(--space-3)]">
         <ChatgptLoginCard onStatusChange={reloadRows} />
-        <ImageGenerationPanel />
         {externalConfigs !== null &&
           (externalConfigs.codex !== undefined ||
             externalConfigs.claudeCode !== undefined ||
@@ -2437,6 +2468,7 @@ export function Settings() {
 
         <section className="flex flex-col min-h-0 overflow-y-auto p-[var(--space-6)]">
           {tab === 'models' ? <ModelsTab /> : null}
+          {tab === 'images' ? <ImageGenerationTab /> : null}
           {tab === 'appearance' ? <AppearanceTab /> : null}
           {tab === 'storage' ? <StorageTab /> : null}
           {tab === 'diagnostics' ? <DiagnosticsPanel /> : null}
