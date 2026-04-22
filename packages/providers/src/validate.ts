@@ -1,4 +1,5 @@
 import {
+  BUILTIN_PROVIDERS,
   CodesignError,
   ERROR_CODES,
   type SupportedOnboardingProvider,
@@ -96,11 +97,16 @@ export async function pingProvider(
 ): Promise<ValidateResult> {
   if (!isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
-      `Provider "${provider}" is not supported in v0.1. Supported: anthropic, openai, openrouter.`,
+      `Provider "${provider}" is not supported in v0.1. Supported: anthropic, openai, openrouter, ollama.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
-  if (!apiKey || apiKey.trim().length === 0) {
+  // Keyless builtins (local Ollama) legitimately validate with an empty key;
+  // all other providers must have one. Keeping the empty-check means a
+  // user who forgets to paste their Anthropic/OpenAI key still gets a fast
+  // PROVIDER_AUTH_MISSING instead of a confusing 401 from the network.
+  const isKeyless = BUILTIN_PROVIDERS[provider].requiresApiKey === false;
+  if (!isKeyless && (!apiKey || apiKey.trim().length === 0)) {
     throw new CodesignError('API key is empty', ERROR_CODES.PROVIDER_AUTH_MISSING);
   }
 
