@@ -22,7 +22,10 @@ describe('buildComposerContextItems', () => {
     } as OnboardingState;
 
     const items = buildComposerContextItems({
-      inputFiles: [file('D:/repo/brief.md', 'brief.md'), file('D:/repo/tokens.json', 'tokens.json')],
+      inputFiles: [
+        file('D:/repo/brief.md', 'brief.md'),
+        file('D:/repo/tokens.json', 'tokens.json'),
+      ],
       referenceUrl: 'https://example.com/spec',
       config,
     });
