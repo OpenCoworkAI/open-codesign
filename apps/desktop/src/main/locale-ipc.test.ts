@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./electron-runtime', () => ({
@@ -24,7 +26,8 @@ import { registerLocaleIpc } from './locale-ipc';
 describe('locale-ipc XDG_CONFIG_HOME', () => {
   it('writes locale.json under XDG_CONFIG_HOME when set', async () => {
     const prev = process.env['XDG_CONFIG_HOME'];
-    process.env['XDG_CONFIG_HOME'] = '/tmp/xdg-locale-test';
+    const xdg = join(tmpdir(), 'xdg-locale-test');
+    process.env['XDG_CONFIG_HOME'] = xdg;
     try {
       writeFileMock.mockClear();
       const handlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -38,7 +41,7 @@ describe('locale-ipc XDG_CONFIG_HOME', () => {
       await setHandler({}, 'zh-CN');
       expect(writeFileMock).toHaveBeenCalled();
       const firstCall = writeFileMock.mock.calls[0];
-      expect(firstCall?.[0]).toBe('/tmp/xdg-locale-test/open-codesign/locale.json');
+      expect(firstCall?.[0]).toBe(join(xdg, 'open-codesign', 'locale.json'));
     } finally {
       if (prev === undefined) process.env['XDG_CONFIG_HOME'] = undefined;
       else process.env['XDG_CONFIG_HOME'] = prev;

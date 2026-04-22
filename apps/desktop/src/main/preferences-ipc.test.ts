@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -57,13 +59,14 @@ describe('readPersisted()', () => {
 
   it('honors XDG_CONFIG_HOME when computing the persisted file path', async () => {
     const prev = process.env['XDG_CONFIG_HOME'];
-    process.env['XDG_CONFIG_HOME'] = '/tmp/xdg-test-home';
+    const xdg = join(tmpdir(), 'xdg-test-home');
+    process.env['XDG_CONFIG_HOME'] = xdg;
     const notFound = Object.assign(new Error('no such file'), { code: 'ENOENT' });
     readFileMock.mockRejectedValueOnce(notFound);
     try {
       await readPersisted();
       expect(readFileMock).toHaveBeenLastCalledWith(
-        '/tmp/xdg-test-home/open-codesign/preferences.json',
+        join(xdg, 'open-codesign', 'preferences.json'),
         'utf8',
       );
     } finally {

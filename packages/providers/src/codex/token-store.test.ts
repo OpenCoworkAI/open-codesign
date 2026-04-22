@@ -71,8 +71,12 @@ describe('CodexTokenStore', () => {
     const loaded = await store2.read();
     expect(loaded).toEqual(auth);
 
-    const s = await stat(filePath);
-    expect(s.mode & 0o777).toBe(0o600);
+    // POSIX mode bits aren't enforceable on Windows NTFS (always reports 0o666),
+    // so only assert the 0o600 bit pattern on platforms that honor it.
+    if (process.platform !== 'win32') {
+      const s = await stat(filePath);
+      expect(s.mode & 0o777).toBe(0o600);
+    }
   });
 
   it('write auto-creates parent directory', async () => {
