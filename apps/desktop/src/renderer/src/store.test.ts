@@ -1,7 +1,12 @@
 import { initI18n } from '@open-codesign/i18n';
 import type { OnboardingState, SelectedElement } from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { coerceUsageSnapshot, useCodesignStore } from './store';
+import {
+  coerceUsageSnapshot,
+  extractCodesignErrorCode,
+  extractUpstreamContext,
+  useCodesignStore,
+} from './store';
 
 const READY_CONFIG: OnboardingState = {
   hasKey: true,
@@ -887,5 +892,102 @@ describe('useCodesignStore report dialog slice', () => {
     expect(found?.code).toBe('IMPORT_FAILED');
     expect(found?.message).toBe('could not read opencode config');
     expect(found?.fingerprint).toMatch(/^[0-9a-f]{8}$/);
+  });
+});
+
+describe('extractCodesignErrorCode', () => {
+  it('returns the code property when it is a non-empty string', () => {
+    expect(extractCodesignErrorCode({ code: 'ATTACHMENT_TOO_LARGE' })).toBe('ATTACHMENT_TOO_LARGE');
+  });
+
+  it('returns undefined for missing / empty / non-string code', () => {
+    expect(extractCodesignErrorCode({})).toBeUndefined();
+    expect(extractCodesignErrorCode({ code: '' })).toBeUndefined();
+    expect(extractCodesignErrorCode({ code: 42 })).toBeUndefined();
+    expect(extractCodesignErrorCode(null)).toBeUndefined();
+    expect(extractCodesignErrorCode('string')).toBeUndefined();
+  });
+
+  it('reads code off a real Error with a .code property', () => {
+    const err = new Error('boom') as Error & { code?: string };
+    err.code = 'CONFIG_MISSING';
+    expect(extractCodesignErrorCode(err)).toBe('CONFIG_MISSING');
+  });
+});
+
+describe('extractUpstreamContext', () => {
+  it('picks up NormalizedProviderError fields off a caught error', () => {
+    const err = Object.assign(new Error('http 429'), {
+      upstream_provider: 'openai',
+      upstream_status: 429,
+      upstream_request_id: 'req-7',
+      retry_count: 3,
+    });
+    expect(extractUpstreamContext(err)).toEqual({
+      upstream_provider: 'openai',
+      upstream_status: 429,
+      upstream_request_id: 'req-7',
+      retry_count: 3,
+    });
+  });
+
+  it('returns undefined when no upstream fields are present', () => {
+    expect(extractUpstreamContext(new Error('plain'))).toBeUndefined();
+    expect(extractUpstreamContext({})).toBeUndefined();
+    expect(extractUpstreamContext(null)).toBeUndefined();
+  });
+});
+
+describe('applyGenerateError via sendPrompt', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
+
+  async function runFailingGenerate(err: unknown): Promise<void> {
+    const recordRendererError = vi.fn().mockResolvedValue({ eventId: null });
+    vi.stubGlobal('window', {
+      codesign: {
+        generate: vi.fn().mockRejectedValue(err),
+        diagnostics: { recordRendererError },
+      },
+    });
+    resetStore();
+    useCodesignStore.setState({ reportableErrors: [] });
+    await useCodesignStore.getState().sendPrompt({ prompt: 'hello' });
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it('preserves CodesignError.code from a rejected generate IPC', async () => {
+    const err = Object.assign(new Error('file too big'), { code: 'ATTACHMENT_TOO_LARGE' });
+    await runFailingGenerate(err);
+    const records = useCodesignStore.getState().reportableErrors;
+    expect(records).toHaveLength(1);
+    expect(records[0]?.code).toBe('ATTACHMENT_TOO_LARGE');
+    expect(records[0]?.scope).toBe('generate');
+  });
+
+  it('falls back to GENERATION_FAILED when no code is present', async () => {
+    await runFailingGenerate(new Error('opaque network blip'));
+    const records = useCodesignStore.getState().reportableErrors;
+    expect(records).toHaveLength(1);
+    expect(records[0]?.code).toBe('GENERATION_FAILED');
+  });
+
+  it('attaches upstream context from a NormalizedProviderError-shaped error', async () => {
+    const err = Object.assign(new Error('http 502'), {
+      code: 'PROVIDER_HTTP_5XX',
+      upstream_provider: 'anthropic',
+      upstream_status: 502,
+      retry_count: 2,
+    });
+    await runFailingGenerate(err);
+    const records = useCodesignStore.getState().reportableErrors;
+    expect(records[0]?.code).toBe('PROVIDER_HTTP_5XX');
+    expect(records[0]?.context).toEqual({
+      upstream_provider: 'anthropic',
+      upstream_status: 502,
+      retry_count: 2,
+    });
   });
 });

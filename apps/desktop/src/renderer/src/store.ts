@@ -902,6 +902,46 @@ function applyGenerateSuccess(
   }
 }
 
+/**
+ * Read a `code` string off a CodesignError-shaped value crossing IPC. Structured-
+ * clone strips the prototype but preserves own enumerable properties in Electron
+ * 28+; we read defensively. Returns undefined for anything that doesn't carry a
+ * non-empty string code so callers can fall back to their scope-specific default.
+ */
+export function extractCodesignErrorCode(err: unknown): string | undefined {
+  if (err === null || typeof err !== 'object') return undefined;
+  const code = (err as { code?: unknown }).code;
+  if (typeof code === 'string' && code.length > 0) return code;
+  return undefined;
+}
+
+/**
+ * Pull NormalizedProviderError-shaped upstream fields off a caught error so the
+ * Report dialog's "Upstream context" block can render them. Returns undefined
+ * when none of the expected keys are present — callers then omit `context`
+ * rather than attaching an empty object.
+ */
+export function extractUpstreamContext(err: unknown): Record<string, unknown> | undefined {
+  if (err === null || typeof err !== 'object') return undefined;
+  const rec = err as Record<string, unknown>;
+  const keys = [
+    'upstream_provider',
+    'upstream_status',
+    'upstream_code',
+    'upstream_message',
+    'upstream_request_id',
+    'retry_count',
+    'redacted_body_head',
+    'original_error_name',
+  ];
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = rec[key];
+    if (value !== undefined && value !== null) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function applyGenerateError(
   get: GetState,
   set: SetState,
@@ -935,16 +975,19 @@ function applyGenerateError(
       payload: { message: msg },
     });
   }
+  const code = extractCodesignErrorCode(err) ?? 'GENERATION_FAILED';
+  const upstream = extractUpstreamContext(err);
   get().pushToast({
     variant: 'error',
     title: tr('notifications.generationFailed'),
     description: msg,
     localId: get().createReportableError({
-      code: 'GENERATION_FAILED',
+      code,
       scope: 'generate',
       message: msg,
       ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
       runId: generationId,
+      ...(upstream !== undefined ? { context: upstream } : {}),
     }),
   });
 }
