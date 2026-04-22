@@ -39,6 +39,8 @@ export interface PromptInputProps {
   onSubmit: () => void;
   onCancel: () => void;
   isGenerating: boolean;
+  /** Optional content rendered above the textarea, inside the composer card. */
+  contextSummary?: ReactNode;
   /** Optional element rendered inside the textarea container, bottom-left. */
   leadingAction?: ReactNode;
 }
@@ -57,7 +59,7 @@ export interface PromptInputHandle {
  *   Shift+Enter     — newline
  */
 export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(function PromptInput(
-  { prompt, setPrompt, onSubmit, onCancel, isGenerating, leadingAction },
+  { prompt, setPrompt, onSubmit, onCancel, isGenerating, contextSummary, leadingAction },
   ref,
 ) {
   const t = useT();
@@ -138,6 +140,11 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
   return (
     <form onSubmit={handleSubmit}>
       <div className="group relative rounded-[16px] bg-[var(--color-surface)] border border-[var(--color-border-muted)] focus-within:border-[var(--color-accent)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_12%,transparent)] transition-all duration-150 ease-out">
+        {contextSummary ? (
+          <div className="border-b border-[var(--color-border-subtle)] px-[12px] py-[10px]">
+            {contextSummary}
+          </div>
+        ) : null}
         <textarea
           ref={taRef}
           value={prompt}

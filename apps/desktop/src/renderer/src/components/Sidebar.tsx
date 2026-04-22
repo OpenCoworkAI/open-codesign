@@ -1,9 +1,12 @@
 import { useT } from '@open-codesign/i18n';
+import type { LocalInputFile, OnboardingState } from '@open-codesign/shared';
+import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useAgentStream } from '../hooks/useAgentStream';
 import { useCodesignStore } from '../store';
 import { ModelSwitcher } from './ModelSwitcher';
 import { ChatMessageList } from './chat/ChatMessageList';
+import { AddMenu } from './chat/AddMenu';
 import { CommentChipBar } from './chat/CommentChipBar';
 import { EmptyState } from './chat/EmptyState';
 import { PromptInput, type PromptInputHandle } from './chat/PromptInput';
@@ -12,6 +15,54 @@ export interface SidebarProps {
   prompt: string;
   setPrompt: (value: string) => void;
   onSubmit: () => void;
+}
+
+interface ComposerContextItem {
+  key: string;
+  label: string;
+  icon: 'file' | 'url' | 'designSystem';
+  actionLabel?: string;
+}
+
+export function buildComposerContextItems(input: {
+  inputFiles: LocalInputFile[];
+  referenceUrl: string;
+  config: OnboardingState | null;
+}): ComposerContextItem[] {
+  const items: ComposerContextItem[] = input.inputFiles.map((file) => ({
+    key: `file:${file.path}`,
+    label: file.name,
+    icon: 'file',
+    actionLabel: file.path,
+  }));
+
+  const referenceUrl = input.referenceUrl.trim();
+  if (referenceUrl.length > 0) {
+    items.push({
+      key: 'reference-url',
+      label: referenceUrl,
+      icon: 'url',
+      actionLabel: referenceUrl,
+    });
+  }
+
+  const designSystem = input.config?.designSystem ?? null;
+  if (designSystem) {
+    items.push({
+      key: 'design-system',
+      label: designSystem.summary,
+      icon: 'designSystem',
+      actionLabel: designSystem.rootPath,
+    });
+  }
+
+  return items;
+}
+
+function ContextIcon({ icon }: { icon: ComposerContextItem['icon'] }) {
+  if (icon === 'file') return <Paperclip className="w-3.5 h-3.5" aria-hidden />;
+  if (icon === 'url') return <Link2 className="w-3.5 h-3.5" aria-hidden />;
+  return <FolderOpen className="w-3.5 h-3.5" aria-hidden />;
 }
 
 /**
@@ -62,6 +113,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
 
   const designSystem = config?.designSystem ?? null;
   const currentDesign = designs.find((d) => d.id === currentDesignId) ?? null;
+  const contextItems = buildComposerContextItems({ inputFiles, referenceUrl, config });
 
   useEffect(() => {
     if (currentDesignId && !chatLoaded) {
@@ -109,6 +161,72 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
             onSubmit={onSubmit}
             onCancel={cancelGeneration}
             isGenerating={isGenerating}
+            contextSummary={
+              contextItems.length > 0 ? (
+                <div className="flex flex-wrap gap-[8px]">
+                  {inputFiles.map((file) => (
+                    <span
+                      key={file.path}
+                      className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
+                      title={file.path}
+                    >
+                      <ContextIcon icon="file" />
+                      <span className="truncate max-w-[180px]">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeInputFile(file.path)}
+                        aria-label={t('sidebar.removeFile', { name: file.name })}
+                        className="inline-flex items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                      >
+                        <X className="w-3 h-3" aria-hidden />
+                      </button>
+                    </span>
+                  ))}
+                  {referenceUrl.trim() ? (
+                    <span
+                      className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
+                      title={referenceUrl.trim()}
+                    >
+                      <ContextIcon icon="url" />
+                      <span className="truncate max-w-[220px]">{referenceUrl.trim()}</span>
+                    </span>
+                  ) : null}
+                  {designSystem ? (
+                    <span
+                      className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
+                      title={designSystem.rootPath}
+                    >
+                      <ContextIcon icon="designSystem" />
+                      <span className="truncate max-w-[220px]">{designSystem.summary}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void clearDesignSystem();
+                        }}
+                        aria-label={t('sidebar.clear')}
+                        className="inline-flex items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                      >
+                        <X className="w-3 h-3" aria-hidden />
+                      </button>
+                    </span>
+                  ) : null}
+                </div>
+              ) : null
+            }
+            leadingAction={
+              <AddMenu
+                onAttachFiles={() => {
+                  void pickInputFiles();
+                }}
+                onLinkDesignSystem={() => {
+                  void pickDesignSystemDirectory();
+                }}
+                referenceUrl={referenceUrl}
+                onReferenceUrlChange={setReferenceUrl}
+                hasDesignSystem={Boolean(designSystem)}
+                disabled={isGenerating}
+              />
+            }
           />
           <div className="flex items-center justify-between gap-[var(--space-2)] px-[2px]">
             <ModelSwitcher variant="sidebar" />
