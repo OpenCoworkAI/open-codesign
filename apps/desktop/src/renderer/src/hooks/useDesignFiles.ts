@@ -57,6 +57,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
     return () => {
       cancelled = true;
     };
+    // biome-ignore lint/correctness/useExhaustiveDependencies: previewHtml is intentionally re-run on as a fresh-generation signal
   }, [designId, previewHtml]);
 
   const files: DesignFileEntry[] = [];
