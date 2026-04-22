@@ -5,9 +5,10 @@
  * pi-ai and routes here. We talk to the `/backend-api/codex/responses`
  * endpoint via `CodexClient`, which handles OAuth token refresh internally.
  *
- * Phase 1 is text-only and non-streaming; attachments/design-system are
- * formatted into the user prompt exactly the way core does it. Tool loops,
- * inline image parts, and streaming are deferred to Phase 2.
+ * Phase 1 is non-streaming. Attachments/design-system are still formatted into
+ * the user prompt the same way core does it, but image attachments are also
+ * forwarded as Responses `input_image` parts so vision-capable models can
+ * actually inspect them.
  */
 
 import { createArtifactParser } from '@open-codesign/artifacts';
@@ -46,7 +47,10 @@ export interface CodexGenerateResult {
 
 interface ResponsesInputItem {
   role: 'user' | 'assistant';
-  content: Array<{ type: 'input_text' | 'output_text'; text: string }>;
+  content: Array<
+    | { type: 'input_text' | 'output_text'; text: string }
+    | { type: 'input_image'; image_url: string; detail: 'auto' }
+  >;
 }
 
 interface Collected {
@@ -147,9 +151,21 @@ function buildInput(input: CodexGenerateInput): {
     const partType = h.role === 'assistant' ? 'output_text' : 'input_text';
     items.push({ role: h.role, content: [{ type: partType, text: h.content }] });
   }
+  const userContent: ResponsesInputItem['content'] = [
+    { type: 'input_text', text: buildUserPrompt(input.prompt, sections) },
+  ];
+  for (const attachment of input.attachments) {
+    if (attachment.imageDataUrl) {
+      userContent.push({
+        type: 'input_image',
+        image_url: attachment.imageDataUrl,
+        detail: 'auto',
+      });
+    }
+  }
   items.push({
     role: 'user',
-    content: [{ type: 'input_text', text: buildUserPrompt(input.prompt, sections) }],
+    content: userContent,
   });
   return { instructions: CODEX_SYSTEM_PROMPT, items };
 }

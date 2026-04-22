@@ -60,6 +60,8 @@ export interface AttachmentContext {
   path: string;
   excerpt?: string | undefined;
   note?: string | undefined;
+  mediaType?: string | undefined;
+  imageDataUrl?: string | undefined;
 }
 
 export interface ReferenceUrlContext {

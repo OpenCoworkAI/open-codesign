@@ -32,7 +32,6 @@ describe('preparePromptContext', () => {
   });
 
   it('allows binary attachments (png) up to 10MB - 500KB png passes', async () => {
-    // Binary attachments only get filename, no content read - allowed larger
     await expect(
       preparePromptContext({
         attachments: [{ path: 'C:/repo/image.png', name: 'image.png', size: 543_034 }],
@@ -40,7 +39,25 @@ describe('preparePromptContext', () => {
     ).rejects.toMatchObject({
       code: 'ATTACHMENT_READ_FAILED',
     });
-    // It fails because the file doesn't exist, but importantly - NOT ATTACHMENT_TOO_LARGE
+  });
+
+  it('encodes supported image attachments as data URLs', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-image-attachment-'));
+    const filePath = path.join(dir, 'shot.png');
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    await fs.writeFile(filePath, pngBytes);
+
+    const result = await preparePromptContext({
+      attachments: [{ path: filePath, name: 'shot.png', size: pngBytes.length }],
+    });
+
+    expect(result.attachments).toHaveLength(1);
+    expect(result.attachments[0]).toMatchObject({
+      name: 'shot.png',
+      mediaType: 'image/png',
+    });
+    expect(result.attachments[0]?.imageDataUrl).toBe(`data:image/png;base64,${pngBytes.toString('base64')}`);
+    expect(result.attachments[0]?.excerpt).toBeUndefined();
   });
 
   it('throws ATTACHMENT_TOO_LARGE for unknown extension text > 256KB', async () => {

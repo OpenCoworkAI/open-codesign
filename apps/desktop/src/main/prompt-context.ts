@@ -28,9 +28,19 @@ const TEXT_EXTS = new Set([
   '.yml',
 ]);
 
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  '.avif': 'image/avif',
+  '.bmp': 'image/bmp',
+  '.gif': 'image/gif',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
+
 const MAX_ATTACHMENT_CHARS = 6_000;
 const MAX_TEXT_ATTACHMENT_BYTES = 256_000;
-const MAX_BINARY_ATTACHMENT_BYTES = 10_000_000; // 10MB - binary attachments only need filename, not content
+const MAX_BINARY_ATTACHMENT_BYTES = 10_000_000;
 const MAX_URL_EXCERPT_CHARS = 1_200;
 const MAX_URL_RESPONSE_BYTES = 256_000;
 const REFERENCE_CONTENT_TYPES = ['text/html', 'application/xhtml+xml'];
@@ -60,9 +70,8 @@ function isProbablyText(buffer: Buffer, extension: string): boolean {
 
 async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> {
   const extension = extname(file.name).toLowerCase();
+  const imageMimeType = IMAGE_MIME_TYPES[extension];
 
-  // Binary attachments (images, etc) only need filename - we don't send content to LLM
-  // So allow much larger size limit
   const isKnownTextExtension = TEXT_EXTS.has(extension);
   const maxFileBytes = isKnownTextExtension
     ? MAX_TEXT_ATTACHMENT_BYTES
@@ -97,8 +106,15 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
     }
 
     if (!looksText) {
-      // Definitely binary - we don't need any more content
-      buffer = probe;
+      if (imageMimeType) {
+        const length = Math.max(1, Math.min(file.size || MAX_BINARY_ATTACHMENT_BYTES, maxFileBytes));
+        const fullBuffer = Buffer.alloc(length);
+        const { bytesRead } = await handle.read(fullBuffer, 0, fullBuffer.length, 0);
+        buffer = fullBuffer.subarray(0, bytesRead);
+      } else {
+        // Non-image binary files stay filename-only for now.
+        buffer = probe;
+      }
     } else {
       // It looks like text and fits within limit - read the whole thing
       const length = Math.max(
@@ -127,6 +143,15 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
   }
 
   if (!isProbablyText(buffer, extension)) {
+    if (imageMimeType) {
+      return {
+        name: file.name,
+        path: file.path,
+        note: 'Attached as an image input. Use the visual content directly, not just the filename.',
+        mediaType: imageMimeType,
+        imageDataUrl: `data:${imageMimeType};base64,${buffer.toString('base64')}`,
+      };
+    }
     return {
       name: file.name,
       path: file.path,

@@ -139,6 +139,60 @@ describe('runCodexGenerate', () => {
     expect(result.issues).toEqual([]);
   });
 
+  it('forwards image attachments as Responses input_image parts', async () => {
+    const { runCodexGenerate } = await import('./codex-generate');
+    const store = makeStore();
+    await store.write({
+      schemaVersion: 1,
+      accessToken: 'at',
+      refreshToken: 'rt',
+      idToken: 'id',
+      expiresAt: Date.now() + 3_600_000,
+      accountId: 'acc-1',
+      email: 'a@b.com',
+      updatedAt: Date.now(),
+    });
+
+    const chat = vi.fn(async () => ({ text: 'ok', raw: {} }));
+    const clientFactory = vi.fn(
+      () => ({ chat }) as unknown as import('@open-codesign/providers/codex').CodexClient,
+    );
+
+    await runCodexGenerate({
+      prompt: 'match this screenshot',
+      history: [],
+      model: MODEL,
+      attachments: [
+        {
+          name: 'shot.png',
+          path: 'C:/tmp/shot.png',
+          note: 'Attached as an image input.',
+          mediaType: 'image/png',
+          imageDataUrl: 'data:image/png;base64,AAAA',
+        },
+      ],
+      referenceUrl: null,
+      designSystem: null,
+      tokenStore: store,
+      clientFactory,
+    });
+
+    const chatArg = (chat.mock.calls as unknown as Array<Array<unknown>>)[0]?.[0] as {
+      input: Array<{
+        role: string;
+        content: Array<{ type: string; text?: string; image_url?: string; detail?: string }>;
+      }>;
+    };
+    const userMessage = chatArg.input.at(-1);
+    expect(userMessage?.role).toBe('user');
+    expect(userMessage?.content.some((part) => part.type === 'input_image')).toBe(true);
+    expect(userMessage?.content.find((part) => part.type === 'input_image')).toMatchObject({
+      type: 'input_image',
+      image_url: 'data:image/png;base64,AAAA',
+      detail: 'auto',
+    });
+  });
+
   it('allows plain-text replies for non-design prompts', async () => {
     const { runCodexGenerate } = await import('./codex-generate');
     const store = makeStore();
