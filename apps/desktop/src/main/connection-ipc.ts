@@ -764,7 +764,14 @@ export function registerConnectionIpc(): void {
     } catch {
       return { ok: false, code: 'PARSE', message: 'Non-JSON response' };
     }
-    const models = extractModelIds(body) ?? [];
+    const models = extractModelIds(body);
+    if (models === null) {
+      // Don't silently pretend Ollama is up with zero models — that would
+      // push the UI into an "available but empty" state that's actually a
+      // parser bug. Surface PARSE so the renderer can flag the probe as
+      // broken rather than rendering an empty model picker.
+      return { ok: false, code: 'PARSE', message: 'Unexpected /api/tags shape' };
+    }
     return { ok: true, models };
   });
 }
