@@ -1,8 +1,6 @@
-import { createWriteStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { CodesignError } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { preparePromptContext } from './prompt-context';
 
@@ -46,13 +44,16 @@ describe('preparePromptContext', () => {
   });
 
   it('throws ATTACHMENT_TOO_LARGE for unknown extension text > 256KB', async () => {
-    // Unknown extension but it's actually text - should still throw based on content probe
-    const err = await expect(
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-attachment-'));
+    const filePath = path.join(dir, 'data.bin');
+    const text = 'a'.repeat(300_000);
+    await fs.writeFile(filePath, text);
+
+    await expect(
       preparePromptContext({
-        attachments: [{ path: 'C:/repo/data.bin', name: 'data.bin', size: 300_000 }],
+        attachments: [{ path: filePath, name: 'data.bin', size: Buffer.byteLength(text) }],
       }),
-    ).rejects;
-    err.toMatchObject({
+    ).rejects.toMatchObject({
       name: 'CodesignError',
       code: 'ATTACHMENT_TOO_LARGE',
     });
