@@ -31,8 +31,22 @@ export const OLLAMA_DEFAULT_MODEL = 'llama3.2';
 
 // ── Wire types (v3) ──────────────────────────────────────────────────────────
 
-export const WireApiSchema = z.enum(['openai-chat', 'openai-responses', 'anthropic']);
+export const WireApiSchema = z.enum([
+  'openai-chat',
+  'openai-responses',
+  'anthropic',
+  'openai-codex-responses',
+]);
 export type WireApi = z.infer<typeof WireApiSchema>;
+
+/**
+ * System-managed provider id for ChatGPT subscription (OAuth). Lives in
+ * shared so both the desktop main process (which owns the OAuth flow and
+ * writes the ProviderEntry) and peripheral helpers (e.g. keyless-allowed
+ * checks in `provider-settings`) reference the same literal without
+ * introducing import cycles.
+ */
+export const CHATGPT_CODEX_PROVIDER_ID = 'chatgpt-codex';
 
 // ── Secrets & StoredDesignSystem ─────────────────────────────────────────────
 

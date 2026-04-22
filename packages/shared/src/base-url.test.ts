@@ -359,6 +359,27 @@ describe('canonicalBaseUrl', () => {
     );
   });
 
+  // ── openai-codex-responses: pass through untouched ───────────────────────
+  // pi-ai's codex wire appends `/codex/responses` from the bare base, so our
+  // canonicalization must not strip anything except trailing slashes.
+  it('openai-codex-responses: passes bare base through', () => {
+    expect(canonicalBaseUrl('https://chatgpt.com/backend-api', 'openai-codex-responses')).toBe(
+      'https://chatgpt.com/backend-api',
+    );
+  });
+
+  it('openai-codex-responses: strips trailing slashes only', () => {
+    expect(canonicalBaseUrl('https://chatgpt.com/backend-api///', 'openai-codex-responses')).toBe(
+      'https://chatgpt.com/backend-api',
+    );
+  });
+
+  it('openai-codex-responses: does NOT strip /responses suffix (pi-ai handles that)', () => {
+    expect(
+      canonicalBaseUrl('https://chatgpt.com/backend-api/codex/responses', 'openai-codex-responses'),
+    ).toBe('https://chatgpt.com/backend-api/codex/responses');
+  });
+
   // ── Idempotence across wires ─────────────────────────────────────────────
   it('is idempotent for anthropic', () => {
     const once = canonicalBaseUrl('https://api.anthropic.com/v1/messages', 'anthropic');
@@ -412,5 +433,16 @@ describe('modelsEndpointUrl', () => {
         'openai-chat',
       ),
     ).toBe('https://generativelanguage.googleapis.com/v1beta/openai/models');
+  });
+
+  // ── openai-codex-responses: no discoverable /models endpoint ─────────────
+  // ChatGPT subscription's model listing requires OAuth bearer +
+  // chatgpt-account-id headers that the keyless discovery path can't supply.
+  // Callers short-circuit via ProviderEntry.modelsHint; the throw surfaces
+  // the programming error if anyone reaches this function.
+  it('openai-codex-responses: throws with an actionable hint', () => {
+    expect(() =>
+      modelsEndpointUrl('https://chatgpt.com/backend-api', 'openai-codex-responses'),
+    ).toThrow(/modelsHint/);
   });
 });

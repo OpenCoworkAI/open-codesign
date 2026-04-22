@@ -6,7 +6,13 @@
  * Tier 1 implementations: minimum viable. Tier 2 features tracked separately.
  */
 
-import { type ChatMessage, CodesignError, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
+import {
+  type ChatMessage,
+  CodesignError,
+  ERROR_CODES,
+  type ModelRef,
+  type WireApi,
+} from '@open-codesign/shared';
 import {
   claudeCodeIdentityHeaders,
   looksLikeClaudeOAuthToken,
@@ -37,10 +43,11 @@ export interface GenerateOptions {
    *  custom endpoints (DeepSeek, Ollama, LiteLLM, Azure, …) route through
    *  the correct pi-ai adapter even if the provider id isn't in pi-ai's
    *  registry. */
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic';
+  wire?: WireApi;
   /** Extra HTTP headers (merged last). Supports Codex-style static headers
    *  for gateways that require custom auth keys. */
   httpHeaders?: Record<string, string>;
+  userImages?: Array<{ data: string; mimeType: string }>;
   /**
    * Allow OpenAI-compatible keyless gateways. The upstream SDK still requires
    * a non-empty apiKey string to instantiate its client, so this uses a local
@@ -61,6 +68,12 @@ interface PiTextContent {
   text: string;
 }
 
+interface PiImageContent {
+  type: 'image';
+  data: string;
+  mimeType: string;
+}
+
 interface PiUsage {
   input: number;
   output: number;
@@ -78,7 +91,7 @@ interface PiUsage {
 
 interface PiUserMessage {
   role: 'user';
-  content: string | PiTextContent[];
+  content: string | (PiTextContent | PiImageContent)[];
   timestamp: number;
 }
 
@@ -155,6 +168,8 @@ const EMPTY_USAGE: PiUsage = {
   },
 };
 
+const MAX_TOTAL_CODEX_IMAGE_BYTES = 4_000_000;
+
 /**
  * Synthesize a PiModel for a wire + custom baseUrl so custom provider ids
  * (DeepSeek, Ollama, LiteLLM, Azure, …) route to the correct pi-ai adapter
@@ -166,19 +181,22 @@ function synthesizeWireModel(
   wire: GenerateOptions['wire'],
   baseUrl: string | undefined,
 ): PiModel {
+  const supportsImageInput = wire === 'openai-codex-responses';
   const api =
     wire === 'anthropic'
       ? 'anthropic-messages'
       : wire === 'openai-responses'
         ? 'openai-responses'
-        : 'openai-completions';
+        : wire === 'openai-codex-responses'
+          ? 'openai-codex-responses'
+          : 'openai-completions';
   const base: PiModel = {
     id: modelId,
     name: modelId,
     api,
     provider,
     reasoning: true,
-    input: ['text'],
+    input: supportsImageInput ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 131072,
     maxTokens: 131072,
@@ -261,7 +279,8 @@ export async function complete(
     piOpts.headers = { ...claudeCodeIdentityHeaders(), ...(piOpts.headers ?? {}) };
   }
 
-  const result = await pi.completeSimple(piModel, toPiContext(messages, piModel), piOpts);
+  validateCodexImageInputs(opts);
+  const result = await pi.completeSimple(piModel, toPiContext(messages, piModel, opts), piOpts);
 
   if (result.stopReason === 'error') {
     throw new CodesignError(
@@ -283,12 +302,35 @@ export async function complete(
   };
 }
 
-function toPiContext(messages: ChatMessage[], model: PiModel): PiContext {
+function validateCodexImageInputs(opts: GenerateOptions): void {
+  if (opts.wire !== 'openai-codex-responses' || (opts.userImages?.length ?? 0) === 0) return;
+  const totalImageBytes = (opts.userImages ?? []).reduce((sum, image) => {
+    const normalized = image.data.replace(/=+$/, '');
+    return sum + Math.floor((normalized.length * 3) / 4);
+  }, 0);
+  if (totalImageBytes > MAX_TOTAL_CODEX_IMAGE_BYTES) {
+    throw new CodesignError(
+      'Attached images are too large in total for ChatGPT Codex. Reduce image count or image size.',
+      ERROR_CODES.ATTACHMENT_TOO_LARGE,
+    );
+  }
+}
+
+function toPiContext(messages: ChatMessage[], model: PiModel, opts: GenerateOptions): PiContext {
   const systemPrompt = messages
     .filter((message) => message.role === 'system')
     .map((message) => message.content.trim())
     .filter((content) => content.length > 0)
     .join('\n\n');
+  const userImages = opts.userImages ?? [];
+
+  let lastUserIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') {
+      lastUserIndex = index;
+      break;
+    }
+  }
 
   return {
     ...(systemPrompt.length > 0 ? { systemPrompt } : {}),
@@ -300,6 +342,20 @@ function toPiContext(messages: ChatMessage[], model: PiModel): PiContext {
       }
 
       if (message.role === 'user') {
+        if (index === lastUserIndex && userImages.length > 0) {
+          return {
+            role: 'user',
+            content: [
+              { type: 'text', text: message.content },
+              ...userImages.map((image) => ({
+                type: 'image' as const,
+                data: image.data,
+                mimeType: image.mimeType,
+              })),
+            ],
+            timestamp,
+          };
+        }
         return {
           role: 'user',
           content: message.content,

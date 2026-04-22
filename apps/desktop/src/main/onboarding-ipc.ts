@@ -1054,7 +1054,15 @@ async function runListEndpointModels(raw: unknown): Promise<ListEndpointModelsRe
   if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
     return { ok: false, error: 'apiKey required' };
   }
-  const url = modelsEndpointUrl(baseUrl, parsedWire.data);
+  let url: string;
+  try {
+    url = modelsEndpointUrl(baseUrl, parsedWire.data);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'unsupported wire for /models lookup',
+    };
+  }
   const headers = buildAuthHeadersForWire(parsedWire.data, apiKey, undefined, baseUrl);
   try {
     const res = await fetch(url, {

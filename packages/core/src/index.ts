@@ -14,6 +14,7 @@ import type {
   ModelRef,
   SelectedElement,
   StoredDesignSystem,
+  WireApi,
 } from '@open-codesign/shared';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { remapProviderError } from './errors.js';
@@ -76,10 +77,17 @@ export interface GenerateInput {
   history: ChatMessage[];
   model: ModelRef;
   apiKey: string;
+  /**
+   * Optional async getter invoked once per agent turn so OAuth tokens can be
+   * refreshed over a long tool-using run. Returns the current bearer token.
+   * When omitted, the agent reuses the static `apiKey` captured at request
+   * start — fine for providers with long-lived API keys.
+   */
+  getApiKey?: (() => Promise<string>) | undefined;
   baseUrl?: string | undefined;
   /** v3 wire — when set, pi-ai synthesizes a model for the wire protocol so
    * custom endpoints route correctly even if the provider id is unknown. */
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  wire?: WireApi | undefined;
   /** v3 extra HTTP headers merged into the outbound request (gateway auth). */
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
@@ -111,7 +119,7 @@ export interface ApplyCommentInput {
   model: ModelRef;
   apiKey: string;
   baseUrl?: string | undefined;
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
   /** @see GenerateInput.reasoningLevel */
@@ -147,16 +155,39 @@ interface ModelRunInput {
   model: ModelRef;
   apiKey: string;
   baseUrl?: string | undefined;
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
   signal?: AbortSignal | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
   messages: ChatMessage[];
+  userImages?: Array<{ data: string; mimeType: string }> | undefined;
   logger?: CoreLogger | undefined;
   /** Log step namespace, e.g. 'generate' or 'apply_comment'. Defaults to 'generate'. */
   logScope?: string | undefined;
+}
+
+function attachmentToImageInput(
+  attachment: AttachmentContext,
+): { data: string; mimeType: string } | null {
+  if (!attachment.imageDataUrl || !attachment.mediaType) return null;
+  const prefix = `data:${attachment.mediaType};base64,`;
+  if (!attachment.imageDataUrl.startsWith(prefix)) return null;
+  return {
+    data: attachment.imageDataUrl.slice(prefix.length),
+    mimeType: attachment.mediaType,
+  };
+}
+
+function imageInputsForWire(
+  attachments: AttachmentContext[] | undefined,
+  wire: WireApi | undefined,
+): Array<{ data: string; mimeType: string }> {
+  if (wire !== 'openai-codex-responses') return [];
+  return (attachments ?? [])
+    .map((attachment) => attachmentToImageInput(attachment))
+    .filter((image): image is { data: string; mimeType: string } => image !== null);
 }
 
 function createHtmlArtifact(content: string, index: number): Artifact {
@@ -327,6 +358,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
           ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
           ...(input.wire !== undefined ? { wire: input.wire } : {}),
           ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
+          ...(input.userImages !== undefined ? { userImages: input.userImages } : {}),
           ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
           ...(input.signal !== undefined ? { signal: input.signal } : {}),
           maxTokens: MAX_OUTPUT_TOKENS,
@@ -639,6 +671,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     signal: input.signal,
     onRetry: input.onRetry,
     messages,
+    userImages: imageInputsForWire(input.attachments, input.wire),
     logger: input.logger,
   });
   return skillResult.warnings.length > 0
@@ -692,6 +725,7 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     signal: input.signal,
     onRetry: input.onRetry,
     messages,
+    userImages: imageInputsForWire(input.attachments, input.wire),
     logger: input.logger,
     logScope: 'apply_comment',
   });
@@ -709,7 +743,7 @@ export interface GenerateTitleInput {
   model: ModelRef;
   apiKey: string;
   baseUrl?: string | undefined;
-  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
   signal?: AbortSignal | undefined;

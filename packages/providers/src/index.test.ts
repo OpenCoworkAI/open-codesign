@@ -197,4 +197,110 @@ describe('complete', () => {
 
     expect(result.content).toBe('ok');
   });
+
+  it('appends image inputs to the final user turn for openai-codex-responses', async () => {
+    getModelMock.mockReturnValue({
+      id: 'gpt-5.4',
+      api: 'openai-codex-responses',
+      provider: 'openai-codex',
+      input: ['text', 'image'],
+    });
+    completeSimpleMock.mockImplementationOnce(async (_model, context) => {
+      expect(context.messages).toEqual([
+        {
+          role: 'user',
+          content: 'earlier turn',
+          timestamp: 1,
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'tell me more' }],
+          api: 'openai-codex-responses',
+          provider: 'openai-codex',
+          model: 'gpt-5.4',
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              total: 0,
+            },
+          },
+          stopReason: 'stop',
+          timestamp: 2,
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'use this screenshot' },
+            { type: 'image', data: 'AAAA', mimeType: 'image/png' },
+          ],
+          timestamp: 3,
+        },
+      ]);
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-codex-responses',
+        provider: 'openai-codex',
+        model: 'gpt-5.4',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    const result = await complete(
+      { provider: 'chatgpt-codex', modelId: 'gpt-5.4' },
+      [
+        { role: 'user', content: 'earlier turn' },
+        { role: 'assistant', content: 'tell me more' },
+        { role: 'user', content: 'use this screenshot' },
+      ],
+      {
+        apiKey: 'token',
+        wire: 'openai-codex-responses',
+        userImages: [{ data: 'AAAA', mimeType: 'image/png' }],
+      },
+    );
+
+    expect(result.content).toBe('ok');
+  });
+
+  it('rejects oversized combined image inputs for openai-codex-responses', async () => {
+    getModelMock.mockReturnValue({
+      id: 'gpt-5.4',
+      api: 'openai-codex-responses',
+      provider: 'openai-codex',
+      input: ['text', 'image'],
+    });
+
+    await expect(
+      complete(
+        { provider: 'chatgpt-codex', modelId: 'gpt-5.4' },
+        [{ role: 'user', content: 'use these screenshots' }],
+        {
+          apiKey: 'token',
+          wire: 'openai-codex-responses',
+          userImages: [
+            { data: 'A'.repeat(2_700_000), mimeType: 'image/png' },
+            { data: 'A'.repeat(2_700_000), mimeType: 'image/png' },
+          ],
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'ATTACHMENT_TOO_LARGE' });
+  });
 });

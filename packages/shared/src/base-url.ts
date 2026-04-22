@@ -64,7 +64,11 @@ export function ensureVersionedBase(baseUrl: string): string {
 }
 
 /** Wire values accepted by canonicalBaseUrl / modelsEndpointUrl. */
-export type CanonicalWire = 'anthropic' | 'openai-chat' | 'openai-responses';
+export type CanonicalWire =
+  | 'anthropic'
+  | 'openai-chat'
+  | 'openai-responses'
+  | 'openai-codex-responses';
 
 /**
  * Canonical base URL to persist in config and hand to SDK clients (pi-ai,
@@ -78,8 +82,19 @@ export type CanonicalWire = 'anthropic' | 'openai-chat' | 'openai-responses';
  *     so the base_url must already carry the version segment (OpenAI /v1,
  *     Zhipu /api/paas/v4, Volcengine /api/v3, Google /v1beta/openai …). If
  *     the user didn't encode a version, default to /v1.
+ *   - openai-codex-responses: pi-ai's codex wire appends `/codex/responses`
+ *     from the bare base. Pass the URL through untouched — stripping or
+ *     version-padding would break it.
  */
 export function canonicalBaseUrl(baseUrl: string, wire: CanonicalWire): string {
+  if (wire === 'openai-codex-responses') {
+    // Non-regex trailing-slash trim. CodeQL flags `/\/+$/` as a polynomial
+    // regex (ReDoS-adjacent on long all-slash inputs). A plain while-loop
+    // is O(n) with no backtracking and makes the bound obvious to readers.
+    let out = baseUrl;
+    while (out.endsWith('/')) out = out.slice(0, -1);
+    return out;
+  }
   const stripped = stripInferenceEndpointSuffix(baseUrl);
   if (wire === 'anthropic') return stripped.replace(/\/v1$/, '');
   return ensureVersionedBase(stripped);
@@ -88,8 +103,19 @@ export function canonicalBaseUrl(baseUrl: string, wire: CanonicalWire): string {
 /**
  * The URL to GET for a /models listing, given a user-supplied base URL and
  * the wire. Mirrors what each SDK's implicit /models endpoint would be.
+ *
+ * openai-codex-responses has no user-discoverable /models endpoint — the
+ * ChatGPT subscription API requires OAuth + chatgpt-account-id headers that
+ * the keyless discovery path cannot supply. Callers short-circuit via
+ * ProviderEntry.modelsHint before reaching this function; if it is called,
+ * we throw to surface the programming error.
  */
 export function modelsEndpointUrl(baseUrl: string, wire: CanonicalWire): string {
+  if (wire === 'openai-codex-responses') {
+    throw new Error(
+      'openai-codex-responses has no discoverable /models endpoint; use ProviderEntry.modelsHint',
+    );
+  }
   const base = canonicalBaseUrl(baseUrl, wire);
   // Anthropic's /models is versioned; OpenAI-compat's /models sits at the
   // already-versioned base.

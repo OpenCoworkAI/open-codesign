@@ -1,6 +1,6 @@
 import type { AgentEvent, AgentMessage, AgentOptions } from '@mariozechner/pi-agent-core';
 import type { LoadedSkill, ModelRef } from '@open-codesign/shared';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const loadBuiltinSkillsMock = vi.fn(async (): Promise<LoadedSkill[]> => []);
@@ -37,6 +37,13 @@ interface AgentScript {
   stopReason?: 'stop' | 'error' | 'aborted';
   errorMessage?: string;
   promptThrows?: Error;
+  /**
+   * When set, the mock invokes `options.getApiKey` before emitting the
+   * assistant response and — if it throws — converts the throw into an
+   * 'error' AgentMessage (matching pi-agent-core's `handleRunFailure`
+   * behavior that flattens getApiKey throws into `errorMessage: string`).
+   */
+  invokeGetApiKey?: boolean;
 }
 
 let scriptedAgent: AgentScript = { assistantText: '' };
@@ -58,6 +65,41 @@ vi.mock('@mariozechner/pi-agent-core', () => {
     async prompt(message: unknown): Promise<void> {
       this.call.prompts.push({ message });
       if (scriptedAgent.promptThrows) throw scriptedAgent.promptThrows;
+
+      // Simulate pi-agent-core's per-turn getApiKey invocation. Real
+      // runAgentLoop calls `await config.getApiKey(provider)` (line 156 of
+      // agent-loop.js); if that rejects, `runWithLifecycle` catches it and
+      // emits a failure AgentMessage with just `errorMessage: string` —
+      // which is why our code captures the original throw in a closure.
+      if (scriptedAgent.invokeGetApiKey && this.call.options.getApiKey) {
+        try {
+          await this.call.options.getApiKey('test-provider');
+        } catch (err) {
+          const failMsg: AgentMessage = {
+            role: 'assistant',
+            // biome-ignore lint/suspicious/noExplicitAny: mock literal union.
+            api: 'anthropic-messages' as any,
+            // biome-ignore lint/suspicious/noExplicitAny: same.
+            provider: 'anthropic' as any,
+            model: 'mock-model',
+            content: [{ type: 'text', text: '' }],
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            stopReason: 'error',
+            errorMessage: err instanceof Error ? err.message : String(err),
+            timestamp: Date.now(),
+          };
+          this.state.messages.push(failMsg);
+          this.emit({ type: 'agent_end', messages: [failMsg] });
+          return;
+        }
+      }
 
       this.emit({ type: 'agent_start' });
       this.emit({ type: 'turn_start' });
@@ -220,6 +262,58 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     const resolver = agentCalls[0]?.options.getApiKey;
     expect(resolver).toBeDefined();
     await expect(Promise.resolve(resolver?.('anthropic'))).resolves.toBe('sk-token-123');
+  });
+
+  it('prefers the dynamic input.getApiKey over the static apiKey when provided', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'long-running agent task',
+      history: [],
+      model: MODEL,
+      apiKey: 'stale-static-token',
+      getApiKey: async () => 'fresh-rotating-token',
+    });
+
+    const resolver = agentCalls[0]?.options.getApiKey;
+    // Each agent turn re-invokes the getter, so a rotated OAuth token picked
+    // up by the token store reaches the next LLM round-trip without
+    // recomputing anything from the IPC layer.
+    await expect(Promise.resolve(resolver?.('openai-codex'))).resolves.toBe('fresh-rotating-token');
+  });
+
+  it('falls back to static apiKey when input.getApiKey returns an empty string', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'fallback behavior',
+      history: [],
+      model: MODEL,
+      apiKey: 'fallback-token',
+      getApiKey: async () => '',
+    });
+
+    const resolver = agentCalls[0]?.options.getApiKey;
+    await expect(Promise.resolve(resolver?.('openai-codex'))).resolves.toBe('fallback-token');
+  });
+
+  it('rethrows the original input.getApiKey error (preserves structured code)', async () => {
+    // Simulates: user signs out of ChatGPT mid-agent-run. Token store throws
+    // CodesignError(PROVIDER_AUTH_MISSING). Without the capture-and-rethrow
+    // dance, pi-agent-core would flatten the throw into a plain errorMessage
+    // string and our post-agent branch would re-wrap as PROVIDER_ERROR —
+    // losing the code the renderer needs to show "sign in again".
+    scriptedAgent = { assistantText: '', invokeGetApiKey: true };
+    const authErr = new CodesignError('ChatGPT 订阅已失效', ERROR_CODES.PROVIDER_AUTH_MISSING);
+    await expect(
+      generateViaAgent({
+        prompt: 'midrun logout scenario',
+        history: [],
+        model: MODEL,
+        apiKey: 'already-expired',
+        getApiKey: async () => {
+          throw authErr;
+        },
+      }),
+    ).rejects.toBe(authErr);
   });
 
   it('overrides pi-ai model baseUrl when input.baseUrl is provided', async () => {
