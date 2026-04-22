@@ -829,7 +829,9 @@ function ModelsTab() {
           blocked: boolean;
         }
       | undefined;
-    opencode?: { count: number; warnings: string[]; blocked: boolean } | undefined;
+    opencode?:
+      | { count: number; providerLabels: string[]; warnings: string[]; blocked: boolean }
+      | undefined;
   } | null>(null);
   /**
    * When set, `AddCustomProviderModal` mounts with these fields pre-filled.
@@ -917,6 +919,10 @@ function ModelsTab() {
             ? {
                 opencode: {
                   count: detected.opencode.providers.length,
+                  // Preserve the "OpenCode · Anthropic" style labels so the
+                  // banner can show the user WHICH providers will be
+                  // imported, not just a bare count.
+                  providerLabels: detected.opencode.providers.map((p) => p.name),
                   warnings: detected.opencode.warnings ?? [],
                   blocked: detected.opencode.blocked,
                 },
@@ -1252,9 +1258,18 @@ function ModelsTab() {
                       />
                     );
                   }
+                  // First 3 provider labels inline, then "+N more" for
+                  // the overflow. Keeps the banner one-line even for a
+                  // user with 7 keys configured in opencode.
+                  const head = oc.providerLabels.slice(0, 3).join(', ');
+                  const overflow = oc.providerLabels.length - 3;
+                  const providerSummary = overflow > 0 ? `${head} +${overflow} more` : head;
                   return (
                     <ImportBanner
-                      label={t('settings.providers.import.opencodeFound', { count: oc.count })}
+                      label={t('settings.providers.import.opencodeFound', {
+                        count: oc.count,
+                        providers: providerSummary,
+                      })}
                       onImport={handleImportOpencode}
                       onDismiss={dismiss}
                     />

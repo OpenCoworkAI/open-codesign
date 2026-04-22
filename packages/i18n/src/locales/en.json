@@ -235,7 +235,7 @@
         "geminiBlocked": "Vertex AI detected. The Gemini importer only supports Gemini Developer API keys (AIzaSy…) — configure Vertex manually.",
         "geminiDone": "Gemini provider imported",
         "opencodeBlocked": "OpenCode config detected but nothing is importable. Check the warning above, fix auth.json, and try again.",
-        "opencodeFound": "OpenCode config detected — import {{count}} providers?",
+        "opencodeFound": "OpenCode detected — import {{count}} providers ({{providers}})?",
         "opencodeDone": "OpenCode providers imported",
         "claudeCodeImportedActivated": "Claude Code imported and set as the active model provider",
         "claudeCodeOpenSettings": "Open Settings",

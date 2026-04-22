@@ -235,7 +235,7 @@
         "geminiBlocked": "检测到 Vertex AI 配置。Gemini 导入仅支持 Gemini Developer API key（AIzaSy…格式）—— Vertex 请手动配置。",
         "geminiDone": "已导入 Gemini 服务",
         "opencodeBlocked": "发现 OpenCode 配置但没有可导入内容。查看上方 warning，修复 auth.json 后重试。",
-        "opencodeFound": "发现 OpenCode 配置 — 导入 {{count}} 个服务？",
+        "opencodeFound": "发现 OpenCode 配置 — 导入 {{count}} 个服务（{{providers}}）？",
         "opencodeDone": "已导入 OpenCode 服务",
         "claudeCodeImportedActivated": "已导入 Claude Code 并设为当前模型服务",
         "claudeCodeOpenSettings": "打开 Settings",

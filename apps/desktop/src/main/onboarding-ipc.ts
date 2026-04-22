@@ -771,9 +771,15 @@ async function runUpdateProvider(input: UpdateProviderInput): Promise<Onboarding
 // preload facade can import one source — see that file's header for the
 // "we were drifting silently" background.
 
-async function detectChatgptSubscription(): Promise<boolean> {
+/** Test seam: the real IPC handler calls `detectChatgptSubscription()` with
+ *  no args, which resolves the path via `codexAuthPath()`. Tests can pass
+ *  a fabricated path pointing at a tmpdir file without having to mock
+ *  `node:fs/promises`. */
+export async function detectChatgptSubscription(
+  authPath: string = codexAuthPath(),
+): Promise<boolean> {
   try {
-    const raw = await readFile(codexAuthPath(), 'utf8');
+    const raw = await readFile(authPath, 'utf8');
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return false;
     return (parsed as Record<string, unknown>)['auth_mode'] === 'chatgpt';

@@ -96,20 +96,32 @@ export interface ReadGeminiCliOptions {
  *
  * Does NOT expand `${OTHER_VAR}` references — the Gemini CLI writes the
  * literal key and no user in practice parameterizes it.
+ *
+ * `parseDotEnvLines` additionally returns malformed (non-blank, non-comment)
+ * lines that were skipped, so callers can warn about `GEMINI_API_KEY value`
+ * (space instead of `=`) instead of silently dropping it.
  */
-export function parseDotEnv(content: string): Record<string, string> {
-  const out: Record<string, string> = {};
+export function parseDotEnvLines(content: string): {
+  vars: Record<string, string>;
+  skipped: string[];
+} {
+  const vars: Record<string, string> = {};
+  const skipped: string[] = [];
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (line.length === 0) continue;
     if (line.startsWith('#')) continue;
-    // Allow `export FOO=bar`. Anything else that doesn't match KEY=VALUE is
-    // silently skipped — better than blowing up on a malformed line.
     const withoutExport = line.startsWith('export ') ? line.slice(7).trimStart() : line;
     const eq = withoutExport.indexOf('=');
-    if (eq <= 0) continue;
+    if (eq <= 0) {
+      skipped.push(line);
+      continue;
+    }
     const key = withoutExport.slice(0, eq).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      skipped.push(line);
+      continue;
+    }
     let value = withoutExport.slice(eq + 1).trim();
     if (value.length >= 2) {
       const first = value[0];
@@ -118,19 +130,38 @@ export function parseDotEnv(content: string): Record<string, string> {
         value = value.slice(1, -1);
       }
     }
-    out[key] = value;
+    vars[key] = value;
   }
-  return out;
+  return { vars, skipped };
 }
 
-async function readEnvFileIfPresent(path: string): Promise<Record<string, string> | null> {
+export function parseDotEnv(content: string): Record<string, string> {
+  return parseDotEnvLines(content).vars;
+}
+
+async function readEnvFileIfPresent(
+  path: string,
+): Promise<{ vars: Record<string, string>; skipped: string[] } | null> {
   try {
     const raw = await readFile(path, 'utf8');
-    return parseDotEnv(raw);
+    return parseDotEnvLines(raw);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw err;
   }
+}
+
+/** Look through the skipped-lines output of parseDotEnvLines for entries
+ *  that the user probably intended as a GEMINI_API_KEY declaration but got
+ *  the syntax wrong (e.g. `GEMINI_API_KEY AIzaSy…` with a space instead of
+ *  `=`). Returns a human-readable warning or null. */
+function suspiciousGeminiLineWarning(path: string, skipped: string[]): string | null {
+  for (const line of skipped) {
+    if (/^(export\s+)?GEMINI_API_KEY\b/.test(line) && !line.includes('=')) {
+      return `${path} has a line that looks like GEMINI_API_KEY but is missing \`=\` — check the syntax (expected \`GEMINI_API_KEY=AIzaSy…\`).`;
+    }
+  }
+  return null;
 }
 
 /**
@@ -173,15 +204,19 @@ export async function readGeminiCliConfig(
   let apiKey: string | null = null;
   let apiKeySource: Exclude<GeminiKeySource, 'none'> | null = null;
   let keyPath: string | null = null;
+  const earlyWarnings: string[] = [];
 
   const geminiEnvPath = geminiDotEnvPath(home);
   const geminiEnvFile = await readEnvFileIfPresent(geminiEnvPath);
   if (geminiEnvFile !== null) {
-    const raw = geminiEnvFile['GEMINI_API_KEY'];
+    const raw = geminiEnvFile.vars['GEMINI_API_KEY'];
     if (typeof raw === 'string' && raw.trim().length > 0) {
       apiKey = raw.trim();
       apiKeySource = 'gemini-env';
       keyPath = geminiEnvPath;
+    } else {
+      const w = suspiciousGeminiLineWarning(geminiEnvPath, geminiEnvFile.skipped);
+      if (w !== null) earlyWarnings.push(w);
     }
   }
 
@@ -189,11 +224,14 @@ export async function readGeminiCliConfig(
     const homeEnvPath = homeDotEnvPath(home);
     const homeEnvFile = await readEnvFileIfPresent(homeEnvPath);
     if (homeEnvFile !== null) {
-      const raw = homeEnvFile['GEMINI_API_KEY'];
+      const raw = homeEnvFile.vars['GEMINI_API_KEY'];
       if (typeof raw === 'string' && raw.trim().length > 0) {
         apiKey = raw.trim();
         apiKeySource = 'home-env';
         keyPath = homeEnvPath;
+      } else {
+        const w = suspiciousGeminiLineWarning(homeEnvPath, homeEnvFile.skipped);
+        if (w !== null) earlyWarnings.push(w);
       }
     }
   }
@@ -206,9 +244,16 @@ export async function readGeminiCliConfig(
     }
   }
 
-  if (apiKey === null || apiKeySource === null) return null;
+  if (apiKey === null || apiKeySource === null) {
+    // Not null if we flagged a malformed line — surface that instead of
+    // a completely silent "nothing to import."
+    if (earlyWarnings.length > 0) {
+      return { kind: 'blocked', warnings: earlyWarnings };
+    }
+    return null;
+  }
 
-  const warnings: string[] = [];
+  const warnings: string[] = [...earlyWarnings];
   if (!GEMINI_API_KEY_PATTERN.test(apiKey)) {
     warnings.push(
       `GEMINI_API_KEY does not match the expected format (AIzaSy + 33 chars). Found at ${keyPath ?? 'shell env'}. The import will proceed but the key may be rejected at validation.`,

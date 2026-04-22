@@ -8,6 +8,7 @@ import {
   GEMINI_OPENAI_COMPAT_BASE_URL,
   type GeminiImport,
   parseDotEnv,
+  parseDotEnvLines,
   readGeminiCliConfig,
 } from './gemini-cli-config';
 
@@ -75,6 +76,19 @@ BAZ=qux
 
   it('preserves = inside values', () => {
     expect(parseDotEnv('A=foo=bar=baz')).toEqual({ A: 'foo=bar=baz' });
+  });
+});
+
+describe('parseDotEnvLines', () => {
+  it('returns skipped lines for non-KEY=VALUE content', () => {
+    const r = parseDotEnvLines('OK=v\nBAD LINE WITHOUT EQUALS\n# comment\n\nOK2=v2');
+    expect(r.vars).toEqual({ OK: 'v', OK2: 'v2' });
+    expect(r.skipped).toEqual(['BAD LINE WITHOUT EQUALS']);
+  });
+
+  it('skips keys with invalid identifier characters', () => {
+    const r = parseDotEnvLines('BAD-KEY=v\nOK=v');
+    expect(r.skipped).toEqual(['BAD-KEY=v']);
   });
 });
 
@@ -201,6 +215,31 @@ describe('readGeminiCliConfig', () => {
     await writeFile(join(home, '.gemini', '.env'), `export GEMINI_API_KEY=${VALID_KEY}\n`, 'utf8');
     const out = expectFound(await readGeminiCliConfig(home, { env: {} }));
     expect(out.apiKey).toBe(VALID_KEY);
+  });
+
+  it('warns when ~/.gemini/.env has a GEMINI_API_KEY line missing `=`', async () => {
+    const home = await makeHome();
+    await mkdir(join(home, '.gemini'), { recursive: true });
+    // Space instead of `=` — the user's intent is clearly to declare the
+    // key but the syntax is wrong. Silently dropping this line lets the
+    // user conclude "the import doesn't work" with zero diagnostic.
+    await writeFile(join(home, '.gemini', '.env'), `GEMINI_API_KEY ${VALID_KEY}\n`, 'utf8');
+    const out = expectBlocked(await readGeminiCliConfig(home, { env: {} }));
+    expect(out.warnings.join('\n')).toMatch(/GEMINI_API_KEY.*missing.*=/);
+  });
+
+  it('surfaces the missing-equals warning even when the key comes from shell env', async () => {
+    const home = await makeHome();
+    await mkdir(join(home, '.gemini'), { recursive: true });
+    await writeFile(join(home, '.gemini', '.env'), 'GEMINI_API_KEY AIzaSy-bad\n', 'utf8');
+    const out = await readGeminiCliConfig(home, { env: { GEMINI_API_KEY: VALID_KEY } });
+    // The shell key wins, but the file warning must still ride along so
+    // the user notices their broken .env line.
+    expect(out?.kind).toBe('found');
+    if (out?.kind === 'found') {
+      expect(out.apiKey).toBe(VALID_KEY);
+      expect(out.warnings.join('\n')).toMatch(/GEMINI_API_KEY.*missing.*=/);
+    }
   });
 });
 
