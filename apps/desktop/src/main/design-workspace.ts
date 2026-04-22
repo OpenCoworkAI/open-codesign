@@ -3,7 +3,7 @@ import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { Design } from '@open-codesign/shared';
 import type Database from 'better-sqlite3';
-import { dialog, shell, type BrowserWindow } from 'electron';
+import { type BrowserWindow, dialog, shell } from 'electron';
 import { getLogger } from './logger';
 import {
   clearDesignWorkspace,
@@ -98,6 +98,10 @@ function requireDesign(db: Database.Database, designId: string): Design {
   return design;
 }
 
+export function checkWorkspaceFolderExists(p: string): boolean {
+  return existsSync(p);
+}
+
 export async function bindWorkspace(
   db: Database.Database,
   designId: string,
@@ -117,7 +121,10 @@ export async function bindWorkspace(
   }
 
   const normalizedPath = normalizeWorkspacePath(workspacePath);
-  if (current.workspacePath !== null && normalizeWorkspacePath(current.workspacePath) === normalizedPath) {
+  if (
+    current.workspacePath !== null &&
+    normalizeWorkspacePath(current.workspacePath) === normalizedPath
+  ) {
     logger.info('workspace.bind.noop', { designId, workspacePath: normalizedPath });
     return current;
   }

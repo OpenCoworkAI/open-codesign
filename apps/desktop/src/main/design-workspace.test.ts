@@ -1,8 +1,13 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDesign, createDesignFile, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
+import {
+  createDesign,
+  createDesignFile,
+  initInMemoryDb,
+  updateDesignWorkspace,
+} from './snapshots-db';
 
 vi.mock('electron', () => ({
   dialog: {
@@ -32,7 +37,11 @@ async function makeTempDir(prefix: string): Promise<string> {
   return dir;
 }
 
-async function writeWorkspaceFile(root: string, relativePath: string, content: string): Promise<void> {
+async function writeWorkspaceFile(
+  root: string,
+  relativePath: string,
+  content: string,
+): Promise<void> {
   const filePath = path.join(root, relativePath);
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, content, 'utf8');
@@ -140,7 +149,9 @@ describe('bindWorkspace', () => {
 
     expect(updated.workspacePath).toBe(normalizeWorkspacePath(destination));
     expect(await readFile(path.join(destination, 'tracked.txt'), 'utf8')).toBe('tracked root');
-    expect(await readFile(path.join(destination, 'nested/child.txt'), 'utf8')).toBe('tracked nested');
+    expect(await readFile(path.join(destination, 'nested/child.txt'), 'utf8')).toBe(
+      'tracked nested',
+    );
     await expect(readFile(path.join(destination, 'ignored.txt'), 'utf8')).rejects.toMatchObject({
       code: 'ENOENT',
     });
@@ -165,7 +176,9 @@ describe('bindWorkspace', () => {
     expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
       workspace_path: sourcePath,
     });
-    expect(await readFile(path.join(destination, 'tracked.txt'), 'utf8')).toBe('existing destination');
+    expect(await readFile(path.join(destination, 'tracked.txt'), 'utf8')).toBe(
+      'existing destination',
+    );
   });
 
   it('clears the workspace binding without touching the filesystem', async () => {

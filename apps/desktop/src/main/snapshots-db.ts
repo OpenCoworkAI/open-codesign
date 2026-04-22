@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { getLogger } from './logger';
 import type {
   ChatAppendInput,
   ChatMessageKind,
@@ -307,8 +308,9 @@ export function initSnapshotsDb(dbPath: string): Database {
     // Don't cache a half-open DB — let the next caller retry from scratch.
     try {
       db.close();
-    } catch {
-      /* swallow secondary close failure */
+    } catch (closeErr) {
+      const logger = getLogger();
+      logger.warn('db.init.close_failed', { cause: closeErr });
     }
     throw cause;
   }
@@ -1041,7 +1043,9 @@ export function upsertDesignFile(
   db.prepare(
     'INSERT INTO design_files (id, design_id, path, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
   ).run(id, designId, p, content, now, now);
-  return rowToDesignFile(db.prepare('SELECT * FROM design_files WHERE id = ?').get(id) as DesignFileRowDb);
+  return rowToDesignFile(
+    db.prepare('SELECT * FROM design_files WHERE id = ?').get(id) as DesignFileRowDb,
+  );
 }
 
 export function strReplaceInDesignFile(

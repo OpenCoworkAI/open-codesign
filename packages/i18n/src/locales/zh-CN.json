@@ -57,6 +57,7 @@
       "change": "更改",
       "open": "打开文件夹",
       "clear": "清除工作区",
+      "unavailable": "文件夹在磁盘上不存在",
       "busyGenerating": "生成中无法更改工作区",
       "updated": "工作区已更新",
       "updateFailed": "更新工作区失败",

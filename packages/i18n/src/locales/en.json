@@ -57,6 +57,7 @@
       "change": "Change",
       "open": "Open folder",
       "clear": "Clear workspace",
+      "unavailable": "Folder not found on disk",
       "busyGenerating": "Cannot change workspace while generating",
       "updated": "Workspace updated",
       "updateFailed": "Failed to update workspace",

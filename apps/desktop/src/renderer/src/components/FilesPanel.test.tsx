@@ -1,8 +1,50 @@
 import { initI18n } from '@open-codesign/i18n';
 import type { Design } from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as React from 'react';
+import * as ReactDOMServer from 'react-dom/server';
+
+vi.mock('react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react')>();
+  const mockUseState = vi.fn((init) => {
+    if (init === null || init === false) {
+      return [false, vi.fn()];
+    }
+    return [init, vi.fn()];
+  });
+  
+  return {
+    ...actual,
+    default: {
+      ...(actual as any).default,
+      useState: mockUseState,
+      useSyncExternalStore: (sub: any, getSnap: any) => getSnap()
+    },
+    useState: mockUseState,
+    useSyncExternalStore: (sub: any, getSnap: any) => getSnap()
+  };
+});
+
 import type { CodesignApi } from '../../../preload';
 import { useCodesignStore } from '../store';
+import { FilesPanel } from './FilesPanel';
+import { useDesignFiles } from '../hooks/useDesignFiles';
+
+
+vi.mock('../store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../store')>();
+  const mockStoreHook = vi.fn((selector) => {
+    return selector(actual.useCodesignStore.getState());
+  });
+  Object.assign(mockStoreHook, actual.useCodesignStore);
+  return {
+    ...actual,
+    useCodesignStore: mockStoreHook,
+  };
+});
+vi.mock('../hooks/useDesignFiles', () => ({
+  useDesignFiles: vi.fn(),
+}));
 
 declare global {
   interface Window {
@@ -295,5 +337,26 @@ describe('FilesPanel workspace integration', () => {
       expect(designs.filter((d) => d.workspacePath === null)).toHaveLength(2);
       expect(designs.filter((d) => d.workspacePath !== null)).toHaveLength(1);
     });
+
+  describe('FilesPanel rendering UI', () => {
+    beforeEach(() => {
+      vi.mocked(useDesignFiles).mockReturnValue({ files: [], loading: false } as any);
+      useCodesignStore.setState({
+        currentDesignId: 'design-1',
+        designs: [mockDesign({ id: 'design-1', workspacePath: '/path/workspace' })],
+      });
+    });
+
+    it('renders empty state rendering alongside workspace', () => {
+      const html = ReactDOMServer.renderToString(React.createElement(FilesPanel));
+      expect(html).toContain('No files yet');
+      expect(html).toContain('Workspace');
+    });
+
+    it('renders unavailable indicator when folderExists is false', () => {
+      const html = ReactDOMServer.renderToString(React.createElement(FilesPanel));
+      expect(html).toContain('Folder not found on disk');
+    });
   });
+});
 });

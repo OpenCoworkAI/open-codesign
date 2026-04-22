@@ -2,8 +2,8 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { existsSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { AgentStreamEvent } from '../preload/index';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentStreamEvent } from '../preload/index';
 import { normalizeWorkspacePath } from './design-workspace';
 import {
   createDesign,
@@ -29,8 +29,11 @@ vi.mock('electron-updater', () => ({
   },
 }));
 
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+function BrowserWindowMock() {}
+
 vi.mock('./electron-runtime', () => ({
-  BrowserWindow: class BrowserWindow {},
+  BrowserWindow: BrowserWindowMock,
   app: {
     getPath: vi.fn((name: string) => {
       if (name === 'userData') return '/tmp/open-codesign-tests';
@@ -103,7 +106,9 @@ describe('createRuntimeTextEditorFs', () => {
 
     fs.create('nested/index.html', '<main>created</main>');
 
-    expect(viewDesignFile(db, design.id, 'nested/index.html')?.content).toBe('<main>created</main>');
+    expect(viewDesignFile(db, design.id, 'nested/index.html')?.content).toBe(
+      '<main>created</main>',
+    );
     expect(logger.error).not.toHaveBeenCalled();
     expect(listFsUpdatedEvents(sendEvent)).toHaveLength(1);
   });
@@ -128,7 +133,9 @@ describe('createRuntimeTextEditorFs', () => {
       fs.create('nested/index.html', '<main>created</main>');
 
       const diskPath = path.join(workspaceDir, 'nested/index.html');
-      expect(viewDesignFile(db, design.id, 'nested/index.html')?.content).toBe('<main>created</main>');
+      expect(viewDesignFile(db, design.id, 'nested/index.html')?.content).toBe(
+        '<main>created</main>',
+      );
       expect(readFileSync(diskPath, 'utf8')).toBe('<main>created</main>');
       expect(listFsUpdatedEvents(sendEvent)).toHaveLength(1);
     } finally {
@@ -158,9 +165,15 @@ describe('createRuntimeTextEditorFs', () => {
 
       const events = listFsUpdatedEvents(sendEvent);
       expect(viewDesignFile(db, design.id, 'index.html')?.content).toBe('<main>after</main>');
-      expect(readFileSync(path.join(workspaceDir, 'index.html'), 'utf8')).toBe('<main>after</main>');
+      expect(readFileSync(path.join(workspaceDir, 'index.html'), 'utf8')).toBe(
+        '<main>after</main>',
+      );
       expect(events).toHaveLength(2);
-      expect(events.at(-1)).toMatchObject({ type: 'fs_updated', path: 'index.html', content: '<main>after</main>' });
+      expect(events.at(-1)).toMatchObject({
+        type: 'fs_updated',
+        path: 'index.html',
+        content: '<main>after</main>',
+      });
     } finally {
       cleanupDir(workspaceDir);
     }

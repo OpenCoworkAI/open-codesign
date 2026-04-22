@@ -82,7 +82,11 @@ import {
   safeInitSnapshotsDb,
   upsertDesignFile,
 } from './snapshots-db';
-import { registerSnapshotsIpc, registerSnapshotsUnavailableIpc, registerWorkspaceIpc } from './snapshots-ipc';
+import {
+  registerSnapshotsIpc,
+  registerSnapshotsUnavailableIpc,
+  registerWorkspaceIpc,
+} from './snapshots-ipc';
 import { initStorageSettings } from './storage-settings';
 
 // ESM shim: package.json "type": "module" means the built bundle is ESM and
@@ -1235,143 +1239,136 @@ async function scheduleStartupUpdateCheck(): Promise<void> {
 
 if (!IS_VITEST) {
   void app.whenReady().then(async () => {
-  // Extracted so the outer try/catch AND post-init listeners (whose callbacks
-  // fire outside this block) can route failures through the same boot-fallback
-  // path. Without this, a later createWindow() throw from app.on('activate')
-  // would bypass writeBootErrorSync and leave the user with nothing to attach.
-  const handleBootFailure = (err: unknown, title: string, message: string): void => {
-    let logsDir: string;
-    try {
-      logsDir = app.getPath('logs');
-    } catch {
-      logsDir = app.getPath('temp');
-    }
-    const bootLogPath = writeBootErrorSync({
-      error: err,
-      logsDir,
-      appVersion: app.getVersion(),
-      platform: process.platform,
-      electronVersion: process.versions.electron ?? 'unknown',
-      nodeVersion: process.versions.node,
-    });
-    const choice = showBootDialog(app, dialog, {
-      type: 'error',
-      title,
-      message,
-      detail: `Error: ${err instanceof Error ? err.message : String(err)}\n\nDiagnostic log: ${bootLogPath}`,
-      buttons: ['Copy diagnostic path', 'Open log folder', 'Quit'],
-      defaultId: 2,
-      cancelId: 2,
-    });
-    if (choice === 0) clipboard.writeText(bootLogPath);
-    if (choice === 1) shell.showItemInFolder(bootLogPath);
-  };
-
-  try {
-    initLogger();
-    // Single-instance lock. Two simultaneous Electron instances would race
-    // `cleanupStaleTmps` vs `writeAtomic` (B's cleanup unlinks A's in-flight
-    // tmp → ENOENT rename) and collide on the SQLite WAL. macOS usually
-    // enforces this at the OS level, but `open -n` defeats that — so we
-    // acquire the lock explicitly before touching any shared files.
-    const gotLock = app.requestSingleInstanceLock();
-    if (!gotLock) {
-      app.quit();
-      return;
-    }
-    app.on('second-instance', () => {
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.focus();
-      }
-    });
-    // Show a blocking dialog if the user launched from the DMG mount. If
-    // they accept the remedy, we quit here before touching safeStorage / the
-    // snapshots DB so nothing half-initialises against a bad install.
-    const aborted = await maybeAbortIfRunningFromDmg();
-    if (aborted) return;
-    await loadConfigOnBoot();
-    // One-shot migration for feat-branch testers whose config.toml still
-    // carries Phase 1's stale codex wire/baseUrl. No-op on fresh installs
-    // and for everyone else. A failure here means the config file itself
-    // is unwritable (disk full, permissions, etc.) — let it bubble up to
-    // the outer boot-error dialog rather than silently hiding it, so the
-    // user sees the diagnostic instead of a mysteriously broken codex flow.
-    await migrateStaleCodexEntryIfNeeded();
-    // Best-effort sweep of leftover `<file>.tmp.<pid>` siblings from previous
-    // crashes. pid changes across restarts so without this the config dir
-    // accumulates 0o600 litter forever.
-    cleanupStaleTmps(join(configDir(), 'reported-fingerprints.json'));
-    // Snapshot persistence is best-effort at boot — a failure here (corrupt DB,
-    // permission denied, missing native binding) must NOT block the BrowserWindow
-    // from opening. Surface it via an error dialog and skip registering the
-    // snapshots IPC channels; the rest of the app stays usable.
-    const dbResult = safeInitSnapshotsDb(join(app.getPath('userData'), 'designs.db'));
-    const diagnosticsDb: Database | null = dbResult.ok ? dbResult.db : null;
-    if (dbResult.ok) {
-      registerSnapshotsIpc(dbResult.db);
-      registerWorkspaceIpc(dbResult.db, () => mainWindow);
-      registerChatMessagesIpc(dbResult.db);
-      registerCommentsIpc(dbResult.db);
+    // Extracted so the outer try/catch AND post-init listeners (whose callbacks
+    // fire outside this block) can route failures through the same boot-fallback
+    // path. Without this, a later createWindow() throw from app.on('activate')
+    // would bypass writeBootErrorSync and leave the user with nothing to attach.
+    const handleBootFailure = (err: unknown, title: string, message: string): void => {
+      let logsDir: string;
       try {
-        pruneDiagnosticEvents(dbResult.db, 500);
-      } catch (err) {
-        getLogger('main:boot').warn('diagnosticEvents.prune.fail', {
-          message: err instanceof Error ? err.message : String(err),
-        });
+        logsDir = app.getPath('logs');
+      } catch {
+        logsDir = app.getPath('temp');
       }
-    } else {
-      const bootLog = getLogger('main:boot');
-      bootLog.error('snapshotsDb.init.fail', {
-        message: dbResult.error.message,
-        stack: dbResult.error.stack,
+      const bootLogPath = writeBootErrorSync({
+        error: err,
+        logsDir,
+        appVersion: app.getVersion(),
+        platform: process.platform,
+        electronVersion: process.versions.electron ?? 'unknown',
+        nodeVersion: process.versions.node,
       });
-      // Install stub handlers so renderer-side calls reject with a typed
-      // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
-      // "No handler registered" rejection — see snapshots-ipc.ts.
-      registerSnapshotsUnavailableIpc(dbResult.error.message);
-      registerChatMessagesUnavailableIpc(dbResult.error.message);
-      registerCommentsUnavailableIpc(dbResult.error.message);
-      dialog.showErrorBox(
-        'Design history unavailable',
-        `Could not open the local snapshots database. Version history will be disabled for this session.\n\n${dbResult.error.message}`,
-      );
-    }
-    registerIpcHandlers(diagnosticsDb);
-    registerLocaleIpc();
-    registerConnectionIpc();
-    registerOnboardingIpc();
-    registerCodexOAuthIpc();
-    registerPreferencesIpc();
-    registerImageGenerationSettingsIpc();
-    registerExporterIpc(() => mainWindow);
-    registerDiagnosticsIpc(diagnosticsDb);
-    setupAutoUpdater();
-    registerAppMenu();
-    createWindow();
-    void scheduleStartupUpdateCheck();
+      const choice = showBootDialog(app, dialog, {
+        type: 'error',
+        title,
+        message,
+        detail: `Error: ${err instanceof Error ? err.message : String(err)}\n\nDiagnostic log: ${bootLogPath}`,
+        buttons: ['Copy diagnostic path', 'Open log folder', 'Quit'],
+        defaultId: 2,
+        cancelId: 2,
+      });
+      if (choice === 0) clipboard.writeText(bootLogPath);
+      if (choice === 1) shell.showItemInFolder(bootLogPath);
+    };
 
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        try {
-          createWindow();
-        } catch (err) {
-          handleBootFailure(err, 'Cannot reopen window', 'Window failed to open.');
-        }
+    try {
+      initLogger();
+      // Single-instance lock. Two simultaneous Electron instances would race
+      // `cleanupStaleTmps` vs `writeAtomic` (B's cleanup unlinks A's in-flight
+      // tmp → ENOENT rename) and collide on the SQLite WAL. macOS usually
+      // enforces this at the OS level, but `open -n` defeats that — so we
+      // acquire the lock explicitly before touching any shared files.
+      const gotLock = app.requestSingleInstanceLock();
+      if (!gotLock) {
+        app.quit();
+        return;
       }
-    });
-  } catch (err) {
-    // Last-resort boot-phase handler. Reached when something before
-    // `initLogger()` finishes (or during the first few setup calls)
-    // throws — our electron-log sink might not exist yet, so write a
-    // best-effort sync log and show a native three-button dialog.
-    handleBootFailure(
-      err,
-      'Open CoDesign failed to start',
-      'A startup error prevented the app from loading.',
-    );
-    app.quit();
-  }
+      app.on('second-instance', () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+        }
+      });
+      // Show a blocking dialog if the user launched from the DMG mount. If
+      // they accept the remedy, we quit here before touching safeStorage / the
+      // snapshots DB so nothing half-initialises against a bad install.
+      const aborted = await maybeAbortIfRunningFromDmg();
+      if (aborted) return;
+      await loadConfigOnBoot();
+      // Best-effort sweep of leftover `<file>.tmp.<pid>` siblings from previous
+      // crashes. pid changes across restarts so without this the config dir
+      // accumulates 0o600 litter forever.
+      cleanupStaleTmps(join(configDir(), 'reported-fingerprints.json'));
+      // Snapshot persistence is best-effort at boot — a failure here (corrupt DB,
+      // permission denied, missing native binding) must NOT block the BrowserWindow
+      // from opening. Surface it via an error dialog and skip registering the
+      // snapshots IPC channels; the rest of the app stays usable.
+      const dbResult = safeInitSnapshotsDb(join(app.getPath('userData'), 'designs.db'));
+      const diagnosticsDb: Database | null = dbResult.ok ? dbResult.db : null;
+      if (dbResult.ok) {
+        registerSnapshotsIpc(dbResult.db);
+        registerWorkspaceIpc(dbResult.db, () => mainWindow);
+        registerChatMessagesIpc(dbResult.db);
+        registerCommentsIpc(dbResult.db);
+        try {
+          pruneDiagnosticEvents(dbResult.db, 500);
+        } catch (err) {
+          getLogger('main:boot').warn('diagnosticEvents.prune.fail', {
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      } else {
+        const bootLog = getLogger('main:boot');
+        bootLog.error('snapshotsDb.init.fail', {
+          message: dbResult.error.message,
+          stack: dbResult.error.stack,
+        });
+        // Install stub handlers so renderer-side calls reject with a typed
+        // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
+        // "No handler registered" rejection — see snapshots-ipc.ts.
+        registerSnapshotsUnavailableIpc(dbResult.error.message);
+        registerChatMessagesUnavailableIpc(dbResult.error.message);
+        registerCommentsUnavailableIpc(dbResult.error.message);
+        dialog.showErrorBox(
+          'Design history unavailable',
+          `Could not open the local snapshots database. Version history will be disabled for this session.\n\n${dbResult.error.message}`,
+        );
+      }
+      registerIpcHandlers(diagnosticsDb);
+      registerLocaleIpc();
+      registerConnectionIpc();
+      registerOnboardingIpc();
+      registerCodexOAuthIpc();
+      registerPreferencesIpc();
+      registerImageGenerationSettingsIpc();
+      registerExporterIpc(() => mainWindow);
+      registerDiagnosticsIpc(diagnosticsDb);
+      setupAutoUpdater();
+      registerAppMenu();
+      createWindow();
+      void scheduleStartupUpdateCheck();
+
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+          try {
+            createWindow();
+          } catch (err) {
+            handleBootFailure(err, 'Cannot reopen window', 'Window failed to open.');
+          }
+        }
+      });
+    } catch (err) {
+      // Last-resort boot-phase handler. Reached when something before
+      // `initLogger()` finishes (or during the first few setup calls)
+      // throws — our electron-log sink might not exist yet, so write a
+      // best-effort sync log and show a native three-button dialog.
+      handleBootFailure(
+        err,
+        'Open CoDesign failed to start',
+        'A startup error prevented the app from loading.',
+      );
+      app.quit();
+    }
   });
 
   app.on('window-all-closed', () => {

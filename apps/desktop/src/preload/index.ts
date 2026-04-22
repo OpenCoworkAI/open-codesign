@@ -456,6 +456,11 @@ const api = {
         schemaVersion: 1,
         designId,
       }) as Promise<void>,
+    checkWorkspaceFolder: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:check', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ exists: boolean }>,
   },
   chat: {
     list: (designId: string) =>

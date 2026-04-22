@@ -1146,7 +1146,9 @@ describe('useCodesignStore workspace rebind confirmation flow', () => {
       },
     });
 
-    await expect(useCodesignStore.getState().confirmWorkspaceRebind(false)).rejects.toThrow('Update failed');
+    await expect(useCodesignStore.getState().confirmWorkspaceRebind(false)).rejects.toThrow(
+      'Update failed',
+    );
     // Pending state should still be cleared on error
     expect(useCodesignStore.getState().workspaceRebindPending).toBeNull();
   });

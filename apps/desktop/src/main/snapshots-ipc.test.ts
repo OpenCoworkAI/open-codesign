@@ -34,17 +34,23 @@ vi.mock('./logger', () => ({
 vi.mock('./design-workspace', () => ({
   bindWorkspace: vi.fn(),
   openWorkspaceFolder: vi.fn(),
+  checkWorkspaceFolderExists: vi.fn(),
 }));
 
-import { createDesign, createSnapshot, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
+import { bindWorkspace, checkWorkspaceFolderExists, openWorkspaceFolder } from './design-workspace';
+import { dialog } from './electron-runtime';
+import {
+  createDesign,
+  createSnapshot,
+  initInMemoryDb,
+  updateDesignWorkspace,
+} from './snapshots-db';
 import {
   SNAPSHOTS_CHANNELS_V1,
   registerSnapshotsIpc,
   registerSnapshotsUnavailableIpc,
   registerWorkspaceIpc,
 } from './snapshots-ipc';
-import { bindWorkspace, openWorkspaceFolder } from './design-workspace';
-import { dialog } from './electron-runtime';
 
 function call(channel: string, raw: unknown): unknown {
   const fn = handlers.get(channel);
@@ -70,7 +76,8 @@ beforeEach(() => {
   handlers.clear();
   db = initInMemoryDb();
   registerSnapshotsIpc(db);
-  registerWorkspaceIpc(db, () => ({} as any));
+  // biome-ignore lint/suspicious/noExplicitAny: test mock
+  registerWorkspaceIpc(db, () => ({}) as any);
 });
 
 // ---------------------------------------------------------------------------
@@ -380,6 +387,7 @@ describe('schemaVersion gating', () => {
     ['snapshots:v1:set-thumbnail', { id: 'x', thumbnailText: null }],
     ['snapshots:v1:soft-delete-design', { id: 'x' }],
     ['snapshots:v1:duplicate-design', { id: 'x', name: 'n' }],
+    ['snapshots:v1:workspace:check', { designId: 'x' }],
     [
       'snapshots:v1:create',
       {
@@ -394,9 +402,9 @@ describe('schemaVersion gating', () => {
   ];
 
   for (const [channel, sample] of channelsAndSamples) {
-    it(`${channel} rejects missing schemaVersion with IPC_BAD_INPUT`, () => {
+    it(`${channel} rejects missing schemaVersion with IPC_BAD_INPUT`, async () => {
       try {
-        call(channel, sample);
+        await callAsync(channel, sample);
         throw new Error('expected throw');
       } catch (err) {
         expect(err).toBeInstanceOf(CodesignError);
@@ -405,9 +413,9 @@ describe('schemaVersion gating', () => {
       }
     });
 
-    it(`${channel} rejects schemaVersion: 2 with IPC_BAD_INPUT`, () => {
+    it(`${channel} rejects schemaVersion: 2 with IPC_BAD_INPUT`, async () => {
       try {
-        call(channel, { schemaVersion: 2, ...sample });
+        await callAsync(channel, { schemaVersion: 2, ...sample });
         throw new Error('expected throw');
       } catch (err) {
         expect(err).toBeInstanceOf(CodesignError);
@@ -627,6 +635,7 @@ describe('snapshots:v1:workspace:update', () => {
   });
 
   it('throws IPC_NOT_FOUND when design does not exist', async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
     vi.mocked(bindWorkspace).mockResolvedValueOnce(null as any);
     try {
       await callAsync(
@@ -664,7 +673,10 @@ describe('snapshots:v1:workspace:update', () => {
 
   it('rejects missing designId with IPC_BAD_INPUT', async () => {
     try {
-      await callAsync('snapshots:v1:workspace:update', v1({ workspacePath: '/path', migrateFiles: false }));
+      await callAsync(
+        'snapshots:v1:workspace:update',
+        v1({ workspacePath: '/path', migrateFiles: false }),
+      );
       throw new Error('expected throw');
     } catch (err) {
       expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
@@ -680,6 +692,68 @@ describe('snapshots:v1:workspace:update', () => {
       v1({ designId: design.id, workspacePath: null, migrateFiles: false }),
     );
     expect(result).toEqual(cleared);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// snapshots:v1:workspace:check
+// ---------------------------------------------------------------------------
+
+describe('snapshots:v1:workspace:check', () => {
+  it('returns true when the workspace folder exists', async () => {
+    const design = createDesign(db, 'Test');
+    updateDesignWorkspace(db, design.id, '/tmp/workspace');
+    vi.mocked(checkWorkspaceFolderExists).mockResolvedValueOnce(true);
+    const result = await callAsync('snapshots:v1:workspace:check', v1({ designId: design.id }));
+    expect(result).toEqual({ exists: true });
+    expect(vi.mocked(checkWorkspaceFolderExists)).toHaveBeenCalledWith('/tmp/workspace');
+  });
+
+  it('returns false when the workspace folder does not exist', async () => {
+    const design = createDesign(db, 'Test');
+    updateDesignWorkspace(db, design.id, '/tmp/missing');
+    vi.mocked(checkWorkspaceFolderExists).mockResolvedValueOnce(false);
+    const result = await callAsync('snapshots:v1:workspace:check', v1({ designId: design.id }));
+    expect(result).toEqual({ exists: false });
+    expect(vi.mocked(checkWorkspaceFolderExists)).toHaveBeenCalledWith('/tmp/missing');
+  });
+
+  it('throws IPC_NOT_FOUND when design does not exist', async () => {
+    try {
+      await callAsync('snapshots:v1:workspace:check', v1({ designId: 'missing' }));
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_NOT_FOUND');
+    }
+  });
+
+  it('throws IPC_BAD_INPUT when design has no workspace path', async () => {
+    const design = createDesign(db, 'Test'); // No workspace bound
+    try {
+      await callAsync('snapshots:v1:workspace:check', v1({ designId: design.id }));
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+      expect((err as Error).message).toBe('Design is not bound to a workspace');
+    }
+  });
+
+  it('rejects non-object payload with IPC_BAD_INPUT', async () => {
+    try {
+      await callAsync('snapshots:v1:workspace:check', null);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+    }
+  });
+
+  it('rejects missing designId with IPC_BAD_INPUT', async () => {
+    try {
+      await callAsync('snapshots:v1:workspace:check', v1({}));
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as CodesignError).code).toBe('IPC_BAD_INPUT');
+    }
   });
 });
 
@@ -758,7 +832,8 @@ describe('registerSnapshotsUnavailableIpc', () => {
     handlers.clear();
     const dbForLive = initInMemoryDb();
     registerSnapshotsIpc(dbForLive);
-    registerWorkspaceIpc(dbForLive, () => ({} as any));
+    // biome-ignore lint/suspicious/noExplicitAny: test mock
+    registerWorkspaceIpc(dbForLive, () => ({}) as any);
     const live = new Set(handlers.keys());
     handlers.clear();
     registerSnapshotsUnavailableIpc('reason');

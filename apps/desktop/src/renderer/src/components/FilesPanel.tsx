@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { FileCode2, Folder, FolderOpen, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatAbsoluteTime, formatRelativeTime, useDesignFiles } from '../hooks/useDesignFiles';
 import { useCodesignStore } from '../store';
 
@@ -11,7 +11,7 @@ function formatBytes(n: number | undefined): string {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function truncatePath(path: string, maxLength: number = 50): string {
+function truncatePath(path: string, maxLength = 50): string {
   if (path.length <= maxLength) return path;
   const start = path.substring(0, maxLength / 2 - 2);
   const end = path.substring(path.length - maxLength / 2 + 2);
@@ -28,10 +28,21 @@ export function FilesPanel() {
   const requestWorkspaceRebind = useCodesignStore((s) => s.requestWorkspaceRebind);
   const { files, loading } = useDesignFiles(currentDesignId);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [folderExists, setFolderExists] = useState<boolean | null>(null);
 
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const workspacePath = currentDesign?.workspacePath ?? null;
   const isCurrentDesignGenerating = isGenerating && generatingDesignId === currentDesignId;
+
+  useEffect(() => {
+    if (!workspacePath || !currentDesignId) {
+      setFolderExists(null);
+      return;
+    }
+    window.codesign?.snapshots.checkWorkspaceFolder?.(currentDesignId)
+      .then(r => setFolderExists(r.exists))
+      .catch(() => setFolderExists(null));
+  }, [currentDesignId, workspacePath]);
 
   async function handlePickWorkspace() {
     if (!window.codesign?.snapshots.pickWorkspaceFolder) return;
@@ -101,7 +112,6 @@ export function FilesPanel() {
     }
   }
 
-
   if (!currentDesignId) {
     return (
       <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
@@ -114,19 +124,6 @@ export function FilesPanel() {
     return (
       <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
         {t('common.loading')}
-      </div>
-    );
-  }
-
-  if (files.length === 0) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center gap-[var(--space-3)] px-[var(--space-6)] text-center">
-        <div className="w-12 h-12 rounded-full border border-dashed border-[var(--color-border)] flex items-center justify-center">
-          <FileCode2 className="w-5 h-5 text-[var(--color-text-muted)] opacity-70" aria-hidden />
-        </div>
-        <p className="text-[var(--text-sm)] text-[var(--color-text-muted)] max-w-sm leading-[var(--leading-body)]">
-          {t('canvas.files.empty')}
-        </p>
       </div>
     );
   }
@@ -148,12 +145,19 @@ export function FilesPanel() {
                   {t('canvas.workspace.label')}
                 </span>
                 {workspacePath ? (
-                  <span
-                    className="truncate text-[var(--text-sm)] text-[var(--color-text-primary)] font-mono"
-                    title={workspacePath}
-                  >
-                    {truncatePath(workspacePath)}
-                  </span>
+                  <>
+                    <span
+                      className="truncate text-[var(--text-sm)] text-[var(--color-text-primary)] font-mono"
+                      title={workspacePath}
+                    >
+                      {truncatePath(workspacePath)}
+                    </span>
+                    {folderExists === false && (
+                      <span className="text-[var(--text-xs)] text-[var(--color-text-warning,_theme(colors.amber.500))]">
+                        {t('canvas.workspace.unavailable')}
+                      </span>
+                    )}
+                  </>
                 ) : (
                   <span className="text-[var(--text-sm)] text-[var(--color-text-muted)]">
                     {t('canvas.workspace.default')}
@@ -211,34 +215,45 @@ export function FilesPanel() {
             </span>
           </header>
 
-          <ul className="list-none p-0 m-0 flex flex-col gap-[var(--space-2)]">
-            {files.map((f) => (
-              <li key={f.path}>
-                <button
-                  type="button"
-                  onClick={() => openFileTab(f.path)}
-                  className="group w-full flex items-center gap-[var(--space-3)] px-[var(--space-4)] h-[52px] text-left rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-[background-color,border-color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
-                >
-                  <FileCode2
-                    className="w-[18px] h-[18px] shrink-0 text-[var(--color-text-secondary)]"
-                    aria-hidden
-                  />
-                  <div className="flex-1 min-w-0 flex flex-col gap-[2px]">
-                    <span className="truncate text-[var(--text-sm)] text-[var(--color-text-primary)] font-sans leading-[var(--leading-ui)]">
-                      {f.path}
-                    </span>
-                    <span
-                      className="text-[11px] text-[var(--color-text-muted)] leading-[var(--leading-ui)]"
-                      title={formatAbsoluteTime(f.updatedAt)}
-                      style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
-                    >
-                      {formatBytes(f.size)} · {formatRelativeTime(f.updatedAt)}
-                    </span>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {files.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-[var(--space-3)] px-[var(--space-6)] text-center py-[var(--space-8)]">
+              <div className="w-12 h-12 rounded-full border border-dashed border-[var(--color-border)] flex items-center justify-center">
+                <FileCode2 className="w-5 h-5 text-[var(--color-text-muted)] opacity-70" aria-hidden />
+              </div>
+              <p className="text-[var(--text-sm)] text-[var(--color-text-muted)] max-w-sm leading-[var(--leading-body)]">
+                {t('canvas.files.empty')}
+              </p>
+            </div>
+          ) : (
+            <ul className="list-none p-0 m-0 flex flex-col gap-[var(--space-2)]">
+              {files.map((f) => (
+                <li key={f.path}>
+                  <button
+                    type="button"
+                    onClick={() => openFileTab(f.path)}
+                    className="group w-full flex items-center gap-[var(--space-3)] px-[var(--space-4)] h-[52px] text-left rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-[background-color,border-color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
+                  >
+                    <FileCode2
+                      className="w-[18px] h-[18px] shrink-0 text-[var(--color-text-secondary)]"
+                      aria-hidden
+                    />
+                    <div className="flex-1 min-w-0 flex flex-col gap-[2px]">
+                      <span className="truncate text-[var(--text-sm)] text-[var(--color-text-primary)] font-sans leading-[var(--leading-ui)]">
+                        {f.path}
+                      </span>
+                      <span
+                        className="text-[11px] text-[var(--color-text-muted)] leading-[var(--leading-ui)]"
+                        title={formatAbsoluteTime(f.updatedAt)}
+                        style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
+                      >
+                        {formatBytes(f.size)} · {formatRelativeTime(f.updatedAt)}
+                      </span>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
     </div>
