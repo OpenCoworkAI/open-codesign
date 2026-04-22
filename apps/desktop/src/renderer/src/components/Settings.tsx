@@ -14,6 +14,7 @@ import {
   Cpu,
   FolderOpen,
   Globe,
+  Image as ImageIcon,
   Loader2,
   MoreHorizontal,
   Palette,
@@ -24,7 +25,13 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AppPaths, Preferences, ProviderRow, StorageKind } from '../../../preload/index';
+import type {
+  AppPaths,
+  ImageGenerationSettingsView,
+  Preferences,
+  ProviderRow,
+  StorageKind,
+} from '../../../preload/index';
 import { recordAction } from '../lib/action-timeline';
 import { useCodesignStore } from '../store';
 import { AddCustomProviderModal } from './AddCustomProviderModal';
@@ -856,6 +863,239 @@ function WarningsList({ warnings }: { warnings: string[] }) {
   );
 }
 
+function defaultImageModelFor(provider: ImageGenerationSettingsView['provider']): string {
+  return provider === 'openrouter' ? 'openai/gpt-5.4-image-2' : 'gpt-image-2';
+}
+
+function defaultImageBaseUrlFor(provider: ImageGenerationSettingsView['provider']): string {
+  return provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1';
+}
+
+function ImageGenerationPanel() {
+  const t = useT();
+  const pushToast = useCodesignStore((s) => s.pushToast);
+  const [settings, setSettings] = useState<ImageGenerationSettingsView | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [model, setModel] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+
+  useEffect(() => {
+    if (!window.codesign?.imageGeneration) return;
+    void window.codesign.imageGeneration
+      .get()
+      .then((next) => {
+        setSettings(next);
+        setModel(next.model);
+        setBaseUrl(next.baseUrl);
+      })
+      .catch((err) => {
+        pushToast({
+          variant: 'error',
+          title: t('settings.imageGen.toast.loadFailed', {
+            defaultValue: 'Image generation settings failed to load',
+          }),
+          description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        });
+      });
+  }, [pushToast, t]);
+
+  async function save(patch: Partial<ImageGenerationSettingsView> & { apiKey?: string }) {
+    if (!window.codesign?.imageGeneration) return;
+    setSaving(true);
+    try {
+      const next = await window.codesign.imageGeneration.update(patch);
+      setSettings(next);
+      setModel(next.model);
+      setBaseUrl(next.baseUrl);
+      setApiKey('');
+      pushToast({
+        variant: 'success',
+        title: t('settings.imageGen.toast.saved', { defaultValue: 'Image generation saved' }),
+      });
+    } catch (err) {
+      pushToast({
+        variant: 'error',
+        title: t('settings.imageGen.toast.saveFailed', {
+          defaultValue: 'Image generation settings failed to save',
+        }),
+        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (settings === null) {
+    return (
+      <div className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] p-[var(--space-4)] text-[var(--text-sm)] text-[var(--color-text-muted)]">
+        {t('settings.common.loading')}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] p-[var(--space-4)] space-y-[var(--space-3)]">
+      <div className="flex items-center justify-between gap-[var(--space-3)]">
+        <div className="min-w-0 flex items-center gap-[var(--space-2)]">
+          <ImageIcon className="w-4 h-4 text-[var(--color-text-secondary)]" aria-hidden />
+          <div className="min-w-0">
+            <SectionTitle>
+              {t('settings.imageGen.title', { defaultValue: 'Image generation assist' })}
+            </SectionTitle>
+            <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] mt-0.5 leading-[var(--leading-body)]">
+              {t('settings.imageGen.hint', {
+                defaultValue:
+                  'Let the agent call GPT Image for hero, product, poster, logo, and background bitmap assets.',
+              })}
+            </p>
+          </div>
+        </div>
+        <input
+          type="checkbox"
+          checked={settings.enabled}
+          disabled={saving}
+          onChange={(e) => void save({ enabled: e.target.checked })}
+          className="h-4 w-4 accent-[var(--color-accent)]"
+          aria-label={t('settings.imageGen.enabled', {
+            defaultValue: 'Enable image generation assist',
+          })}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-[var(--space-3)]">
+        <Row label={t('settings.imageGen.provider', { defaultValue: 'Provider' })}>
+          <NativeSelect
+            value={settings.provider}
+            disabled={saving}
+            options={[
+              { value: 'openai', label: 'OpenAI' },
+              { value: 'openrouter', label: 'OpenRouter' },
+            ]}
+            onChange={(value) => {
+              const provider = value as ImageGenerationSettingsView['provider'];
+              void save({
+                provider,
+                model: defaultImageModelFor(provider),
+                baseUrl: defaultImageBaseUrlFor(provider),
+              });
+            }}
+          />
+        </Row>
+        <Row label={t('settings.imageGen.credentials', { defaultValue: 'Credentials' })}>
+          <SegmentedControl
+            value={settings.credentialMode}
+            disabled={saving}
+            options={[
+              {
+                value: 'inherit',
+                label: t('settings.imageGen.inherit', { defaultValue: 'Inherit' }),
+              },
+              {
+                value: 'custom',
+                label: t('settings.imageGen.customKey', { defaultValue: 'Custom key' }),
+              },
+            ]}
+            onChange={(credentialMode) => void save({ credentialMode })}
+          />
+        </Row>
+      </div>
+
+      {settings.credentialMode === 'custom' ? (
+        <div className="flex items-center gap-[var(--space-2)]">
+          <input
+            type="password"
+            value={apiKey}
+            disabled={saving}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={
+              settings.maskedKey
+                ? t('settings.imageGen.keyPlaceholder', {
+                    defaultValue: 'Leave empty to keep {{mask}}',
+                    mask: settings.maskedKey,
+                  })
+                : t('settings.imageGen.newKeyPlaceholder', {
+                    defaultValue: 'Paste API key',
+                  })
+            }
+            className="min-w-0 flex-1 h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
+          />
+          <button
+            type="button"
+            disabled={saving || apiKey.trim().length === 0}
+            onClick={() => void save({ apiKey })}
+            className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {t('common.save')}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-[1fr_1fr_auto] gap-[var(--space-3)] items-end">
+        <label className="min-w-0">
+          <Label>{t('settings.imageGen.model', { defaultValue: 'Image model' })}</Label>
+          <input
+            type="text"
+            value={model}
+            disabled={saving}
+            onChange={(e) => setModel(e.target.value)}
+            className="mt-1 w-full h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
+          />
+        </label>
+        <label className="min-w-0">
+          <Label>{t('settings.imageGen.baseUrl', { defaultValue: 'Base URL' })}</Label>
+          <input
+            type="url"
+            value={baseUrl}
+            disabled={saving}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            className="mt-1 w-full h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={saving || model.trim().length === 0 || baseUrl.trim().length === 0}
+          onClick={() => void save({ model, baseUrl })}
+          className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {t('common.save')}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-[var(--space-3)]">
+        <Row label={t('settings.imageGen.quality', { defaultValue: 'Quality' })}>
+          <NativeSelect
+            value={settings.quality}
+            disabled={saving}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+            ]}
+            onChange={(quality) =>
+              void save({ quality: quality as ImageGenerationSettingsView['quality'] })
+            }
+          />
+        </Row>
+        <Row label={t('settings.imageGen.size', { defaultValue: 'Size' })}>
+          <NativeSelect
+            value={settings.size}
+            disabled={saving}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: '1024x1024', label: '1024 x 1024' },
+              { value: '1536x1024', label: '1536 x 1024' },
+              { value: '1024x1536', label: '1024 x 1536' },
+            ]}
+            onChange={(size) => void save({ size: size as ImageGenerationSettingsView['size'] })}
+          />
+        </Row>
+      </div>
+    </div>
+  );
+}
+
 function ModelsTab() {
   const t = useT();
   const config = useCodesignStore((s) => s.config);
@@ -1313,6 +1553,7 @@ function ModelsTab() {
 
       <div className="space-y-[var(--space-3)]">
         <ChatgptLoginCard onStatusChange={reloadRows} />
+        <ImageGenerationPanel />
         {externalConfigs !== null &&
           (externalConfigs.codex !== undefined ||
             externalConfigs.claudeCode !== undefined ||

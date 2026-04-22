@@ -33,10 +33,12 @@ import type {
   ModelsListResponse,
   TestEndpointResponse,
 } from '../main/connection-ipc';
+import type { ImageGenerationSettingsView } from '../main/image-generation-settings';
 
 export type { ConnectionTestError, ConnectionTestResult, ModelsListResponse, TestEndpointResponse };
 export type { ClaudeCodeUserType, ExternalConfigsDetection };
 export type { CodexOAuthStatus };
+export type { ImageGenerationSettingsView };
 
 export interface ValidateKeyResult {
   ok: true;
@@ -337,6 +339,15 @@ const api = {
     get: () => ipcRenderer.invoke('preferences:v1:get') as Promise<Preferences>,
     update: (patch: Partial<Preferences>) =>
       ipcRenderer.invoke('preferences:v1:update', patch) as Promise<Preferences>,
+  },
+  imageGeneration: {
+    get: () =>
+      ipcRenderer.invoke('image-generation:v1:get') as Promise<ImageGenerationSettingsView>,
+    update: (patch: Partial<ImageGenerationSettingsView> & { apiKey?: string }) =>
+      ipcRenderer.invoke(
+        'image-generation:v1:update',
+        patch,
+      ) as Promise<ImageGenerationSettingsView>,
   },
   codexOAuth: {
     status: () => ipcRenderer.invoke('codex-oauth:v1:status') as Promise<CodexOAuthStatus>,
