@@ -353,6 +353,17 @@ export type { CompleteWithRetryOptions, RetryReason } from './retry';
 
 export { injectSkillsIntoMessages, formatSkillsForPrompt, filterActive } from './skill-injector';
 
+export { defaultImageBaseUrl, defaultImageModel, generateImage } from './images';
+export type {
+  GenerateImageOptions,
+  GenerateImageResult,
+  ImageAspectRatio,
+  ImageGenerationProvider,
+  ImageOutputFormat,
+  ImageQuality,
+  ImageSize,
+} from './images';
+
 // Tier 2 surface (not yet implemented):
 //   structuredComplete<T>(model, schema, messages, opts): Promise<T>
 //   streamArtifacts(model, messages, opts): AsyncIterable<ArtifactEvent>
