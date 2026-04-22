@@ -157,6 +157,11 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
     });
   }, [onStatusChange, pushToast, t]);
 
+  const handleCancel = useCallback(() => {
+    // User manually cancelled after closing browser - reset loading state
+    if (mountedRef.current) setLoading(false);
+  }, []);
+
   const handleLogout = useCallback(async () => {
     if (!window.codesign) return;
     await performLogout({
@@ -211,12 +216,17 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
           {t('settings.providers.chatgptLogin.description')}
         </p>
       </div>
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center gap-[var(--space-2)]">
         {viewState === 'loading' ? (
-          <Button variant="primary" size="sm" disabled>
-            <Loader2 className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] animate-spin" />
-            {t('settings.providers.chatgptLogin.inProgress')}
-          </Button>
+          <>
+            <Button variant="primary" size="sm" disabled>
+              <Loader2 className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] animate-spin" />
+              {t('settings.providers.chatgptLogin.inProgress')}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleCancel}>
+              {t('common.cancel')}
+            </Button>
+          </>
         ) : (
           <Button variant="primary" size="sm" onClick={() => void handleLogin()}>
             <Sparkles className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" />

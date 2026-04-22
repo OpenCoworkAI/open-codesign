@@ -19,7 +19,7 @@ interface PendingWait {
 }
 
 const DEFAULT_PORT = 1455;
-const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
+const CALLBACK_TIMEOUT_MS = 2 * 60 * 1000;
 
 function escapeHtml(s: string): string {
   return s
