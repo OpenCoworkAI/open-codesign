@@ -5,6 +5,7 @@ import {
   ERROR_CODES,
   type SupportedOnboardingProvider,
   type WireApi,
+  buildAuthHeadersForWire as buildSharedAuthHeadersForWire,
   canonicalBaseUrl,
   ensureVersionedBase,
   isSupportedOnboardingProvider,
@@ -159,21 +160,13 @@ function buildEndpointForWire(
 export function buildAuthHeadersForWire(
   wire: WireApi,
   apiKey: string,
+  baseUrl?: string,
   extraHeaders?: Record<string, string>,
 ): Record<string, string> {
-  if (apiKey.length === 0) {
-    // Keyless provider (e.g. IP-whitelisted proxy) — skip auth, keep extras.
-    const base = wire === 'anthropic' ? { 'anthropic-version': '2023-06-01' } : {};
-    return { ...base, ...(extraHeaders ?? {}) };
-  }
-  const base =
-    wire === 'anthropic'
-      ? {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        }
-      : { authorization: `Bearer ${apiKey}` };
-  return { ...base, ...(extraHeaders ?? {}) };
+  return buildSharedAuthHeadersForWire(wire, apiKey, {
+    ...(baseUrl !== undefined ? { baseUrl } : {}),
+    ...(extraHeaders !== undefined ? { extraHeaders } : {}),
+  });
 }
 
 function buildModelsEndpoint(
@@ -409,7 +402,12 @@ function resolveActiveCredentials(): ActiveProviderCredentials | ConnectionTestE
 
 async function runProviderTest(creds: ActiveProviderCredentials): Promise<ConnectionTestResponse> {
   const { url } = buildEndpointForWire(creds.wire, creds.baseUrl);
-  const headers = buildAuthHeadersForWire(creds.wire, creds.apiKey, creds.httpHeaders);
+  const headers = buildAuthHeadersForWire(
+    creds.wire,
+    creds.apiKey,
+    creds.baseUrl,
+    creds.httpHeaders,
+  );
 
   let res: Response;
   try {
@@ -637,7 +635,7 @@ export function registerConnectionIpc(): void {
       if (cached !== null) return { ok: true, models: cached };
 
       const { url } = buildEndpointForWire(entry.wire, entry.baseUrl);
-      const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.httpHeaders);
+      const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.baseUrl, entry.httpHeaders);
 
       let res: Response;
       try {
@@ -702,7 +700,12 @@ export function registerConnectionIpc(): void {
       }
 
       const { url } = buildEndpointForWire(payload.wire, payload.baseUrl);
-      const headers = buildAuthHeadersForWire(payload.wire, payload.apiKey, payload.httpHeaders);
+      const headers = buildAuthHeadersForWire(
+        payload.wire,
+        payload.apiKey,
+        payload.baseUrl,
+        payload.httpHeaders,
+      );
 
       let res: Response;
       try {

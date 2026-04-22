@@ -258,6 +258,8 @@ export {
   ProxyPresetIdSchema,
   getPresetById,
 } from './proxy-presets';
+
+export { buildAuthHeadersForWire, shouldMirrorBearerForAnthropic } from './auth-headers';
 export type { ProxyPresetId } from './proxy-presets';
 
 export {

@@ -143,6 +143,19 @@ describe('pingProvider', () => {
     await pingProvider('anthropic', 'sk-ant-test', 'https://api.anthropic.com/v1/messages');
   });
 
+  it('adds Bearer auth for remote Anthropic-compatible gateways', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toBe('https://api.nagara.top/v1/models');
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['x-api-key']).toBe('sk-ant-test');
+      expect(headers['authorization']).toBe('Bearer sk-ant-test');
+      expect(headers['anthropic-version']).toBe('2023-06-01');
+      return new Response(JSON.stringify({ data: [{ id: 'claude-opus-4-6' }] }), { status: 200 });
+    });
+    const result = await pingProvider('anthropic', 'sk-ant-test', 'https://api.nagara.top');
+    expect(result).toEqual({ ok: true, modelCount: 1 });
+  });
+
   it('strips /v1/responses suffix', async () => {
     mockFetch(async (url) => {
       expect(url).toBe('https://api.example.com/v1/models');

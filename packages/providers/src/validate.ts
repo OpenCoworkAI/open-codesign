@@ -2,6 +2,7 @@ import {
   CodesignError,
   ERROR_CODES,
   type SupportedOnboardingProvider,
+  buildAuthHeadersForWire,
   isSupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
 } from '@open-codesign/shared';
@@ -33,24 +34,30 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
       const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://api.anthropic.com';
       return {
         url: `${root}/v1/models`,
-        headers: (apiKey) => ({
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        }),
+        headers: (apiKey) =>
+          buildAuthHeadersForWire('anthropic', apiKey, {
+            baseUrl: root,
+          }),
       };
     }
     case 'openai': {
       const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://api.openai.com';
       return {
         url: `${root}/v1/models`,
-        headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+        headers: (apiKey) =>
+          buildAuthHeadersForWire('openai-chat', apiKey, {
+            baseUrl: root,
+          }),
       };
     }
     case 'openrouter': {
       const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://openrouter.ai/api';
       return {
         url: `${root}/v1/models`,
-        headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+        headers: (apiKey) =>
+          buildAuthHeadersForWire('openai-chat', apiKey, {
+            baseUrl: root,
+          }),
       };
     }
   }

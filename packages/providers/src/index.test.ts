@@ -197,4 +197,75 @@ describe('complete', () => {
 
     expect(result.content).toBe('ok');
   });
+
+  it('adds Bearer auth for remote Anthropic-compatible gateways', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
+      expect(opts.apiKey).toBe('sk-ant-test');
+      expect(opts.headers).toEqual({ authorization: 'Bearer sk-ant-test' });
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'anthropic-messages',
+        provider: 'claude-code-imported',
+        model: 'claude-opus-4-6',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    const result = await complete(
+      { provider: 'claude-code-imported', modelId: 'claude-opus-4-6' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: 'sk-ant-test',
+        wire: 'anthropic',
+        baseUrl: 'https://api.nagara.top',
+      },
+    );
+
+    expect(result.content).toBe('ok');
+  });
+
+  it('does not add Bearer auth for localhost Anthropic proxies', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
+      expect(opts.headers).toBeUndefined();
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'anthropic-messages',
+        provider: 'claude-local',
+        model: 'claude-sonnet-4-6',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'claude-local', modelId: 'claude-sonnet-4-6' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: 'sk-ant-test',
+        wire: 'anthropic',
+        baseUrl: 'http://localhost:4000',
+      },
+    );
+  });
 });

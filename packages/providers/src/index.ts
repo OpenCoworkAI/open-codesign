@@ -6,7 +6,13 @@
  * Tier 1 implementations: minimum viable. Tier 2 features tracked separately.
  */
 
-import { type ChatMessage, CodesignError, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
+import {
+  type ChatMessage,
+  CodesignError,
+  ERROR_CODES,
+  type ModelRef,
+  shouldMirrorBearerForAnthropic,
+} from '@open-codesign/shared';
 
 /** Subset of pi-ai's `ThinkingLevel` we expose. Maps directly to its `reasoning`
  * field, which Anthropic adapters translate to extended-thinking effort/budget
@@ -242,7 +248,16 @@ export async function complete(
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.reasoning !== undefined) piOpts.reasoning = opts.reasoning;
-  if (opts.httpHeaders !== undefined) piOpts.headers = opts.httpHeaders;
+  const headers =
+    opts.wire === 'anthropic' &&
+    opts.apiKey.length > 0 &&
+    shouldMirrorBearerForAnthropic(opts.baseUrl)
+      ? {
+          ...(opts.httpHeaders ?? {}),
+          authorization: opts.httpHeaders?.['authorization'] ?? `Bearer ${opts.apiKey}`,
+        }
+      : opts.httpHeaders;
+  if (headers !== undefined) piOpts.headers = headers;
 
   const result = await pi.completeSimple(piModel, toPiContext(messages, piModel), piOpts);
 

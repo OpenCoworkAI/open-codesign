@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import {
   CONNECTION_FETCH_TIMEOUT_MS,
   _clearModelsCache,
+  buildAuthHeadersForWire,
   classifyHttpError,
   extractIds,
   extractModelIds,
@@ -272,6 +273,23 @@ describe('getCacheKey', () => {
     const keyA = getCacheKey('openai', 'https://api.example.com', 'sk-test');
     const keyB = getCacheKey('anthropic', 'https://api.example.com', 'sk-test');
     expect(keyA).not.toBe(keyB);
+  });
+});
+
+describe('buildAuthHeadersForWire', () => {
+  it('adds Bearer auth for remote Anthropic-compatible gateways', () => {
+    expect(buildAuthHeadersForWire('anthropic', 'sk-ant-test', 'https://api.nagara.top')).toEqual({
+      'x-api-key': 'sk-ant-test',
+      'anthropic-version': '2023-06-01',
+      authorization: 'Bearer sk-ant-test',
+    });
+  });
+
+  it('keeps localhost Anthropic proxies on x-api-key only', () => {
+    expect(buildAuthHeadersForWire('anthropic', 'sk-ant-test', 'http://localhost:4000')).toEqual({
+      'x-api-key': 'sk-ant-test',
+      'anthropic-version': '2023-06-01',
+    });
   });
 });
 
