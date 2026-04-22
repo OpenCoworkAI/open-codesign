@@ -17,6 +17,7 @@ import {
   fetchWithTimeout,
   getCacheKey,
   normalizeBaseUrl,
+  normalizeOllamaBaseUrl,
 } from './connection-ipc';
 
 // ---------------------------------------------------------------------------
@@ -218,6 +219,21 @@ describe('extractIds', () => {
 
   it('returns null when an id is a number instead of a string', () => {
     expect(extractIds([{ id: 'a' }, { id: 123 }])).toBeNull();
+  });
+
+  // Ollama's /api/tags returns `{ models: [{ name: "llama3.2:latest" }] }`
+  // instead of OpenAI/Anthropic's `id` field. Without this fallback, a user
+  // who points a custom provider at `http://localhost:11434` (no /v1 suffix)
+  // would silently get a PARSE error from the model list endpoint.
+  it('accepts items with a `name` field for Ollama /api/tags shape', () => {
+    expect(extractIds([{ name: 'llama3.2:latest' }, { name: 'qwen2.5' }])).toEqual([
+      'llama3.2:latest',
+      'qwen2.5',
+    ]);
+  });
+
+  it('prefers `id` over `name` when both are present', () => {
+    expect(extractIds([{ id: 'official-id', name: 'display-name' }])).toEqual(['official-id']);
   });
 });
 
@@ -779,5 +795,48 @@ describe('Claude Code identity header injection', () => {
 
     const oa = buildAuthHeaders('openai', '', 'https://keyless.example.com');
     expect(oa['authorization']).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeOllamaBaseUrl — input sanitization for ollama:v1:probe
+// ---------------------------------------------------------------------------
+
+describe('normalizeOllamaBaseUrl', () => {
+  it('returns the default localhost URL when input is empty or whitespace', () => {
+    expect(normalizeOllamaBaseUrl('')).toBe('http://localhost:11434');
+    expect(normalizeOllamaBaseUrl('   ')).toBe('http://localhost:11434');
+  });
+
+  it('auto-prefixes http:// when scheme is missing', () => {
+    expect(normalizeOllamaBaseUrl('localhost:11434')).toBe('http://localhost:11434');
+    expect(normalizeOllamaBaseUrl('192.168.1.10:11434')).toBe('http://192.168.1.10:11434');
+    // IPv6 users still get a usable URL — fetch handles bracketed hosts.
+    expect(normalizeOllamaBaseUrl('[::1]:11434')).toBe('http://[::1]:11434');
+  });
+
+  it('preserves an explicit https:// scheme', () => {
+    expect(normalizeOllamaBaseUrl('https://ollama.example.com')).toBe('https://ollama.example.com');
+  });
+
+  it('strips a trailing /v1 suffix so /api/tags lives at the root', () => {
+    expect(normalizeOllamaBaseUrl('http://localhost:11434/v1')).toBe('http://localhost:11434');
+    expect(normalizeOllamaBaseUrl('http://localhost:11434/v1/')).toBe('http://localhost:11434');
+  });
+
+  it('throws IPC_BAD_INPUT on non-http(s) schemes (no silent localhost fallback)', () => {
+    // `file://` has an explicit scheme and reaches the protocol check.
+    expect(() => normalizeOllamaBaseUrl('file:///etc/passwd')).toThrow(/must use http/);
+    expect(() => normalizeOllamaBaseUrl('ftp://example.com')).toThrow(/must use http/);
+    // `javascript:alert(1)` doesn't match `scheme://`, so it falls into the
+    // auto-prefix path. `http://javascript:alert(1)` fails URL parsing —
+    // we just require that it's rejected, not which branch rejects it.
+    expect(() => normalizeOllamaBaseUrl('javascript:alert(1)')).toThrow();
+  });
+
+  it('throws IPC_BAD_INPUT on malformed URLs', () => {
+    // The scheme-coercion path prepends `http://`, so truly malformed inputs
+    // like "http://" with an empty host still reach URL() and reject there.
+    expect(() => normalizeOllamaBaseUrl('http://')).toThrow(/not a valid URL/);
   });
 });

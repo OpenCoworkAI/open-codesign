@@ -644,6 +644,10 @@ interface UpdateProviderInput {
   queryParams?: Record<string, string>;
   wire?: WireApi;
   reasoningLevel?: ReasoningLevel | null;
+  /** When present AND non-empty, re-encrypt and replace the stored secret.
+   *  Empty string means "clear stored secret" for providers that became
+   *  keyless (e.g. switched to local Ollama). `undefined` means "leave alone". */
+  apiKey?: string;
 }
 
 function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
@@ -695,6 +699,7 @@ function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
     const parsed = ReasoningLevelSchema.safeParse(r['reasoningLevel']);
     if (parsed.success) out.reasoningLevel = parsed.data;
   }
+  if (typeof r['apiKey'] === 'string') out.apiKey = r['apiKey'];
   return out;
 }
 
@@ -703,7 +708,12 @@ async function runUpdateProvider(input: UpdateProviderInput): Promise<Onboarding
   if (cfg === null) {
     throw new CodesignError('No configuration found', ERROR_CODES.CONFIG_MISSING);
   }
-  const existing = cfg.providers[input.id];
+  // Builtin providers may not have an entry on disk yet on a fresh install
+  // (the providers map is seeded lazily). Fall back to BUILTIN_PROVIDERS so
+  // "change my Ollama baseUrl" works before the user ever opened onboarding.
+  const existing =
+    cfg.providers[input.id] ??
+    (isSupportedOnboardingProvider(input.id) ? { ...BUILTIN_PROVIDERS[input.id] } : undefined);
   if (existing === undefined) {
     throw new CodesignError(`Provider "${input.id}" not found`, ERROR_CODES.IPC_BAD_INPUT);
   }
@@ -725,11 +735,24 @@ async function runUpdateProvider(input: UpdateProviderInput): Promise<Onboarding
   } else if (input.reasoningLevel !== undefined) {
     updated.reasoningLevel = input.reasoningLevel;
   }
+  // Secret rotation: only touch secrets when the caller explicitly supplied
+  // an apiKey field. Empty string clears the secret (keyless providers);
+  // a non-empty value re-encrypts under the current safeStorage session key.
+  let nextSecrets = cfg.secrets;
+  if (input.apiKey !== undefined) {
+    const trimmed = input.apiKey.trim();
+    if (trimmed.length === 0) {
+      const { [input.id]: _removed, ...rest } = cfg.secrets;
+      nextSecrets = rest;
+    } else {
+      nextSecrets = { ...cfg.secrets, [input.id]: buildSecretRef(trimmed) };
+    }
+  }
   const next = hydrateConfig({
     version: 3,
     activeProvider: cfg.activeProvider,
     activeModel: cfg.activeModel,
-    secrets: cfg.secrets,
+    secrets: nextSecrets,
     providers: { ...cfg.providers, [input.id]: updated },
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
   });

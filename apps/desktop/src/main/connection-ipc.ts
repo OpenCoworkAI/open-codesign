@@ -72,15 +72,22 @@ function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
       ERROR_CODES.IPC_BAD_INPUT,
     );
   }
-  if (typeof r['apiKey'] !== 'string' || r['apiKey'].trim().length === 0) {
+  if (typeof r['apiKey'] !== 'string') {
+    throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  // Keyless builtins (Ollama) legitimately send an empty apiKey from the
+  // onboarding form. Non-keyless providers still require a non-empty key.
+  const provider = r['provider'] as SupportedOnboardingProvider;
+  const apiKey = r['apiKey'].trim();
+  if (apiKey.length === 0 && BUILTIN_PROVIDERS[provider].requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof r['baseUrl'] !== 'string' || r['baseUrl'].trim().length === 0) {
     throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   return {
-    provider: r['provider'],
-    apiKey: r['apiKey'].trim(),
+    provider,
+    apiKey,
     baseUrl: r['baseUrl'].trim(),
   };
 }
@@ -96,15 +103,20 @@ function parseModelsListPayload(raw: unknown): ModelsListPayloadV1 {
       ERROR_CODES.IPC_BAD_INPUT,
     );
   }
-  if (typeof r['apiKey'] !== 'string' || r['apiKey'].trim().length === 0) {
+  if (typeof r['apiKey'] !== 'string') {
+    throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  const provider = r['provider'] as SupportedOnboardingProvider;
+  const apiKey = r['apiKey'].trim();
+  if (apiKey.length === 0 && BUILTIN_PROVIDERS[provider].requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof r['baseUrl'] !== 'string' || r['baseUrl'].trim().length === 0) {
     throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   return {
-    provider: r['provider'],
-    apiKey: r['apiKey'].trim(),
+    provider,
+    apiKey,
     baseUrl: r['baseUrl'].trim(),
   };
 }
@@ -235,12 +247,25 @@ export async function fetchWithTimeout(
 export function extractIds(items: unknown[]): string[] | null {
   const ids: string[] = [];
   for (const item of items) {
-    if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
-      ids.push((item as { id: string }).id);
-    } else {
-      // Any item missing a string id field means the shape is unexpected — reject entirely.
-      return null;
+    if (item && typeof item === 'object') {
+      const rec = item as { id?: unknown; name?: unknown };
+      // OpenAI/Anthropic/OpenRouter all return a canonical `id` string; we
+      // prefer it unconditionally. The `name` fallback exists solely for
+      // Ollama's /api/tags shape (`{models: [{ name: "llama3.2:latest" }]}`)
+      // which has no `id` field. No known API-key provider returns objects
+      // with `name` but no `id`, so this fallback never silently misroutes
+      // for existing providers — but a future provider that ships display
+      // names without ids would also land here.
+      if (typeof rec.id === 'string') {
+        ids.push(rec.id);
+        continue;
+      }
+      if (typeof rec.name === 'string') {
+        ids.push(rec.name);
+        continue;
+      }
     }
+    return null;
   }
   return ids;
 }
@@ -272,6 +297,15 @@ const modelsCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export function getCacheKey(provider: string, baseUrl: string, apiKey: string): string {
+  // SHA-256 here is a cache-key discriminator, not a password hash — the
+  // Map lives in-process with a 5-minute TTL, never persists, and never
+  // leaves the main process. Using bcrypt/scrypt (as CodeQL's default
+  // rule suggests) would make every cache lookup take hundreds of ms
+  // and defeat the purpose of caching. Hashing apiKey (rather than
+  // embedding it verbatim in the Map key) is defense-in-depth so plaintext
+  // keys don't end up in memory-dump strings a third-party crash reporter
+  // might pick up.
+  // codeql[js/insufficient-password-hash]
   const keyHash = createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
   return `${provider}::${baseUrl}::${keyHash}`;
 }
@@ -717,6 +751,111 @@ export function registerConnectionIpc(): void {
       return { ok: true, modelCount: ids?.length ?? 0, models: ids ?? [] };
     },
   );
+
+  // ── Ollama probe — used by onboarding to show "detected/not running" ─────
+  // We intentionally don't reuse the /v1/models endpoint because /api/tags is
+  // Ollama's canonical liveness probe, returns faster, and survives users who
+  // disabled the OpenAI-compat server. Short 2s timeout because the user is
+  // staring at a spinner in the onboarding flow.
+  ipcMain.handle('ollama:v1:probe', async (_e, raw: unknown): Promise<OllamaProbeResponse> => {
+    let baseUrl: string;
+    try {
+      baseUrl = parseOllamaProbePayload(raw);
+    } catch (err) {
+      // Surface invalid URL / unsupported scheme as an explicit IPC error
+      // instead of silently coercing back to localhost — the renderer needs
+      // to see the mistake to let the user fix their typed baseUrl.
+      return {
+        ok: false,
+        code: 'IPC_BAD_INPUT',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+    const url = `${baseUrl.replace(/\/+$/, '')}/api/tags`;
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(url, { method: 'GET' }, 2000);
+    } catch (err) {
+      const { code } = classifyNetworkError(err);
+      return { ok: false, code, message: err instanceof Error ? err.message : String(err) };
+    }
+    if (!res.ok) {
+      return { ok: false, code: 'HTTP', message: `HTTP ${res.status}` };
+    }
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      return { ok: false, code: 'PARSE', message: 'Non-JSON response' };
+    }
+    const models = extractModelIds(body);
+    if (models === null) {
+      // Don't silently pretend Ollama is up with zero models — that would
+      // push the UI into an "available but empty" state that's actually a
+      // parser bug. Surface PARSE so the renderer can flag the probe as
+      // broken rather than rendering an empty model picker.
+      return { ok: false, code: 'PARSE', message: 'Unexpected /api/tags shape' };
+    }
+    return { ok: true, models };
+  });
+}
+
+export type OllamaProbeResponse =
+  | { ok: true; models: string[] }
+  | { ok: false; code: string; message: string };
+
+function parseOllamaProbePayload(raw: unknown): string {
+  return normalizeOllamaBaseUrl(typeof raw === 'string' ? raw : '');
+}
+
+/**
+ * Exported for unit tests. Turns whatever string the renderer sent into the
+ * base URL for the /api/tags probe. Returns the default `http://localhost:11434`
+ * ONLY when the input is empty — any other garbage (malformed URL,
+ * `file://`, `javascript:` etc.) throws a `CodesignError` so the IPC handler
+ * can surface the mistake instead of silently probing localhost.
+ */
+export function normalizeOllamaBaseUrl(raw: string): string {
+  const DEFAULT_BASE_URL = 'http://localhost:11434';
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return DEFAULT_BASE_URL;
+
+  // Treat the input as "already has a scheme" only if it starts with a
+  // recognizable `scheme://` prefix. That lets us reject `file://` /
+  // `ftp://` without also misclassifying `localhost:11434` (which the
+  // plain `URL()` constructor parses as scheme="localhost:" because of
+  // the host:port shape). `javascript:alert(1)` and similar scheme-only
+  // tricks fail the `://` gate and instead get `http://` prepended, which
+  // then fails URL parsing in the second pass and is rejected below.
+  const hasScheme = /^[a-z][a-z0-9+.\-]*:\/\//i.test(trimmed);
+  const withScheme = hasScheme ? trimmed : `http://${trimmed}`;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    throw new CodesignError(
+      `Ollama baseUrl "${trimmed}" is not a valid URL`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new CodesignError(
+      `Ollama baseUrl must use http(s), got "${parsed.protocol}"`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  if (parsed.hostname.length === 0) {
+    throw new CodesignError(
+      `Ollama baseUrl "${trimmed}" is not a valid URL`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  // We deliberately do NOT restrict to loopback because some users run
+  // Ollama on a LAN box; the threat model matches config:v1:test-endpoint
+  // (renderer is trusted, main-process fetch is the intended egress path).
+  // Strip any /v1 suffix — /api/tags lives at the root.
+  return withScheme.replace(/\/+$/, '').replace(/\/v1$/, '');
 }
 
 interface TestEndpointPayload {

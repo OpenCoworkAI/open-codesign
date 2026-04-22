@@ -21,6 +21,23 @@ describe('pingProvider', () => {
     await expect(pingProvider('anthropic', '')).rejects.toBeInstanceOf(CodesignError);
   });
 
+  // Keyless builtins (local Ollama) explicitly opt out of API keys via
+  // `requiresApiKey: false`. The empty-key guard must recognize that flag —
+  // otherwise Ollama onboarding/validation fails before ever hitting the
+  // network (bot review on PR #135).
+  it('does not throw when key is empty for a keyless builtin (ollama)', async () => {
+    mockFetch(async (url) => {
+      expect(url).toBe('http://localhost:11434/v1/models');
+      return new Response(JSON.stringify({ data: [{ id: 'llama3.2' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const res = await pingProvider('ollama', '');
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.modelCount).toBe(1);
+  });
+
   it('returns ok with model count for Anthropic 200', async () => {
     mockFetch(async (url, init) => {
       expect(url).toBe('https://api.anthropic.com/v1/models');

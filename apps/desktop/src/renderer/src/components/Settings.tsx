@@ -17,6 +17,7 @@ import {
   Loader2,
   MoreHorizontal,
   Palette,
+  Pencil,
   Plus,
   RotateCcw,
   Sliders,
@@ -147,15 +148,16 @@ function NativeSelect({
 // ─── Models tab ──────────────────────────────────────────────────────────────
 
 function ProviderOverflowMenu({
-  isActive,
   hasError,
   onTestConnection,
+  onEdit,
   onDelete,
   label,
 }: {
   isActive: boolean;
   hasError: boolean;
   onTestConnection: () => void;
+  onEdit: () => void;
   onDelete: () => void;
   label: string;
 }) {
@@ -215,6 +217,18 @@ function ProviderOverflowMenu({
               {t('settings.providers.testConnection')}
             </button>
           )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              close();
+              onEdit();
+            }}
+            className={itemClass}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            {t('settings.providers.edit')}
+          </button>
           {confirmDelete ? (
             <div className="px-2.5 py-1.5 flex items-center gap-1.5">
               <button
@@ -258,12 +272,14 @@ function ProviderCard({
   config,
   onDelete,
   onActivate,
+  onEdit,
   onRowChanged,
 }: {
   row: ProviderRow;
   config: OnboardingState | null;
   onDelete: (p: string) => void;
   onActivate: (p: string) => void;
+  onEdit: (row: ProviderRow) => void;
   onRowChanged: (row: ProviderRow) => void;
 }) {
   const t = useT();
@@ -354,6 +370,7 @@ function ProviderCard({
             isActive={row.isActive}
             hasError={hasError}
             onTestConnection={handleTestConnection}
+            onEdit={() => onEdit(row)}
             onDelete={() => onDelete(row.provider)}
             label={label}
           />
@@ -830,6 +847,14 @@ function ModelsTab() {
       }
     | undefined
   >(undefined);
+  /** Open AddCustomProviderModal in edit-mode against this row. Works for
+   *  both builtin and custom providers; builtins get their endpoint fields
+   *  locked so users can't accidentally break them. */
+  const [editingRow, setEditingRow] = useState<ProviderRow | null>(null);
+
+  function handleEdit(row: ProviderRow) {
+    setEditingRow(row);
+  }
 
   useEffect(() => {
     if (!window.codesign) return;
@@ -1132,6 +1157,28 @@ function ModelsTab() {
         />
       )}
 
+      {editingRow !== null && (
+        <AddCustomProviderModal
+          onSave={async () => {
+            setEditingRow(null);
+            await reloadRows();
+            pushToast({ variant: 'success', title: t('settings.providers.toast.saved') });
+          }}
+          onClose={() => setEditingRow(null)}
+          editTarget={{
+            id: editingRow.provider,
+            name: editingRow.name,
+            baseUrl: editingRow.baseUrl ?? '',
+            wire: editingRow.wire,
+            defaultModel: editingRow.defaultModel,
+            builtin: editingRow.builtin,
+            lockEndpoint: editingRow.builtin,
+            ...(editingRow.maskedKey.length > 0 ? { keyMask: editingRow.maskedKey } : {}),
+          }}
+          initialSetAsActive={false}
+        />
+      )}
+
       <div className="space-y-[var(--space-3)]">
         <ChatgptLoginCard onStatusChange={reloadRows} />
         {externalConfigs !== null &&
@@ -1375,6 +1422,7 @@ function ModelsTab() {
                 config={config}
                 onDelete={handleDelete}
                 onActivate={handleActivate}
+                onEdit={handleEdit}
                 onRowChanged={(next) =>
                   setRows((prev) => prev.map((r) => (r.provider === next.provider ? next : r)))
                 }

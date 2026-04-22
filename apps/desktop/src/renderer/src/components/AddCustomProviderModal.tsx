@@ -20,6 +20,26 @@ interface Props {
     wire?: WireApi;
     defaultModel?: string;
   };
+  /**
+   * Edit-mode: pre-fill every field from an existing provider and save via
+   * `updateProvider` (keeps id stable, rotates secret only when user types
+   * a new key). When undefined, falls back to create-mode.
+   */
+  editTarget?: {
+    id: string;
+    name: string;
+    baseUrl: string;
+    wire: WireApi;
+    defaultModel: string;
+    builtin: boolean;
+    /** When true, lock baseUrl/wire so users can't accidentally break a
+     *  builtin. Builtins still allow API key + defaultModel edits. */
+    lockEndpoint: boolean;
+    /** Display mask of existing key (e.g. "sk-ant-***xyz9") — shown as
+     *  placeholder so user knows there's a stored key, and an empty submit
+     *  doesn't wipe it. */
+    keyMask?: string;
+  };
 }
 
 type TestState =
@@ -38,16 +58,23 @@ export function AddCustomProviderModal({
   onClose,
   initialSetAsActive = true,
   initialValues,
+  editTarget,
 }: Props) {
   const t = useT();
-  const [name, setName] = useState(initialValues?.name ?? '');
-  const [baseUrl, setBaseUrl] = useState(initialValues?.baseUrl ?? '');
+  const isEdit = editTarget !== undefined;
+  const lockEndpoint = editTarget?.lockEndpoint === true;
+  const [name, setName] = useState(editTarget?.name ?? initialValues?.name ?? '');
+  const [baseUrl, setBaseUrl] = useState(editTarget?.baseUrl ?? initialValues?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
-  const [defaultModel, setDefaultModel] = useState(initialValues?.defaultModel ?? '');
-  const [wire, setWire] = useState<WireApi>(initialValues?.wire ?? 'openai-chat');
-  // If the caller pre-specified a wire, they know what they want — don't
-  // overwrite it when the user edits baseUrl.
-  const [wireAuto, setWireAuto] = useState(initialValues?.wire === undefined);
+  const [defaultModel, setDefaultModel] = useState(
+    editTarget?.defaultModel ?? initialValues?.defaultModel ?? '',
+  );
+  const [wire, setWire] = useState<WireApi>(
+    editTarget?.wire ?? initialValues?.wire ?? 'openai-chat',
+  );
+  // In edit mode we trust the stored wire; in create mode we only auto-detect
+  // if the caller didn't pin one.
+  const [wireAuto, setWireAuto] = useState(!isEdit && initialValues?.wire === undefined);
   const [test, setTest] = useState<TestState>({ kind: 'idle' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,21 +112,39 @@ export function AddCustomProviderModal({
     setSaving(true);
     setError(null);
     try {
-      const slug = slugify(name);
-      const id = `custom-${slug}-${Date.now().toString(36).slice(-4)}`;
-      // Canonicalize before persisting so pi-ai / Anthropic SDK always see
-      // the root they expect. Without this, a user pasting /v1/chat/completions
-      // would have it stored verbatim and then pi-ai would append another
-      // /chat/completions at inference time.
-      await window.codesign.config.addProvider({
-        id,
-        name: name.trim() || id,
-        wire,
-        baseUrl: canonicalBaseUrl(baseUrl.trim(), wire),
-        apiKey: apiKey.trim(),
-        defaultModel: defaultModel.trim(),
-        setAsActive: initialSetAsActive,
-      });
+      if (isEdit && editTarget !== undefined) {
+        // Edit mode: reuse id, rotate secret only when user typed something.
+        // Omitting `apiKey` leaves the stored secret untouched — matching the
+        // "leave empty to keep current key" UX hinted at by the mask placeholder.
+        const update: Parameters<NonNullable<typeof window.codesign.config.updateProvider>>[0] = {
+          id: editTarget.id,
+        };
+        if (name.trim() !== editTarget.name) update.name = name.trim() || editTarget.id;
+        if (defaultModel.trim() !== editTarget.defaultModel) {
+          update.defaultModel = defaultModel.trim();
+        }
+        if (!lockEndpoint) {
+          if (baseUrl.trim() !== editTarget.baseUrl) {
+            update.baseUrl = canonicalBaseUrl(baseUrl.trim(), wire);
+          }
+          if (wire !== editTarget.wire) update.wire = wire;
+        }
+        const typedKey = apiKey.trim();
+        if (typedKey.length > 0) update.apiKey = typedKey;
+        await window.codesign.config.updateProvider(update);
+      } else {
+        const slug = slugify(name);
+        const id = `custom-${slug}-${Date.now().toString(36).slice(-4)}`;
+        await window.codesign.config.addProvider({
+          id,
+          name: name.trim() || id,
+          wire,
+          baseUrl: canonicalBaseUrl(baseUrl.trim(), wire),
+          apiKey: apiKey.trim(),
+          defaultModel: defaultModel.trim(),
+          setAsActive: initialSetAsActive,
+        });
+      }
       onSave();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -109,13 +154,25 @@ export function AddCustomProviderModal({
   }
 
   const canTest = baseUrl.trim().length > 0 && test.kind !== 'testing';
-  const canSave = canTest && defaultModel.trim().length > 0 && name.trim().length > 0 && !saving;
+  const canSave = (() => {
+    if (saving) return false;
+    if (isEdit) {
+      // In edit mode, require at least the mandatory fields still hold values
+      // — but don't require the user to re-enter the API key.
+      return baseUrl.trim().length > 0 && defaultModel.trim().length > 0 && name.trim().length > 0;
+    }
+    return canTest && defaultModel.trim().length > 0 && name.trim().length > 0;
+  })();
+
+  const title = isEdit
+    ? t('settings.providers.custom.editTitle')
+    : t('settings.providers.custom.title');
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={t('settings.providers.custom.title')}
+      aria-label={title}
       className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-[var(--color-overlay)]"
       onClick={onClose}
       onKeyDown={(e) => e.key === 'Escape' && onClose()}
@@ -128,7 +185,7 @@ export function AddCustomProviderModal({
       >
         <div className="flex items-center justify-between">
           <h2 className="text-[var(--text-base)] font-semibold text-[var(--color-text-primary)]">
-            {t('settings.providers.custom.title')}
+            {title}
           </h2>
           <button
             type="button"
@@ -140,31 +197,38 @@ export function AddCustomProviderModal({
           </button>
         </div>
 
-        <Field label={t('settings.providers.custom.wire')}>
-          <div className="flex gap-3 flex-wrap">
-            {(['openai-chat', 'openai-responses', 'anthropic'] as const).map((w) => (
-              <label
-                key={w}
-                className="inline-flex items-center gap-1.5 text-[var(--text-xs)] cursor-pointer"
-              >
-                <input
-                  type="radio"
-                  name="wire"
-                  value={w}
-                  checked={wire === w}
-                  onChange={() => handleWireChange(w)}
-                  className="accent-[var(--color-accent)]"
-                />
-                <span className="text-[var(--color-text-secondary)]">
-                  {t(`settings.providers.custom.wires.${w}`)}
-                </span>
-              </label>
-            ))}
-          </div>
-        </Field>
+        {!lockEndpoint && (
+          <Field label={t('settings.providers.custom.wire')}>
+            <div className="flex gap-3 flex-wrap">
+              {(['openai-chat', 'openai-responses', 'anthropic'] as const).map((w) => (
+                <label
+                  key={w}
+                  className="inline-flex items-center gap-1.5 text-[var(--text-xs)] cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="wire"
+                    value={w}
+                    checked={wire === w}
+                    onChange={() => handleWireChange(w)}
+                    className="accent-[var(--color-accent)]"
+                  />
+                  <span className="text-[var(--color-text-secondary)]">
+                    {t(`settings.providers.custom.wires.${w}`)}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </Field>
+        )}
 
         <Field label={t('settings.providers.custom.name')}>
-          <TextInput value={name} onChange={setName} placeholder="My Provider" />
+          <TextInput
+            value={name}
+            onChange={setName}
+            placeholder="My Provider"
+            disabled={lockEndpoint}
+          />
         </Field>
 
         <Field label={t('settings.providers.custom.baseUrl')}>
@@ -172,11 +236,23 @@ export function AddCustomProviderModal({
             value={baseUrl}
             onChange={handleBaseUrlChange}
             placeholder="https://api.example.com/v1"
+            disabled={lockEndpoint}
           />
         </Field>
 
         <Field label={t('settings.providers.custom.apiKey')}>
-          <TextInput value={apiKey} onChange={setApiKey} type="password" placeholder="sk-..." />
+          <TextInput
+            value={apiKey}
+            onChange={setApiKey}
+            type="password"
+            placeholder={
+              isEdit && editTarget?.keyMask !== undefined && editTarget.keyMask.length > 0
+                ? t('settings.providers.custom.apiKeyEditPlaceholder', {
+                    mask: editTarget.keyMask,
+                  })
+                : 'sk-...'
+            }
+          />
         </Field>
 
         <Field label={t('settings.providers.custom.defaultModel')}>
@@ -220,7 +296,7 @@ export function AddCustomProviderModal({
             {t('common.cancel')}
           </Button>
           <Button size="sm" onClick={handleSave} disabled={!canSave}>
-            {t('settings.providers.custom.save')}
+            {isEdit ? t('settings.providers.custom.saveEdit') : t('settings.providers.custom.save')}
           </Button>
         </div>
       </div>
@@ -244,11 +320,13 @@ function TextInput({
   onChange,
   placeholder,
   type,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   type?: string;
+  disabled?: boolean;
 }) {
   return (
     <input
@@ -256,7 +334,8 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+      disabled={disabled === true}
+      className="w-full h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-60 disabled:cursor-not-allowed"
     />
   );
 }

@@ -182,6 +182,7 @@
       "addKey": "添加 Key",
       "confirm": "确认",
       "delete": "删除",
+      "edit": "编辑",
       "testConnection": "测试连接",
       "moreActions": "更多操作",
       "editModel": "更改模型",
@@ -190,6 +191,7 @@
       "fast": "快速",
       "custom": {
         "title": "添加自定义接入点",
+        "editTitle": "编辑接入点",
         "wire": "协议类型",
         "wires": {
           "openai-chat": "OpenAI Chat",
@@ -199,10 +201,12 @@
         "name": "名称",
         "baseUrl": "接入地址",
         "apiKey": "API Key",
+        "apiKeyEditPlaceholder": "留空则保留 {{mask}}",
         "defaultModel": "默认模型",
         "test": "测试连接",
         "testOk": "正常 — 共 {{count}} 个模型",
-        "save": "保存并继续"
+        "save": "保存并继续",
+        "saveEdit": "保存修改"
       },
       "import": {
         "action": "导入",
@@ -391,8 +395,13 @@
       "tryFreeSubtitle": "使用 OpenRouter 免费额度 — 粘贴一个 OpenRouter Key，然后选 openrouter/free 或输入任意模型 ID。",
       "useKey": "使用我的 API Key",
       "useKeySubtitle": "支持 Anthropic、OpenAI 或 OpenRouter，自动识别 Key 前缀。",
-      "useOllama": "使用本地模型（已检测到 Ollama）",
-      "useOllamaSubtitle": "将在 v0.2 中推出 — Ollama 集成已列入路线图。",
+      "useOllama": "使用本地模型（Ollama）",
+      "useOllamaSubtitle": "完全本地运行，零 API 费用。需要已安装并启动 Ollama。",
+      "useOllamaDetected": "已检测到 Ollama — 本地共 {{count}} 个模型可用。",
+      "useOllamaNotRunning": "未在 localhost:11434 检测到 Ollama，请先安装或启动后重试。",
+      "useOllamaProbing": "正在检测本地 Ollama 实例…",
+      "useOllamaRetry": "重新检测",
+      "useOllamaInstall": "安装 Ollama ↗",
       "whereToGetKey": "在哪里获取 Key"
     },
     "paste": {

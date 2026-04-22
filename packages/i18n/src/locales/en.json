@@ -179,6 +179,7 @@
       "reEnterKey": "Re-enter key",
       "confirm": "Confirm",
       "delete": "Delete",
+      "edit": "Edit",
       "testConnection": "Test connection",
       "moreActions": "More actions",
       "editModel": "Change model",
@@ -187,6 +188,7 @@
       "fast": "Fast",
       "custom": {
         "title": "Add custom endpoint",
+        "editTitle": "Edit provider",
         "wire": "Wire protocol",
         "wires": {
           "openai-chat": "OpenAI Chat",
@@ -196,10 +198,12 @@
         "name": "Label",
         "baseUrl": "Base URL",
         "apiKey": "API Key",
+        "apiKeyEditPlaceholder": "Leave empty to keep {{mask}}",
         "defaultModel": "Default model",
         "test": "Test connection",
         "testOk": "OK — {{count}} models available",
-        "save": "Save & continue"
+        "save": "Save & continue",
+        "saveEdit": "Save changes"
       },
       "import": {
         "action": "Import",
@@ -388,8 +392,13 @@
       "tryFreeSubtitle": "OpenRouter free tier - paste an OpenRouter key, then start with openrouter/free or type any model ID.",
       "useKey": "Use my API key",
       "useKeySubtitle": "Anthropic, OpenAI, or OpenRouter. Auto-detected from the key prefix.",
-      "useOllama": "Use local model (Ollama detected)",
-      "useOllamaSubtitle": "Coming in v0.2 - Ollama integration is on the roadmap.",
+      "useOllama": "Use local model (Ollama)",
+      "useOllamaSubtitle": "Runs 100% locally with zero API cost. Needs Ollama installed and running.",
+      "useOllamaDetected": "Ollama detected — {{count}} models available locally.",
+      "useOllamaNotRunning": "Ollama not detected at localhost:11434. Install or start it, then retry.",
+      "useOllamaProbing": "Checking for a local Ollama instance...",
+      "useOllamaRetry": "Retry probe",
+      "useOllamaInstall": "Install Ollama ↗",
       "whereToGetKey": "Where to get a key"
     },
     "paste": {
