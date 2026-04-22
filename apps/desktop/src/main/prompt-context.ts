@@ -64,7 +64,9 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
   // Binary attachments (images, etc) only need filename - we don't send content to LLM
   // So allow much larger size limit
   const isKnownTextExtension = TEXT_EXTS.has(extension);
-  const maxFileBytes = isKnownTextExtension ? MAX_TEXT_ATTACHMENT_BYTES : MAX_BINARY_ATTACHMENT_BYTES;
+  const maxFileBytes = isKnownTextExtension
+    ? MAX_TEXT_ATTACHMENT_BYTES
+    : MAX_BINARY_ATTACHMENT_BYTES;
   if (file.size > maxFileBytes) {
     throw new CodesignError(
       isKnownTextExtension
@@ -90,7 +92,10 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
       buffer = probe;
     } else if (file.size <= MAX_TEXT_ATTACHMENT_BYTES) {
       // It looks like text and fits within limit - read the whole thing
-      const length = Math.max(1, Math.min(file.size || MAX_TEXT_ATTACHMENT_BYTES, MAX_TEXT_ATTACHMENT_BYTES));
+      const length = Math.max(
+        1,
+        Math.min(file.size || MAX_TEXT_ATTACHMENT_BYTES, MAX_TEXT_ATTACHMENT_BYTES),
+      );
       const fullBuffer = Buffer.alloc(length);
       // Read from start (we already have the probe, but just re-read for simplicity)
       const { bytesRead } = await handle.read(fullBuffer, 0, fullBuffer.length, 0);
