@@ -194,7 +194,7 @@ export async function runCodexGenerate(input: CodexGenerateInput): Promise<Codex
   const stored = await store.read();
   if (stored === null) {
     throw new CodesignError(
-      'ChatGPT 订阅未登录。请在 Settings 里先登录。',
+      'ChatGPT subscription login is still being polished and will ship in the next release — for now, please switch to another provider. / "用 ChatGPT 订阅登录"功能仍在打磨中，下个版本开放 —— 目前请先切换到其他 provider。',
       ERROR_CODES.PROVIDER_AUTH_MISSING,
     );
   }
