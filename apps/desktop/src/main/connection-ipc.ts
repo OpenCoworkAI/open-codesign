@@ -42,11 +42,13 @@ export interface ConnectionTestResult {
   /**
    * `models` when the standard GET /models probe succeeded.
    * `chat_completion_degraded` when /models 404'd but POST /chat/completions
-   * proved the endpoint is alive (e.g. Zhipu GLM's gateway — no public /models
-   * but /chat/completions works fine). The renderer surfaces this so users
-   * know /models is unavailable even though generation will work.
+   * proved the openai-chat wire is alive (e.g. Zhipu GLM — no public /models).
+   * `responses_degraded` when /models 404'd but POST /responses proved the
+   * openai-responses wire is alive. We probe the wire's real inference
+   * endpoint so a gateway that only implements /chat/completions can't
+   * false-positive for a user whose provider is on the Responses API.
    */
-  probeMethod?: 'models' | 'chat_completion_degraded';
+  probeMethod?: 'models' | 'chat_completion_degraded' | 'responses_degraded';
 }
 
 export interface ConnectionTestError {
@@ -494,15 +496,19 @@ export async function runProviderTest(
     // not degrade anthropic — its /v1/models is standard, and skipping it
     // would mask real path-shape mistakes.
     if (res.status === 404 && (creds.wire === 'openai-chat' || creds.wire === 'openai-responses')) {
-      const probe = await probeChatCompletion(normalizedBaseUrl, headers);
+      const probe = await probeInferenceEndpoint(creds.wire, normalizedBaseUrl, headers);
       if (probe.kind === 'pass') {
-        return { ok: true, probeMethod: 'chat_completion_degraded' };
+        return {
+          ok: true,
+          probeMethod:
+            creds.wire === 'openai-responses' ? 'responses_degraded' : 'chat_completion_degraded',
+        };
       }
       if (probe.kind === 'http' && probe.status !== 404) {
         const { code, hint } = classifyHttpError(probe.status);
         return { ok: false, code, message: `HTTP ${probe.status}`, hint };
       }
-      // /chat/completions also 404'd (or the network dropped) — fall through
+      // Inference endpoint also 404'd (or the network dropped) — fall through
       // and report the original /models 404.
     }
     const { code, hint } = classifyHttpError(res.status);
@@ -517,28 +523,45 @@ type ProbeResult =
   | { kind: 'network'; message: string };
 
 /**
- * POST a minimal chat-completion request to verify the endpoint is alive
- * when GET /models returned 404. A 2xx response or any API-originated 4xx
- * (400 model_unknown, 402 insufficient credits, 422, 429 — and 401/403 too,
- * which we surface as an auth error instead of the misleading 404 hint)
- * counts as "endpoint reachable". Only 404 and 5xx count as a real failure.
+ * POST a minimal inference request to verify the endpoint is alive when GET
+ * /models returned 404. We dispatch by wire so that providers on the
+ * Responses API (which may not implement /chat/completions at all) can't
+ * false-positive via a gateway that only speaks the other shape. A 2xx
+ * response or any API-originated 4xx (400 model_unknown, 402 insufficient
+ * credits, 422, 429 — and 401/403 too, which we surface as auth) counts as
+ * "endpoint reachable". Only 404 and 5xx count as a real failure. The
+ * request body is intentionally minimal; if the gateway rejects the payload
+ * shape with a 4xx we still know the route exists.
  */
-async function probeChatCompletion(
+async function probeInferenceEndpoint(
+  wire: 'openai-chat' | 'openai-responses',
   normalizedBaseUrl: string,
   headers: Record<string, string>,
 ): Promise<ProbeResult> {
-  const url = `${normalizedBaseUrl}/chat/completions`;
+  const url =
+    wire === 'openai-responses'
+      ? `${normalizedBaseUrl}/responses`
+      : `${normalizedBaseUrl}/chat/completions`;
+  const body =
+    wire === 'openai-responses'
+      ? JSON.stringify({
+          model: 'probe',
+          input: [{ role: 'user', content: [{ type: 'input_text', text: 'ping' }] }],
+          max_output_tokens: 1,
+          stream: false,
+        })
+      : JSON.stringify({
+          model: 'probe',
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1,
+          stream: false,
+        });
   let res: Response;
   try {
     res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: 'probe',
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 1,
-        stream: false,
-      }),
+      body,
     });
   } catch (err) {
     return { kind: 'network', message: err instanceof Error ? err.message : String(err) };

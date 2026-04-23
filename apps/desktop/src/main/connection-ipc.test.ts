@@ -1012,10 +1012,11 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
     }
   });
 
-  it('openai-responses: /models 404 + /chat/completions 2xx → degrade pass', async () => {
-    const { restore } = installFakeFetch((url) => {
+  it('openai-responses: /models 404 + /responses 2xx → probeMethod=responses_degraded', async () => {
+    const { calls, restore } = installFakeFetch((url) => {
       if (url.endsWith('/models')) return { status: 404 };
-      return { status: 200, body: { ok: true } };
+      if (url.endsWith('/responses')) return { status: 200, body: { ok: true } };
+      return { status: 500 };
     });
     try {
       const res = await runProviderTest({
@@ -1025,7 +1026,48 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
         baseUrl: 'https://gateway.example.com/v1',
       });
       expect(res.ok).toBe(true);
-      if (res.ok) expect(res.probeMethod).toBe('chat_completion_degraded');
+      if (res.ok) expect(res.probeMethod).toBe('responses_degraded');
+      expect(calls).toHaveLength(2);
+      expect(calls[0]?.url).toMatch(/\/models$/);
+      expect(calls[1]?.url).toMatch(/\/responses$/);
+      expect(calls[1]?.method).toBe('POST');
+      const body = JSON.parse(calls[1]?.body ?? '{}');
+      // Responses API shape — must NOT look like /chat/completions payload.
+      expect(body.max_output_tokens).toBe(1);
+      expect(Array.isArray(body.input)).toBe(true);
+      expect(body.messages).toBeUndefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it('openai-responses: /models 404 + /responses 404 → preserves original 404 (no /chat/completions false-positive)', async () => {
+    // Regression: the previous implementation probed /chat/completions for
+    // every OpenAI-compat wire. A gateway that only implements /chat/completions
+    // would then report the connection healthy even though real inference (on
+    // /responses) would 404 at generate-time. We want the opposite: if the
+    // wire's real endpoint is dead, the test must fail.
+    const { calls, restore } = installFakeFetch((url) => {
+      if (url.endsWith('/models')) return { status: 404 };
+      if (url.endsWith('/responses')) return { status: 404 };
+      // A gateway that only has /chat/completions — must not be consulted.
+      if (url.endsWith('/chat/completions')) return { status: 200, body: { id: 'wrong-probe' } };
+      return { status: 500 };
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'chat-only-gateway',
+        wire: 'openai-responses',
+        apiKey: 'sk-test',
+        baseUrl: 'https://gateway.example.com/v1',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe('404');
+        expect(res.message).toBe('HTTP 404');
+      }
+      // /chat/completions must NOT have been probed for an openai-responses wire.
+      expect(calls.some((c) => c.url.endsWith('/chat/completions'))).toBe(false);
     } finally {
       restore();
     }
