@@ -199,7 +199,7 @@ const REASONING_MODEL_ID_PATTERN = new RegExp(
   [
     ':thinking$',
     '(^|/)claude-(?:opus|sonnet)-4',
-    '^o1[-.]', '^o3[-.]', '^o4[-.]', '^gpt-5[-.]',
+    '^(?:openai/)?(?:o1|o3|o4|gpt-5)(?:[-.].*)?$',
     '^minimax/minimax-m\\d',
     '^deepseek/deepseek-r\\d',
     '^qwen/qwq',
