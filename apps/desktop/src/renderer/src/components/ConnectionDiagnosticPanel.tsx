@@ -182,7 +182,7 @@ export function ConnectionDiagnosticPanel({
           </p>
         )}
         {showGatewayAllowlistHint && (
-          <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-warning,#d97706)] bg-[var(--color-warning-soft,var(--color-surface))] px-3 py-2">
+          <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2">
             <p className="font-medium text-[var(--color-text-primary)]">
               {t('diagnostics.gatewayAllowlistHintTitle')}
             </p>
