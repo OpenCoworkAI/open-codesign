@@ -217,6 +217,9 @@
         "defaultModel": "Default model",
         "switchToManual": "Enter manually",
         "switchToDropdown": "Pick from list",
+        "discoveringModels": "Discovering models...",
+        "discoveredModels": "Found {{count}} models",
+        "discoveryFailed": "Could not auto-discover models",
         "test": "Test connection",
         "testOk": "OK — {{count}} models available",
         "save": "Save & continue",
@@ -307,10 +310,7 @@
         "presetName": "CLIProxyAPI",
         "presetDescription": "Local proxy that wraps Claude/Codex/Gemini OAuth subscriptions",
         "apiKeyOptional": "API key only required if you configured `api-keys` in CPA config.yaml",
-        "thinkingHint": "Tip: append `(high)` / `(xhigh)` / `(8192)` to model name to control thinking budget",
-        "discoveringModels": "Discovering models...",
-        "discoveredModels": "Found {{count}} models",
-        "discoveryFailed": "Could not connect to CPA"
+        "thinkingHint": "Tip: append `(high)` / `(xhigh)` / `(8192)` to model name to control thinking budget"
       },
       "reasoning": {
         "label": "Reasoning depth",
