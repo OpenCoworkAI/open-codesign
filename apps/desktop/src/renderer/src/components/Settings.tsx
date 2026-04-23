@@ -23,6 +23,7 @@ import {
   RotateCcw,
   Sliders,
   Trash2,
+  Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
@@ -1107,6 +1108,41 @@ function ImageGenerationPanel() {
           className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {t('common.save')}
+const CPA_DETECTION_DISMISSED_KEY = 'cpa-detection-dismissed-v1';
+
+function LocalCpaImportCard({
+  onImport,
+  onDismiss,
+}: {
+  onImport: () => void;
+  onDismiss: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-accent)] bg-[var(--color-accent-tint)] px-[var(--space-3)] py-[var(--space-2_5)] flex items-start gap-[var(--space-3)]">
+      <Zap className="w-4 h-4 mt-0.5 shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
+      <div className="flex-1 min-w-0">
+        <p className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)] leading-snug">
+          {t('settings.providers.cpaDetection.title')}
+        </p>
+        <p className="text-[var(--text-xs)] text-[var(--color-text-secondary)] mt-0.5 leading-[var(--leading-body)]">
+          {t('settings.providers.cpaDetection.body')}
+        </p>
+      </div>
+      <div className="flex items-center gap-[var(--space-1_5)] shrink-0">
+        <button
+          type="button"
+          onClick={onImport}
+          className="h-7 px-[var(--space-2_5)] rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-on-accent)] bg-[var(--color-accent)] hover:opacity-90 transition-opacity whitespace-nowrap"
+        >
+          {t('settings.providers.cpaDetection.importAction')}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="h-7 px-[var(--space-2)] rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors whitespace-nowrap"
+        >
+          {t('settings.providers.cpaDetection.dismissAction')}
         </button>
       </div>
     </div>
@@ -1138,6 +1174,9 @@ function ModelsTab() {
   const [loading, setLoading] = useState(true);
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [cpaDetection, setCpaDetection] = useState<
+    'idle' | 'detecting' | 'available' | 'unavailable'
+  >('idle');
   const [externalConfigs, setExternalConfigs] = useState<{
     codex?: { count: number } | undefined;
     claudeCode?:
@@ -1265,6 +1304,44 @@ function ModelsTab() {
         // non-fatal; banner just doesn't appear
       });
   }, [pushToast, t]);
+
+  useEffect(() => {
+    if (!window.codesign?.config?.testEndpoint) return;
+    // Only probe once — once we've reached a terminal state, skip.
+    if (cpaDetection !== 'idle') return;
+    // Skip if user already dismissed this banner for this install.
+    try {
+      if (window.localStorage.getItem(CPA_DETECTION_DISMISSED_KEY) === '1') return;
+    } catch {
+      // localStorage unavailable — proceed with detection
+    }
+    // Skip detection if a provider is already pointing at the CPA port.
+    // We wait for the rows load to settle before probing so we don't flash
+    // the banner and immediately hide it on the next render tick.
+    if (loading) return;
+    const alreadyConfigured = rows.some((r) =>
+      /^https?:\/\/(localhost|127\.0\.0\.1):8317/.test(r.baseUrl ?? ''),
+    );
+    if (alreadyConfigured) return;
+
+    setCpaDetection('detecting');
+    void window.codesign.config
+      .testEndpoint({ wire: 'anthropic', baseUrl: 'http://127.0.0.1:8317', apiKey: '' })
+      .then((res) => {
+        setCpaDetection(res.ok ? 'available' : 'unavailable');
+      })
+      .catch((err) => {
+        reportableErrorToast({
+          code: 'CPA_DETECTION_FAILED',
+          scope: 'settings',
+          title: t('settings.imageGen.toast.loadFailed', {
+            defaultValue: 'Image generation settings failed to load',
+          }),
+          description: cleanIpcError(err) || t('settings.common.unknownError'),
+        });
+        setCpaDetection('unavailable');
+      });
+  }, [cpaDetection, loading, rows, pushToast, reportableErrorToast, t]);
 
   async function reloadRows() {
     if (!window.codesign) return;
@@ -1585,6 +1662,28 @@ function ModelsTab() {
 
       <div className="space-y-[var(--space-3)]">
         <ChatgptLoginCard onStatusChange={reloadRows} />
+        {cpaDetection === 'available' && (
+          <LocalCpaImportCard
+            onImport={() => {
+              setCustomProviderPreset({
+                name: 'CLIProxyAPI',
+                baseUrl: 'http://127.0.0.1:8317',
+                wire: 'anthropic',
+                defaultModel: '',
+              });
+              setShowAddCustom(true);
+              setCpaDetection('unavailable');
+            }}
+            onDismiss={() => {
+              try {
+                window.localStorage.setItem(CPA_DETECTION_DISMISSED_KEY, '1');
+              } catch {
+                // non-fatal
+              }
+              setCpaDetection('unavailable');
+            }}
+          />
+        )}
         {externalConfigs !== null &&
           (externalConfigs.codex !== undefined ||
             externalConfigs.claudeCode !== undefined ||
@@ -1828,6 +1927,16 @@ function ModelsTab() {
             }}
             onAddCustom={() => {
               setShowAddMenu(false);
+              setShowAddCustom(true);
+            }}
+            onAddCliProxyApi={() => {
+              setShowAddMenu(false);
+              setCustomProviderPreset({
+                name: 'CLIProxyAPI',
+                baseUrl: 'http://127.0.0.1:8317',
+                wire: 'anthropic',
+                defaultModel: '',
+              });
               setShowAddCustom(true);
             }}
           />
@@ -2488,6 +2597,7 @@ interface AddProviderMenuProps {
   onImportClaudeCode: () => void;
   onAddOllama: () => void;
   onAddCustom: () => void;
+  onAddCliProxyApi: () => void;
 }
 
 function AddProviderMenu({
@@ -2499,6 +2609,7 @@ function AddProviderMenu({
   onImportClaudeCode,
   onAddOllama,
   onAddCustom,
+  onAddCliProxyApi,
 }: AddProviderMenuProps) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -2561,6 +2672,15 @@ function AddProviderMenu({
       }),
       disabled: false,
       onClick: onAddCustom,
+    },
+    {
+      key: 'cli-proxy-api',
+      label: t('settings.providers.cliProxyApi.presetName', { defaultValue: 'CLIProxyAPI' }),
+      desc: t('settings.providers.cliProxyApi.presetDescription', {
+        defaultValue: 'Local proxy that wraps Claude/Codex/Gemini OAuth subscriptions',
+      }),
+      disabled: false,
+      onClick: onAddCliProxyApi,
     },
   ];
 

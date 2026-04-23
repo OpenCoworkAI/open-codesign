@@ -53,6 +53,13 @@ export const PROXY_PRESETS = [
     notes: 'Edit URL to your deployment',
   },
   {
+    id: 'cli-proxy-api',
+    label: 'CLIProxyAPI',
+    provider: 'anthropic',
+    baseUrl: 'http://127.0.0.1:8317',
+    notes: '',
+  },
+  {
     id: 'custom',
     label: 'Custom...',
     provider: 'openai',
