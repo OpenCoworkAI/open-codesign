@@ -210,7 +210,7 @@ jobs:
           pnpm --filter @open-codesign/desktop exec electron-builder --mac --${{ matrix.mac_arch }} --publish never
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_glob }}
@@ -270,7 +270,7 @@ jobs:
         run: pnpm exec electron-vite build && pnpm exec electron-builder --linux snap --publish never
 
       - name: Upload snap artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installer-snap
           path: apps/desktop/release/*.snap
@@ -330,7 +330,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Upload provenance artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: provenance
           path: |
