@@ -313,10 +313,10 @@ export function createRuntimeTextEditorFs({
 
   function persistMutation(filePath: string, content: string): void {
     if (designId === null || db === null) return;
-    upsertDesignFile(db, designId, filePath, content);
+    const persisted = upsertDesignFile(db, designId, filePath, content);
     const design = getDesign(db, designId);
     if (design === null || design.workspacePath === null) return;
-    const destinationPath = path_module.join(design.workspacePath, filePath);
+    const destinationPath = path_module.join(design.workspacePath, persisted.path);
     try {
       mkdirSync(path_module.dirname(destinationPath), { recursive: true });
       writeFileSync(destinationPath, content, 'utf8');

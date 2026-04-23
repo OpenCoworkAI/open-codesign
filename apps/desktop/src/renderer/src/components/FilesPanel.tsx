@@ -58,7 +58,11 @@ export function FilesPanel() {
       setWorkspaceLoading(true);
       const path = await window.codesign.snapshots.pickWorkspaceFolder();
       if (path && currentDesign && currentDesignId) {
-        if (currentDesign.workspacePath && currentDesign.workspacePath !== path) {
+        const normalizePath = (p: string) => p.replaceAll('\\', '/').replace(/\/+$/, '');
+        if (
+          currentDesign.workspacePath &&
+          normalizePath(currentDesign.workspacePath) !== normalizePath(path)
+        ) {
           requestWorkspaceRebind(currentDesign, path);
         } else if (!currentDesign.workspacePath) {
           await window.codesign.snapshots.updateWorkspace(currentDesignId, path, false);
@@ -67,7 +71,11 @@ export function FilesPanel() {
         }
       }
     } catch (err) {
-      console.error('Failed to pick workspace:', err);
+      useCodesignStore.getState().pushToast({
+        variant: 'error',
+        title: t('canvas.workspace.updateFailed'),
+        description: err instanceof Error ? err.message : t('errors.unknown'),
+      });
     } finally {
       setWorkspaceLoading(false);
     }
@@ -86,7 +94,11 @@ export function FilesPanel() {
       setWorkspaceLoading(true);
       await window.codesign.snapshots.openWorkspaceFolder(currentDesignId);
     } catch (err) {
-      console.error('Failed to open workspace:', err);
+      useCodesignStore.getState().pushToast({
+        variant: 'error',
+        title: t('canvas.workspace.updateFailed'),
+        description: err instanceof Error ? err.message : t('errors.unknown'),
+      });
     } finally {
       setWorkspaceLoading(false);
     }
@@ -107,7 +119,11 @@ export function FilesPanel() {
       const updated = await window.codesign.snapshots.listDesigns();
       useCodesignStore.setState({ designs: updated });
     } catch (err) {
-      console.error('Failed to clear workspace:', err);
+      useCodesignStore.getState().pushToast({
+        variant: 'error',
+        title: t('canvas.workspace.updateFailed'),
+        description: err instanceof Error ? err.message : t('errors.unknown'),
+      });
     } finally {
       setWorkspaceLoading(false);
     }
