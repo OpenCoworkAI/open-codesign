@@ -13,6 +13,8 @@ import { EmptyState } from '../preview/EmptyState';
 import { ErrorState } from '../preview/ErrorState';
 import { useCodesignStore } from '../store';
 import { CanvasErrorBar } from './CanvasErrorBar';
+import { humanizePreviewError } from './CanvasErrorBar';
+import { CanvasSketchView } from './CanvasSketchView';
 import { CanvasTabBar } from './CanvasTabBar';
 import { FilesTabView } from './FilesTabView';
 import { PhoneFrame } from './PhoneFrame';
@@ -479,76 +481,88 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       chatMessages.length > 0);
 
   let body: React.ReactNode;
-  // Only take over the whole pane with ErrorState when there's nothing to
-  // show yet. If the agent produced a preview before failing on the last
-  // step (common with token-overflow / validation errors), keep the preview
-  // visible — the user can still inspect and tweak what did generate.
-  // A small dismissible error banner surfaces via CanvasErrorBar / toast.
-  if (errorMessage && !previewHtml) {
-    body = (
-      <ErrorState
-        message={errorMessage}
-        onRetry={() => {
-          void retry();
-        }}
-        onDismiss={clearError}
-      />
-    );
-  } else if (activeTab?.kind === 'files' && previewHtml) {
+  if (activeTab?.kind === 'canvas') {
+    body = <CanvasSketchView />;
+  } else if (activeTab?.kind === 'files') {
     body = <FilesTabView />;
   } else {
-    // Pool slots stay mounted even when the current design has no preview —
-    // background iframes for recently-visited designs keep their documents
-    // alive for instant switch-back. EmptyState is overlaid in the same
-    // stacking context when the active design has no content yet.
-    body = (
-      <div className="relative h-full w-full">
-        {poolEntries.map((entry) => (
-          <PreviewSlot
-            key={entry.id}
-            designId={entry.id}
-            html={entry.html}
-            active={entry.id === currentDesignId}
-            viewport={previewViewport}
-            zoom={previewZoom}
-            showCommentUi={showCommentUi}
-            commentHintLabel={t('preview.commentModeHint')}
-            pinOverlay={pinOverlay}
-            interactionMode={interactionMode}
-            registerIframe={registerIframe}
-            onIframeError={pushIframeError}
-            onIframeLoaded={handleIframeLoaded}
-          />
-        ))}
-        {!activeHasHtml ? (
-          designHasContent ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-background)]">
-              <div className="w-[60%] max-w-[720px] aspect-[4/3] rounded-[var(--radius-lg)] bg-[linear-gradient(110deg,var(--color-background-secondary)_0%,rgba(0,0,0,0.03)_40%,var(--color-background-secondary)_80%)] animate-pulse" />
-            </div>
-          ) : (
-            <EmptyState onPickStarter={onPickStarter} />
-          )
-        ) : null}
-      </div>
-    );
+    // Only take over the whole pane with ErrorState when there's nothing to
+    // show yet. If the agent produced a preview before failing on the last
+    // step (common with token-overflow / validation errors), keep the preview
+    // visible — the user can still inspect and tweak what did generate.
+    // A small dismissible error banner surfaces via CanvasErrorBar / toast.
+    if (errorMessage && !previewHtml) {
+      body = (
+        <ErrorState
+          message={errorMessage}
+          onRetry={() => {
+            void retry();
+          }}
+          onDismiss={clearError}
+        />
+      );
+    } else if (!activeHasHtml && friendlyIframeError) {
+      body = (
+        <ErrorState
+          message={friendlyIframeError}
+          onRetry={() => {
+            void retry();
+          }}
+          onDismiss={clearIframeErrors}
+        />
+      );
+    } else {
+      // Pool slots stay mounted even when the current design has no preview —
+      // background iframes for recently-visited designs keep their documents
+      // alive for instant switch-back. EmptyState is overlaid in the same
+      // stacking context when the active design has no content yet.
+      body = (
+        <div className="relative h-full w-full">
+          {poolEntries.map((entry) => (
+            <PreviewSlot
+              key={entry.id}
+              designId={entry.id}
+              html={entry.html}
+              active={entry.id === currentDesignId}
+              viewport={previewViewport}
+              zoom={previewZoom}
+              showCommentUi={showCommentUi}
+              commentHintLabel={t('preview.commentModeHint')}
+              pinOverlay={pinOverlay}
+              interactionMode={interactionMode}
+              registerIframe={registerIframe}
+              onIframeError={pushIframeError}
+              onIframeLoaded={handleIframeLoaded}
+            />
+          ))}
+          {!activeHasHtml ? (
+            designHasContent ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-background)]">
+                <div className="w-[60%] max-w-[720px] aspect-[4/3] rounded-[var(--radius-lg)] bg-[linear-gradient(110deg,var(--color-background-secondary)_0%,rgba(0,0,0,0.03)_40%,var(--color-background-secondary)_80%)] animate-pulse" />
+              </div>
+            ) : (
+              <EmptyState onPickStarter={onPickStarter} />
+            )
+          ) : null}
+        </div>
+      );
+    }
   }
 
   const hasTabs = canvasTabs.length > 0;
-  const isWelcome = !errorMessage && !previewHtml && !designHasContent;
+  const showPreviewToolbar = activeTab?.kind === 'file';
 
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex flex-col min-h-0 flex-1">
-        {isWelcome ? null : (
-          <div className="flex items-stretch justify-between gap-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] pl-[var(--space-2)]">
-            {hasTabs ? <CanvasTabBar /> : <div />}
-            <PreviewToolbar />
-          </div>
-        )}
+        <div className="flex items-stretch justify-between gap-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] pl-[var(--space-2)]">
+          {hasTabs ? <CanvasTabBar /> : <div />}
+          {showPreviewToolbar ? <PreviewToolbar /> : <div />}
+        </div>
         <CanvasErrorBar />
         <div className="relative flex-1 overflow-hidden">
           {body}
-          {previewHtml ? <TweakPanel iframeRef={iframeRef} /> : null}
+          {previewHtml && activeTab?.kind === 'file' ? <TweakPanel iframeRef={iframeRef} /> : null}
         </div>
         {commentBubble && interactionMode === 'comment'
           ? (() => {

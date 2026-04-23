@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { FolderOpen, X } from 'lucide-react';
+import { FolderOpen, PencilRuler, X } from 'lucide-react';
 import { useCodesignStore } from '../store';
 
 function fileTabLabel(path: string): string {
@@ -25,9 +25,22 @@ export function CanvasTabBar() {
       {tabs.map((tab, index) => {
         const isActive = index === active;
         const isFiles = tab.kind === 'files';
-        const label = isFiles ? t('canvas.filesTab') : fileTabLabel((tab as { path: string }).path);
-        const title = isFiles ? t('canvas.filesTab') : (tab as { path: string }).path;
-        const key: string = isFiles ? 'files' : `file:${(tab as { path: string }).path}`;
+        const isCanvas = tab.kind === 'canvas';
+        const label = isFiles
+          ? t('canvas.filesTab')
+          : isCanvas
+            ? t('canvas.canvasTab')
+            : fileTabLabel((tab as { path: string }).path);
+        const title = isFiles
+          ? t('canvas.filesTab')
+          : isCanvas
+            ? t('canvas.canvasTab')
+            : (tab as { path: string }).path;
+        const key: string = isFiles
+          ? 'files'
+          : isCanvas
+            ? 'canvas'
+            : `file:${(tab as { path: string }).path}`;
         return (
           <div
             key={key}
@@ -46,14 +59,15 @@ export function CanvasTabBar() {
               className="flex items-center gap-[var(--space-1_5)] focus:outline-none"
             >
               {isFiles ? <FolderOpen className="w-3.5 h-3.5 opacity-80" aria-hidden /> : null}
+              {isCanvas ? <PencilRuler className="w-3.5 h-3.5 opacity-80" aria-hidden /> : null}
               <span
                 className="truncate max-w-[220px]"
-                style={isFiles ? undefined : { fontFamily: 'var(--font-mono)' }}
+                style={isFiles || isCanvas ? undefined : { fontFamily: 'var(--font-mono)' }}
               >
                 {label}
               </span>
             </button>
-            {isFiles ? null : (
+            {isFiles || isCanvas ? null : (
               <button
                 type="button"
                 onClick={() => close(index)}

@@ -39,6 +39,10 @@
   },
   "canvas": {
     "filesTab": "文件",
+    "canvasTab": "画布",
+    "contextBadge": "画布上下文",
+    "contextReady": "画布上下文将随本次发送",
+    "contextUpToDate": "画布未变更",
     "filesTabEmpty": "还没有文件",
     "openInTab": "在新标签打开",
     "previewHint": "缩略预览 · 双击文件名或点击「在新标签打开」可在独立标签查看",

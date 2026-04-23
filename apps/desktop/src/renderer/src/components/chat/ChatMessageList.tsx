@@ -110,13 +110,18 @@ export function ChatMessageList({
     flush();
 
     if (msg.kind === 'user') {
-      const p = msg.payload as { text?: string; attachedSkills?: string[] };
+      const p = msg.payload as {
+        text?: string;
+        attachedSkills?: string[];
+        contextBadges?: string[];
+      };
       items.push({
         key: `u-${msg.seq}`,
         node: (
           <UserMessage
             text={p?.text ?? ''}
             {...(p?.attachedSkills ? { attachedSkills: p.attachedSkills } : {})}
+            {...(p?.contextBadges ? { contextBadges: p.contextBadges } : {})}
           />
         ),
       });

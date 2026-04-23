@@ -45,6 +45,27 @@
 
 ---
 
+## Recent Desktop Additions
+
+The items in this section are the latest workflow upgrades added on top of the
+core Open CoDesign experience, so they stay separate from the baseline repo
+feature list below.
+
+- **Pinned `Canvas` tab with full Excalidraw UI** — sketch wireframes, widgets, motion notes, and layout ideas directly in the app before the first generation
+- **Canvas-to-model context export** — the canvas is packaged into prompt context automatically as a summary plus SVG exports, with frame-aware exports when the scene is too large
+- **Imported canvas images are sent separately too** — reference images dropped into the canvas also show up as standalone chat attachments for clearer model context
+- **Visible send confirmation** — the composer and chat now show when canvas context was actually included, so you can confirm it at a glance
+- **Canvas autosave and save-on-submit** — rough sketches are persisted per design, with an extra flush when you send a prompt
+- **Smart follow-up reuse** — canvas context is only resent on later turns when the canvas changed since the last successful generation
+
+<p align="center">
+  <img src="./website/Excalidraw-canvas.png" alt="Open CoDesign canvas tab with an Excalidraw wireframe and imported UI references" width="1000" />
+</p>
+
+For implementation details, see [`apps/desktop/CANVAS_CONTEXT.md`](./apps/desktop/CANVAS_CONTEXT.md).
+
+---
+
 ## What it is
 
 Turn a prompt into a polished prototype, slide deck, or marketing asset, locally, with the model you already use.

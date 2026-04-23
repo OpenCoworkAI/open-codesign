@@ -82,10 +82,15 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   );
   const cancelGeneration = useCodesignStore((s) => s.cancelGeneration);
   const inputFiles = useCodesignStore((s) => s.inputFiles);
+  const canvasScene = useCodesignStore((s) => s.canvasScene);
+  const canvasImportedFiles = useCodesignStore((s) => s.canvasImportedFiles);
+  const canvasRevision = useCodesignStore((s) => s.canvasRevision);
+  const lastGeneratedCanvasRevision = useCodesignStore((s) => s.lastGeneratedCanvasRevision);
   const referenceUrl = useCodesignStore((s) => s.referenceUrl);
   const setReferenceUrl = useCodesignStore((s) => s.setReferenceUrl);
   const pickInputFiles = useCodesignStore((s) => s.pickInputFiles);
   const removeInputFile = useCodesignStore((s) => s.removeInputFile);
+  const removeCanvasImportedFile = useCodesignStore((s) => s.removeCanvasImportedFile);
   const pickDesignSystemDirectory = useCodesignStore((s) => s.pickDesignSystemDirectory);
   const clearDesignSystem = useCodesignStore((s) => s.clearDesignSystem);
   const lastUsage = useCodesignStore((s) => s.lastUsage);
@@ -113,7 +118,18 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
 
   const designSystem = config?.designSystem ?? null;
   const currentDesign = designs.find((d) => d.id === currentDesignId) ?? null;
-  const contextItems = buildComposerContextItems({ inputFiles, referenceUrl, config });
+  const hasCanvasContext = Boolean(
+    (canvasScene && canvasScene.elements.length > 0) || canvasImportedFiles.length > 0,
+  );
+  const canvasWillBeSent = hasCanvasContext && canvasRevision > lastGeneratedCanvasRevision;
+  const visibleFiles = [...inputFiles, ...canvasImportedFiles].filter(
+    (file, index, all) => all.findIndex((candidate) => candidate.path === file.path) === index,
+  );
+  const contextItems = buildComposerContextItems({
+    inputFiles: visibleFiles,
+    referenceUrl,
+    config,
+  });
 
   useEffect(() => {
     if (currentDesignId && !chatLoaded) {
@@ -164,24 +180,53 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
             contextSummary={
               contextItems.length > 0 ? (
                 <div className="flex flex-wrap gap-[8px]">
-                  {inputFiles.map((file) => (
-                    <span
-                      key={file.path}
-                      className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
-                      title={file.path}
-                    >
-                      <ContextIcon icon="file" />
-                      <span className="truncate max-w-[180px]">{file.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeInputFile(file.path)}
-                        aria-label={t('sidebar.removeFile', { name: file.name })}
-                        className="inline-flex items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                  {visibleFiles.map((file) => {
+                    const isCanvasImport = canvasImportedFiles.some(
+                      (candidate) => candidate.path === file.path,
+                    );
+                    return (
+                      <span
+                        key={file.path}
+                        className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
+                        title={file.path}
                       >
-                        <X className="w-3 h-3" aria-hidden />
-                      </button>
+                        <ContextIcon icon="file" />
+                        <span className="truncate max-w-[180px]">{file.name}</span>
+                        {isCanvasImport ? (
+                          <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+                            {t('canvas.canvasTab')}
+                          </span>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            isCanvasImport
+                              ? removeCanvasImportedFile(file.path)
+                              : removeInputFile(file.path)
+                          }
+                          aria-label={t('sidebar.removeFile', { name: file.name })}
+                          className="inline-flex items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                        >
+                          <X className="w-3 h-3" aria-hidden />
+                        </button>
+                      </span>
+                    );
+                  })}
+                  {hasCanvasContext ? (
+                    <span
+                      className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
+                      title={
+                        canvasWillBeSent
+                          ? t('canvas.contextReady')
+                          : t('canvas.contextUpToDate')
+                      }
+                    >
+                      <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+                        {t('canvas.canvasTab')}
+                      </span>
+                      <span>{canvasWillBeSent ? t('canvas.contextReady') : t('canvas.contextUpToDate')}</span>
                     </span>
-                  ))}
+                  ) : null}
                   {referenceUrl.trim() ? (
                     <span
                       className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
