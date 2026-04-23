@@ -54,10 +54,40 @@ describe('diagnose', () => {
     expect(fix?.baseUrlTransform?.('https://api.example.com')).toBe('https://api.example.com/v1');
   });
 
-  it('404 transform is idempotent when /v1 already present', () => {
-    const result = diagnose('404', { ...baseCtx, baseUrl: 'https://api.example.com/v1' });
-    const transform = result[0]?.suggestedFix?.baseUrlTransform;
-    expect(transform?.('https://api.example.com/v1')).toBe('https://api.example.com/v1');
+  // Regression: Zhipu GLM (issue #179) — baseUrl is /api/paas/v4, /models 404
+  // is because GLM does not expose /models, NOT because /v1 is missing.
+  // Auto-suggesting "add /v1" would corrupt a correct baseUrl.
+  it('404 skips missingV1 when baseUrl already has /v4 (GLM)', () => {
+    const result = diagnose('404', {
+      ...baseCtx,
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
+    expect(result[0]?.suggestedFix).toBeUndefined();
+  });
+
+  it('404 skips missingV1 when baseUrl already has /v1 (e.g. Cloudflare Workers AI)', () => {
+    const result = diagnose('404', {
+      ...baseCtx,
+      baseUrl: 'https://gateway.ai.cloudflare.com/v1/account/foo/openai',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
+    expect(result[0]?.suggestedFix).toBeUndefined();
+  });
+
+  it('404 skips missingV1 when baseUrl already has /v1beta (AI Studio)', () => {
+    const result = diagnose('404', {
+      ...baseCtx,
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
+    expect(result[0]?.suggestedFix).toBeUndefined();
+  });
+
+  it('404 still suggests missingV1 when baseUrl has NO version segment', () => {
+    const result = diagnose('404', { ...baseCtx, baseUrl: 'https://api.example.com' });
+    expect(result[0]?.cause).toBe('diagnostics.cause.missingV1');
+    expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.addV1');
   });
 
   it('maps 429 to rateLimit with waitAndRetry fix', () => {

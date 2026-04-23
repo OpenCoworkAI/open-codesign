@@ -81,6 +81,16 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
   }
 
   if (normalised === '404') {
+    // If the baseUrl already encodes a version segment (/v1, /v4, /v1beta,
+    // etc.), suggesting "add /v1" is wrong — Zhipu GLM uses /v4, AI Studio
+    // uses /v1beta, and some Cloudflare Workers AI gateways already carry
+    // /v1. A 404 on such endpoints usually means /models simply isn't
+    // exposed, not that the path is malformed. Fall back to the generic
+    // hypothesis so the user isn't pushed into corrupting a correct baseUrl.
+    const hasVersionSegment = /\/v\d+[a-z]*(?:\/|$)/i.test(ctx.baseUrl);
+    if (hasVersionSegment) {
+      return [{ cause: 'diagnostics.cause.unknown' }];
+    }
     return [
       {
         cause: 'diagnostics.cause.missingV1',

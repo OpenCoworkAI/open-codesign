@@ -39,6 +39,14 @@ interface ModelsListPayloadV1 {
 
 export interface ConnectionTestResult {
   ok: true;
+  /**
+   * `models` when the standard GET /models probe succeeded.
+   * `chat_completion_degraded` when /models 404'd but POST /chat/completions
+   * proved the endpoint is alive (e.g. Zhipu GLM's gateway — no public /models
+   * but /chat/completions works fine). The renderer surfaces this so users
+   * know /models is unavailable even though generation will work.
+   */
+  probeMethod?: 'models' | 'chat_completion_degraded';
 }
 
 export interface ConnectionTestError {
@@ -345,7 +353,7 @@ export function _getModelsCache(): Map<string, CacheEntry> {
 // IPC registration
 // ---------------------------------------------------------------------------
 
-interface ActiveProviderCredentials {
+export interface ActiveProviderCredentials {
   provider: string;
   wire: WireApi;
   apiKey: string;
@@ -446,7 +454,9 @@ async function testChatGPTCodexOAuth(): Promise<ConnectionTestResponse> {
   return { ok: true };
 }
 
-async function runProviderTest(creds: ActiveProviderCredentials): Promise<ConnectionTestResponse> {
+export async function runProviderTest(
+  creds: ActiveProviderCredentials,
+): Promise<ConnectionTestResponse> {
   // ChatGPT subscription uses OAuth + ChatGPT-Account-Id headers; its host
   // has no `/models` endpoint that a generic Bearer probe can reach. A plain
   // HTTP probe would return 401 here and render as the misleading "API key
@@ -456,7 +466,7 @@ async function runProviderTest(creds: ActiveProviderCredentials): Promise<Connec
     return testChatGPTCodexOAuth();
   }
 
-  const { url } = buildEndpointForWire(creds.wire, creds.baseUrl);
+  const { url, normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
   const headers = buildAuthHeadersForWire(
     creds.wire,
     creds.apiKey,
@@ -477,10 +487,69 @@ async function runProviderTest(creds: ActiveProviderCredentials): Promise<Connec
     };
   }
   if (!res.ok) {
+    // Some OpenAI-compatible gateways (Zhipu GLM, a handful of self-hosted
+    // proxies) don't expose /models but their /chat/completions works fine.
+    // If the primary probe 404s on those wires, degrade-probe with a tiny
+    // chat request before declaring the endpoint dead. We intentionally do
+    // not degrade anthropic — its /v1/models is standard, and skipping it
+    // would mask real path-shape mistakes.
+    if (res.status === 404 && (creds.wire === 'openai-chat' || creds.wire === 'openai-responses')) {
+      const probe = await probeChatCompletion(normalizedBaseUrl, headers);
+      if (probe.kind === 'pass') {
+        return { ok: true, probeMethod: 'chat_completion_degraded' };
+      }
+      if (probe.kind === 'http' && probe.status !== 404) {
+        const { code, hint } = classifyHttpError(probe.status);
+        return { ok: false, code, message: `HTTP ${probe.status}`, hint };
+      }
+      // /chat/completions also 404'd (or the network dropped) — fall through
+      // and report the original /models 404.
+    }
     const { code, hint } = classifyHttpError(res.status);
     return { ok: false, code, message: `HTTP ${res.status}`, hint };
   }
-  return { ok: true };
+  return { ok: true, probeMethod: 'models' };
+}
+
+type ProbeResult =
+  | { kind: 'pass' }
+  | { kind: 'http'; status: number }
+  | { kind: 'network'; message: string };
+
+/**
+ * POST a minimal chat-completion request to verify the endpoint is alive
+ * when GET /models returned 404. A 2xx response or any API-originated 4xx
+ * (400 model_unknown, 402 insufficient credits, 422, 429 — and 401/403 too,
+ * which we surface as an auth error instead of the misleading 404 hint)
+ * counts as "endpoint reachable". Only 404 and 5xx count as a real failure.
+ */
+async function probeChatCompletion(
+  normalizedBaseUrl: string,
+  headers: Record<string, string>,
+): Promise<ProbeResult> {
+  const url = `${normalizedBaseUrl}/chat/completions`;
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, {
+      method: 'POST',
+      headers: { ...headers, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'probe',
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1,
+        stream: false,
+      }),
+    });
+  } catch (err) {
+    return { kind: 'network', message: err instanceof Error ? err.message : String(err) };
+  }
+  if (res.ok) return { kind: 'pass' };
+  if (res.status === 404 || res.status >= 500) return { kind: 'http', status: res.status };
+  // 401/403 — endpoint alive but auth rejected; surface as auth error so the
+  // diagnostics panel shows the key-invalid hint instead of the 404 one.
+  if (res.status === 401 || res.status === 403) return { kind: 'http', status: res.status };
+  // 400/402/422/429 etc. — endpoint alive, request-level rejection.
+  return { kind: 'pass' };
 }
 
 export function registerConnectionIpc(): void {
