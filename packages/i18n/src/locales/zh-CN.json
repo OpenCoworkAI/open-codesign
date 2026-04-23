@@ -781,6 +781,7 @@
       "sslError": "SSL / 证书错误（中转服务使用了自签证书？）。",
       "gatewayIncompatible": "网关接受了连接但没有实现该 Provider 的 API。尝试切换 wire（例如改为 openai-chat）。",
       "openaiResponsesMisconfigured": "端点拒绝了请求格式。wire 可能配错了——尝试切换到 openai-chat。",
+      "relayStreamingBug": "网关可能错误处理了 OpenAI Responses API 的 SSE 事件（老版本 sub2api / claude2api / anyrouter 会把流提前截断）。",
       "serverError": "上游服务错误。可能是暂时性的，稍后重试。",
       "unknown": "未知错误——请查看完整日志以获取详情。"
     },
@@ -794,7 +795,8 @@
       "checkVpn": "检查 VPN / 防火墙",
       "reportBug": "报告此 Bug",
       "disableTls": "禁用 TLS 验证",
-      "switchWire": "到设置页切换 wire"
+      "switchWire": "到设置页切换 wire",
+      "relayStreamingBug": "升级中转服务；或把 wire 切到 openai-chat；或改用 api.openai.com"
     },
     "applyFix": "应用此修复",
     "setBaseUrlFirst": "请先填写 Base URL",

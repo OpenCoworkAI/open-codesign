@@ -191,4 +191,69 @@ describe('diagnoseGenerateFailure', () => {
     const result = diagnoseGenerateFailure({ ...ctx, message: 'something odd' });
     expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
   });
+
+  describe('relay streaming bug (#180)', () => {
+    it('openai-responses + custom baseUrl + "terminated" → relayStreamingBug', () => {
+      const result = diagnoseGenerateFailure({
+        provider: 'openai',
+        baseUrl: 'https://relay.example.com/v1',
+        wire: 'openai-responses',
+        message: 'fetch failed: terminated',
+      });
+      expect(result[0]?.cause).toBe('diagnostics.cause.relayStreamingBug');
+      expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.relayStreamingBug');
+    });
+
+    it('openai-responses + api.openai.com + "terminated" → NOT relayStreamingBug', () => {
+      const result = diagnoseGenerateFailure({
+        provider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        wire: 'openai-responses',
+        message: 'fetch failed: terminated',
+      });
+      expect(result[0]?.cause).not.toBe('diagnostics.cause.relayStreamingBug');
+    });
+
+    it('openai-responses + custom baseUrl + 500 HTTP error → NOT relayStreamingBug', () => {
+      const result = diagnoseGenerateFailure({
+        provider: 'openai',
+        baseUrl: 'https://relay.example.com/v1',
+        wire: 'openai-responses',
+        status: 500,
+        message: 'internal server error',
+      });
+      expect(result[0]?.cause).not.toBe('diagnostics.cause.relayStreamingBug');
+      expect(result[0]?.cause).toBe('diagnostics.cause.serverError');
+    });
+
+    it('anthropic wire + "terminated" → NOT relayStreamingBug', () => {
+      const result = diagnoseGenerateFailure({
+        provider: 'anthropic',
+        baseUrl: 'https://relay.example.com/v1',
+        wire: 'anthropic',
+        message: 'stream terminated',
+      });
+      expect(result[0]?.cause).not.toBe('diagnostics.cause.relayStreamingBug');
+    });
+
+    it('matches "premature close" message shape', () => {
+      const result = diagnoseGenerateFailure({
+        provider: 'openai',
+        baseUrl: 'https://relay.example.com/v1',
+        wire: 'openai-responses',
+        message: 'Error: Premature close',
+      });
+      expect(result[0]?.cause).toBe('diagnostics.cause.relayStreamingBug');
+    });
+
+    it('matches ECONNRESET message shape', () => {
+      const result = diagnoseGenerateFailure({
+        provider: 'openai',
+        baseUrl: 'https://relay.example.com/v1',
+        wire: 'openai-responses',
+        message: 'read ECONNRESET',
+      });
+      expect(result[0]?.cause).toBe('diagnostics.cause.relayStreamingBug');
+    });
+  });
 });

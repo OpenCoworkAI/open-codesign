@@ -174,11 +174,51 @@ export interface GenerateFailureContext {
  *   - 401 / 402 / 403 / 429 → delegates to diagnose(String(status))
  *   - 404-shaped message even when no status is attached (e.g. a raw
  *     "404 page not found" body surfaced as message text)
+ *   - openai-responses + custom baseUrl + truncated-stream error shape →
+ *     relayStreamingBug (third-party gateway mishandles response.* SSE events, #180)
  *   - Everything else → generic unknown hypothesis
  */
+
+function looksLikeTruncatedStream(message: string): boolean {
+  return (
+    /stream\s*(ended|closed)/i.test(message) ||
+    /premature\s*close/i.test(message) ||
+    /\bterminated\b/i.test(message) ||
+    /ECONNRESET/i.test(message) ||
+    /aborted/i.test(message)
+  );
+}
+
+function isCustomBaseUrl(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false;
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    return host !== 'api.openai.com' && !host.endsWith('.openai.com');
+  } catch {
+    return false;
+  }
+}
+
 export function diagnoseGenerateFailure(ctx: GenerateFailureContext): DiagnosticHypothesis[] {
   const message = (ctx.message ?? '').toLowerCase();
   const status = ctx.status;
+
+  // Third-party relay bug: openai-responses wire pointed at a custom gateway
+  // that mishandles `response.*` SSE events, causing the stream to die with
+  // no HTTP status — only a transport-level "terminated" / "premature close".
+  if (
+    status === undefined &&
+    ctx.wire === 'openai-responses' &&
+    isCustomBaseUrl(ctx.baseUrl) &&
+    looksLikeTruncatedStream(message)
+  ) {
+    return [
+      {
+        cause: 'diagnostics.cause.relayStreamingBug',
+        suggestedFix: { label: 'diagnostics.fix.relayStreamingBug' },
+      },
+    ];
+  }
 
   if (status === 400 && message.includes('instructions')) {
     return [
