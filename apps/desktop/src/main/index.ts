@@ -43,7 +43,11 @@ import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { makeRuntimeVerifier } from './done-verify';
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
-import { armGenerationTimeout, cancelGenerationRequest } from './generation-ipc';
+import {
+  armGenerationTimeout,
+  cancelGenerationRequest,
+  extractGenerationTimeoutError,
+} from './generation-ipc';
 import { maybeAbortIfRunningFromDmg } from './install-check';
 import { registerLocaleIpc } from './locale-ipc';
 import { getLogPath, getLogger, initLogger } from './logger';
@@ -159,6 +163,35 @@ function createWindow(): void {
 }
 
 type Database = BetterSqlite3.Database;
+
+/**
+ * Pull an HTTP status code out of a caught provider error. Mirrors
+ * `packages/providers/src/retry.ts::extractStatus` intentionally — we don't
+ * import from retry.ts to avoid coupling main to a retry-internal helper
+ * that might get reshaped. Used by the generate catch block to tag the
+ * thrown err with `upstream_status` so the renderer's diagnose pipeline
+ * can pick up a hypothesis.
+ */
+function extractUpstreamHttpStatus(err: unknown): number | undefined {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const candidates: unknown[] = [
+    (err as { status?: unknown }).status,
+    (err as { statusCode?: unknown }).statusCode,
+    (err as { upstream_status?: unknown }).upstream_status,
+    (err as { response?: { status?: unknown } }).response?.status,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c) && c >= 100 && c < 600) return c;
+  }
+  if (err instanceof Error) {
+    const m = /\b(\d{3})\b/.exec(err.message);
+    if (m?.[1]) {
+      const n = Number(m[1]);
+      if (n >= 400 && n < 600) return n;
+    }
+  }
+  return undefined;
+}
 
 function resolveActiveApiKeyFromState(providerId: string): Promise<string> {
   return resolveActiveApiKey(providerId, {
@@ -686,17 +719,46 @@ function registerIpcHandlers(db: Database | null): void {
         });
         return result;
       } catch (err) {
+        // Attach upstream metadata to the thrown err so the renderer's
+        // diagnostic pipeline (store.ts::applyGenerateError →
+        // diagnoseGenerateFailure) can map this failure to a "most likely
+        // cause + suggested fix" hypothesis. Without this, renderer only
+        // sees err.message + err.code and cannot offer actionable hints
+        // (e.g. the #130 404-page-not-found case that needs /v1 appended).
+        const upstreamStatus = extractUpstreamHttpStatus(err);
+        if (err !== null && typeof err === 'object') {
+          const errAsRec = err as Record<string, unknown>;
+          if (upstreamStatus !== undefined && errAsRec['upstream_status'] === undefined) {
+            errAsRec['upstream_status'] = upstreamStatus;
+          }
+          if (errAsRec['upstream_provider'] === undefined) {
+            errAsRec['upstream_provider'] = active.model.provider;
+          }
+          if (errAsRec['upstream_baseurl'] === undefined && baseUrl !== undefined) {
+            errAsRec['upstream_baseurl'] = baseUrl;
+          }
+          if (errAsRec['upstream_wire'] === undefined && active.wire !== undefined) {
+            errAsRec['upstream_wire'] = active.wire;
+          }
+        }
+        // The SDK catches our AbortController and rethrows a generic
+        // `'Request was aborted.'` that drops signal.reason. Prefer the
+        // CodesignError we stashed on the signal so the user sees the
+        // configured timeout + Settings path instead of an opaque message.
+        const timeoutErr = extractGenerationTimeoutError(controller.signal);
+        const rethrow = timeoutErr ?? err;
         logIpc.error('generate.fail', {
           generationId: id,
           ms: Date.now() - t0,
           provider: active.model.provider,
           modelId: active.model.modelId,
           baseUrl: baseUrl ?? '<default>',
-          message: err instanceof Error ? err.message : String(err),
-          code: err instanceof CodesignError ? err.code : undefined,
+          status: upstreamStatus,
+          message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+          code: rethrow instanceof CodesignError ? rethrow.code : undefined,
         });
-        recordFinalError('generate', id, err);
-        throw err;
+        recordFinalError('generate', id, rethrow);
+        throw rethrow;
       } finally {
         clearTimeoutGuard();
         inFlight.delete(id);
@@ -794,17 +856,23 @@ function registerIpcHandlers(db: Database | null): void {
         });
         return result;
       } catch (err) {
+        // The SDK catches our AbortController and rethrows a generic
+        // `'Request was aborted.'` that drops signal.reason. Prefer the
+        // CodesignError we stashed on the signal so the user sees the
+        // configured timeout + Settings path instead of an opaque message.
+        const timeoutErr = extractGenerationTimeoutError(controller.signal);
+        const rethrow = timeoutErr ?? err;
         logIpc.error('generate.fail', {
           generationId: id,
           ms: Date.now() - t0,
           provider: active.model.provider,
           modelId: active.model.modelId,
           baseUrl: baseUrl ?? '<default>',
-          message: err instanceof Error ? err.message : String(err),
-          code: err instanceof CodesignError ? err.code : undefined,
+          message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+          code: rethrow instanceof CodesignError ? rethrow.code : undefined,
         });
-        recordFinalError('generate', id, err);
-        throw err;
+        recordFinalError('generate', id, rethrow);
+        throw rethrow;
       } finally {
         clearTimeoutGuard();
         inFlight.delete(id);

@@ -24,7 +24,7 @@ import {
   Trash2,
   Zap,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppPaths, Preferences, ProviderRow, StorageKind } from '../../../preload/index';
 import { recordAction } from '../lib/action-timeline';
 import { useCodesignStore } from '../store';
@@ -484,8 +484,16 @@ function RowModelSelector({
     });
   }
 
-  const options =
-    models !== null && models.length > 0 ? models.map((m) => ({ value: m, label: m })) : null;
+  const notInListSuffix = t('settings.providers.activeNotInList');
+  const options = useMemo(
+    () =>
+      computeModelOptions({
+        models,
+        activeModelId: isActive ? primary : null,
+        notInListSuffix,
+      }),
+    [models, isActive, primary, notInListSuffix],
+  );
 
   return (
     <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
@@ -1724,6 +1732,56 @@ export async function applyLocaleChange(
   return applied;
 }
 
+/**
+ * Build the <select> options for the active-provider model dropdown.
+ *
+ * The /models endpoint may return a partial list (or none at all), and the
+ * active model id may have been set via TOML import or a previous list that
+ * the gateway no longer returns. If the active id is not in `models`, the
+ * native <select> would silently fall back to options[0] and lie about which
+ * model is in use (issue #136). Pin the active id at the top with a hint so
+ * the UI always matches reality.
+ *
+ * Returns null when there is nothing to render (loading completed, no models,
+ * no active id) so the caller can fall back to a plain text label.
+ */
+export function computeModelOptions(input: {
+  models: string[] | null;
+  activeModelId: string | null;
+  notInListSuffix: string;
+}): { value: string; label: string }[] | null {
+  const { models, activeModelId, notInListSuffix } = input;
+  if (models === null || models.length === 0) return null;
+  const base = models.map((m) => ({ value: m, label: m }));
+  if (activeModelId && !models.includes(activeModelId)) {
+    return [{ value: activeModelId, label: `${activeModelId} ${notInListSuffix}` }, ...base];
+  }
+  return base;
+}
+
+/**
+ * Canonical timeout choices shown in Settings → Advanced. The default prefs
+ * value is 1200s (20 min); long generations (full PDP runs) need 30-60 min,
+ * so the dropdown tops out at 2h. The old 60-300s ceiling silently clamped
+ * the stored value when the UI couldn't represent it.
+ */
+export const TIMEOUT_OPTION_SECONDS = [60, 120, 180, 300, 600, 1200, 1800, 3600, 7200] as const;
+
+/**
+ * Returns the canonical timeout list with `currentSec` merged in when it is a
+ * positive finite value that isn't already present. Prevents the select from
+ * rendering with no selection when the user (or an earlier build) stored a
+ * custom value — and prevents a silent downgrade on the next save.
+ */
+export function resolveTimeoutOptions(currentSec: number): number[] {
+  const base: number[] = [...TIMEOUT_OPTION_SECONDS];
+  if (Number.isFinite(currentSec) && currentSec > 0 && !base.includes(currentSec)) {
+    base.push(currentSec);
+    base.sort((a, b) => a - b);
+  }
+  return base;
+}
+
 function AppearanceTab() {
   const t = useT();
   const theme = useCodesignStore((s) => s.theme);
@@ -2189,12 +2247,10 @@ function AdvancedTab() {
         <NativeSelect
           value={String(prefs.generationTimeoutSec)}
           onChange={(v) => void updatePref({ generationTimeoutSec: Number(v) })}
-          options={[
-            { value: '60', label: t('settings.advanced.timeoutSeconds', { value: 60 }) },
-            { value: '120', label: t('settings.advanced.timeoutSeconds', { value: 120 }) },
-            { value: '180', label: t('settings.advanced.timeoutSeconds', { value: 180 }) },
-            { value: '300', label: t('settings.advanced.timeoutSeconds', { value: 300 }) },
-          ]}
+          options={resolveTimeoutOptions(prefs.generationTimeoutSec).map((sec) => ({
+            value: String(sec),
+            label: t('settings.advanced.timeoutSeconds', { value: sec }),
+          }))}
         />
       </Row>
 

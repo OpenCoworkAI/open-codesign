@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { ERROR_CODES } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TokenSet } from './oauth';
 import { CodexTokenStore, type CodexTokenStoreOptions, type StoredCodexAuth } from './token-store';
@@ -204,6 +205,75 @@ describe('CodexTokenStore', () => {
     await expect(store.read()).rejects.toThrow(/Invalid Codex token store/);
   });
 
+  it('read() raises CodesignError(CODEX_TOKEN_PARSE_FAILED) on truncated JSON', async () => {
+    const { store, filePath } = makeStore();
+    await mkdir(dirname(filePath), { recursive: true });
+    // Simulate a partial/truncated write — valid-looking prefix, cut short.
+    await writeFile(filePath, '{"schemaVersion":1,"accessToken":"ac', 'utf8');
+    await expect(store.read()).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    });
+  });
+
+  it('read() raises CodesignError(CODEX_TOKEN_PARSE_FAILED) when schema is invalid', async () => {
+    const { store, filePath } = makeStore();
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify({ hello: 'world' }), 'utf8');
+    await expect(store.read()).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    });
+  });
+
+  it('getValidAccessToken() raises CodesignError(CODEX_TOKEN_NOT_LOGGED_IN) when file missing', async () => {
+    const { store } = makeStore();
+    await expect(store.getValidAccessToken()).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_NOT_LOGGED_IN,
+    });
+  });
+
+  it('write() is atomic — tmp cleaned up and original file untouched when rename fails', async () => {
+    // Put a directory at filePath so rename(tmpPath, filePath) fails (EISDIR).
+    const base = join(tmpdir(), `codex-token-test-${randomBytes(8).toString('hex')}`);
+    const filePath = join(base, 'creds');
+    createdPaths.push(filePath);
+    createdPaths.push(base);
+    await mkdir(filePath, { recursive: true });
+    // Drop a sentinel inside so the dir is non-empty on platforms where empty-
+    // dir rename would silently replace it.
+    await writeFile(join(filePath, 'sentinel'), 'marker', 'utf8');
+
+    const store = new CodexTokenStore({ filePath, refreshFn: vi.fn(), now: () => NOW });
+    await expect(store.write(baseAuth())).rejects.toBeInstanceOf(Error);
+
+    // Original directory + sentinel still present.
+    const sentinel = await readFile(join(filePath, 'sentinel'), 'utf8');
+    expect(sentinel).toBe('marker');
+
+    // No leftover .tmp.* files in the parent dir.
+    const leftovers = (await readdir(base)).filter((n) => n.includes('.tmp.'));
+    expect(leftovers).toEqual([]);
+
+    // Manual cleanup since createdPaths only does unlink (not rmdir).
+    await rm(base, { recursive: true, force: true });
+  });
+
+  it('write() succeeds with mode 0o600 and leaves no tmp files behind', async () => {
+    const { store, filePath } = makeStore();
+    const auth = baseAuth({ accessToken: 'atomic-ok' });
+    await store.write(auth);
+    const body = JSON.parse(await readFile(filePath, 'utf8')) as StoredCodexAuth;
+    expect(body).toEqual(auth);
+    const s = await stat(filePath);
+    expect(s.mode & 0o777).toBe(0o600);
+    const leftovers = (await readdir(dirname(filePath))).filter((n) =>
+      n.startsWith(`${filePath.split('/').pop()}.tmp.`),
+    );
+    expect(leftovers).toEqual([]);
+  });
+
   it('clears stored auth and throws Chinese error when refresh hits invalid_grant', async () => {
     const refreshFn = vi
       .fn()
@@ -252,5 +322,25 @@ describe('CodexTokenStore', () => {
       'utf8',
     );
     await expect(store.read()).rejects.toThrow(/Invalid Codex token store/);
+  });
+
+  it('concurrent write() calls leave the file in a valid state (no tmp collision)', async () => {
+    const { store, filePath } = makeStore();
+    const authA = baseAuth({ accessToken: 'concurrent-A' });
+    const authB = baseAuth({ accessToken: 'concurrent-B' });
+
+    // Fire both writes without awaiting in between. Before the fix these
+    // would race on the same `${path}.tmp.${pid}` and one could unlink or
+    // overwrite the other's tmp, potentially leaving the target file
+    // missing or corrupted.
+    await Promise.all([store.write(authA), store.write(authB)]);
+
+    const persisted = JSON.parse(await readFile(filePath, 'utf8')) as StoredCodexAuth;
+    expect(['concurrent-A', 'concurrent-B']).toContain(persisted.accessToken);
+
+    const leftovers = (await readdir(dirname(filePath))).filter((n) =>
+      n.startsWith(`${filePath.split('/').pop()}.tmp.`),
+    );
+    expect(leftovers).toEqual([]);
   });
 });

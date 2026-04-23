@@ -326,12 +326,13 @@ export type {
 export { SkillFrontmatterV1 } from './skills';
 export type { LoadedSkill } from './skills';
 
-export { diagnose } from './diagnostics';
+export { diagnose, diagnoseGenerateFailure } from './diagnostics';
 export type {
   DiagnosticHypothesis,
   DiagnosticFix,
   DiagnoseContext,
   ErrorCode,
+  GenerateFailureContext,
 } from './diagnostics';
 
 export { ERROR_CODES, ERROR_CODE_DESCRIPTIONS } from './error-codes';

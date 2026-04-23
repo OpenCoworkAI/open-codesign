@@ -82,3 +82,21 @@ export async function armGenerationTimeout(
   }, ms);
   return () => clearTimeout(handle);
 }
+
+/**
+ * Provider SDKs (Anthropic / OpenAI) catch an aborted fetch and rethrow their
+ * own generic `'Request was aborted.'` error, discarding `signal.reason`. When
+ * the caught error came from our own timeout abort, we want the richer message
+ * (with the configured seconds and the Settings path) to surface to the user.
+ *
+ * Returns the `CodesignError` we stashed on `signal.reason`, or `null` when the
+ * abort was caused by something else (user-initiated cancel, upstream error).
+ */
+export function extractGenerationTimeoutError(signal: AbortSignal): CodesignError | null {
+  if (!signal.aborted) return null;
+  const reason = signal.reason;
+  if (reason instanceof CodesignError && reason.code === ERROR_CODES.GENERATION_TIMEOUT) {
+    return reason;
+  }
+  return null;
+}

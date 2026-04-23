@@ -30,11 +30,13 @@ import {
 } from '@mariozechner/pi-agent-core';
 import type { Message as PiAiMessage, Model as PiAiModel } from '@mariozechner/pi-ai';
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
-import type { RetryReason } from '@open-codesign/providers';
+import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
+  classifyError,
   claudeCodeIdentityHeaders,
   looksLikeClaudeOAuthToken,
   shouldForceClaudeCodeIdentity,
+  withBackoff,
 } from '@open-codesign/providers';
 import {
   type Artifact,
@@ -822,16 +824,66 @@ export async function generateViaAgent(
 
   log.info('[generate] step=send_request', ctx);
   const sendStart = Date.now();
+  // First-turn-only retry, further guarded by a side-effect check. Multi-turn
+  // requests carry half-complete agent state (tool calls mid-flight, transcript
+  // accumulated in pi-agent-core's internal loop) — retrying would replay
+  // partial progress and corrupt the session. Even on the first turn, retrying
+  // is safe only before any assistant message has landed in `agent.state`:
+  // once the model has emitted tokens or tool calls, side effects (text_editor
+  // writes, set_todos state) have already fired and a retry would re-run them.
+  // The pre-attempt snapshot of `agent.state.messages.length` lets us detect
+  // whether the failed attempt produced any such artefact and, if so, mark the
+  // error as non-retryable.
+  const isFirstTurn = input.history.length === 0;
+  const RETRY_BLOCKED = Symbol.for('open-codesign.retry.blocked');
+  type RetryBlockedError = Error & { [RETRY_BLOCKED]?: true };
+  const sendOnce = async (): Promise<void> => {
+    const preLen = agent.state.messages.length;
+    try {
+      await agent.prompt(userContent);
+      await agent.waitForIdle();
+    } catch (err) {
+      if (agent.state.messages.length > preLen) {
+        const tagged = (err instanceof Error ? err : new Error(String(err))) as RetryBlockedError;
+        tagged[RETRY_BLOCKED] = true;
+        throw tagged;
+      }
+      throw err;
+    }
+  };
   try {
-    await agent.prompt(userContent);
-    await agent.waitForIdle();
+    if (isFirstTurn) {
+      const retryOpts: Parameters<typeof withBackoff>[1] = {
+        maxRetries: 3,
+        classify: (err): RetryDecision => {
+          if ((err as RetryBlockedError)[RETRY_BLOCKED]) {
+            return { retry: false, reason: 'agent already produced side effects' };
+          }
+          return classifyError(err);
+        },
+        onRetry: (info: RetryReason) => {
+          log.warn('[generate] step=send_request.retry', {
+            ...ctx,
+            attempt: info.attempt,
+            totalAttempts: info.totalAttempts,
+            delayMs: info.delayMs,
+            reason: info.reason,
+          });
+          deps.onRetry?.(info);
+        },
+      };
+      if (input.signal) retryOpts.signal = input.signal;
+      await withBackoff(sendOnce, retryOpts);
+    } else {
+      await sendOnce();
+    }
   } catch (err) {
     log.error('[generate] step=send_request.fail', {
       ...ctx,
       ms: Date.now() - sendStart,
       errorClass: err instanceof Error ? err.constructor.name : typeof err,
     });
-    throw remapProviderError(err, input.model.provider);
+    throw remapProviderError(err, input.model.provider, input.wire);
   }
 
   const finalAssistant = findFinalAssistantMessage(agent.state.messages);
@@ -861,6 +913,7 @@ export async function generateViaAgent(
     throw remapProviderError(
       new CodesignError(message, ERROR_CODES.PROVIDER_ERROR),
       input.model.provider,
+      input.wire,
     );
   }
   log.info('[generate] step=send_request.ok', { ...ctx, ms: Date.now() - sendStart });

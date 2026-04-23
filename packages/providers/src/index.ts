@@ -18,6 +18,7 @@ import {
   looksLikeClaudeOAuthToken,
   shouldForceClaudeCodeIdentity,
 } from './claude-code-compat';
+import { normalizeGeminiModelId } from './gemini-compat';
 
 /** Subset of pi-ai's `ThinkingLevel` we expose. Maps directly to its `reasoning`
  * field, which Anthropic adapters translate to extended-thinking effort/budget
@@ -171,6 +172,42 @@ const EMPTY_USAGE: PiUsage = {
 const MAX_TOTAL_CODEX_IMAGE_BYTES = 4_000_000;
 
 /**
+ * `reasoning: true` on a synthesized PiModel makes pi-ai's openai-responses /
+ * openai-chat adapters write the system prompt with role `'developer'`
+ * instead of `'system'`. That's OpenAI-Responses-only; every OpenAI-compat
+ * gateway out there (DashScope/Qwen, DeepSeek, GLM/BigModel, Moonshot, …)
+ * rejects `developer` with HTTP 400. So only claim reasoning when we
+ * actually know the target accepts it. (#183)
+ */
+function isOpenAIOfficial(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false;
+  return /^https:\/\/api\.openai\.com(\/|$)/.test(baseUrl);
+}
+
+function isReasoningModelId(modelId: string): boolean {
+  // OpenAI reasoning families: o1, o3, o4, gpt-5 (incl. variants like gpt-5-turbo, gpt-5.4)
+  return /^(o[134]|gpt-5)/i.test(modelId);
+}
+
+export function inferReasoning(
+  wire: GenerateOptions['wire'],
+  modelId: string,
+  baseUrl: string | undefined,
+): boolean {
+  switch (wire) {
+    case 'anthropic':
+      return true;
+    case 'openai-responses':
+    case 'openai-codex-responses':
+      return true;
+    case 'openai-chat':
+      return isOpenAIOfficial(baseUrl) && isReasoningModelId(modelId);
+    default:
+      return false;
+  }
+}
+
+/**
  * Synthesize a PiModel for a wire + custom baseUrl so custom provider ids
  * (DeepSeek, Ollama, LiteLLM, Azure, …) route to the correct pi-ai adapter
  * without being in pi-ai's model registry.
@@ -195,7 +232,7 @@ function synthesizeWireModel(
     name: modelId,
     api,
     provider,
-    reasoning: true,
+    reasoning: inferReasoning(wire, modelId, baseUrl),
     input: supportsImageInput ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 131072,
@@ -221,6 +258,11 @@ export async function complete(
   }
   const apiKey = opts.apiKey || 'open-codesign-keyless';
 
+  // Gemini's OpenAI-compat endpoint rejects the `models/` prefix that its own
+  // /models listing returns (issue #175). Normalize on the wire only; Settings
+  // keeps the prefixed form so provider/model UX stays in sync with /models.
+  const effectiveModelId = normalizeGeminiModelId(model.modelId, opts.baseUrl);
+
   const pi = (await import('@mariozechner/pi-ai')) as unknown as {
     getModel: (provider: string, modelId: string) => PiModel | undefined;
     completeSimple: (
@@ -233,16 +275,17 @@ export async function complete(
         maxTokens?: number;
         reasoning?: ReasoningLevel;
         headers?: Record<string, string>;
+        onPayload?: (payload: unknown) => unknown;
       },
     ) => Promise<PiAssistantMessage>;
   };
 
-  let piModel = pi.getModel(model.provider, model.modelId);
+  let piModel = pi.getModel(model.provider, effectiveModelId);
   if (!piModel) {
     if (opts.wire !== undefined) {
-      piModel = synthesizeWireModel(model.provider, model.modelId, opts.wire, opts.baseUrl);
+      piModel = synthesizeWireModel(model.provider, effectiveModelId, opts.wire, opts.baseUrl);
     } else if (model.provider === 'openrouter') {
-      piModel = synthesizeOpenRouterModel(model.modelId);
+      piModel = synthesizeOpenRouterModel(effectiveModelId);
     } else {
       throw new CodesignError(
         `Unknown model ${model.provider}:${model.modelId}`,
@@ -251,6 +294,8 @@ export async function complete(
     }
   }
 
+  const piContext = toPiContext(messages, piModel, opts);
+
   const piOpts: {
     apiKey: string;
     baseUrl?: string;
@@ -258,6 +303,7 @@ export async function complete(
     maxTokens?: number;
     reasoning?: ReasoningLevel;
     headers?: Record<string, string>;
+    onPayload?: (payload: unknown) => unknown;
   } = {
     apiKey,
   };
@@ -266,6 +312,28 @@ export async function complete(
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.reasoning !== undefined) piOpts.reasoning = opts.reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };
+
+  // Strict OpenAI-Responses gateways (e.g. sub2api-style routers) 400 when
+  // they see BOTH a system/developer item in `input[]` AND no top-level
+  // `instructions`. pi-ai's plain `openai-responses` wire injects the former
+  // but not the latter, so we mirror the codex wire's strict behavior here:
+  // set `instructions` and strip system/developer entries from `input[]`.
+  if (piModel.api === 'openai-responses' && piContext.systemPrompt) {
+    const systemPrompt = piContext.systemPrompt;
+    piOpts.onPayload = (payload) => {
+      const params = payload as {
+        instructions?: string;
+        input?: Array<{ role?: string }>;
+      };
+      params.instructions = systemPrompt;
+      if (Array.isArray(params.input)) {
+        params.input = params.input.filter(
+          (entry) => entry.role !== 'system' && entry.role !== 'developer',
+        );
+      }
+      return params;
+    };
+  }
 
   // sub2api / claude2api gateways 403 requests without claude-cli identity
   // headers. pi-ai only injects those on OAuth tokens — paste a
@@ -280,7 +348,7 @@ export async function complete(
   }
 
   validateCodexImageInputs(opts);
-  const result = await pi.completeSimple(piModel, toPiContext(messages, piModel, opts), piOpts);
+  const result = await pi.completeSimple(piModel, piContext, piOpts);
 
   if (result.stopReason === 'error') {
     throw new CodesignError(
@@ -411,8 +479,15 @@ export {
   withClaudeCodeIdentity,
 } from './claude-code-compat';
 
-export { completeWithRetry, classifyError, sleepWithAbort } from './retry';
-export type { CompleteWithRetryOptions, RetryReason } from './retry';
+export { completeWithRetry, classifyError, sleepWithAbort, withBackoff } from './retry';
+export type {
+  BackoffOptions,
+  CompleteWithRetryOptions,
+  RetryDecision,
+  RetryReason,
+} from './retry';
+
+export { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
 
 export { injectSkillsIntoMessages, formatSkillsForPrompt, filterActive } from './skill-injector';
 

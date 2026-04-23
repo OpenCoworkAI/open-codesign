@@ -368,6 +368,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
           ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
           logger: log,
           provider: input.model.provider,
+          ...(input.wire !== undefined ? { wire: input.wire } : {}),
         },
         complete,
       );
@@ -396,7 +397,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
         reasoning = undefined;
         continue;
       }
-      const remapped = remapProviderError(err, input.model.provider);
+      const remapped = remapProviderError(err, input.model.provider, input.wire);
       log.error(`[${scope}] step=send_request.fail`, {
         ...ctx,
         ms: Date.now() - sendStart,
@@ -808,6 +809,7 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
       {
         logger: log,
         provider: input.model.provider,
+        ...(input.wire !== undefined ? { wire: input.wire } : {}),
       },
     );
     log.info('[title] step=send_request.ok', { ms: Date.now() - started });
@@ -821,6 +823,6 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
       ms: Date.now() - started,
       errorClass: err instanceof Error ? err.constructor.name : typeof err,
     });
-    throw remapProviderError(err, input.model.provider);
+    throw remapProviderError(err, input.model.provider, input.wire);
   }
 }
