@@ -157,7 +157,7 @@ export function FilesPanel() {
       <div className="mx-auto max-w-[720px] px-[var(--space-6)] py-[var(--space-8)]">
         <section className="mb-[var(--space-8)]">
           <header className="mb-[var(--space-4)] flex items-center gap-[var(--space-2)]">
-            <h2 className="text-[var(--font-size-body-xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium m-0">
+            <h2 className="text-[11px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium m-0">
               {t('canvas.workspace.sectionTitle')}
             </h2>
           </header>
@@ -228,11 +228,11 @@ export function FilesPanel() {
 
         <section>
           <header className="mb-[var(--space-4)] flex items-center gap-[var(--space-2)]">
-            <h2 className="text-[var(--font-size-body-xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium m-0">
+            <h2 className="text-[11px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium m-0">
               {t('canvas.files.sectionTitle')}
             </h2>
             <span
-              className="inline-flex items-center justify-center min-w-[18px] h-[var(--space-4)] px-[5px] rounded-[var(--radius-sm)] bg-[var(--color-background-secondary)] text-[var(--text-2xs)] text-[var(--color-text-muted)]"
+              className="inline-flex items-center justify-center min-w-[18px] h-[var(--space-4)] px-[5px] rounded-[var(--radius-sm)] bg-[var(--color-background-secondary)] text-[10px] text-[var(--color-text-muted)]"
               style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
             >
               {files.length}
@@ -269,7 +269,7 @@ export function FilesPanel() {
                         {f.path}
                       </span>
                       <span
-                        className="text-[var(--font-size-body-xs)] text-[var(--color-text-muted)] leading-[var(--leading-ui)]"
+                        className="text-[11px] text-[var(--color-text-muted)] leading-[var(--leading-ui)]"
                         title={formatAbsoluteTime(f.updatedAt)}
                         style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
                       >
