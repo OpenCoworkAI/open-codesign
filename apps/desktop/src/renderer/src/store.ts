@@ -1967,8 +1967,17 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       void get().loadChatForCurrentDesign();
       void get().loadCommentsForCurrentDesign();
       if (workspacePath) {
-        await window.codesign.snapshots.updateWorkspace(design.id, workspacePath, false);
-        await get().loadDesigns();
+        try {
+          await window.codesign.snapshots.updateWorkspace(design.id, workspacePath, false);
+          await get().loadDesigns();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : tr('errors.unknown');
+          get().pushToast({
+            variant: 'error',
+            title: tr('canvas.workspace.updateFailed'),
+            description: msg,
+          });
+        }
       }
       return design;
     } catch (err) {
