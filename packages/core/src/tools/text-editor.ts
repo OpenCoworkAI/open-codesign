@@ -16,7 +16,11 @@ import { Type } from '@sinclair/typebox';
 export interface TextEditorFsCallbacks {
   view(path: string): { content: string; numLines: number } | null;
   create(path: string, content: string): Promise<{ path: string }> | { path: string };
-  strReplace(path: string, oldStr: string, newStr: string): Promise<{ path: string }> | { path: string };
+  strReplace(
+    path: string,
+    oldStr: string,
+    newStr: string,
+  ): Promise<{ path: string }> | { path: string };
   insert(path: string, line: number, text: string): Promise<{ path: string }> | { path: string };
   /** Optional: list files for `view` on a directory. Returns sorted paths. */
   listDir(dir: string): string[];
