@@ -232,7 +232,7 @@ export function FilesPanel() {
               {t('canvas.files.sectionTitle')}
             </h2>
             <span
-              className="inline-flex items-center justify-center min-w-[18px] h-[var(--space-4)] px-[5px] rounded-[var(--radius-sm)] bg-[var(--color-background-secondary)] text-[10px] text-[var(--color-text-muted)]"
+              className="inline-flex items-center justify-center min-w-[18px] h-[16px] px-[5px] rounded-[var(--radius-sm)] bg-[var(--color-background-secondary)] text-[10px] text-[var(--color-text-muted)]"
               style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
             >
               {files.length}
