@@ -113,6 +113,7 @@ export function AddCustomProviderModal({
   function scheduleDiscovery(currentBaseUrl: string, currentWire: WireApi) {
     if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
     if (!currentBaseUrl.trim().match(/^https?:\/\//)) {
+      discoverySeq.current += 1;
       setDiscovery({ kind: 'idle' });
       return;
     }
