@@ -31,6 +31,21 @@ const openPath = vi.mocked(shell.openPath);
 
 const tempDirs: string[] = [];
 
+async function withMockedPlatform<T>(platform: NodeJS.Platform, run: () => Promise<T>): Promise<T> {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', {
+    value: platform,
+    configurable: true,
+  });
+  try {
+    return await run();
+  } finally {
+    if (original) {
+      Object.defineProperty(process, 'platform', original);
+    }
+  }
+}
+
 async function makeTempDir(prefix: string): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), prefix));
   tempDirs.push(dir);
@@ -130,6 +145,35 @@ describe('bindWorkspace', () => {
     );
     expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
       workspace_path: null,
+    });
+  });
+
+  it('treats case-only workspace differences as the same path on Windows for the same design', async () => {
+    await withMockedPlatform('win32', async () => {
+      const db = initInMemoryDb();
+      const design = createDesign(db);
+      const storedPath = normalizeWorkspacePath('/Users/Roy/Workspace');
+      updateDesignWorkspace(db, design.id, storedPath);
+
+      const rebound = await bindWorkspace(db, design.id, '/users/roy/workspace/', false);
+
+      expect(rebound.workspacePath).toBe(storedPath);
+      expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
+        workspace_path: storedPath,
+      });
+    });
+  });
+
+  it('treats case-only workspace differences as conflicts on Windows across designs', async () => {
+    await withMockedPlatform('win32', async () => {
+      const db = initInMemoryDb();
+      const design = createDesign(db);
+      const otherDesign = createDesign(db);
+      updateDesignWorkspace(db, otherDesign.id, normalizeWorkspacePath('/Users/Roy/Workspace'));
+
+      await expect(bindWorkspace(db, design.id, '/users/roy/workspace', false)).rejects.toThrow(
+        'Workspace path is already bound to another design',
+      );
     });
   });
 

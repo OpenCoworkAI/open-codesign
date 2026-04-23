@@ -25,6 +25,11 @@ export function normalizeWorkspacePath(p: string): string {
   return stripTrailingSlash(path.resolve(p).replaceAll('\\', '/'));
 }
 
+function workspacePathComparisonKey(p: string): string {
+  const normalized = normalizeWorkspacePath(p);
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
 export async function pickWorkspaceFolder(win: BrowserWindow): Promise<string | null> {
   const result = await dialog.showOpenDialog(win, {
     properties: ['openDirectory', 'createDirectory'],
@@ -47,12 +52,15 @@ export function checkWorkspaceConflict(
   designId: string,
   normalizedPath: string,
 ): boolean {
-  const row = db
-    .prepare(
-      'SELECT 1 FROM designs WHERE workspace_path = ? AND id != ? AND deleted_at IS NULL LIMIT 1',
-    )
-    .get(normalizedPath, designId);
-  return row !== undefined;
+  const comparisonPath = workspacePathComparisonKey(normalizedPath);
+  const rows = db
+    .prepare('SELECT workspace_path FROM designs WHERE id != ? AND deleted_at IS NULL')
+    .all(designId) as Array<{ workspace_path: string | null }>;
+  return rows.some(
+    (row) =>
+      row.workspace_path !== null &&
+      workspacePathComparisonKey(row.workspace_path) === comparisonPath,
+  );
 }
 
 export async function migrateWorkspaceFiles(
@@ -121,9 +129,10 @@ export async function bindWorkspace(
   }
 
   const normalizedPath = normalizeWorkspacePath(workspacePath);
+  const comparisonPath = workspacePathComparisonKey(normalizedPath);
   if (
     current.workspacePath !== null &&
-    normalizeWorkspacePath(current.workspacePath) === normalizedPath
+    workspacePathComparisonKey(current.workspacePath) === comparisonPath
   ) {
     logger.info('workspace.bind.noop', { designId, workspacePath: normalizedPath });
     return current;
