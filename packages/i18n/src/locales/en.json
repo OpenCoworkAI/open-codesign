@@ -244,6 +244,11 @@
         "apiKey": "API Key",
         "apiKeyEditPlaceholder": "Leave empty to keep {{mask}}",
         "defaultModel": "Default model",
+        "switchToManual": "Enter manually",
+        "switchToDropdown": "Pick from list",
+        "discoveringModels": "Discovering models...",
+        "discoveredModels": "Found {{count}} models",
+        "discoveryFailed": "Could not auto-discover models",
         "test": "Test connection",
         "testOk": "OK — {{count}} models available",
         "save": "Save & continue",
@@ -329,6 +334,18 @@
         "reasoningSaveFailed": "Failed to save reasoning depth",
         "connectionOk": "Connection OK",
         "connectionFailed": "Connection failed"
+      },
+      "cliProxyApi": {
+        "presetName": "CLIProxyAPI",
+        "presetDescription": "Local proxy that wraps Claude/Codex/Gemini OAuth subscriptions",
+        "apiKeyOptional": "API key only required if you configured `api-keys` in CPA config.yaml",
+        "thinkingHint": "Tip: append `(high)` / `(xhigh)` / `(8192)` to model name to control thinking budget"
+      },
+      "cpaDetection": {
+        "title": "CLIProxyAPI detected on your machine",
+        "body": "Import it as a provider to use your OAuth-authenticated Claude / Codex / Gemini accounts.",
+        "importAction": "Import",
+        "dismissAction": "Dismiss"
       },
       "reasoning": {
         "label": "Reasoning depth",

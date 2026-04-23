@@ -1,8 +1,8 @@
 import { useT } from '@open-codesign/i18n';
 import { type WireApi, canonicalBaseUrl, detectWireFromBaseUrl } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
-import { AlertCircle, CheckCircle, Loader2, X } from 'lucide-react';
-import { useState } from 'react';
+import { AlertCircle, Check, CheckCircle, Loader2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 
 interface Props {
   onSave: () => void;
@@ -48,6 +48,28 @@ type TestState =
   | { kind: 'ok'; modelCount: number }
   | { kind: 'error'; message: string };
 
+type DiscoveryState =
+  | { kind: 'idle' }
+  | { kind: 'discovering' }
+  | { kind: 'found'; models: string[] }
+  | { kind: 'failed' };
+
+/** Priority-ordered model selection after a successful discovery. */
+function pickBestModel(models: string[]): string {
+  const priorities: RegExp[] = [
+    /^claude-sonnet-4-5/,
+    /^claude-opus/,
+    /^claude-sonnet/,
+    /^gemini-2\.5-pro$|^gemini-3.*pro/,
+    /^gpt-5/,
+  ];
+  for (const pattern of priorities) {
+    const match = models.find((m) => pattern.test(m));
+    if (match !== undefined) return match;
+  }
+  return models[0] ?? '';
+}
+
 /**
  * Minimal Custom Provider form — wire-agnostic endpoint onboarding.
  * Deliberately barebones (native form + FormData-ish accessors, no schema),
@@ -79,15 +101,77 @@ export function AddCustomProviderModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [discovery, setDiscovery] = useState<DiscoveryState>({ kind: 'idle' });
+  // When true, user explicitly chose to type a model name instead of picking from the dropdown.
+  const [manualModel, setManualModel] = useState(false);
+  // Track whether user has explicitly typed/picked a model so auto-pick doesn't override it.
+  const userPickedModel = useRef(false);
+
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const discoverySeq = useRef(0);
+
+  function scheduleDiscovery(currentBaseUrl: string, currentWire: WireApi) {
+    if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
+    if (!currentBaseUrl.trim().match(/^https?:\/\//)) {
+      discoverySeq.current += 1;
+      setDiscovery({ kind: 'idle' });
+      return;
+    }
+    debounceTimer.current = setTimeout(() => {
+      void runDiscovery(currentBaseUrl, currentWire);
+    }, 500);
+  }
+
+  async function runDiscovery(currentBaseUrl: string, currentWire: WireApi) {
+    if (!window.codesign?.config) return;
+    const seq = ++discoverySeq.current;
+    setDiscovery({ kind: 'discovering' });
+    try {
+      const res = await window.codesign.config.testEndpoint({
+        wire: currentWire,
+        baseUrl: currentBaseUrl.trim(),
+        apiKey: '',
+      });
+      if (seq !== discoverySeq.current) return;
+      if (res.ok && res.models.length > 0) {
+        setDiscovery({ kind: 'found', models: res.models });
+        if (!userPickedModel.current) {
+          const best = pickBestModel(res.models);
+          setDefaultModel(best);
+        }
+      } else {
+        setDiscovery({ kind: 'failed' });
+      }
+    } catch {
+      if (seq === discoverySeq.current) setDiscovery({ kind: 'failed' });
+    }
+  }
+
   function handleBaseUrlChange(v: string) {
     setBaseUrl(v);
     if (wireAuto) setWire(detectWireFromBaseUrl(v));
     setTest({ kind: 'idle' });
+    scheduleDiscovery(v, wireAuto ? detectWireFromBaseUrl(v) : wire);
+  }
+
+  function handleApiKeyChange(v: string) {
+    setApiKey(v);
   }
 
   function handleWireChange(v: WireApi) {
     setWire(v);
     setWireAuto(false);
+    scheduleDiscovery(baseUrl, v);
+  }
+
+  function handleModelSelect(v: string) {
+    setDefaultModel(v);
+    userPickedModel.current = true;
+  }
+
+  function handleModelTextChange(v: string) {
+    setDefaultModel(v);
+    userPickedModel.current = v.length > 0;
   }
 
   async function handleTest() {
@@ -168,6 +252,10 @@ export function AddCustomProviderModal({
     ? t('settings.providers.custom.editTitle')
     : t('settings.providers.custom.title');
 
+  // Show the model dropdown when discovery found models AND user hasn't switched to manual entry.
+  const showModelDropdown =
+    !manualModel && discovery.kind === 'found' && discovery.models.length > 0;
+
   return (
     <div
       role="dialog"
@@ -243,7 +331,7 @@ export function AddCustomProviderModal({
         <Field label={t('settings.providers.custom.apiKey')}>
           <TextInput
             value={apiKey}
-            onChange={setApiKey}
+            onChange={handleApiKeyChange}
             type="password"
             placeholder={
               isEdit && editTarget?.keyMask !== undefined && editTarget.keyMask.length > 0
@@ -255,8 +343,68 @@ export function AddCustomProviderModal({
           />
         </Field>
 
-        <Field label={t('settings.providers.custom.defaultModel')}>
-          <TextInput value={defaultModel} onChange={setDefaultModel} placeholder="model-name" />
+        <Field
+          label={t('settings.providers.custom.defaultModel')}
+          inline={
+            discovery.kind === 'discovering' ? (
+              <span className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                {t('settings.providers.custom.discoveringModels')}
+              </span>
+            ) : discovery.kind === 'found' ? (
+              <span className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-success)]">
+                <Check className="w-3 h-3" />
+                {t('settings.providers.custom.discoveredModels', {
+                  count: discovery.models.length,
+                })}
+              </span>
+            ) : discovery.kind === 'failed' ? (
+              <span className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
+                <AlertCircle className="w-3 h-3" />
+                {t('settings.providers.custom.discoveryFailed')}
+              </span>
+            ) : null
+          }
+        >
+          {showModelDropdown ? (
+            <div className="flex items-center gap-2">
+              <select
+                value={defaultModel}
+                onChange={(e) => handleModelSelect(e.target.value)}
+                className="flex-1 h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+              >
+                {discovery.models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setManualModel(true)}
+                className="shrink-0 text-[var(--text-xs)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
+              >
+                {t('settings.providers.custom.switchToManual')}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <TextInput
+                value={defaultModel}
+                onChange={handleModelTextChange}
+                placeholder="model-name"
+              />
+              {manualModel && discovery.kind === 'found' && discovery.models.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setManualModel(false)}
+                  className="shrink-0 text-[var(--text-xs)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
+                >
+                  {t('settings.providers.custom.switchToDropdown')}
+                </button>
+              )}
+            </div>
+          )}
         </Field>
 
         <div className="flex items-center gap-2">
@@ -304,12 +452,23 @@ export function AddCustomProviderModal({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  inline,
+  children,
+}: {
+  label: string;
+  inline?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
-        {label}
-      </p>
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)]">
+          {label}
+        </p>
+        {inline !== undefined && <span>{inline}</span>}
+      </div>
       {children}
     </div>
   );

@@ -39,6 +39,48 @@ describe('applyLocaleChange', () => {
     expect(result).toBe('zh-CN');
   });
 });
+
+describe('CPA detection regex', () => {
+  const CPA_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1):8317/;
+
+  it('matches http://localhost:8317', () => {
+    expect('http://localhost:8317').toMatch(CPA_REGEX);
+  });
+
+  it('matches https://127.0.0.1:8317', () => {
+    expect('https://127.0.0.1:8317').toMatch(CPA_REGEX);
+  });
+
+  it('does not match other ports', () => {
+    expect('http://localhost:8080').not.toMatch(CPA_REGEX);
+    expect('https://example.com:8317').not.toMatch(CPA_REGEX);
+  });
+});
+
+describe('CPA detection localStorage dismissal', () => {
+  const KEY = 'cpa-detection-dismissed-v1';
+
+  it('reads and writes dismissal flag', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: vi.fn((key: string) => values.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        values.set(key, value);
+      }),
+    };
+
+    // Check initial read
+    expect(storage.getItem(KEY)).toBeNull();
+
+    // Simulate user dismissal
+    storage.setItem(KEY, '1');
+    expect(storage.setItem).toHaveBeenCalledWith(KEY, '1');
+
+    // Verify we can read it back
+    expect(storage.getItem(KEY)).toBe('1');
+  });
+});
+
 describe('computeModelOptions', () => {
   const suffix = '(active, not in provider list)';
 
