@@ -13,7 +13,13 @@
  *   - any AbortSignal abort short-circuits immediately, no retry
  */
 
-import { type ChatMessage, CodesignError, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
+import {
+  type ChatMessage,
+  CodesignError,
+  ERROR_CODES,
+  type ModelRef,
+  type WireApi,
+} from '@open-codesign/shared';
 import { normalizeProviderError } from './errors';
 import { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
 import { type GenerateOptions, type GenerateResult, complete } from './index';
@@ -32,6 +38,7 @@ export interface CompleteWithRetryOptions {
   onRetry?: (info: RetryReason) => void;
   logger?: { warn: (event: string, data?: Record<string, unknown>) => void };
   provider?: string;
+  wire?: WireApi;
 }
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -51,7 +58,7 @@ const RETRYABLE_NET_CODES = new Set([
   'ECONNREFUSED',
 ]);
 
-function classifyByStatus(status: number, err: unknown): RetryDecision | undefined {
+function classifyByStatus(status: number, err: unknown, wire?: WireApi): RetryDecision | undefined {
   if (status === 429) {
     const retryAfterMs = extractRetryAfterMs(err);
     const decision: RetryDecision = { retry: true, reason: 'rate-limited (429)' };
@@ -63,8 +70,10 @@ function classifyByStatus(status: number, err: unknown): RetryDecision | undefin
     // return 5xx + "not implemented" for POST /v1/messages even though their
     // /v1/models endpoint works. Retrying wastes 3 rounds of exponential
     // backoff on an endpoint that will never respond; short-circuit so the
-    // user sees the actionable error immediately.
-    if (looksLikeGatewayMissingMessagesApi(err)) {
+    // user sees the actionable error immediately. Only applies to
+    // anthropic-wire endpoints — OpenAI/Google wires can emit the same text
+    // for unrelated reasons and should retry normally.
+    if (wire === 'anthropic' && looksLikeGatewayMissingMessagesApi(err)) {
       return { retry: false, reason: 'gateway does not implement Messages API' };
     }
     return { retry: true, reason: `server error (${status})` };
@@ -85,13 +94,13 @@ function classifyByNetwork(err: unknown): RetryDecision | undefined {
   return undefined;
 }
 
-export function classifyError(err: unknown): RetryDecision {
+export function classifyError(err: unknown, wire?: WireApi): RetryDecision {
   if (err instanceof Error && (err.name === 'AbortError' || err.message === 'aborted')) {
     return { retry: false, reason: 'aborted' };
   }
   const status = extractStatus(err);
   if (status !== undefined) {
-    const byStatus = classifyByStatus(status, err);
+    const byStatus = classifyByStatus(status, err, wire);
     if (byStatus) return byStatus;
   }
   const byNet = classifyByNetwork(err);
@@ -289,7 +298,7 @@ export async function completeWithRetry(
     maxRetries,
     baseDelayMs,
     classify: (err) => {
-      const decision = classifyError(err);
+      const decision = classifyError(err, retryOpts.wire);
       const retryCount = Math.max(0, attemptForLog - 1);
       const normalized = normalizeProviderError(err, provider, retryCount);
       if (shouldStop(decision, attemptForLog, maxRetries)) {

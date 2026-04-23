@@ -883,7 +883,7 @@ export async function generateViaAgent(
       ms: Date.now() - sendStart,
       errorClass: err instanceof Error ? err.constructor.name : typeof err,
     });
-    throw remapProviderError(err, input.model.provider);
+    throw remapProviderError(err, input.model.provider, input.wire);
   }
 
   const finalAssistant = findFinalAssistantMessage(agent.state.messages);
@@ -913,6 +913,7 @@ export async function generateViaAgent(
     throw remapProviderError(
       new CodesignError(message, ERROR_CODES.PROVIDER_ERROR),
       input.model.provider,
+      input.wire,
     );
   }
   log.info('[generate] step=send_request.ok', { ...ctx, ms: Date.now() - sendStart });

@@ -16,7 +16,7 @@
  */
 
 import { looksLikeGatewayMissingMessagesApi } from '@open-codesign/providers';
-import type { ProviderId } from '@open-codesign/shared';
+import type { ProviderId, WireApi } from '@open-codesign/shared';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 export const PROVIDER_KEY_HELP_URL: Partial<Record<ProviderId, string>> = {
@@ -99,14 +99,22 @@ export function rewriteUpstreamMessage(
  * 4xx errors are rewritten — everything else is rethrown unchanged so the
  * retry/network layer keeps its own taxonomy.
  */
-export function remapProviderError(err: unknown, provider: string | undefined): unknown {
+export function remapProviderError(
+  err: unknown,
+  provider: string | undefined,
+  wire?: WireApi | undefined,
+): unknown {
   if (!(err instanceof Error)) return err;
   if (err instanceof CodesignError && err.code === ERROR_CODES.PROVIDER_ABORTED) return err;
   // Third-party Anthropic relays often reply to POST /v1/messages with 5xx +
   // "not implemented" while their /v1/models endpoint works. Catch that shape
   // before any other classification so the UI can suggest switching wire
-  // instead of the misleading default "check your API key" message.
+  // instead of the misleading default "check your API key" message. Guard on
+  // wire === 'anthropic' because the actionable hint ("switch wire to
+  // openai-chat") only makes sense for Anthropic-compatible endpoints — a 501
+  // from an OpenAI/Google wire is just a generic upstream error.
   if (
+    wire === 'anthropic' &&
     !(err instanceof CodesignError && err.code === ERROR_CODES.PROVIDER_GATEWAY_INCOMPATIBLE) &&
     looksLikeGatewayMissingMessagesApi(err)
   ) {

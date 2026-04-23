@@ -83,18 +83,37 @@ describe('remapProviderError', () => {
     expect(out).toBe(err);
   });
 
-  it('tags 5xx "not implemented" bodies as PROVIDER_GATEWAY_INCOMPATIBLE', () => {
+  it('tags 5xx "not implemented" bodies as PROVIDER_GATEWAY_INCOMPATIBLE on anthropic wire', () => {
     const err = httpError(500, 'not implemented');
-    const out = remapProviderError(err, 'anthropic');
+    const out = remapProviderError(err, 'anthropic', 'anthropic');
     expect(out).toBeInstanceOf(CodesignError);
     expect((out as CodesignError).code).toBe('PROVIDER_GATEWAY_INCOMPATIBLE');
     expect((out as CodesignError).message).toContain('not implemented');
   });
 
-  it('tags status-less errors whose message mentions 501 as PROVIDER_GATEWAY_INCOMPATIBLE', () => {
-    const out = remapProviderError(new Error('HTTP 501 from gateway'), 'anthropic');
+  it('tags status-less errors whose message mentions 501 as PROVIDER_GATEWAY_INCOMPATIBLE on anthropic wire', () => {
+    const out = remapProviderError(new Error('HTTP 501 from gateway'), 'anthropic', 'anthropic');
     expect(out).toBeInstanceOf(CodesignError);
     expect((out as CodesignError).code).toBe('PROVIDER_GATEWAY_INCOMPATIBLE');
+  });
+
+  it('does NOT remap 5xx "not implemented" to gateway-incompatible on openai-chat wire', () => {
+    const err = httpError(501, 'not implemented');
+    const out = remapProviderError(err, 'openai', 'openai-chat');
+    // Non-anthropic wire: 501 is just a generic upstream error, pass through.
+    expect(out).toBe(err);
+  });
+
+  it('does NOT remap 501 on openai-responses wire even when body matches gateway pattern', () => {
+    const err = httpError(501, 'messages api not supported');
+    const out = remapProviderError(err, 'openai', 'openai-responses');
+    expect(out).toBe(err);
+  });
+
+  it('does NOT remap when wire is undefined (safer default: pass through)', () => {
+    const err = httpError(500, 'not implemented');
+    const out = remapProviderError(err, 'anthropic');
+    expect(out).toBe(err);
   });
 
   it('extracts status code from CodesignError messages that embed it', () => {
