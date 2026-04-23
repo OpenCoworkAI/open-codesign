@@ -199,6 +199,7 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
     }
     if (typeof window === 'undefined' || !window.codesign) return;
     let cancelled = false;
+    // TODO(v0.2/T2.4): re-route through session JSONL — see T2.6.
     void window.codesign.snapshots
       .list(design.id)
       .then((snaps) => {

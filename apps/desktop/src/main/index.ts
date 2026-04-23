@@ -39,6 +39,7 @@ import {
 import { configDir } from './config';
 import { registerConnectionIpc } from './connection-ipc';
 import { scanDesignSystem } from './design-system';
+import { pruneDiagnosticEvents, recordDiagnosticEvent, safeInitSnapshotsDb } from './designs-db';
 import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { makeRuntimeVerifier } from './done-verify';
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from './electron-runtime';
@@ -72,7 +73,6 @@ import { resolveActiveModel } from './provider-settings';
 import { cleanupStaleTmps } from './reported-fingerprints';
 import { resolveActiveApiKey, resolveApiKeyWithKeylessFallback } from './resolve-api-key';
 import { withRun } from './runContext';
-import { pruneDiagnosticEvents, recordDiagnosticEvent, safeInitSnapshotsDb } from './snapshots-db';
 import { initStorageSettings } from './storage-settings';
 
 // ESM shim: package.json "type": "module" means the built bundle is ESM and

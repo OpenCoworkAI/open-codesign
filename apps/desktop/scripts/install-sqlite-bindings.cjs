@@ -13,7 +13,7 @@
  *   build/Release/better_sqlite3.node-electron-arm64.node(Electron ABI, arm64 app)
  *   build/Release/better_sqlite3.node-electron.node      (legacy alias for host arch)
  *
- * snapshots-db.ts then opts into the right file via better-sqlite3's
+ * designs-db.ts then opts into the right file via better-sqlite3's
  * `nativeBinding` constructor option, depending on whether process.versions.electron
  * is defined.
  *

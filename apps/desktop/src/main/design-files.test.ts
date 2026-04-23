@@ -1,5 +1,5 @@
 /**
- * Unit tests for design_files helpers in snapshots-db.ts.
+ * Unit tests for design_files helpers in designs-db.ts.
  *
  * Runs against an in-memory SQLite — no filesystem, no Electron.
  */
@@ -15,7 +15,7 @@ import {
   normalizeDesignFilePath,
   strReplaceInDesignFile,
   viewDesignFile,
-} from './snapshots-db';
+} from './designs-db';
 
 function seed() {
   const db = initInMemoryDb();

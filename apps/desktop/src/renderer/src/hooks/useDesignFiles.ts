@@ -41,6 +41,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
       return;
     }
     setLoading(true);
+    // TODO(v0.2/T2.4): re-route through session JSONL — see T2.6.
     window.codesign.snapshots
       .list(designId)
       .then((snaps) => {

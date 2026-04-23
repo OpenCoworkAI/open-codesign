@@ -47,6 +47,7 @@ vi.mock('zip-lib', async () => {
   };
 });
 
+import { initInMemoryDb, listDiagnosticEvents, recordDiagnosticEvent } from './designs-db';
 import {
   API_KEY_RE,
   aliasHome,
@@ -56,7 +57,6 @@ import {
   redactSensitiveTomlFields,
   registerDiagnosticsIpc,
 } from './diagnostics-ipc';
-import { initInMemoryDb, listDiagnosticEvents, recordDiagnosticEvent } from './snapshots-db';
 
 function invoke(channel: string, payload: unknown): unknown {
   const fn = handlers.get(channel);

@@ -30,6 +30,7 @@ import {
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
 import type BetterSqlite3 from 'better-sqlite3';
 import { configDir, configPath } from './config';
+import { getDiagnosticEventById, listDiagnosticEvents, recordDiagnosticEvent } from './designs-db';
 import {
   composeSummaryMarkdown,
   redactPathsAndUrls,
@@ -38,11 +39,6 @@ import {
 import { app, ipcMain, shell } from './electron-runtime';
 import { getLogPath, getLogger, logsDir } from './logger';
 import { findRecent, recordReported } from './reported-fingerprints';
-import {
-  getDiagnosticEventById,
-  listDiagnosticEvents,
-  recordDiagnosticEvent,
-} from './snapshots-db';
 
 type Database = BetterSqlite3.Database;
 

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { safeInitSnapshotsDb } from './snapshots-db';
+import { safeInitSnapshotsDb } from './designs-db';
 
 describe('safeInitSnapshotsDb', () => {
   it('returns { ok: false, error } when better-sqlite3 throws — does not rethrow', () => {

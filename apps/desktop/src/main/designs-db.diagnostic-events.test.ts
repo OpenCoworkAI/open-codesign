@@ -1,5 +1,5 @@
 /**
- * Unit tests for the diagnostic_events store in snapshots-db.ts.
+ * Unit tests for the diagnostic_events store in designs-db.ts.
  *
  * Covers 200ms dedup window, transient OR-merge on dedup, run_id-insensitive
  * fingerprint matching, list filtering, and prune behaviour. Uses an isolated
@@ -13,7 +13,7 @@ import {
   listDiagnosticEvents,
   pruneDiagnosticEvents,
   recordDiagnosticEvent,
-} from './snapshots-db';
+} from './designs-db';
 
 function baseInput(overrides: Partial<DiagnosticEventInput> = {}): DiagnosticEventInput {
   return {
