@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "brands": [
+    { "slug": "vercel", "name": "Vercel", "category": "Dev Tools", "path": "vercel/DESIGN.md" },
+    { "slug": "linear", "name": "Linear", "category": "Productivity", "path": "linear/DESIGN.md" },
+    { "slug": "stripe", "name": "Stripe", "category": "Fintech", "path": "stripe/DESIGN.md" },
+    { "slug": "figma", "name": "Figma", "category": "Design Tools", "path": "figma/DESIGN.md" },
+    { "slug": "notion", "name": "Notion", "category": "Productivity", "path": "notion/DESIGN.md" },
+    { "slug": "apple", "name": "Apple", "category": "Consumer", "path": "apple/DESIGN.md" },
+    { "slug": "airbnb", "name": "Airbnb", "category": "Consumer", "path": "airbnb/DESIGN.md" },
+    { "slug": "spotify", "name": "Spotify", "category": "Media", "path": "spotify/DESIGN.md" },
+    { "slug": "cursor", "name": "Cursor", "category": "Dev Tools", "path": "cursor/DESIGN.md" },
+    {
+      "slug": "supabase",
+      "name": "Supabase",
+      "category": "Dev Tools",
+      "path": "supabase/DESIGN.md"
+    },
+    { "slug": "posthog", "name": "PostHog", "category": "Dev Tools", "path": "posthog/DESIGN.md" },
+    { "slug": "framer", "name": "Framer", "category": "Design Tools", "path": "framer/DESIGN.md" },
+    { "slug": "runwayml", "name": "Runway", "category": "AI", "path": "runwayml/DESIGN.md" },
+    { "slug": "mistral", "name": "Mistral", "category": "AI", "path": "mistral/DESIGN.md" },
+    {
+      "slug": "elevenlabs",
+      "name": "ElevenLabs",
+      "category": "AI",
+      "path": "elevenlabs/DESIGN.md"
+    },
+    { "slug": "coinbase", "name": "Coinbase", "category": "Fintech", "path": "coinbase/DESIGN.md" },
+    { "slug": "revolut", "name": "Revolut", "category": "Fintech", "path": "revolut/DESIGN.md" },
+    { "slug": "nike", "name": "Nike", "category": "Retail", "path": "nike/DESIGN.md" },
+    { "slug": "ferrari", "name": "Ferrari", "category": "Luxury", "path": "ferrari/DESIGN.md" },
+    { "slug": "spacex", "name": "SpaceX", "category": "Tech", "path": "spacex/DESIGN.md" },
+    {
+      "slug": "starbucks",
+      "name": "Starbucks",
+      "category": "Retail",
+      "path": "starbucks/DESIGN.md"
+    },
+    { "slug": "shopify", "name": "Shopify", "category": "E-commerce", "path": "shopify/DESIGN.md" },
+    { "slug": "ibm", "name": "IBM", "category": "Enterprise", "path": "ibm/DESIGN.md" },
+    {
+      "slug": "raycast",
+      "name": "Raycast",
+      "category": "Productivity",
+      "path": "raycast/DESIGN.md"
+    },
+    { "slug": "cal-com", "name": "Cal.com", "category": "SaaS", "path": "cal-com/DESIGN.md" }
+  ]
+}
