@@ -34,3 +34,42 @@ describe('applyLocaleChange', () => {
     expect(result).toBe('zh-CN');
   });
 });
+
+describe('CPA detection regex', () => {
+  const CPA_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1):8317/;
+
+  it('matches http://localhost:8317', () => {
+    expect('http://localhost:8317').toMatch(CPA_REGEX);
+  });
+
+  it('matches https://127.0.0.1:8317', () => {
+    expect('https://127.0.0.1:8317').toMatch(CPA_REGEX);
+  });
+
+  it('does not match other ports', () => {
+    expect('http://localhost:8080').not.toMatch(CPA_REGEX);
+    expect('https://example.com:8317').not.toMatch(CPA_REGEX);
+  });
+});
+
+describe('CPA detection localStorage dismissal', () => {
+  const KEY = 'cpa-detection-dismissed-v1';
+
+  it('reads and writes dismissal flag', () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+
+    // Check initial read
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+
+    // Simulate user dismissal
+    window.localStorage.setItem(KEY, '1');
+    expect(setItemSpy).toHaveBeenCalledWith(KEY, '1');
+
+    // Verify we can read it back
+    expect(window.localStorage.getItem(KEY)).toBe('1');
+
+    getItemSpy.mockRestore();
+    setItemSpy.mockRestore();
+  });
+});

@@ -312,6 +312,12 @@
         "apiKeyOptional": "API key only required if you configured `api-keys` in CPA config.yaml",
         "thinkingHint": "Tip: append `(high)` / `(xhigh)` / `(8192)` to model name to control thinking budget"
       },
+      "cpaDetection": {
+        "title": "CLIProxyAPI detected on your machine",
+        "body": "Import it as a provider to use your OAuth-authenticated Claude / Codex / Gemini accounts.",
+        "importAction": "Import",
+        "dismissAction": "Dismiss"
+      },
       "reasoning": {
         "label": "Reasoning depth",
         "default": "Default (auto)",

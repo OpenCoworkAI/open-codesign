@@ -110,7 +110,7 @@ export function AddCustomProviderModal({
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discoverySeq = useRef(0);
 
-  function scheduleDiscovery(currentBaseUrl: string, currentWire: WireApi) {
+  function scheduleDiscovery(currentBaseUrl: string, currentApiKey: string, currentWire: WireApi) {
     if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
     if (!currentBaseUrl.trim().match(/^https?:\/\//)) {
       discoverySeq.current += 1;
@@ -118,11 +118,11 @@ export function AddCustomProviderModal({
       return;
     }
     debounceTimer.current = setTimeout(() => {
-      void runDiscovery(currentBaseUrl, currentWire);
+      void runDiscovery(currentBaseUrl, currentApiKey, currentWire);
     }, 500);
   }
 
-  async function runDiscovery(currentBaseUrl: string, currentWire: WireApi) {
+  async function runDiscovery(currentBaseUrl: string, currentApiKey: string, currentWire: WireApi) {
     if (!window.codesign?.config) return;
     const seq = ++discoverySeq.current;
     setDiscovery({ kind: 'discovering' });
@@ -130,7 +130,7 @@ export function AddCustomProviderModal({
       const res = await window.codesign.config.testEndpoint({
         wire: currentWire,
         baseUrl: currentBaseUrl.trim(),
-        apiKey: '',
+        apiKey: currentApiKey.trim(),
       });
       if (seq !== discoverySeq.current) return;
       if (res.ok && res.models.length > 0) {
@@ -151,17 +151,18 @@ export function AddCustomProviderModal({
     setBaseUrl(v);
     if (wireAuto) setWire(detectWireFromBaseUrl(v));
     setTest({ kind: 'idle' });
-    scheduleDiscovery(v, wireAuto ? detectWireFromBaseUrl(v) : wire);
+    scheduleDiscovery(v, apiKey, wireAuto ? detectWireFromBaseUrl(v) : wire);
   }
 
   function handleApiKeyChange(v: string) {
     setApiKey(v);
+    scheduleDiscovery(baseUrl, v, wire);
   }
 
   function handleWireChange(v: WireApi) {
     setWire(v);
     setWireAuto(false);
-    scheduleDiscovery(baseUrl, v);
+    scheduleDiscovery(baseUrl, apiKey, v);
   }
 
   function handleModelSelect(v: string) {

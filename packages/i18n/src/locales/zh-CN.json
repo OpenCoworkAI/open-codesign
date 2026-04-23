@@ -312,6 +312,12 @@
         "apiKeyOptional": "仅当你在 CPA config.yaml 里配置了 api-keys 才需要填",
         "thinkingHint": "提示：在 model 名后加 `(high)` / `(xhigh)` / `(8192)` 可控制思考力度"
       },
+      "cpaDetection": {
+        "title": "检测到本机运行的 CLIProxyAPI",
+        "body": "一键导入即可使用你已登录的 Claude / Codex / Gemini 订阅账号。",
+        "importAction": "导入",
+        "dismissAction": "忽略"
+      },
       "reasoning": {
         "label": "推理深度",
         "default": "默认（自动）",
