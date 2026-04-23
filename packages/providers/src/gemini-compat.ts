@@ -9,7 +9,15 @@
 
 export function isGeminiOpenAICompat(baseUrl: string | undefined): boolean {
   if (!baseUrl) return false;
-  return baseUrl.includes('generativelanguage.googleapis.com');
+  try {
+    const { hostname } = new URL(baseUrl);
+    return (
+      hostname === 'generativelanguage.googleapis.com' ||
+      hostname.endsWith('.generativelanguage.googleapis.com')
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function normalizeGeminiModelId(modelId: string, baseUrl: string | undefined): string {

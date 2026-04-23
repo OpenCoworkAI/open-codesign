@@ -15,6 +15,30 @@ describe('isGeminiOpenAICompat', () => {
   it('returns false when baseUrl is undefined', () => {
     expect(isGeminiOpenAICompat(undefined)).toBe(false);
   });
+
+  it('returns false when baseUrl is empty', () => {
+    expect(isGeminiOpenAICompat('')).toBe(false);
+  });
+
+  it('returns false when baseUrl is not a parseable URL', () => {
+    expect(isGeminiOpenAICompat('not a url')).toBe(false);
+  });
+
+  it('rejects spoofed URLs with Gemini host in query string', () => {
+    expect(
+      isGeminiOpenAICompat('https://attacker.com/?x=generativelanguage.googleapis.com/v1'),
+    ).toBe(false);
+  });
+
+  it('rejects spoofed URLs with Gemini host as subdomain suffix of attacker domain', () => {
+    expect(isGeminiOpenAICompat('https://generativelanguage.googleapis.com.evil.com/v1')).toBe(
+      false,
+    );
+  });
+
+  it('rejects spoofed URLs with Gemini host hyphenated into attacker domain', () => {
+    expect(isGeminiOpenAICompat('https://generativelanguage-googleapis-com.evil.com')).toBe(false);
+  });
 });
 
 describe('normalizeGeminiModelId', () => {
