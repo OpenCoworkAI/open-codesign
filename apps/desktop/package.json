@@ -1,6 +1,6 @@
 {
   "name": "@open-codesign/desktop",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",

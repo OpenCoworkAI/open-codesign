@@ -1,6 +1,6 @@
 {
   "name": "@open-codesign/i18n",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
