@@ -110,18 +110,18 @@ export function AddCustomProviderModal({
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discoverySeq = useRef(0);
 
-  function scheduleDiscovery(currentBaseUrl: string, currentApiKey: string, currentWire: WireApi) {
+  function scheduleDiscovery(currentBaseUrl: string, currentWire: WireApi) {
     if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
     if (!currentBaseUrl.trim().match(/^https?:\/\//)) {
       setDiscovery({ kind: 'idle' });
       return;
     }
     debounceTimer.current = setTimeout(() => {
-      void runDiscovery(currentBaseUrl, currentApiKey, currentWire);
+      void runDiscovery(currentBaseUrl, currentWire);
     }, 500);
   }
 
-  async function runDiscovery(currentBaseUrl: string, currentApiKey: string, currentWire: WireApi) {
+  async function runDiscovery(currentBaseUrl: string, currentWire: WireApi) {
     if (!window.codesign?.config) return;
     const seq = ++discoverySeq.current;
     setDiscovery({ kind: 'discovering' });
@@ -129,7 +129,7 @@ export function AddCustomProviderModal({
       const res = await window.codesign.config.testEndpoint({
         wire: currentWire,
         baseUrl: currentBaseUrl.trim(),
-        apiKey: currentApiKey.trim(),
+        apiKey: '',
       });
       if (seq !== discoverySeq.current) return;
       if (res.ok && res.models.length > 0) {
@@ -150,7 +150,7 @@ export function AddCustomProviderModal({
     setBaseUrl(v);
     if (wireAuto) setWire(detectWireFromBaseUrl(v));
     setTest({ kind: 'idle' });
-    scheduleDiscovery(v, apiKey, wireAuto ? detectWireFromBaseUrl(v) : wire);
+    scheduleDiscovery(v, wireAuto ? detectWireFromBaseUrl(v) : wire);
   }
 
   function handleApiKeyChange(v: string) {
@@ -160,7 +160,7 @@ export function AddCustomProviderModal({
   function handleWireChange(v: WireApi) {
     setWire(v);
     setWireAuto(false);
-    scheduleDiscovery(baseUrl, apiKey, v);
+    scheduleDiscovery(baseUrl, v);
   }
 
   function handleModelSelect(v: string) {
@@ -348,19 +348,19 @@ export function AddCustomProviderModal({
             discovery.kind === 'discovering' ? (
               <span className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
                 <Loader2 className="w-3 h-3 animate-spin" />
-                {t('settings.providers.cliProxyApi.discoveringModels')}
+                {t('settings.providers.custom.discoveringModels')}
               </span>
             ) : discovery.kind === 'found' ? (
               <span className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-success)]">
                 <Check className="w-3 h-3" />
-                {t('settings.providers.cliProxyApi.discoveredModels', {
+                {t('settings.providers.custom.discoveredModels', {
                   count: discovery.models.length,
                 })}
               </span>
             ) : discovery.kind === 'failed' ? (
               <span className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
                 <AlertCircle className="w-3 h-3" />
-                {t('settings.providers.cliProxyApi.discoveryFailed')}
+                {t('settings.providers.custom.discoveryFailed')}
               </span>
             ) : null
           }
