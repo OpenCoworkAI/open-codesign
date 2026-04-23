@@ -1,0 +1,16 @@
+.dot-grid {
+  background-color: #fafafa;
+  background-image: radial-gradient(circle, #c7c7c7 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+  min-height: 100%;
+}
+
+.dot-grid.dot-grid-dark {
+  background-color: #0a0a0c;
+  background-image: radial-gradient(circle, #2a2a2e 1px, transparent 1px);
+}
+
+.dot-grid.dot-grid-dense {
+  background-size: 12px 12px;
+}

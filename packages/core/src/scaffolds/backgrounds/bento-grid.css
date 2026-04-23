@@ -1,0 +1,38 @@
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 160px;
+  gap: 16px;
+  padding: 24px;
+  background: #0f172a;
+  min-height: 100%;
+}
+
+.bento-grid > * {
+  background: #1e293b;
+  border-radius: 18px;
+  padding: 20px;
+  color: #f1f5f9;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.bento-grid > .bento-wide {
+  grid-column: span 2;
+}
+.bento-grid > .bento-tall {
+  grid-row: span 2;
+}
+.bento-grid > .bento-hero {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+@media (max-width: 720px) {
+  .bento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bento-grid > .bento-wide,
+  .bento-grid > .bento-hero {
+    grid-column: span 2;
+  }
+}

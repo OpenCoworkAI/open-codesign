@@ -1,0 +1,11 @@
+.aurora-mesh {
+  background-color: #0b0f1a;
+  background-image: radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.55) 0px, transparent 50%),
+    radial-gradient(at 80% 10%, rgba(236, 72, 153, 0.45) 0px, transparent 50%),
+    radial-gradient(at 90% 80%, rgba(34, 211, 238, 0.45) 0px, transparent 50%),
+    radial-gradient(at 10% 90%, rgba(250, 204, 21, 0.35) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(168, 85, 247, 0.35) 0px, transparent 60%);
+  background-attachment: fixed;
+  min-height: 100%;
+  color: #f8fafc;
+}

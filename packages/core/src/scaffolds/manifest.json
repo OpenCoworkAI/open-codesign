@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "scaffolds": {
+    "iphone-frame": {
+      "description": "Default iPhone frame (rounded corners, no notch).",
+      "path": "../frames/iphone.jsx",
+      "category": "device-frame",
+      "license": "MIT-internal"
+    },
+    "ipad-frame": {
+      "description": "iPad frame (square corners, slim bezel).",
+      "path": "../frames/ipad.jsx",
+      "category": "device-frame",
+      "license": "MIT-internal"
+    },
+    "watch-frame": {
+      "description": "Apple Watch frame with crown and curved corners.",
+      "path": "../frames/watch.jsx",
+      "category": "device-frame",
+      "license": "MIT-internal"
+    },
+    "android-frame": {
+      "description": "Generic Android phone frame with hole-punch camera.",
+      "path": "../frames/android.jsx",
+      "category": "device-frame",
+      "license": "MIT-internal"
+    },
+    "macos-safari-frame": {
+      "description": "macOS Safari window chrome (traffic lights + URL bar).",
+      "path": "../frames/macos-safari.jsx",
+      "category": "device-frame",
+      "license": "MIT-internal"
+    },
+    "iphone-16-pro-frame": {
+      "description": "iPhone 16 Pro with dynamic-island notch.",
+      "path": "device-frames/iphone-16-pro.jsx",
+      "category": "device-frame",
+      "license": "MIT-internal"
+    },
+    "macbook-pro-16-2024-frame": {
+      "description": "MacBook Pro 16\" (2024) with display notch and bottom curve.",
+      "path": "device-frames/macbook-pro-16-2024.jsx",
+      "category": "device-frame",
+      "license": "MIT-internal"
+    },
+    "vision-pro-frame": {
+      "description": "Apple Vision Pro spatial-canvas frame with frosted glass plate.",
+      "path": "device-frames/vision-pro.jsx",
+      "category": "device-frame",
+      "license": "MIT-internal"
+    },
+    "foldable-frame": {
+      "description": "Galaxy Fold-style foldable with toggleable open/closed state.",
+      "path": "device-frames/foldable.jsx",
+      "category": "device-frame",
+      "license": "MIT-internal"
+    },
+    "browser-chrome": {
+      "description": "Chrome browser chrome with tabs, URL bar, and traffic lights.",
+      "path": "browser/chrome.jsx",
+      "category": "browser",
+      "license": "MIT-internal"
+    },
+    "browser-safari": {
+      "description": "Safari browser chrome with centered URL/title and toolbar.",
+      "path": "browser/safari.jsx",
+      "category": "browser",
+      "license": "MIT-internal"
+    },
+    "browser-arc": {
+      "description": "Arc browser layout with sidebar tabs and command bar.",
+      "path": "browser/arc.jsx",
+      "category": "browser",
+      "license": "MIT-internal"
+    },
+    "terminal": {
+      "description": "Single-file HTML terminal simulator with prompt and basic commands.",
+      "path": "dev-mockups/terminal.html",
+      "category": "dev-mockup",
+      "license": "MIT-internal"
+    },
+    "vscode": {
+      "description": "VS Code mockup with file tree, tab bar, and editor surface.",
+      "path": "dev-mockups/vscode.jsx",
+      "category": "dev-mockup",
+      "license": "MIT-internal"
+    },
+    "cmdk-palette": {
+      "description": "Raycast/cmdk-style command palette with fuzzy filter and shortcuts.",
+      "path": "ui-primitives/cmdk-palette.jsx",
+      "category": "ui-primitive",
+      "license": "MIT-internal"
+    },
+    "kanban-board": {
+      "description": "Three-column Kanban board with draggable cards and tag chips.",
+      "path": "ui-primitives/kanban-board.jsx",
+      "category": "ui-primitive",
+      "license": "MIT-internal"
+    },
+    "toast": {
+      "description": "Sonner-style toast stack with success/info/error kinds and dismiss.",
+      "path": "ui-primitives/toast.jsx",
+      "category": "ui-primitive",
+      "license": "MIT-internal"
+    },
+    "drawer": {
+      "description": "Vaul-style bottom-sheet drawer with backdrop and grab handle.",
+      "path": "ui-primitives/drawer.jsx",
+      "category": "ui-primitive",
+      "license": "MIT-internal"
+    },
+    "skeleton-set": {
+      "description": "Five skeleton variants (text-line, avatar, card, list-row, image).",
+      "path": "ui-primitives/skeleton-set.jsx",
+      "category": "ui-primitive",
+      "license": "MIT-internal"
+    },
+    "empty-states": {
+      "description": "Five empty-state variants (search, mailbox, chart, kanban-zero, error).",
+      "path": "ui-primitives/empty-states.jsx",
+      "category": "ui-primitive",
+      "license": "MIT-internal"
+    },
+    "stepper": {
+      "description": "Horizontal three-step progress indicator with active and done states.",
+      "path": "ui-primitives/stepper.jsx",
+      "category": "ui-primitive",
+      "license": "MIT-internal"
+    },
+    "file-tree": {
+      "description": "Collapsible file tree with chevron toggles and folder/file icons.",
+      "path": "ui-primitives/file-tree.jsx",
+      "category": "ui-primitive",
+      "license": "MIT-internal"
+    },
+    "aurora-mesh-bg": {
+      "description": "Multi-layer radial-gradient mesh background (aurora vibes).",
+      "path": "backgrounds/aurora-mesh.css",
+      "category": "background",
+      "license": "MIT-internal"
+    },
+    "glassmorphism-bg": {
+      "description": "Frosted-glass card surface with backdrop-filter blur.",
+      "path": "backgrounds/glassmorphism.css",
+      "category": "background",
+      "license": "MIT-internal"
+    },
+    "bento-grid-bg": {
+      "description": "CSS grid bento layout with rounded cells and span helpers.",
+      "path": "backgrounds/bento-grid.css",
+      "category": "background",
+      "license": "MIT-internal"
+    },
+    "noise-grain-bg": {
+      "description": "SVG feTurbulence inline-data-URI grain overlay.",
+      "path": "backgrounds/noise-grain.css",
+      "category": "background",
+      "license": "MIT-internal"
+    },
+    "dot-grid-bg": {
+      "description": "Radial-gradient 1px dot pattern (light/dark/dense variants).",
+      "path": "backgrounds/dot-grid.css",
+      "category": "background",
+      "license": "MIT-internal"
+    },
+    "animated-gradient-bg": {
+      "description": "Looping animated gradient via background-position keyframes.",
+      "path": "backgrounds/animated-gradient.css",
+      "category": "background",
+      "license": "MIT-internal"
+    },
+    "neubrutalism-surface": {
+      "description": "Neubrutalist card/button surface with thick borders and chunky shadows.",
+      "path": "surfaces/neubrutalism.css",
+      "category": "surface",
+      "license": "MIT-internal"
+    },
+    "slide-16-9-deck": {
+      "description": "Reveal.js 16:9 slide deck skeleton (CDN-hosted, no build).",
+      "path": "decks/slide-16-9.html",
+      "category": "deck",
+      "license": "MIT-internal"
+    },
+    "landing-hero": {
+      "description": "Landing page hero with eyebrow chip, headline, sub, and dual CTAs.",
+      "path": "landing/hero.jsx",
+      "category": "landing",
+      "license": "MIT-internal"
+    }
+  }
+}

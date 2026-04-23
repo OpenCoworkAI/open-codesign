@@ -1,0 +1,54 @@
+.neubrutalism {
+  --neu-bg: #fef3c7;
+  --neu-fg: #0a0a0a;
+  --neu-shadow: #0a0a0a;
+  background: var(--neu-bg);
+  color: var(--neu-fg);
+  font-family: "Inter", system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  min-height: 100%;
+  padding: 32px;
+}
+
+.neubrutalism-card {
+  background: #fff;
+  border: 3px solid var(--neu-shadow);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 8px 8px 0 0 var(--neu-shadow);
+}
+
+.neubrutalism-button {
+  display: inline-block;
+  background: #ff5f57;
+  color: #fff;
+  border: 3px solid var(--neu-shadow);
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 6px 6px 0 0 var(--neu-shadow);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.neubrutalism-button:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 7px 7px 0 0 var(--neu-shadow);
+}
+
+.neubrutalism-button:active {
+  transform: translate(4px, 4px);
+  box-shadow: 2px 2px 0 0 var(--neu-shadow);
+}
+
+.neubrutalism-pill {
+  display: inline-block;
+  background: #34d399;
+  border: 2px solid var(--neu-shadow);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 12px;
+}

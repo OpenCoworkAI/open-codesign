@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Slide deck</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" />
+    <style>
+      :root { --accent: #6366f1; }
+      .reveal { font-family: "Inter", system-ui, sans-serif; }
+      .reveal h1, .reveal h2 { letter-spacing: -0.02em; }
+      .reveal section.title { background: linear-gradient(135deg, #0f172a, #1e1b4b); }
+      .reveal .accent { color: var(--accent); }
+      .reveal .grid { display: grid; gap: 24px; grid-template-columns: 1fr 1fr; }
+    </style>
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section class="title">
+          <h1>Deck title</h1>
+          <p><span class="accent">Subtitle here</span> — replace with the brief.</p>
+        </section>
+        <section>
+          <h2>Section header</h2>
+          <ul>
+            <li>Point one</li>
+            <li>Point two</li>
+            <li>Point three</li>
+          </ul>
+        </section>
+        <section>
+          <h2>Two columns</h2>
+          <div class="grid">
+            <div>
+              <h3>Left</h3>
+              <p>Description for the left column.</p>
+            </div>
+            <div>
+              <h3>Right</h3>
+              <p>Description for the right column.</p>
+            </div>
+          </div>
+        </section>
+        <section>
+          <h2>Quote</h2>
+          <blockquote>"Replace this quote with the brief."</blockquote>
+          <p>— Attribution</p>
+        </section>
+        <section>
+          <h1 class="accent">Thank you</h1>
+          <p>Q&amp;A</p>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+    <script>
+      Reveal.initialize({
+        hash: true,
+        width: 1280,
+        height: 720,
+        margin: 0.06,
+        controls: true,
+        progress: true,
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+.animated-gradient {
+  background: linear-gradient(120deg, #6366f1, #ec4899, #f97316, #10b981, #6366f1);
+  background-size: 300% 300%;
+  animation: animated-gradient-shift 14s ease infinite;
+  min-height: 100%;
+  color: #fff;
+}
+
+@keyframes animated-gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-gradient {
+    animation: none;
+  }
+}

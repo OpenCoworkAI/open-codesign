@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Terminal</title>
+    <style>
+      :root {
+        --bg: #1e1e1e;
+        --fg: #d4d4d4;
+        --accent: #4ec9b0;
+        --prompt: #569cd6;
+        --muted: #858585;
+        --error: #f48771;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: #0e0e10;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px;
+      }
+      .terminal {
+        width: 100%;
+        max-width: 880px;
+        background: var(--bg);
+        border-radius: 12px;
+        box-shadow: 0 30px 70px rgba(0,0,0,0.5);
+        overflow: hidden;
+        color: var(--fg);
+      }
+      .titlebar {
+        background: #2d2d2d;
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .dot { width: 12px; height: 12px; border-radius: 50%; }
+      .dot.r { background: #ff5f57; }
+      .dot.y { background: #febc2e; }
+      .dot.g { background: #28c840; }
+      .title {
+        flex: 1; text-align: center; font-size: 13px; color: var(--muted);
+      }
+      .body {
+        padding: 18px 20px;
+        height: 480px;
+        overflow-y: auto;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .line { white-space: pre-wrap; }
+      .prompt { color: var(--prompt); }
+      .accent { color: var(--accent); }
+      .muted { color: var(--muted); }
+      .error { color: var(--error); }
+      .input-row { display: flex; gap: 8px; }
+      .input-row input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--fg);
+        font: inherit;
+        outline: none;
+      }
+      .cursor::after {
+        content: "▎";
+        color: var(--fg);
+        animation: blink 1s steps(2) infinite;
+      }
+      @keyframes blink { 50% { opacity: 0; } }
+    </style>
+  </head>
+  <body>
+    <div class="terminal">
+      <div class="titlebar">
+        <span class="dot r"></span>
+        <span class="dot y"></span>
+        <span class="dot g"></span>
+        <span class="title">user@host: ~/project</span>
+      </div>
+      <div class="body" id="body">
+        <div class="line"><span class="accent">welcome</span> to the demo terminal. type <span class="muted">help</span></div>
+        <div class="input-row">
+          <span class="prompt">~/project ❯</span>
+          <input id="input" autofocus autocomplete="off" />
+        </div>
+      </div>
+    </div>
+    <script>
+      const body = document.getElementById('body');
+      const input = document.getElementById('input');
+      const commands = {
+        help: () => 'available: help, ls, pwd, whoami, clear, echo <text>',
+        ls: () => 'README.md  package.json  src/  node_modules/',
+        pwd: () => '/Users/demo/project',
+        whoami: () => 'demo',
+        clear: () => { body.querySelectorAll('.line').forEach(n => n.remove()); return null; },
+      };
+      function print(text, cls) {
+        const div = document.createElement('div');
+        div.className = 'line' + (cls ? ' ' + cls : '');
+        div.textContent = text;
+        body.insertBefore(div, body.lastElementChild);
+      }
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        const raw = input.value.trim();
+        input.value = '';
+        if (!raw) return;
+        print('~/project ❯ ' + raw, 'prompt');
+        const [cmd, ...rest] = raw.split(/\s+/);
+        if (cmd === 'echo') { print(rest.join(' ')); }
+        else if (commands[cmd]) {
+          const out = commands[cmd]();
+          if (out) print(out);
+        }
+        else { print('command not found: ' + cmd, 'error'); }
+        body.scrollTop = body.scrollHeight;
+      });
+    </script>
+  </body>
+</html>
