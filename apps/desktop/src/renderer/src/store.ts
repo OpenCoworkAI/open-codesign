@@ -1140,14 +1140,25 @@ function buildGenerateFixAction(
   };
 }
 
-async function applyGenerateBaseUrlFix(
+export async function applyGenerateBaseUrlFix(
   get: GetState,
   set: SetState,
   providerId: string,
   nextBaseUrl: string,
 ): Promise<void> {
   const api = window.codesign?.config?.updateProvider;
-  if (api === undefined) return;
+  // Don't silently swallow "this app version lacks the IPC" — surface it as a
+  // reportable error so users know why the Apply-fix button did nothing and
+  // can fall back to editing baseUrl manually in Settings.
+  if (api === undefined) {
+    get().reportableErrorToast({
+      code: 'GENERATE_FIX_APPLY_UNAVAILABLE',
+      scope: 'generate',
+      title: tr('notifications.generationFailedFixUnavailable'),
+      description: tr('notifications.generationFailedFixUnavailableDescription'),
+    });
+    return;
+  }
   try {
     const next = await api({ id: providerId, baseUrl: nextBaseUrl });
     set({ config: next });
@@ -1159,7 +1170,7 @@ async function applyGenerateBaseUrlFix(
     get().reportableErrorToast({
       code: 'GENERATE_FIX_APPLY_FAILED',
       scope: 'generate',
-      title: tr('notifications.generationFailed'),
+      title: tr('notifications.generationFailedFixApplyFailed'),
       description: updateErr instanceof Error ? updateErr.message : String(updateErr),
       ...(updateErr instanceof Error && updateErr.stack !== undefined
         ? { stack: updateErr.stack }
