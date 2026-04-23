@@ -215,6 +215,8 @@
         "apiKey": "API Key",
         "apiKeyEditPlaceholder": "留空则保留 {{mask}}",
         "defaultModel": "默认模型",
+        "switchToManual": "手动输入",
+        "switchToDropdown": "从列表选择",
         "test": "测试连接",
         "testOk": "正常 — 共 {{count}} 个模型",
         "save": "保存并继续",
@@ -300,6 +302,15 @@
         "reasoningSaveFailed": "保存推理深度失败",
         "connectionOk": "连接正常",
         "connectionFailed": "连接失败"
+      },
+      "cliProxyApi": {
+        "presetName": "CLIProxyAPI",
+        "presetDescription": "本地反代，将 Claude/Codex/Gemini 的订阅账号包装成统一 API",
+        "apiKeyOptional": "仅当你在 CPA config.yaml 里配置了 api-keys 才需要填",
+        "thinkingHint": "提示：在 model 名后加 `(high)` / `(xhigh)` / `(8192)` 可控制思考力度",
+        "discoveringModels": "正在发现模型…",
+        "discoveredModels": "发现 {{count}} 个模型",
+        "discoveryFailed": "连接 CPA 失败"
       },
       "reasoning": {
         "label": "推理深度",

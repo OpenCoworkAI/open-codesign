@@ -215,6 +215,8 @@
         "apiKey": "API Key",
         "apiKeyEditPlaceholder": "Leave empty to keep {{mask}}",
         "defaultModel": "Default model",
+        "switchToManual": "Enter manually",
+        "switchToDropdown": "Pick from list",
         "test": "Test connection",
         "testOk": "OK — {{count}} models available",
         "save": "Save & continue",
@@ -300,6 +302,15 @@
         "reasoningSaveFailed": "Failed to save reasoning depth",
         "connectionOk": "Connection OK",
         "connectionFailed": "Connection failed"
+      },
+      "cliProxyApi": {
+        "presetName": "CLIProxyAPI",
+        "presetDescription": "Local proxy that wraps Claude/Codex/Gemini OAuth subscriptions",
+        "apiKeyOptional": "API key only required if you configured `api-keys` in CPA config.yaml",
+        "thinkingHint": "Tip: append `(high)` / `(xhigh)` / `(8192)` to model name to control thinking budget",
+        "discoveringModels": "Discovering models...",
+        "discoveredModels": "Found {{count}} models",
+        "discoveryFailed": "Could not connect to CPA"
       },
       "reasoning": {
         "label": "Reasoning depth",
