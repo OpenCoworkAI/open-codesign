@@ -108,6 +108,7 @@ export function AddCustomProviderModal({
   const userPickedModel = useRef(false);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const discoverySeq = useRef(0);
 
   function scheduleDiscovery(currentBaseUrl: string, currentApiKey: string, currentWire: WireApi) {
     if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
@@ -122,6 +123,7 @@ export function AddCustomProviderModal({
 
   async function runDiscovery(currentBaseUrl: string, currentApiKey: string, currentWire: WireApi) {
     if (!window.codesign?.config) return;
+    const seq = ++discoverySeq.current;
     setDiscovery({ kind: 'discovering' });
     try {
       const res = await window.codesign.config.testEndpoint({
@@ -129,6 +131,7 @@ export function AddCustomProviderModal({
         baseUrl: currentBaseUrl.trim(),
         apiKey: currentApiKey.trim(),
       });
+      if (seq !== discoverySeq.current) return;
       if (res.ok && res.models.length > 0) {
         setDiscovery({ kind: 'found', models: res.models });
         if (!userPickedModel.current) {
@@ -139,7 +142,7 @@ export function AddCustomProviderModal({
         setDiscovery({ kind: 'failed' });
       }
     } catch {
-      setDiscovery({ kind: 'failed' });
+      if (seq === discoverySeq.current) setDiscovery({ kind: 'failed' });
     }
   }
 
@@ -152,7 +155,6 @@ export function AddCustomProviderModal({
 
   function handleApiKeyChange(v: string) {
     setApiKey(v);
-    scheduleDiscovery(baseUrl, v, wire);
   }
 
   function handleWireChange(v: WireApi) {
