@@ -411,8 +411,13 @@ export {
   withClaudeCodeIdentity,
 } from './claude-code-compat';
 
-export { completeWithRetry, classifyError, sleepWithAbort } from './retry';
-export type { CompleteWithRetryOptions, RetryReason } from './retry';
+export { completeWithRetry, classifyError, sleepWithAbort, withBackoff } from './retry';
+export type {
+  BackoffOptions,
+  CompleteWithRetryOptions,
+  RetryDecision,
+  RetryReason,
+} from './retry';
 
 export { injectSkillsIntoMessages, formatSkillsForPrompt, filterActive } from './skill-injector';
 

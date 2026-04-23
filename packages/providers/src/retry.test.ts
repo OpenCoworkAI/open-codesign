@@ -1,7 +1,7 @@
 import { type ChatMessage, CodesignError, type ModelRef } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import type { GenerateOptions, GenerateResult } from './index';
-import { type RetryReason, classifyError, completeWithRetry } from './retry';
+import { type RetryReason, classifyError, completeWithRetry, withBackoff } from './retry';
 
 const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
 const MESSAGES: ChatMessage[] = [{ role: 'user', content: 'hi' }];
@@ -206,5 +206,86 @@ describe('completeWithRetry', () => {
     );
     const firstCall = logger.warn.mock.calls.find((c) => c[0] === 'provider.error');
     expect(firstCall?.[1]).toMatchObject({ upstream_request_id: 'req_test' });
+  });
+});
+
+describe('withBackoff', () => {
+  it('returns the result on first-try success without invoking onRetry', async () => {
+    const onRetry = vi.fn();
+    const fn = vi.fn().mockResolvedValueOnce('ok');
+    const out = await withBackoff(fn, { baseDelayMs: 1, onRetry });
+    expect(out).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it('retries on 503 then succeeds and surfaces each attempt via onRetry', async () => {
+    const onRetry = vi.fn<(info: RetryReason) => void>();
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(new HttpError('boom', 503))
+      .mockResolvedValueOnce('ok');
+    const out = await withBackoff(fn, { baseDelayMs: 1, onRetry });
+    expect(out).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry.mock.calls[0]?.[0].reason).toMatch(/server error/);
+  });
+
+  it('retries on 429 and honours Retry-After (delay is at least retryAfterMs)', async () => {
+    const onRetry = vi.fn<(info: RetryReason) => void>();
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(new HttpError('slow', 429, { 'retry-after': '0.05' }))
+      .mockResolvedValueOnce('ok');
+    await withBackoff(fn, { baseDelayMs: 1, onRetry });
+    const info = onRetry.mock.calls[0]?.[0];
+    expect(info?.retryAfterMs).toBe(50);
+    expect(info?.delayMs).toBeGreaterThanOrEqual(50);
+  });
+
+  it('does not retry on a 4xx client error', async () => {
+    const fn = vi.fn().mockRejectedValue(new HttpError('unauthorized', 401));
+    await expect(withBackoff(fn, { baseDelayMs: 1 })).rejects.toThrow(/unauthorized/);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('exhausts maxRetries and rethrows the last error', async () => {
+    const onRetry = vi.fn();
+    const fn = vi.fn().mockRejectedValue(new HttpError('still down', 500));
+    await expect(withBackoff(fn, { baseDelayMs: 1, maxRetries: 3, onRetry })).rejects.toThrow(
+      /still down/,
+    );
+    expect(fn).toHaveBeenCalledTimes(3);
+    expect(onRetry).toHaveBeenCalledTimes(2);
+  });
+
+  it('aborts immediately when signal is already aborted', async () => {
+    const fn = vi.fn().mockResolvedValue('ok');
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(withBackoff(fn, { signal: ctrl.signal })).rejects.toBeInstanceOf(CodesignError);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('aborts mid-backoff when signal fires during retry sleep', async () => {
+    const fn = vi.fn().mockRejectedValue(new HttpError('boom', 503));
+    const ctrl = new AbortController();
+    const promise = withBackoff(fn, {
+      baseDelayMs: 5_000,
+      maxRetries: 5,
+      signal: ctrl.signal,
+    });
+    setTimeout(() => ctrl.abort(), 10);
+    await expect(promise).rejects.toThrow();
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a custom classify override when provided', async () => {
+    const fn = vi.fn().mockRejectedValue(new Error('weird'));
+    const classify = vi.fn(() => ({ retry: false as const, reason: 'never-retry' }));
+    await expect(withBackoff(fn, { baseDelayMs: 1, classify })).rejects.toThrow(/weird/);
+    expect(classify).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });
