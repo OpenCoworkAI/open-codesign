@@ -18,6 +18,7 @@ import {
   looksLikeClaudeOAuthToken,
   shouldForceClaudeCodeIdentity,
 } from './claude-code-compat';
+import { normalizeGeminiModelId } from './gemini-compat';
 
 /** Subset of pi-ai's `ThinkingLevel` we expose. Maps directly to its `reasoning`
  * field, which Anthropic adapters translate to extended-thinking effort/budget
@@ -221,6 +222,11 @@ export async function complete(
   }
   const apiKey = opts.apiKey || 'open-codesign-keyless';
 
+  // Gemini's OpenAI-compat endpoint rejects the `models/` prefix that its own
+  // /models listing returns (issue #175). Normalize on the wire only; Settings
+  // keeps the prefixed form so provider/model UX stays in sync with /models.
+  const effectiveModelId = normalizeGeminiModelId(model.modelId, opts.baseUrl);
+
   const pi = (await import('@mariozechner/pi-ai')) as unknown as {
     getModel: (provider: string, modelId: string) => PiModel | undefined;
     completeSimple: (
@@ -237,12 +243,12 @@ export async function complete(
     ) => Promise<PiAssistantMessage>;
   };
 
-  let piModel = pi.getModel(model.provider, model.modelId);
+  let piModel = pi.getModel(model.provider, effectiveModelId);
   if (!piModel) {
     if (opts.wire !== undefined) {
-      piModel = synthesizeWireModel(model.provider, model.modelId, opts.wire, opts.baseUrl);
+      piModel = synthesizeWireModel(model.provider, effectiveModelId, opts.wire, opts.baseUrl);
     } else if (model.provider === 'openrouter') {
-      piModel = synthesizeOpenRouterModel(model.modelId);
+      piModel = synthesizeOpenRouterModel(effectiveModelId);
     } else {
       throw new CodesignError(
         `Unknown model ${model.provider}:${model.modelId}`,

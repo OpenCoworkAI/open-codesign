@@ -303,4 +303,40 @@ describe('complete', () => {
       ),
     ).rejects.toMatchObject({ code: 'ATTACHMENT_TOO_LARGE' });
   });
+
+  it('strips models/ prefix from modelId when routing through Gemini OpenAI-compat endpoint', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (piModel) => {
+      expect(piModel.id).toBe('gemini-2-pro');
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'hi' }],
+        api: 'openai-completions',
+        provider: 'custom-gemini',
+        model: 'gemini-2-pro',
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'custom-gemini', modelId: 'models/gemini-2-pro' },
+      [{ role: 'user', content: 'hello' }],
+      {
+        apiKey: 'token',
+        wire: 'openai-chat',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      },
+    );
+
+    expect(getModelMock).toHaveBeenCalledWith('custom-gemini', 'gemini-2-pro');
+  });
 });
