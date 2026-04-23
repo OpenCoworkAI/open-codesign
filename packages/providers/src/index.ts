@@ -171,6 +171,42 @@ const EMPTY_USAGE: PiUsage = {
 const MAX_TOTAL_CODEX_IMAGE_BYTES = 4_000_000;
 
 /**
+ * `reasoning: true` on a synthesized PiModel makes pi-ai's openai-responses /
+ * openai-chat adapters write the system prompt with role `'developer'`
+ * instead of `'system'`. That's OpenAI-Responses-only; every OpenAI-compat
+ * gateway out there (DashScope/Qwen, DeepSeek, GLM/BigModel, Moonshot, …)
+ * rejects `developer` with HTTP 400. So only claim reasoning when we
+ * actually know the target accepts it. (#183)
+ */
+function isOpenAIOfficial(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false;
+  return /^https:\/\/api\.openai\.com(\/|$)/.test(baseUrl);
+}
+
+function isReasoningModelId(modelId: string): boolean {
+  // OpenAI reasoning families: o1, o3, o4, gpt-5 (incl. variants like gpt-5-turbo, gpt-5.4)
+  return /^(o[134]|gpt-5)/i.test(modelId);
+}
+
+export function inferReasoning(
+  wire: GenerateOptions['wire'],
+  modelId: string,
+  baseUrl: string | undefined,
+): boolean {
+  switch (wire) {
+    case 'anthropic':
+      return true;
+    case 'openai-responses':
+    case 'openai-codex-responses':
+      return true;
+    case 'openai-chat':
+      return isOpenAIOfficial(baseUrl) && isReasoningModelId(modelId);
+    default:
+      return false;
+  }
+}
+
+/**
  * Synthesize a PiModel for a wire + custom baseUrl so custom provider ids
  * (DeepSeek, Ollama, LiteLLM, Azure, …) route to the correct pi-ai adapter
  * without being in pi-ai's model registry.
@@ -195,7 +231,7 @@ function synthesizeWireModel(
     name: modelId,
     api,
     provider,
-    reasoning: true,
+    reasoning: inferReasoning(wire, modelId, baseUrl),
     input: supportsImageInput ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 131072,
