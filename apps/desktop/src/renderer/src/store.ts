@@ -1622,15 +1622,6 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     const shouldIncludeCanvasContext =
       canvasRevisionAtSend > get().lastGeneratedCanvasRevision &&
       (hasCanvasContent(canvasSceneAtSend) || canvasImportedFilesAtSend.length > 0);
-    if (
-      designIdAtStart &&
-      !input.silent &&
-      get().autoContinueIncompleteFired.has(designIdAtStart)
-    ) {
-      const nextFired = new Set(get().autoContinueIncompleteFired);
-      nextFired.delete(designIdAtStart);
-      set({ autoContinueIncompleteFired: nextFired });
-    }
     set(() => ({
       isGenerating: true,
       activeGenerationId: generationId,
@@ -1688,9 +1679,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         kind: 'user',
         payload: {
           text: request.prompt,
-          ...(shouldIncludeCanvasContext
-            ? { contextBadges: [tr('canvas.contextBadge')] }
-            : {}),
+          ...(shouldIncludeCanvasContext ? { contextBadges: [tr('canvas.contextBadge')] } : {}),
         },
       });
     }

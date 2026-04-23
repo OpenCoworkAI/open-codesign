@@ -286,8 +286,10 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const canvasTabs = useCodesignStore((s) => s.canvasTabs);
   const activeCanvasTab = useCodesignStore((s) => s.activeCanvasTab);
   const errorMessage = useCodesignStore((s) => s.errorMessage);
+  const iframeErrors = useCodesignStore((s) => s.iframeErrors);
   const retry = useCodesignStore((s) => s.retryLastPrompt);
   const clearError = useCodesignStore((s) => s.clearError);
+  const clearIframeErrors = useCodesignStore((s) => s.clearIframeErrors);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
@@ -469,6 +471,9 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
   const activeHasHtml =
     currentDesignId !== null && poolEntries.some((e) => e.id === currentDesignId);
+  const latestIframeError = iframeErrors[iframeErrors.length - 1] ?? null;
+  const friendlyIframeError =
+    latestIframeError !== null ? humanizePreviewError(latestIframeError, t) : null;
 
   // When a design already has persisted content (thumbnail from a prior save,
   // or chat history), the preview IS coming — we're just waiting on the IPC

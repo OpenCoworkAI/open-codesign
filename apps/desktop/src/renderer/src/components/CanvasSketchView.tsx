@@ -27,7 +27,9 @@ export function CanvasSketchView() {
   const canvasSceneLoaded = useCodesignStore((s) => s.canvasSceneLoaded);
   const canvasSeed = useCodesignStore((s) => s.canvasSeed);
   const ensureCurrentDesign = useCodesignStore((s) => s.ensureCurrentDesign);
-  const loadCanvasStateForCurrentDesign = useCodesignStore((s) => s.loadCanvasStateForCurrentDesign);
+  const loadCanvasStateForCurrentDesign = useCodesignStore(
+    (s) => s.loadCanvasStateForCurrentDesign,
+  );
 
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const saveTimerRef = useRef<number | null>(null);

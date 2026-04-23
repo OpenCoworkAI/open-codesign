@@ -216,15 +216,15 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
                     <span
                       className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
                       title={
-                        canvasWillBeSent
-                          ? t('canvas.contextReady')
-                          : t('canvas.contextUpToDate')
+                        canvasWillBeSent ? t('canvas.contextReady') : t('canvas.contextUpToDate')
                       }
                     >
                       <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
                         {t('canvas.canvasTab')}
                       </span>
-                      <span>{canvasWillBeSent ? t('canvas.contextReady') : t('canvas.contextUpToDate')}</span>
+                      <span>
+                        {canvasWillBeSent ? t('canvas.contextReady') : t('canvas.contextUpToDate')}
+                      </span>
                     </span>
                   ) : null}
                   {referenceUrl.trim() ? (

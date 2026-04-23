@@ -258,39 +258,6 @@ describe('useCodesignStore generation cancellation', () => {
   });
 });
 
-describe('useCodesignStore auto-continue incomplete todos', () => {
-  it('fires one silent continuation per design until a new explicit prompt resets the guard', async () => {
-    const sendPromptMock = vi.fn(async () => undefined);
-    const mockedSendPrompt = sendPromptMock as unknown as SendPromptFn;
-
-    useCodesignStore.setState({
-      currentDesignId: 'design-incomplete',
-      isGenerating: false,
-      autoContinueIncompleteFired: new Set<string>(),
-      sendPrompt: mockedSendPrompt,
-    });
-
-    const first = useCodesignStore
-      .getState()
-      .tryAutoContinueIncomplete('design-incomplete', ['Finish the final screen']);
-    const second = useCodesignStore
-      .getState()
-      .tryAutoContinueIncomplete('design-incomplete', ['Finish the final screen']);
-
-    expect(first).toBe(true);
-    expect(second).toBe(false);
-    expect(sendPromptMock).toHaveBeenCalledTimes(1);
-    expect(sendPromptMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        silent: true,
-        prompt: expect.stringContaining('Finish the final screen'),
-      }),
-    );
-
-    useCodesignStore.setState({ sendPrompt: initialState.sendPrompt });
-  });
-});
-
 describe('useCodesignStore canvas context attachments', () => {
   it('shows canvas context in the user chat payload and sends fresh canvas files when dirty', async () => {
     const append = vi.fn(async (input: { designId: string; kind: string; payload: unknown }) => ({
@@ -303,10 +270,12 @@ describe('useCodesignStore canvas context attachments', () => {
       createdAt: new Date().toISOString(),
       schemaVersion: 1,
     }));
-    const generate = vi.fn(async (payload: { attachments: Array<{ path: string; name: string }> }) => ({
-      artifacts: [],
-      message: 'done',
-    }));
+    const generate = vi.fn(
+      async (payload: { attachments: Array<{ path: string; name: string }> }) => ({
+        artifacts: [],
+        message: 'done',
+      }),
+    );
 
     vi.stubGlobal('window', {
       codesign: {

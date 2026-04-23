@@ -7,7 +7,10 @@ import { useCodesignStore } from '../store';
  * from broken snapshots surface as "Inline Babel script" — the user can't
  * do anything about them except regenerate, so say that plainly.
  */
-function humanizeError(raw: string, t: (k: string, d?: Record<string, unknown>) => string): string {
+export function humanizePreviewError(
+  raw: string,
+  t: (k: string, d?: Record<string, unknown>) => string,
+): string {
   if (/Inline Babel script/i.test(raw) || /Unexpected token/.test(raw)) {
     return t('preview.error.brokenJsx', {
       defaultValue:
@@ -29,7 +32,7 @@ export function CanvasErrorBar() {
   if (errors.length === 0) return null;
   const latest = errors[errors.length - 1];
   if (!latest) return null;
-  const friendly = humanizeError(latest, t);
+  const friendly = humanizePreviewError(latest, t);
   return (
     <div
       role="alert"
