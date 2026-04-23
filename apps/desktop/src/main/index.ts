@@ -321,12 +321,14 @@ export function createRuntimeTextEditorFs({
       mkdirSync(path_module.dirname(destinationPath), { recursive: true });
       writeFileSync(destinationPath, content, 'utf8');
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       logger.error('runtime.fs.writeThrough.fail', {
         designId,
         filePath,
         workspacePath: design.workspacePath,
-        message: err instanceof Error ? err.message : String(err),
+        message,
       });
+      throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
     }
   }
 

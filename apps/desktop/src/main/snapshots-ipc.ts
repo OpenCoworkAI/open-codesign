@@ -410,7 +410,14 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       } catch (err) {
         if (err instanceof CodesignError) throw err;
         if (err instanceof Error && err.message.includes('already bound')) {
-          throw new CodesignError(err.message, 'IPC_CONFLICT');
+          throw new CodesignError(err.message, 'IPC_CONFLICT', { cause: err });
+        }
+        if (
+          err instanceof Error &&
+          (err.message.includes('Workspace migration collision') ||
+            err.message.includes('Tracked workspace file missing'))
+        ) {
+          throw new CodesignError(err.message, 'IPC_BAD_INPUT', { cause: err });
         }
         throw new CodesignError('Workspace update failed', 'IPC_DB_ERROR', { cause: err });
       }

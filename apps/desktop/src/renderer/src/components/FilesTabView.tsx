@@ -50,7 +50,11 @@ function WorkspaceSection() {
       setPicking(true);
       const path = await window.codesign.snapshots.pickWorkspaceFolder();
       if (path && currentDesign && currentDesignId) {
-        if (currentDesign.workspacePath && currentDesign.workspacePath !== path) {
+        const normalizePath = (p: string) => p.replaceAll('\\', '/').replace(/\/+$/, '');
+        if (
+          currentDesign.workspacePath &&
+          normalizePath(currentDesign.workspacePath) !== normalizePath(path)
+        ) {
           requestWorkspaceRebind(currentDesign, path);
         } else if (!currentDesign.workspacePath) {
           await window.codesign.snapshots.updateWorkspace(currentDesignId, path, false);
