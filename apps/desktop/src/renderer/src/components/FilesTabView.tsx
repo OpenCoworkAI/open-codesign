@@ -35,8 +35,15 @@ function WorkspaceSection() {
     window.codesign?.snapshots
       .checkWorkspaceFolder?.(currentDesignId)
       .then((r) => setFolderExists(r.exists))
-      .catch(() => setFolderExists(null));
-  }, [currentDesignId, workspacePath]);
+      .catch((err) => {
+        setFolderExists(null);
+        useCodesignStore.getState().pushToast({
+          variant: 'error',
+          title: t('canvas.workspace.updateFailed'),
+          description: err instanceof Error ? err.message : t('errors.unknown'),
+        });
+      });
+  }, [currentDesignId, workspacePath, t]);
 
   async function handlePickWorkspace() {
     if (!window.codesign?.snapshots.pickWorkspaceFolder) return;
@@ -67,7 +74,7 @@ function WorkspaceSection() {
     }
   }
 
-  function handleOpenWorkspace() {
+  async function handleOpenWorkspace() {
     if (!currentDesignId || !window.codesign?.snapshots.openWorkspaceFolder) return;
     if (isCurrentDesignGenerating) {
       useCodesignStore
@@ -75,16 +82,24 @@ function WorkspaceSection() {
         .pushToast({ variant: 'info', title: t('canvas.workspace.busyGenerating') });
       return;
     }
-    void window.codesign.snapshots.openWorkspaceFolder(currentDesignId);
+    try {
+      await window.codesign.snapshots.openWorkspaceFolder(currentDesignId);
+    } catch (err) {
+      useCodesignStore.getState().pushToast({
+        variant: 'error',
+        title: t('canvas.workspace.updateFailed'),
+        description: err instanceof Error ? err.message : t('errors.unknown'),
+      });
+    }
   }
 
   return (
     <div className="flex items-center gap-[var(--space-2)] px-[var(--space-4)] py-[var(--space-2)] border-b border-[var(--color-border-muted)] min-w-0">
-      <span className="text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium shrink-0">
+      <span className="text-[var(--text-xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium shrink-0">
         {t('canvas.workspace.sectionTitle')}
       </span>
       <span
-        className="flex-1 min-w-0 truncate text-[10px] text-[var(--color-text-secondary)]"
+        className="flex-1 min-w-0 truncate text-[var(--text-xs)] text-[var(--color-text-secondary)]"
         title={workspacePath ?? undefined}
         style={{ fontFamily: 'var(--font-mono)' }}
       >
@@ -108,7 +123,7 @@ function WorkspaceSection() {
           type="button"
           onClick={handlePickWorkspace}
           disabled={disabled}
-          className="h-6 px-2 rounded-[var(--radius-sm)] text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1"
+          className="h-6 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1"
           title={workspacePath ? t('canvas.workspace.change') : t('canvas.workspace.choose')}
         >
           <Folder className="w-3 h-3" aria-hidden />
@@ -119,7 +134,7 @@ function WorkspaceSection() {
             type="button"
             onClick={handleOpenWorkspace}
             disabled={isCurrentDesignGenerating}
-            className="h-6 px-2 rounded-[var(--radius-sm)] text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="h-6 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title={t('canvas.workspace.open')}
           >
             <FolderOpen className="w-3 h-3" aria-hidden />
@@ -191,11 +206,11 @@ export function FilesTabView() {
         <WorkspaceSection />
         <div className="px-[var(--space-6)] py-[var(--space-6)]">
           <div className="mb-[var(--space-4)] flex items-center gap-[var(--space-2)]">
-            <h2 className="text-[11px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium m-0">
+            <h2 className="text-[var(--text-xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium m-0">
               {t('canvas.files.sectionTitle')}
             </h2>
             <span
-              className="inline-flex items-center justify-center min-w-[18px] h-[16px] px-[5px] rounded-[var(--radius-sm)] bg-[var(--color-background-secondary)] text-[10px] text-[var(--color-text-muted)]"
+              className="inline-flex items-center justify-center min-w-[18px] h-[var(--space-4)] px-[5px] rounded-[var(--radius-sm)] bg-[var(--color-background-secondary)] text-[var(--text-xs)] text-[var(--color-text-muted)]"
               style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
             >
               {files.length}
@@ -240,7 +255,7 @@ export function FilesTabView() {
                         {name}
                       </span>
                       <span
-                        className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-[var(--tracking-label)]"
+                        className="text-[var(--text-xs)] text-[var(--color-text-muted)] uppercase tracking-[var(--tracking-label)]"
                         style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
                       >
                         {formatBytes(f.size)}
@@ -252,7 +267,7 @@ export function FilesTabView() {
             })}
           </ul>
 
-          <p className="mt-[var(--space-6)] text-[11px] text-[var(--color-text-muted)] leading-[var(--leading-body)]">
+          <p className="mt-[var(--space-6)] text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-body)]">
             {t('canvas.previewHint')}
           </p>
         </div>
@@ -268,12 +283,12 @@ export function FilesTabView() {
           <button
             type="button"
             onClick={() => selectedPath && openFileTab(selectedPath)}
-            className="text-[11px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
+            className="text-[var(--text-xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
           >
             {t('canvas.openInTab')}
           </button>
         </div>
-        <div className="flex-1 min-h-0 bg-white">
+        <div className="flex-1 min-h-0 bg-[var(--color-background-secondary)]">
           {srcDoc ? (
             <iframe
               ref={iframeRef}
