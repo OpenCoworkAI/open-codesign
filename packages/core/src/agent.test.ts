@@ -44,6 +44,14 @@ interface AgentScript {
    */
   promptThrowsTimes?: number;
   /**
+   * When true together with `promptThrows`, the mock pushes a partial
+   * assistant message onto `agent.state.messages` BEFORE throwing on
+   * each failing attempt. Simulates "model streamed tokens / tool call
+   * then the connection dropped" — the real pi-agent-core path where a
+   * retry at the outer send boundary would replay tool side effects.
+   */
+  promptPushesAssistantBeforeThrow?: boolean;
+  /**
    * When set, the mock invokes `options.getApiKey` before emitting the
    * assistant response and — if it throws — converts the throw into an
    * 'error' AgentMessage (matching pi-agent-core's `handleRunFailure`
@@ -72,7 +80,31 @@ vi.mock('@mariozechner/pi-agent-core', () => {
       this.call.prompts.push({ message });
       if (scriptedAgent.promptThrows) {
         const limit = scriptedAgent.promptThrowsTimes ?? Number.POSITIVE_INFINITY;
-        if (this.call.prompts.length <= limit) throw scriptedAgent.promptThrows;
+        if (this.call.prompts.length <= limit) {
+          if (scriptedAgent.promptPushesAssistantBeforeThrow) {
+            const partial: AgentMessage = {
+              role: 'assistant',
+              // biome-ignore lint/suspicious/noExplicitAny: same.
+              api: 'anthropic-messages' as any,
+              // biome-ignore lint/suspicious/noExplicitAny: same.
+              provider: 'anthropic' as any,
+              model: 'mock-model',
+              content: [{ type: 'text', text: 'partial tokens before drop' }],
+              usage: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 0,
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+              },
+              stopReason: 'error',
+              timestamp: Date.now(),
+            };
+            this.state.messages.push(partial);
+          }
+          throw scriptedAgent.promptThrows;
+        }
       }
 
       // Simulate pi-agent-core's per-turn getApiKey invocation. Real
@@ -557,6 +589,28 @@ describe('generateViaAgent() — first-turn retry', () => {
     scriptedAgent = {
       assistantText: '',
       promptThrows: new HttpError('unauthorized', 401),
+    };
+    await expect(
+      generateViaAgent({
+        prompt: 'design a dashboard',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      }),
+    ).rejects.toBeTruthy();
+    expect(agentCalls[0]?.prompts.length).toBe(1);
+  });
+
+  it('does not retry once the agent has produced an assistant message (side-effect guard)', async () => {
+    // First-turn + transient 500, BUT the mock pushes a partial assistant
+    // message before throwing, simulating "model already emitted tokens /
+    // tool calls before the connection dropped". Replaying would re-run
+    // any text_editor / set_todos side effects, so retry must be blocked
+    // regardless of the HTTP status. A single attempt is the only safe move.
+    scriptedAgent = {
+      assistantText: '',
+      promptThrows: new HttpError('upstream 500', 500),
+      promptPushesAssistantBeforeThrow: true,
     };
     await expect(
       generateViaAgent({

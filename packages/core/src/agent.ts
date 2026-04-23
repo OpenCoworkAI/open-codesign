@@ -30,8 +30,9 @@ import {
 } from '@mariozechner/pi-agent-core';
 import type { Message as PiAiMessage, Model as PiAiModel } from '@mariozechner/pi-ai';
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
-import type { RetryReason } from '@open-codesign/providers';
+import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
+  classifyError,
   claudeCodeIdentityHeaders,
   looksLikeClaudeOAuthToken,
   shouldForceClaudeCodeIdentity,
@@ -823,20 +824,43 @@ export async function generateViaAgent(
 
   log.info('[generate] step=send_request', ctx);
   const sendStart = Date.now();
-  // First-turn-only retry. Multi-turn requests carry half-complete agent
-  // state (tool calls mid-flight, transcript accumulated in pi-agent-core's
-  // internal loop) — retrying would replay partial progress and corrupt the
-  // session. `input.history.length === 0` is the cleanest signal that this
-  // call starts a fresh agent, so retry there and only there.
+  // First-turn-only retry, further guarded by a side-effect check. Multi-turn
+  // requests carry half-complete agent state (tool calls mid-flight, transcript
+  // accumulated in pi-agent-core's internal loop) — retrying would replay
+  // partial progress and corrupt the session. Even on the first turn, retrying
+  // is safe only before any assistant message has landed in `agent.state`:
+  // once the model has emitted tokens or tool calls, side effects (text_editor
+  // writes, set_todos state) have already fired and a retry would re-run them.
+  // The pre-attempt snapshot of `agent.state.messages.length` lets us detect
+  // whether the failed attempt produced any such artefact and, if so, mark the
+  // error as non-retryable.
   const isFirstTurn = input.history.length === 0;
+  const RETRY_BLOCKED = Symbol.for('open-codesign.retry.blocked');
+  type RetryBlockedError = Error & { [RETRY_BLOCKED]?: true };
   const sendOnce = async (): Promise<void> => {
-    await agent.prompt(userContent);
-    await agent.waitForIdle();
+    const preLen = agent.state.messages.length;
+    try {
+      await agent.prompt(userContent);
+      await agent.waitForIdle();
+    } catch (err) {
+      if (agent.state.messages.length > preLen) {
+        const tagged = (err instanceof Error ? err : new Error(String(err))) as RetryBlockedError;
+        tagged[RETRY_BLOCKED] = true;
+        throw tagged;
+      }
+      throw err;
+    }
   };
   try {
     if (isFirstTurn) {
       const retryOpts: Parameters<typeof withBackoff>[1] = {
         maxRetries: 3,
+        classify: (err): RetryDecision => {
+          if ((err as RetryBlockedError)[RETRY_BLOCKED]) {
+            return { retry: false, reason: 'agent already produced side effects' };
+          }
+          return classifyError(err);
+        },
         onRetry: (info: RetryReason) => {
           log.warn('[generate] step=send_request.retry', {
             ...ctx,
