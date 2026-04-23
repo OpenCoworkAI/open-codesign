@@ -77,6 +77,7 @@ import { resolveActiveApiKey, resolveApiKeyWithKeylessFallback } from './resolve
 import { withRun } from './runContext';
 import {
   getDesign,
+  normalizeDesignFilePath,
   pruneDiagnosticEvents,
   recordDiagnosticEvent,
   safeInitSnapshotsDb,
@@ -313,23 +314,26 @@ export function createRuntimeTextEditorFs({
 
   async function persistMutation(filePath: string, content: string): Promise<void> {
     if (designId === null || db === null) return;
-    const persisted = upsertDesignFile(db, designId, filePath, content);
+    const normalizedPath = normalizeDesignFilePath(filePath);
     const design = getDesign(db, designId);
-    if (design === null || design.workspacePath === null) return;
-    const destinationPath = path_module.join(design.workspacePath, persisted.path);
-    try {
-      await mkdir(path_module.dirname(destinationPath), { recursive: true });
-      await writeFile(destinationPath, content, 'utf8');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error('runtime.fs.writeThrough.fail', {
-        designId,
-        filePath,
-        workspacePath: design.workspacePath,
-        message,
-      });
-      throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
+    if (design?.workspacePath !== null && design !== null) {
+      const destinationPath = path_module.join(design.workspacePath, normalizedPath);
+      try {
+        await mkdir(path_module.dirname(destinationPath), { recursive: true });
+        await writeFile(destinationPath, content, 'utf8');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('runtime.fs.writeThrough.fail', {
+          designId,
+          filePath,
+          workspacePath: design.workspacePath,
+          message,
+        });
+        throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
+      }
     }
+
+    upsertDesignFile(db, designId, normalizedPath, content);
   }
 
   const fs = {

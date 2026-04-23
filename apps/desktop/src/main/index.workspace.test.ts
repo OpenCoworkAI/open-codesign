@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { existsSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -143,6 +143,36 @@ describe('createRuntimeTextEditorFs', () => {
     }
   });
 
+  it('does not create a db row when bound workspace write-through fails', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Workspace');
+    const workspaceDir = makeTempDir('ocd-runtime-create-fail-');
+    const workspaceFile = path.join(workspaceDir, 'occupied');
+    writeFileSync(workspaceFile, 'occupied', 'utf8');
+    updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceFile));
+    const sendEvent = vi.fn();
+    const logger = { error: vi.fn() };
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: design.id,
+      generationId: 'gen-create-workspace-fail',
+      logger,
+      previousHtml: null,
+      sendEvent,
+    });
+
+    try {
+      await expect(fs.create('nested/index.html', '<main>created</main>')).rejects.toThrow(
+        'Workspace write-through failed for nested/index.html',
+      );
+
+      expect(viewDesignFile(db, design.id, 'nested/index.html')).toBeNull();
+      expect(logger.error).toHaveBeenCalled();
+    } finally {
+      cleanupDir(workspaceDir);
+    }
+  });
+
   it('updates db and disk for fs.strReplace in a bound workspace', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db, 'Workspace');
@@ -174,6 +204,38 @@ describe('createRuntimeTextEditorFs', () => {
         path: 'index.html',
         content: '<main>after</main>',
       });
+    } finally {
+      cleanupDir(workspaceDir);
+    }
+  });
+
+  it('does not advance db content when bound workspace strReplace write-through fails', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Workspace');
+    const workspaceDir = makeTempDir('ocd-runtime-replace-fail-');
+    const workspaceFile = path.join(workspaceDir, 'occupied');
+    writeFileSync(workspaceFile, 'occupied', 'utf8');
+    const sendEvent = vi.fn();
+    const logger = { error: vi.fn() };
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: design.id,
+      generationId: 'gen-replace-workspace-fail',
+      logger,
+      previousHtml: null,
+      sendEvent,
+    });
+
+    try {
+      await fs.create('index.html', '<main>before</main>');
+      updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceFile));
+
+      await expect(fs.strReplace('index.html', 'before', 'after')).rejects.toThrow(
+        'Workspace write-through failed for index.html',
+      );
+
+      expect(viewDesignFile(db, design.id, 'index.html')?.content).toBe('<main>before</main>');
+      expect(logger.error).toHaveBeenCalled();
     } finally {
       cleanupDir(workspaceDir);
     }
