@@ -555,4 +555,22 @@ describe('inferReasoning', () => {
   it('returns false when wire is undefined', () => {
     expect(inferReasoning(undefined, 'gpt-4o', 'https://api.openai.com/v1')).toBe(false);
   });
+
+  it('returns true for third-party openai-chat with reasoning model ID (issue #188)', () => {
+    // univibe/custom proxy with Claude 4 model
+    expect(inferReasoning('openai-chat', 'claude-opus-4-6', 'https://api.univibe.cc/openai')).toBe(true);
+    expect(inferReasoning('openai-chat', 'claude-sonnet-4-6', 'https://api.univibe.cc/openai')).toBe(true);
+    // OpenRouter-style paths on custom proxy
+    expect(inferReasoning('openai-chat', 'anthropic/claude-opus-4-6', 'https://my-proxy.example/v1')).toBe(true);
+    // o1 on custom proxy
+    expect(inferReasoning('openai-chat', 'o1-mini', 'https://my-proxy.example/v1')).toBe(true);
+    // qwen/qwq on custom proxy
+    expect(inferReasoning('openai-chat', 'qwen/qwq-32b-preview', 'https://my-proxy.example/v1')).toBe(true);
+  });
+
+  it('returns false for third-party openai-chat with non-reasoning model ID', () => {
+    expect(inferReasoning('openai-chat', 'qwen3.6-plus', 'https://dashscope.aliyuncs.com/compatible-mode/v1')).toBe(false);
+    expect(inferReasoning('openai-chat', 'deepseek-chat', 'https://api.deepseek.com/v1')).toBe(false);
+    expect(inferReasoning('openai-chat', 'glm-4.6v', 'https://open.bigmodel.cn/api/paas/v4')).toBe(false);
+  });
 });

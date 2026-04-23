@@ -189,6 +189,24 @@ function isReasoningModelId(modelId: string): boolean {
   return /^(o[134]|gpt-5)/i.test(modelId);
 }
 
+/**
+ * Matches reasoning-capable model IDs commonly proxied through OpenAI-compatible
+ * gateways (OpenRouter, univibe, sub2api, etc). This pattern matches the same
+ * set that OPENROUTER_REASONING_MODEL_RE uses for OpenRouter, but applies to
+ * custom openai-chat wire endpoints as well.
+ */
+const REASONING_MODEL_ID_PATTERN = new RegExp(
+  [
+    ':thinking$',
+    '(^|/)claude-(?:opus|sonnet)-4',
+    '^o1[-.]', '^o3[-.]', '^o4[-.]', '^gpt-5[-.]',
+    '^minimax/minimax-m\\d',
+    '^deepseek/deepseek-r\\d',
+    '^qwen/qwq',
+  ].join('|'),
+  'i',
+);
+
 export function inferReasoning(
   wire: GenerateOptions['wire'],
   modelId: string,
@@ -201,7 +219,14 @@ export function inferReasoning(
     case 'openai-codex-responses':
       return true;
     case 'openai-chat':
-      return isOpenAIOfficial(baseUrl) && isReasoningModelId(modelId);
+      // For official OpenAI, check both base URL and model ID pattern
+      if (isOpenAIOfficial(baseUrl)) {
+        return isReasoningModelId(modelId);
+      }
+      // For third-party OpenAI-compatible gateways, heuristically match
+      // common reasoning model IDs — many gateways still require the
+      // reasoning flag to get extended thinking output.
+      return REASONING_MODEL_ID_PATTERN.test(modelId);
     default:
       return false;
   }
