@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   ERROR_CODES,
   type SupportedOnboardingProvider,
@@ -14,7 +15,8 @@ import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
 import { getCodexTokenStore } from './codex-oauth-ipc';
 import { ipcMain } from './electron-runtime';
 import { getApiKeyForProvider, getCachedConfig } from './onboarding-ipc';
-import { isKeylessProviderAllowed } from './provider-settings';
+import { isKeylessProviderAllowed, resolveProviderConfig } from './provider-settings';
+import { resolveApiKeyWithKeylessFallback } from './resolve-api-key';
 
 // Re-export so existing importers (tests, other main-process modules) keep
 // working after the helpers moved to `./auth-headers` to break a circular
@@ -363,109 +365,96 @@ export interface ActiveProviderCredentials {
   httpHeaders?: Record<string, string>;
 }
 
-function resolveCredentialsForProvider(
+export function resolveCredentialsForProvider(
   providerId: string,
-): ActiveProviderCredentials | ConnectionTestError {
+): Promise<ActiveProviderCredentials | ConnectionTestError> {
   const cfg = getCachedConfig();
   if (cfg === null || providerId.length === 0) {
-    return {
+    return Promise.resolve({
       ok: false,
       code: 'IPC_BAD_INPUT',
       message: 'No active provider configured',
       hint: 'Complete onboarding first',
-    };
+    });
   }
-  const entry =
-    cfg.providers[providerId] ??
-    (isSupportedOnboardingProvider(providerId) ? BUILTIN_PROVIDERS[providerId] : undefined);
-  if (entry === undefined) {
-    return {
-      ok: false,
-      code: 'IPC_BAD_INPUT',
-      message: `Provider "${providerId}" not found in config`,
-      hint: 'Re-add the provider from Settings',
-    };
-  }
-  let apiKey: string;
+  let resolved: ReturnType<typeof resolveProviderConfig>;
   try {
-    apiKey = getApiKeyForProvider(providerId);
+    resolved = resolveProviderConfig(cfg, providerId);
   } catch (err) {
-    // No stored key — provider may be keyless (IP-whitelisted proxy).
-    if (!isKeylessProviderAllowed(providerId, entry)) {
-      return {
-        ok: false,
-        code: 'IPC_BAD_INPUT',
-        message:
-          err instanceof Error ? err.message : `No API key stored for provider "${providerId}"`,
-        hint: 'Open Settings and import Codex again, or add an API key for this provider',
-      };
-    }
-    apiKey = '';
+    return Promise.resolve(mapCredentialResolutionError(providerId, err));
   }
-  return {
-    provider: providerId,
-    wire: entry.wire,
-    apiKey,
-    baseUrl: entry.baseUrl,
-    ...(entry.httpHeaders !== undefined ? { httpHeaders: entry.httpHeaders } : {}),
-  };
+  return resolveApiKeyWithKeylessFallback(providerId, resolved.allowKeyless, {
+    getCodexAccessToken: () => getCodexTokenStore().getValidAccessToken(),
+    getApiKeyForProvider,
+  })
+    .then((apiKey) => ({
+      provider: providerId,
+      wire: resolved.wire,
+      apiKey,
+      baseUrl: resolved.baseUrl,
+      ...(resolved.httpHeaders !== undefined ? { httpHeaders: resolved.httpHeaders } : {}),
+    }))
+    .catch((err: unknown) => mapCredentialResolutionError(providerId, err));
 }
 
-function resolveActiveCredentials(): ActiveProviderCredentials | ConnectionTestError {
+export function resolveActiveCredentials(): Promise<
+  ActiveProviderCredentials | ConnectionTestError
+> {
   const cfg = getCachedConfig();
   const active = cfg?.activeProvider;
   if (active === undefined || active.length === 0) {
-    return {
+    return Promise.resolve({
       ok: false,
       code: 'IPC_BAD_INPUT',
       message: 'No active provider configured',
       hint: 'Complete onboarding first',
-    };
+    });
   }
   return resolveCredentialsForProvider(active);
 }
 
-async function testChatGPTCodexOAuth(): Promise<ConnectionTestResponse> {
-  let stored: Awaited<ReturnType<ReturnType<typeof getCodexTokenStore>['read']>>;
-  try {
-    stored = await getCodexTokenStore().read();
-  } catch (err) {
-    return {
-      ok: false,
-      code: '401',
-      message: err instanceof Error ? err.message : String(err),
-      hint: 'ChatGPT 订阅凭证读取失败，请到 Settings 重新登录',
-    };
+function mapCredentialResolutionError(providerId: string, err: unknown): ConnectionTestError {
+  if (err instanceof CodesignError) {
+    if (
+      providerId === CHATGPT_CODEX_PROVIDER_ID &&
+      err.code === ERROR_CODES.PROVIDER_AUTH_MISSING
+    ) {
+      return {
+        ok: false,
+        code: '401',
+        message: err.message,
+        hint: 'ChatGPT subscription sign-in expired. Re-login from Settings.',
+      };
+    }
+    if (
+      err.code === ERROR_CODES.PROVIDER_NOT_SUPPORTED ||
+      err.code === ERROR_CODES.PROVIDER_KEY_MISSING ||
+      err.code === ERROR_CODES.PROVIDER_AUTH_MISSING
+    ) {
+      return {
+        ok: false,
+        code: 'IPC_BAD_INPUT',
+        message: err.message,
+        hint: 'Open Settings and import Codex again, or add an API key for this provider',
+      };
+    }
   }
-  if (stored === null) {
-    return {
-      ok: false,
-      code: '401',
-      message: 'No ChatGPT OAuth token stored',
-      hint: 'ChatGPT 订阅未登录，请到 Settings 登录',
-    };
-  }
-  if (stored.expiresAt < Date.now()) {
-    return {
-      ok: false,
-      code: '401',
-      message: 'ChatGPT OAuth token expired',
-      hint: 'ChatGPT 订阅登录已过期，请重新登录',
-    };
-  }
-  return { ok: true };
+  return {
+    ok: false,
+    code: 'IPC_BAD_INPUT',
+    message: err instanceof Error ? err.message : `Failed to resolve provider "${providerId}"`,
+    hint: 'Open Settings and import Codex again, or add an API key for this provider',
+  };
 }
 
 export async function runProviderTest(
   creds: ActiveProviderCredentials,
 ): Promise<ConnectionTestResponse> {
-  // ChatGPT subscription uses OAuth + ChatGPT-Account-Id headers; its host
-  // has no `/models` endpoint that a generic Bearer probe can reach. A plain
-  // HTTP probe would return 401 here and render as the misleading "API key
-  // 错误或权限不足" hint — so we check the OAuth token store directly and
-  // surface a login-specific hint instead.
+  // ChatGPT subscription has no generic /models probe path that matches the
+  // runtime SDK route. Once the OAuth bearer resolves via the same credential
+  // helper runtime uses, treat the connection test as passed.
   if (creds.wire === 'openai-codex-responses') {
-    return testChatGPTCodexOAuth();
+    return { ok: true };
   }
 
   const { url, normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
@@ -697,7 +686,7 @@ export function registerConnectionIpc(): void {
 
   // Tests the currently active provider using the stored (encrypted) key — no key passed from renderer.
   ipcMain.handle('connection:v1:test-active', async (): Promise<ConnectionTestResponse> => {
-    const creds = resolveActiveCredentials();
+    const creds = await resolveActiveCredentials();
     if (!('provider' in creds)) return creds;
     return runProviderTest(creds);
   });
@@ -715,7 +704,7 @@ export function registerConnectionIpc(): void {
           hint: 'Internal error — missing provider id',
         };
       }
-      const creds = resolveCredentialsForProvider(raw);
+      const creds = await resolveCredentialsForProvider(raw);
       if (!('provider' in creds)) return creds;
       return runProviderTest(creds);
     },

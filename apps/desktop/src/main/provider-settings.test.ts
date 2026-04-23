@@ -11,6 +11,7 @@ import {
   getAddProviderDefaults,
   isKeylessProviderAllowed,
   resolveActiveModel,
+  resolveProviderConfig,
   toProviderRows,
 } from './provider-settings';
 
@@ -458,5 +459,63 @@ describe('resolveActiveModel', () => {
         modelId: 'gpt-5.4',
       }),
     ).toThrowError(CodesignError);
+  });
+});
+
+describe('resolveProviderConfig', () => {
+  it('resolves the stored provider contract for a saved provider id', () => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      secrets: { openai: { ciphertext: 'enc-oai' } },
+      baseUrls: { openai: 'https://api.duckcoding.ai/v1' },
+    });
+
+    const result = resolveProviderConfig(cfg, 'openai');
+
+    expect(result).toMatchObject({
+      provider: 'openai',
+      defaultModel: 'gpt-4o',
+      baseUrl: 'https://api.duckcoding.ai/v1',
+      wire: 'openai-chat',
+      allowKeyless: false,
+    });
+  });
+
+  it('allows keyless imported providers and carries their stored wire/baseUrl', () => {
+    const cfg = makeCfg({
+      provider: 'codex-proxy',
+      modelPrimary: 'gpt-5.3-codex',
+      providers: {
+        'codex-proxy': {
+          id: 'codex-proxy',
+          name: 'Codex (imported)',
+          builtin: false,
+          wire: 'openai-responses',
+          baseUrl: 'https://proxy.example.com/v1',
+          defaultModel: 'gpt-5.3-codex',
+        },
+      },
+    });
+
+    const result = resolveProviderConfig(cfg, 'codex-proxy');
+
+    expect(result).toMatchObject({
+      provider: 'codex-proxy',
+      defaultModel: 'gpt-5.3-codex',
+      baseUrl: 'https://proxy.example.com/v1',
+      wire: 'openai-responses',
+      allowKeyless: true,
+    });
+  });
+
+  it('throws for unknown providers', () => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      secrets: { openai: { ciphertext: 'enc-oai' } },
+    });
+
+    expect(() => resolveProviderConfig(cfg, 'missing-provider')).toThrowError(CodesignError);
   });
 });
