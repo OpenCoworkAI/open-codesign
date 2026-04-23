@@ -96,6 +96,18 @@ export type StoredDesignSystem = z.infer<typeof StoredDesignSystem>;
 export const ReasoningLevelSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']);
 export type ReasoningLevel = z.infer<typeof ReasoningLevelSchema>;
 
+export const ProviderModelDiscoveryModeSchema = z.enum(['models', 'static-hint', 'manual']);
+export type ProviderModelDiscoveryMode = z.infer<typeof ProviderModelDiscoveryModeSchema>;
+
+export const ProviderCapabilitiesSchema = z.object({
+  supportsKeyless: z.boolean().optional(),
+  supportsModelsEndpoint: z.boolean().optional(),
+  supportsReasoning: z.boolean().optional(),
+  requiresClaudeCodeIdentity: z.boolean().optional(),
+  modelDiscoveryMode: ProviderModelDiscoveryModeSchema.optional(),
+});
+export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
+
 export const IMAGE_GENERATION_SCHEMA_VERSION = 1 as const;
 
 export const ImageGenerationProviderSchema = z.enum(['openai', 'openrouter']);
@@ -152,8 +164,47 @@ export const ProviderEntrySchema = z.object({
    * per endpoint. The UI surfaces this as a "Reasoning depth" dropdown.
    */
   reasoningLevel: ReasoningLevelSchema.optional(),
+  capabilities: ProviderCapabilitiesSchema.optional(),
 });
 export type ProviderEntry = z.infer<typeof ProviderEntrySchema>;
+
+interface ProviderCapabilityInput {
+  wire: WireApi;
+  requiresApiKey?: boolean | undefined;
+  modelsHint?: string[] | undefined;
+  reasoningLevel?: ReasoningLevel | undefined;
+  capabilities?: ProviderCapabilities | undefined;
+}
+
+export function defaultProviderCapabilities(
+  _providerId: string,
+  entry: ProviderCapabilityInput,
+): Required<ProviderCapabilities> {
+  const supportsModelsEndpoint =
+    entry.wire !== 'openai-codex-responses' && entry.modelsHint === undefined;
+  return {
+    supportsKeyless: entry.requiresApiKey === false,
+    supportsModelsEndpoint,
+    supportsReasoning:
+      entry.reasoningLevel !== undefined ||
+      entry.wire === 'anthropic' ||
+      entry.wire === 'openai-responses' ||
+      entry.wire === 'openai-codex-responses',
+    requiresClaudeCodeIdentity: false,
+    modelDiscoveryMode:
+      entry.modelsHint !== undefined ? 'static-hint' : supportsModelsEndpoint ? 'models' : 'manual',
+  };
+}
+
+export function resolveProviderCapabilities(
+  providerId: string,
+  entry: ProviderCapabilityInput,
+): Required<ProviderCapabilities> {
+  return {
+    ...defaultProviderCapabilities(providerId, entry),
+    ...(entry.capabilities ?? {}),
+  };
+}
 
 export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, ProviderEntry>> = {
   anthropic: {
@@ -163,6 +214,13 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     wire: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
     defaultModel: 'claude-sonnet-4-6',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsReasoning: true,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
   },
   openai: {
     id: 'openai',
@@ -171,6 +229,13 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     wire: 'openai-chat',
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-4o',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsReasoning: false,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
   },
   openrouter: {
     id: 'openrouter',
@@ -179,6 +244,13 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     wire: 'openai-chat',
     baseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'anthropic/claude-sonnet-4.6',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsReasoning: false,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
   },
   ollama: {
     id: 'ollama',
@@ -188,6 +260,13 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     baseUrl: OLLAMA_DEFAULT_BASE_URL,
     defaultModel: OLLAMA_DEFAULT_MODEL,
     requiresApiKey: false,
+    capabilities: {
+      supportsKeyless: true,
+      supportsModelsEndpoint: true,
+      supportsReasoning: false,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
   },
 } as const;
 

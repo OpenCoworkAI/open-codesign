@@ -3,10 +3,12 @@ import {
   BUILTIN_PROVIDERS,
   ConfigV3Schema,
   SUPPORTED_ONBOARDING_PROVIDERS,
+  defaultProviderCapabilities,
   detectWireFromBaseUrl,
   hydrateConfig,
   migrateLegacyToV3,
   parseConfigFlexible,
+  resolveProviderCapabilities,
   toPersistedV3,
 } from './config';
 
@@ -24,6 +26,32 @@ describe('config v3 schema', () => {
     const parsed = ConfigV3Schema.parse(raw);
     expect(parsed.version).toBe(3);
     expect(parsed.activeProvider).toBe('anthropic');
+  });
+
+  it('accepts provider capability profiles', () => {
+    const parsed = ConfigV3Schema.parse({
+      version: 3,
+      activeProvider: 'custom-lite',
+      activeModel: 'gpt-4.1',
+      secrets: {},
+      providers: {
+        'custom-lite': {
+          id: 'custom-lite',
+          name: 'Lite Gateway',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://proxy.example.com/v1',
+          defaultModel: 'gpt-4.1',
+          capabilities: {
+            supportsKeyless: true,
+            supportsModelsEndpoint: false,
+            modelDiscoveryMode: 'manual',
+          },
+        },
+      },
+    });
+    expect(parsed.providers['custom-lite']?.capabilities?.supportsKeyless).toBe(true);
+    expect(parsed.providers['custom-lite']?.capabilities?.modelDiscoveryMode).toBe('manual');
   });
 
   it('rejects unknown wire values', () => {
@@ -218,5 +246,32 @@ describe('hydrateConfig / toPersistedV3', () => {
       },
     });
     expect(toPersistedV3(hydrated).imageGeneration?.model).toBe('gpt-image-2');
+  });
+});
+
+describe('provider capability helpers', () => {
+  it('derives static-hint model discovery for providers with modelsHint', () => {
+    const caps = defaultProviderCapabilities('chatgpt-codex', {
+      wire: 'openai-codex-responses',
+      requiresApiKey: false,
+      modelsHint: ['gpt-5.4'],
+    });
+    expect(caps.supportsKeyless).toBe(true);
+    expect(caps.supportsModelsEndpoint).toBe(false);
+    expect(caps.modelDiscoveryMode).toBe('static-hint');
+  });
+
+  it('lets explicit capability overrides win over defaults', () => {
+    const caps = resolveProviderCapabilities('custom-lite', {
+      wire: 'openai-chat',
+      capabilities: {
+        supportsKeyless: true,
+        supportsModelsEndpoint: false,
+        modelDiscoveryMode: 'manual',
+      },
+    });
+    expect(caps.supportsKeyless).toBe(true);
+    expect(caps.supportsModelsEndpoint).toBe(false);
+    expect(caps.modelDiscoveryMode).toBe('manual');
   });
 });

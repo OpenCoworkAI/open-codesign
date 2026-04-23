@@ -64,6 +64,13 @@ const CHATGPT_CODEX_PROVIDER: ProviderEntry = {
     'gpt-5.1-codex-mini',
   ],
   requiresApiKey: false,
+  capabilities: {
+    supportsKeyless: true,
+    supportsModelsEndpoint: false,
+    supportsReasoning: true,
+    requiresClaudeCodeIdentity: false,
+    modelDiscoveryMode: 'static-hint',
+  },
 };
 
 let tokenStoreSingleton: CodexTokenStore | null = null;
