@@ -214,7 +214,15 @@ async function postJson<T>(
 }
 
 function joinEndpoint(baseUrl: string, path: string): string {
-  return `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+  // Trim trailing `/` on baseUrl and leading `/` on path with explicit loops
+  // instead of /\/+$/ + /^\/+/. CodeQL flags the anchored-quantifier regex
+  // form as polynomial ReDoS on library input, and a simple scan is both
+  // linear in the worst case and easier to reason about.
+  let end = baseUrl.length;
+  while (end > 0 && baseUrl.charCodeAt(end - 1) === 47) end--;
+  let start = 0;
+  while (start < path.length && path.charCodeAt(start) === 47) start++;
+  return `${baseUrl.slice(0, end)}/${path.slice(start)}`;
 }
 
 function mimeFromFormat(format: ImageOutputFormat): string {

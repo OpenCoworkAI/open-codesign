@@ -36,12 +36,23 @@ describe('safeReadImportFile', () => {
     expect(await safeReadImportFile(path)).toBeNull();
   });
 
-  it('accepts a symlink to a regular small file (legitimate dotfile repo pattern)', async () => {
+  it('accepts a symlink to a regular small file (legitimate dotfile repo pattern)', async (ctx) => {
     const dir = await freshPath();
     const target = join(dir, 'target.env');
     await writeFile(target, 'GEMINI_API_KEY=AIzaSy...', 'utf8');
     const link = join(dir, 'link.env');
-    await symlink(target, link);
+    try {
+      await symlink(target, link);
+    } catch (err) {
+      // Windows users without Developer Mode / admin rights cannot create
+      // symlinks at all (EPERM). Skip rather than fail — the production code
+      // is POSIX-pattern-agnostic, and CI on Linux/macOS keeps real coverage.
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') {
+        ctx.skip();
+        return;
+      }
+      throw err;
+    }
     expect(await safeReadImportFile(link)).toBe('GEMINI_API_KEY=AIzaSy...');
   });
 });

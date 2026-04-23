@@ -270,8 +270,12 @@ describe('CodexTokenStore', () => {
     await store.write(auth);
     const body = JSON.parse(await readFile(filePath, 'utf8')) as StoredCodexAuth;
     expect(body).toEqual(auth);
-    const s = await stat(filePath);
-    expect(s.mode & 0o777).toBe(0o600);
+    // POSIX mode bits aren't enforceable on Windows NTFS (always reports
+    // 0o666), so only assert the 0o600 bit pattern on platforms that honor it.
+    if (process.platform !== 'win32') {
+      const s = await stat(filePath);
+      expect(s.mode & 0o777).toBe(0o600);
+    }
     const leftovers = (await readdir(dirname(filePath))).filter((n) =>
       n.startsWith(`${filePath.split('/').pop()}.tmp.`),
     );
