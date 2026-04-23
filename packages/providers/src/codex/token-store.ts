@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
@@ -92,10 +93,13 @@ export class CodexTokenStore {
   async write(auth: StoredCodexAuth): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
     const body = JSON.stringify(auth, null, 2);
-    // Write to a pid-scoped tmp then atomically rename. Guards against
-    // truncated writes on Win11 when the process is killed or antivirus
-    // interferes mid-write (issue #128).
-    const tmpPath = `${this.filePath}.tmp.${process.pid}`;
+    // Write to a pid + UUID scoped tmp then atomically rename. The UUID
+    // suffix prevents intra-process races when two write() calls overlap
+    // (same pid would otherwise collide on the tmp path and could unlink
+    // or rename each other's file). rename() itself is atomic on POSIX and
+    // Windows (Node >= 10). Guards against truncated writes on Win11 when
+    // the process is killed or antivirus interferes mid-write (issue #128).
+    const tmpPath = `${this.filePath}.tmp.${process.pid}.${randomUUID()}`;
     try {
       await writeFile(tmpPath, body, { encoding: 'utf8', mode: 0o600 });
       await rename(tmpPath, this.filePath);

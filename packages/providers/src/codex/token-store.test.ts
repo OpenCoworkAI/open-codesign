@@ -323,4 +323,24 @@ describe('CodexTokenStore', () => {
     );
     await expect(store.read()).rejects.toThrow(/Invalid Codex token store/);
   });
+
+  it('concurrent write() calls leave the file in a valid state (no tmp collision)', async () => {
+    const { store, filePath } = makeStore();
+    const authA = baseAuth({ accessToken: 'concurrent-A' });
+    const authB = baseAuth({ accessToken: 'concurrent-B' });
+
+    // Fire both writes without awaiting in between. Before the fix these
+    // would race on the same `${path}.tmp.${pid}` and one could unlink or
+    // overwrite the other's tmp, potentially leaving the target file
+    // missing or corrupted.
+    await Promise.all([store.write(authA), store.write(authB)]);
+
+    const persisted = JSON.parse(await readFile(filePath, 'utf8')) as StoredCodexAuth;
+    expect(['concurrent-A', 'concurrent-B']).toContain(persisted.accessToken);
+
+    const leftovers = (await readdir(dirname(filePath))).filter((n) =>
+      n.startsWith(`${filePath.split('/').pop()}.tmp.`),
+    );
+    expect(leftovers).toEqual([]);
+  });
 });
