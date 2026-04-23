@@ -8,7 +8,7 @@ vi.mock('../store', () => ({
   useCodesignStore: () => vi.fn(),
 }));
 
-import { isAbsoluteHttpUrl } from './ConnectionDiagnosticPanel';
+import { isAbsoluteHttpUrl, shouldShowGatewayAllowlistHint } from './ConnectionDiagnosticPanel';
 
 describe('isAbsoluteHttpUrl', () => {
   it('rejects an empty string so /v1 quick-fix cannot produce a bare "/v1"', () => {
@@ -26,5 +26,35 @@ describe('isAbsoluteHttpUrl', () => {
     expect(isAbsoluteHttpUrl('https://api.example.com')).toBe(true);
     expect(isAbsoluteHttpUrl('http://localhost:8080')).toBe(true);
     expect(isAbsoluteHttpUrl('  https://api.example.com  ')).toBe(true);
+  });
+});
+
+describe('shouldShowGatewayAllowlistHint', () => {
+  it('shows the hint for 400-class compatibility failures on third-party gateways', () => {
+    expect(shouldShowGatewayAllowlistHint('400', 'https://relay.example.com/v1', undefined)).toBe(
+      true,
+    );
+    expect(
+      shouldShowGatewayAllowlistHint(
+        '403',
+        'https://relay.example.com/v1',
+        'https://relay.example.com/v1/chat/completions',
+      ),
+    ).toBe(true);
+    expect(shouldShowGatewayAllowlistHint('PARSE', 'https://relay.example.com/v1')).toBe(true);
+  });
+
+  it('suppresses the hint for official providers and localhost proxies', () => {
+    expect(shouldShowGatewayAllowlistHint('400', 'https://api.openai.com/v1')).toBe(false);
+    expect(shouldShowGatewayAllowlistHint('403', 'https://api.anthropic.com')).toBe(false);
+    expect(shouldShowGatewayAllowlistHint('400', 'http://127.0.0.1:8317')).toBe(false);
+  });
+
+  it('suppresses the hint for unrelated error classes', () => {
+    expect(shouldShowGatewayAllowlistHint('404', 'https://relay.example.com/v1')).toBe(false);
+    expect(shouldShowGatewayAllowlistHint('429', 'https://relay.example.com/v1')).toBe(false);
+    expect(shouldShowGatewayAllowlistHint('ECONNREFUSED', 'https://relay.example.com/v1')).toBe(
+      false,
+    );
   });
 });

@@ -326,6 +326,17 @@ export function AddCustomProviderModal({
             placeholder="https://api.example.com/v1"
             disabled={lockEndpoint}
           />
+          {!lockEndpoint && (
+            <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-warning,#d97706)] bg-[var(--color-warning-soft,var(--color-surface))] px-3 py-2 text-[var(--text-xs)] text-[var(--color-text-secondary)]">
+              <div className="flex items-center gap-1.5 font-medium text-[var(--color-text-primary)]">
+                <AlertCircle className="w-3.5 h-3.5 text-[var(--color-warning,#d97706)]" />
+                <span>{t('settings.providers.custom.compatibilityHintTitle')}</span>
+              </div>
+              <p className="mt-1 leading-5">
+                {t('settings.providers.custom.compatibilityHintBody')}
+              </p>
+            </div>
+          )}
         </Field>
 
         <Field label={t('settings.providers.custom.apiKey')}>

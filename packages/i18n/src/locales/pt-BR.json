@@ -213,6 +213,8 @@
         "apiKey": "Chave de API",
         "apiKeyEditPlaceholder": "Deixe vazio para manter {{mask}}",
         "defaultModel": "Modelo padrão",
+        "compatibilityHintTitle": "Aviso de compatibilidade",
+        "compatibilityHintBody": "Alguns coding plans, relays e gateways compatíveis com OpenAI só permitem clientes específicos, como Claude Code, openclaw ou Hermes. Mesmo que a API pareça compatível, o Open CoDesign ainda pode ser bloqueado por uma lista de apps permitidos.",
         "test": "Testar conexão",
         "testOk": "OK — {{count}} modelos disponíveis",
         "save": "Salvar e continuar",
@@ -806,6 +808,8 @@
     "testAgain": "Testar novamente",
     "showLog": "Mostrar log completo",
     "showLogFailed": "Falha ao abrir a pasta de logs",
+    "gatewayAllowlistHintTitle": "Este endpoint pode restringir quais apps podem se conectar",
+    "gatewayAllowlistHintBody": "Alguns coding plans e gateways de conversão de protocolo mantêm uma lista de apps permitidos. Mesmo anunciando uma API compatível com OpenAI, eles ainda podem recusar o Open CoDesign se este app não estiver explicitamente liberado.",
     "dismiss": "Dispensar",
     "report": {
       "title": "Reportar um bug",

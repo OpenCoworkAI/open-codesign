@@ -216,6 +216,8 @@
         "apiKey": "API Key",
         "apiKeyEditPlaceholder": "Leave empty to keep {{mask}}",
         "defaultModel": "Default model",
+        "compatibilityHintTitle": "Compatibility note",
+        "compatibilityHintBody": "Some coding plans, relay services, or OpenAI-compatible gateways only allow specific clients such as Claude Code, openclaw, or Hermes. Even if the API looks compatible, Open CoDesign may still be blocked by an app allowlist.",
         "switchToManual": "Enter manually",
         "switchToDropdown": "Pick from list",
         "discoveringModels": "Discovering models...",
@@ -824,6 +826,8 @@
     "testAgain": "Test again",
     "showLog": "Show full log",
     "showLogFailed": "Failed to open logs folder",
+    "gatewayAllowlistHintTitle": "This endpoint may restrict which apps can connect",
+    "gatewayAllowlistHintBody": "Some coding plans and protocol-conversion gateways keep an app allowlist. Even when they advertise an OpenAI-compatible API, they may still reject Open CoDesign unless this app is explicitly allowed.",
     "dismiss": "Dismiss",
     "report": {
       "title": "Report a bug",

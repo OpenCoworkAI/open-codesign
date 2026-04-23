@@ -216,6 +216,8 @@
         "apiKey": "API Key",
         "apiKeyEditPlaceholder": "留空则保留 {{mask}}",
         "defaultModel": "默认模型",
+        "compatibilityHintTitle": "\u517c\u5bb9\u6027\u63d0\u793a",
+        "compatibilityHintBody": "\u90e8\u5206 coding plan\uff0c\u534f\u8bae\u8f6c\u6362\u670d\u52a1\u6216 OpenAI \u517c\u5bb9\u7f51\u5173\u53ea\u5141\u8bb8\u7279\u5b9a\u5ba2\u6237\u7aef\uff08\u5982 Claude Code\uff0copenclaw\uff0cHermes\uff09\u8bbf\u95ee\u3002\u5373\u4f7f API \u770b\u8d77\u6765\u517c\u5bb9\uff0cOpen CoDesign \u4e5f\u53ef\u80fd\u56e0\u4e3a\u5e94\u7528\u767d\u540d\u5355\u800c\u65e0\u6cd5\u4f7f\u7528\u3002",
         "switchToManual": "手动输入",
         "switchToDropdown": "从列表选择",
         "discoveringModels": "正在发现模型…",
@@ -820,6 +822,8 @@
     "testAgain": "再次测试",
     "showLog": "查看完整日志",
     "showLogFailed": "无法打开日志文件夹",
+    "gatewayAllowlistHintTitle": "\u8fd9\u4e2a\u7aef\u70b9\u53ef\u80fd\u9650\u5236\u53ef\u63a5\u5165\u7684\u5e94\u7528",
+    "gatewayAllowlistHintBody": "\u90e8\u5206 coding plan \u548c\u534f\u8bae\u8f6c\u6362\u7f51\u5173\u4f1a\u914d\u7f6e\u5e94\u7528\u767d\u540d\u5355\u3002\u5b83\u4eec\u5373\u4f7f\u58f0\u79f0\u63d0\u4f9b OpenAI \u517c\u5bb9 API\uff0c\u4e5f\u53ef\u80fd\u5728\u6ca1\u6709\u663e\u5f0f\u5141\u8bb8 Open CoDesign \u7684\u60c5\u51b5\u4e0b\u62d2\u7edd\u8bf7\u6c42\u3002",
     "dismiss": "关闭",
     "report": {
       "title": "上报问题",

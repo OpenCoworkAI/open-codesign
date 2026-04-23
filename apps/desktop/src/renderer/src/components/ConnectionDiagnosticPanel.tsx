@@ -11,6 +11,49 @@ export function isAbsoluteHttpUrl(value: string): boolean {
   return /^https?:\/\/\S+/i.test(value.trim());
 }
 
+const OFFICIAL_PROVIDER_HOST_SUFFIXES = [
+  'openai.com',
+  'anthropic.com',
+  'openrouter.ai',
+  'deepseek.com',
+  'googleapis.com',
+  'google.com',
+  'x.ai',
+  'mistral.ai',
+  'groq.com',
+  'cerebras.ai',
+  'amazonaws.com',
+  'azure.com',
+] as const;
+
+function hostnameFromUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isOfficialProviderHost(hostname: string | null): boolean {
+  if (!hostname) return false;
+  return OFFICIAL_PROVIDER_HOST_SUFFIXES.some(
+    (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
+  );
+}
+
+export function shouldShowGatewayAllowlistHint(
+  errorCode: ErrorCode,
+  baseUrl: string,
+  attemptedUrl?: string,
+): boolean {
+  const normalised = String(errorCode).toUpperCase();
+  if (!['400', '401', '403', 'PARSE'].includes(normalised)) return false;
+  const hostname = hostnameFromUrl(attemptedUrl) ?? hostnameFromUrl(baseUrl);
+  if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1') return false;
+  return !isOfficialProviderHost(hostname);
+}
+
 export interface ConnectionDiagnosticPanelProps {
   /** The error code returned by connection.test or generate */
   errorCode: ErrorCode;
@@ -58,6 +101,7 @@ export function ConnectionDiagnosticPanel({
       ? fix.baseUrlTransform(baseUrl)
       : undefined;
   const canApplyFix = suggestedUrl !== undefined || fix?.externalUrl !== undefined;
+  const showGatewayAllowlistHint = shouldShowGatewayAllowlistHint(errorCode, baseUrl, attemptedUrl);
 
   function handleApplyFix() {
     if (suggestedUrl !== undefined) {
@@ -136,6 +180,16 @@ export function ConnectionDiagnosticPanel({
           <p className="font-mono text-[var(--text-xs)] text-[var(--color-accent)] break-all">
             {t('diagnostics.fix.addV1')}: {suggestedUrl}
           </p>
+        )}
+        {showGatewayAllowlistHint && (
+          <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-warning,#d97706)] bg-[var(--color-warning-soft,var(--color-surface))] px-3 py-2">
+            <p className="font-medium text-[var(--color-text-primary)]">
+              {t('diagnostics.gatewayAllowlistHintTitle')}
+            </p>
+            <p className="mt-1 text-[var(--text-xs)] leading-5">
+              {t('diagnostics.gatewayAllowlistHintBody')}
+            </p>
+          </div>
         )}
       </div>
 
