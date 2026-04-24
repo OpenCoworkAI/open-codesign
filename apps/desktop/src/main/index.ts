@@ -29,6 +29,7 @@ import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import type { AgentStreamEvent } from '../preload/index';
 import { registerAppMenu } from './app-menu';
+import { registerAskIpc, requestAsk } from './ask-ipc';
 import { showBootDialog, writeBootErrorSync } from './boot-fallback';
 import {
   CHATGPT_CODEX_PROVIDER_ID,
@@ -512,102 +513,109 @@ function registerIpcHandlers(db: Database | null): void {
     let deltaCount = 0;
     let toolCount = 0;
 
-    return generateViaAgent(input, {
-      fs,
-      runtimeVerify,
-      ...(generateImageAsset !== undefined ? { generateImageAsset } : {}),
-      onEvent: (event: AgentEvent) => {
-        // High-signal only. Skip per-token deltas and inner message_*
-        // markers. Emit a concise summary at turn_end.
-        if (event.type === 'turn_start') {
-          deltaCount = 0;
-          toolCount = 0;
-          logIpc.info('agent.turn_start', { generationId: id });
-        } else if (event.type === 'message_update') {
-          const ame = event.assistantMessageEvent;
-          if (ame.type === 'text_delta') deltaCount += 1;
-        } else if (event.type === 'tool_execution_start') {
-          toolCount += 1;
-          logIpc.info('agent.tool_start', { generationId: id, tool: event.toolName });
-        } else if (event.type === 'tool_execution_end') {
-          logIpc.info('agent.tool_end', {
-            generationId: id,
-            tool: event.toolName,
-            isError: event.isError,
-          });
-        } else if (event.type === 'turn_end') {
-          logIpc.info('agent.turn_end', { generationId: id, deltas: deltaCount, tools: toolCount });
-        } else if (event.type === 'agent_end') {
-          logIpc.info('agent.end', { generationId: id });
-        }
-        if (designId === null) return; // no routing target
-        if (event.type === 'turn_start') {
-          sendEvent({ ...baseCtx, type: 'turn_start' });
-          return;
-        }
-        if (event.type === 'message_update') {
-          const ame = event.assistantMessageEvent;
-          if (ame.type === 'text_delta' && typeof ame.delta === 'string') {
-            sendEvent({ ...baseCtx, type: 'text_delta', delta: ame.delta });
+    return generateViaAgent(
+      { ...input, askBridge: (askInput) => requestAsk(id, askInput, () => mainWindow) },
+      {
+        fs,
+        runtimeVerify,
+        ...(generateImageAsset !== undefined ? { generateImageAsset } : {}),
+        onEvent: (event: AgentEvent) => {
+          // High-signal only. Skip per-token deltas and inner message_*
+          // markers. Emit a concise summary at turn_end.
+          if (event.type === 'turn_start') {
+            deltaCount = 0;
+            toolCount = 0;
+            logIpc.info('agent.turn_start', { generationId: id });
+          } else if (event.type === 'message_update') {
+            const ame = event.assistantMessageEvent;
+            if (ame.type === 'text_delta') deltaCount += 1;
+          } else if (event.type === 'tool_execution_start') {
+            toolCount += 1;
+            logIpc.info('agent.tool_start', { generationId: id, tool: event.toolName });
+          } else if (event.type === 'tool_execution_end') {
+            logIpc.info('agent.tool_end', {
+              generationId: id,
+              tool: event.toolName,
+              isError: event.isError,
+            });
+          } else if (event.type === 'turn_end') {
+            logIpc.info('agent.turn_end', {
+              generationId: id,
+              deltas: deltaCount,
+              tools: toolCount,
+            });
+          } else if (event.type === 'agent_end') {
+            logIpc.info('agent.end', { generationId: id });
           }
-          return;
-        }
-        if (event.type === 'tool_execution_start') {
-          toolStartedAt.set(event.toolCallId, Date.now());
-          const argsObj =
-            typeof event.args === 'object' && event.args !== null
-              ? (event.args as Record<string, unknown>)
-              : {};
-          const command =
-            typeof argsObj['command'] === 'string' ? (argsObj['command'] as string) : undefined;
-          sendEvent({
-            ...baseCtx,
-            type: 'tool_call_start',
-            toolName: event.toolName,
-            toolCallId: event.toolCallId,
-            args: argsObj,
-            ...(command ? { command } : {}),
-          });
-          return;
-        }
-        if (event.type === 'tool_execution_end') {
-          const startedAt = toolStartedAt.get(event.toolCallId) ?? Date.now();
-          toolStartedAt.delete(event.toolCallId);
-          sendEvent({
-            ...baseCtx,
-            type: 'tool_call_result',
-            toolName: event.toolName,
-            toolCallId: event.toolCallId,
-            result: event.result,
-            durationMs: Date.now() - startedAt,
-          });
-          return;
-        }
-        if (event.type === 'turn_end') {
-          const msg = event.message as { content?: Array<{ type: string; text?: string }> };
-          const rawText = (msg.content ?? [])
-            .filter(
-              (c): c is { type: 'text'; text: string } =>
-                c.type === 'text' && typeof c.text === 'string',
-            )
-            .map((c) => c.text)
-            .join('');
-          // Strip <artifact ...>...</artifact> blocks — artifact content is
-          // delivered via fs_updated / artifact_delivered, not the chat text.
-          const finalText = rawText.replace(/<artifact[\s\S]*?<\/artifact>/g, '').trim();
-          sendEvent({ ...baseCtx, type: 'turn_end', finalText });
-          return;
-        }
-        if (event.type === 'agent_end') {
-          // Final boundary of an agent run — renderer uses this to persist a
-          // SQLite snapshot from the in-memory previewHtml so the design
-          // survives an app restart. Without this the next switchDesign() at
-          // boot finds no snapshot and falls back to the empty welcome state.
-          sendEvent({ ...baseCtx, type: 'agent_end' });
-          return;
-        }
+          if (designId === null) return; // no routing target
+          if (event.type === 'turn_start') {
+            sendEvent({ ...baseCtx, type: 'turn_start' });
+            return;
+          }
+          if (event.type === 'message_update') {
+            const ame = event.assistantMessageEvent;
+            if (ame.type === 'text_delta' && typeof ame.delta === 'string') {
+              sendEvent({ ...baseCtx, type: 'text_delta', delta: ame.delta });
+            }
+            return;
+          }
+          if (event.type === 'tool_execution_start') {
+            toolStartedAt.set(event.toolCallId, Date.now());
+            const argsObj =
+              typeof event.args === 'object' && event.args !== null
+                ? (event.args as Record<string, unknown>)
+                : {};
+            const command =
+              typeof argsObj['command'] === 'string' ? (argsObj['command'] as string) : undefined;
+            sendEvent({
+              ...baseCtx,
+              type: 'tool_call_start',
+              toolName: event.toolName,
+              toolCallId: event.toolCallId,
+              args: argsObj,
+              ...(command ? { command } : {}),
+            });
+            return;
+          }
+          if (event.type === 'tool_execution_end') {
+            const startedAt = toolStartedAt.get(event.toolCallId) ?? Date.now();
+            toolStartedAt.delete(event.toolCallId);
+            sendEvent({
+              ...baseCtx,
+              type: 'tool_call_result',
+              toolName: event.toolName,
+              toolCallId: event.toolCallId,
+              result: event.result,
+              durationMs: Date.now() - startedAt,
+            });
+            return;
+          }
+          if (event.type === 'turn_end') {
+            const msg = event.message as { content?: Array<{ type: string; text?: string }> };
+            const rawText = (msg.content ?? [])
+              .filter(
+                (c): c is { type: 'text'; text: string } =>
+                  c.type === 'text' && typeof c.text === 'string',
+              )
+              .map((c) => c.text)
+              .join('');
+            // Strip <artifact ...>...</artifact> blocks — artifact content is
+            // delivered via fs_updated / artifact_delivered, not the chat text.
+            const finalText = rawText.replace(/<artifact[\s\S]*?<\/artifact>/g, '').trim();
+            sendEvent({ ...baseCtx, type: 'turn_end', finalText });
+            return;
+          }
+          if (event.type === 'agent_end') {
+            // Final boundary of an agent run — renderer uses this to persist a
+            // SQLite snapshot from the in-memory previewHtml so the design
+            // survives an app restart. Without this the next switchDesign() at
+            // boot finds no snapshot and falls back to the empty welcome state.
+            sendEvent({ ...baseCtx, type: 'agent_end' });
+            return;
+          }
+        },
       },
-    }).then((result) => ({
+    ).then((result) => ({
       ...result,
       artifacts: result.artifacts.map((artifact) => ({
         ...artifact,
@@ -1289,6 +1297,7 @@ void app.whenReady().then(async () => {
     registerImageGenerationSettingsIpc();
     registerExporterIpc(() => mainWindow);
     registerDiagnosticsIpc(diagnosticsDb);
+    registerAskIpc();
     setupAutoUpdater();
     registerAppMenu();
     createWindow();

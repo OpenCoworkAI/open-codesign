@@ -1,3 +1,4 @@
+import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
 import { type Static, Type } from '@sinclair/typebox';
 
 /**
@@ -98,4 +99,38 @@ export function validateAskInput(input: unknown): { ok: true } | { ok: false; re
   if (obj.questions.length === 0) return { ok: false, reason: 'at least one question required' };
   if (obj.questions.length > 25) return { ok: false, reason: 'at most 25 questions per turn' };
   return { ok: true };
+}
+
+export type AskBridge = (input: AskInput) => Promise<AskResult>;
+
+export function makeAskTool(askBridge: AskBridge): AgentTool<typeof AskInput, AskResult> {
+  return {
+    name: 'ask',
+    label: 'Ask',
+    description:
+      'Render a structured questionnaire (1–25 questions, 5 types: text-options / ' +
+      'svg-options / slider / file / freeform) to the user and wait for answers. ' +
+      'Use BEFORE implementing when the request is ambiguous or when aesthetic / ' +
+      "content direction is unclear. Returns `{status: 'answered', answers}` or " +
+      "`{status: 'cancelled', answers: []}`.",
+    parameters: AskInput,
+    async execute(_toolCallId, params): Promise<AgentToolResult<AskResult>> {
+      const valid = validateAskInput(params);
+      if (!valid.ok) {
+        return {
+          content: [{ type: 'text', text: `ask: invalid input — ${valid.reason}` }],
+          details: { status: 'cancelled', answers: [] },
+        };
+      }
+      const result = await askBridge(params);
+      const summary =
+        result.status === 'answered'
+          ? `user answered ${result.answers.length} question(s)`
+          : 'user cancelled';
+      return {
+        content: [{ type: 'text', text: summary }],
+        details: result,
+      };
+    },
+  };
 }

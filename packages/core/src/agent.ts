@@ -60,6 +60,7 @@ import type {
 import { reasoningForModel } from './index.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt } from './prompts/index.js';
+import { makeAskTool } from './tools/ask.js';
 import { makeDeclareTweakSchemaTool } from './tools/declare-tweak-schema.js';
 import { type DoneRuntimeVerifier, makeDoneTool } from './tools/done.js';
 import {
@@ -802,6 +803,9 @@ export async function generateViaAgent(
     defaultTools.push(
       makeTweaksTool(input.readWorkspaceFiles) as unknown as AgentTool<TSchema, unknown>,
     );
+  }
+  if (input.askBridge) {
+    defaultTools.push(makeAskTool(input.askBridge) as unknown as AgentTool<TSchema, unknown>);
   }
   const tools = deps.tools ?? defaultTools;
   const encourageToolUse = deps.encourageToolUse ?? tools.length > 0;

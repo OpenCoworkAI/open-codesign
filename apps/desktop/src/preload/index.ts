@@ -175,6 +175,73 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+/**
+ * Ask-tool wire shape. Mirrors packages/core/src/tools/ask.ts — duplicated
+ * here so the preload does not take a hard dep on `@open-codesign/core`.
+ * Keep in lockstep with the TypeBox schema in that file.
+ */
+export type AskQuestionType = 'text-options' | 'svg-options' | 'slider' | 'file' | 'freeform';
+export interface AskTextOptionsQuestion {
+  id: string;
+  type: 'text-options';
+  prompt: string;
+  options: string[];
+  multi?: boolean;
+}
+export interface AskSvgOptionsQuestion {
+  id: string;
+  type: 'svg-options';
+  prompt: string;
+  options: Array<{ id: string; label: string; svg: string }>;
+}
+export interface AskSliderQuestion {
+  id: string;
+  type: 'slider';
+  prompt: string;
+  min: number;
+  max: number;
+  step: number;
+  default?: number;
+  unit?: string;
+}
+export interface AskFileQuestion {
+  id: string;
+  type: 'file';
+  prompt: string;
+  accept?: string[];
+  multiple?: boolean;
+}
+export interface AskFreeformQuestion {
+  id: string;
+  type: 'freeform';
+  prompt: string;
+  placeholder?: string;
+  multiline?: boolean;
+}
+export type AskQuestion =
+  | AskTextOptionsQuestion
+  | AskSvgOptionsQuestion
+  | AskSliderQuestion
+  | AskFileQuestion
+  | AskFreeformQuestion;
+export interface AskInput {
+  questions: AskQuestion[];
+  rationale?: string;
+}
+export interface AskAnswer {
+  questionId: string;
+  value: string | number | string[] | null;
+}
+export interface AskResult {
+  status: 'answered' | 'cancelled';
+  answers: AskAnswer[];
+}
+export interface AskRequest {
+  requestId: string;
+  sessionId: string;
+  input: AskInput;
+}
+
 const api = {
   detectProvider: (key: string) =>
     ipcRenderer.invoke('codesign:detect-provider', key) as Promise<string | null>,
@@ -560,6 +627,15 @@ const api = {
   },
   openExternal: (url: string) =>
     ipcRenderer.invoke('codesign:v1:open-external', url) as Promise<void>,
+  ask: {
+    onRequest: (cb: (req: AskRequest) => void) => {
+      const listener = (_e: unknown, req: AskRequest) => cb(req);
+      ipcRenderer.on('ask:request', listener);
+      return () => ipcRenderer.removeListener('ask:request', listener);
+    },
+    resolve: (requestId: string, result: AskResult) =>
+      ipcRenderer.invoke('ask:resolve', { requestId, ...result }) as Promise<void>,
+  },
 };
 
 contextBridge.exposeInMainWorld('codesign', api);

@@ -1,8 +1,10 @@
 import { useT } from '@open-codesign/i18n';
 import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AskModal } from './components/AskModal';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
+import { PermissionDialog } from './components/PermissionDialog';
 import { PreviewPane } from './components/PreviewPane';
 import { RenameDesignDialog } from './components/RenameDesignDialog';
 import { Settings } from './components/Settings';
@@ -258,6 +260,8 @@ export function App() {
       <DeleteDesignDialog />
       <ToastViewport />
       <CommentsPanel />
+      <PermissionDialog />
+      <AskModal />
       <ReportEventDialog localId={activeReportLocalId} onClose={closeReportDialog} />
     </div>
   );

@@ -92,6 +92,15 @@ export {
   type PreviewResult,
   type RunPreviewFn,
 } from './tools/preview.js';
+export {
+  makeAskTool,
+  validateAskInput,
+  type AskBridge,
+  type AskInput,
+  type AskResult,
+  type AskAnswer,
+  type AskQuestion,
+} from './tools/ask.js';
 
 export interface AttachmentContext {
   name: string;
@@ -171,6 +180,14 @@ export interface GenerateInput {
         path: string;
         vision: boolean;
       }) => Promise<import('./tools/preview.js').PreviewResult>)
+    | undefined;
+  /**
+   * Optional async bridge for the `ask` tool. When provided, the agent gains
+   * an `ask` tool that pauses the turn, renders the questionnaire to the
+   * user, and resumes with the collected answers.
+   */
+  askBridge?:
+    | ((input: import('./tools/ask.js').AskInput) => Promise<import('./tools/ask.js').AskResult>)
     | undefined;
 }
 

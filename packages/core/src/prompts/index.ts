@@ -72,7 +72,11 @@ You have \`preview(path)\` to render an artifact and read back console errors + 
 Before each tool call, say one sentence about what you're doing and why.
 After each substantial tool result, say one sentence about what you learned and what's next.
 Keep these narrations to ≤15 words each — they're for the user to follow along, not for reasoning.
-Do not narrate trivial tool calls (e.g. repeated \`set_todos\` status flips).`;
+Do not narrate trivial tool calls (e.g. repeated \`set_todos\` status flips).
+
+## Ask
+
+If the brief is vague OR the aesthetic direction is genuinely ambiguous (three plausible very different palettes; unclear target audience), call \`ask({questions: [...]})\` with 3–10 short questions BEFORE writing code. Prefer \`svg-options\` for visual / aesthetic choices, \`slider\` for continuous knobs (density, contrast), \`text-options\` for category picks, \`freeform\` only when you truly need prose. Never ask more than 10 questions per turn — design momentum matters.`;
 
 const OUTPUT_RULES = `# Output rules
 
