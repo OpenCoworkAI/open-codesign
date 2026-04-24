@@ -209,7 +209,8 @@
         "loginFailedTitle": "ChatGPT 登录失败",
         "logoutFailedTitle": "ChatGPT 登出失败",
         "statusFailedTitle": "ChatGPT 登录状态读取失败",
-        "unknownError": "未知错误"
+        "unknownError": "未知错误",
+        "unsupportedCountryRegion": "当前账号、国家、地区或区域暂不支持 ChatGPT 订阅登录。"
       },
       "addProvider": "添加服务",
       "addCustom": "添加自定义",

@@ -1347,7 +1347,7 @@ function ModelsTab() {
         });
         setCpaDetection('unavailable');
       });
-  }, [cpaDetection, loading, rows, pushToast, reportableErrorToast, t]);
+  }, [cpaDetection, loading, rows, reportableErrorToast, t]);
 
   async function reloadRows() {
     if (!window.codesign) return;

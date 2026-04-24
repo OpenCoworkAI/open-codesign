@@ -209,7 +209,8 @@
         "loginFailedTitle": "ChatGPT sign-in failed",
         "logoutFailedTitle": "ChatGPT sign-out failed",
         "statusFailedTitle": "ChatGPT status check failed",
-        "unknownError": "Unknown error"
+        "unknownError": "Unknown error",
+        "unsupportedCountryRegion": "ChatGPT subscription login is not available for this account, country, region, or territory."
       },
       "addProvider": "Add provider",
       "addCustom": "Add custom",

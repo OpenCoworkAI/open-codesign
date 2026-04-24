@@ -181,7 +181,8 @@
         "loginFailedTitle": "Falha ao entrar no ChatGPT",
         "logoutFailedTitle": "Falha ao sair do ChatGPT",
         "statusFailedTitle": "Falha ao verificar status do ChatGPT",
-        "unknownError": "Erro desconhecido"
+        "unknownError": "Erro desconhecido",
+        "unsupportedCountryRegion": "O login com assinatura do ChatGPT não está disponível para esta conta, país, região ou território."
       },
       "addProvider": "Adicionar provedor",
       "addCustom": "Adicionar personalizado",

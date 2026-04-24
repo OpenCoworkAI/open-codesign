@@ -52,6 +52,75 @@ interface TokenResponse {
   expires_in?: number;
 }
 
+interface ParsedOAuthError {
+  oauthErrorCode: string | undefined;
+  upstreamMessage: string | undefined;
+}
+
+export class CodexOAuthTokenError extends Error {
+  public readonly kind: 'exchange' | 'refresh';
+  public readonly status: number;
+  public readonly responseBody: string;
+  public readonly oauthErrorCode: string | undefined;
+  public readonly upstreamMessage: string | undefined;
+
+  constructor(input: {
+    kind: 'exchange' | 'refresh';
+    status: number;
+    responseBody: string;
+    oauthErrorCode: string | undefined;
+    upstreamMessage: string | undefined;
+  }) {
+    super(
+      `Codex OAuth ${input.kind} failed: ${input.status}${formatOAuthErrorDetail(
+        input.responseBody,
+        input.oauthErrorCode,
+        input.upstreamMessage,
+      )}`,
+    );
+    this.name = 'CodexOAuthTokenError';
+    this.kind = input.kind;
+    this.status = input.status;
+    this.responseBody = input.responseBody;
+    this.oauthErrorCode = input.oauthErrorCode;
+    this.upstreamMessage = input.upstreamMessage;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseOAuthErrorBody(text: string): ParsedOAuthError {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!isRecord(parsed)) return { oauthErrorCode: undefined, upstreamMessage: undefined };
+    const error = parsed['error'];
+    if (!isRecord(error)) return { oauthErrorCode: undefined, upstreamMessage: undefined };
+    const code = error['code'];
+    const message = error['message'];
+    return {
+      oauthErrorCode: typeof code === 'string' && code.length > 0 ? code : undefined,
+      upstreamMessage: typeof message === 'string' && message.length > 0 ? message : undefined,
+    };
+  } catch {
+    return { oauthErrorCode: undefined, upstreamMessage: undefined };
+  }
+}
+
+function formatOAuthErrorDetail(
+  responseBody: string,
+  oauthErrorCode: string | undefined,
+  upstreamMessage: string | undefined,
+): string {
+  if (oauthErrorCode !== undefined && upstreamMessage !== undefined) {
+    return ` ${oauthErrorCode} - ${upstreamMessage}`;
+  }
+  if (oauthErrorCode !== undefined) return ` ${oauthErrorCode}`;
+  if (upstreamMessage !== undefined) return ` ${upstreamMessage}`;
+  return ` ${responseBody}`;
+}
+
 async function postToken(
   body: URLSearchParams,
   kind: 'exchange' | 'refresh',
@@ -63,7 +132,14 @@ async function postToken(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Codex OAuth ${kind} failed: ${res.status} ${text}`);
+    const parsed = parseOAuthErrorBody(text);
+    throw new CodexOAuthTokenError({
+      kind,
+      status: res.status,
+      responseBody: text,
+      oauthErrorCode: parsed.oauthErrorCode,
+      upstreamMessage: parsed.upstreamMessage,
+    });
   }
   return (await res.json()) as TokenResponse;
 }
