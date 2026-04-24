@@ -102,7 +102,12 @@ export type ProviderModelDiscoveryMode = z.infer<typeof ProviderModelDiscoveryMo
 export const ProviderCapabilitiesSchema = z.object({
   supportsKeyless: z.boolean().optional(),
   supportsModelsEndpoint: z.boolean().optional(),
+  supportsChatCompletions: z.boolean().optional(),
+  supportsResponsesApi: z.boolean().optional(),
+  supportsSystemRole: z.boolean().optional(),
+  supportsDeveloperRole: z.boolean().optional(),
   supportsReasoning: z.boolean().optional(),
+  supportsToolCalling: z.boolean().optional(),
   requiresClaudeCodeIdentity: z.boolean().optional(),
   modelDiscoveryMode: ProviderModelDiscoveryModeSchema.optional(),
 });
@@ -182,14 +187,21 @@ export function defaultProviderCapabilities(
 ): Required<ProviderCapabilities> {
   const supportsModelsEndpoint =
     entry.wire !== 'openai-codex-responses' && entry.modelsHint === undefined;
+  const wire = entry.wire;
   return {
     supportsKeyless: entry.requiresApiKey === false,
     supportsModelsEndpoint,
+    supportsChatCompletions: wire === 'openai-chat',
+    supportsResponsesApi: wire === 'openai-responses' || wire === 'openai-codex-responses',
+    supportsSystemRole: wire !== 'openai-responses' && wire !== 'openai-codex-responses',
+    supportsDeveloperRole: wire === 'openai-responses' || wire === 'openai-codex-responses',
     supportsReasoning:
       entry.reasoningLevel !== undefined ||
-      entry.wire === 'anthropic' ||
-      entry.wire === 'openai-responses' ||
-      entry.wire === 'openai-codex-responses',
+      wire === 'anthropic' ||
+      wire === 'openai-responses' ||
+      wire === 'openai-codex-responses',
+    supportsToolCalling:
+      wire === 'anthropic' || wire === 'openai-chat' || wire === 'openai-responses',
     requiresClaudeCodeIdentity: false,
     modelDiscoveryMode:
       entry.modelsHint !== undefined ? 'static-hint' : supportsModelsEndpoint ? 'models' : 'manual',
@@ -200,9 +212,20 @@ export function resolveProviderCapabilities(
   providerId: string,
   entry: ProviderCapabilityInput,
 ): Required<ProviderCapabilities> {
+  const defaults = defaultProviderCapabilities(providerId, entry);
+  const explicit = entry.capabilities ?? {};
   return {
-    ...defaultProviderCapabilities(providerId, entry),
-    ...(entry.capabilities ?? {}),
+    supportsKeyless: explicit.supportsKeyless ?? defaults.supportsKeyless,
+    supportsModelsEndpoint: explicit.supportsModelsEndpoint ?? defaults.supportsModelsEndpoint,
+    supportsChatCompletions: explicit.supportsChatCompletions ?? defaults.supportsChatCompletions,
+    supportsResponsesApi: explicit.supportsResponsesApi ?? defaults.supportsResponsesApi,
+    supportsSystemRole: explicit.supportsSystemRole ?? defaults.supportsSystemRole,
+    supportsDeveloperRole: explicit.supportsDeveloperRole ?? defaults.supportsDeveloperRole,
+    supportsReasoning: explicit.supportsReasoning ?? defaults.supportsReasoning,
+    supportsToolCalling: explicit.supportsToolCalling ?? defaults.supportsToolCalling,
+    requiresClaudeCodeIdentity:
+      explicit.requiresClaudeCodeIdentity ?? defaults.requiresClaudeCodeIdentity,
+    modelDiscoveryMode: explicit.modelDiscoveryMode ?? defaults.modelDiscoveryMode,
   };
 }
 
@@ -217,7 +240,12 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     capabilities: {
       supportsKeyless: false,
       supportsModelsEndpoint: true,
+      supportsChatCompletions: false,
+      supportsResponsesApi: false,
+      supportsSystemRole: true,
+      supportsDeveloperRole: false,
       supportsReasoning: true,
+      supportsToolCalling: true,
       requiresClaudeCodeIdentity: false,
       modelDiscoveryMode: 'models',
     },
@@ -232,7 +260,12 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     capabilities: {
       supportsKeyless: false,
       supportsModelsEndpoint: true,
+      supportsChatCompletions: true,
+      supportsResponsesApi: false,
+      supportsSystemRole: true,
+      supportsDeveloperRole: false,
       supportsReasoning: false,
+      supportsToolCalling: true,
       requiresClaudeCodeIdentity: false,
       modelDiscoveryMode: 'models',
     },
@@ -247,7 +280,12 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     capabilities: {
       supportsKeyless: false,
       supportsModelsEndpoint: true,
+      supportsChatCompletions: true,
+      supportsResponsesApi: false,
+      supportsSystemRole: true,
+      supportsDeveloperRole: false,
       supportsReasoning: false,
+      supportsToolCalling: true,
       requiresClaudeCodeIdentity: false,
       modelDiscoveryMode: 'models',
     },
@@ -263,7 +301,12 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     capabilities: {
       supportsKeyless: true,
       supportsModelsEndpoint: true,
+      supportsChatCompletions: true,
+      supportsResponsesApi: false,
+      supportsSystemRole: true,
+      supportsDeveloperRole: false,
       supportsReasoning: false,
+      supportsToolCalling: true,
       requiresClaudeCodeIdentity: false,
       modelDiscoveryMode: 'models',
     },

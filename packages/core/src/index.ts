@@ -12,6 +12,7 @@ import type {
   ChatMessage,
   LoadedSkill,
   ModelRef,
+  ProviderCapabilities,
   SelectedElement,
   StoredDesignSystem,
   WireApi,
@@ -97,6 +98,8 @@ export interface GenerateInput {
   wire?: WireApi | undefined;
   /** v3 extra HTTP headers merged into the outbound request (gateway auth). */
   httpHeaders?: Record<string, string> | undefined;
+  /** Explicit provider capability profile resolved by desktop main. */
+  capabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   /**
    * Per-call reasoning level override. Typically sourced from
@@ -128,6 +131,7 @@ export interface ApplyCommentInput {
   baseUrl?: string | undefined;
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
+  capabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   /** @see GenerateInput.reasoningLevel */
   reasoningLevel?: ReasoningLevel | undefined;
@@ -164,6 +168,7 @@ interface ModelRunInput {
   baseUrl?: string | undefined;
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
+  capabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
   signal?: AbortSignal | undefined;
@@ -365,6 +370,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
           ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
           ...(input.wire !== undefined ? { wire: input.wire } : {}),
           ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
+          ...(input.capabilities !== undefined ? { capabilities: input.capabilities } : {}),
           ...(input.userImages !== undefined ? { userImages: input.userImages } : {}),
           ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
           ...(input.signal !== undefined ? { signal: input.signal } : {}),
@@ -674,6 +680,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     baseUrl: input.baseUrl,
     wire: input.wire,
     httpHeaders: input.httpHeaders,
+    capabilities: input.capabilities,
     allowKeyless: input.allowKeyless,
     reasoningLevel: input.reasoningLevel,
     signal: input.signal,
@@ -728,6 +735,7 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     baseUrl: input.baseUrl,
     wire: input.wire,
     httpHeaders: input.httpHeaders,
+    capabilities: input.capabilities,
     allowKeyless: input.allowKeyless,
     reasoningLevel: input.reasoningLevel,
     signal: input.signal,
@@ -753,6 +761,7 @@ export interface GenerateTitleInput {
   baseUrl?: string | undefined;
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
+  capabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   signal?: AbortSignal | undefined;
   logger?: CoreLogger | undefined;
@@ -809,6 +818,7 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.wire !== undefined ? { wire: input.wire } : {}),
         ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
+        ...(input.capabilities !== undefined ? { capabilities: input.capabilities } : {}),
         ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
         ...(input.signal !== undefined ? { signal: input.signal } : {}),
         maxTokens: 200,

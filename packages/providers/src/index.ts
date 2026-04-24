@@ -11,6 +11,7 @@ import {
   CodesignError,
   ERROR_CODES,
   type ModelRef,
+  type ProviderCapabilities,
   type WireApi,
 } from '@open-codesign/shared';
 import {
@@ -55,6 +56,11 @@ export interface GenerateOptions {
    * placeholder while auth is supplied by `httpHeaders` or by the gateway.
    */
   allowKeyless?: boolean;
+  /**
+   * Explicit capability profile for the provider. When set, overrides
+   * heuristic inference (e.g. reasoning support, role compatibility).
+   */
+  capabilities?: ProviderCapabilities;
 }
 
 export interface GenerateResult {
@@ -211,7 +217,11 @@ export function inferReasoning(
   wire: GenerateOptions['wire'],
   modelId: string,
   baseUrl: string | undefined,
+  capabilities?: ProviderCapabilities,
 ): boolean {
+  if (capabilities?.supportsReasoning !== undefined) {
+    return capabilities.supportsReasoning;
+  }
   switch (wire) {
     case 'anthropic':
       return true;
@@ -242,6 +252,7 @@ function synthesizeWireModel(
   modelId: string,
   wire: GenerateOptions['wire'],
   baseUrl: string | undefined,
+  capabilities?: ProviderCapabilities,
 ): PiModel {
   const supportsImageInput = wire === 'openai-codex-responses';
   const api =
@@ -257,7 +268,7 @@ function synthesizeWireModel(
     name: modelId,
     api,
     provider,
-    reasoning: inferReasoning(wire, modelId, baseUrl),
+    reasoning: inferReasoning(wire, modelId, baseUrl, capabilities),
     input: supportsImageInput ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 131072,
@@ -308,7 +319,13 @@ export async function complete(
   let piModel = pi.getModel(model.provider, effectiveModelId);
   if (!piModel) {
     if (opts.wire !== undefined) {
-      piModel = synthesizeWireModel(model.provider, effectiveModelId, opts.wire, opts.baseUrl);
+      piModel = synthesizeWireModel(
+        model.provider,
+        effectiveModelId,
+        opts.wire,
+        opts.baseUrl,
+        opts.capabilities,
+      );
     } else if (model.provider === 'openrouter') {
       piModel = synthesizeOpenRouterModel(effectiveModelId);
     } else {

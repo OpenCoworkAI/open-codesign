@@ -274,4 +274,54 @@ describe('provider capability helpers', () => {
     expect(caps.supportsModelsEndpoint).toBe(false);
     expect(caps.modelDiscoveryMode).toBe('manual');
   });
+
+  it('fills in omitted capability fields from defaults when merging overrides', () => {
+    const caps = resolveProviderCapabilities('custom-lite', {
+      wire: 'openai-chat',
+      capabilities: {
+        supportsModelsEndpoint: false,
+      },
+    });
+    expect(caps.supportsKeyless).toBe(false);
+    expect(caps.supportsModelsEndpoint).toBe(false);
+    expect(caps.supportsChatCompletions).toBe(true);
+    expect(caps.supportsResponsesApi).toBe(false);
+    expect(caps.supportsToolCalling).toBe(true);
+  });
+
+  it('defaults openai-chat wire to chat-completions + system-role + tool-calling', () => {
+    const caps = defaultProviderCapabilities('custom-proxy', { wire: 'openai-chat' });
+    expect(caps.supportsChatCompletions).toBe(true);
+    expect(caps.supportsResponsesApi).toBe(false);
+    expect(caps.supportsSystemRole).toBe(true);
+    expect(caps.supportsDeveloperRole).toBe(false);
+    expect(caps.supportsToolCalling).toBe(true);
+  });
+
+  it('defaults anthropic wire to no-chat-completions + system-role + tool-calling', () => {
+    const caps = defaultProviderCapabilities('custom-anthropic', { wire: 'anthropic' });
+    expect(caps.supportsChatCompletions).toBe(false);
+    expect(caps.supportsResponsesApi).toBe(false);
+    expect(caps.supportsSystemRole).toBe(true);
+    expect(caps.supportsDeveloperRole).toBe(false);
+    expect(caps.supportsToolCalling).toBe(true);
+  });
+
+  it('defaults openai-responses wire to responses-api + developer-role', () => {
+    const caps = defaultProviderCapabilities('custom-responses', { wire: 'openai-responses' });
+    expect(caps.supportsChatCompletions).toBe(false);
+    expect(caps.supportsResponsesApi).toBe(true);
+    expect(caps.supportsSystemRole).toBe(false);
+    expect(caps.supportsDeveloperRole).toBe(true);
+    expect(caps.supportsToolCalling).toBe(true);
+  });
+
+  it('defaults openai-codex-responses wire to responses-api + no-tool-calling', () => {
+    const caps = defaultProviderCapabilities('codex-proxy', { wire: 'openai-codex-responses' });
+    expect(caps.supportsChatCompletions).toBe(false);
+    expect(caps.supportsResponsesApi).toBe(true);
+    expect(caps.supportsSystemRole).toBe(false);
+    expect(caps.supportsDeveloperRole).toBe(true);
+    expect(caps.supportsToolCalling).toBe(false);
+  });
 });

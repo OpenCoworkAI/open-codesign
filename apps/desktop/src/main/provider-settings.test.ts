@@ -435,6 +435,25 @@ describe('resolveActiveModel', () => {
     expect(result.allowKeyless).toBe(true);
   });
 
+  it('returns resolved capabilities for the active provider', () => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      secrets: {
+        openai: { ciphertext: 'enc-oai' },
+      },
+    });
+
+    const result = resolveActiveModel(cfg, { provider: 'openai', modelId: 'gpt-4o' });
+
+    expect(result.capabilities.supportsChatCompletions).toBe(true);
+    expect(result.capabilities.supportsResponsesApi).toBe(false);
+    expect(result.capabilities.supportsSystemRole).toBe(true);
+    expect(result.capabilities.supportsToolCalling).toBe(true);
+    expect(result.capabilities.supportsKeyless).toBe(false);
+    expect(result.capabilities.supportsModelsEndpoint).toBe(true);
+  });
+
   it('throws for active imported Codex providers that require a stored secret', () => {
     const cfg = makeCfg({
       provider: 'codex-custom',

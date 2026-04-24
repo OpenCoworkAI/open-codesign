@@ -6,6 +6,7 @@ import {
   ERROR_CODES,
   type ModelRef,
   PROVIDER_SHORTLIST,
+  type ProviderCapabilities,
   type ProviderEntry,
   type ReasoningLevel,
   type WireApi,
@@ -209,6 +210,7 @@ export interface ActiveModelResolution {
   queryParams: Record<string, string> | undefined;
   reasoningLevel: ReasoningLevel | undefined;
   allowKeyless: boolean;
+  capabilities: Required<ProviderCapabilities>;
   /** True when the renderer-supplied hint provider didn't match the canonical active. */
   overridden: boolean;
 }
@@ -225,6 +227,7 @@ export function resolveActiveModel(
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
+  const capabilities = resolveProviderCapabilities(activeId, entry);
   const allowKeyless = isKeylessProviderAllowed(activeId, entry);
   if (cfg.secrets[activeId] === undefined && !allowKeyless) {
     throw new CodesignError(
@@ -242,6 +245,7 @@ export function resolveActiveModel(
     queryParams: entry.queryParams,
     reasoningLevel: entry.reasoningLevel,
     allowKeyless,
+    capabilities,
     overridden,
   };
 }

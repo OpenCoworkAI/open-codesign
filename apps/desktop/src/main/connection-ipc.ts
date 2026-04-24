@@ -3,11 +3,13 @@ import {
   BUILTIN_PROVIDERS,
   CodesignError,
   ERROR_CODES,
+  type ProviderCapabilities,
   type SupportedOnboardingProvider,
   type WireApi,
   canonicalBaseUrl,
   ensureVersionedBase,
   isSupportedOnboardingProvider,
+  resolveProviderCapabilities,
   stripInferenceEndpointSuffix,
 } from '@open-codesign/shared';
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
@@ -49,6 +51,7 @@ export interface ConnectionTestResult {
    * false-positive for a user whose provider is on the Responses API.
    */
   probeMethod?: 'models' | 'chat_completion_degraded' | 'responses_degraded';
+  diagnostics?: ConnectionTestDiagnostics;
 }
 
 export interface ConnectionTestError {
@@ -56,9 +59,26 @@ export interface ConnectionTestError {
   code: 'IPC_BAD_INPUT' | '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE';
   message: string;
   hint: string;
+  diagnostics?: ConnectionTestDiagnostics;
 }
 
 export type ConnectionTestResponse = ConnectionTestResult | ConnectionTestError;
+
+export interface ConnectionTestCapabilitySummary {
+  supportsModelsEndpoint: boolean;
+  supportsChatCompletions: boolean;
+  supportsResponsesApi: boolean;
+  supportsReasoning: boolean;
+  supportsToolCalling: boolean;
+}
+
+export interface ConnectionTestDiagnostics {
+  wire: WireApi;
+  strategy: 'oauth' | 'models' | 'models_then_inference' | 'inference_only';
+  capabilitySummary?: ConnectionTestCapabilitySummary;
+  attemptedEndpoints: string[];
+  skippedEndpoints: string[];
+}
 
 export type ModelsListResponse =
   | { ok: true; models: string[] }
@@ -361,6 +381,7 @@ export interface ActiveProviderCredentials {
   apiKey: string;
   baseUrl: string;
   httpHeaders?: Record<string, string>;
+  capabilities?: Required<ProviderCapabilities>;
 }
 
 function resolveCredentialsForProvider(
@@ -402,12 +423,14 @@ function resolveCredentialsForProvider(
     }
     apiKey = '';
   }
+  const capabilities = resolveProviderCapabilities(providerId, entry);
   return {
     provider: providerId,
     wire: entry.wire,
     apiKey,
     baseUrl: entry.baseUrl,
     ...(entry.httpHeaders !== undefined ? { httpHeaders: entry.httpHeaders } : {}),
+    capabilities,
   };
 }
 
@@ -423,6 +446,50 @@ function resolveActiveCredentials(): ActiveProviderCredentials | ConnectionTestE
     };
   }
   return resolveCredentialsForProvider(active);
+}
+
+function isInferenceProbeWire(
+  wire: WireApi,
+): wire is Extract<WireApi, 'openai-chat' | 'openai-responses'> {
+  return wire === 'openai-chat' || wire === 'openai-responses';
+}
+
+function getInferenceProbeUrl(
+  wire: Extract<WireApi, 'openai-chat' | 'openai-responses'>,
+  normalizedBaseUrl: string,
+): string {
+  return wire === 'openai-responses'
+    ? `${normalizedBaseUrl}/responses`
+    : `${normalizedBaseUrl}/chat/completions`;
+}
+
+function summarizeCapabilities(
+  capabilities: Required<ProviderCapabilities> | undefined,
+): ConnectionTestCapabilitySummary | undefined {
+  if (capabilities === undefined) return undefined;
+  return {
+    supportsModelsEndpoint: capabilities.supportsModelsEndpoint ?? false,
+    supportsChatCompletions: capabilities.supportsChatCompletions ?? false,
+    supportsResponsesApi: capabilities.supportsResponsesApi ?? false,
+    supportsReasoning: capabilities.supportsReasoning ?? false,
+    supportsToolCalling: capabilities.supportsToolCalling ?? false,
+  };
+}
+
+function makeConnectionDiagnostics(
+  creds: Pick<ActiveProviderCredentials, 'wire' | 'capabilities'>,
+  strategy: ConnectionTestDiagnostics['strategy'],
+  attemptedEndpoints: string[],
+  skippedEndpoints: string[],
+): ConnectionTestDiagnostics {
+  const capabilitySummary = summarizeCapabilities(creds.capabilities);
+  return {
+    wire: creds.wire,
+    strategy,
+    attemptedEndpoints,
+    skippedEndpoints,
+    ...(capabilitySummary !== undefined ? { capabilitySummary } : {}),
+  };
 }
 
 async function testChatGPTCodexOAuth(): Promise<ConnectionTestResponse> {
@@ -476,51 +543,169 @@ export async function runProviderTest(
     creds.baseUrl,
   );
 
-  let res: Response;
-  try {
-    res = await fetchWithTimeout(url, { method: 'GET', headers });
-  } catch (err) {
-    const { code, hint } = classifyNetworkError(err);
-    return {
-      ok: false,
-      code,
-      message: err instanceof Error ? err.message : 'Network request failed',
-      hint,
-    };
-  }
-  if (!res.ok) {
-    // Some OpenAI-compatible gateways (Zhipu GLM, a handful of self-hosted
-    // proxies) don't expose /models but their /chat/completions works fine.
-    // If the primary probe 404s on those wires, degrade-probe with a tiny
-    // chat request before declaring the endpoint dead. We intentionally do
-    // not degrade anthropic — its /v1/models is standard, and skipping it
-    // would mask real path-shape mistakes.
+  const supportsModels = creds.capabilities?.supportsModelsEndpoint ?? true;
+  const inferenceUrl = isInferenceProbeWire(creds.wire)
+    ? getInferenceProbeUrl(creds.wire, normalizedBaseUrl)
+    : null;
+
+  if (supportsModels) {
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(url, { method: 'GET', headers });
+    } catch (err) {
+      const { code, hint } = classifyNetworkError(err);
+      return {
+        ok: false,
+        code,
+        message: err instanceof Error ? err.message : 'Network request failed',
+        hint,
+        diagnostics: makeConnectionDiagnostics(
+          creds,
+          'models',
+          [url],
+          inferenceUrl === null ? [] : [inferenceUrl],
+        ),
+      };
+    }
+    if (res.ok) {
+      return {
+        ok: true,
+        probeMethod: 'models',
+        diagnostics: makeConnectionDiagnostics(
+          creds,
+          'models',
+          [url],
+          inferenceUrl === null ? [] : [inferenceUrl],
+        ),
+      };
+    }
+    let attemptedInferenceProbe = false;
     if (res.status === 404 && (creds.wire === 'openai-chat' || creds.wire === 'openai-responses')) {
-      const probe = await probeInferenceEndpoint(creds.wire, normalizedBaseUrl, headers);
+      attemptedInferenceProbe = true;
+      const degradeUrl = getInferenceProbeUrl(creds.wire, normalizedBaseUrl);
+      const probe = await probeInferenceEndpoint(
+        creds.wire,
+        normalizedBaseUrl,
+        headers,
+        creds.capabilities,
+      );
       if (probe.kind === 'pass') {
         return {
           ok: true,
           probeMethod:
             creds.wire === 'openai-responses' ? 'responses_degraded' : 'chat_completion_degraded',
+          diagnostics: makeConnectionDiagnostics(
+            creds,
+            'models_then_inference',
+            [url, degradeUrl],
+            [],
+          ),
+        };
+      }
+      if (probe.kind === 'unsupported') {
+        return {
+          ok: false,
+          code: 'NETWORK',
+          message: probe.message,
+          hint: 'Provider capability profile says this endpoint is not supported. Check wire selection.',
+          diagnostics: makeConnectionDiagnostics(
+            creds,
+            'models_then_inference',
+            [url],
+            [degradeUrl],
+          ),
         };
       }
       if (probe.kind === 'http' && probe.status !== 404) {
         const { code, hint } = classifyHttpError(probe.status);
-        return { ok: false, code, message: `HTTP ${probe.status}`, hint };
+        return {
+          ok: false,
+          code,
+          message: `HTTP ${probe.status}`,
+          hint,
+          diagnostics: makeConnectionDiagnostics(
+            creds,
+            'models_then_inference',
+            [url, degradeUrl],
+            [],
+          ),
+        };
       }
       // Inference endpoint also 404'd (or the network dropped) — fall through
       // and report the original /models 404.
     }
     const { code, hint } = classifyHttpError(res.status);
-    return { ok: false, code, message: `HTTP ${res.status}`, hint };
+    return {
+      ok: false,
+      code,
+      message: `HTTP ${res.status}`,
+      hint,
+      diagnostics: makeConnectionDiagnostics(
+        creds,
+        attemptedInferenceProbe ? 'models_then_inference' : 'models',
+        attemptedInferenceProbe && inferenceUrl !== null ? [url, inferenceUrl] : [url],
+        attemptedInferenceProbe || inferenceUrl === null ? [] : [inferenceUrl],
+      ),
+    };
   }
-  return { ok: true, probeMethod: 'models' };
+
+  // supportsModelsEndpoint === false — skip /models and probe the inference endpoint directly.
+  if (!isInferenceProbeWire(creds.wire) || inferenceUrl === null) {
+    return {
+      ok: false,
+      code: 'NETWORK',
+      message: 'Provider capability profile disables /models, but this wire has no fallback probe',
+      hint: 'Re-enable supportsModelsEndpoint or switch to an OpenAI-compatible wire.',
+      diagnostics: makeConnectionDiagnostics(creds, 'inference_only', [], [url]),
+    };
+  }
+  const probe = await probeInferenceEndpoint(
+    creds.wire,
+    normalizedBaseUrl,
+    headers,
+    creds.capabilities,
+  );
+  if (probe.kind === 'pass') {
+    return {
+      ok: true,
+      probeMethod:
+        creds.wire === 'openai-responses' ? 'responses_degraded' : 'chat_completion_degraded',
+      diagnostics: makeConnectionDiagnostics(creds, 'inference_only', [inferenceUrl], [url]),
+    };
+  }
+  if (probe.kind === 'unsupported') {
+    return {
+      ok: false,
+      code: 'NETWORK',
+      message: probe.message,
+      hint: 'Provider capability profile says this endpoint is not supported. Check wire selection.',
+      diagnostics: makeConnectionDiagnostics(creds, 'inference_only', [], [url, inferenceUrl]),
+    };
+  }
+  if (probe.kind === 'http') {
+    const { code, hint } = classifyHttpError(probe.status);
+    return {
+      ok: false,
+      code,
+      message: `HTTP ${probe.status}`,
+      hint,
+      diagnostics: makeConnectionDiagnostics(creds, 'inference_only', [inferenceUrl], [url]),
+    };
+  }
+  return {
+    ok: false,
+    code: 'NETWORK',
+    message: probe.message,
+    hint: 'Cannot reach provider inference endpoint',
+    diagnostics: makeConnectionDiagnostics(creds, 'inference_only', [inferenceUrl], [url]),
+  };
 }
 
 type ProbeResult =
   | { kind: 'pass' }
   | { kind: 'http'; status: number }
-  | { kind: 'network'; message: string };
+  | { kind: 'network'; message: string }
+  | { kind: 'unsupported'; message: string };
 
 /**
  * POST a minimal inference request to verify the endpoint is alive when GET
@@ -537,7 +722,14 @@ async function probeInferenceEndpoint(
   wire: 'openai-chat' | 'openai-responses',
   normalizedBaseUrl: string,
   headers: Record<string, string>,
+  capabilities?: Required<ProviderCapabilities>,
 ): Promise<ProbeResult> {
+  if (wire === 'openai-responses' && capabilities?.supportsResponsesApi === false) {
+    return { kind: 'unsupported', message: 'Provider does not support Responses API' };
+  }
+  if (wire === 'openai-chat' && capabilities?.supportsChatCompletions === false) {
+    return { kind: 'unsupported', message: 'Provider does not support Chat Completions API' };
+  }
   const url =
     wire === 'openai-responses'
       ? `${normalizedBaseUrl}/responses`

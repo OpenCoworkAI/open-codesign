@@ -556,6 +556,19 @@ describe('inferReasoning', () => {
     expect(inferReasoning(undefined, 'gpt-4o', 'https://api.openai.com/v1')).toBe(false);
   });
 
+  it('prefers explicit capability profile over heuristic reasoning inference', () => {
+    expect(
+      inferReasoning('openai-chat', 'gpt-5.4', 'https://api.openai.com/v1', {
+        supportsReasoning: false,
+      }),
+    ).toBe(false);
+    expect(
+      inferReasoning('openai-chat', 'gpt-4o', 'https://api.openai.com/v1', {
+        supportsReasoning: true,
+      }),
+    ).toBe(true);
+  });
+
   it('returns true for third-party openai-chat with reasoning model ID (issue #188)', () => {
     // univibe/custom proxy with Claude 4 model
     expect(inferReasoning('openai-chat', 'claude-opus-4-6', 'https://api.univibe.cc/openai')).toBe(
