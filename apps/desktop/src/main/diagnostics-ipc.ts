@@ -182,75 +182,88 @@ function parseListEventsInput(raw: unknown): ListEventsInput {
   return out;
 }
 
+function requireNonEmptyString(r: Record<string, unknown>, key: string, prefix = ''): string {
+  if (typeof r[key] !== 'string' || (r[key] as string).length === 0) {
+    throw new CodesignError(`${prefix}${key} must be a non-empty string`, 'IPC_BAD_INPUT');
+  }
+  return r[key] as string;
+}
+
+function coerceOptionalString(
+  r: Record<string, unknown>,
+  key: string,
+  prefix = '',
+): string | undefined {
+  if (r[key] === undefined) return undefined;
+  if (typeof r[key] !== 'string') {
+    throw new CodesignError(`${prefix}${key} must be a string if provided`, 'IPC_BAD_INPUT');
+  }
+  return r[key] as string;
+}
+
+function coerceErrorContext(
+  raw: unknown,
+  prefix: 'error.' | '',
+  rejectArrays: boolean,
+): Record<string, unknown> | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'object' || raw === null || (rejectArrays && Array.isArray(raw))) {
+    throw new CodesignError(`${prefix}context must be an object if provided`, 'IPC_BAD_INPUT');
+  }
+  const ctx = raw as Record<string, unknown>;
+  let serializedLen: number;
+  try {
+    serializedLen = JSON.stringify(ctx).length;
+  } catch {
+    throw new CodesignError(`${prefix}context must be JSON-serializable`, 'IPC_BAD_INPUT');
+  }
+  if (serializedLen > CONTEXT_JSON_MAX) {
+    throw new CodesignError(
+      `${prefix}context serialized length exceeds ${CONTEXT_JSON_MAX} characters`,
+      'IPC_BAD_INPUT',
+    );
+  }
+  return ctx;
+}
+
+function assertStringLen(value: string, max: number, label: string): void {
+  if (value.length > max) {
+    throw new CodesignError(`${label} exceeds ${max} characters`, 'IPC_BAD_INPUT');
+  }
+}
+
 function parseReportableError(raw: unknown): ReportableError {
   if (typeof raw !== 'object' || raw === null) {
     throw new CodesignError('error payload must be an object', 'IPC_BAD_INPUT');
   }
   const r = raw as Record<string, unknown>;
-  const requireString = (key: string): string => {
-    if (typeof r[key] !== 'string' || (r[key] as string).length === 0) {
-      throw new CodesignError(`${key} must be a non-empty string`, 'IPC_BAD_INPUT');
-    }
-    return r[key] as string;
-  };
-  const optString = (key: string): string | undefined => {
-    if (r[key] === undefined) return undefined;
-    if (typeof r[key] !== 'string') {
-      throw new CodesignError(`${key} must be a string if provided`, 'IPC_BAD_INPUT');
-    }
-    return r[key] as string;
-  };
   if (typeof r['ts'] !== 'number' || !Number.isFinite(r['ts'])) {
     throw new CodesignError('error.ts must be a finite number', 'IPC_BAD_INPUT');
-  }
-  if (
-    r['context'] !== undefined &&
-    (typeof r['context'] !== 'object' || r['context'] === null || Array.isArray(r['context']))
-  ) {
-    throw new CodesignError('error.context must be an object if provided', 'IPC_BAD_INPUT');
   }
   if (r['persistedEventId'] !== undefined && typeof r['persistedEventId'] !== 'number') {
     throw new CodesignError('error.persistedEventId must be a number if provided', 'IPC_BAD_INPUT');
   }
   const messageField = typeof r['message'] === 'string' ? (r['message'] as string) : '';
-  if (messageField.length > MESSAGE_MAX) {
-    throw new CodesignError(`error.message exceeds ${MESSAGE_MAX} characters`, 'IPC_BAD_INPUT');
-  }
+  assertStringLen(messageField, MESSAGE_MAX, 'error.message');
+  const context = coerceErrorContext(r['context'], 'error.', true);
   const out: ReportableError = {
-    localId: requireString('localId'),
-    code: requireString('code'),
-    scope: requireString('scope'),
+    localId: requireNonEmptyString(r, 'localId'),
+    code: requireNonEmptyString(r, 'code'),
+    scope: requireNonEmptyString(r, 'scope'),
     message: messageField,
-    fingerprint: requireString('fingerprint'),
+    fingerprint: requireNonEmptyString(r, 'fingerprint'),
     ts: r['ts'] as number,
   };
-  const stack = optString('stack');
+  const stack = coerceOptionalString(r, 'stack');
   if (stack !== undefined) {
-    if (stack.length > STACK_MAX) {
-      throw new CodesignError(`error.stack exceeds ${STACK_MAX} characters`, 'IPC_BAD_INPUT');
-    }
+    assertStringLen(stack, STACK_MAX, 'error.stack');
     out.stack = stack;
   }
-  const runId = optString('runId');
+  const runId = coerceOptionalString(r, 'runId');
   if (runId !== undefined) out.runId = runId;
-  if (r['context'] !== undefined) {
-    const ctx = r['context'] as Record<string, unknown>;
-    let serializedLen: number;
-    try {
-      serializedLen = JSON.stringify(ctx).length;
-    } catch {
-      throw new CodesignError('error.context must be JSON-serializable', 'IPC_BAD_INPUT');
-    }
-    if (serializedLen > CONTEXT_JSON_MAX) {
-      throw new CodesignError(
-        `error.context serialized length exceeds ${CONTEXT_JSON_MAX} characters`,
-        'IPC_BAD_INPUT',
-      );
-    }
-    out.context = ctx;
-  }
+  if (context !== undefined) out.context = context;
   if (r['persistedEventId'] !== undefined) out.persistedEventId = r['persistedEventId'] as number;
-  const persistedFp = optString('persistedFingerprint');
+  const persistedFp = coerceOptionalString(r, 'persistedFingerprint');
   if (persistedFp !== undefined) out.persistedFingerprint = persistedFp;
   return out;
 }
@@ -340,44 +353,17 @@ function parseRecordRendererErrorInput(raw: unknown): {
       'IPC_BAD_INPUT',
     );
   }
-  if (typeof r['code'] !== 'string' || (r['code'] as string).length === 0) {
-    throw new CodesignError('code must be a non-empty string', 'IPC_BAD_INPUT');
-  }
-  if (typeof r['scope'] !== 'string' || (r['scope'] as string).length === 0) {
-    throw new CodesignError('scope must be a non-empty string', 'IPC_BAD_INPUT');
-  }
+  const code = requireNonEmptyString(r, 'code');
+  const scope = requireNonEmptyString(r, 'scope');
   if (typeof r['message'] !== 'string') {
     throw new CodesignError('message must be a string', 'IPC_BAD_INPUT');
   }
-  if ((r['message'] as string).length > MESSAGE_MAX) {
-    throw new CodesignError(`message exceeds ${MESSAGE_MAX} characters`, 'IPC_BAD_INPUT');
-  }
-  if (r['stack'] !== undefined && typeof r['stack'] !== 'string') {
-    throw new CodesignError('stack must be a string if provided', 'IPC_BAD_INPUT');
-  }
-  if (r['stack'] !== undefined && (r['stack'] as string).length > STACK_MAX) {
-    throw new CodesignError(`stack exceeds ${STACK_MAX} characters`, 'IPC_BAD_INPUT');
-  }
-  if (r['runId'] !== undefined && typeof r['runId'] !== 'string') {
-    throw new CodesignError('runId must be a string if provided', 'IPC_BAD_INPUT');
-  }
-  if (r['context'] !== undefined && (typeof r['context'] !== 'object' || r['context'] === null)) {
-    throw new CodesignError('context must be an object if provided', 'IPC_BAD_INPUT');
-  }
-  if (r['context'] !== undefined) {
-    let serializedLen: number;
-    try {
-      serializedLen = JSON.stringify(r['context']).length;
-    } catch {
-      throw new CodesignError('context must be JSON-serializable', 'IPC_BAD_INPUT');
-    }
-    if (serializedLen > CONTEXT_JSON_MAX) {
-      throw new CodesignError(
-        `context serialized length exceeds ${CONTEXT_JSON_MAX} characters`,
-        'IPC_BAD_INPUT',
-      );
-    }
-  }
+  const message = r['message'] as string;
+  assertStringLen(message, MESSAGE_MAX, 'message');
+  const stack = coerceOptionalString(r, 'stack');
+  if (stack !== undefined) assertStringLen(stack, STACK_MAX, 'stack');
+  const runId = coerceOptionalString(r, 'runId');
+  const context = coerceErrorContext(r['context'], '', false);
   const out: {
     code: string;
     scope: string;
@@ -385,14 +371,10 @@ function parseRecordRendererErrorInput(raw: unknown): {
     stack?: string;
     runId?: string;
     context?: Record<string, unknown>;
-  } = {
-    code: r['code'] as string,
-    scope: r['scope'] as string,
-    message: r['message'] as string,
-  };
-  if (r['stack'] !== undefined) out.stack = r['stack'] as string;
-  if (r['runId'] !== undefined) out.runId = r['runId'] as string;
-  if (r['context'] !== undefined) out.context = r['context'] as Record<string, unknown>;
+  } = { code, scope, message };
+  if (stack !== undefined) out.stack = stack;
+  if (runId !== undefined) out.runId = runId;
+  if (context !== undefined) out.context = context;
   return out;
 }
 
@@ -501,6 +483,93 @@ export async function buildBundle(opts: {
   }
 
   return destPath;
+}
+
+async function handleReportEvent(
+  db: Database | null,
+  input: ReportEventInput,
+): Promise<ReportEventResult> {
+  const error = input.error;
+
+  // If the ReportableError was persisted into diagnostic_events earlier,
+  // surface the DB row's `count` + `context_json` so the bundle carries
+  // the richer repeat-count and any context the renderer didn't ship. All
+  // of this is nice-to-have; Report works end-to-end without the DB.
+  let dbCount = 1;
+  if (db !== null && typeof error.persistedEventId === 'number') {
+    const row = getDiagnosticEventById(db, error.persistedEventId);
+    if (row !== undefined) {
+      dbCount = row.count;
+      if (error.context === undefined && row.context !== undefined) {
+        error.context = row.context;
+      }
+    }
+  }
+
+  const recentLogTail = await readLogTail(50);
+  const summaryMarkdown = composeSummaryMarkdown({
+    error,
+    count: dbCount,
+    level: 'error',
+    transient: false,
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    electronVersion: process.versions.electron ?? 'unknown',
+    nodeVersion: process.versions.node,
+    timeline: input.timeline,
+    recentLogTail,
+    notes: input.notes,
+    includePromptText: input.includePromptText,
+    includePaths: input.includePaths,
+    includeUrls: input.includeUrls,
+    includeTimeline: input.includeTimeline,
+  });
+
+  const bundlePath = await buildBundle({
+    summaryMarkdown,
+    includePromptText: input.includePromptText,
+    includePaths: input.includePaths,
+    includeUrls: input.includeUrls,
+  });
+  const os = await import('node:os');
+  const issueUrl = buildIssueUrlWithTemplate({
+    error,
+    bundlePath,
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    platformVersion: prettyPlatformVersion(process.platform, os.release()),
+    logTail: recentLogTail,
+    notes: input.notes,
+    includePromptText: input.includePromptText,
+    includePaths: input.includePaths,
+    includeUrls: input.includeUrls,
+  });
+
+  try {
+    // SECURITY: never trust the renderer-supplied fingerprint for dedup.
+    // Recompute main-side from errorCode + stack + message so a compromised
+    // renderer can't spoof or bypass the "recently reported" record.
+    const fp = computeFingerprint({
+      errorCode: error.code,
+      stack: error.stack,
+      message: error.message,
+    });
+    recordReported(reportedFingerprintsPath(), fp, issueUrl);
+  } catch (err) {
+    logger.warn('diagnostics.reported.dedupWrite.fail', {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  logger.info('diagnostics.reported', {
+    localId: error.localId,
+    code: error.code,
+    fingerprint: error.fingerprint,
+    persistedEventId: error.persistedEventId,
+    bundlePath,
+  });
+
+  return { schemaVersion: 1, issueUrl, bundlePath, summaryMarkdown };
 }
 
 async function buildDiagnosticsZip(): Promise<string> {
@@ -638,57 +707,68 @@ function fenceLogs(lines: string[], max: number): string {
   return `\`\`\`\n${body}\n\`\`\``;
 }
 
+function dispatchRendererLog(entry: RendererLogEntry): void {
+  const scopedLogger = getLogger(`renderer:${entry.scope}`);
+  const fields: Record<string, unknown> = {};
+  if (entry.data !== undefined) {
+    Object.assign(fields, entry.data);
+  }
+  // Stack is forwarded as a separate key, never concatenated into the message,
+  // so it doesn't duplicate what electron-log already captures per-error.
+  if (entry.stack !== undefined) {
+    fields['stack'] = entry.stack;
+  }
+  switch (entry.level) {
+    case 'info':
+      scopedLogger.info(entry.message, fields);
+      break;
+    case 'warn':
+      scopedLogger.warn(entry.message, fields);
+      break;
+    case 'error':
+      scopedLogger.error(entry.message, fields);
+      break;
+  }
+}
+
+function persistRendererErrorEntry(db: Database, entry: RendererLogEntry): void {
+  const dataCode =
+    entry.data !== undefined && typeof entry.data['code'] === 'string'
+      ? (entry.data['code'] as string)
+      : undefined;
+  const code = dataCode ?? 'RENDERER_ERROR';
+  const runId =
+    entry.data !== undefined && typeof entry.data['runId'] === 'string'
+      ? (entry.data['runId'] as string)
+      : undefined;
+  recordDiagnosticEvent(db, {
+    level: 'error',
+    code,
+    scope: entry.scope,
+    runId,
+    fingerprint: computeFingerprint({
+      errorCode: code,
+      stack: entry.stack,
+      message: entry.message,
+    }),
+    message: entry.message,
+    stack: entry.stack,
+    transient: false,
+  });
+}
+
+function handleRendererLog(db: Database | null, raw: unknown): void {
+  const entry = parseLogEntry(raw);
+  dispatchRendererLog(entry);
+  // Persist only error-level renderer entries into diagnostic_events.
+  if (entry.level === 'error' && db !== null) {
+    persistRendererErrorEntry(db, entry);
+  }
+}
+
 export function registerDiagnosticsIpc(db: Database | null): void {
   ipcMain.handle('diagnostics:v1:log', (_e: unknown, raw: unknown): void => {
-    const entry = parseLogEntry(raw);
-    const scopedLogger = getLogger(`renderer:${entry.scope}`);
-    const fields: Record<string, unknown> = {};
-    if (entry.data !== undefined) {
-      Object.assign(fields, entry.data);
-    }
-    // Stack is forwarded as a separate key, never concatenated into the message,
-    // so it doesn't duplicate what electron-log already captures per-error.
-    if (entry.stack !== undefined) {
-      fields['stack'] = entry.stack;
-    }
-    switch (entry.level) {
-      case 'info':
-        scopedLogger.info(entry.message, fields);
-        break;
-      case 'warn':
-        scopedLogger.warn(entry.message, fields);
-        break;
-      case 'error':
-        scopedLogger.error(entry.message, fields);
-        break;
-    }
-
-    // Persist only error-level renderer entries into diagnostic_events.
-    if (entry.level === 'error' && db !== null) {
-      const dataCode =
-        entry.data !== undefined && typeof entry.data['code'] === 'string'
-          ? (entry.data['code'] as string)
-          : undefined;
-      const code = dataCode ?? 'RENDERER_ERROR';
-      const runId =
-        entry.data !== undefined && typeof entry.data['runId'] === 'string'
-          ? (entry.data['runId'] as string)
-          : undefined;
-      recordDiagnosticEvent(db, {
-        level: 'error',
-        code,
-        scope: entry.scope,
-        runId,
-        fingerprint: computeFingerprint({
-          errorCode: code,
-          stack: entry.stack,
-          message: entry.message,
-        }),
-        message: entry.message,
-        stack: entry.stack,
-        transient: false,
-      });
-    }
+    handleRendererLog(db, raw);
   });
 
   ipcMain.handle(
@@ -783,87 +863,7 @@ export function registerDiagnosticsIpc(db: Database | null): void {
     'diagnostics:v1:reportEvent',
     async (_e: unknown, raw: unknown): Promise<ReportEventResult> => {
       const input = parseReportEventInput(raw);
-      const error = input.error;
-
-      // If the ReportableError was persisted into diagnostic_events earlier,
-      // surface the DB row's `count` + `context_json` so the bundle carries
-      // the richer repeat-count and any context the renderer didn't ship. All
-      // of this is nice-to-have; Report works end-to-end without the DB.
-      let dbCount = 1;
-      if (db !== null && typeof error.persistedEventId === 'number') {
-        const row = getDiagnosticEventById(db, error.persistedEventId);
-        if (row !== undefined) {
-          dbCount = row.count;
-          if (error.context === undefined && row.context !== undefined) {
-            error.context = row.context;
-          }
-        }
-      }
-
-      const recentLogTail = await readLogTail(50);
-      const summaryMarkdown = composeSummaryMarkdown({
-        error,
-        count: dbCount,
-        level: 'error',
-        transient: false,
-        appVersion: app.getVersion(),
-        platform: process.platform,
-        electronVersion: process.versions.electron ?? 'unknown',
-        nodeVersion: process.versions.node,
-        timeline: input.timeline,
-        recentLogTail,
-        notes: input.notes,
-        includePromptText: input.includePromptText,
-        includePaths: input.includePaths,
-        includeUrls: input.includeUrls,
-        includeTimeline: input.includeTimeline,
-      });
-
-      const bundlePath = await buildBundle({
-        summaryMarkdown,
-        includePromptText: input.includePromptText,
-        includePaths: input.includePaths,
-        includeUrls: input.includeUrls,
-      });
-      const os = await import('node:os');
-      const issueUrl = buildIssueUrlWithTemplate({
-        error,
-        bundlePath,
-        appVersion: app.getVersion(),
-        platform: process.platform,
-        platformVersion: prettyPlatformVersion(process.platform, os.release()),
-        logTail: recentLogTail,
-        notes: input.notes,
-        includePromptText: input.includePromptText,
-        includePaths: input.includePaths,
-        includeUrls: input.includeUrls,
-      });
-
-      try {
-        // SECURITY: never trust the renderer-supplied fingerprint for dedup.
-        // Recompute main-side from errorCode + stack + message so a compromised
-        // renderer can't spoof or bypass the "recently reported" record.
-        const fp = computeFingerprint({
-          errorCode: error.code,
-          stack: error.stack,
-          message: error.message,
-        });
-        recordReported(reportedFingerprintsPath(), fp, issueUrl);
-      } catch (err) {
-        logger.warn('diagnostics.reported.dedupWrite.fail', {
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
-
-      logger.info('diagnostics.reported', {
-        localId: error.localId,
-        code: error.code,
-        fingerprint: error.fingerprint,
-        persistedEventId: error.persistedEventId,
-        bundlePath,
-      });
-
-      return { schemaVersion: 1, issueUrl, bundlePath, summaryMarkdown };
+      return handleReportEvent(db, input);
     },
   );
 
