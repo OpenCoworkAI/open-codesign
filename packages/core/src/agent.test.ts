@@ -372,6 +372,54 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     expect(model?.baseUrl).toBe('https://proxy.example.com/v1');
   });
 
+  it('respects explicit reasoning opt-out for imported openai-chat providers on official OpenAI hosts', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a landing page',
+      history: [],
+      model: { provider: 'opencode-openai', modelId: 'gpt-5.4' },
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://api.openai.com/v1',
+      capabilities: {
+        supportsReasoning: false,
+      },
+    });
+
+    const initialState = agentCalls[0]?.options.initialState as
+      | {
+          model?: { reasoning?: boolean };
+          thinkingLevel?: string;
+        }
+      | undefined;
+    expect(initialState?.model?.reasoning).toBe(false);
+    expect(initialState?.thinkingLevel).toBe('off');
+  });
+
+  it('preserves official OpenAI reasoning heuristics for builtin providers in agent runtime', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a landing page',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-5.4' },
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://api.openai.com/v1',
+      capabilities: {
+        supportsReasoning: false,
+      },
+    });
+
+    const initialState = agentCalls[0]?.options.initialState as
+      | {
+          model?: { reasoning?: boolean };
+          thinkingLevel?: string;
+        }
+      | undefined;
+    expect(initialState?.model?.reasoning).toBe(true);
+    expect(initialState?.thinkingLevel).toBe('high');
+  });
+
   it('extracts artifact and returns usage mapped from pi-ai assistant usage', async () => {
     scriptedAgent = {
       assistantText: RESPONSE_WITH_ARTIFACT,
