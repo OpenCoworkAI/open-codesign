@@ -345,6 +345,18 @@ function registerIpcHandlers(db: Database | null): void {
   });
 
   /**
+   * Lookup the filesystem workspace bound to a design.
+   *
+   * dev/v0.2 does not yet persist a per-design workspace binding — PR #173
+   * will add a `workspace_path` column to the `designs` table. Until then
+   * this returns `undefined` so core's scaffold tool cleanly surfaces
+   * "no workspace attached" rather than writing to a guessed path.
+   */
+  const resolveWorkspaceRootForDesign = (_designId: string | null): string | undefined => {
+    return undefined;
+  };
+
+  /**
    * Phase 1 flag dispatcher. When `USE_AGENT_RUNTIME` is off, passes through
    * to `generate()` unchanged. When on, routes through `generateViaAgent()`
    * and forwards normalized `AgentEvent`s to the renderer via
@@ -513,8 +525,19 @@ function registerIpcHandlers(db: Database | null): void {
     let deltaCount = 0;
     let toolCount = 0;
 
+    // Resolve the design's bound workspace root so the scaffold tool can
+    // write into the right directory. dev/v0.2 does not yet persist a
+    // per-design workspace binding (planned with PR #173); until that lands
+    // this returns undefined and core's scaffold tool surfaces a clean
+    // "no workspace attached" error.
+    const workspaceRoot = resolveWorkspaceRootForDesign(designId);
+
     return generateViaAgent(
-      { ...input, askBridge: (askInput) => requestAsk(id, askInput, () => mainWindow) },
+      {
+        ...input,
+        askBridge: (askInput) => requestAsk(id, askInput, () => mainWindow),
+        ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
+      },
       {
         fs,
         runtimeVerify,
