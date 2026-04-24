@@ -52,6 +52,7 @@ export class CodexTokenStore {
   private readonly now: () => number;
   private cache: StoredCodexAuth | null = null;
   private refreshPromise: Promise<string> | null = null;
+  private writeChain: Promise<void> = Promise.resolve();
 
   constructor(opts: CodexTokenStoreOptions) {
     this.filePath = opts.filePath;
@@ -91,14 +92,18 @@ export class CodexTokenStore {
   }
 
   async write(auth: StoredCodexAuth): Promise<void> {
+    const op = this.writeChain.then(() => this.writeNow(auth));
+    this.writeChain = op.catch(() => {});
+    await op;
+  }
+
+  private async writeNow(auth: StoredCodexAuth): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
     const body = JSON.stringify(auth, null, 2);
-    // Write to a pid + UUID scoped tmp then atomically rename. The UUID
-    // suffix prevents intra-process races when two write() calls overlap
-    // (same pid would otherwise collide on the tmp path and could unlink
-    // or rename each other's file). rename() itself is atomic on POSIX and
-    // Windows (Node >= 10). Guards against truncated writes on Win11 when
-    // the process is killed or antivirus interferes mid-write (issue #128).
+    // Queue writes per store instance, then publish via pid + UUID scoped
+    // temp files. Windows can still reject concurrent rename() calls that
+    // target the same destination with EPERM even when the temp names differ,
+    // so we serialize the final swap while keeping each individual write atomic.
     const tmpPath = `${this.filePath}.tmp.${process.pid}.${randomUUID()}`;
     try {
       await writeFile(tmpPath, body, { encoding: 'utf8', mode: 0o600 });

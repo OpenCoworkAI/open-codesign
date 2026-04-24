@@ -330,6 +330,18 @@ export async function complete(
   };
 
   let piModel = pi.getModel(model.provider, effectiveModelId);
+  if (piModel && opts.wire !== undefined) {
+    piModel = {
+      ...piModel,
+      reasoning: inferReasoning(
+        opts.wire,
+        effectiveModelId,
+        opts.baseUrl,
+        opts.capabilities,
+        model.provider,
+      ),
+    };
+  }
   if (!piModel) {
     if (opts.wire !== undefined) {
       piModel = synthesizeWireModel(
