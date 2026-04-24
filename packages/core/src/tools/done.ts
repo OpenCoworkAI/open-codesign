@@ -132,6 +132,17 @@ function findMissingAlt(html: string): DoneError[] {
  * skipped — those have their own checks via findUnclosedTags etc.
  */
 function findJsxStructuralIssues(src: string): DoneError[] {
+  // Plain HTML files are first-class in v0.2 (agent writes index.html into
+  // the workspace; puppeteer renders file:// directly — no JSX wrap needed).
+  // Skip the JSX structural checks entirely when the source looks like an
+  // HTML document, otherwise the "missing ReactDOM.createRoot" error trains
+  // the agent to rewrite the file as React, which is a regression.
+  const looksHtml =
+    /<!doctype\s+html/i.test(src) ||
+    /<html[\s>]/i.test(src) ||
+    (/<head[\s>]/i.test(src) && /<body[\s>]/i.test(src));
+  if (looksHtml) return [];
+
   const looksJsx =
     /ReactDOM\.createRoot\s*\(/.test(src) ||
     /\/\*\s*EDITMODE-BEGIN\s*\*\//.test(src) ||

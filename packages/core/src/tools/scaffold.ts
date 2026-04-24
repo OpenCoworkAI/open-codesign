@@ -1,20 +1,23 @@
-import { copyFile, mkdir, readFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import { Type } from '@sinclair/typebox';
 
 /**
- * `scaffold` tool (T3.2). Copies a pre-bundled starter file from
- * `packages/core/src/scaffolds/` into the user's workspace.
+ * `scaffold` tool (T3.2). Inlines the pre-bundled starter files at build time
+ * via `import.meta.glob` so the tool works identically in dev, production,
+ * and test, and after electron-vite bundles `packages/core/src/tools/scaffold.ts`
+ * into `apps/desktop/out/main/index.js`. Previously we resolved a runtime
+ * SCAFFOLDS_ROOT from `import.meta.url`, which broke after bundling because
+ * the JS moved away from the source tree.
  *
- * The set of legal `kind` values is the union of keys from
- * `manifest.json` (T4.2). Loaded lazily so the renderer can reflect
- * the catalog without bundling every scaffold's bytes.
+ * Any tooling that ingests packages/core (vite, electron-vite, vitest) handles
+ * this glob. It is NOT compatible with plain tsc + node — acceptable because
+ * packages/core is an internal workspace dep, never published.
  */
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SCAFFOLDS_ROOT = path.join(HERE, '..', 'scaffolds');
+import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import { Type } from '@sinclair/typebox';
+// biome-ignore lint/correctness/noUnusedImports: used by import.meta.glob (vite)
+import manifestJson from '../scaffolds/manifest.json' with { type: 'json' };
 
 interface ManifestEntry {
   description: string;
@@ -28,18 +31,46 @@ interface Manifest {
   scaffolds: Record<string, ManifestEntry>;
 }
 
-let cached: Manifest | null = null;
+const MANIFEST = manifestJson as unknown as Manifest;
+
+// Eagerly inline every file under scaffolds/ as a raw string. Vite rewrites
+// this at build time so the JS bundle contains the file contents — no runtime
+// filesystem access into the source tree is needed.
+const SCAFFOLD_SOURCES = import.meta.glob<string>('../scaffolds/**/*.{jsx,css,html,js}', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+// Frames live in a sibling directory and predate the scaffolds bundle. The
+// manifest references them via `../frames/<file>`; inline those too so
+// `iphone-frame` etc. still resolve post-bundle.
+const FRAME_SOURCES = import.meta.glob<string>('../frames/*.jsx', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+function resolveSource(entryPath: string): string | null {
+  // entryPath is the manifest's `path` field, e.g. `device-frames/iphone-16-pro.jsx`
+  // or `../frames/iphone.jsx`. Normalize to a key matching our glob keys.
+  const normalized = entryPath.replace(/^\.\//, '');
+  const tryKeys = normalized.startsWith('../frames/')
+    ? [normalized, `../${normalized.slice(3)}`]
+    : [`../scaffolds/${normalized}`];
+  for (const key of tryKeys) {
+    const src = SCAFFOLD_SOURCES[key] ?? FRAME_SOURCES[key];
+    if (typeof src === 'string') return src;
+  }
+  return null;
+}
 
 export async function loadScaffoldManifest(): Promise<Manifest> {
-  if (cached) return cached;
-  const raw = await readFile(path.join(SCAFFOLDS_ROOT, 'manifest.json'), 'utf8');
-  cached = JSON.parse(raw) as Manifest;
-  return cached;
+  return MANIFEST;
 }
 
 export async function listScaffoldKinds(): Promise<string[]> {
-  const m = await loadScaffoldManifest();
-  return Object.keys(m.scaffolds).sort();
+  return Object.keys(MANIFEST.scaffolds).sort();
 }
 
 export interface ScaffoldRequest {
@@ -58,22 +89,21 @@ export interface ScaffoldResult {
 }
 
 export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult> {
-  const manifest = await loadScaffoldManifest();
-  const entry = manifest.scaffolds[req.kind];
+  const entry = MANIFEST.scaffolds[req.kind];
   if (!entry) return { ok: false, reason: `unknown scaffold kind: ${req.kind}` };
 
-  const sourceAbs = path.resolve(SCAFFOLDS_ROOT, entry.path);
-  if (!sourceAbs.startsWith(SCAFFOLDS_ROOT) && !sourceAbs.startsWith(path.join(HERE, '..'))) {
-    return { ok: false, reason: 'scaffold source escaped expected root' };
+  const source = resolveSource(entry.path);
+  if (source === null) {
+    return { ok: false, reason: `scaffold source not found for kind ${req.kind} (${entry.path})` };
   }
+
   const dest = path.resolve(req.workspaceRoot, req.destPath);
   if (!dest.startsWith(req.workspaceRoot)) {
     return { ok: false, reason: 'destination outside workspace' };
   }
   await mkdir(path.dirname(dest), { recursive: true });
-  await copyFile(sourceAbs, dest);
-  const bytes = (await readFile(dest)).byteLength;
-  return { ok: true, written: dest, bytes };
+  await writeFile(dest, source, 'utf8');
+  return { ok: true, written: dest, bytes: Buffer.byteLength(source, 'utf8') };
 }
 
 const ScaffoldParams = Type.Object({
