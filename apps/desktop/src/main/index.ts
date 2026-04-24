@@ -75,6 +75,7 @@ import { cleanupStaleTmps } from './reported-fingerprints';
 import { resolveActiveApiKey, resolveApiKeyWithKeylessFallback } from './resolve-api-key';
 import { withRun } from './runContext';
 import { initStorageSettings } from './storage-settings';
+import { readWorkspaceFilesAt } from './workspace-reader';
 
 // ESM shim: package.json "type": "module" means the built bundle is ESM and
 // __dirname/__filename don't exist. Derive them from import.meta.url so the
@@ -368,6 +369,7 @@ function registerIpcHandlers(db: Database | null): void {
     id: string,
     designId: string | null,
     previousHtml: string | null,
+    workspacePath: string | null,
   ): ReturnType<typeof generate> => {
     if (!USE_AGENT_RUNTIME) return generate(input);
     const sendEvent = (event: AgentStreamEvent) => {
@@ -537,6 +539,9 @@ function registerIpcHandlers(db: Database | null): void {
         ...input,
         askBridge: (askInput) => requestAsk(id, askInput, () => mainWindow),
         ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
+        ...(workspaceRoot
+          ? { readWorkspaceFiles: (patterns) => readWorkspaceFilesAt(workspaceRoot, patterns) }
+          : {}),
       },
       {
         fs,
@@ -862,6 +867,9 @@ function registerIpcHandlers(db: Database | null): void {
           id,
           payload.designId ?? null,
           payload.previousHtml ?? null,
+          // PR #173 will populate this from the design's workspace record; for
+          // now the reader stays undefined and the tweaks tool is skipped.
+          null,
         );
         logIpc.info('generate.ok', {
           generationId: id,
@@ -997,6 +1005,7 @@ function registerIpcHandlers(db: Database | null): void {
             signal: controller.signal,
           },
           id,
+          null,
           null,
           null,
         );
