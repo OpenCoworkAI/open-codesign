@@ -2110,14 +2110,37 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     try {
       // TODO(v0.2/T2.4): re-route through session JSONL — see T2.6.
       await window.codesign.snapshots.renameDesign(id, trimmed);
-      // Optimistic in-memory update: the T2.4 stubs return a synthetic
-      // Design but do not persist, and listDesigns() comes back empty,
-      // which would blank the sidebar on every reload. Patch the row
-      // locally until T2.6 lands a JSONL-backed store.
-      set((s) => ({
-        designs: s.designs.map((d) => (d.id === id ? { ...d, name: trimmed } : d)),
-        designToRename: null,
-      }));
+      // Optimistic in-memory update. T2.4 stubs don't persist and
+      // listDesigns() returns [] — but a freshly-created design lives as a
+      // "ghost" (currentDesignId set, designs[] empty) because the post-
+      // createDesign loadDesigns() wiped the local copy. If the target row
+      // is missing, synthesize one so the sidebar / top bar can surface
+      // the name. Remove this block once T2.6 lands real JSONL storage.
+      const nowIso = new Date().toISOString();
+      set((s) => {
+        const existing = s.designs.find((d) => d.id === id);
+        if (existing) {
+          return {
+            designs: s.designs.map((d) => (d.id === id ? { ...d, name: trimmed } : d)),
+            designToRename: null,
+          };
+        }
+        return {
+          designs: [
+            ...s.designs,
+            {
+              schemaVersion: 1 as const,
+              id,
+              name: trimmed,
+              createdAt: nowIso,
+              updatedAt: nowIso,
+              thumbnailText: null,
+              deletedAt: null,
+            },
+          ],
+          designToRename: null,
+        };
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
       get().pushToast({

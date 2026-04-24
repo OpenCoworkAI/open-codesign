@@ -169,13 +169,32 @@ export function useAgentStream(): void {
       // result round-trip.
       if (toolName === 'set_title') {
         const rawTitle = (event.args as { title?: unknown } | undefined)?.title;
+        console.warn(
+          '[set_title] received',
+          JSON.stringify({
+            args: event.args,
+            rawTitle,
+            designId,
+            currentDesigns: useCodesignStore.getState().designs.map((d) => d.id),
+          }),
+        );
         if (typeof rawTitle === 'string' && rawTitle.trim().length > 0) {
           const cleaned = rawTitle
             .trim()
             .replace(/[\s.,;:!?—–\-]+$/u, '')
             .slice(0, 60);
           if (cleaned.length > 0) {
-            void renameDesign(designId, cleaned);
+            console.warn('[set_title] calling renameDesign', JSON.stringify({ designId, cleaned }));
+            void renameDesign(designId, cleaned).then(() => {
+              console.warn(
+                '[set_title] renameDesign resolved',
+                JSON.stringify({
+                  designs: useCodesignStore
+                    .getState()
+                    .designs.map((d) => ({ id: d.id, name: d.name })),
+                }),
+              );
+            });
           }
         }
       }
