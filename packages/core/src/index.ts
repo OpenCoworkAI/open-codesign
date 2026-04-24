@@ -851,6 +851,9 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
         ...(input.wire !== undefined ? { wire: input.wire } : {}),
         ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
         ...(input.capabilities !== undefined ? { capabilities: input.capabilities } : {}),
+        ...(input.explicitCapabilities !== undefined
+          ? { explicitCapabilities: input.explicitCapabilities }
+          : {}),
         ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
         ...(input.signal !== undefined ? { signal: input.signal } : {}),
         maxTokens: 200,
