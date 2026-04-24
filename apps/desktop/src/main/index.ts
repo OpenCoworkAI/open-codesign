@@ -68,6 +68,7 @@ import {
 } from './onboarding-ipc';
 import { isAllowedExternalUrl } from './open-external';
 import { readPersisted as readPreferences, registerPreferencesIpc } from './preferences-ipc';
+import { runPreview } from './preview-runtime';
 import { preparePromptContext } from './prompt-context';
 import { createProviderContextStore } from './provider-context';
 import { resolveActiveModel } from './provider-settings';
@@ -514,7 +515,20 @@ function registerIpcHandlers(db: Database | null): void {
     let toolCount = 0;
 
     return generateViaAgent(
-      { ...input, askBridge: (askInput) => requestAsk(id, askInput, () => mainWindow) },
+      {
+        ...input,
+        askBridge: (askInput) => requestAsk(id, askInput, () => mainWindow),
+        ...(input.workspaceRoot
+          ? {
+              runPreview: ({ path, vision }) =>
+                runPreview({
+                  path,
+                  vision,
+                  workspaceRoot: input.workspaceRoot as string,
+                }),
+            }
+          : {}),
+      },
       {
         fs,
         runtimeVerify,

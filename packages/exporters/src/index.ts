@@ -32,6 +32,7 @@ export type { ExportPptxOptions } from './pptx';
 export type { ExportZipOptions, ZipAsset } from './zip';
 export type { ExportMarkdownOptions, MarkdownMeta } from './markdown';
 export { htmlToMarkdown } from './markdown';
+export { findSystemChrome, type ChromeDiscoveryDeps } from './chrome-discovery';
 
 export async function exportHtml(
   htmlContent: string,

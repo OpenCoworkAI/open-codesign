@@ -34,6 +34,7 @@
     "electron-log": "^5",
     "electron-updater": "^6.3.9",
     "lucide-react": "^1.8.0",
+    "puppeteer-core": "^24.10.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "smol-toml": "^1.6.1",

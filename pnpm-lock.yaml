@@ -92,6 +92,9 @@ importers:
       lucide-react:
         specifier: ^1.8.0
         version: 1.8.0(react@19.2.5)
+      puppeteer-core:
+        specifier: ^24.10.0
+        version: 24.41.0
       react:
         specifier: ^19.0.0
         version: 19.2.5
