@@ -190,6 +190,11 @@ function isOpenAIOfficial(baseUrl: string | undefined): boolean {
   return /^https:\/\/api\.openai\.com(\/|$)/.test(baseUrl);
 }
 
+function isOpenRouterOfficial(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false;
+  return /^https:\/\/openrouter\.ai\/api\/v1(\/|$)/.test(baseUrl);
+}
+
 function isReasoningModelId(modelId: string): boolean {
   // OpenAI reasoning families: o1, o3, o4, gpt-5 (incl. variants like gpt-5-turbo, gpt-5.4)
   return /^(o[134]|gpt-5)/i.test(modelId);
@@ -219,8 +224,13 @@ export function inferReasoning(
   baseUrl: string | undefined,
   capabilities?: ProviderCapabilities,
 ): boolean {
-  if (capabilities?.supportsReasoning !== undefined) {
-    return capabilities.supportsReasoning;
+  if (capabilities?.supportsReasoning === true) {
+    return true;
+  }
+  const preserveChatHeuristics =
+    wire === 'openai-chat' && (isOpenAIOfficial(baseUrl) || isOpenRouterOfficial(baseUrl));
+  if (capabilities?.supportsReasoning === false && !preserveChatHeuristics) {
+    return false;
   }
   switch (wire) {
     case 'anthropic':

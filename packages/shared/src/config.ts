@@ -186,7 +186,7 @@ export function defaultProviderCapabilities(
   entry: ProviderCapabilityInput,
 ): Required<ProviderCapabilities> {
   const supportsModelsEndpoint =
-    entry.wire !== 'openai-codex-responses' && entry.modelsHint === undefined;
+    entry.capabilities?.supportsModelsEndpoint ?? entry.wire !== 'openai-codex-responses';
   const wire = entry.wire;
   return {
     supportsKeyless: entry.requiresApiKey === false,

@@ -556,15 +556,28 @@ describe('inferReasoning', () => {
     expect(inferReasoning(undefined, 'gpt-4o', 'https://api.openai.com/v1')).toBe(false);
   });
 
-  it('prefers explicit capability profile over heuristic reasoning inference', () => {
+  it('prefers explicit capability profile over heuristic reasoning inference on custom gateways', () => {
     expect(
-      inferReasoning('openai-chat', 'gpt-5.4', 'https://api.openai.com/v1', {
+      inferReasoning('openai-chat', 'gpt-5.4', 'https://proxy.example/v1', {
         supportsReasoning: false,
       }),
     ).toBe(false);
     expect(
-      inferReasoning('openai-chat', 'gpt-4o', 'https://api.openai.com/v1', {
+      inferReasoning('openai-chat', 'gpt-4o', 'https://proxy.example/v1', {
         supportsReasoning: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('preserves official openai-chat heuristics when resolved capabilities default to supportsReasoning:false', () => {
+    expect(
+      inferReasoning('openai-chat', 'gpt-5.4', 'https://api.openai.com/v1', {
+        supportsReasoning: false,
+      }),
+    ).toBe(true);
+    expect(
+      inferReasoning('openai-chat', 'openai/o3-mini', 'https://openrouter.ai/api/v1', {
+        supportsReasoning: false,
       }),
     ).toBe(true);
   });

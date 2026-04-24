@@ -261,6 +261,15 @@ describe('provider capability helpers', () => {
     expect(caps.modelDiscoveryMode).toBe('static-hint');
   });
 
+  it('keeps /models enabled for static-hint providers on wires that still support it', () => {
+    const caps = defaultProviderCapabilities('anthropic-static', {
+      wire: 'anthropic',
+      modelsHint: ['claude-sonnet-4-6'],
+    });
+    expect(caps.supportsModelsEndpoint).toBe(true);
+    expect(caps.modelDiscoveryMode).toBe('static-hint');
+  });
+
   it('lets explicit capability overrides win over defaults', () => {
     const caps = resolveProviderCapabilities('custom-lite', {
       wire: 'openai-chat',
@@ -287,6 +296,7 @@ describe('provider capability helpers', () => {
     expect(caps.supportsChatCompletions).toBe(true);
     expect(caps.supportsResponsesApi).toBe(false);
     expect(caps.supportsToolCalling).toBe(true);
+    expect(caps.modelDiscoveryMode).toBe('manual');
   });
 
   it('defaults openai-chat wire to chat-completions + system-role + tool-calling', () => {
