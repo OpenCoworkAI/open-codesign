@@ -71,6 +71,7 @@ import { makeReadDesignSystemTool } from './tools/read-design-system.js';
 import { makeReadUrlTool } from './tools/read-url.js';
 import { makeSetTitleTool } from './tools/set-title.js';
 import { makeSetTodosTool } from './tools/set-todos.js';
+import { makeSkillTool } from './tools/skill.js';
 import { type TextEditorFsCallbacks, makeTextEditorTool } from './tools/text-editor.js';
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via
@@ -756,6 +757,10 @@ export async function generateViaAgent(
   const defaultTools: AgentTool<TSchema, unknown>[] = [];
   defaultTools.push(makeSetTodosTool() as unknown as AgentTool<TSchema, unknown>);
   defaultTools.push(makeSetTitleTool() as unknown as AgentTool<TSchema, unknown>);
+  const loadedSkills = new Set<string>();
+  defaultTools.push(
+    makeSkillTool({ dedup: loadedSkills }) as unknown as AgentTool<TSchema, unknown>,
+  );
   defaultTools.push(makeReadUrlTool() as unknown as AgentTool<TSchema, unknown>);
   defaultTools.push(
     makeReadDesignSystemTool(() => input.designSystem ?? null) as unknown as AgentTool<
