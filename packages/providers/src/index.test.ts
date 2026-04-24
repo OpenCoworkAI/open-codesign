@@ -270,6 +270,42 @@ describe('complete', () => {
     });
   });
 
+  it('uses registry baseUrl when preserving official OpenAI heuristics for registered models', async () => {
+    getModelMock.mockReturnValue({
+      id: 'gpt-5.4',
+      api: 'openai-completions',
+      provider: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      reasoning: false,
+    });
+    completeSimpleMock.mockImplementationOnce(async (piModel) => {
+      expect(piModel.reasoning).toBe(true);
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'openai',
+        model: 'gpt-5.4',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete({ provider: 'openai', modelId: 'gpt-5.4' }, [{ role: 'user', content: 'hi' }], {
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      capabilities: { supportsReasoning: false },
+    });
+  });
+
   it('appends image inputs to the final user turn for openai-codex-responses', async () => {
     getModelMock.mockReturnValue({
       id: 'gpt-5.4',

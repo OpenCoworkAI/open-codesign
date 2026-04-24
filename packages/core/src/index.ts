@@ -6,6 +6,7 @@ import {
   completeWithRetry,
   filterActive,
   formatSkillsForPrompt,
+  inferReasoning,
 } from '@open-codesign/providers';
 import type {
   Artifact,
@@ -356,7 +357,19 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
   log.info(`[${scope}] step=send_request`, ctx);
   const sendStart = Date.now();
   let result: GenerateResult;
-  let reasoning = input.reasoningLevel ?? reasoningForModel(input.model, input.baseUrl);
+  const inferredReasoning =
+    input.wire === undefined && input.capabilities === undefined
+      ? true
+      : inferReasoning(
+          input.wire,
+          input.model.modelId,
+          input.baseUrl,
+          input.capabilities,
+          input.model.provider,
+        );
+  let reasoning =
+    input.reasoningLevel ??
+    (inferredReasoning ? reasoningForModel(input.model, input.baseUrl) : undefined);
   // Self-healing: if the upstream rejects on reasoning mismatch, flip the
   // knob once and retry. Handles new reasoning-mandatory models (and
   // not-supported models) without code changes.

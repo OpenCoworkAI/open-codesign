@@ -331,12 +331,13 @@ export async function complete(
 
   let piModel = pi.getModel(model.provider, effectiveModelId);
   if (piModel && opts.wire !== undefined) {
+    const effectiveBaseUrl = opts.baseUrl ?? piModel.baseUrl;
     piModel = {
       ...piModel,
       reasoning: inferReasoning(
         opts.wire,
         effectiveModelId,
-        opts.baseUrl,
+        effectiveBaseUrl,
         opts.capabilities,
         model.provider,
       ),

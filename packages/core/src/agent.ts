@@ -809,16 +809,17 @@ export async function generateViaAgent(
   // precedence, then the model-family default from reasoningForModel. If
   // neither yields a value the agent runs with 'off', matching
   // pi-agent-core's default.
+  const effectiveBaseUrl = piModel.baseUrl;
   const thinkingLevel =
     input.reasoningLevel ??
     (inferReasoning(
       input.wire,
       input.model.modelId,
-      input.baseUrl,
+      effectiveBaseUrl,
       input.capabilities,
       input.model.provider,
     )
-      ? reasoningForModel(input.model, input.baseUrl)
+      ? reasoningForModel(input.model, effectiveBaseUrl)
       : undefined) ??
     'off';
 

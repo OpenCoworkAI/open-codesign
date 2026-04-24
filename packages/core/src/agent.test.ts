@@ -420,6 +420,30 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     expect(initialState?.thinkingLevel).toBe('high');
   });
 
+  it('uses resolved builtin baseUrl when setting agent thinkingLevel', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a landing page',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-5.4' },
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      capabilities: {
+        supportsReasoning: false,
+      },
+    });
+
+    const initialState = agentCalls[0]?.options.initialState as
+      | {
+          model?: { baseUrl?: string; reasoning?: boolean };
+          thinkingLevel?: string;
+        }
+      | undefined;
+    expect(initialState?.model?.baseUrl).toBe('https://api.openai.com/v1');
+    expect(initialState?.model?.reasoning).toBe(true);
+    expect(initialState?.thinkingLevel).toBe('high');
+  });
+
   it('extracts artifact and returns usage mapped from pi-ai assistant usage', async () => {
     scriptedAgent = {
       assistantText: RESPONSE_WITH_ARTIFACT,

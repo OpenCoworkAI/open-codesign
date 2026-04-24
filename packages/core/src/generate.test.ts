@@ -152,6 +152,30 @@ describe('generate()', () => {
     expect(opts.reasoning).toBeUndefined();
   });
 
+  it('omits reasoning for builtin OpenAI rows repointed to non-reasoning proxies', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-5.4' },
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://api.duckcoding.ai/v1',
+      capabilities: { supportsReasoning: false },
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as {
+      reasoning?: string;
+    };
+    expect(opts.reasoning).toBeUndefined();
+  });
+
   it('passes reasoning=high for OpenAI gpt-5 (whitelisted reasoning model)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
