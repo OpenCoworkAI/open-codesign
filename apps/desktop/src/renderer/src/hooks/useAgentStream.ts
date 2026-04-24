@@ -47,6 +47,7 @@ export function useAgentStream(): void {
   const setPreviewHtmlFromAgent = useCodesignStore((s) => s.setPreviewHtmlFromAgent);
   const updateChatToolStatus = useCodesignStore((s) => s.updateChatToolStatus);
   const persistAgentRunSnapshot = useCodesignStore((s) => s.persistAgentRunSnapshot);
+  const renameDesign = useCodesignStore((s) => s.renameDesign);
   const inFlight = useRef<InFlightTurn | null>(null);
 
   // Throttled live-preview push. iframe srcdoc reloads the whole page on every
@@ -162,6 +163,22 @@ export function useAgentStream(): void {
         toolName,
         toolCallId: event.toolCallId,
       });
+      // set_title runs with no side effects on disk — its whole job is
+      // to rename the design. Trigger the rename immediately off the
+      // start event so the sidebar label flips without waiting for the
+      // result round-trip.
+      if (toolName === 'set_title') {
+        const rawTitle = (event.args as { title?: unknown } | undefined)?.title;
+        if (typeof rawTitle === 'string' && rawTitle.trim().length > 0) {
+          const cleaned = rawTitle
+            .trim()
+            .replace(/[\s.,;:!?—–\-]+$/u, '')
+            .slice(0, 60);
+          if (cleaned.length > 0) {
+            void renameDesign(designId, cleaned);
+          }
+        }
+      }
       // DB row rather than an in-memory shadow. Capture seq via promise so
       // the result handler can patch the same row even if it lands before
       // the append round-trip completes.
