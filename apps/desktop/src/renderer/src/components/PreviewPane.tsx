@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { buildSrcdoc } from '@open-codesign/runtime';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../preview/EmptyState';
 import { ErrorState } from '../preview/ErrorState';
 import {
@@ -19,7 +19,10 @@ import { PinOverlay } from './comment/PinOverlay';
 import { FilesTabView } from './FilesTabView';
 import { PhoneFrame } from './PhoneFrame';
 import { PreviewToolbar } from './PreviewToolbar';
-import { TweakPanel } from './TweakPanel';
+
+// TweakPanel only mounts once there is rendered preview HTML — defer its
+// ~4kb gzipped chunk (plus its input primitives) out of first paint.
+const TweakPanel = lazy(() => import('./TweakPanel').then((m) => ({ default: m.TweakPanel })));
 
 export type {
   AllowedPreviewMessageType,
@@ -453,7 +456,11 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         <CanvasErrorBar />
         <div className="relative flex-1 overflow-hidden">
           {body}
-          {previewHtml ? <TweakPanel iframeRef={iframeRef} /> : null}
+          {previewHtml ? (
+            <Suspense fallback={null}>
+              <TweakPanel iframeRef={iframeRef} />
+            </Suspense>
+          ) : null}
         </div>
         {commentBubble && interactionMode === 'comment'
           ? (() => {
