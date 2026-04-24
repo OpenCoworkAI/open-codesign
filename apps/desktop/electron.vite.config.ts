@@ -12,7 +12,16 @@ export default defineConfig({
       outDir: 'out/main',
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/main/index.ts') },
-        external: ['puppeteer-core', 'pptxgenjs', 'zip-lib', 'better-sqlite3'],
+        external: [
+          'puppeteer-core',
+          'pptxgenjs',
+          'zip-lib',
+          'better-sqlite3',
+          '@mariozechner/pi-coding-agent',
+          '@mariozechner/pi-agent-core',
+          '@mariozechner/pi-ai',
+          '@mariozechner/pi-tui',
+        ],
       },
     },
   },
