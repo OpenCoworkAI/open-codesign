@@ -135,6 +135,36 @@ describe('inferReasoning — unknown/undefined wire', () => {
 
 // ── THIRD_PARTY_REASONING_MODEL_RE ────────────────────────────────────────────
 
+describe('inferReasoning - official imported providers with omitted supportsReasoning', () => {
+  it('keeps official OpenAI heuristics when imported provider capabilities omit supportsReasoning', () => {
+    expect(
+      inferReasoning(
+        'openai-chat',
+        'gpt-5.4',
+        'https://api.openai.com/v1',
+        {
+          supportsModelsEndpoint: true,
+        },
+        'codex-openai',
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps official OpenRouter heuristics when imported provider capabilities omit supportsReasoning', () => {
+    expect(
+      inferReasoning(
+        'openai-chat',
+        'openai/o3-mini',
+        'https://openrouter.ai/api/v1',
+        {
+          supportsModelsEndpoint: true,
+        },
+        'opencode-openrouter',
+      ),
+    ).toBe(true);
+  });
+});
+
 describe('THIRD_PARTY_REASONING_MODEL_RE', () => {
   it('does not match plain non-reasoning model IDs', () => {
     expect(THIRD_PARTY_REASONING_MODEL_RE.test('gpt-4o')).toBe(false);

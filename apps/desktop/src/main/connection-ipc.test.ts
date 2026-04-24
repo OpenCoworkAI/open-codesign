@@ -1,12 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock electron-runtime so importing connection-ipc doesn't require('electron').
+const electronRuntimeMocks = vi.hoisted(() => ({
+  handle: vi.fn(),
+}));
+
 vi.mock('./electron-runtime', () => ({
-  ipcMain: { handle: vi.fn() },
+  ipcMain: { handle: electronRuntimeMocks.handle },
+}));
+
+const onboardingMocks = vi.hoisted(() => ({
+  getCachedConfig: vi.fn(),
+  getApiKeyForProvider: vi.fn(),
+}));
+
+vi.mock('./onboarding-ipc', () => ({
+  getCachedConfig: onboardingMocks.getCachedConfig,
+  getApiKeyForProvider: onboardingMocks.getApiKeyForProvider,
+}));
+
+vi.mock('./codex-oauth-ipc', () => ({
+  getCodexTokenStore: () => ({
+    getValidAccessToken: vi.fn(async () => 'token'),
+  }),
 }));
 
 import { createHash } from 'node:crypto';
+import { hydrateConfig } from '@open-codesign/shared';
 import {
+  registerConnectionIpc,
   CONNECTION_FETCH_TIMEOUT_MS,
   _clearModelsCache,
   buildAuthHeaders,
@@ -542,6 +564,64 @@ describe('models:v1:list-for-provider input validation', () => {
   it('accepts a valid provider id string', () => {
     const result = validateListForProviderInput('claude-code-anthropic');
     expect(result).toBeNull();
+  });
+});
+
+describe('models:v1:list-for-provider discovery modes', () => {
+  beforeEach(() => {
+    electronRuntimeMocks.handle.mockReset();
+    onboardingMocks.getCachedConfig.mockReset();
+    onboardingMocks.getApiKeyForProvider.mockReset();
+  });
+
+  it('manual providers do not hit /models and return a manual-entry hint instead', async () => {
+    onboardingMocks.getCachedConfig.mockReturnValue(
+      hydrateConfig({
+        version: 3,
+        activeProvider: 'manual-proxy',
+        activeModel: 'gpt-5.4',
+        secrets: {},
+        providers: {
+          'manual-proxy': {
+            id: 'manual-proxy',
+            name: 'Manual Proxy',
+            builtin: false,
+            wire: 'openai-chat',
+            baseUrl: 'https://proxy.example.com/v1',
+            defaultModel: 'gpt-5.4',
+            capabilities: {
+              supportsModelsEndpoint: false,
+              modelDiscoveryMode: 'manual',
+            },
+          },
+        },
+      }),
+    );
+
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.fn();
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+
+    try {
+      registerConnectionIpc();
+      const handler = electronRuntimeMocks.handle.mock.calls.find(
+        (call) => call[0] === 'models:v1:list-for-provider',
+      )?.[1] as ((event: unknown, raw: unknown) => Promise<ModelsListResponse>) | undefined;
+      expect(handler).toBeDefined();
+
+      const result = await handler?.({}, 'manual-proxy');
+      expect(result).toMatchObject({
+        ok: false,
+        code: 'HTTP',
+      });
+      if (result && !result.ok) {
+        expect(result.message).toContain('/models');
+        expect(result.hint).toContain('manual');
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+    }
   });
 });
 

@@ -299,6 +299,17 @@ describe('provider capability helpers', () => {
     expect(caps.modelDiscoveryMode).toBe('manual');
   });
 
+  it('keeps default reasoning heuristics separate from omitted explicit supportsReasoning', () => {
+    const caps = resolveProviderCapabilities('imported-openai', {
+      wire: 'openai-chat',
+      capabilities: {
+        supportsModelsEndpoint: true,
+      },
+    });
+    expect(caps.supportsReasoning).toBe(false);
+    expect(caps.supportsModelsEndpoint).toBe(true);
+  });
+
   it('defaults openai-chat wire to chat-completions + system-role + tool-calling', () => {
     const caps = defaultProviderCapabilities('custom-proxy', { wire: 'openai-chat' });
     expect(caps.supportsChatCompletions).toBe(true);

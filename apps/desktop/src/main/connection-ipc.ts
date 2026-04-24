@@ -4,7 +4,9 @@ import {
   CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   ERROR_CODES,
+  resolveProviderCapabilities,
   type ProviderCapabilities,
+  type ProviderEntry,
   type SupportedOnboardingProvider,
   type WireApi,
   canonicalBaseUrl,
@@ -89,6 +91,13 @@ export type ModelsListResponse =
       message: string;
       hint: string;
     };
+
+function resolveDiscoveryHintModels(entry: ProviderEntry): string[] {
+  if (entry.modelsHint !== undefined && entry.modelsHint.length > 0) {
+    return entry.modelsHint;
+  }
+  return entry.defaultModel.trim().length > 0 ? [entry.defaultModel] : [];
+}
 
 function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
   if (typeof raw !== 'object' || raw === null) {
@@ -939,6 +948,22 @@ export function registerConnectionIpc(): void {
       // keyless discovery path cannot supply) short-circuit with modelsHint.
       if (entry.modelsHint !== undefined && entry.modelsHint.length > 0) {
         return { ok: true, models: entry.modelsHint };
+      }
+
+      const capabilities = resolveProviderCapabilities(raw, entry);
+      if (capabilities.modelDiscoveryMode === 'static-hint') {
+        return { ok: true, models: resolveDiscoveryHintModels(entry) };
+      }
+      if (capabilities.supportsModelsEndpoint === false) {
+        return {
+          ok: false,
+          code: 'HTTP',
+          message: 'Provider does not expose a /models endpoint',
+          hint:
+            capabilities.modelDiscoveryMode === 'manual'
+              ? 'This provider uses manual model entry. Use the configured default model or type a model id manually.'
+              : 'Provider capability profile disables model discovery via /models.',
+        };
       }
 
       let apiKey: string;

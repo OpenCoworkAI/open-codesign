@@ -885,6 +885,7 @@ function registerIpcHandlers(db: Database | null): void {
             wire: active.wire,
             ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
             capabilities: active.capabilities,
+            explicitCapabilities: active.explicitCapabilities,
             ...(allowKeyless ? { allowKeyless: true } : {}),
             signal: controller.signal,
             logger: coreLogger,
@@ -1119,10 +1120,11 @@ function registerIpcHandlers(db: Database | null): void {
           designSystem: promptContext.designSystem ?? null,
           ...(baseUrl !== undefined ? { baseUrl } : {}),
           wire: active.wire,
-          ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-          capabilities: active.capabilities,
-          ...(allowKeyless ? { allowKeyless: true } : {}),
-        });
+            ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+            capabilities: active.capabilities,
+            explicitCapabilities: active.explicitCapabilities,
+            ...(allowKeyless ? { allowKeyless: true } : {}),
+          });
         logIpc.info('applyComment.ok', {
           ms: Date.now() - t0,
           artifacts: result.artifacts.length,
@@ -1177,6 +1179,7 @@ function registerIpcHandlers(db: Database | null): void {
           wire: active.wire,
           ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
           capabilities: active.capabilities,
+          explicitCapabilities: active.explicitCapabilities,
           ...(allowKeyless ? { allowKeyless: true } : {}),
           logger: titleLogger,
         });

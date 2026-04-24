@@ -176,6 +176,36 @@ describe('generate()', () => {
     expect(opts.reasoning).toBeUndefined();
   });
 
+  it('keeps official OpenAI heuristics for imported providers when explicitCapabilities omit supportsReasoning', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'codex-openai', modelId: 'gpt-5.4' },
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://api.openai.com/v1',
+      capabilities: { supportsReasoning: false, supportsModelsEndpoint: true },
+      explicitCapabilities: { supportsModelsEndpoint: true },
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as {
+      reasoning?: string;
+      capabilities?: { supportsReasoning?: boolean; supportsModelsEndpoint?: boolean };
+    };
+    expect(opts.reasoning).toBe('high');
+    expect(opts.capabilities).toEqual({
+      supportsReasoning: false,
+      supportsModelsEndpoint: true,
+    });
+  });
+
   it('passes reasoning=high for OpenAI gpt-5 (whitelisted reasoning model)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
@@ -193,6 +223,29 @@ describe('generate()', () => {
 
     const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
     expect(opts.reasoning).toBe('high');
+  });
+
+  it('passes reasoning=medium for imported providers on official OpenRouter base URLs', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'opencode-openrouter', modelId: 'openai/o3-mini' },
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      capabilities: { supportsReasoning: false, supportsModelsEndpoint: true },
+      explicitCapabilities: { supportsModelsEndpoint: true },
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBe('medium');
   });
 
   it('passes reasoning=high for OpenAI o-series (o1, o3, o4)', async () => {

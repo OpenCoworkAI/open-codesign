@@ -260,6 +260,7 @@ function buildPiModel(
   httpHeaders?: Record<string, string> | undefined,
   apiKey?: string,
   capabilities?: ProviderCapabilities,
+  explicitCapabilities?: ProviderCapabilities,
 ): PiModel {
   // Fall through to the canonical public endpoint for the 3 first-party
   // BYOK providers when the caller omitted baseUrl. This is a fact about
@@ -288,7 +289,13 @@ function buildPiModel(
     api: apiForWire(wire),
     provider: model.provider,
     baseUrl: canonicalBase,
-    reasoning: inferReasoning(wire, model.modelId, canonicalBase, capabilities, model.provider),
+    reasoning: inferReasoning(
+      wire,
+      model.modelId,
+      canonicalBase,
+      explicitCapabilities ?? capabilities,
+      model.provider,
+    ),
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
@@ -725,6 +732,7 @@ export async function generateViaAgent(
     input.httpHeaders,
     input.apiKey,
     input.capabilities,
+    input.explicitCapabilities,
   );
   log.info('[generate] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
 
@@ -816,7 +824,7 @@ export async function generateViaAgent(
       input.wire,
       input.model.modelId,
       effectiveBaseUrl,
-      input.capabilities,
+      input.explicitCapabilities ?? input.capabilities,
       input.model.provider,
     )
       ? reasoningForModel(input.model, effectiveBaseUrl)
@@ -926,7 +934,7 @@ export async function generateViaAgent(
           if ((err as RetryBlockedError)[RETRY_BLOCKED]) {
             return { retry: false, reason: 'agent already produced side effects' };
           }
-          return classifyError(err);
+          return classifyError(err, input.wire);
         },
         onRetry: (info: RetryReason) => {
           log.warn('[generate] step=send_request.retry', {

@@ -211,6 +211,7 @@ export interface ActiveModelResolution {
   reasoningLevel: ReasoningLevel | undefined;
   allowKeyless: boolean;
   capabilities: Required<ProviderCapabilities>;
+  explicitCapabilities: ProviderCapabilities | undefined;
   /** True when the renderer-supplied hint provider didn't match the canonical active. */
   overridden: boolean;
 }
@@ -230,6 +231,7 @@ export interface ProviderConfigResolution {
   reasoningLevel: ReasoningLevel | undefined;
   allowKeyless: boolean;
   capabilities: Required<ProviderCapabilities>;
+  explicitCapabilities: ProviderCapabilities | undefined;
 }
 
 export function resolveProviderConfig(cfg: Config, providerId: string): ProviderConfigResolution {
@@ -252,6 +254,7 @@ export function resolveProviderConfig(cfg: Config, providerId: string): Provider
     reasoningLevel: entry.reasoningLevel,
     allowKeyless,
     capabilities,
+    explicitCapabilities: entry.capabilities,
   };
 }
 
@@ -272,6 +275,7 @@ export function resolveActiveModel(
     reasoningLevel: resolved.reasoningLevel,
     allowKeyless: resolved.allowKeyless,
     capabilities: resolved.capabilities,
+    explicitCapabilities: resolved.explicitCapabilities,
     overridden,
   };
 }

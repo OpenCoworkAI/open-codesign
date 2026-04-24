@@ -483,6 +483,33 @@ describe('resolveActiveModel', () => {
     expect(result.capabilities.supportsKeyless).toBe(false);
     expect(result.capabilities.supportsModelsEndpoint).toBe(true);
   });
+
+  it('preserves explicitCapabilities separately from resolved defaults', () => {
+    const cfg = makeCfg({
+      provider: 'imported-openai',
+      modelPrimary: 'gpt-5.4',
+      providers: {
+        'imported-openai': {
+          id: 'imported-openai',
+          name: 'Imported OpenAI',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://api.openai.com/v1',
+          defaultModel: 'gpt-5.4',
+          capabilities: {
+            supportsModelsEndpoint: true,
+          },
+        },
+      },
+    });
+
+    const result = resolveActiveModel(cfg, { provider: 'imported-openai', modelId: 'gpt-5.4' });
+
+    expect(result.capabilities.supportsReasoning).toBe(false);
+    expect(result.explicitCapabilities).toEqual({
+      supportsModelsEndpoint: true,
+    });
+  });
 });
 
 describe('resolveProviderConfig', () => {
@@ -569,6 +596,33 @@ describe('resolveProviderConfig', () => {
         supportsReasoning: true,
         supportsToolCalling: true,
       },
+    });
+  });
+
+  it('returns explicitCapabilities for imported providers without materializing omitted flags', () => {
+    const cfg = makeCfg({
+      provider: 'imported-openrouter',
+      modelPrimary: 'openai/o3-mini',
+      providers: {
+        'imported-openrouter': {
+          id: 'imported-openrouter',
+          name: 'Imported OpenRouter',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          defaultModel: 'openai/o3-mini',
+          capabilities: {
+            supportsModelsEndpoint: true,
+          },
+        },
+      },
+    });
+
+    const result = resolveProviderConfig(cfg, 'imported-openrouter');
+
+    expect(result.capabilities.supportsReasoning).toBe(false);
+    expect(result.explicitCapabilities).toEqual({
+      supportsModelsEndpoint: true,
     });
   });
 

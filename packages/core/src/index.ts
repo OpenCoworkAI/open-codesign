@@ -101,6 +101,8 @@ export interface GenerateInput {
   httpHeaders?: Record<string, string> | undefined;
   /** Explicit provider capability profile resolved by desktop main. */
   capabilities?: ProviderCapabilities | undefined;
+  /** Raw capability overrides explicitly stored on the provider entry. */
+  explicitCapabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   /**
    * Per-call reasoning level override. Typically sourced from
@@ -133,6 +135,7 @@ export interface ApplyCommentInput {
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   capabilities?: ProviderCapabilities | undefined;
+  explicitCapabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   /** @see GenerateInput.reasoningLevel */
   reasoningLevel?: ReasoningLevel | undefined;
@@ -170,6 +173,7 @@ interface ModelRunInput {
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   capabilities?: ProviderCapabilities | undefined;
+  explicitCapabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
   signal?: AbortSignal | undefined;
@@ -364,7 +368,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
           input.wire,
           input.model.modelId,
           input.baseUrl,
-          input.capabilities,
+          input.explicitCapabilities ?? input.capabilities,
           input.model.provider,
         );
   let reasoning =
@@ -596,6 +600,18 @@ export function reasoningForModel(
   model: ModelRef,
   baseUrl?: string | undefined,
 ): ReasoningLevel | undefined {
+  const isOfficialOpenAI =
+    baseUrl !== undefined && /(^|\/\/)api\.openai\.com\/v1($|[/?#])/i.test(baseUrl);
+  const isOfficialOpenRouter =
+    baseUrl !== undefined && /(^|\/\/)openrouter\.ai\/api\/v1($|[/?#])/i.test(baseUrl);
+
+  if (isOfficialOpenAI) {
+    return OPENAI_REASONING_MODEL_RE.test(model.modelId) ? 'high' : undefined;
+  }
+  if (isOfficialOpenRouter) {
+    return OPENROUTER_REASONING_MODEL_RE.test(model.modelId) ? 'medium' : undefined;
+  }
+
   // Proxy detection: when the provider id is 'anthropic' but baseUrl points
   // somewhere other than api.anthropic.com, we're talking to a Claude Code-
   // style proxy. Those commonly gate reasoning by plan and consumer-tier
@@ -694,6 +710,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     wire: input.wire,
     httpHeaders: input.httpHeaders,
     capabilities: input.capabilities,
+    explicitCapabilities: input.explicitCapabilities,
     allowKeyless: input.allowKeyless,
     reasoningLevel: input.reasoningLevel,
     signal: input.signal,
@@ -749,6 +766,7 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     wire: input.wire,
     httpHeaders: input.httpHeaders,
     capabilities: input.capabilities,
+    explicitCapabilities: input.explicitCapabilities,
     allowKeyless: input.allowKeyless,
     reasoningLevel: input.reasoningLevel,
     signal: input.signal,
@@ -775,6 +793,7 @@ export interface GenerateTitleInput {
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   capabilities?: ProviderCapabilities | undefined;
+  explicitCapabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   signal?: AbortSignal | undefined;
   logger?: CoreLogger | undefined;
