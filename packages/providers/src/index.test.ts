@@ -873,3 +873,207 @@ describe('inferReasoning', () => {
     );
   });
 });
+
+// ── capabilities integration (#206) ──────────────────────────────────────────
+
+describe('complete — capabilities.supportsReasoning override', () => {
+  it('disables reasoning on synthesized wire model when capabilities.supportsReasoning is false', async () => {
+    getModelMock.mockReturnValue(undefined);
+    let capturedModel: Record<string, unknown> | undefined;
+    completeSimpleMock.mockImplementationOnce(async (model) => {
+      capturedModel = model as Record<string, unknown>;
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'lite-gateway',
+        model: 'llama3',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'lite-gateway', modelId: 'llama3' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'http://localhost:4000/v1',
+        capabilities: {
+          supportsReasoning: false,
+          supportsModelsEndpoint: false,
+          supportsResponsesApi: false,
+          supportsChatCompletions: true,
+          supportsSystemRole: true,
+          supportsDeveloperRole: false,
+          supportsToolCalling: true,
+          supportsKeyless: false,
+          requiresClaudeCodeIdentity: false,
+          modelDiscoveryMode: 'manual',
+        },
+      },
+    );
+
+    expect(capturedModel?.['reasoning']).toBe(false);
+  });
+
+  it('enables reasoning on synthesized wire model when capabilities.supportsReasoning is true', async () => {
+    getModelMock.mockReturnValue(undefined);
+    let capturedModel: Record<string, unknown> | undefined;
+    completeSimpleMock.mockImplementationOnce(async (model) => {
+      capturedModel = model as Record<string, unknown>;
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'capable-gateway',
+        model: 'gpt-5',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'capable-gateway', modelId: 'gpt-5' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://api.openai.com/v1',
+        capabilities: {
+          supportsReasoning: true,
+          supportsModelsEndpoint: true,
+          supportsResponsesApi: false,
+          supportsChatCompletions: true,
+          supportsSystemRole: true,
+          supportsDeveloperRole: true,
+          supportsToolCalling: true,
+          supportsKeyless: false,
+          requiresClaudeCodeIdentity: false,
+          modelDiscoveryMode: 'models',
+        },
+      },
+    );
+
+    expect(capturedModel?.['reasoning']).toBe(true);
+  });
+});
+
+describe('complete — capabilities.requiresClaudeCodeIdentity override', () => {
+  it('suppresses identity headers when requiresClaudeCodeIdentity is false, even for non-official host', async () => {
+    getModelMock.mockReturnValue(undefined);
+    let capturedHeaders: Record<string, string> | undefined;
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
+      capturedHeaders = opts.headers as Record<string, string> | undefined;
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'anthropic-messages',
+        provider: 'my-relay',
+        model: 'claude-opus-4-7',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'my-relay', modelId: 'claude-opus-4-7' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: 'sk-plain-key',
+        wire: 'anthropic',
+        baseUrl: 'https://my-relay.example.com/v1',
+        capabilities: {
+          supportsReasoning: true,
+          supportsModelsEndpoint: true,
+          supportsResponsesApi: false,
+          supportsChatCompletions: false,
+          supportsSystemRole: true,
+          supportsDeveloperRole: false,
+          supportsToolCalling: true,
+          supportsKeyless: false,
+          requiresClaudeCodeIdentity: false,
+          modelDiscoveryMode: 'models',
+        },
+      },
+    );
+
+    // user-agent header should NOT be present when identity is suppressed
+    expect(capturedHeaders?.['user-agent']).toBeUndefined();
+  });
+
+  it('injects identity headers when requiresClaudeCodeIdentity is true', async () => {
+    getModelMock.mockReturnValue(undefined);
+    let capturedHeaders: Record<string, string> | undefined;
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
+      capturedHeaders = opts.headers as Record<string, string> | undefined;
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'anthropic-messages',
+        provider: 'sub2api',
+        model: 'claude-opus-4-7',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'sub2api', modelId: 'claude-opus-4-7' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: 'sk-sub2api-key',
+        wire: 'anthropic',
+        baseUrl: 'https://sub2api.example.com',
+        capabilities: {
+          supportsReasoning: true,
+          supportsModelsEndpoint: true,
+          supportsResponsesApi: false,
+          supportsChatCompletions: false,
+          supportsSystemRole: true,
+          supportsDeveloperRole: false,
+          supportsToolCalling: true,
+          supportsKeyless: false,
+          requiresClaudeCodeIdentity: true,
+          modelDiscoveryMode: 'models',
+        },
+      },
+    );
+
+    expect(capturedHeaders?.['user-agent']).toMatch(/^claude-cli\//);
+    expect(capturedHeaders?.['x-app']).toBe('cli');
+  });
+});

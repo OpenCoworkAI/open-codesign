@@ -330,10 +330,10 @@ export async function complete(
   // sub2api-issued key and you hit the plain API-key branch. Force the
   // identity headers for custom anthropic endpoints so the WAF admits us.
   // User-supplied httpHeaders keep precedence.
-  if (
-    shouldForceClaudeCodeIdentity(opts.wire, opts.baseUrl) &&
-    !looksLikeClaudeOAuthToken(apiKey)
-  ) {
+  const requiresIdentity =
+    opts.capabilities?.requiresClaudeCodeIdentity ??
+    shouldForceClaudeCodeIdentity(opts.wire, opts.baseUrl);
+  if (requiresIdentity && !looksLikeClaudeOAuthToken(apiKey)) {
     piOpts.headers = { ...claudeCodeIdentityHeaders(), ...(piOpts.headers ?? {}) };
   }
 

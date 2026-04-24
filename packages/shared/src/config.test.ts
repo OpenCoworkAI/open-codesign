@@ -346,3 +346,30 @@ describe('provider capability helpers', () => {
     expect(caps.supportsToolCalling).toBe(false);
   });
 });
+
+describe('requiresClaudeCodeIdentity — host-based detection', () => {
+  it('official api.anthropic.com → requiresClaudeCodeIdentity: false', () => {
+    const caps = resolveProviderCapabilities('anthropic', {
+      wire: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+    });
+    expect(caps.requiresClaudeCodeIdentity).toBe(false);
+  });
+
+  it('custom relay host → requiresClaudeCodeIdentity: true', () => {
+    const caps = resolveProviderCapabilities('sub2api', {
+      wire: 'anthropic',
+      baseUrl: 'https://sub2api.example.com/v1',
+    });
+    expect(caps.requiresClaudeCodeIdentity).toBe(true);
+  });
+
+  it('declared capabilities.requiresClaudeCodeIdentity: false overrides host detection', () => {
+    const caps = resolveProviderCapabilities('relay', {
+      wire: 'anthropic',
+      baseUrl: 'https://my-relay.example.com',
+      capabilities: { requiresClaudeCodeIdentity: false },
+    });
+    expect(caps.requiresClaudeCodeIdentity).toBe(false);
+  });
+});

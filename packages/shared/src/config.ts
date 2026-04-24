@@ -175,10 +175,23 @@ export type ProviderEntry = z.infer<typeof ProviderEntrySchema>;
 
 interface ProviderCapabilityInput {
   wire: WireApi;
+  baseUrl?: string | undefined;
   requiresApiKey?: boolean | undefined;
   modelsHint?: string[] | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
   capabilities?: ProviderCapabilities | undefined;
+}
+
+function isAnthropicOfficialHost(baseUrl: string | undefined): boolean {
+  if (baseUrl === undefined || baseUrl.length === 0) return true;
+  let host: string;
+  try {
+    host = new URL(baseUrl).host.toLowerCase();
+  } catch {
+    return false;
+  }
+  const normalized = host.replace(/:(?:80|443)$/, '');
+  return normalized === 'api.anthropic.com' || normalized.endsWith('.anthropic.com');
 }
 
 export function defaultProviderCapabilities(
@@ -202,7 +215,7 @@ export function defaultProviderCapabilities(
       wire === 'openai-codex-responses',
     supportsToolCalling:
       wire === 'anthropic' || wire === 'openai-chat' || wire === 'openai-responses',
-    requiresClaudeCodeIdentity: false,
+    requiresClaudeCodeIdentity: wire === 'anthropic' && !isAnthropicOfficialHost(entry.baseUrl),
     modelDiscoveryMode:
       entry.modelsHint !== undefined ? 'static-hint' : supportsModelsEndpoint ? 'models' : 'manual',
   };
@@ -228,6 +241,9 @@ export function resolveProviderCapabilities(
     modelDiscoveryMode: explicit.modelDiscoveryMode ?? defaults.modelDiscoveryMode,
   };
 }
+
+/** Alias for `Required<ProviderCapabilities>` — all capability fields resolved. */
+export type ResolvedProviderCapabilities = Required<ProviderCapabilities>;
 
 export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, ProviderEntry>> = {
   anthropic: {
