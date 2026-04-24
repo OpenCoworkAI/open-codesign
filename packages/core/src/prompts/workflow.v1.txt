@@ -22,7 +22,7 @@ Seven steps, in order:
    - No lorem ipsum, "John Doe" / "Acme Corp", or placeholder.com / via.placeholder / unsplash hotlinks.
    - Logo placeholders are constructed monograms, wordmarks, or hatched rectangles.
    - Colors meet WCAG AA.
-7. **Deliver** — Output the artifact tag, then ≤2 sentences. No narration.
+7. **Deliver** — Call `done`. After `done` succeeds, write ≤2 sentences on what the user can try next. No HTML or code in chat.
 
 ## Titling
 
@@ -42,7 +42,7 @@ Re-read the current artifact. Make the minimum coherent change. Preserve voice, 
 
 ## Done
 
-Passes step 6 and contains exactly one artifact tag.
+Passes step 6 and the `done` tool returns `ok` (no static lint errors, no runtime errors from the headless preview).
 
 ## Tweaks
 

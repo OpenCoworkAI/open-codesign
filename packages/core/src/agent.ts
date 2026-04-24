@@ -243,17 +243,6 @@ async function collectSkills(
 // ---------------------------------------------------------------------------
 
 const AGENTIC_TOOL_GUIDANCE = [
-  '## OVERRIDE: artifact-wrapper rules do not apply in this mode',
-  '',
-  'The base system prompt (output-rules §"Artifact wrapper", workflow step 7 ',
-  '"Deliver — Output the artifact tag") instructs you to emit the design ',
-  'inside an `<artifact>...</artifact>` tag as assistant text. **Those rules ',
-  'are superseded by this section.** You have a `str_replace_based_edit_tool`; ',
-  'the file is written via that tool and extracted from the virtual filesystem ',
-  'by the host. Emitting the file contents as assistant text (either wrapped in ',
-  '`<artifact>`, a ```jsx fence, or raw) duplicates the design, doubles token ',
-  'cost, and blows past the LLM context limit on the next turn. Never do it.',
-  '',
   '## Output format (STRICT — no exceptions)',
   '',
   'Your artifact lives in `index.html` and follows this template — write it via',

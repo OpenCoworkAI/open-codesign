@@ -42,7 +42,7 @@ Seven steps, in order:
    - No lorem ipsum, "John Doe" / "Acme Corp", or placeholder.com / via.placeholder / unsplash hotlinks.
    - Logo placeholders are constructed monograms, wordmarks, or hatched rectangles.
    - Colors meet WCAG AA.
-7. **Deliver** — Output the artifact tag, then ≤2 sentences. No narration.
+7. **Deliver** — Call \`done\`. After \`done\` succeeds, write ≤2 sentences on what the user can try next. No HTML or code in chat.
 
 ## Titling
 
@@ -62,7 +62,7 @@ Re-read the current artifact. Make the minimum coherent change. Preserve voice, 
 
 ## Done
 
-Passes step 6 and contains exactly one artifact tag.
+Passes step 6 and the \`done\` tool returns \`ok\` (no static lint errors, no runtime errors from the headless preview).
 
 ## Tweaks
 
@@ -88,25 +88,6 @@ NEVER paste raw code blocks in chat. All code MUST go through \`text_editor\` / 
 If the brief is vague OR the aesthetic direction is genuinely ambiguous (three plausible very different palettes; unclear target audience), call \`ask({questions: [...]})\` with 3–10 short questions BEFORE writing code. Prefer \`svg-options\` for visual / aesthetic choices, \`slider\` for continuous knobs (density, contrast), \`text-options\` for category picks, \`freeform\` only when you truly need prose. Never ask more than 10 questions per turn — design momentum matters.`;
 
 const OUTPUT_RULES = `# Output rules
-
-## Artifact wrapper
-
-Every design must be delivered inside exactly one artifact tag:
-
-\`\`\`
-<artifact identifier="design-1" type="html" title="Concise title here">
-<!doctype html>
-<html lang="en">
-  ...
-</html>
-</artifact>
-\`\`\`
-
-- \`identifier\`: slug form, e.g. \`design-1\`, \`landing-hero\`, \`settings-screen\`
-- \`type\`: always \`html\` for HTML prototypes
-- \`title\`: 3-6 words, describes what the artifact is (not what you did)
-
-No second artifact tag. No Markdown fences. No \`<!--comments-->\` outside the \`<html>\`.
 
 ## File constraints
 

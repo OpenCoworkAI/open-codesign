@@ -4,13 +4,11 @@ import path_module, { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   type AgentEvent,
-  applyComment,
   buildApplyCommentUserPrompt,
   type CoreLogger,
   composeSystemPrompt,
   type GenerateImageAssetRequest,
   type GenerateImageAssetResult,
-  generate,
   generateTitle,
   generateViaAgent,
   loadDesignSkills,
