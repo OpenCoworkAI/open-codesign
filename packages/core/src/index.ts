@@ -56,6 +56,7 @@ export {
 } from './tools/text-editor.js';
 export { makeSetTodosTool, type SetTodosDetails } from './tools/set-todos.js';
 export { makeSetTitleTool, type SetTitleDetails, normalizeTitle } from './tools/set-title.js';
+export { makeSkillTool, type SkillDetails } from './tools/skill.js';
 export { makeListFilesTool, type ListFilesDetails } from './tools/list-files.js';
 export { makeReadUrlTool, type ReadUrlDetails } from './tools/read-url.js';
 export {
