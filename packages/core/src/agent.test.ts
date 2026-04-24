@@ -233,6 +233,29 @@ const RESPONSE_WITH_ARTIFACT = `Here is your design.
 ${SAMPLE_HTML}
 </artifact>`;
 
+/**
+ * Minimal in-memory `TextEditorFsCallbacks` stub. The agent's parse step
+ * pulls the artifact from `index.html` via the host fs — pre-populating
+ * it here simulates a model that wrote through the text_editor tool.
+ */
+function makeStubFs(initialFiles: Record<string, string> = {}) {
+  const files = new Map(Object.entries(initialFiles));
+  return {
+    view(path: string) {
+      const content = files.get(path);
+      if (content === undefined) return null;
+      return { content, numLines: content.split('\n').length };
+    },
+    create: (path: string, content: string) => {
+      files.set(path, content);
+      return { path };
+    },
+    strReplace: (path: string) => ({ path }),
+    insert: (path: string) => ({ path }),
+    listDir: () => Array.from(files.keys()),
+  };
+}
+
 beforeEach(() => {
   agentCalls.length = 0;
   scriptedAgent = { assistantText: '' };
@@ -384,12 +407,15 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
         cost: { input: 0.0002, output: 0.001, cacheRead: 0, cacheWrite: 0, total: 0.0012 },
       },
     };
-    const result = await generateViaAgent({
-      prompt: 'design a meditation app',
-      history: [],
-      model: MODEL,
-      apiKey: 'sk-test',
-    });
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+    );
 
     expect(result.artifacts).toHaveLength(1);
     expect(result.artifacts[0]?.id).toBe('design-1');
@@ -469,13 +495,16 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
       },
       error: () => {},
     };
-    const result = await generateViaAgent({
-      prompt: 'make a dashboard',
-      history: [],
-      model: MODEL,
-      apiKey: 'sk-test',
-      logger,
-    });
+    const result = await generateViaAgent(
+      {
+        prompt: 'make a dashboard',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        logger,
+      },
+      { fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+    );
     expect(result.artifacts).toHaveLength(1);
     expect(result.warnings).toEqual([
       expect.stringContaining('Builtin skills unavailable: disk read failed'),
@@ -572,7 +601,7 @@ describe('generateViaAgent() — first-turn retry', () => {
           model: MODEL,
           apiKey: 'sk-test',
         },
-        { onRetry },
+        { onRetry, fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
       );
       await vi.runAllTimersAsync();
       const result = await promise;

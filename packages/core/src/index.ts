@@ -1,17 +1,8 @@
-import path from 'node:path';
-import { createArtifactParser } from '@open-codesign/artifacts';
-import type { GenerateResult, ReasoningLevel } from '@open-codesign/providers';
-import {
-  complete,
-  completeWithRetry,
-  filterActive,
-  formatSkillsForPrompt,
-  type RetryReason,
-} from '@open-codesign/providers';
+import type { ReasoningLevel } from '@open-codesign/providers';
+import { completeWithRetry, type RetryReason } from '@open-codesign/providers';
 import type {
   Artifact,
   ChatMessage,
-  LoadedSkill,
   ModelRef,
   SelectedElement,
   StoredDesignSystem,
@@ -20,11 +11,9 @@ import type {
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type GenerateViaAgentDeps, generateViaAgent as runAgent } from './agent.js';
 import { remapProviderError } from './errors.js';
-import { type Collected, collect, stripEmptyFences } from './lib/artifact-collect.js';
-import { buildContextSections, buildUserPromptWithContext } from './lib/context-format.js';
+import { buildContextSections } from './lib/context-format.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt, type PromptComposeOptions } from './prompts/index.js';
-import { loadBuiltinSkills } from './skills/loader.js';
 
 export type { AgentEvent, GenerateViaAgentDeps } from './agent.js';
 export { generateViaAgent } from './agent.js';
@@ -244,45 +233,6 @@ export interface GenerateOutput {
   warnings?: string[];
 }
 
-interface ModelRunInput {
-  model: ModelRef;
-  apiKey: string;
-  baseUrl?: string | undefined;
-  wire?: WireApi | undefined;
-  httpHeaders?: Record<string, string> | undefined;
-  allowKeyless?: boolean | undefined;
-  reasoningLevel?: ReasoningLevel | undefined;
-  signal?: AbortSignal | undefined;
-  onRetry?: ((info: RetryReason) => void) | undefined;
-  messages: ChatMessage[];
-  userImages?: Array<{ data: string; mimeType: string }> | undefined;
-  logger?: CoreLogger | undefined;
-  /** Log step namespace, e.g. 'generate' or 'apply_comment'. Defaults to 'generate'. */
-  logScope?: string | undefined;
-}
-
-function attachmentToImageInput(
-  attachment: AttachmentContext,
-): { data: string; mimeType: string } | null {
-  if (!attachment.imageDataUrl || !attachment.mediaType) return null;
-  const prefix = `data:${attachment.mediaType};base64,`;
-  if (!attachment.imageDataUrl.startsWith(prefix)) return null;
-  return {
-    data: attachment.imageDataUrl.slice(prefix.length),
-    mimeType: attachment.mediaType,
-  };
-}
-
-function imageInputsForWire(
-  attachments: AttachmentContext[] | undefined,
-  wire: WireApi | undefined,
-): Array<{ data: string; mimeType: string }> {
-  if (wire !== 'openai-codex-responses') return [];
-  return (attachments ?? [])
-    .map((attachment) => attachmentToImageInput(attachment))
-    .filter((image): image is { data: string; mimeType: string } => image !== null);
-}
-
 export interface BuildApplyCommentPromptInput {
   comment: string;
   selection: SelectedElement;
@@ -320,115 +270,7 @@ export function buildApplyCommentUserPrompt(input: BuildApplyCommentPromptInput)
 
 export { composeSystemPrompt } from './prompts/index.js';
 
-async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
-  const log = input.logger ?? NOOP_LOGGER;
-  const scope = input.logScope ?? 'generate';
-  const ctx = {
-    provider: input.model.provider,
-    modelId: input.model.modelId,
-  } as const;
-
-  log.info(`[${scope}] step=send_request`, ctx);
-  const sendStart = Date.now();
-  let result: GenerateResult;
-  let reasoning = input.reasoningLevel ?? reasoningForModel(input.model, input.baseUrl);
-  // Self-healing: if the upstream rejects on reasoning mismatch, flip the
-  // knob once and retry. Handles new reasoning-mandatory models (and
-  // not-supported models) without code changes.
-  for (let attempt = 1; ; attempt++) {
-    try {
-      result = await completeWithRetry(
-        input.model,
-        input.messages,
-        {
-          apiKey: input.apiKey,
-          ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
-          ...(input.wire !== undefined ? { wire: input.wire } : {}),
-          ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
-          ...(input.userImages !== undefined ? { userImages: input.userImages } : {}),
-          ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
-          ...(input.signal !== undefined ? { signal: input.signal } : {}),
-          maxTokens: MAX_OUTPUT_TOKENS,
-          ...(reasoning !== undefined ? { reasoning } : {}),
-        },
-        {
-          ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
-          logger: log,
-          provider: input.model.provider,
-          ...(input.wire !== undefined ? { wire: input.wire } : {}),
-        },
-        complete,
-      );
-      break;
-    } catch (err) {
-      const adjustment = attempt === 1 ? reasoningMismatch(err, reasoning) : null;
-      if (adjustment === 'add') {
-        log.info(`[${scope}] step=send_request.retry_with_reasoning`, ctx);
-        input.onRetry?.({
-          attempt,
-          totalAttempts: attempt + 1,
-          delayMs: 0,
-          reason: 'reasoning required by upstream',
-        });
-        reasoning = 'medium';
-        continue;
-      }
-      if (adjustment === 'drop') {
-        log.info(`[${scope}] step=send_request.retry_without_reasoning`, ctx);
-        input.onRetry?.({
-          attempt,
-          totalAttempts: attempt + 1,
-          delayMs: 0,
-          reason: 'reasoning not supported by upstream',
-        });
-        reasoning = undefined;
-        continue;
-      }
-      const remapped = remapProviderError(err, input.model.provider, input.wire);
-      log.error(`[${scope}] step=send_request.fail`, {
-        ...ctx,
-        ms: Date.now() - sendStart,
-        errorClass: err instanceof Error ? err.constructor.name : typeof err,
-        status: extractStatus(err),
-        code: remapped instanceof CodesignError ? remapped.code : undefined,
-      });
-      throw remapped;
-    }
-  }
-  log.info(`[${scope}] step=send_request.ok`, { ...ctx, ms: Date.now() - sendStart });
-
-  log.info(`[${scope}] step=parse_response`, ctx);
-  const parseStart = Date.now();
-  try {
-    const parser = createArtifactParser();
-    const collected: Collected = { text: '', artifacts: [] };
-    collect(parser.feed(result.content), collected);
-    collect(parser.flush(), collected);
-
-    log.info(`[${scope}] step=parse_response.ok`, {
-      ...ctx,
-      ms: Date.now() - parseStart,
-      artifacts: collected.artifacts.length,
-    });
-
-    return {
-      message: stripEmptyFences(collected.text),
-      artifacts: collected.artifacts,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      costUsd: result.costUsd,
-    };
-  } catch (err) {
-    log.error(`[${scope}] step=parse_response.fail`, {
-      ...ctx,
-      ms: Date.now() - parseStart,
-      errorClass: err instanceof Error ? err.constructor.name : typeof err,
-    });
-    throw err;
-  }
-}
-
-function extractStatus(err: unknown): number | undefined {
+function _extractStatus(err: unknown): number | undefined {
   if (typeof err !== 'object' || err === null) return undefined;
   const candidates = [
     (err as { status?: unknown }).status,
@@ -469,7 +311,7 @@ function errorMessage(err: unknown): string {
   return '';
 }
 
-function reasoningMismatch(
+function _reasoningMismatch(
   err: unknown,
   sentReasoning: ReasoningLevel | undefined,
 ): 'add' | 'drop' | null {
@@ -489,49 +331,12 @@ function reasoningMismatch(
   return null;
 }
 
-// Skill loading is best-effort: a missing or unreadable builtin directory must
-// not block generation, but the failure must surface (logged at error level
-// AND returned as a warning so the UI can show it). This honours
-// PRINCIPLES "no silent fallbacks" without sacrificing the user's response.
-//
-// All loaded skills are formatted into blobs unconditionally — the model picks
-// which one applies (progressive disclosure level 1+2). Algorithmic prompt
-// matching has been removed: language-gated keyword tables were the bug.
-// We still honour the skill contract: drop entries with
-// `disable_model_invocation: true` and entries restricted to other providers.
-async function collectAllSkillBlobs(
-  log: CoreLogger,
-  providerId: string,
-  builtinDir: string | undefined,
-): Promise<{ blobs: string[]; warnings: string[] }> {
-  const start = Date.now();
-  let skills: LoadedSkill[];
-  try {
-    skills = await loadBuiltinSkills(builtinDir ?? '');
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const errorClass = err instanceof Error ? err.constructor.name : typeof err;
-    log.warn('[generate] step=load_skills.fail', { errorClass, message });
-    return {
-      blobs: [],
-      warnings: [`Builtin skills unavailable: ${message}`],
-    };
-  }
-  const active = filterActive(skills, providerId);
-  const blobs = formatSkillsForPrompt(active);
-  log.info('[generate] step=load_skills.ok', {
-    ms: Date.now() - start,
-    skills: blobs.length,
-  });
-  return { blobs, warnings: [] };
-}
-
 /**
  * Output-token budget for every generation. Tripled from pi-ai's default
  * (~1/3 of context window, ~10k for Opus 4) to give Claude room for both
  * extended-thinking traces and a full HTML artifact.
  */
-const MAX_OUTPUT_TOKENS = 32000;
+const _MAX_OUTPUT_TOKENS = 32000;
 
 /** Match Anthropic's Claude 4.x family, which supports extended thinking. */
 const CLAUDE_4_MODEL_RE = /claude-(?:opus|sonnet)-4/i;
@@ -590,89 +395,6 @@ export function reasoningForModel(
     default:
       return undefined;
   }
-}
-
-export async function generate(input: GenerateInput): Promise<GenerateOutput> {
-  const log = input.logger ?? NOOP_LOGGER;
-  const ctx = {
-    provider: input.model.provider,
-    modelId: input.model.modelId,
-  } as const;
-
-  if (!input.prompt.trim()) {
-    throw new CodesignError('Prompt cannot be empty', ERROR_CODES.INPUT_EMPTY_PROMPT);
-  }
-
-  // Narrow guard: only 'create' is wired through buildUserPromptWithContext. Callers passing
-  // 'tweak' or 'revise' would silently get wrong output — reject early instead.
-  // When systemPrompt is provided the caller owns the full system message, so
-  // mode is irrelevant and we skip the guard (the contract says mode is ignored).
-  if (!input.systemPrompt && input.mode && input.mode !== 'create') {
-    throw new CodesignError(
-      'generate() built-in prompt only supports mode "create". Use applyComment() for revise; tweak is not yet wired.',
-      ERROR_CODES.INPUT_UNSUPPORTED_MODE,
-    );
-  }
-
-  log.info('[generate] step=resolve_model', ctx);
-  const resolveStart = Date.now();
-  // Tier 1: model is already resolved by the caller (no primary/fast fallback
-  // here yet). Step exists so logs/UI can show the same name even when the
-  // logic later picks between primary/fast.
-  log.info('[generate] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
-
-  log.info('[generate] step=build_request', ctx);
-  const buildStart = Date.now();
-  const skillResult = input.systemPrompt
-    ? { blobs: [], warnings: [] }
-    : await collectAllSkillBlobs(
-        log,
-        input.model.provider,
-        input.templatesRoot ? path.join(input.templatesRoot, 'skills') : undefined,
-      );
-  const skillBlobs = skillResult.blobs;
-  const messages: ChatMessage[] = [
-    {
-      role: 'system',
-      content:
-        input.systemPrompt ??
-        composeSystemPrompt({
-          mode: 'create',
-          userPrompt: input.prompt,
-          ...(skillBlobs.length > 0 ? { skills: skillBlobs } : {}),
-        }),
-    },
-    ...input.history,
-    {
-      role: 'user',
-      content: buildUserPromptWithContext(input.prompt, buildContextSections(input)),
-    },
-  ];
-  log.info('[generate] step=build_request.ok', {
-    ...ctx,
-    ms: Date.now() - buildStart,
-    messages: messages.length,
-    skills: skillBlobs.length,
-    skillWarnings: skillResult.warnings.length,
-  });
-
-  const output = await runModel({
-    model: input.model,
-    apiKey: input.apiKey,
-    baseUrl: input.baseUrl,
-    wire: input.wire,
-    httpHeaders: input.httpHeaders,
-    allowKeyless: input.allowKeyless,
-    reasoningLevel: input.reasoningLevel,
-    signal: input.signal,
-    onRetry: input.onRetry,
-    messages,
-    userImages: imageInputsForWire(input.attachments, input.wire),
-    logger: input.logger,
-  });
-  return skillResult.warnings.length > 0
-    ? { ...output, warnings: [...(output.warnings ?? []), ...skillResult.warnings] }
-    : output;
 }
 
 export async function applyComment(

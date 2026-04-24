@@ -32,7 +32,6 @@ import {
   type AgentTool,
 } from '@mariozechner/pi-agent-core';
 import type { Message as PiAiMessage, Model as PiAiModel } from '@mariozechner/pi-ai';
-import { createArtifactParser } from '@open-codesign/artifacts';
 import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
   classifyError,
@@ -54,12 +53,7 @@ import { buildTransformContext } from './context-prune.js';
 import { remapProviderError } from './errors.js';
 import type { GenerateInput, GenerateOutput } from './index.js';
 import { reasoningForModel } from './index.js';
-import {
-  type Collected,
-  collect,
-  createHtmlArtifact,
-  stripEmptyFences,
-} from './lib/artifact-collect.js';
+import { type Collected, createHtmlArtifact, stripEmptyFences } from './lib/artifact-collect.js';
 import { buildContextSections, buildUserPromptWithContext } from './lib/context-format.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt } from './prompts/index.js';
@@ -870,22 +864,12 @@ export async function generateViaAgent(
     .map((c) => c.text)
     .join('');
 
-  const parser = createArtifactParser();
-  const collected: Collected = { text: '', artifacts: [] };
-  collect(parser.feed(fullText), collected);
-  collect(parser.flush(), collected);
+  const collected: Collected = { text: fullText, artifacts: [] };
 
-  if (collected.artifacts.length === 0) {
-    // Prose `<artifact>` fallback (fenced ```html / bare <html>) was deliberately
-    // removed: the agent owns artifacts via the text_editor tool, and tolerating
-    // inline source encouraged the model to double-emit (tool + prose), spamming
-    // the user's chat view. The fs path below is the only supported recovery
-    // when the parser produced nothing.
-  }
-
-  // When the agent used the text_editor tool to write index.html, the final
-  // assistant text is just prose. Pull the artifact out of the virtual FS.
-  if (collected.artifacts.length === 0 && deps.fs) {
+  // The agent writes artifacts through the text_editor tool — final assistant
+  // text is prose, not an `<artifact>` blob. Pull index.html out of the
+  // virtual FS to populate the artifact list.
+  if (deps.fs) {
     const file = deps.fs.view('index.html');
     if (file !== null && file.content.trim().length > 0) {
       collected.artifacts.push(createHtmlArtifact(file.content, 0));
