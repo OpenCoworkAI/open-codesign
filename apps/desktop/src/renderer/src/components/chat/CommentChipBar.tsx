@@ -25,7 +25,7 @@ export function CommentChipBar() {
     (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
   );
 
-  const pending = comments.filter((c) => c.kind === 'edit' && c.status === 'pending');
+  const pending = comments.filter((c) => c != null && c.kind === 'edit' && c.status === 'pending');
   if (pending.length === 0) return null;
 
   const isReady =

@@ -69,6 +69,7 @@ import {
 import { makeListFilesTool } from './tools/list-files.js';
 import { makeReadDesignSystemTool } from './tools/read-design-system.js';
 import { makeReadUrlTool } from './tools/read-url.js';
+import { makeSetTitleTool } from './tools/set-title.js';
 import { makeSetTodosTool } from './tools/set-todos.js';
 import { type TextEditorFsCallbacks, makeTextEditorTool } from './tools/text-editor.js';
 
@@ -754,6 +755,7 @@ export async function generateViaAgent(
   //   - text_editor + list_files + done (when fs callbacks are provided)
   const defaultTools: AgentTool<TSchema, unknown>[] = [];
   defaultTools.push(makeSetTodosTool() as unknown as AgentTool<TSchema, unknown>);
+  defaultTools.push(makeSetTitleTool() as unknown as AgentTool<TSchema, unknown>);
   defaultTools.push(makeReadUrlTool() as unknown as AgentTool<TSchema, unknown>);
   defaultTools.push(
     makeReadDesignSystemTool(() => input.designSystem ?? null) as unknown as AgentTool<

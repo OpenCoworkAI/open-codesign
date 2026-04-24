@@ -2584,6 +2584,9 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         ...(input.parentOuterHTML ? { parentOuterHTML: input.parentOuterHTML } : {}),
       });
       if (get().currentDesignId === designId) {
+        if (!row) {
+          return null;
+        }
         set((s) => ({ comments: [...s.comments, row] }));
       }
       return row;

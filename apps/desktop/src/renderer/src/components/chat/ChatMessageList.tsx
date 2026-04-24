@@ -81,7 +81,7 @@ export function ChatMessageList({
     }
     const cur = bucket;
     items.push({
-      key: `tc-${cur.firstSeq}`,
+      key: `tc-${cur.firstSeq}-${items.length}`,
       node: <WorkingCard calls={cur.calls} />,
     });
     bucket = null;
@@ -97,7 +97,7 @@ export function ChatMessageList({
       if (call.toolName === 'set_todos') {
         flush();
         items.push({
-          key: `todos-${msg.seq}`,
+          key: `todos-${msg.seq}-${items.length}`,
           node: <InlineTodoList call={call} />,
         });
         continue;
@@ -112,7 +112,7 @@ export function ChatMessageList({
     if (msg.kind === 'user') {
       const p = msg.payload as { text?: string; attachedSkills?: string[] };
       items.push({
-        key: `u-${msg.seq}`,
+        key: `u-${msg.seq}-${items.length}`,
         node: (
           <UserMessage
             text={p?.text ?? ''}
@@ -125,14 +125,14 @@ export function ChatMessageList({
       const isLast = msg === messages[messages.length - 1];
       const streaming = Boolean(isGenerating) && isLast;
       items.push({
-        key: `a-${msg.seq}`,
+        key: `a-${msg.seq}-${items.length}`,
         node: <AssistantText text={p?.text ?? ''} streaming={streaming} />,
       });
     } else if (msg.kind === 'artifact_delivered') {
       const p = msg.payload as { filename?: string; createdAt?: string };
       const label = p?.filename ?? t('sidebar.chat.artifactDefaultLabel');
       items.push({
-        key: `art-${msg.seq}`,
+        key: `art-${msg.seq}-${items.length}`,
         node: (
           <div className="flex items-center gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-2)]">
             <FileText
@@ -151,7 +151,7 @@ export function ChatMessageList({
     } else if (msg.kind === 'error') {
       const p = msg.payload as { message?: string };
       items.push({
-        key: `err-${msg.seq}`,
+        key: `err-${msg.seq}-${items.length}`,
         node: (
           <div className="rounded-[var(--radius-md)] border border-[var(--color-error)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-2)] text-[12.5px] font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-primary)] break-all whitespace-pre-wrap">
             {p?.message ?? t('errors.unknown')}

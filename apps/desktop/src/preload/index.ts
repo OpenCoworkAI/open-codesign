@@ -503,7 +503,12 @@ const api = {
   },
   comments: {
     // TODO(v0.2): re-route through session JSONL — see T2.6.
-    add: (_input: CommentCreateInput) => Promise.resolve(null as unknown as CommentRow),
+    // Stubs reject so renderer surfaces a toast instead of pushing
+    // `null` rows into the store (which used to crash CommentChipBar).
+    add: (_input: CommentCreateInput) =>
+      Promise.reject(
+        new Error('Comments are being migrated to session JSONL in v0.2 — not yet wired.'),
+      ) as Promise<CommentRow>,
     list: (_designId: string, _snapshotId?: string) => Promise.resolve([] as CommentRow[]),
     listPendingEdits: (_designId: string) => Promise.resolve([] as CommentRow[]),
     update: (_id: string, _patch: { text?: string; status?: CommentStatus }) =>
