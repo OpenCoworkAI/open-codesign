@@ -393,6 +393,7 @@
       "diagnosticsTitle": "Diagnóstico",
       "diagnosticsHint": "Abra a pasta de logs para inspecionar os arquivos ou exporte um pacote com dados sensíveis removidos para reportar bugs.",
       "openLogFolder": "Abrir pasta de logs",
+      "openTemplatesFolder": "Abrir pasta de modelos",
       "exportDiagnostics": "Exportar diagnóstico",
       "diagnosticsExported": "Exportado para {{path}}",
       "diagnosticsExportFailed": "Não foi possível exportar o diagnóstico"

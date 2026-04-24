@@ -1,23 +1,20 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
 import { Type } from '@sinclair/typebox';
 
 /**
- * `skill` tool (T3.3). Lazy-loads the markdown body of a builtin skill
- * (or a brand reference under `brand:<slug>`). Per-session de-dup so a
- * second call returns a short "already loaded" stub instead of re-injecting
- * the whole text.
+ * `skill` tool. Lazy-loads the markdown body of a builtin design skill (or a
+ * brand reference under `brand:<slug>`). Per-session de-dup so a second call
+ * returns a short "already loaded" stub instead of re-injecting the whole
+ * text.
  *
- * Manifest exposure: skill names are listed in the system prompt at session
- * start (~500 bytes). Body content (~500–2000 bytes) only enters context on
- * explicit tool call.
+ * Both directories live under the user-visible templates tree
+ * (`<userData>/templates/skills/` and `<userData>/templates/brand-refs/`),
+ * seeded from the app bundle on first boot and user-editable thereafter.
+ * Paths are injected at factory time so tests can point at a tmpdir and the
+ * production wiring stays out of `import.meta.url`.
  */
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const BUILTIN_DIR = path.join(HERE, '..', 'skills', 'builtin');
-const BRAND_DIR = path.join(HERE, '..', 'brand-refs');
 
 export interface SkillManifestEntry {
   name: string;
@@ -26,37 +23,46 @@ export interface SkillManifestEntry {
   path: string;
 }
 
-export async function listSkillManifest(): Promise<SkillManifestEntry[]> {
+export interface SkillRoots {
+  skillsRoot?: string | null | undefined;
+  brandRefsRoot?: string | null | undefined;
+}
+
+export async function listSkillManifest(roots: SkillRoots): Promise<SkillManifestEntry[]> {
   const out: SkillManifestEntry[] = [];
 
-  try {
-    const builtins = await readdir(BUILTIN_DIR);
-    for (const name of builtins) {
-      if (!name.endsWith('.md')) continue;
-      out.push({
-        name: name.replace(/\.md$/, ''),
-        category: 'design',
-        source: 'builtin',
-        path: path.join(BUILTIN_DIR, name),
-      });
+  if (roots.skillsRoot) {
+    try {
+      const builtins = await readdir(roots.skillsRoot);
+      for (const name of builtins) {
+        if (!name.endsWith('.md')) continue;
+        out.push({
+          name: name.replace(/\.md$/, ''),
+          category: 'design',
+          source: 'builtin',
+          path: path.join(roots.skillsRoot, name),
+        });
+      }
+    } catch {
+      // directory missing — return whatever we have
     }
-  } catch {
-    // builtin dir missing — return whatever we have
   }
 
-  try {
-    const brandSlugs = await readdir(BRAND_DIR);
-    for (const slug of brandSlugs) {
-      if (slug.startsWith('.') || slug === 'manifest.json') continue;
-      out.push({
-        name: `brand:${slug}`,
-        category: 'brand',
-        source: 'brand-ref',
-        path: path.join(BRAND_DIR, slug, 'DESIGN.md'),
-      });
+  if (roots.brandRefsRoot) {
+    try {
+      const brandSlugs = await readdir(roots.brandRefsRoot);
+      for (const slug of brandSlugs) {
+        if (slug.startsWith('.') || slug === 'manifest.json') continue;
+        out.push({
+          name: `brand:${slug}`,
+          category: 'brand',
+          source: 'brand-ref',
+          path: path.join(roots.brandRefsRoot, slug, 'DESIGN.md'),
+        });
+      }
+    } catch {
+      // brand-refs dir missing — fine, manifest just shows builtins
     }
-  } catch {
-    // brand-refs dir missing — fine, skill manifest just shows builtins
   }
 
   return out;
@@ -64,6 +70,7 @@ export async function listSkillManifest(): Promise<SkillManifestEntry[]> {
 
 export interface InvokeSkillOptions {
   name: string;
+  roots: SkillRoots;
   alreadyLoaded?: ReadonlySet<string>;
 }
 
@@ -77,7 +84,7 @@ export async function invokeSkill(opts: InvokeSkillOptions): Promise<InvokeSkill
   if (opts.alreadyLoaded?.has(opts.name)) {
     return { status: 'already-loaded' };
   }
-  const manifest = await listSkillManifest();
+  const manifest = await listSkillManifest(opts.roots);
   const entry = manifest.find((e) => e.name === opts.name);
   if (!entry) {
     return { status: 'not-found', reason: `no skill registered as ${opts.name}` };
@@ -109,10 +116,18 @@ export interface SkillDetails {
   status: 'loaded' | 'already-loaded' | 'not-found';
 }
 
-export function makeSkillTool(opts?: {
+export interface MakeSkillToolOptions extends SkillRoots {
   dedup?: Set<string>;
-}): AgentTool<typeof SkillParams, SkillDetails> {
-  const dedup = opts?.dedup;
+}
+
+export function makeSkillTool(
+  opts: MakeSkillToolOptions = {},
+): AgentTool<typeof SkillParams, SkillDetails> {
+  const dedup = opts.dedup;
+  const roots: SkillRoots = {
+    ...(opts.skillsRoot !== undefined ? { skillsRoot: opts.skillsRoot } : {}),
+    ...(opts.brandRefsRoot !== undefined ? { brandRefsRoot: opts.brandRefsRoot } : {}),
+  };
   return {
     name: 'skill',
     label: 'Skill',
@@ -138,7 +153,11 @@ export function makeSkillTool(opts?: {
           details: { name, status: 'already-loaded' },
         };
       }
-      const result = await invokeSkill({ name, ...(dedup ? { alreadyLoaded: dedup } : {}) });
+      const result = await invokeSkill({
+        name,
+        roots,
+        ...(dedup ? { alreadyLoaded: dedup } : {}),
+      });
       if (result.status === 'loaded') {
         dedup?.add(name);
         return {

@@ -2306,6 +2306,19 @@ function StorageTab() {
     }
   }
 
+  async function handleOpenTemplatesFolder() {
+    if (!window.codesign?.settings?.openTemplatesFolder) return;
+    try {
+      await window.codesign.settings.openTemplatesFolder();
+    } catch (err) {
+      pushToast({
+        variant: 'error',
+        title: t('settings.storage.openFolderFailed'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+      });
+    }
+  }
+
   async function handleExportDiagnostics() {
     if (!window.codesign?.diagnostics?.exportDiagnostics) return;
     setExporting(true);
@@ -2375,6 +2388,14 @@ function StorageTab() {
           >
             <FolderOpen className="w-3.5 h-3.5" />
             {t('settings.storage.openLogFolder')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleOpenTemplatesFolder()}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+            {t('settings.storage.openTemplatesFolder')}
           </button>
           <button
             type="button"

@@ -6,13 +6,13 @@ import {
   type AgentEvent,
   applyComment,
   type CoreLogger,
-  DESIGN_SKILLS,
-  FRAME_TEMPLATES,
   type GenerateImageAssetRequest,
   type GenerateImageAssetResult,
   generate,
   generateTitle,
   generateViaAgent,
+  loadDesignSkills,
+  loadFrameTemplates,
 } from '@open-codesign/core';
 import { detectProviderFromKey, generateImage } from '@open-codesign/providers';
 import {
@@ -43,6 +43,7 @@ import { scanDesignSystem } from './design-system';
 import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { makeRuntimeVerifier } from './done-verify';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from './electron-runtime';
+import { ensureUserTemplates, resolveBundledTemplatesDir } from './ensure-user-templates';
 import { registerExporterIpc } from './exporter-ipc';
 import {
   armGenerationTimeout,
@@ -278,6 +279,8 @@ interface CreateRuntimeTextEditorFsOptions {
   previousHtml: string | null;
   sendEvent: (event: AgentStreamEvent) => void;
   logger: Pick<CoreLogger, 'error'>;
+  frames?: ReadonlyArray<readonly [string, string]>;
+  designSkills?: ReadonlyArray<readonly [string, string]>;
 }
 
 export function createRuntimeTextEditorFs({
@@ -287,16 +290,18 @@ export function createRuntimeTextEditorFs({
   previousHtml,
   sendEvent,
   logger,
+  frames = [],
+  designSkills = [],
 }: CreateRuntimeTextEditorFsOptions) {
   const baseCtx = { designId: designId ?? '', generationId } as const;
   const fsMap = new Map<string, string>();
   if (previousHtml && previousHtml.trim().length > 0) {
     fsMap.set('index.html', previousHtml);
   }
-  for (const [name, content] of FRAME_TEMPLATES) {
+  for (const [name, content] of frames) {
     fsMap.set(`frames/${name}`, content);
   }
-  for (const [name, content] of DESIGN_SKILLS) {
+  for (const [name, content] of designSkills) {
     fsMap.set(`skills/${name}`, content);
   }
 
@@ -501,7 +506,7 @@ function registerIpcHandlers(db: Database | null): void {
    * `agent:event:v1` so the sidebar chat can render incremental output
    * instead of waiting for the full final message.
    */
-  const runGenerate = (
+  const runGenerate = async (
     input: Parameters<typeof generate>[0],
     id: string,
     designId: string | null,
@@ -515,6 +520,11 @@ function registerIpcHandlers(db: Database | null): void {
     const baseCtx = { designId: designId ?? '', generationId: id } as const;
     const toolStartedAt = new Map<string, number>();
     const runtimeVerify = makeRuntimeVerifier();
+    const templatesRoot = path_module.join(app.getPath('userData'), 'templates');
+    const [frames, designSkills] = await Promise.all([
+      loadFrameTemplates(path_module.join(templatesRoot, 'frames')),
+      loadDesignSkills(path_module.join(templatesRoot, 'design-skills')),
+    ]);
     const { fs, fsMap } = createRuntimeTextEditorFs({
       db,
       designId,
@@ -522,6 +532,8 @@ function registerIpcHandlers(db: Database | null): void {
       logger: logIpc,
       previousHtml,
       sendEvent,
+      frames,
+      designSkills,
     });
     const cfg = getCachedConfig();
     const imageConfig = cfg ? resolveImageGenerationConfig(cfg) : null;
@@ -596,6 +608,7 @@ function registerIpcHandlers(db: Database | null): void {
     return generateViaAgent(
       {
         ...input,
+        templatesRoot,
         askBridge: (askInput) => requestAsk(id, askInput, () => mainWindow),
         ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
         ...(workspaceRoot
@@ -1236,6 +1249,12 @@ function registerIpcHandlers(db: Database | null): void {
     await shell.openPath(getLogPath());
   });
 
+  ipcMain.handle('codesign:v1:open-templates-folder', async () => {
+    const dir = path_module.join(app.getPath('userData'), 'templates');
+    await mkdir(dir, { recursive: true });
+    await shell.openPath(dir);
+  });
+
   ipcMain.handle('codesign:v1:open-external', async (_e, url: unknown) => {
     if (typeof url !== 'string') {
       throw new CodesignError('codesign:v1:open-external requires a string url', 'IPC_BAD_INPUT');
@@ -1343,6 +1362,14 @@ if (!IS_VITEST) {
       const aborted = await maybeAbortIfRunningFromDmg();
       if (aborted) return;
       await loadConfigOnBoot();
+      // Seed `<userData>/templates/` from the bundled resources if it does
+      // not already exist. After the first boot the user owns the tree —
+      // edits to scaffolds, skills, brand-refs, frames, or design-skills
+      // survive upgrades, and deleting the folder re-seeds on next launch.
+      const bootLog = getLogger('main:boot');
+      const templatesSource = resolveBundledTemplatesDir(process.resourcesPath);
+      const seeded = await ensureUserTemplates(app.getPath('userData'), templatesSource);
+      bootLog.info('templates.ensure', { ...seeded });
       // One-shot migration for feat-branch testers whose config.toml still
       // carries Phase 1's stale codex wire/baseUrl. No-op on fresh installs
       // and for everyone else.
@@ -1368,7 +1395,6 @@ if (!IS_VITEST) {
           });
         }
       } else {
-        const bootLog = getLogger('main:boot');
         bootLog.error('snapshotsDb.init.fail', {
           message: dbResult.error.message,
           stack: dbResult.error.stack,

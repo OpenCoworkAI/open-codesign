@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { createArtifactParser } from '@open-codesign/artifacts';
 import type { GenerateResult, ReasoningLevel } from '@open-codesign/providers';
 import {
@@ -38,13 +39,17 @@ export {
   ModelRegistry,
   SessionManager,
 } from './agent-session.js';
-export { DESIGN_SKILLS, type DesignSkillName } from './design-skills/index.js';
+export {
+  DESIGN_SKILL_FILES,
+  type DesignSkillName,
+  loadDesignSkills,
+} from './design-skills/index.js';
 export {
   PROVIDER_KEY_HELP_URL,
   remapProviderError,
   rewriteUpstreamMessage,
 } from './errors.js';
-export { FRAME_TEMPLATES, type FrameName } from './frames/index.js';
+export { FRAME_FILES, type FrameName, loadFrameTemplates } from './frames/index.js';
 export type { CoreLogger } from './logger.js';
 export type { LoadAllSkillsOptions } from './skills/index.js';
 export { loadAllSkills, loadSkillsFromDir } from './skills/index.js';
@@ -149,6 +154,14 @@ export interface GenerateInput {
   /** Absolute path to the current design's workspace on disk. When set, tools
    * that need to write files (e.g. `scaffold`) use this as the sandbox root. */
   workspaceRoot?: string | undefined;
+  /**
+   * Absolute path to the user-visible templates tree (typically
+   * `<userData>/templates`). The agent reads scaffolds, skills, brand
+   * references, frames, and design-skill starters from this directory.
+   * When omitted, the scaffold / skill tools degrade to "not configured"
+   * errors and builtin skill loading is skipped.
+   */
+  templatesRoot?: string | undefined;
   /** Override the system prompt entirely. When set, `mode` is ignored. */
   systemPrompt?: string | undefined;
   /**
@@ -469,11 +482,12 @@ function reasoningMismatch(
 async function collectAllSkillBlobs(
   log: CoreLogger,
   providerId: string,
+  builtinDir: string | undefined,
 ): Promise<{ blobs: string[]; warnings: string[] }> {
   const start = Date.now();
   let skills: LoadedSkill[];
   try {
-    skills = await loadBuiltinSkills();
+    skills = await loadBuiltinSkills(builtinDir ?? '');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const errorClass = err instanceof Error ? err.constructor.name : typeof err;
@@ -591,7 +605,11 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
   const buildStart = Date.now();
   const skillResult = input.systemPrompt
     ? { blobs: [], warnings: [] }
-    : await collectAllSkillBlobs(log, input.model.provider);
+    : await collectAllSkillBlobs(
+        log,
+        input.model.provider,
+        input.templatesRoot ? path.join(input.templatesRoot, 'skills') : undefined,
+      );
   const skillBlobs = skillResult.blobs;
   const messages: ChatMessage[] = [
     {

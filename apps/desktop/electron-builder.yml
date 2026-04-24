@@ -15,6 +15,9 @@ directories:
 files:
   - out/**
   - package.json
+extraResources:
+  - from: resources/templates
+    to: templates
 asar: true
 mac:
   category: public.app-category.developer-tools

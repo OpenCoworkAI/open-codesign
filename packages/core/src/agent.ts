@@ -22,6 +22,7 @@
  *     events directly via `onEvent`.
  */
 
+import path from 'node:path';
 import {
   Agent,
   type AgentEvent,
@@ -212,12 +213,13 @@ function buildPiModel(
 async function collectSkills(
   log: CoreLogger,
   providerId: string,
+  builtinDir: string | undefined,
 ): Promise<{ blobs: string[]; warnings: string[] }> {
   const start = Date.now();
   try {
     const { loadBuiltinSkills } = await import('./skills/loader.js');
     const { filterActive, formatSkillsForPrompt } = await import('@open-codesign/providers');
-    const skills = await loadBuiltinSkills();
+    const skills = await loadBuiltinSkills(builtinDir ?? '');
     const active = filterActive(skills, providerId);
     const blobs = formatSkillsForPrompt(active);
     log.info('[generate] step=load_skills.ok', {
@@ -621,9 +623,12 @@ export async function generateViaAgent(
 
   log.info('[generate] step=build_request', ctx);
   const buildStart = Date.now();
+  const skillsBuiltinDir = input.templatesRoot
+    ? path.join(input.templatesRoot, 'skills')
+    : undefined;
   const skillResult = input.systemPrompt
     ? { blobs: [] as string[], warnings: [] as string[] }
-    : await collectSkills(log, input.model.provider);
+    : await collectSkills(log, input.model.provider, skillsBuiltinDir);
   const systemPrompt =
     input.systemPrompt ??
     composeSystemPrompt({
@@ -647,15 +652,24 @@ export async function generateViaAgent(
   //   - read_url        (always — uses global fetch)
   //   - read_design_system (always — closes over the caller's designSystem)
   //   - text_editor + list_files + done (when fs callbacks are provided)
+  const scaffoldsRoot = input.templatesRoot ? path.join(input.templatesRoot, 'scaffolds') : null;
+  const brandRefsRoot = input.templatesRoot ? path.join(input.templatesRoot, 'brand-refs') : null;
   const defaultTools: AgentTool<TSchema, unknown>[] = [];
   defaultTools.push(makeSetTodosTool() as unknown as AgentTool<TSchema, unknown>);
   defaultTools.push(makeSetTitleTool() as unknown as AgentTool<TSchema, unknown>);
   const loadedSkills = new Set<string>();
   defaultTools.push(
-    makeSkillTool({ dedup: loadedSkills }) as unknown as AgentTool<TSchema, unknown>,
+    makeSkillTool({
+      dedup: loadedSkills,
+      skillsRoot: skillsBuiltinDir ?? null,
+      brandRefsRoot,
+    }) as unknown as AgentTool<TSchema, unknown>,
   );
   defaultTools.push(
-    makeScaffoldTool(() => input.workspaceRoot ?? null) as unknown as AgentTool<TSchema, unknown>,
+    makeScaffoldTool(
+      () => input.workspaceRoot ?? null,
+      () => scaffoldsRoot,
+    ) as unknown as AgentTool<TSchema, unknown>,
   );
   defaultTools.push(makeReadUrlTool() as unknown as AgentTool<TSchema, unknown>);
   defaultTools.push(

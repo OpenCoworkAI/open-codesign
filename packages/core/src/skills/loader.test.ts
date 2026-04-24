@@ -55,8 +55,10 @@ Full skill body here.
 // ---------------------------------------------------------------------------
 
 describe('loadSkillsFromDir()', () => {
-  it('loads builtin skills from the real builtin directory', async () => {
-    const builtinDir = fileURLToPath(new URL('./builtin', import.meta.url));
+  it('loads builtin skills from the templates/skills bundled resources', async () => {
+    const builtinDir = fileURLToPath(
+      new URL('../../../../apps/desktop/resources/templates/skills', import.meta.url),
+    );
     const skills = await loadSkillsFromDir(builtinDir, 'builtin');
     expect(skills.length).toBeGreaterThanOrEqual(9);
     const ids = skills.map((s) => s.id).sort();

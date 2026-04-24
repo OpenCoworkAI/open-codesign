@@ -670,33 +670,45 @@ describe('generateViaAgent() — first-turn retry', () => {
   });
 });
 
-describe('FRAME_TEMPLATES — device frame starter assets', () => {
-  it('exposes iphone, ipad, watch, android, and macos-safari frames as JSX modules with EDITMODE markers', async () => {
-    const { FRAME_TEMPLATES } = await import('./frames/index.js');
-    const names = FRAME_TEMPLATES.map(([n]) => n);
-    expect(names).toEqual([
-      'iphone.jsx',
-      'ipad.jsx',
-      'watch.jsx',
-      'android.jsx',
-      'macos-safari.jsx',
-    ]);
-    for (const [name, jsx] of FRAME_TEMPLATES) {
-      expect(jsx.length, `${name} should be non-empty`).toBeGreaterThan(200);
-      expect(jsx, `${name} must declare an EDITMODE block`).toMatch(/EDITMODE-BEGIN/);
-      expect(jsx, `${name} must declare an EDITMODE block`).toMatch(/EDITMODE-END/);
-      expect(jsx, `${name} must call ReactDOM.createRoot`).toMatch(/ReactDOM\.createRoot/);
+describe('loadFrameTemplates — device frame starter assets', () => {
+  it('returns declared frame files in canonical order when a directory provides them', async () => {
+    const { mkdirSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    const { FRAME_FILES, loadFrameTemplates } = await import('./frames/index.js');
+    const dir = path.join(tmpdir(), `codesign-frames-${process.pid}-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    try {
+      for (const name of FRAME_FILES) {
+        writeFileSync(path.join(dir, name), `// ${name}\nplaceholder\n`, 'utf8');
+      }
+      const entries = await loadFrameTemplates(dir);
+      expect(entries.map(([n]) => n)).toEqual([...FRAME_FILES]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
   it('seeds an agent-host fsMap so the agent can `view` frames/<name>', async () => {
-    const { FRAME_TEMPLATES } = await import('./frames/index.js');
-    const fsMap = new Map<string, string>();
-    for (const [name, content] of FRAME_TEMPLATES) {
-      fsMap.set(`frames/${name}`, content);
+    const { mkdirSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    const { FRAME_FILES, loadFrameTemplates } = await import('./frames/index.js');
+    const dir = path.join(tmpdir(), `codesign-frames-seed-${process.pid}-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    try {
+      for (const name of FRAME_FILES) {
+        writeFileSync(path.join(dir, name), `// ${name} body\nReactDOM.createRoot(...)\n`, 'utf8');
+      }
+      const entries = await loadFrameTemplates(dir);
+      const fsMap = new Map<string, string>();
+      for (const [name, content] of entries) {
+        fsMap.set(`frames/${name}`, content);
+      }
+      expect(fsMap.get('frames/iphone.jsx')).toMatch(/iphone\.jsx body/);
+      expect(fsMap.get('frames/ipad.jsx')).toMatch(/ReactDOM\.createRoot/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
-    expect(fsMap.get('frames/iphone.jsx')).toMatch(/IOSDevice/);
-    expect(fsMap.get('frames/ipad.jsx')).toMatch(/ReactDOM\.createRoot/);
-    expect(fsMap.get('frames/watch.jsx')).toMatch(/ReactDOM\.createRoot/);
   });
 });

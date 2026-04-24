@@ -16,6 +16,7 @@
       "!**/.turbo",
       "!**/vendor",
       "!**/packaging",
+      "!apps/desktop/resources/templates",
       "!**/*.vue"
     ]
   },

@@ -428,6 +428,7 @@
       "diagnosticsTitle": "诊断",
       "diagnosticsHint": "打开日志文件夹查看日志，或导出脱敏包用于提交 bug 报告。",
       "openLogFolder": "打开日志文件夹",
+      "openTemplatesFolder": "打开模板文件夹",
       "exportDiagnostics": "导出诊断包",
       "diagnosticsExported": "已导出至 {{path}}",
       "diagnosticsExportFailed": "无法导出诊断包"

@@ -428,6 +428,7 @@
       "diagnosticsTitle": "Diagnostics",
       "diagnosticsHint": "Open the log folder to inspect logs, or export a redacted bundle for bug reports.",
       "openLogFolder": "Open log folder",
+      "openTemplatesFolder": "Open templates folder",
       "exportDiagnostics": "Export diagnostics",
       "diagnosticsExported": "Exported to {{path}}",
       "diagnosticsExportFailed": "Could not export diagnostics"

@@ -1,6 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type LoadedSkill, SkillFrontmatterV1 } from './types.js';
 
@@ -312,12 +311,13 @@ export async function loadAllSkills(opts: LoadAllSkillsOptions): Promise<LoadedS
 }
 
 /**
- * Load the four builtin skills shipped inside this package
- * (`packages/core/src/skills/builtin/*.md`). Resolved relative to this file via
- * `import.meta.url` so it works in ESM, Vite, and Electron main without
- * hard-coded paths.
+ * Load skills from the user-editable skills directory.
+ *
+ * In the desktop app this resolves to `<userData>/templates/skills`. Pass
+ * the path at call time so this module stays independent of boot wiring —
+ * tests seed a tmpdir, the agent wires in the live path through
+ * `GenerateInput.templatesRoot`.
  */
-export async function loadBuiltinSkills(): Promise<LoadedSkill[]> {
-  const builtinDir = fileURLToPath(new URL('./builtin/', import.meta.url));
+export async function loadBuiltinSkills(builtinDir: string): Promise<LoadedSkill[]> {
   return loadSkillsFromDir(builtinDir, 'builtin');
 }

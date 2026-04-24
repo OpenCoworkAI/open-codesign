@@ -340,6 +340,8 @@ const api = {
       ipcRenderer.invoke('settings:v1:choose-storage-folder', kind) as Promise<AppPaths>,
     openFolder: (path: string) =>
       ipcRenderer.invoke('settings:v1:open-folder', path) as Promise<void>,
+    openTemplatesFolder: () =>
+      ipcRenderer.invoke('codesign:v1:open-templates-folder') as Promise<void>,
     resetOnboarding: () => ipcRenderer.invoke('settings:v1:reset-onboarding') as Promise<void>,
     toggleDevtools: () => ipcRenderer.invoke('settings:v1:toggle-devtools') as Promise<void>,
     validateKey: (input: {
