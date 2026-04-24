@@ -44,6 +44,21 @@ child.stderr.on('end', () => {
   stderrTail = '';
 });
 
+// Forward termination signals to the child. Without this, Ctrl+C on the parent
+// node process leaves the Electron main + helpers as orphans on macOS/Linux.
+let forwarding = false;
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(sig, () => {
+    if (forwarding) return;
+    forwarding = true;
+    try {
+      child.kill(sig);
+    } catch {
+      // child already gone
+    }
+  });
+}
+
 child.on('exit', (code, signal) => {
   if (signal) {
     process.kill(process.pid, signal);

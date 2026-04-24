@@ -69,6 +69,7 @@ import {
 import { isAllowedExternalUrl } from './open-external';
 import { readPersisted as readPreferences, registerPreferencesIpc } from './preferences-ipc';
 import { runPreview } from './preview-runtime';
+import { shutdownAllProcesses } from './process-registry';
 import { preparePromptContext } from './prompt-context';
 import { createProviderContextStore } from './provider-context';
 import { resolveActiveModel } from './provider-settings';
@@ -599,10 +600,10 @@ function registerIpcHandlers(db: Database | null): void {
     let toolCount = 0;
 
     // Resolve the design's bound workspace root so the scaffold tool can
-    // write into the right directory. dev/v0.2 does not yet persist a
-    // per-design workspace binding (planned with PR #173); until that lands
-    // this returns undefined and core's scaffold tool surfaces a clean
-    // "no workspace attached" error.
+    // write into the right directory. PR #173 landed the per-design
+    // workspace binding; this returns the bound path, or undefined if the
+    // design predates binding, in which case core's scaffold tool surfaces
+    // a clean "no workspace attached" error.
     const workspaceRoot = resolveWorkspaceRootForDesign(designId);
 
     return generateViaAgent(
@@ -1263,6 +1264,18 @@ function registerIpcHandlers(db: Database | null): void {
       throw new CodesignError('URL not allowed', 'IPC_BAD_INPUT');
     }
     await shell.openExternal(url);
+  });
+
+  app.on('before-quit', () => {
+    for (const controller of inFlight.values()) {
+      try {
+        controller.abort();
+      } catch {
+        // controller may already be settled
+      }
+    }
+    inFlight.clear();
+    shutdownAllProcesses();
   });
 }
 
