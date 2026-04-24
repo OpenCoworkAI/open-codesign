@@ -67,7 +67,11 @@ describe('inferReasoning — openai-chat wire, official OpenAI endpoint', () => 
 describe('inferReasoning — openai-chat wire, third-party gateways (#183)', () => {
   it('returns false for Qwen DashScope (non-reasoning model id)', () => {
     expect(
-      inferReasoning('openai-chat', 'qwen3.6-plus', 'https://dashscope.aliyuncs.com/compatible-mode/v1'),
+      inferReasoning(
+        'openai-chat',
+        'qwen3.6-plus',
+        'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      ),
     ).toBe(false);
   });
 
@@ -104,21 +108,21 @@ describe('inferReasoning — openai-chat wire, third-party gateways (#183)', () 
   });
 
   it('returns true for :thinking-suffixed model IDs', () => {
-    expect(
-      inferReasoning('openai-chat', 'some-model:thinking', 'https://proxy.example/v1'),
-    ).toBe(true);
+    expect(inferReasoning('openai-chat', 'some-model:thinking', 'https://proxy.example/v1')).toBe(
+      true,
+    );
   });
 
   it('returns true for minimax reasoning models', () => {
-    expect(
-      inferReasoning('openai-chat', 'minimax/minimax-m1', 'https://proxy.example/v1'),
-    ).toBe(true);
+    expect(inferReasoning('openai-chat', 'minimax/minimax-m1', 'https://proxy.example/v1')).toBe(
+      true,
+    );
   });
 
   it('returns true for deepseek-r series', () => {
-    expect(
-      inferReasoning('openai-chat', 'deepseek/deepseek-r1', 'https://proxy.example/v1'),
-    ).toBe(true);
+    expect(inferReasoning('openai-chat', 'deepseek/deepseek-r1', 'https://proxy.example/v1')).toBe(
+      true,
+    );
   });
 });
 
