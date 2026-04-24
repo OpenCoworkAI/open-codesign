@@ -77,6 +77,15 @@ export {
   type DoneError,
   type DoneRuntimeVerifier,
 } from './tools/done.js';
+export {
+  makeTweaksTool,
+  parseTweakBlocks,
+  aggregateTweaks,
+  type TweaksDetails,
+  type TweakBlock,
+  type TweakEntry,
+  type TweakFileInput,
+} from './tools/tweaks.js';
 
 export interface AttachmentContext {
   name: string;
@@ -135,6 +144,16 @@ export interface GenerateInput {
   signal?: AbortSignal | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
   logger?: CoreLogger | undefined;
+  /**
+   * Optional workspace-glob reader. When provided, the agent wires up the
+   * `tweaks` tool so the model can aggregate EDITMODE blocks across multiple
+   * files. Main-process implementations pass a real glob-backed reader; unit
+   * tests can stub with an in-memory map. When omitted, the legacy
+   * `declare_tweak_schema` path (single-file) is still available.
+   */
+  readWorkspaceFiles?:
+    | ((patterns?: string[]) => Promise<Array<{ file: string; contents: string }>>)
+    | undefined;
 }
 
 export interface ApplyCommentInput {

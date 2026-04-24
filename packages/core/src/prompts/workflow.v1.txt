@@ -39,6 +39,10 @@ Re-read the current artifact. Make the minimum coherent change. Preserve voice, 
 
 Passes step 6 and contains exactly one artifact tag.
 
+## Tweaks
+
+After the first substantive implementation pass, call `tweaks()` (no args is fine) to register the EDITMODE values a user should be able to adjust without re-prompting. Prefer 2–5 "big-rock" values (hero color, heading font, radius scale, density). Do NOT register every pixel — the panel drowns.
+
 ## Narration rhythm (for tool-using turns)
 
 Before each tool call, say one sentence about what you're doing and why.
