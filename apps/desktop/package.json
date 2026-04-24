@@ -18,6 +18,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@mariozechner/pi-agent-core": "^0.69.0",
+    "@mariozechner/pi-ai": "^0.69.0",
+    "@mariozechner/pi-coding-agent": "^0.69.0",
     "@open-codesign/artifacts": "workspace:*",
     "@open-codesign/core": "workspace:*",
     "@open-codesign/exporters": "workspace:*",
