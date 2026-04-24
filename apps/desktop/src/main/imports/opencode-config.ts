@@ -202,49 +202,92 @@ async function readAuthJson(path: string): Promise<{
   }
 }
 
+/** Advance past a `// ... \n` line comment. Returns the new cursor, which
+ *  lands on the newline (or at EOF) so the outer loop picks it back up. */
+function skipLineComment(input: string, start: number): number {
+  let i = start;
+  while (i < input.length && input[i] !== '\n') i += 1;
+  return i;
+}
+
+/** Advance past a `/* ... *\/` block comment. Returns the cursor positioned
+ *  after the closing `*\/`. */
+function skipBlockComment(input: string, start: number): number {
+  let i = start + 2;
+  while (i < input.length - 1 && !(input[i] === '*' && input[i + 1] === '/')) i += 1;
+  return i + 2;
+}
+
+/** Copy one string literal (opened at `start` with quote `quote`) into `out`
+ *  and return the cursor positioned after the closing quote. Preserves
+ *  backslash-escapes so `"foo\"bar"` parses correctly. */
+function copyString(input: string, start: number, quote: string, out: string[]): number {
+  out.push(input.charAt(start));
+  let i = start + 1;
+  while (i < input.length) {
+    const ch = input.charAt(i);
+    out.push(ch);
+    if (ch === '\\' && i + 1 < input.length) {
+      out.push(input.charAt(i + 1));
+      i += 2;
+      continue;
+    }
+    if (ch === quote) return i + 1;
+    i += 1;
+  }
+  return i;
+}
+
 /** Strip `//` and `/* ... *\/` comments so `opencode.jsonc` can be parsed as
  *  JSON. Good enough for the narrow case where we only read one string field;
  *  we intentionally don't pull in a jsonc dep. Exported for direct testing. */
 export function stripJsonComments(input: string): string {
-  let out = '';
+  const out: string[] = [];
   let i = 0;
-  let inString = false;
-  let stringQuote = '';
   while (i < input.length) {
-    const ch = input[i];
-    const next = input[i + 1];
-    if (inString) {
-      out += ch;
-      if (ch === '\\' && i + 1 < input.length) {
-        out += input[i + 1];
-        i += 2;
-        continue;
-      }
-      if (ch === stringQuote) inString = false;
-      i += 1;
-      continue;
-    }
+    const ch = input.charAt(i);
+    const next = input.charAt(i + 1);
     if (ch === '"' || ch === "'") {
-      inString = true;
-      stringQuote = ch;
-      out += ch;
-      i += 1;
+      i = copyString(input, i, ch, out);
       continue;
     }
     if (ch === '/' && next === '/') {
-      while (i < input.length && input[i] !== '\n') i += 1;
+      i = skipLineComment(input, i);
       continue;
     }
     if (ch === '/' && next === '*') {
-      i += 2;
-      while (i < input.length - 1 && !(input[i] === '*' && input[i + 1] === '/')) i += 1;
-      i += 2;
+      i = skipBlockComment(input, i);
       continue;
     }
-    out += ch;
+    out.push(ch);
     i += 1;
   }
-  return out;
+  return out.join('');
+}
+
+function extractModelField(parsed: unknown): string | null {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+  const model = (parsed as Record<string, unknown>)['model'];
+  return typeof model === 'string' && model.length > 0 ? model : null;
+}
+
+/** Parse the text of a single opencode config candidate and extract `model`.
+ *  `first` means "the lookup chain stops here" — either we found a usable
+ *  config file (so later candidates don't shadow it) or we hit a parse error
+ *  and already surfaced a warning. `null`/`continue` means "keep looking." */
+function parseConfigCandidate(
+  path: string,
+  text: string,
+  warnings: string[],
+): { first: string | null } {
+  try {
+    const parsed: unknown = JSON.parse(path.endsWith('.jsonc') ? stripJsonComments(text) : text);
+    return { first: extractModelField(parsed) };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    warnings.push(`Could not parse ${path}: ${msg}`);
+    return { first: null };
+  }
 }
 
 async function readActiveModelFromConfig(
@@ -255,19 +298,109 @@ async function readActiveModelFromConfig(
   for (const path of opencodeConfigCandidatePaths(home, env)) {
     const text = await safeReadImportFile(path);
     if (text === null) continue;
-    try {
-      const parsed: unknown = JSON.parse(path.endsWith('.jsonc') ? stripJsonComments(text) : text);
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-      const model = (parsed as Record<string, unknown>)['model'];
-      if (typeof model === 'string' && model.length > 0) return model;
-      return null;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      warnings.push(`Could not parse ${path}: ${msg}`);
-      return null;
-    }
+    return parseConfigCandidate(path, text, warnings).first;
   }
   return null;
+}
+
+type ParsedAuthEntry =
+  | { kind: 'skip'; warning: string }
+  | { kind: 'provider'; provider: ProviderEntry; apiKey: string };
+
+/** Classify one entry from opencode's auth.json. Returns a ProviderEntry
+ *  we can append, or a warning explaining why this one didn't import. */
+function parseAuthBlock(providerId: string, entry: unknown): ParsedAuthEntry {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return {
+      kind: 'skip',
+      warning: `OpenCode provider "${providerId}" has an invalid entry shape; skipping`,
+    };
+  }
+  const auth = entry as AuthEntry;
+  if (auth.type === 'oauth') {
+    return {
+      kind: 'skip',
+      warning: `OpenCode provider "${providerId}" uses OAuth and can't be imported. Log in with an API key in OpenCode, or paste one manually here.`,
+    };
+  }
+  if (auth.type === 'wellknown') {
+    return {
+      kind: 'skip',
+      warning: `OpenCode provider "${providerId}" uses a well-known two-token auth scheme that can't be reused outside the CLI; skipping.`,
+    };
+  }
+  if (auth.type !== 'api') {
+    return {
+      kind: 'skip',
+      warning: `OpenCode provider "${providerId}" has unknown auth type "${String(auth.type)}"; skipping`,
+    };
+  }
+  if (typeof auth.key !== 'string' || auth.key.trim().length === 0) {
+    return {
+      kind: 'skip',
+      warning: `OpenCode provider "${providerId}" has no API key; skipping`,
+    };
+  }
+  if (!isKnownProvider(providerId)) {
+    return {
+      kind: 'skip',
+      warning: `OpenCode provider "${providerId}" isn't supported yet — add it as a custom provider.`,
+    };
+  }
+  const mapping = PROVIDER_MAP[providerId];
+  const importedId = `opencode-${providerId}`;
+  return {
+    kind: 'provider',
+    provider: {
+      id: importedId,
+      name: `OpenCode · ${mapping.label}`,
+      builtin: false,
+      wire: mapping.wire,
+      baseUrl: mapping.baseUrl,
+      defaultModel: mapping.defaultModel,
+      envKey: mapping.envKey,
+    },
+    apiKey: auth.key.trim(),
+  };
+}
+
+function collectProvidersFromAuthJson(
+  raw: Record<string, unknown>,
+  warnings: string[],
+): { providers: ProviderEntry[]; apiKeyMap: Record<string, string> } {
+  const providers: ProviderEntry[] = [];
+  const apiKeyMap: Record<string, string> = {};
+  for (const [providerId, entry] of Object.entries(raw)) {
+    const parsed = parseAuthBlock(providerId, entry);
+    if (parsed.kind === 'skip') {
+      warnings.push(parsed.warning);
+      continue;
+    }
+    providers.push(parsed.provider);
+    apiKeyMap[parsed.provider.id] = parsed.apiKey;
+  }
+  return { providers, apiKeyMap };
+}
+
+/** Split opencode's `model: "provider/model"` string, matching it against
+ *  imported providers. Mutates the matched provider's defaultModel to the
+ *  model-suffix so the UI starts on the same model OpenCode last used. */
+function resolveActiveSelection(
+  providers: ProviderEntry[],
+  rawActiveModel: string | null,
+): { activeProvider: string | null; activeModel: string | null } {
+  if (rawActiveModel === null) return { activeProvider: null, activeModel: null };
+  const slash = rawActiveModel.indexOf('/');
+  if (slash <= 0 || slash >= rawActiveModel.length - 1) {
+    return { activeProvider: null, activeModel: null };
+  }
+  const providerPart = rawActiveModel.slice(0, slash);
+  const modelPart = rawActiveModel.slice(slash + 1);
+  const candidateId = `opencode-${providerPart}`;
+  const entry = providers.find((p) => p.id === candidateId);
+  if (entry === undefined) return { activeProvider: null, activeModel: null };
+  entry.defaultModel = modelPart;
+  return { activeProvider: candidateId, activeModel: modelPart };
 }
 
 export async function readOpencodeConfig(
@@ -281,76 +414,11 @@ export async function readOpencodeConfig(
   const warnings: string[] = [];
   if (warning !== null) warnings.push(warning);
 
-  const providers: ProviderEntry[] = [];
-  const apiKeyMap: Record<string, string> = {};
-
-  if (raw !== null) {
-    for (const [providerId, entry] of Object.entries(raw)) {
-      if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-        warnings.push(`OpenCode provider "${providerId}" has an invalid entry shape; skipping`);
-        continue;
-      }
-      const auth = entry as AuthEntry;
-      if (auth.type === 'oauth') {
-        warnings.push(
-          `OpenCode provider "${providerId}" uses OAuth and can't be imported. Log in with an API key in OpenCode, or paste one manually here.`,
-        );
-        continue;
-      }
-      if (auth.type === 'wellknown') {
-        warnings.push(
-          `OpenCode provider "${providerId}" uses a well-known two-token auth scheme that can't be reused outside the CLI; skipping.`,
-        );
-        continue;
-      }
-      if (auth.type !== 'api') {
-        warnings.push(
-          `OpenCode provider "${providerId}" has unknown auth type "${String(auth.type)}"; skipping`,
-        );
-        continue;
-      }
-      if (typeof auth.key !== 'string' || auth.key.trim().length === 0) {
-        warnings.push(`OpenCode provider "${providerId}" has no API key; skipping`);
-        continue;
-      }
-      if (!isKnownProvider(providerId)) {
-        warnings.push(
-          `OpenCode provider "${providerId}" isn't supported yet — add it as a custom provider.`,
-        );
-        continue;
-      }
-      const mapping = PROVIDER_MAP[providerId];
-      const importedId = `opencode-${providerId}`;
-      providers.push({
-        id: importedId,
-        name: `OpenCode · ${mapping.label}`,
-        builtin: false,
-        wire: mapping.wire,
-        baseUrl: mapping.baseUrl,
-        defaultModel: mapping.defaultModel,
-        envKey: mapping.envKey,
-      });
-      apiKeyMap[importedId] = auth.key.trim();
-    }
-  }
+  const { providers, apiKeyMap } =
+    raw !== null ? collectProvidersFromAuthJson(raw, warnings) : { providers: [], apiKeyMap: {} };
 
   const rawActiveModel = await readActiveModelFromConfig(home, env, warnings);
-  let activeProvider: string | null = null;
-  let activeModel: string | null = null;
-  if (rawActiveModel !== null) {
-    const slash = rawActiveModel.indexOf('/');
-    if (slash > 0 && slash < rawActiveModel.length - 1) {
-      const providerPart = rawActiveModel.slice(0, slash);
-      const modelPart = rawActiveModel.slice(slash + 1);
-      const candidateId = `opencode-${providerPart}`;
-      if (providers.some((p) => p.id === candidateId)) {
-        activeProvider = candidateId;
-        activeModel = modelPart;
-        const entry = providers.find((p) => p.id === candidateId);
-        if (entry !== undefined) entry.defaultModel = modelPart;
-      }
-    }
-  }
+  const { activeProvider, activeModel } = resolveActiveSelection(providers, rawActiveModel);
 
   return {
     providers,

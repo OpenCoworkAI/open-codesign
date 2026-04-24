@@ -101,6 +101,34 @@ export interface ReadGeminiCliOptions {
  * lines that were skipped, so callers can warn about `GEMINI_API_KEY value`
  * (space instead of `=`) instead of silently dropping it.
  */
+type DotEnvLine =
+  | { kind: 'empty' }
+  | { kind: 'skip'; raw: string }
+  | { kind: 'kv'; key: string; value: string };
+
+function stripSurroundingQuotes(value: string): string {
+  if (value.length < 2) return value;
+  const first = value[0];
+  const last = value[value.length - 1];
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function parseDotEnvLine(rawLine: string): DotEnvLine {
+  const line = rawLine.trim();
+  if (line.length === 0) return { kind: 'empty' };
+  if (line.startsWith('#')) return { kind: 'empty' };
+  const withoutExport = line.startsWith('export ') ? line.slice(7).trimStart() : line;
+  const eq = withoutExport.indexOf('=');
+  if (eq <= 0) return { kind: 'skip', raw: line };
+  const key = withoutExport.slice(0, eq).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return { kind: 'skip', raw: line };
+  const value = stripSurroundingQuotes(withoutExport.slice(eq + 1).trim());
+  return { kind: 'kv', key, value };
+}
+
 export function parseDotEnvLines(content: string): {
   vars: Record<string, string>;
   skipped: string[];
@@ -108,29 +136,9 @@ export function parseDotEnvLines(content: string): {
   const vars: Record<string, string> = {};
   const skipped: string[] = [];
   for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (line.length === 0) continue;
-    if (line.startsWith('#')) continue;
-    const withoutExport = line.startsWith('export ') ? line.slice(7).trimStart() : line;
-    const eq = withoutExport.indexOf('=');
-    if (eq <= 0) {
-      skipped.push(line);
-      continue;
-    }
-    const key = withoutExport.slice(0, eq).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-      skipped.push(line);
-      continue;
-    }
-    let value = withoutExport.slice(eq + 1).trim();
-    if (value.length >= 2) {
-      const first = value[0];
-      const last = value[value.length - 1];
-      if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-        value = value.slice(1, -1);
-      }
-    }
-    vars[key] = value;
+    const parsed = parseDotEnvLine(rawLine);
+    if (parsed.kind === 'kv') vars[parsed.key] = parsed.value;
+    else if (parsed.kind === 'skip') skipped.push(parsed.raw);
   }
   return { vars, skipped };
 }
@@ -181,66 +189,90 @@ function suspiciousGeminiLineWarning(path: string, skipped: string[]): string | 
  *  `GOOGLE_GENAI_USE_VERTEXAI`: any of true/1/yes/on in any case counts. */
 const VERTEX_TRUTHY = new Set(['true', '1', 'yes', 'on']);
 
+function checkVertexAiBlocked(env: NodeJS.ProcessEnv): GeminiImport | null {
+  const vertexFlag = env['GOOGLE_GENAI_USE_VERTEXAI']?.trim().toLowerCase();
+  if (vertexFlag === undefined || !VERTEX_TRUTHY.has(vertexFlag)) return null;
+  return {
+    kind: 'blocked',
+    warnings: [
+      "Google Vertex AI projects aren't supported yet — paste a Gemini Developer API key (starts with AIzaSy…) to use Gemini here.",
+    ],
+  };
+}
+
+type EnvFileKeyProbe =
+  | { kind: 'found'; apiKey: string }
+  | { kind: 'suspicious'; warning: string }
+  | { kind: 'absent' };
+
+/** Read one .env file and probe for a usable GEMINI_API_KEY. Returns
+ *  `absent` when the file itself doesn't exist. Quiet `absent` when the
+ *  file is present but has no GEMINI_API_KEY and no suspicious near-miss
+ *  line (so the caller keeps walking the lookup chain). */
+async function probeGeminiKeyInEnvFile(path: string): Promise<EnvFileKeyProbe> {
+  const envFile = await readEnvFileIfPresent(path);
+  if (envFile === null) return { kind: 'absent' };
+  const raw = envFile.vars['GEMINI_API_KEY'];
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    return { kind: 'found', apiKey: raw.trim() };
+  }
+  const warning = suspiciousGeminiLineWarning(path, envFile.skipped);
+  if (warning !== null) return { kind: 'suspicious', warning };
+  return { kind: 'absent' };
+}
+
+type Resolved = {
+  apiKey: string;
+  apiKeySource: Exclude<GeminiKeySource, 'none'>;
+  keyPath: string | null;
+};
+
+/** Walk the three lookup locations — ~/.gemini/.env, ~/.env, shell env —
+ *  in priority order and return the first usable key plus any near-miss
+ *  warnings gathered along the way. */
+async function resolveGeminiKey(
+  home: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ resolved: Resolved | null; earlyWarnings: string[] }> {
+  const earlyWarnings: string[] = [];
+  const sources: Array<{
+    source: Exclude<GeminiKeySource, 'none' | 'shell-env'>;
+    path: string;
+  }> = [
+    { source: 'gemini-env', path: geminiDotEnvPath(home) },
+    { source: 'home-env', path: homeDotEnvPath(home) },
+  ];
+  for (const { source, path } of sources) {
+    const probe = await probeGeminiKeyInEnvFile(path);
+    if (probe.kind === 'found') {
+      return {
+        resolved: { apiKey: probe.apiKey, apiKeySource: source, keyPath: path },
+        earlyWarnings,
+      };
+    }
+    if (probe.kind === 'suspicious') earlyWarnings.push(probe.warning);
+  }
+  const shellKey = env['GEMINI_API_KEY'];
+  if (typeof shellKey === 'string' && shellKey.trim().length > 0) {
+    return {
+      resolved: { apiKey: shellKey.trim(), apiKeySource: 'shell-env', keyPath: null },
+      earlyWarnings,
+    };
+  }
+  return { resolved: null, earlyWarnings };
+}
+
 export async function readGeminiCliConfig(
   home: string = homedir(),
   options: ReadGeminiCliOptions = {},
 ): Promise<GeminiImport | null> {
   const env = options.env ?? process.env;
 
-  const vertexFlag = env['GOOGLE_GENAI_USE_VERTEXAI']?.trim().toLowerCase();
-  if (vertexFlag !== undefined && VERTEX_TRUTHY.has(vertexFlag)) {
-    return {
-      kind: 'blocked',
-      warnings: [
-        "Google Vertex AI projects aren't supported yet — paste a Gemini Developer API key (starts with AIzaSy…) to use Gemini here.",
-      ],
-    };
-  }
+  const blocked = checkVertexAiBlocked(env);
+  if (blocked !== null) return blocked;
 
-  let apiKey: string | null = null;
-  let apiKeySource: Exclude<GeminiKeySource, 'none'> | null = null;
-  let keyPath: string | null = null;
-  const earlyWarnings: string[] = [];
-
-  const geminiEnvPath = geminiDotEnvPath(home);
-  const geminiEnvFile = await readEnvFileIfPresent(geminiEnvPath);
-  if (geminiEnvFile !== null) {
-    const raw = geminiEnvFile.vars['GEMINI_API_KEY'];
-    if (typeof raw === 'string' && raw.trim().length > 0) {
-      apiKey = raw.trim();
-      apiKeySource = 'gemini-env';
-      keyPath = geminiEnvPath;
-    } else {
-      const w = suspiciousGeminiLineWarning(geminiEnvPath, geminiEnvFile.skipped);
-      if (w !== null) earlyWarnings.push(w);
-    }
-  }
-
-  if (apiKey === null) {
-    const homeEnvPath = homeDotEnvPath(home);
-    const homeEnvFile = await readEnvFileIfPresent(homeEnvPath);
-    if (homeEnvFile !== null) {
-      const raw = homeEnvFile.vars['GEMINI_API_KEY'];
-      if (typeof raw === 'string' && raw.trim().length > 0) {
-        apiKey = raw.trim();
-        apiKeySource = 'home-env';
-        keyPath = homeEnvPath;
-      } else {
-        const w = suspiciousGeminiLineWarning(homeEnvPath, homeEnvFile.skipped);
-        if (w !== null) earlyWarnings.push(w);
-      }
-    }
-  }
-
-  if (apiKey === null) {
-    const shellKey = env['GEMINI_API_KEY'];
-    if (typeof shellKey === 'string' && shellKey.trim().length > 0) {
-      apiKey = shellKey.trim();
-      apiKeySource = 'shell-env';
-    }
-  }
-
-  if (apiKey === null || apiKeySource === null) {
+  const { resolved, earlyWarnings } = await resolveGeminiKey(home, env);
+  if (resolved === null) {
     // Not null if we flagged a malformed line — surface that instead of
     // a completely silent "nothing to import."
     if (earlyWarnings.length > 0) {
@@ -250,9 +282,9 @@ export async function readGeminiCliConfig(
   }
 
   const warnings: string[] = [...earlyWarnings];
-  if (!GEMINI_API_KEY_PATTERN.test(apiKey)) {
+  if (!GEMINI_API_KEY_PATTERN.test(resolved.apiKey)) {
     warnings.push(
-      `GEMINI_API_KEY does not match the expected format (AIzaSy + 33 chars). Found at ${keyPath ?? 'shell env'}. The import will proceed but the key may be rejected at validation.`,
+      `GEMINI_API_KEY does not match the expected format (AIzaSy + 33 chars). Found at ${resolved.keyPath ?? 'shell env'}. The import will proceed but the key may be rejected at validation.`,
     );
   }
 
@@ -269,9 +301,9 @@ export async function readGeminiCliConfig(
   return {
     kind: 'found',
     provider,
-    apiKey,
-    apiKeySource,
-    keyPath,
+    apiKey: resolved.apiKey,
+    apiKeySource: resolved.apiKeySource,
+    keyPath: resolved.keyPath,
     warnings,
   };
 }

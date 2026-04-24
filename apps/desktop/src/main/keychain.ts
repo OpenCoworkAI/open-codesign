@@ -87,6 +87,37 @@ export function buildSecretRef(plaintext: string): SecretRef {
  * leave that row untouched so the rest of the migration can land; the
  * user can re-enter that key from Settings.
  */
+/** Per-entry migration step: either returns a replacement SecretRef (when
+ *  the row is legacy ciphertext or is missing its display mask), or null
+ *  when the row is already fully up-to-date and should be left untouched.
+ *  A legacy row that fails to decrypt also returns null — the caller logs
+ *  and the user re-enters from Settings. */
+function migrateSecretRef(provider: string, ref: SecretRef): SecretRef | null {
+  const isLegacy = !ref.ciphertext.startsWith(PLAIN_PREFIX);
+  const needsMask = ref.mask === undefined || ref.mask.length === 0;
+  if (!isLegacy && !needsMask) return null;
+
+  let plaintext: string;
+  if (isLegacy) {
+    try {
+      plaintext = decryptLegacy(ref.ciphertext);
+    } catch (err) {
+      log.warn('secret.migration.decrypt_failed', {
+        provider,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
+  } else {
+    plaintext = ref.ciphertext.slice(PLAIN_PREFIX.length);
+  }
+
+  return {
+    ciphertext: `${PLAIN_PREFIX}${plaintext}`,
+    mask: maskSecret(plaintext),
+  };
+}
+
 export function migrateSecrets(cfg: Config): { config: Config; changed: boolean } {
   const secrets = cfg.secrets ?? {};
   const entries = Object.entries(secrets);
@@ -95,29 +126,9 @@ export function migrateSecrets(cfg: Config): { config: Config; changed: boolean 
   const nextSecrets: Record<string, SecretRef> = { ...secrets };
   let changed = false;
   for (const [provider, ref] of entries) {
-    const isLegacy = !ref.ciphertext.startsWith(PLAIN_PREFIX);
-    const needsMask = ref.mask === undefined || ref.mask.length === 0;
-    if (!isLegacy && !needsMask) continue;
-
-    let plaintext: string;
-    if (isLegacy) {
-      try {
-        plaintext = decryptLegacy(ref.ciphertext);
-      } catch (err) {
-        log.warn('secret.migration.decrypt_failed', {
-          provider,
-          err: err instanceof Error ? err.message : String(err),
-        });
-        continue;
-      }
-    } else {
-      plaintext = ref.ciphertext.slice(PLAIN_PREFIX.length);
-    }
-
-    nextSecrets[provider] = {
-      ciphertext: `${PLAIN_PREFIX}${plaintext}`,
-      mask: maskSecret(plaintext),
-    };
+    const migrated = migrateSecretRef(provider, ref);
+    if (migrated === null) continue;
+    nextSecrets[provider] = migrated;
     changed = true;
   }
   return { config: { ...cfg, secrets: nextSecrets }, changed };
