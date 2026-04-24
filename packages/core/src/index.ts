@@ -86,6 +86,12 @@ export {
   type TweakEntry,
   type TweakFileInput,
 } from './tools/tweaks.js';
+export {
+  makePreviewTool,
+  trimPreviewResult,
+  type PreviewResult,
+  type RunPreviewFn,
+} from './tools/preview.js';
 
 export interface AttachmentContext {
   name: string;
@@ -153,6 +159,18 @@ export interface GenerateInput {
    */
   readWorkspaceFiles?:
     | ((patterns?: string[]) => Promise<Array<{ file: string; contents: string }>>)
+    | undefined;
+  /**
+   * Optional host-injected preview executor. When provided, the agent gets
+   * a `preview` tool it can call before `done` to render the artifact and
+   * read back console / asset errors + a DOM outline (or screenshot on
+   * vision-capable models).
+   */
+  runPreview?:
+    | ((opts: {
+        path: string;
+        vision: boolean;
+      }) => Promise<import('./tools/preview.js').PreviewResult>)
     | undefined;
 }
 

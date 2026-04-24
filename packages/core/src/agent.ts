@@ -67,6 +67,7 @@ import {
   makeGenerateImageAssetTool,
 } from './tools/generate-image-asset.js';
 import { makeListFilesTool } from './tools/list-files.js';
+import { makePreviewTool } from './tools/preview.js';
 import { makeReadDesignSystemTool } from './tools/read-design-system.js';
 import { makeReadUrlTool } from './tools/read-url.js';
 import { makeScaffoldTool } from './tools/scaffold.js';
@@ -781,6 +782,12 @@ export async function generateViaAgent(
     );
     defaultTools.push(
       makeDoneTool(deps.fs, deps.runtimeVerify) as unknown as AgentTool<TSchema, unknown>,
+    );
+  }
+  if (input.runPreview) {
+    const vision = piModel.input?.includes('image') === true;
+    defaultTools.push(
+      makePreviewTool(input.runPreview, { vision }) as unknown as AgentTool<TSchema, unknown>,
     );
   }
   if (deps.generateImageAsset) {
