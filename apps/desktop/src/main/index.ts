@@ -68,6 +68,7 @@ import {
 } from './onboarding-ipc';
 import { isAllowedExternalUrl } from './open-external';
 import { readPersisted as readPreferences, registerPreferencesIpc } from './preferences-ipc';
+import { runPreview } from './preview-runtime';
 import { preparePromptContext } from './prompt-context';
 import { createProviderContextStore } from './provider-context';
 import { resolveActiveModel } from './provider-settings';
@@ -540,7 +541,10 @@ function registerIpcHandlers(db: Database | null): void {
         askBridge: (askInput) => requestAsk(id, askInput, () => mainWindow),
         ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
         ...(workspaceRoot
-          ? { readWorkspaceFiles: (patterns) => readWorkspaceFilesAt(workspaceRoot, patterns) }
+          ? {
+              readWorkspaceFiles: (patterns) => readWorkspaceFilesAt(workspaceRoot, patterns),
+              runPreview: ({ path, vision }) => runPreview({ path, vision, workspaceRoot }),
+            }
           : {}),
       },
       {
