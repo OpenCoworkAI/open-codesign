@@ -49,6 +49,31 @@
       "sectionSubtitle": "{{count}} files",
       "empty": "No files yet. Send a prompt to have the agent generate a design — files will show up here."
     },
+    "newDesignDialog": {
+      "title": "New design",
+      "subtitle": "Optionally choose a local folder to sync your design files.",
+      "noWorkspace": "No folder selected",
+      "skip": "Skip",
+      "confirm": "Create"
+    },
+    "workspace": {
+      "sectionTitle": "Workspace",
+      "label": "Folder",
+      "default": "Default internal storage",
+      "choose": "Choose folder",
+      "change": "Change",
+      "open": "Open folder",
+      "clear": "Clear workspace",
+      "unavailable": "Folder not found on disk",
+      "busyGenerating": "Cannot change workspace while generating",
+      "updated": "Workspace updated",
+      "updateFailed": "Failed to update workspace",
+      "rebindTitle": "Change workspace folder?",
+      "rebindDescription": "This design already has a workspace folder. Choose how to proceed:",
+      "rebindCancel": "Cancel",
+      "rebindSwitchOnly": "Switch without copying",
+      "rebindSwitchAndCopy": "Switch and copy files"
+    },
     "rail": {
       "title": "Files",
       "collapse": "Collapse files",

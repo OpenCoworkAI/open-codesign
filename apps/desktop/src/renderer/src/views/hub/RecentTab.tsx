@@ -8,8 +8,7 @@ const RECENT_LIMIT = 6;
 export function RecentTab() {
   const t = useT();
   const designs = useCodesignStore((s) => s.designs);
-  const createNewDesign = useCodesignStore((s) => s.createNewDesign);
-  const setView = useCodesignStore((s) => s.setView);
+  const openNewDesignDialog = useCodesignStore((s) => s.openNewDesignDialog);
   const isGenerating = useCodesignStore(
     (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
   );
@@ -18,9 +17,8 @@ export function RecentTab() {
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
     .slice(0, RECENT_LIMIT);
 
-  async function handleNewDesign(): Promise<void> {
-    const design = await createNewDesign();
-    if (design) setView('workspace');
+  function handleNewDesign(): void {
+    openNewDesignDialog();
   }
 
   const newDesignTile = (

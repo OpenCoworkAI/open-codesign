@@ -198,8 +198,11 @@ interface CodesignState {
   currentDesignId: string | null;
   designsLoaded: boolean;
   designsViewOpen: boolean;
+  newDesignDialogOpen: boolean;
   designToDelete: Design | null;
   designToRename: Design | null;
+  /** Workspace rebind confirmation state: { design, newPath } when user picks a different folder */
+  workspaceRebindPending: { design: Design; newPath: string } | null;
 
   theme: Theme;
   view: AppView;
@@ -347,7 +350,9 @@ interface CodesignState {
 
   loadDesigns: () => Promise<void>;
   ensureCurrentDesign: () => Promise<void>;
-  createNewDesign: () => Promise<Design | null>;
+  openNewDesignDialog: () => void;
+  closeNewDesignDialog: () => void;
+  createNewDesign: (workspacePath?: string | null) => Promise<Design | null>;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string) => Promise<void>;
@@ -357,6 +362,10 @@ interface CodesignState {
   closeDesignsView: () => void;
   requestDeleteDesign: (design: Design | null) => void;
   requestRenameDesign: (design: Design | null) => void;
+
+  requestWorkspaceRebind: (design: Design, newPath: string) => void;
+  cancelWorkspaceRebind: () => void;
+  confirmWorkspaceRebind: (migrateFiles: boolean) => Promise<void>;
 
   pushToast: (toast: Omit<Toast, 'id'>) => string;
   /**
@@ -1365,8 +1374,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   currentDesignId: null,
   designsLoaded: false,
   designsViewOpen: false,
+  newDesignDialogOpen: false,
   designToDelete: null,
   designToRename: null,
+  workspaceRebindPending: null,
 
   inputFiles: [],
   referenceUrl: '',
@@ -1924,7 +1935,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     await get().createNewDesign();
   },
 
-  async createNewDesign() {
+  async createNewDesign(workspacePath?: string | null) {
     if (!window.codesign) return null;
     if (get().isGenerating) {
       // Don't silently drop the request — callers like the Examples flow
@@ -1965,6 +1976,19 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       await get().loadDesigns();
       void get().loadChatForCurrentDesign();
       void get().loadCommentsForCurrentDesign();
+      if (workspacePath) {
+        try {
+          await window.codesign.snapshots.updateWorkspace(design.id, workspacePath, false);
+          await get().loadDesigns();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : tr('errors.unknown');
+          get().pushToast({
+            variant: 'error',
+            title: tr('canvas.workspace.updateFailed'),
+            description: msg,
+          });
+        }
+      }
       return design;
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
@@ -2205,11 +2229,56 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   closeDesignsView() {
     set({ designsViewOpen: false });
   },
+  openNewDesignDialog() {
+    set({ newDesignDialogOpen: true });
+  },
+  closeNewDesignDialog() {
+    set({ newDesignDialogOpen: false });
+  },
   requestDeleteDesign(design) {
     set({ designToDelete: design });
   },
   requestRenameDesign(design) {
     set({ designToRename: design });
+  },
+
+  requestWorkspaceRebind(design, newPath) {
+    // Block workspace changes while the current design is generating
+    const state = get();
+    if (state.isGenerating && state.generatingDesignId === state.currentDesignId) {
+      return;
+    }
+    set({ workspaceRebindPending: { design, newPath } });
+  },
+
+  cancelWorkspaceRebind() {
+    set({ workspaceRebindPending: null });
+  },
+
+  async confirmWorkspaceRebind(migrateFiles) {
+    if (!window.codesign) return;
+    const pending = get().workspaceRebindPending;
+    if (!pending) return;
+
+    const { design, newPath } = pending;
+    try {
+      await window.codesign.snapshots.updateWorkspace(design.id, newPath, migrateFiles);
+      const updated = await window.codesign.snapshots.listDesigns();
+      set({ designs: updated, workspaceRebindPending: null });
+      get().pushToast({
+        variant: 'success',
+        title: tr('canvas.workspace.updated'),
+      });
+    } catch (err) {
+      set({ workspaceRebindPending: null });
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('canvas.workspace.updateFailed'),
+        description: msg,
+      });
+      throw err;
+    }
   },
 
   pushToast(toast) {

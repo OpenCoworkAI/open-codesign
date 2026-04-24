@@ -222,6 +222,23 @@ describe('isKeylessProviderAllowed', () => {
     expect(isKeylessProviderAllowed('ollama', entry)).toBe(true);
   });
 
+  it('allows providers whose capability profile explicitly marks them keyless', () => {
+    const entry = {
+      id: 'litellm-proxy',
+      name: 'LiteLLM Proxy',
+      builtin: false,
+      wire: 'openai-chat',
+      baseUrl: 'https://proxy.example.com/v1',
+      defaultModel: 'gpt-4.1',
+      capabilities: {
+        supportsKeyless: true,
+        supportsModelsEndpoint: true,
+        modelDiscoveryMode: 'models',
+      },
+    } as const;
+    expect(isKeylessProviderAllowed('litellm-proxy', entry)).toBe(true);
+  });
+
   it('allows codex-family providers without an envKey (legacy contract)', () => {
     const entry = {
       id: 'codex-oss',

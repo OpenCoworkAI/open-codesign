@@ -10,6 +10,7 @@ import {
   type ReasoningLevel,
   type WireApi,
   isSupportedOnboardingProvider,
+  resolveProviderCapabilities,
 } from '@open-codesign/shared';
 import { maskSecret } from './keychain';
 
@@ -70,10 +71,10 @@ export function assertProviderHasStoredSecret(cfg: Config, provider: string): vo
 }
 
 export function isKeylessProviderAllowed(provider: string, entry?: ProviderEntry | null): boolean {
-  // Providers that explicitly opt out of API keys (e.g. local Ollama, a
-  // self-hosted LiteLLM fronting IP-whitelisted models). The flag lets any
-  // provider — builtin or custom — declare keyless-ness at config time.
-  if (entry?.requiresApiKey === false) return true;
+  if (entry !== undefined && entry !== null) {
+    const capabilities = resolveProviderCapabilities(provider, entry);
+    if (capabilities.supportsKeyless) return true;
+  }
   const isCodexFamily = provider.startsWith('codex-') || provider === CHATGPT_CODEX_PROVIDER_ID;
   return isCodexFamily && entry?.requiresApiKey !== true && entry?.envKey === undefined;
 }

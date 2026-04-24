@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AskModal } from './components/AskModal';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
+import { NewDesignDialog } from './components/NewDesignDialog';
 import { PermissionDialog } from './components/PermissionDialog';
 import { PreviewPane } from './components/PreviewPane';
+import { RebindWorkspaceDialog } from './components/RebindWorkspaceDialog';
 import { RenameDesignDialog } from './components/RenameDesignDialog';
 import { Settings } from './components/Settings';
 import { Sidebar } from './components/Sidebar';
@@ -258,6 +260,8 @@ export function App() {
       <DesignsView />
       <RenameDesignDialog />
       <DeleteDesignDialog />
+      <RebindWorkspaceDialog />
+      <NewDesignDialog />
       <ToastViewport />
       <CommentsPanel />
       <PermissionDialog />

@@ -467,79 +467,78 @@ const api = {
       >,
   },
   snapshots: {
-    // TODO(v0.2): re-route through session JSONL — see T2.5 / T2.6.
-    // Stubs returning empty/synthetic values: the legacy SQLite snapshot
-    // / chat / comment tables were deleted in T2.4. The renderer keeps the
-    // window.codesign.{snapshots,chat,comments} surface so it still
-    // typechecks and runs without throwing; T2.5 / T2.6 will swap each
-    // method for its JSONL-backed equivalent.
-    listDesigns: () => Promise.resolve([] as Design[]),
+    listDesigns: () =>
+      ipcRenderer.invoke('snapshots:v1:list-designs', { schemaVersion: 1 }) as Promise<Design[]>,
     createDesign: (name: string) =>
-      Promise.resolve({
+      ipcRenderer.invoke('snapshots:v1:create-design', {
         schemaVersion: 1,
-        id: stubId(),
         name,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-        thumbnailText: null,
-        deletedAt: null,
-      } satisfies Design),
-    getDesign: (_id: string) => Promise.resolve(null as Design | null),
+      }) as Promise<Design>,
+    getDesign: (id: string) =>
+      ipcRenderer.invoke('snapshots:v1:get-design', {
+        schemaVersion: 1,
+        id,
+      }) as Promise<Design | null>,
     renameDesign: (id: string, name: string) =>
-      Promise.resolve({
+      ipcRenderer.invoke('snapshots:v1:rename-design', {
         schemaVersion: 1,
         id,
         name,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-        thumbnailText: null,
-        deletedAt: null,
-      } satisfies Design),
+      }) as Promise<Design>,
     setThumbnail: (id: string, thumbnailText: string | null) =>
-      Promise.resolve({
+      ipcRenderer.invoke('snapshots:v1:set-thumbnail', {
         schemaVersion: 1,
         id,
-        name: '',
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
         thumbnailText,
-        deletedAt: null,
-      } satisfies Design),
+      }) as Promise<Design>,
     softDeleteDesign: (id: string) =>
-      Promise.resolve({
+      ipcRenderer.invoke('snapshots:v1:soft-delete-design', {
         schemaVersion: 1,
         id,
-        name: '',
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-        thumbnailText: null,
-        deletedAt: nowIso(),
-      } satisfies Design),
-    duplicateDesign: (_id: string, name: string) =>
-      Promise.resolve({
+      }) as Promise<Design>,
+    duplicateDesign: (id: string, name: string) =>
+      ipcRenderer.invoke('snapshots:v1:duplicate-design', {
         schemaVersion: 1,
-        id: stubId(),
+        id,
         name,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-        thumbnailText: null,
-        deletedAt: null,
-      } satisfies Design),
-    list: (_designId: string) => Promise.resolve([] as DesignSnapshot[]),
-    get: (_id: string) => Promise.resolve(null as DesignSnapshot | null),
-    create: (input: SnapshotCreateInput) =>
-      Promise.resolve({
+      }) as Promise<Design>,
+    list: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:list', { schemaVersion: 1, designId }) as Promise<
+        DesignSnapshot[]
+      >,
+    get: (id: string) =>
+      ipcRenderer.invoke('snapshots:v1:get', {
         schemaVersion: 1,
-        id: stubId(),
-        designId: input.designId,
-        parentId: input.parentId ?? null,
-        type: input.type,
-        prompt: input.prompt ?? null,
-        artifactType: input.artifactType,
-        artifactSource: input.artifactSource,
-        createdAt: nowIso(),
-      } satisfies DesignSnapshot),
-    delete: (_id: string) => Promise.resolve(),
+        id,
+      }) as Promise<DesignSnapshot | null>,
+    create: (input: SnapshotCreateInput) =>
+      ipcRenderer.invoke('snapshots:v1:create', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<DesignSnapshot>,
+    delete: (id: string) =>
+      ipcRenderer.invoke('snapshots:v1:delete', { schemaVersion: 1, id }) as Promise<void>,
+    pickWorkspaceFolder: () =>
+      ipcRenderer.invoke('snapshots:v1:workspace:pick', {
+        schemaVersion: 1,
+      }) as Promise<string | null>,
+    updateWorkspace: (designId: string, workspacePath: string | null, migrateFiles: boolean) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:update', {
+        schemaVersion: 1,
+        designId,
+        workspacePath,
+        migrateFiles,
+      }) as Promise<Design>,
+    openWorkspaceFolder: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:open', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<void>,
+    checkWorkspaceFolder: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:check', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ exists: boolean }>,
   },
   chat: {
     // TODO(v0.2): re-route through session JSONL — see T2.5.
