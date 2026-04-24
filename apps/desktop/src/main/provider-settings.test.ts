@@ -396,7 +396,7 @@ describe('resolveActiveModel', () => {
     expect(result.baseUrl).not.toBe('https://api.duckcoding.ai/v1');
   });
 
-  it('throws PROVIDER_KEY_MISSING when the active provider has no stored secret', () => {
+  it('still resolves the active provider contract when the secret is loaded later at runtime', () => {
     const cfg = makeCfg({
       provider: 'anthropic',
       modelPrimary: 'claude-sonnet-4-6',
@@ -405,9 +405,11 @@ describe('resolveActiveModel', () => {
         openrouter: { ciphertext: 'enc-or' },
       },
     });
-    expect(() =>
-      resolveActiveModel(cfg, { provider: 'anthropic', modelId: 'claude-sonnet-4-6' }),
-    ).toThrowError(CodesignError);
+
+    const result = resolveActiveModel(cfg, { provider: 'anthropic', modelId: 'claude-sonnet-4-6' });
+
+    expect(result.model).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-4-6' });
+    expect(result.allowKeyless).toBe(false);
   });
 
   it('allows active imported Codex providers without a stored secret', () => {
@@ -436,7 +438,7 @@ describe('resolveActiveModel', () => {
     expect(result.allowKeyless).toBe(true);
   });
 
-  it('throws for active imported Codex providers that require a stored secret', () => {
+  it('does not reject active imported providers that require a secret before runtime credential resolution', () => {
     const cfg = makeCfg({
       provider: 'codex-custom',
       modelPrimary: 'gpt-5.4',
@@ -453,12 +455,13 @@ describe('resolveActiveModel', () => {
       },
     });
 
-    expect(() =>
-      resolveActiveModel(cfg, {
-        provider: 'codex-custom',
-        modelId: 'gpt-5.4',
-      }),
-    ).toThrowError(CodesignError);
+    const result = resolveActiveModel(cfg, {
+      provider: 'codex-custom',
+      modelId: 'gpt-5.4',
+    });
+
+    expect(result.model).toEqual({ provider: 'codex-custom', modelId: 'gpt-5.4' });
+    expect(result.allowKeyless).toBe(false);
   });
 });
 
@@ -506,6 +509,34 @@ describe('resolveProviderConfig', () => {
       baseUrl: 'https://proxy.example.com/v1',
       wire: 'openai-responses',
       allowKeyless: true,
+    });
+  });
+
+  it('does not reject imported providers that rely on envKey fallback', () => {
+    const cfg = makeCfg({
+      provider: 'claude-shell',
+      modelPrimary: 'claude-sonnet-4-6',
+      providers: {
+        'claude-shell': {
+          id: 'claude-shell',
+          name: 'Claude (shell env)',
+          builtin: false,
+          wire: 'anthropic',
+          baseUrl: 'https://api.anthropic.com',
+          defaultModel: 'claude-sonnet-4-6',
+          envKey: 'ANTHROPIC_AUTH_TOKEN',
+        },
+      },
+    });
+
+    const result = resolveProviderConfig(cfg, 'claude-shell');
+
+    expect(result).toMatchObject({
+      provider: 'claude-shell',
+      defaultModel: 'claude-sonnet-4-6',
+      baseUrl: 'https://api.anthropic.com',
+      wire: 'anthropic',
+      allowKeyless: false,
     });
   });
 

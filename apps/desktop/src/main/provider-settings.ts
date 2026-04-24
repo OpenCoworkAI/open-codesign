@@ -238,12 +238,6 @@ export function resolveProviderConfig(cfg: Config, providerId: string): Provider
     );
   }
   const allowKeyless = isKeylessProviderAllowed(providerId, entry);
-  if (cfg.secrets[providerId] === undefined && !allowKeyless) {
-    throw new CodesignError(
-      `No API key stored for provider "${providerId}". Re-run onboarding to add one.`,
-      ERROR_CODES.PROVIDER_KEY_MISSING,
-    );
-  }
   return {
     provider: providerId,
     defaultModel: entry.defaultModel,
