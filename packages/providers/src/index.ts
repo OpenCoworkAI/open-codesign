@@ -223,12 +223,13 @@ export function inferReasoning(
   modelId: string,
   baseUrl: string | undefined,
   capabilities?: ProviderCapabilities,
+  providerId?: string,
 ): boolean {
   if (capabilities?.supportsReasoning === true) {
     return true;
   }
   const preserveChatHeuristics =
-    wire === 'openai-chat' && (isOpenAIOfficial(baseUrl) || isOpenRouterOfficial(baseUrl));
+    wire === 'openai-chat' && (providerId === 'openai' || providerId === 'openrouter');
   if (capabilities?.supportsReasoning === false && !preserveChatHeuristics) {
     return false;
   }
@@ -278,7 +279,7 @@ function synthesizeWireModel(
     name: modelId,
     api,
     provider,
-    reasoning: inferReasoning(wire, modelId, baseUrl, capabilities),
+    reasoning: inferReasoning(wire, modelId, baseUrl, capabilities, provider),
     input: supportsImageInput ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 131072,

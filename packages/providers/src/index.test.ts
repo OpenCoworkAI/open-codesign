@@ -571,15 +571,52 @@ describe('inferReasoning', () => {
 
   it('preserves official openai-chat heuristics when resolved capabilities default to supportsReasoning:false', () => {
     expect(
-      inferReasoning('openai-chat', 'gpt-5.4', 'https://api.openai.com/v1', {
-        supportsReasoning: false,
-      }),
+      inferReasoning(
+        'openai-chat',
+        'gpt-5.4',
+        'https://api.openai.com/v1',
+        {
+          supportsReasoning: false,
+        },
+        'openai',
+      ),
     ).toBe(true);
     expect(
-      inferReasoning('openai-chat', 'openai/o3-mini', 'https://openrouter.ai/api/v1', {
-        supportsReasoning: false,
-      }),
+      inferReasoning(
+        'openai-chat',
+        'openai/o3-mini',
+        'https://openrouter.ai/api/v1',
+        {
+          supportsReasoning: false,
+        },
+        'openrouter',
+      ),
     ).toBe(true);
+  });
+
+  it('respects explicit reasoning opt-out for imported providers even on official base URLs', () => {
+    expect(
+      inferReasoning(
+        'openai-chat',
+        'gpt-5.4',
+        'https://api.openai.com/v1',
+        {
+          supportsReasoning: false,
+        },
+        'custom-openai',
+      ),
+    ).toBe(false);
+    expect(
+      inferReasoning(
+        'openai-chat',
+        'openai/o3-mini',
+        'https://openrouter.ai/api/v1',
+        {
+          supportsReasoning: false,
+        },
+        'custom-openrouter',
+      ),
+    ).toBe(false);
   });
 
   it('returns true for third-party openai-chat with reasoning model ID (issue #188)', () => {
