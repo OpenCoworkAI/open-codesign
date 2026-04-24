@@ -215,30 +215,36 @@ export interface ActiveModelResolution {
   overridden: boolean;
 }
 
-export function resolveActiveModel(
-  cfg: Config,
-  hint: { provider: string; modelId: string },
-): ActiveModelResolution {
-  const activeId = cfg.activeProvider;
-  const entry = resolveEntryFor(cfg, activeId);
+/**
+ * Shared provider resolution for any main-process path that needs the stored
+ * provider contract as persisted on disk, regardless of whether the caller is
+ * about to generate, list models, or probe the connection.
+ */
+export interface ProviderConfigResolution {
+  provider: string;
+  defaultModel: string;
+  baseUrl: string;
+  wire: WireApi;
+  httpHeaders: Record<string, string> | undefined;
+  queryParams: Record<string, string> | undefined;
+  reasoningLevel: ReasoningLevel | undefined;
+  allowKeyless: boolean;
+  capabilities: Required<ProviderCapabilities>;
+}
+
+export function resolveProviderConfig(cfg: Config, providerId: string): ProviderConfigResolution {
+  const entry = resolveEntryFor(cfg, providerId);
   if (entry === null) {
     throw new CodesignError(
-      `Active provider "${activeId}" has no provider entry on disk.`,
+      `Provider "${providerId}" has no provider entry on disk.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
-  const capabilities = resolveProviderCapabilities(activeId, entry);
-  const allowKeyless = isKeylessProviderAllowed(activeId, entry);
-  if (cfg.secrets[activeId] === undefined && !allowKeyless) {
-    throw new CodesignError(
-      `No API key stored for active provider "${activeId}". Re-run onboarding to add one.`,
-      ERROR_CODES.PROVIDER_KEY_MISSING,
-    );
-  }
-  const overridden = activeId !== hint.provider;
-  const modelId = overridden ? cfg.activeModel : hint.modelId;
+  const allowKeyless = isKeylessProviderAllowed(providerId, entry);
+  const capabilities = resolveProviderCapabilities(providerId, entry);
   return {
-    model: { provider: activeId, modelId },
+    provider: providerId,
+    defaultModel: entry.defaultModel,
     baseUrl: entry.baseUrl,
     wire: entry.wire,
     httpHeaders: entry.httpHeaders,
@@ -246,6 +252,26 @@ export function resolveActiveModel(
     reasoningLevel: entry.reasoningLevel,
     allowKeyless,
     capabilities,
+  };
+}
+
+export function resolveActiveModel(
+  cfg: Config,
+  hint: { provider: string; modelId: string },
+): ActiveModelResolution {
+  const activeId = cfg.activeProvider;
+  const resolved = resolveProviderConfig(cfg, activeId);
+  const overridden = activeId !== hint.provider;
+  const modelId = overridden ? cfg.activeModel : hint.modelId;
+  return {
+    model: { provider: activeId, modelId },
+    baseUrl: resolved.baseUrl,
+    wire: resolved.wire,
+    httpHeaders: resolved.httpHeaders,
+    queryParams: resolved.queryParams,
+    reasoningLevel: resolved.reasoningLevel,
+    allowKeyless: resolved.allowKeyless,
+    capabilities: resolved.capabilities,
     overridden,
   };
 }

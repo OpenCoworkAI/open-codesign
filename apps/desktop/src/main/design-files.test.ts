@@ -14,6 +14,7 @@ import {
   listDesignFilesInDir,
   normalizeDesignFilePath,
   strReplaceInDesignFile,
+  upsertDesignFile,
   viewDesignFile,
 } from './snapshots-db';
 
@@ -97,6 +98,30 @@ describe('insert', () => {
     const { db, designId } = seed();
     createDesignFile(db, designId, 'a.txt', 'x');
     expect(() => insertInDesignFile(db, designId, 'a.txt', 99, 'y')).toThrow(/out of range/);
+  });
+});
+
+describe('upsert', () => {
+  it('creates a missing design file', () => {
+    const { db, designId } = seed();
+
+    const file = upsertDesignFile(db, designId, 'nested\\index.html', '<main>first</main>');
+
+    expect(file.path).toBe('nested/index.html');
+    expect(file.content).toBe('<main>first</main>');
+    expect(viewDesignFile(db, designId, 'nested/index.html')?.content).toBe('<main>first</main>');
+  });
+
+  it('updates an existing design file in place', () => {
+    const { db, designId } = seed();
+    const created = createDesignFile(db, designId, 'index.html', '<main>before</main>');
+
+    const updated = upsertDesignFile(db, designId, 'index.html', '<main>after</main>');
+
+    expect(updated.id).toBe(created.id);
+    expect(updated.content).toBe('<main>after</main>');
+    expect(updated.updatedAt >= created.updatedAt).toBe(true);
+    expect(viewDesignFile(db, designId, 'index.html')?.content).toBe('<main>after</main>');
   });
 });
 

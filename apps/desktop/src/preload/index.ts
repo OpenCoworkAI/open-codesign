@@ -440,6 +440,27 @@ const api = {
       }) as Promise<DesignSnapshot>,
     delete: (id: string) =>
       ipcRenderer.invoke('snapshots:v1:delete', { schemaVersion: 1, id }) as Promise<void>,
+    pickWorkspaceFolder: () =>
+      ipcRenderer.invoke('snapshots:v1:workspace:pick', {
+        schemaVersion: 1,
+      }) as Promise<string | null>,
+    updateWorkspace: (designId: string, workspacePath: string | null, migrateFiles: boolean) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:update', {
+        schemaVersion: 1,
+        designId,
+        workspacePath,
+        migrateFiles,
+      }) as Promise<Design>,
+    openWorkspaceFolder: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:open', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<void>,
+    checkWorkspaceFolder: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:check', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ exists: boolean }>,
   },
   chat: {
     list: (designId: string) =>

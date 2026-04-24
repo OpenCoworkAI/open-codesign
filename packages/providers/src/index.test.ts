@@ -619,6 +619,31 @@ describe('inferReasoning', () => {
     ).toBe(false);
   });
 
+  it('does not preserve builtin openai/openrouter heuristics after repointing baseUrl to a proxy', () => {
+    expect(
+      inferReasoning(
+        'openai-chat',
+        'gpt-5.4',
+        'https://api.duckcoding.ai/v1',
+        {
+          supportsReasoning: false,
+        },
+        'openai',
+      ),
+    ).toBe(false);
+    expect(
+      inferReasoning(
+        'openai-chat',
+        'openai/o3-mini',
+        'https://my-openrouter-proxy.example/v1',
+        {
+          supportsReasoning: false,
+        },
+        'openrouter',
+      ),
+    ).toBe(false);
+  });
+
   it('returns true for third-party openai-chat with reasoning model ID (issue #188)', () => {
     // univibe/custom proxy with Claude 4 model
     expect(inferReasoning('openai-chat', 'claude-opus-4-6', 'https://api.univibe.cc/openai')).toBe(

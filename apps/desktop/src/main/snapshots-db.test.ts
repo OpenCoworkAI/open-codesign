@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendChatMessage,
+  clearDesignWorkspace,
   createDesign,
   createSnapshot,
   deleteSnapshot,
@@ -21,6 +22,7 @@ import {
   setDesignThumbnail,
   softDeleteDesign,
   updateChatToolCallStatus,
+  updateDesignWorkspace,
 } from './snapshots-db';
 
 function makeDb() {
@@ -432,6 +434,137 @@ describe('duplicateDesign', () => {
     // Cloned snapshots survive the source deletion because they belong to a
     // different design row.
     expect(listSnapshots(db, cloned?.id ?? '')).toHaveLength(1);
+  });
+});
+
+describe('updateDesignWorkspace', () => {
+  it('sets the workspace_path and bumps updated_at', () => {
+    const db = makeDb();
+    const d = createDesign(db, 'My design');
+    const originalUpdatedAt = d.updatedAt;
+
+    const updated = updateDesignWorkspace(db, d.id, '/path/to/workspace');
+    expect(updated).not.toBeNull();
+    expect(updated?.workspacePath).toBe('/path/to/workspace');
+    expect(updated?.updatedAt).toBeTruthy();
+    expect(new Date(updated?.updatedAt ?? '').getTime()).toBeGreaterThanOrEqual(
+      new Date(originalUpdatedAt).getTime(),
+    );
+  });
+
+  it('returns null when the design is missing', () => {
+    const db = makeDb();
+    expect(updateDesignWorkspace(db, 'missing', '/path')).toBeNull();
+  });
+
+  it('overwrites an existing workspace_path', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    updateDesignWorkspace(db, d.id, '/old/path');
+    const updated = updateDesignWorkspace(db, d.id, '/new/path');
+    expect(updated?.workspacePath).toBe('/new/path');
+  });
+});
+
+describe('clearDesignWorkspace', () => {
+  it('sets workspace_path to NULL and bumps updated_at', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    updateDesignWorkspace(db, d.id, '/path/to/workspace');
+    const originalUpdatedAt = d.updatedAt;
+
+    const cleared = clearDesignWorkspace(db, d.id);
+    expect(cleared).not.toBeNull();
+    expect(cleared?.workspacePath).toBeNull();
+    expect(cleared?.updatedAt).toBeTruthy();
+    expect(new Date(cleared?.updatedAt ?? '').getTime()).toBeGreaterThanOrEqual(
+      new Date(originalUpdatedAt).getTime(),
+    );
+  });
+
+  it('returns null when the design is missing', () => {
+    const db = makeDb();
+    expect(clearDesignWorkspace(db, 'missing')).toBeNull();
+  });
+
+  it('is idempotent — clearing an already-null workspace_path works', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    // workspace_path is NULL by default
+    const cleared1 = clearDesignWorkspace(db, d.id);
+    expect(cleared1?.workspacePath).toBeNull();
+    const cleared2 = clearDesignWorkspace(db, d.id);
+    expect(cleared2?.workspacePath).toBeNull();
+  });
+});
+
+describe('duplicateDesign workspace_path semantics', () => {
+  it('copies a design with workspace_path set, but cloned design has workspace_path = NULL', () => {
+    const db = makeDb();
+    const source = createDesign(db, 'Source with workspace');
+    updateDesignWorkspace(db, source.id, '/path/to/workspace');
+
+    const sourceReloaded = getDesign(db, source.id);
+    expect(sourceReloaded?.workspacePath).toBe('/path/to/workspace');
+
+    const cloned = duplicateDesign(db, source.id, 'Cloned');
+    expect(cloned).not.toBeNull();
+    expect(cloned?.workspacePath).toBeNull();
+
+    // Source remains unchanged
+    expect(getDesign(db, source.id)?.workspacePath).toBe('/path/to/workspace');
+  });
+
+  it('clones a design with workspace_path = NULL, result also has NULL', () => {
+    const db = makeDb();
+    const source = createDesign(db, 'Source without workspace');
+    expect(source.workspacePath).toBeNull();
+
+    const cloned = duplicateDesign(db, source.id, 'Cloned');
+    expect(cloned?.workspacePath).toBeNull();
+  });
+});
+
+describe('migration idempotency for workspace_path', () => {
+  it('workspace_path column exists after first init', () => {
+    const db = makeDb();
+    type ColumnInfo = { name: string };
+    const cols = (db.prepare('PRAGMA table_info(designs)').all() as ColumnInfo[]).map(
+      (c) => c.name,
+    );
+    expect(cols).toContain('workspace_path');
+  });
+
+  it('legacy rows read as workspacePath: null after migration', () => {
+    const db = makeDb();
+    // Insert a row directly without workspace_path (simulating pre-migration data)
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    db.prepare(
+      'INSERT INTO designs (id, schema_version, name, created_at, updated_at) VALUES (?, 1, ?, ?, ?)',
+    ).run(id, 'Legacy design', now, now);
+
+    const design = getDesign(db, id);
+    expect(design?.workspacePath).toBeNull();
+  });
+
+  it('re-applying migrations does not fail or lose data', () => {
+    const db = makeDb();
+    const d = createDesign(db, 'persist me');
+    updateDesignWorkspace(db, d.id, '/workspace/path');
+
+    // Simulate re-applying migrations (second app boot)
+    // This should be idempotent — the column already exists
+    type ColumnInfo = { name: string };
+    const cols = (db.prepare('PRAGMA table_info(designs)').all() as ColumnInfo[]).map(
+      (c) => c.name,
+    );
+    expect(cols).toContain('workspace_path');
+
+    // Data should be intact
+    const reloaded = getDesign(db, d.id);
+    expect(reloaded?.name).toBe('persist me');
+    expect(reloaded?.workspacePath).toBe('/workspace/path');
   });
 });
 

@@ -49,6 +49,31 @@
       "sectionSubtitle": "{{count}} arquivos",
       "empty": "Nenhum arquivo ainda. Envie um prompt para o agente gerar um design — os arquivos vão aparecer aqui."
     },
+    "newDesignDialog": {
+      "title": "Novo design",
+      "subtitle": "Opcionalmente escolha uma pasta local para sincronizar seus arquivos de design.",
+      "noWorkspace": "Nenhuma pasta selecionada",
+      "skip": "Pular",
+      "confirm": "Criar"
+    },
+    "workspace": {
+      "sectionTitle": "Espaço de trabalho",
+      "label": "Pasta",
+      "default": "Armazenamento interno padrão",
+      "choose": "Escolher pasta",
+      "change": "Alterar",
+      "open": "Abrir pasta",
+      "clear": "Remover espaço de trabalho",
+      "unavailable": "Pasta não encontrada no disco",
+      "busyGenerating": "Não é possível alterar o espaço de trabalho durante a geração",
+      "updated": "Espaço de trabalho atualizado",
+      "updateFailed": "Falha ao atualizar espaço de trabalho",
+      "rebindTitle": "Alterar pasta do espaço de trabalho?",
+      "rebindDescription": "Este design já tem uma pasta de espaço de trabalho. Escolha como prosseguir:",
+      "rebindCancel": "Cancelar",
+      "rebindSwitchOnly": "Alternar sem copiar",
+      "rebindSwitchAndCopy": "Alternar e copiar arquivos"
+    },
     "rail": {
       "title": "Arquivos",
       "collapse": "Recolher arquivos",
@@ -181,7 +206,8 @@
         "loginFailedTitle": "Falha ao entrar no ChatGPT",
         "logoutFailedTitle": "Falha ao sair do ChatGPT",
         "statusFailedTitle": "Falha ao verificar status do ChatGPT",
-        "unknownError": "Erro desconhecido"
+        "unknownError": "Erro desconhecido",
+        "unsupportedCountryRegion": "O login com assinatura do ChatGPT não está disponível para esta conta, país, região ou território."
       },
       "addProvider": "Adicionar provedor",
       "addCustom": "Adicionar personalizado",

@@ -229,7 +229,9 @@ export function inferReasoning(
     return true;
   }
   const preserveChatHeuristics =
-    wire === 'openai-chat' && (providerId === 'openai' || providerId === 'openrouter');
+    wire === 'openai-chat' &&
+    ((providerId === 'openai' && isOpenAIOfficial(baseUrl)) ||
+      (providerId === 'openrouter' && isOpenRouterOfficial(baseUrl)));
   if (capabilities?.supportsReasoning === false && !preserveChatHeuristics) {
     return false;
   }

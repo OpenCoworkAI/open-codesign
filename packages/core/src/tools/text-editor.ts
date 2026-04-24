@@ -15,9 +15,13 @@ import { Type } from '@sinclair/typebox';
 
 export interface TextEditorFsCallbacks {
   view(path: string): { content: string; numLines: number } | null;
-  create(path: string, content: string): { path: string };
-  strReplace(path: string, oldStr: string, newStr: string): { path: string };
-  insert(path: string, line: number, text: string): { path: string };
+  create(path: string, content: string): Promise<{ path: string }> | { path: string };
+  strReplace(
+    path: string,
+    oldStr: string,
+    newStr: string,
+  ): Promise<{ path: string }> | { path: string };
+  insert(path: string, line: number, text: string): Promise<{ path: string }> | { path: string };
   /** Optional: list files for `view` on a directory. Returns sorted paths. */
   listDir(dir: string): string[];
 }
@@ -135,20 +139,20 @@ export function makeTextEditorTool(
         }
         case 'create': {
           const text = params.file_text ?? '';
-          const result = fs.create(path, text);
+          const result = await fs.create(path, text);
           return ok(`Created ${result.path}`, { command: 'create', path, result });
         }
         case 'str_replace': {
           const oldStr = params.old_str ?? '';
           const newStr = params.new_str ?? '';
           if (oldStr.length === 0) throw new Error('str_replace requires non-empty old_str');
-          const result = fs.strReplace(path, oldStr, newStr);
+          const result = await fs.strReplace(path, oldStr, newStr);
           return ok(`Edited ${result.path}`, { command: 'str_replace', path, result });
         }
         case 'insert': {
           const line = params.insert_line ?? 0;
           const text = params.new_str ?? '';
-          const result = fs.insert(path, line, text);
+          const result = await fs.insert(path, line, text);
           return ok(`Inserted at ${result.path}:${line}`, { command: 'insert', path, result });
         }
       }
