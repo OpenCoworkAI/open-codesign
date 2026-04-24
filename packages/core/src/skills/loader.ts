@@ -112,6 +112,51 @@ function resolveEmptyValue(lines: string[], start: number, baseIndent: number): 
 }
 
 /**
+ * Classify a raw mapping line at `baseIndent` into one of:
+ *   - 'skip'   : blank, comment, deeper-indented continuation, or colon-less line
+ *   - 'break'  : indentation dropped below the current mapping scope
+ *   - 'entry'  : a valid `key: value` pair at this mapping level
+ */
+type LineClassification =
+  | { kind: 'skip' }
+  | { kind: 'break' }
+  | { kind: 'entry'; key: string; afterTrimmed: string };
+
+function classifyMappingLine(raw: string, baseIndent: number): LineClassification {
+  if (raw.trim() === '' || raw.trimStart().startsWith('#')) return { kind: 'skip' };
+
+  const indent = indentOf(raw);
+  if (indent < baseIndent) return { kind: 'break' };
+  if (indent > baseIndent) return { kind: 'skip' };
+
+  const colonIdx = raw.indexOf(':');
+  if (colonIdx === -1) return { kind: 'skip' };
+
+  return {
+    kind: 'entry',
+    key: raw.slice(0, colonIdx).trim(),
+    afterTrimmed: raw.slice(colonIdx + 1).trim(),
+  };
+}
+
+/** Parse the value that follows `key:` on the same line, dispatching on its shape. */
+function parseMappingValue(
+  afterTrimmed: string,
+  lines: string[],
+  start: number,
+  baseIndent: number,
+): [unknown, number] {
+  if (afterTrimmed.startsWith('[')) return [parseInlineSequence(afterTrimmed), start];
+  if (isBlockScalarIndicator(afterTrimmed)) {
+    const style = afterTrimmed.charAt(0) === '|' ? '|' : '>';
+    return parseBlockScalar(lines, start, baseIndent, style);
+  }
+  if (afterTrimmed === '{}') return [{}, start];
+  if (afterTrimmed === '') return resolveEmptyValue(lines, start, baseIndent);
+  return [parseScalar(unquote(afterTrimmed)), start];
+}
+
+/**
  * Parse a sequence of YAML lines into a plain object.
  * `baseIndent` is the expected indentation level of keys in this mapping.
  */
@@ -124,46 +169,17 @@ function parseMapping(
   let i = start;
 
   while (i < lines.length) {
-    const raw = lines[i] ?? '';
-
-    if (raw.trim() === '' || raw.trimStart().startsWith('#')) {
+    const classification = classifyMappingLine(lines[i] ?? '', baseIndent);
+    if (classification.kind === 'break') break;
+    if (classification.kind === 'skip') {
       i++;
       continue;
     }
 
-    const indent = indentOf(raw);
-    if (indent < baseIndent) break;
-    if (indent > baseIndent) {
-      i++;
-      continue;
-    }
-
-    const colonIdx = raw.indexOf(':');
-    if (colonIdx === -1) {
-      i++;
-      continue;
-    }
-
-    const key = raw.slice(0, colonIdx).trim();
-    const afterTrimmed = raw.slice(colonIdx + 1).trim();
     i++;
-
-    if (afterTrimmed.startsWith('[')) {
-      result[key] = parseInlineSequence(afterTrimmed);
-    } else if (isBlockScalarIndicator(afterTrimmed)) {
-      const style = afterTrimmed.charAt(0) === '|' ? '|' : '>';
-      const [value, nextI] = parseBlockScalar(lines, i, baseIndent, style);
-      result[key] = value;
-      i = nextI;
-    } else if (afterTrimmed === '{}') {
-      result[key] = {};
-    } else if (afterTrimmed === '') {
-      const [value, nextI] = resolveEmptyValue(lines, i, baseIndent);
-      result[key] = value;
-      i = nextI;
-    } else {
-      result[key] = parseScalar(unquote(afterTrimmed));
-    }
+    const [value, nextI] = parseMappingValue(classification.afterTrimmed, lines, i, baseIndent);
+    result[classification.key] = value;
+    i = nextI;
   }
 
   return [result, i];
@@ -189,6 +205,51 @@ function parseFrontmatter(content: string): ParsedMd {
 // Loader
 // ---------------------------------------------------------------------------
 
+type SkillLoadOutcome = { ok: true; skill: LoadedSkill } | { ok: false; error: string };
+
+function describeErr(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+async function loadSingleSkill(
+  dir: string,
+  entry: string,
+  source: LoadedSkill['source'],
+): Promise<SkillLoadOutcome> {
+  const filePath = join(dir, entry);
+  const id = basename(entry, '.md');
+
+  let raw: string;
+  try {
+    raw = await readFile(filePath, 'utf-8');
+  } catch (err) {
+    return { ok: false, error: `Could not read ${filePath}: ${describeErr(err)}` };
+  }
+
+  let parsed: ParsedMd;
+  try {
+    parsed = parseFrontmatter(raw);
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Could not parse frontmatter in ${filePath}: ${describeErr(err)}`,
+    };
+  }
+
+  // Merge: use filename as name fallback
+  const raw_fm = { name: id, ...parsed.frontmatter };
+  const result = SkillFrontmatterV1.safeParse(raw_fm);
+  if (!result.success) {
+    const issues = result.error.issues.map((i) => i.message).join('; ');
+    return { ok: false, error: `Invalid frontmatter in ${filePath}: ${issues}` };
+  }
+
+  return {
+    ok: true,
+    skill: { id, source, frontmatter: result.data, body: parsed.body.trim() },
+  };
+}
+
 export async function loadSkillsFromDir(
   dir: string,
   source: LoadedSkill['source'],
@@ -201,53 +262,14 @@ export async function loadSkillsFromDir(
     throw err;
   }
 
+  const mdEntries = entries.filter((entry) => extname(entry) === '.md');
+  const outcomes = await Promise.all(mdEntries.map((entry) => loadSingleSkill(dir, entry, source)));
+
   const skills: LoadedSkill[] = [];
   const errors: string[] = [];
-
-  for (const entry of entries) {
-    if (extname(entry) !== '.md') continue;
-    const filePath = join(dir, entry);
-    const id = basename(entry, '.md');
-
-    let raw: string;
-    try {
-      raw = await readFile(filePath, 'utf-8');
-    } catch (err) {
-      errors.push(
-        `Could not read ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      continue;
-    }
-
-    let parsed: ParsedMd;
-    try {
-      parsed = parseFrontmatter(raw);
-    } catch (err) {
-      errors.push(
-        `Could not parse frontmatter in ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      continue;
-    }
-
-    // Merge: use filename as name fallback
-    const raw_fm = {
-      name: id,
-      ...parsed.frontmatter,
-    };
-
-    const result = SkillFrontmatterV1.safeParse(raw_fm);
-    if (!result.success) {
-      const issues = result.error.issues.map((i) => i.message).join('; ');
-      errors.push(`Invalid frontmatter in ${filePath}: ${issues}`);
-      continue;
-    }
-
-    skills.push({
-      id,
-      source,
-      frontmatter: result.data,
-      body: parsed.body.trim(),
-    });
+  for (const outcome of outcomes) {
+    if (outcome.ok) skills.push(outcome.skill);
+    else errors.push(outcome.error);
   }
 
   if (errors.length > 0) {
