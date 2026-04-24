@@ -1,4 +1,4 @@
-import { type ReactNode, isValidElement, useId } from 'react';
+import { isValidElement, type ReactNode, useId } from 'react';
 
 export interface TooltipProps {
   label: string | undefined;

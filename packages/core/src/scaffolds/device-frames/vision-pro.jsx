@@ -3,7 +3,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
   glassTint: 'rgba(120, 140, 200, 0.18)',
 } /*EDITMODE-END*/;
 
-function App() {
+function _App() {
   return (
     <div
       style={{

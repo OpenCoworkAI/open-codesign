@@ -12,11 +12,11 @@ describe('skill tool', () => {
     const m = await listSkillManifest();
     const designs = m.filter((e) => e.category === 'design');
     if (designs.length === 0) return; // skip if no skills (subagent ordering)
-    const first = await invokeSkill({ name: designs[0]!.name });
+    const first = await invokeSkill({ name: designs[0]?.name });
     expect(first.status).toBe('loaded');
     const second = await invokeSkill({
-      name: designs[0]!.name,
-      alreadyLoaded: new Set([designs[0]!.name]),
+      name: designs[0]?.name,
+      alreadyLoaded: new Set([designs[0]?.name]),
     });
     expect(second.status).toBe('already-loaded');
   });

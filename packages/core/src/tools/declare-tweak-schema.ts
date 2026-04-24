@@ -30,7 +30,7 @@
  */
 
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import { type TweakSchema, parseTweakSchema, replaceTweakSchema } from '@open-codesign/shared';
+import { parseTweakSchema, replaceTweakSchema, type TweakSchema } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 import type { TextEditorFsCallbacks } from './text-editor.js';
 

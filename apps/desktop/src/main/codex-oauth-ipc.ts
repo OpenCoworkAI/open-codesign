@@ -1,23 +1,23 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import {
+  buildAuthorizeUrl,
   type CallbackServer,
   CodexTokenStore,
-  type StoredCodexAuth,
-  type TokenSet,
-  buildAuthorizeUrl,
   decodeJwtClaims,
   exchangeCode,
   generatePkce,
+  type StoredCodexAuth,
   startCallbackServer,
+  type TokenSet,
 } from '@open-codesign/providers/codex';
 import {
   CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   type Config,
   ERROR_CODES,
-  type ProviderEntry,
   hydrateConfig,
+  type ProviderEntry,
 } from '@open-codesign/shared';
 import { configDir, writeConfig } from './config';
 import { ipcMain, shell } from './electron-runtime';

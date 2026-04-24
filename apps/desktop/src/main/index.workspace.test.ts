@@ -1,5 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

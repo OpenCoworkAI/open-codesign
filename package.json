@@ -34,10 +34,12 @@
     "release": "turbo run build && changeset publish"
   },
   "pnpm": {
-    "neverBuiltDependencies": ["better-sqlite3"]
+    "neverBuiltDependencies": [
+      "better-sqlite3"
+    ]
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.4.13",
     "@changesets/cli": "^2.27.11",
     "@iarna/toml": "^2.2.5",
     "@open-codesign/core": "workspace:*",

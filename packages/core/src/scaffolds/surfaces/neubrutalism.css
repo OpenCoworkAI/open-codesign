@@ -30,7 +30,9 @@
   text-transform: uppercase;
   cursor: pointer;
   box-shadow: 6px 6px 0 0 var(--neu-shadow);
-  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.08s ease;
 }
 
 .neubrutalism-button:hover {

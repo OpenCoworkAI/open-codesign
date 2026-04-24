@@ -145,8 +145,10 @@ body {
   background: var(--color-surface);
   box-shadow: var(--shadow-soft);
   border-radius: var(--radius-xl);
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease, border-color
-    0.18s ease;
+  transition:
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
 .VPFeature:hover {
   transform: translateY(-2px);
@@ -279,7 +281,9 @@ body {
   font-weight: 600;
   text-decoration: none;
   box-shadow: var(--shadow-card);
-  transition: background 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    background 0.18s ease,
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .codesign-cta a:hover {
   background: var(--color-accent-hover);
@@ -298,7 +302,9 @@ body {
   width: 100%;
   border-radius: 14px;
   display: block;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04), 0 16px 40px -16px rgba(26, 26, 26, 0.28);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.04),
+    0 16px 40px -16px rgba(26, 26, 26, 0.28);
 }
 
 /* Screenshot gallery — 2×3 grid on desktop, 1 column on mobile. */
@@ -314,8 +320,10 @@ body {
   border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: var(--shadow-soft);
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease, border-color
-    0.18s ease;
+  transition:
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
 .codesign-gallery figure:hover {
   transform: translateY(-2px);
@@ -351,7 +359,9 @@ body {
   width: 100%;
   border-radius: 14px;
   display: block;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04), 0 16px 40px -16px rgba(26, 26, 26, 0.28);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.04),
+    0 16px 40px -16px rgba(26, 26, 26, 0.28);
 }
 
 /* Full-length demo with controls (generate-from-scratch walkthrough). */
@@ -363,7 +373,9 @@ body {
   width: 100%;
   border-radius: 12px;
   display: block;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04), 0 12px 32px -12px rgba(26, 26, 26, 0.24);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.04),
+    0 12px 32px -12px rgba(26, 26, 26, 0.24);
 }
 
 /* Community — two-card row directly under "Trusted by builders" with the
@@ -425,11 +437,13 @@ body {
   padding: 0.4rem 0.9rem;
   border-radius: 8px;
   background: var(--vp-c-brand-1, #c96442);
-  color: #fff !important;
-  text-decoration: none !important;
+  color: #fff;
+  text-decoration: none;
   font-size: 0.86rem;
   font-weight: 500;
-  transition: transform 120ms ease-out, background-color 120ms ease;
+  transition:
+    transform 120ms ease-out,
+    background-color 120ms ease;
 }
 .community-button:hover {
   transform: translateY(-1px);

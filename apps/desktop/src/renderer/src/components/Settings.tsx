@@ -1,8 +1,8 @@
 import { setLocale as applyLocale, getCurrentLocale, useT } from '@open-codesign/i18n';
 import type { OnboardingState, ReasoningLevel, WireApi } from '@open-codesign/shared';
 import {
-  PROVIDER_SHORTLIST as SHORTLIST,
   isSupportedOnboardingProvider,
+  PROVIDER_SHORTLIST as SHORTLIST,
 } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
 import {
@@ -1347,7 +1347,7 @@ function ModelsTab() {
         });
         setCpaDetection('unavailable');
       });
-  }, [cpaDetection, loading, rows, pushToast, reportableErrorToast, t]);
+  }, [cpaDetection, loading, rows, reportableErrorToast, t]);
 
   async function reloadRows() {
     if (!window.codesign) return;

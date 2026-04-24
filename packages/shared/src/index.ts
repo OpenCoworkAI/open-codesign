@@ -232,37 +232,13 @@ export class CodesignError extends Error {
   }
 }
 
+export type { CanonicalWire } from './base-url';
 export {
-  BUILTIN_PROVIDERS,
-  CHATGPT_CODEX_PROVIDER_ID,
-  ConfigSchema,
-  ConfigV3Schema,
-  IMAGE_GENERATION_SCHEMA_VERSION,
-  PROVIDER_SHORTLIST,
-  ProviderCapabilitiesSchema,
-  ImageGenerationCredentialModeSchema,
-  ImageGenerationOutputFormatSchema,
-  ImageGenerationProviderSchema,
-  ImageGenerationQualitySchema,
-  ImageGenerationSettingsSchema,
-  ImageGenerationSizeSchema,
-  ProviderEntrySchema,
-  ProviderModelDiscoveryModeSchema,
-  ReasoningLevelSchema,
-  SUPPORTED_ONBOARDING_PROVIDERS,
-  SecretRef,
-  STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
-  StoredDesignSystem,
-  WireApiSchema,
-  defaultProviderCapabilities,
-  detectWireFromBaseUrl,
-  hydrateConfig,
-  isSupportedOnboardingProvider,
-  migrateLegacyToV3,
-  parseConfigFlexible,
-  resolveProviderCapabilities,
-  toPersistedV3,
-} from './config';
+  canonicalBaseUrl,
+  ensureVersionedBase,
+  modelsEndpointUrl,
+  stripInferenceEndpointSuffix,
+} from './base-url';
 export type {
   Config,
   ConfigV3,
@@ -281,7 +257,39 @@ export type {
   SupportedOnboardingProvider,
   WireApi,
 } from './config';
-
+export {
+  BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
+  ConfigSchema,
+  ConfigV3Schema,
+  defaultProviderCapabilities,
+  detectWireFromBaseUrl,
+  hydrateConfig,
+  IMAGE_GENERATION_SCHEMA_VERSION,
+  ImageGenerationCredentialModeSchema,
+  ImageGenerationOutputFormatSchema,
+  ImageGenerationProviderSchema,
+  ImageGenerationQualitySchema,
+  ImageGenerationSettingsSchema,
+  ImageGenerationSizeSchema,
+  isSupportedOnboardingProvider,
+  migrateLegacyToV3,
+  PROVIDER_SHORTLIST,
+  ProviderCapabilitiesSchema,
+  ProviderEntrySchema,
+  ProviderModelDiscoveryModeSchema,
+  parseConfigFlexible,
+  ReasoningLevelSchema,
+  resolveProviderCapabilities,
+  SecretRef,
+  STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
+  StoredDesignSystem,
+  SUPPORTED_ONBOARDING_PROVIDERS,
+  toPersistedV3,
+  WireApiSchema,
+} from './config';
+export type { DesignToken } from './design-token';
+export { DesignTokenSet, DesignTokenV1 } from './design-token';
 export type {
   ClaudeCodeDetectionMeta,
   ClaudeCodeUserType,
@@ -290,39 +298,30 @@ export type {
   GeminiDetectionMeta,
   OpencodeDetectionMeta,
 } from './detection';
-
+export type {
+  DiagnoseContext,
+  DiagnosticFix,
+  DiagnosticHypothesis,
+  ErrorCode,
+  GenerateFailureContext,
+} from './diagnostics';
+export { diagnose, diagnoseGenerateFailure } from './diagnostics';
+export type { CodesignErrorCode } from './error-codes';
+export { ERROR_CODE_DESCRIPTIONS, ERROR_CODES } from './error-codes';
+// NOTE: fingerprint.ts imports node:crypto and is intentionally NOT re-exported
+// from this barrel — it's main-process only. Import from
+// '@open-codesign/shared/fingerprint' directly.
+export type { FingerprintInput } from './fingerprint';
+export type { ProxyPresetId } from './proxy-presets';
 export {
+  getPresetById,
   PROXY_PRESET_SCHEMA_VERSION,
   PROXY_PRESETS,
   ProxyPreset,
   ProxyPresetIdSchema,
-  getPresetById,
 } from './proxy-presets';
-export type { ProxyPresetId } from './proxy-presets';
-
-export {
-  canonicalBaseUrl,
-  ensureVersionedBase,
-  modelsEndpointUrl,
-  stripInferenceEndpointSuffix,
-} from './base-url';
-export type { CanonicalWire } from './base-url';
-
-export { DesignTokenV1, DesignTokenSet } from './design-token';
-export type { DesignToken } from './design-token';
-
-export {
-  ChatMessageKind,
-  ChatMessageRowV1,
-  CommentKind,
-  CommentRect,
-  CommentRowV1,
-  CommentStatus,
-  DesignFileV1,
-  DesignMessageV1,
-  DesignSnapshotV1,
-  DesignV1,
-} from './snapshot';
+export type { LoadedSkill } from './skills';
+export { SkillFrontmatterV1 } from './skills';
 export type {
   ChatAppendInput,
   ChatArtifactDeliveredPayload,
@@ -341,25 +340,18 @@ export type {
   DesignSnapshot,
   SnapshotCreateInput,
 } from './snapshot';
-
-export { SkillFrontmatterV1 } from './skills';
-export type { LoadedSkill } from './skills';
-
-export { diagnose, diagnoseGenerateFailure } from './diagnostics';
-export type {
-  DiagnosticHypothesis,
-  DiagnosticFix,
-  DiagnoseContext,
-  ErrorCode,
-  GenerateFailureContext,
-} from './diagnostics';
-
-export { ERROR_CODES, ERROR_CODE_DESCRIPTIONS } from './error-codes';
-export type { CodesignErrorCode } from './error-codes';
-// NOTE: fingerprint.ts imports node:crypto and is intentionally NOT re-exported
-// from this barrel — it's main-process only. Import from
-// '@open-codesign/shared/fingerprint' directly.
-export type { FingerprintInput } from './fingerprint';
+export {
+  ChatMessageKind,
+  ChatMessageRowV1,
+  CommentKind,
+  CommentRect,
+  CommentRowV1,
+  CommentStatus,
+  DesignFileV1,
+  DesignMessageV1,
+  DesignSnapshotV1,
+  DesignV1,
+} from './snapshot';
 
 // ---------------------------------------------------------------------------
 // Diagnostic events (PR3 — main-process diagnostic_events table)
@@ -516,6 +508,7 @@ export interface RecordRendererErrorResult {
   fingerprint: string | null;
 }
 
+export type { EditmodeBlock, TokenSchemaEntry, TweakSchema } from './editmode';
 export {
   ensureEditmodeMarkers,
   parseEditmodeBlock,
@@ -523,4 +516,3 @@ export {
   replaceEditmodeBlock,
   replaceTweakSchema,
 } from './editmode';
-export type { EditmodeBlock, TokenSchemaEntry, TweakSchema } from './editmode';

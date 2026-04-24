@@ -22,8 +22,8 @@ const props = defineProps<{
 const { site } = useData();
 
 const base = computed(() => site.value.base.replace(/\/$/, ''));
-const url = computed(() => `${base.value}${props.src}`);
-const posterUrl = computed(() => (props.poster ? `${base.value}${props.poster}` : undefined));
+const _url = computed(() => `${base.value}${props.src}`);
+const _posterUrl = computed(() => (props.poster ? `${base.value}${props.poster}` : undefined));
 </script>
 
 <template>

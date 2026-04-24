@@ -1,5 +1,5 @@
 import type { Dirent } from 'node:fs';
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 
 export const DEFAULT_WORKSPACE_PATTERNS = ['**/*.html', '**/*.jsx', '**/*.css', '**/*.js'] as const;

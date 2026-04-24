@@ -3,9 +3,9 @@ import { Tooltip } from '@open-codesign/ui';
 import { ArrowUp, Square } from 'lucide-react';
 import {
   type FormEvent,
+  forwardRef,
   type KeyboardEvent,
   type ReactNode,
-  forwardRef,
   useEffect,
   useImperativeHandle,
   useRef,

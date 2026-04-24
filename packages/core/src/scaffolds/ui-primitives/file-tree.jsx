@@ -47,7 +47,7 @@ function Node({ node, depth }) {
   );
 }
 
-function App() {
+function _App() {
   return (
     <div
       style={{

@@ -1,4 +1,4 @@
-export { extractFromTailwindConfig } from './tailwindExtractor.js';
+export type { DesignToken, DesignTokenSet } from '@open-codesign/shared';
 export { extractFromCssVars } from './cssVarExtractor.js';
 export { importDtcgJson } from './dtcgImporter.js';
-export type { DesignToken, DesignTokenSet } from '@open-codesign/shared';
+export { extractFromTailwindConfig } from './tailwindExtractor.js';

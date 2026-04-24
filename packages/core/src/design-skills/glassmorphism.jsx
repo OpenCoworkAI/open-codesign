@@ -188,7 +188,7 @@ function GlassSettings({ tokens = {} }) {
         </div>
         <div style={{ fontSize: 22, fontFamily: SERIF, marginTop: 4 }}>Quick controls</div>
       </div>
-      {rows.map((r, i) => (
+      {rows.map((r, _i) => (
         <div
           key={r.label}
           style={{

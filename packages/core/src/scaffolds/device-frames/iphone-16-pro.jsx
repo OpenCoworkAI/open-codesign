@@ -4,7 +4,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
   accentColor: '#0a84ff',
 } /*EDITMODE-END*/;
 
-function App() {
+function _App() {
   return (
     <div
       style={{

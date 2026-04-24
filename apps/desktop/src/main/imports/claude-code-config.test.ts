@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PARSE_REASON_NOT_JSON_OBJECT,
   claudeCodeSettingsPath,
+  PARSE_REASON_NOT_JSON_OBJECT,
   parseClaudeCodeSettings,
 } from './claude-code-config';
 

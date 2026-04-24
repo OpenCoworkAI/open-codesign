@@ -1,4 +1,4 @@
-import { Menu, app, dialog } from 'electron';
+import { app, dialog, Menu } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
 export function registerAppMenu(): void {
@@ -35,7 +35,7 @@ export function registerAppMenu(): void {
             }
             try {
               const result = await autoUpdater.checkForUpdates();
-              if (!result || !result.updateInfo) {
+              if (!result?.updateInfo) {
                 dialog.showMessageBox({
                   type: 'info',
                   title: 'Update Check',

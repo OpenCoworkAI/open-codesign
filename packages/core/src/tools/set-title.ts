@@ -30,7 +30,7 @@ export interface SetTitleDetails {
 }
 
 export function normalizeTitle(raw: string): string {
-  return raw.replace(/[\s.,;:!?—–\-]+$/u, '').trim();
+  return raw.replace(/[\s.,;:!?—–-]+$/u, '').trim();
 }
 
 export function makeSetTitleTool(): AgentTool<typeof SetTitleParams, SetTitleDetails> {

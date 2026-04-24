@@ -35,7 +35,7 @@ const STATES = [
   },
 ];
 
-function App() {
+function _App() {
   return (
     <div
       style={{

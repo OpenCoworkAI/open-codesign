@@ -87,7 +87,7 @@
         <div class="line"><span class="accent">welcome</span> to the demo terminal. type <span class="muted">help</span></div>
         <div class="input-row">
           <span class="prompt">~/project ❯</span>
-          <input id="input" autofocus autocomplete="off" />
+          <input id="input" autocomplete="off" />
         </div>
       </div>
     </div>
@@ -103,7 +103,7 @@
       };
       function print(text, cls) {
         const div = document.createElement('div');
-        div.className = 'line' + (cls ? ' ' + cls : '');
+        div.className = `line${cls ? ` ${cls}` : ''}`;
         div.textContent = text;
         body.insertBefore(div, body.lastElementChild);
       }
@@ -112,14 +112,14 @@
         const raw = input.value.trim();
         input.value = '';
         if (!raw) return;
-        print('~/project ❯ ' + raw, 'prompt');
+        print(`~/project ❯ ${raw}`, 'prompt');
         const [cmd, ...rest] = raw.split(/\s+/);
         if (cmd === 'echo') { print(rest.join(' ')); }
         else if (commands[cmd]) {
           const out = commands[cmd]();
           if (out) print(out);
         }
-        else { print('command not found: ' + cmd, 'error'); }
+        else { print(`command not found: ${cmd}`, 'error'); }
         body.scrollTop = body.scrollHeight;
       });
     </script>

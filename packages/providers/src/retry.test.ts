@@ -1,7 +1,7 @@
 import { type ChatMessage, CodesignError, type ModelRef } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import type { GenerateOptions, GenerateResult } from './index';
-import { type RetryReason, classifyError, completeWithRetry, withBackoff } from './retry';
+import { classifyError, completeWithRetry, type RetryReason, withBackoff } from './retry';
 
 const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
 const MESSAGES: ChatMessage[] = [{ role: 'user', content: 'hi' }];

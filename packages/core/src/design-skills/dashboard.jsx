@@ -465,7 +465,7 @@ function DashboardAnalyticsLight({ tokens = {} }) {
 }
 
 function DashboardFinanceLedger({ tokens = {} }) {
-  const t = { ...TWEAK_DEFAULTS, ...tokens };
+  const _t = { ...TWEAK_DEFAULTS, ...tokens };
   const kpis = [
     { label: 'Revenue · MTD', value: '$4.81M', delta: '+18.2%', up: true },
     { label: 'Gross margin', value: '64.3%', delta: '+1.4 pts', up: true },

@@ -4,13 +4,13 @@ import {
   CodesignError,
   type Config,
   ERROR_CODES,
+  isSupportedOnboardingProvider,
   type ModelRef,
   PROVIDER_SHORTLIST,
   type ProviderEntry,
   type ReasoningLevel,
-  type WireApi,
-  isSupportedOnboardingProvider,
   resolveProviderCapabilities,
+  type WireApi,
 } from '@open-codesign/shared';
 import { maskSecret } from './keychain';
 

@@ -6,7 +6,6 @@
  */
 
 import { CodesignError } from '@open-codesign/shared';
-import type { Design } from '@open-codesign/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Collect registered handlers so tests can invoke them directly.
@@ -46,10 +45,10 @@ import {
   updateDesignWorkspace,
 } from './snapshots-db';
 import {
-  SNAPSHOTS_CHANNELS_V1,
   registerSnapshotsIpc,
   registerSnapshotsUnavailableIpc,
   registerWorkspaceIpc,
+  SNAPSHOTS_CHANNELS_V1,
 } from './snapshots-ipc';
 
 function call(channel: string, raw: unknown): unknown {

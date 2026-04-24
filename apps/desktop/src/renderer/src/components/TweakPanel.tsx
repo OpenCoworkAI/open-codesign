@@ -1,25 +1,25 @@
 import { useT } from '@open-codesign/i18n';
 import {
   type EditmodeBlock,
-  type TokenSchemaEntry,
-  type TweakSchema,
   parseEditmodeBlock,
   parseTweakSchema,
   replaceEditmodeBlock,
+  type TokenSchemaEntry,
+  type TweakSchema,
 } from '@open-codesign/shared';
 import { RotateCcw, SlidersHorizontal, X } from 'lucide-react';
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { useCodesignStore } from '../store';
 import {
   ColorSwatch,
+  humanize,
+  isColorString,
   JsonInput,
   NumberInput,
   RangeSlider,
   SegmentedPicker,
   Switch,
   TextInput,
-  humanize,
-  isColorString,
 } from './TweakPanel.inputs';
 
 type TokenValue = unknown;
@@ -122,11 +122,7 @@ function TokenRow({
   );
 }
 
-export function TweakPanel({
-  iframeRef,
-}: {
-  iframeRef: RefObject<HTMLIFrameElement | null>;
-}) {
+export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameElement | null> }) {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const setPreviewHtml = useCodesignStore((s) => s.setPreviewHtml);

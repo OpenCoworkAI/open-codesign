@@ -14,15 +14,15 @@ import type {
   LocalInputFile,
   ModelRef,
   OnboardingState,
+  ReportableError,
   ReportEventInput,
   ReportEventResult,
-  ReportableError,
   SelectedElement,
 } from '@open-codesign/shared';
 import { diagnoseGenerateFailure } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
-import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
+import { create } from 'zustand';
 import type { CodesignApi, ExportFormat } from '../../preload/index';
 import { recordAction, snapshotTimeline } from './lib/action-timeline';
 import { rendererLogger } from './lib/renderer-logger';

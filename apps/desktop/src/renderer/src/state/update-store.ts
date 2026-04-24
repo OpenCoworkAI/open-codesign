@@ -1,5 +1,5 @@
-import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
+import { create } from 'zustand';
 
 export type UpdateStatus = 'idle' | 'available';
 

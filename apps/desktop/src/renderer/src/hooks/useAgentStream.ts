@@ -172,7 +172,7 @@ export function useAgentStream(): void {
         if (typeof rawTitle === 'string' && rawTitle.trim().length > 0) {
           const cleaned = rawTitle
             .trim()
-            .replace(/[\s.,;:!?—–\-]+$/u, '')
+            .replace(/[\s.,;:!?—–-]+$/u, '')
             .slice(0, 60);
           if (cleaned.length > 0) {
             void renameDesign(designId, cleaned);
@@ -244,7 +244,7 @@ export function useAgentStream(): void {
     };
 
     const handleError = (event: AgentStreamEvent) => {
-      const current = inFlight.current;
+      const _current = inFlight.current;
       // TODO: replace with rendererLogger once renderer-logger lands
       console.error('[agent] error', {
         generationId: event.generationId,
@@ -371,5 +371,6 @@ export function useAgentStream(): void {
     setPreviewHtmlFromAgent,
     updateChatToolStatus,
     persistAgentRunSnapshot,
+    renameDesign,
   ]);
 }

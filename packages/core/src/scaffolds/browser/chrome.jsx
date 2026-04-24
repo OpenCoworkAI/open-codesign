@@ -3,7 +3,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
   theme: 'light',
 } /*EDITMODE-END*/;
 
-function App() {
+function _App() {
   const dark = TWEAK_DEFAULTS.theme === 'dark';
   const chromeBg = dark ? '#202124' : '#dee1e6';
   const tabBg = dark ? '#35363a' : '#ffffff';

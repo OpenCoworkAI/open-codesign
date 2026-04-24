@@ -16,7 +16,6 @@ import type {
   LocalInputFile,
   ModelRef,
   OnboardingState,
-  ProviderEntry,
   ReasoningLevel,
   ReportEventInput,
   ReportEventResult,
@@ -35,10 +34,16 @@ import type {
 } from '../main/connection-ipc';
 import type { ImageGenerationSettingsView } from '../main/image-generation-settings';
 
-export type { ConnectionTestError, ConnectionTestResult, ModelsListResponse, TestEndpointResponse };
-export type { ClaudeCodeUserType, ExternalConfigsDetection };
-export type { CodexOAuthStatus };
-export type { ImageGenerationSettingsView };
+export type {
+  ClaudeCodeUserType,
+  CodexOAuthStatus,
+  ConnectionTestError,
+  ConnectionTestResult,
+  ExternalConfigsDetection,
+  ImageGenerationSettingsView,
+  ModelsListResponse,
+  TestEndpointResponse,
+};
 
 export interface ValidateKeyResult {
   ok: true;
@@ -168,7 +173,7 @@ export interface AgentStreamEvent {
 // The `crypto.randomUUID()` global is available in the Electron renderer
 // preload context (Chromium 128+). See snapshots / chat / comments stubs
 // below — kept top-level so each stub stays a one-liner.
-function stubId(): string {
+function _stubId(): string {
   return crypto.randomUUID();
 }
 function nowIso(): string {
@@ -434,11 +439,7 @@ const api = {
     logout: () => ipcRenderer.invoke('codex-oauth:v1:logout') as Promise<CodexOAuthStatus>,
   },
   connection: {
-    test: (input: {
-      provider: SupportedOnboardingProvider;
-      apiKey: string;
-      baseUrl: string;
-    }) =>
+    test: (input: { provider: SupportedOnboardingProvider; apiKey: string; baseUrl: string }) =>
       ipcRenderer.invoke('connection:v1:test', input) as Promise<
         ConnectionTestResult | ConnectionTestError
       >,
@@ -452,11 +453,8 @@ const api = {
       >,
   },
   models: {
-    list: (input: {
-      provider: SupportedOnboardingProvider;
-      apiKey: string;
-      baseUrl: string;
-    }) => ipcRenderer.invoke('models:v1:list', input) as Promise<ModelsListResponse>,
+    list: (input: { provider: SupportedOnboardingProvider; apiKey: string; baseUrl: string }) =>
+      ipcRenderer.invoke('models:v1:list', input) as Promise<ModelsListResponse>,
     listForProvider: (providerId: string) =>
       ipcRenderer.invoke('models:v1:list-for-provider', providerId) as Promise<ModelsListResponse>,
   },

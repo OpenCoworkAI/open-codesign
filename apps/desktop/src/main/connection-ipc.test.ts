@@ -7,10 +7,10 @@ vi.mock('./electron-runtime', () => ({
 
 import { createHash } from 'node:crypto';
 import {
-  CONNECTION_FETCH_TIMEOUT_MS,
   _clearModelsCache,
   buildAuthHeaders,
   buildAuthHeadersForWire,
+  CONNECTION_FETCH_TIMEOUT_MS,
   classifyHttpError,
   extractIds,
   extractModelIds,
@@ -141,8 +141,8 @@ async function handleModelsList(
     };
   }
 
-  const provider = r['provider'] as string;
-  const apiKey = (r['apiKey'] as string).trim();
+  const _provider = r['provider'] as string;
+  const _apiKey = (r['apiKey'] as string).trim();
   const baseUrl = (r['baseUrl'] as string).trim();
 
   let res: { ok: boolean; status: number; json: () => Promise<unknown> };

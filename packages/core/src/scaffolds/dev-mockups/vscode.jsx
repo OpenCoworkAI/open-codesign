@@ -43,7 +43,7 @@ function FileNode({ node, depth }) {
   );
 }
 
-function App() {
+function _App() {
   return (
     <div
       style={{

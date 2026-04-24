@@ -1,16 +1,15 @@
 import { mkdirSync } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
-import path_module from 'node:path';
-import { basename, dirname, join } from 'node:path';
+import path_module, { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   type AgentEvent,
+  applyComment,
   type CoreLogger,
   DESIGN_SKILLS,
   FRAME_TEMPLATES,
   type GenerateImageAssetRequest,
   type GenerateImageAssetResult,
-  applyComment,
   generate,
   generateTitle,
   generateViaAgent,
@@ -43,7 +42,7 @@ import { registerConnectionIpc } from './connection-ipc';
 import { scanDesignSystem } from './design-system';
 import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { makeRuntimeVerifier } from './done-verify';
-import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from './electron-runtime';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
 import {
   armGenerationTimeout,
@@ -57,7 +56,7 @@ import {
 } from './image-generation-settings';
 import { maybeAbortIfRunningFromDmg } from './install-check';
 import { registerLocaleIpc } from './locale-ipc';
-import { getLogPath, getLogger, initLogger } from './logger';
+import { getLogger, getLogPath, initLogger } from './logger';
 import {
   getApiKeyForProvider,
   getCachedConfig,
@@ -507,7 +506,7 @@ function registerIpcHandlers(db: Database | null): void {
     id: string,
     designId: string | null,
     previousHtml: string | null,
-    workspacePath: string | null,
+    _workspacePath: string | null,
   ): ReturnType<typeof generate> => {
     if (!USE_AGENT_RUNTIME) return generate(input);
     const sendEvent = (event: AgentStreamEvent) => {

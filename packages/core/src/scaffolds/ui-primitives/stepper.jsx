@@ -9,7 +9,7 @@ const STEPS = [
   { label: 'Invite team', hint: 'Optional' },
 ];
 
-function App() {
+function _App() {
   return (
     <div
       style={{

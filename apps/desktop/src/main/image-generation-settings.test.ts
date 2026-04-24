@@ -1,8 +1,8 @@
 import {
   type Config,
+  hydrateConfig,
   IMAGE_GENERATION_SCHEMA_VERSION,
   type ProviderEntry,
-  hydrateConfig,
 } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {

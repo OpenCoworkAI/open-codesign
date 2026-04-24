@@ -1,8 +1,8 @@
 import { useT } from '@open-codesign/i18n';
 import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { useEffect } from 'react';
-import { useCodesignStore } from '../store';
 import type { Toast as ToastModel, ToastVariant } from '../store';
+import { useCodesignStore } from '../store';
 
 export function useToast() {
   const push = useCodesignStore((s) => s.pushToast);

@@ -69,10 +69,7 @@ export function trimPreviewResult(result: PreviewResult): PreviewResult {
  *  a structured runtime report. Kept distinct from `DoneRuntimeVerifier` so
  *  preview's wire shape can evolve independently from done's lint + console
  *  error contract. */
-export type RunPreviewFn = (opts: {
-  path: string;
-  vision: boolean;
-}) => Promise<PreviewResult>;
+export type RunPreviewFn = (opts: { path: string; vision: boolean }) => Promise<PreviewResult>;
 
 export function makePreviewTool(
   runPreview: RunPreviewFn,

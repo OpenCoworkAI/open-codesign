@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ERROR_CODES, ERROR_CODE_DESCRIPTIONS } from './error-codes';
 import type { CodesignErrorCode } from './error-codes';
+import { ERROR_CODE_DESCRIPTIONS, ERROR_CODES } from './error-codes';
 
 describe('ERROR_CODES', () => {
   it('every value equals its key (identity constant)', () => {

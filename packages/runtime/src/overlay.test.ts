@@ -9,10 +9,10 @@ interface FakeWindow {
   __cs_msg?: boolean;
 }
 
-function runOverlay(opts: {
-  removeThrows?: boolean;
-  addThrows?: boolean;
-}): { warn: ReturnType<typeof vi.fn>; tick: () => void } {
+function runOverlay(opts: { removeThrows?: boolean; addThrows?: boolean }): {
+  warn: ReturnType<typeof vi.fn>;
+  tick: () => void;
+} {
   const warn = vi.fn();
   const fakeConsole = { warn };
 

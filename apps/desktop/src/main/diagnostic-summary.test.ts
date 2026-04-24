@@ -1,10 +1,10 @@
 import type { ActionTimelineEntry, ReportableError } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import {
-  type SummaryInput,
   composeSummaryMarkdown,
   mdInlineCode,
   redactPathsAndUrls,
+  type SummaryInput,
 } from './diagnostic-summary';
 
 function baseEvent(overrides: Partial<ReportableError> = {}): ReportableError {

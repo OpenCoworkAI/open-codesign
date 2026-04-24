@@ -1,21 +1,29 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
     "useIgnoreFile": true
   },
   "files": {
-    "ignore": [
-      "**/dist/**",
-      "**/dist-electron/**",
-      "**/.next/**",
-      "**/node_modules/**",
-      "**/coverage/**",
-      "**/.turbo/**",
-      "**/vendor/**",
-      "packaging/**"
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/dist-electron",
+      "!**/.next",
+      "!**/node_modules",
+      "!**/coverage",
+      "!**/.turbo",
+      "!**/vendor",
+      "!**/packaging",
+      "!**/*.vue"
     ]
+  },
+  "css": {
+    "parser": {
+      "cssModules": true,
+      "tailwindDirectives": true
+    }
   },
   "formatter": {
     "enabled": true,
@@ -46,21 +54,25 @@
         "noArrayIndexKey": "off",
         "noAssignInExpressions": "off",
         "noPrototypeBuiltins": "off",
-        "noDuplicateObjectKeys": "warn"
+        "noDuplicateObjectKeys": "warn",
+        "useIterableCallbackReturn": "off"
       },
       "style": {
         "noNonNullAssertion": "warn",
         "useImportType": "error",
-        "useLiteralEnumMembers": "off",
-        "noCommaOperator": "off"
+        "useLiteralEnumMembers": "off"
       },
       "complexity": {
         "noExcessiveCognitiveComplexity": "off",
         "noForEach": "off",
-        "useLiteralKeys": "off"
+        "useLiteralKeys": "off",
+        "noCommaOperator": "off"
       },
       "correctness": {
-        "useExhaustiveDependencies": "warn"
+        "useExhaustiveDependencies": "warn",
+        "noUnusedFunctionParameters": "off",
+        "noInnerDeclarations": "off",
+        "noUnusedVariables": "warn"
       },
       "a11y": {
         "useButtonType": "off",
@@ -68,18 +80,21 @@
         "useSemanticElements": "off",
         "noSvgWithoutTitle": "off",
         "useKeyWithClickEvents": "off",
-        "useValidAnchor": "off"
+        "useValidAnchor": "off",
+        "useAriaPropsForRole": "off",
+        "useAriaPropsSupportedByRole": "off",
+        "noStaticElementInteractions": "off"
       }
     }
   },
   "overrides": [
     {
-      "include": [
-        "apps/desktop/src/main/**",
-        "packages/core/src/**",
-        "packages/providers/src/**",
-        "packages/exporters/src/**",
-        "packages/shared/src/**"
+      "includes": [
+        "**/apps/desktop/src/main/**",
+        "**/packages/core/src/**",
+        "**/packages/providers/src/**",
+        "**/packages/exporters/src/**",
+        "**/packages/shared/src/**"
       ],
       "linter": {
         "rules": {
@@ -90,7 +105,7 @@
       }
     },
     {
-      "include": ["**/*.test.ts", "**/*.test.tsx", "packages/core/src/prompts/**"],
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/packages/core/src/prompts/**"],
       "linter": {
         "rules": {
           "suspicious": {

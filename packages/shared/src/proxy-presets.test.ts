@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PROXY_PRESETS,
   PROXY_PRESET_SCHEMA_VERSION,
+  PROXY_PRESETS,
   ProxyPreset,
   ProxyPresetIdSchema,
 } from './proxy-presets';

@@ -1,16 +1,15 @@
 import { readFile } from 'node:fs/promises';
-import { type ValidateResult, pingProvider } from '@open-codesign/providers';
+import { pingProvider, type ValidateResult } from '@open-codesign/providers';
 import {
   BUILTIN_PROVIDERS,
-  type ClaudeCodeDetectionMeta,
   CodesignError,
-  type CodexDetectionMeta,
   type Config,
   ERROR_CODES,
   type ExternalConfigsDetection,
-  type GeminiDetectionMeta,
+  hydrateConfig,
+  isSupportedOnboardingProvider,
+  modelsEndpointUrl,
   type OnboardingState,
-  type OpencodeDetectionMeta,
   type ProviderEntry,
   type ReasoningLevel,
   ReasoningLevelSchema,
@@ -19,9 +18,6 @@ import {
   type SupportedOnboardingProvider,
   type WireApi,
   WireApiSchema,
-  hydrateConfig,
-  isSupportedOnboardingProvider,
-  modelsEndpointUrl,
 } from '@open-codesign/shared';
 import { buildAuthHeadersForWire } from './auth-headers';
 import { defaultConfigDir, readConfig, writeConfig } from './config';
@@ -38,20 +34,20 @@ import { type OpencodeImport, readOpencodeConfig } from './imports/opencode-conf
 import { buildSecretRef, decryptSecret, migrateSecrets } from './keychain';
 import { defaultLogsDir, getLogger } from './logger';
 import {
-  type ProviderRow,
   assertProviderHasStoredSecret,
   computeDeleteProviderResult,
   getAddProviderDefaults,
   isKeylessProviderAllowed,
+  type ProviderRow,
   toProviderRows,
 } from './provider-settings';
 import {
   type AppPaths,
-  type StorageKind,
   buildAppPathsForLocations,
   getDefaultUserDataDir,
   patchForStorageKind,
   readPersistedStorageLocations,
+  type StorageKind,
   writeStorageLocations,
 } from './storage-settings';
 import { createWarnOnce } from './warnOnce';

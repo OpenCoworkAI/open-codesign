@@ -119,5 +119,5 @@ export function useT(): (key: string, options?: Record<string, unknown>) => stri
   return useCallback((key, options) => t(key, options ?? {}) as string, [i18n.language]);
 }
 
-export { i18next as i18n };
 export { useTranslation } from 'react-i18next';
+export { i18next as i18n };

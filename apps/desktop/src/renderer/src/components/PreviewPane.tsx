@@ -14,13 +14,18 @@ import {
 import { useCodesignStore } from '../store';
 import { CanvasErrorBar } from './CanvasErrorBar';
 import { CanvasTabBar } from './CanvasTabBar';
+import { CommentBubble } from './comment/CommentBubble';
+import { PinOverlay } from './comment/PinOverlay';
 import { FilesTabView } from './FilesTabView';
 import { PhoneFrame } from './PhoneFrame';
 import { PreviewToolbar } from './PreviewToolbar';
 import { TweakPanel } from './TweakPanel';
-import { CommentBubble } from './comment/CommentBubble';
-import { PinOverlay } from './comment/PinOverlay';
 
+export type {
+  AllowedPreviewMessageType,
+  PreviewMessageHandlers,
+  PreviewMessageOutcome,
+} from '../preview/helpers';
 // Re-export the helpers so App.test.ts / PreviewPane.test.ts keep working.
 export {
   formatIframeError,
@@ -29,11 +34,6 @@ export {
   postModeToPreviewWindow,
   scaleRectForZoom,
   stablePreviewSourceKey,
-} from '../preview/helpers';
-export type {
-  AllowedPreviewMessageType,
-  PreviewMessageHandlers,
-  PreviewMessageOutcome,
 } from '../preview/helpers';
 
 export interface PreviewPaneProps {

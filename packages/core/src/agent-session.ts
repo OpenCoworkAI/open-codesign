@@ -18,13 +18,13 @@ import {
   type AgentSession,
   type AuthStorage,
   type CreateAgentSessionResult,
+  createAgentSession,
   DefaultResourceLoader,
   type ExtensionFactory,
-  ModelRegistry,
-  SessionManager,
-  createAgentSession,
   getAgentDir,
   isToolCallEventType,
+  ModelRegistry,
+  SessionManager,
 } from '@mariozechner/pi-coding-agent';
 
 export interface PermissionDecision {

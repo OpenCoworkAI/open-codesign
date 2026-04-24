@@ -26,7 +26,7 @@ const COLUMNS = [
   },
 ];
 
-function App() {
+function _App() {
   const { useState } = React;
   const [board, setBoard] = useState(COLUMNS);
   const [drag, setDrag] = useState(null);

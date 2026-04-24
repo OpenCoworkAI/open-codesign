@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { type WireApi, canonicalBaseUrl, detectWireFromBaseUrl } from '@open-codesign/shared';
+import { canonicalBaseUrl, detectWireFromBaseUrl, type WireApi } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
 import { AlertCircle, Check, CheckCircle, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';

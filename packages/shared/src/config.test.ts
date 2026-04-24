@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILTIN_PROVIDERS,
   ConfigV3Schema,
-  SUPPORTED_ONBOARDING_PROVIDERS,
   defaultProviderCapabilities,
   detectWireFromBaseUrl,
   hydrateConfig,
   migrateLegacyToV3,
   parseConfigFlexible,
   resolveProviderCapabilities,
+  SUPPORTED_ONBOARDING_PROVIDERS,
   toPersistedV3,
 } from './config';
 

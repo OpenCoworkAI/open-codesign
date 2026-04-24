@@ -3,7 +3,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
   accent: '#0f172a',
 } /*EDITMODE-END*/;
 
-function App() {
+function _App() {
   const { useState } = React;
   const [open, setOpen] = useState(true);
   return (

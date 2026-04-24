@@ -26,13 +26,13 @@ export function isExporterReady(_format: ExporterFormat): boolean {
   return true;
 }
 
+export { type ChromeDiscoveryDeps, findSystemChrome } from './chrome-discovery';
 export type { ExportHtmlOptions } from './html';
+export type { ExportMarkdownOptions, MarkdownMeta } from './markdown';
+export { htmlToMarkdown } from './markdown';
 export type { ExportPdfOptions } from './pdf';
 export type { ExportPptxOptions } from './pptx';
 export type { ExportZipOptions, ZipAsset } from './zip';
-export type { ExportMarkdownOptions, MarkdownMeta } from './markdown';
-export { htmlToMarkdown } from './markdown';
-export { findSystemChrome, type ChromeDiscoveryDeps } from './chrome-discovery';
 
 export async function exportHtml(
   htmlContent: string,

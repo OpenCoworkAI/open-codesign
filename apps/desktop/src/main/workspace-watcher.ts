@@ -1,7 +1,7 @@
 import { type FSWatcher, watch as nodeWatch } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
-import { type WebContents, ipcMain } from 'electron';
+import { ipcMain, type WebContents } from 'electron';
 import { getLogger } from './logger';
 
 /**

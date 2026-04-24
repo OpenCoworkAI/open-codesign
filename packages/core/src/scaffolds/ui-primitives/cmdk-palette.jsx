@@ -10,7 +10,7 @@ const ITEMS = [
   { id: 'help', icon: '?', label: 'Help & shortcuts', shortcut: '⌘/' },
 ];
 
-function App() {
+function _App() {
   const { useState } = React;
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);

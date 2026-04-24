@@ -1,5 +1,5 @@
-import { setLocale as applyLocale, getCurrentLocale, useT } from '@open-codesign/i18n';
 import type { Locale } from '@open-codesign/i18n';
+import { setLocale as applyLocale, getCurrentLocale, useT } from '@open-codesign/i18n';
 import { Globe } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';

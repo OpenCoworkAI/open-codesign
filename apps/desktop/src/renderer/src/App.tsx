@@ -1,9 +1,10 @@
 import { useT } from '@open-codesign/i18n';
-import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AskModal } from './components/AskModal';
+import { CommentsPanel } from './components/comment/CommentsPanel';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
+import { ReportEventDialog } from './components/diagnostics/ReportEventDialog';
 import { NewDesignDialog } from './components/NewDesignDialog';
 import { PermissionDialog } from './components/PermissionDialog';
 import { PreviewPane } from './components/PreviewPane';
@@ -14,8 +15,6 @@ import { Sidebar } from './components/Sidebar';
 import { ToastViewport } from './components/Toast';
 import { TopBar } from './components/TopBar';
 import { UpdateBanner } from './components/UpdateBanner';
-import { CommentsPanel } from './components/comment/CommentsPanel';
-import { ReportEventDialog } from './components/diagnostics/ReportEventDialog';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useUpdateWiring } from './hooks/useUpdateWiring';
 import { createUpdateStore } from './state/update-store';
@@ -45,7 +44,7 @@ export function App() {
   const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
-  const sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
+  const _sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
   const activeReportLocalId = useCodesignStore((s) => s.activeReportLocalId);
   const closeReportDialog = useCodesignStore((s) => s.closeReportDialog);
 
@@ -129,7 +128,7 @@ export function App() {
     setPrompt('');
   }
 
-  const ready = configLoaded && config !== null && config.hasKey;
+  const ready = configLoaded && config?.hasKey;
 
   const bindings = useMemo(
     () => [

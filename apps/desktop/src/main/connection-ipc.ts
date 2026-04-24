@@ -2,14 +2,14 @@ import { createHash } from 'node:crypto';
 import {
   BUILTIN_PROVIDERS,
   CodesignError,
-  ERROR_CODES,
-  type ProviderEntry,
-  type SupportedOnboardingProvider,
-  type WireApi,
   canonicalBaseUrl,
+  ERROR_CODES,
   ensureVersionedBase,
   isSupportedOnboardingProvider,
+  type ProviderEntry,
+  type SupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
+  type WireApi,
 } from '@open-codesign/shared';
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
 import { getCodexTokenStore } from './codex-oauth-ipc';
@@ -977,7 +977,7 @@ export function normalizeOllamaBaseUrl(raw: string): string {
   // the host:port shape). `javascript:alert(1)` and similar scheme-only
   // tricks fail the `://` gate and instead get `http://` prepended, which
   // then fails URL parsing in the second pass and is rejected below.
-  const hasScheme = /^[a-z][a-z0-9+.\-]*:\/\//i.test(trimmed);
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);
   const withScheme = hasScheme ? trimmed : `http://${trimmed}`;
 
   let parsed: URL;

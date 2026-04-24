@@ -1,7 +1,7 @@
 import { getCurrentLocale, useT } from '@open-codesign/i18n';
-import type { ReportEventInput, ReportableError } from '@open-codesign/shared';
+import type { ReportableError, ReportEventInput } from '@open-codesign/shared';
 import { useEffect, useRef, useState } from 'react';
-import { type RedactOpts, applyRedaction } from '../../lib/redact';
+import { applyRedaction, type RedactOpts } from '../../lib/redact';
 import { useCodesignStore } from '../../store';
 import { formatRelativeTime } from '../settings/DiagnosticsPanel';
 
@@ -44,7 +44,7 @@ export function pickRecentReport(
   now: number = Date.now(),
   locale = 'en',
 ): RecentReportWarning | null {
-  if (!result || !result.reported) return null;
+  if (!result?.reported) return null;
   if (typeof result.ts !== 'number' || typeof result.issueUrl !== 'string') return null;
   return {
     relative: formatRelativeTime(result.ts, now, locale),

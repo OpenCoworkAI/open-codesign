@@ -3,7 +3,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
   spaceName: 'Work',
 } /*EDITMODE-END*/;
 
-function App() {
+function _App() {
   const tabs = [
     { name: 'GitHub', favicon: '⌥' },
     { name: 'Notion', favicon: '◾' },

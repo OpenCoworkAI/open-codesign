@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  TIMEOUT_OPTION_SECONDS,
   applyLocaleChange,
   computeModelOptions,
   resolveTimeoutOptions,
+  TIMEOUT_OPTION_SECONDS,
 } from './Settings';
 
 vi.mock('@open-codesign/i18n', () => ({

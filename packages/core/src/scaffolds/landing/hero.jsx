@@ -6,7 +6,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
   secondaryCta: 'See live demo',
 } /*EDITMODE-END*/;
 
-function App() {
+function _App() {
   return (
     <div
       style={{

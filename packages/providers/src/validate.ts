@@ -2,8 +2,8 @@ import {
   BUILTIN_PROVIDERS,
   CodesignError,
   ERROR_CODES,
-  type SupportedOnboardingProvider,
   isSupportedOnboardingProvider,
+  type SupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
 } from '@open-codesign/shared';
 import { looksLikeClaudeOAuthToken, withClaudeCodeIdentity } from './claude-code-compat';

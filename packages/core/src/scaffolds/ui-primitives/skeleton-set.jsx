@@ -18,7 +18,7 @@ function Box({ width, height, radius = 8, circle = false }) {
   );
 }
 
-function App() {
+function _App() {
   return (
     <div
       style={{

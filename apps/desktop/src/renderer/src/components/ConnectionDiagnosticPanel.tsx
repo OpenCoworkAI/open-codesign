@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
-import { type DiagnoseContext, type DiagnosticHypothesis, diagnose } from '@open-codesign/shared';
 import type { ErrorCode } from '@open-codesign/shared';
+import { type DiagnoseContext, type DiagnosticHypothesis, diagnose } from '@open-codesign/shared';
 import { AlertCircle, ExternalLink, FileText, RefreshCw, X } from 'lucide-react';
 import { useState } from 'react';
 import { useCodesignStore } from '../store';

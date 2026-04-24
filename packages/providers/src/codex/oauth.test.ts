@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AUTH_BASE,
-  CLIENT_ID,
   buildAuthorizeUrl,
+  CLIENT_ID,
   decodeJwtClaims,
   exchangeCode,
   extractAccountId,

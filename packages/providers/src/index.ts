@@ -493,9 +493,6 @@ export function detectProviderFromKey(key: string): ModelRef['provider'] | null 
   return null;
 }
 
-export { pingProvider } from './validate';
-export type { ValidateResult } from './validate';
-
 export {
   claudeCodeIdentityHeaders,
   isOfficialAnthropicBaseUrl,
@@ -503,20 +500,7 @@ export {
   shouldForceClaudeCodeIdentity,
   withClaudeCodeIdentity,
 } from './claude-code-compat';
-
-export { completeWithRetry, classifyError, sleepWithAbort, withBackoff } from './retry';
-export type {
-  BackoffOptions,
-  CompleteWithRetryOptions,
-  RetryDecision,
-  RetryReason,
-} from './retry';
-
 export { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
-
-export { injectSkillsIntoMessages, formatSkillsForPrompt, filterActive } from './skill-injector';
-
-export { defaultImageBaseUrl, defaultImageModel, generateImage } from './images';
 export type {
   GenerateImageOptions,
   GenerateImageResult,
@@ -526,6 +510,18 @@ export type {
   ImageQuality,
   ImageSize,
 } from './images';
+export { defaultImageBaseUrl, defaultImageModel, generateImage } from './images';
+export type {
+  BackoffOptions,
+  CompleteWithRetryOptions,
+  RetryDecision,
+  RetryReason,
+} from './retry';
+export { classifyError, completeWithRetry, sleepWithAbort, withBackoff } from './retry';
+
+export { filterActive, formatSkillsForPrompt, injectSkillsIntoMessages } from './skill-injector';
+export type { ValidateResult } from './validate';
+export { pingProvider } from './validate';
 
 // Tier 2 surface (not yet implemented):
 //   structuredComplete<T>(model, schema, messages, opts): Promise<T>

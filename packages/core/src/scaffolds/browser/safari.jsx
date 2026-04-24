@@ -3,7 +3,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
   title: 'Apple',
 } /*EDITMODE-END*/;
 
-function App() {
+function _App() {
   return (
     <div
       style={{

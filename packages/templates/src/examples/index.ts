@@ -11,7 +11,7 @@
  * source (the model is multilingual either way).
  */
 
-import { type Locale, availableLocales, normalizeLocale } from '@open-codesign/i18n';
+import { availableLocales, type Locale, normalizeLocale } from '@open-codesign/i18n';
 import { enExamples } from './locales/en';
 import { ptBRExamples } from './locales/pt-BR';
 import { zhCNExamples } from './locales/zh-CN';

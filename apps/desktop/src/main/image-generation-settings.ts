@@ -1,12 +1,13 @@
 import {
-  type GenerateImageOptions,
   defaultImageBaseUrl,
   defaultImageModel,
+  type GenerateImageOptions,
 } from '@open-codesign/providers';
 import {
   CodesignError,
   type Config,
   ERROR_CODES,
+  hydrateConfig,
   IMAGE_GENERATION_SCHEMA_VERSION,
   type ImageGenerationCredentialMode,
   ImageGenerationCredentialModeSchema,
@@ -20,7 +21,6 @@ import {
   ImageGenerationSettingsSchema,
   type ImageGenerationSize,
   ImageGenerationSizeSchema,
-  hydrateConfig,
 } from '@open-codesign/shared';
 import { writeConfig } from './config';
 import { ipcMain } from './electron-runtime';

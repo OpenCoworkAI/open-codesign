@@ -160,19 +160,16 @@ describe('readOpencodeConfig', () => {
     ['fireworks', 'https://api.fireworks.ai/inference/v1', 'Fireworks'],
     ['cerebras', 'https://api.cerebras.ai/v1', 'Cerebras'],
     ['vercel-ai-gateway', 'https://gateway.ai.vercel.app/v1', 'Vercel AI Gateway'],
-  ])(
-    'maps extended provider %s to the correct OpenAI-compatible endpoint',
-    async (providerId, baseUrl, label) => {
-      const home = await makeHome();
-      await writeAuth(home, { [providerId]: { type: 'api', key: 'sk-test' } });
-      const out = await readOpencodeConfig(home, {});
-      expect(out?.providers).toHaveLength(1);
-      expect(out?.providers[0]?.id).toBe(`opencode-${providerId}`);
-      expect(out?.providers[0]?.name).toBe(`OpenCode · ${label}`);
-      expect(out?.providers[0]?.baseUrl).toBe(baseUrl);
-      expect(out?.providers[0]?.wire).toBe('openai-chat');
-    },
-  );
+  ])('maps extended provider %s to the correct OpenAI-compatible endpoint', async (providerId, baseUrl, label) => {
+    const home = await makeHome();
+    await writeAuth(home, { [providerId]: { type: 'api', key: 'sk-test' } });
+    const out = await readOpencodeConfig(home, {});
+    expect(out?.providers).toHaveLength(1);
+    expect(out?.providers[0]?.id).toBe(`opencode-${providerId}`);
+    expect(out?.providers[0]?.name).toBe(`OpenCode · ${label}`);
+    expect(out?.providers[0]?.baseUrl).toBe(baseUrl);
+    expect(out?.providers[0]?.wire).toBe('openai-chat');
+  });
 
   it('emits a warning on malformed auth.json and returns no providers', async () => {
     const home = await makeHome();
@@ -300,29 +297,27 @@ describe('readOpencodeConfig', () => {
       'opencode-openrouter',
       'anthropic/claude-sonnet-4.6',
     ],
-  ])(
-    'treats the first slash as provider/model boundary for nested-path model %s',
-    async (modelString, expectedProvider, expectedModel) => {
-      const home = await makeHome();
-      await writeAuth(home, { openrouter: { type: 'api', key: 'sk-or' } });
-      await writeConfig(home, 'opencode.json', JSON.stringify({ model: modelString }));
-      const out = await readOpencodeConfig(home, {});
-      expect(out?.activeProvider).toBe(expectedProvider);
-      expect(out?.activeModel).toBe(expectedModel);
-    },
-  );
+  ])('treats the first slash as provider/model boundary for nested-path model %s', async (modelString, expectedProvider, expectedModel) => {
+    const home = await makeHome();
+    await writeAuth(home, { openrouter: { type: 'api', key: 'sk-or' } });
+    await writeConfig(home, 'opencode.json', JSON.stringify({ model: modelString }));
+    const out = await readOpencodeConfig(home, {});
+    expect(out?.activeProvider).toBe(expectedProvider);
+    expect(out?.activeModel).toBe(expectedModel);
+  });
 
-  it.each([['/leading'], ['trailing/'], ['no-slash-at-all']])(
-    'ignores malformed active-model string "%s"',
-    async (modelString) => {
-      const home = await makeHome();
-      await writeAuth(home, { anthropic: { type: 'api', key: 'sk-ant' } });
-      await writeConfig(home, 'opencode.json', JSON.stringify({ model: modelString }));
-      const out = await readOpencodeConfig(home, {});
-      expect(out?.activeProvider).toBeNull();
-      expect(out?.activeModel).toBeNull();
-    },
-  );
+  it.each([
+    ['/leading'],
+    ['trailing/'],
+    ['no-slash-at-all'],
+  ])('ignores malformed active-model string "%s"', async (modelString) => {
+    const home = await makeHome();
+    await writeAuth(home, { anthropic: { type: 'api', key: 'sk-ant' } });
+    await writeConfig(home, 'opencode.json', JSON.stringify({ model: modelString }));
+    const out = await readOpencodeConfig(home, {});
+    expect(out?.activeProvider).toBeNull();
+    expect(out?.activeModel).toBeNull();
+  });
 
   it('surfaces a warning when opencode.jsonc has a parse error', async () => {
     const home = await makeHome();

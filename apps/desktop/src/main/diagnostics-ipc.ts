@@ -22,9 +22,9 @@ import {
   type ListEventsInput,
   type ListEventsResult,
   type RecordRendererErrorResult,
+  type ReportableError,
   type ReportEventInput,
   type ReportEventResult,
-  type ReportableError,
 } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
 import type BetterSqlite3 from 'better-sqlite3';
@@ -41,7 +41,7 @@ import {
   redactForIssueUrl,
 } from './diagnostics/redact';
 import { app, ipcMain, shell } from './electron-runtime';
-import { getLogPath, getLogger, logsDir } from './logger';
+import { getLogger, getLogPath, logsDir } from './logger';
 import { findRecent, recordReported } from './reported-fingerprints';
 import {
   getDiagnosticEventById,

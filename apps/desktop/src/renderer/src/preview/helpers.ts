@@ -1,10 +1,10 @@
 import {
   type ElementRectsMessage,
   type IframeErrorMessage,
-  type OverlayMessage,
   isElementRectsMessage,
   isIframeErrorMessage,
   isOverlayMessage,
+  type OverlayMessage,
 } from '@open-codesign/runtime';
 
 export function formatIframeError(

@@ -1,9 +1,9 @@
 import type { ReportableError } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import {
-  type PreviewLabels,
   buildReportInput,
   formatPreview,
+  type PreviewLabels,
   parseIssueNumber,
   pickRecentReport,
   validateNotes,

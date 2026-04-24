@@ -18,10 +18,10 @@ vi.mock('react', async (importOriginal) => {
     default: {
       ...(actual as typeof actual & { default: Record<string, unknown> }).default,
       useState: mockUseState,
-      useSyncExternalStore: (sub: unknown, getSnap: () => unknown) => getSnap(),
+      useSyncExternalStore: (_sub: unknown, getSnap: () => unknown) => getSnap(),
     },
     useState: mockUseState,
-    useSyncExternalStore: (sub: unknown, getSnap: () => unknown) => getSnap(),
+    useSyncExternalStore: (_sub: unknown, getSnap: () => unknown) => getSnap(),
   };
 });
 

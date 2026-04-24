@@ -15,7 +15,7 @@ const KIND_STYLES = {
   error: { bar: '#ef4444', icon: '✕' },
 };
 
-function App() {
+function _App() {
   const { useState } = React;
   const [toasts, setToasts] = useState(STARTER_TOASTS);
   const positionStyle = {

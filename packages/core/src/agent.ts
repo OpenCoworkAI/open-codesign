@@ -41,10 +41,10 @@ import {
 import {
   type ChatMessage,
   CodesignError,
+  canonicalBaseUrl,
   ERROR_CODES,
   type ModelRef,
   type WireApi,
-  canonicalBaseUrl,
 } from '@open-codesign/shared';
 import type { TSchema } from '@sinclair/typebox';
 import { buildTransformContext } from './context-prune.js';
@@ -74,7 +74,7 @@ import { makeScaffoldTool } from './tools/scaffold.js';
 import { makeSetTitleTool } from './tools/set-title.js';
 import { makeSetTodosTool } from './tools/set-todos.js';
 import { makeSkillTool } from './tools/skill.js';
-import { type TextEditorFsCallbacks, makeTextEditorTool } from './tools/text-editor.js';
+import { makeTextEditorTool, type TextEditorFsCallbacks } from './tools/text-editor.js';
 import { makeTweaksTool } from './tools/tweaks.js';
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via

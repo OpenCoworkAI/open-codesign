@@ -22,7 +22,7 @@ import {
 } from '@open-codesign/shared';
 import { normalizeProviderError } from './errors';
 import { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
-import { type GenerateOptions, type GenerateResult, complete } from './index';
+import { complete, type GenerateOptions, type GenerateResult } from './index';
 
 export interface RetryReason {
   attempt: number;

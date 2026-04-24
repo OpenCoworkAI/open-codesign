@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyRedaction,
   PATH_OMITTED,
   PROMPT_OMITTED,
-  URL_OMITTED,
-  applyRedaction,
   redactPaths,
   redactUrls,
   scrubPromptInLine,
+  URL_OMITTED,
 } from './redact';
 
 describe('scrubPromptInLine', () => {

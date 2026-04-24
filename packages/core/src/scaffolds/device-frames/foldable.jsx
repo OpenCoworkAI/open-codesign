@@ -34,7 +34,7 @@ function Panel({ children, width }) {
   );
 }
 
-function App() {
+function _App() {
   const open = TWEAK_DEFAULTS.state === 'open';
   return (
     <div

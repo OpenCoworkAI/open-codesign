@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   MAX_ASSET_ERRORS,
   MAX_CONSOLE_ENTRIES,
-  type PreviewResult,
   makePreviewTool,
+  type PreviewResult,
 } from './preview.js';
 
 function cannedResult(overrides: Partial<PreviewResult> = {}): PreviewResult {

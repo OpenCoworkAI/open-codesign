@@ -124,18 +124,22 @@ wire_api = "chat"
     expect(out.warnings.join('\n')).toMatch(/env_key.*AWS_SECRET_ACCESS_KEY.*env-var exfiltration/);
   });
 
-  it.each(['GITHUB_TOKEN', 'DATABASE_URL', 'HOME', 'PATH', 'NPM_TOKEN', 'AWS_SECRET_ACCESS_KEY'])(
-    'rejects env_key=%s',
-    async (envKey) => {
-      const toml = `
+  it.each([
+    'GITHUB_TOKEN',
+    'DATABASE_URL',
+    'HOME',
+    'PATH',
+    'NPM_TOKEN',
+    'AWS_SECRET_ACCESS_KEY',
+  ])('rejects env_key=%s', async (envKey) => {
+    const toml = `
 [model_providers.p]
 base_url = "https://ex.com/v1"
 env_key  = "${envKey}"
 `;
-      const out = await parseCodexConfig(toml);
-      expect(out.providers[0]?.envKey).toBeUndefined();
-    },
-  );
+    const out = await parseCodexConfig(toml);
+    expect(out.providers[0]?.envKey).toBeUndefined();
+  });
 
   it.each([
     'OPENAI_API_KEY',

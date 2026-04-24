@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  type TweakFileInput,
   aggregateTweaks,
   makeTweaksTool,
   parseTweakBlocks,
+  type TweakFileInput,
 } from './tweaks.js';
 
 const blockFile = (file: string, json: string): TweakFileInput => ({

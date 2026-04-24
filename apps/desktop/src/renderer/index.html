@@ -11,11 +11,11 @@
   <body>
     <div id="root"></div>
     <script>
-      (function () {
+      (() => {
         try {
           var t = localStorage.getItem('open-codesign:theme');
           if (t === 'dark') document.documentElement.classList.add('dark');
-        } catch (e) {
+        } catch (_e) {
           /* localStorage unavailable; default light theme */
         }
       })();

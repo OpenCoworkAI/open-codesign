@@ -42,7 +42,7 @@ export function AskModal() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending]);
+  }, [pending, cancel]);
 
   if (!pending) return null;
 
@@ -298,13 +298,7 @@ function SliderField({
   );
 }
 
-function FileField({
-  q,
-  onChange,
-}: {
-  q: AskFileQuestion;
-  onChange: (v: AnswerValue) => void;
-}) {
+function FileField({ q, onChange }: { q: AskFileQuestion; onChange: (v: AnswerValue) => void }) {
   return (
     <input
       id={`ask-q-${q.id}`}

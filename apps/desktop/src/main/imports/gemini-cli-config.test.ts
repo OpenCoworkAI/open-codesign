@@ -185,29 +185,37 @@ describe('readGeminiCliConfig', () => {
     expect(out.warnings.join('\n')).toMatch(/Vertex/);
   });
 
-  it.each(['TRUE', 'True', '1', 'yes', 'YES', 'On', ' on '])(
-    'treats GOOGLE_GENAI_USE_VERTEXAI=%s as Vertex (case-insensitive + trimmed)',
-    async (value) => {
-      const home = await makeHome();
-      const out = expectBlocked(
-        await readGeminiCliConfig(home, { env: { GOOGLE_GENAI_USE_VERTEXAI: value } }),
-      );
-      expect(out.warnings.join('\n')).toMatch(/Vertex/);
-    },
-  );
+  it.each([
+    'TRUE',
+    'True',
+    '1',
+    'yes',
+    'YES',
+    'On',
+    ' on ',
+  ])('treats GOOGLE_GENAI_USE_VERTEXAI=%s as Vertex (case-insensitive + trimmed)', async (value) => {
+    const home = await makeHome();
+    const out = expectBlocked(
+      await readGeminiCliConfig(home, { env: { GOOGLE_GENAI_USE_VERTEXAI: value } }),
+    );
+    expect(out.warnings.join('\n')).toMatch(/Vertex/);
+  });
 
-  it.each(['false', 'FALSE', '0', 'no', ''])(
-    'ignores GOOGLE_GENAI_USE_VERTEXAI=%s as not-Vertex',
-    async (value) => {
-      const home = await makeHome();
-      await mkdir(join(home, '.gemini'), { recursive: true });
-      await writeFile(join(home, '.gemini', '.env'), `GEMINI_API_KEY=${VALID_KEY}\n`, 'utf8');
-      const out = expectFound(
-        await readGeminiCliConfig(home, { env: { GOOGLE_GENAI_USE_VERTEXAI: value } }),
-      );
-      expect(out.apiKey).toBe(VALID_KEY);
-    },
-  );
+  it.each([
+    'false',
+    'FALSE',
+    '0',
+    'no',
+    '',
+  ])('ignores GOOGLE_GENAI_USE_VERTEXAI=%s as not-Vertex', async (value) => {
+    const home = await makeHome();
+    await mkdir(join(home, '.gemini'), { recursive: true });
+    await writeFile(join(home, '.gemini', '.env'), `GEMINI_API_KEY=${VALID_KEY}\n`, 'utf8');
+    const out = expectFound(
+      await readGeminiCliConfig(home, { env: { GOOGLE_GENAI_USE_VERTEXAI: value } }),
+    );
+    expect(out.apiKey).toBe(VALID_KEY);
+  });
 
   it('accepts export-prefixed lines', async () => {
     const home = await makeHome();

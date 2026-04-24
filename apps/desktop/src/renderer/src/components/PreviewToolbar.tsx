@@ -2,7 +2,6 @@ import { useT } from '@open-codesign/i18n';
 import { Download, MessageSquare } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
-import type { PreviewViewport } from '../store';
 import { useCodesignStore } from '../store';
 
 interface ExportItem {
@@ -20,7 +19,7 @@ export function PreviewToolbar(): ReactElement {
   const exportActive = useCodesignStore((s) => s.exportActive);
   const toastMessage = useCodesignStore((s) => s.toastMessage);
   const dismissToast = useCodesignStore((s) => s.dismissToast);
-  const previewViewport = useCodesignStore((s) => s.previewViewport);
+  const _previewViewport = useCodesignStore((s) => s.previewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
   const setPreviewZoom = useCodesignStore((s) => s.setPreviewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);

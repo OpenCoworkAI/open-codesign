@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { ChatMessage, LoadedSkill, ModelRef, StoredDesignSystem } from '@open-codesign/shared';
 import { CodesignError, STORED_DESIGN_SYSTEM_SCHEMA_VERSION } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PROMPT_SECTIONS, PROMPT_SECTION_FILES, composeSystemPrompt } from './prompts/index.js';
+import { composeSystemPrompt, PROMPT_SECTION_FILES, PROMPT_SECTIONS } from './prompts/index.js';
 
 const completeMock = vi.fn();
 const loadBuiltinSkillsMock = vi.fn(async (): Promise<LoadedSkill[]> => []);

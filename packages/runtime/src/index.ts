@@ -20,16 +20,16 @@ import { ensureEditmodeMarkers } from '@open-codesign/shared';
 import BABEL_STANDALONE from '../vendor/babel.standalone.js?raw';
 import DESIGN_CANVAS_JSX from '../vendor/design-canvas.jsx?raw';
 import IOS_FRAME_JSX from '../vendor/ios-frame.jsx?raw';
-import REACT_DOM_UMD from '../vendor/react-dom.umd.js?raw';
 import REACT_UMD from '../vendor/react.umd.js?raw';
+import REACT_DOM_UMD from '../vendor/react-dom.umd.js?raw';
 
 import { OVERLAY_SCRIPT } from './overlay';
 import { TWEAKS_BRIDGE_LISTENER, TWEAKS_BRIDGE_SETUP } from './tweaks-bridge';
 
-export { OVERLAY_SCRIPT, isOverlayMessage, isElementRectsMessage } from './overlay';
-export type { OverlayMessage, ElementRectsMessage } from './overlay';
-export { isIframeErrorMessage } from './iframe-errors';
 export type { IframeErrorMessage } from './iframe-errors';
+export { isIframeErrorMessage } from './iframe-errors';
+export type { ElementRectsMessage, OverlayMessage } from './overlay';
+export { isElementRectsMessage, isOverlayMessage, OVERLAY_SCRIPT } from './overlay';
 
 const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
 const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
