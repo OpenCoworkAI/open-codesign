@@ -99,10 +99,10 @@ export interface WorkspaceFileEntry {
   updatedAt: string;
 }
 
-/** Ignored by `listWorkspaceFilesAt` and `readWorkspaceFilesAt`. Keeps the
- *  scan bounded on workspaces that have a bundled node_modules or build
- *  outputs lying around. */
-const LIST_IGNORED_DIRS = new Set<string>([
+/** Ignored by `listWorkspaceFilesAt`, `readWorkspaceFilesAt`, and the
+ *  workspace file watcher. Keeps the scan bounded on workspaces that have a
+ *  bundled node_modules or build outputs lying around. */
+export const WORKSPACE_IGNORED_DIRS = new Set<string>([
   'node_modules',
   '.git',
   '.codesign',
@@ -112,6 +112,8 @@ const LIST_IGNORED_DIRS = new Set<string>([
   '.vite',
   '__pycache__',
 ]);
+
+const LIST_IGNORED_DIRS = WORKSPACE_IGNORED_DIRS;
 
 const LIST_MAX_FILES = 2_000;
 

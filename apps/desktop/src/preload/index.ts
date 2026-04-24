@@ -476,6 +476,21 @@ const api = {
       }) as Promise<
         Array<{ path: string; kind: 'html' | 'asset'; size: number; updatedAt: string }>
       >,
+    subscribe: (designId: string) =>
+      ipcRenderer.invoke('codesign:files:v1:subscribe', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ ok: true } | { ok: false; reason: string }>,
+    unsubscribe: (designId: string) =>
+      ipcRenderer.invoke('codesign:files:v1:unsubscribe', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ ok: true }>,
+    onChanged: (cb: (event: { schemaVersion: 1; designId: string }) => void) => {
+      const listener = (_e: unknown, event: { schemaVersion: 1; designId: string }) => cb(event);
+      ipcRenderer.on('codesign:files:v1:changed', listener);
+      return () => ipcRenderer.removeListener('codesign:files:v1:changed', listener);
+    },
   },
   snapshots: {
     listDesigns: () =>

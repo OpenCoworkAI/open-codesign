@@ -1,129 +1,184 @@
 import { type FSWatcher, watch as nodeWatch } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import path from 'node:path';
-import { ipcMain, type WebContents } from 'electron';
+import { CodesignError } from '@open-codesign/shared';
+import type BetterSqlite3 from 'better-sqlite3';
+import type { BrowserWindow } from 'electron';
+import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
+import { getDesign } from './snapshots-db';
+import { WORKSPACE_IGNORED_DIRS } from './workspace-reader';
 
 /**
- * Workspace file watcher (T2.3). One watcher per active design tab,
- * built on `node:fs.watch` (no chokidar dep — node 22's recursive
- * watch is stable on macOS / Linux / Windows).
+ * Files watcher (T2.3 follow-up). Without this, edits made in Finder / a
+ * separate IDE while the agent is idle never reach the renderer's Files
+ * panel — the existing `useDesignFiles` hook only refetches on agent stream
+ * events.
  *
  * Channels:
- *   - 'fs:watch:start' { sessionId, workspacePath } -> {ok}|{ok:false,reason}
- *   - 'fs:watch:stop'  { sessionId } -> {ok}
- *   - 'fs:event'       (push) { sessionId, kind, path, mtime }
+ *   - `codesign:files:v1:subscribe`   { schemaVersion: 1, designId } → { ok }
+ *   - `codesign:files:v1:unsubscribe` { schemaVersion: 1, designId } → { ok }
+ *   - `codesign:files:v1:changed`     (push) { schemaVersion: 1, designId }
  *
- * Ignored: node_modules / .git / .codesign/sessions / .DS_Store, so the
- * agent's own writes don't bounce back.
+ * One ref-counted watcher per designId. Started on first subscribe, kept
+ * alive across short remounts via a 5-minute idle teardown timer. Bursts
+ * are coalesced into a single emit per 250ms so a `pnpm install` in the
+ * workspace doesn't spam IPC.
+ *
+ * Uses `node:fs.watch({recursive: true})` — works on macOS (FSEvents) and
+ * Linux (recent kernel). No chokidar dep; Windows recursive coverage is
+ * weaker but we're macOS-first.
  */
 
-const log = getLogger('fs-watch');
+const log = getLogger('files-watcher');
+
+/** Coalesce bursts of fs events into one IPC emit. */
+const COALESCE_MS = 250;
+/** Keep an idle watcher alive briefly so quick tab-switches don't churn. */
+const IDLE_TEARDOWN_MS = 5 * 60_000;
 
 interface ActiveWatcher {
   watcher: FSWatcher;
   workspacePath: string;
-  webContents: WebContents;
+  refCount: number;
+  pendingEmit: ReturnType<typeof setTimeout> | null;
+  idleTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const watchers = new Map<string, ActiveWatcher>();
 
-const IGNORE_PATTERNS = [
-  /(?:^|[\\/])node_modules(?:[\\/]|$)/,
-  /(?:^|[\\/])\.git(?:[\\/]|$)/,
-  /(?:^|[\\/])\.codesign[\\/]sessions(?:[\\/]|$)/,
-  /(?:^|[\\/])\.DS_Store$/,
-];
-
 function isIgnored(rel: string): boolean {
-  return IGNORE_PATTERNS.some((p) => p.test(rel));
+  if (!rel) return true;
+  if (rel.endsWith('.DS_Store')) return true;
+  for (const seg of rel.split(/[\\/]/)) {
+    if (WORKSPACE_IGNORED_DIRS.has(seg)) return true;
+  }
+  return false;
 }
 
-export function registerWorkspaceWatcherIpc(): void {
-  ipcMain.handle('fs:watch:start', (event, raw: unknown) => {
-    const parsed = parseStart(raw);
-    if (!parsed) return { ok: false, reason: 'invalid args' };
-    return startWatch(parsed.sessionId, parsed.workspacePath, event.sender);
-  });
-  ipcMain.handle('fs:watch:stop', (_event, raw: unknown) => {
-    const parsed = parseStop(raw);
-    if (!parsed) return { ok: false, reason: 'invalid args' };
-    stopWatch(parsed.sessionId);
-    return { ok: true };
-  });
+function scheduleEmit(designId: string, getWin: () => BrowserWindow | null): void {
+  const entry = watchers.get(designId);
+  if (!entry) return;
+  if (entry.pendingEmit) return;
+  entry.pendingEmit = setTimeout(() => {
+    entry.pendingEmit = null;
+    const win = getWin();
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send('codesign:files:v1:changed', { schemaVersion: 1, designId });
+  }, COALESCE_MS);
 }
 
-function startWatch(
-  sessionId: string,
+function startWatcher(
+  designId: string,
   workspacePath: string,
-  webContents: WebContents,
-): { ok: true } | { ok: false; reason: string } {
-  stopWatch(sessionId);
+  getWin: () => BrowserWindow | null,
+): ActiveWatcher | null {
+  let watcher: FSWatcher;
   try {
-    const watcher = nodeWatch(workspacePath, { recursive: true }, (eventType, filename) => {
-      if (!filename) return;
-      if (isIgnored(filename)) return;
-      if (webContents.isDestroyed()) return;
-      const absolute = path.join(workspacePath, filename.toString());
-      void mtimeOf(absolute).then((mtime) => {
-        if (webContents.isDestroyed()) return;
-        const kind = mtime === 0 ? 'unlink' : eventType === 'rename' ? 'add' : 'change';
-        webContents.send('fs:event', { sessionId, kind, path: absolute, mtime });
-      });
+    watcher = nodeWatch(workspacePath, { recursive: true }, (_eventType, filename) => {
+      if (filename && isIgnored(filename.toString())) return;
+      scheduleEmit(designId, getWin);
     });
-    watcher.on('error', (err) => log.warn('fs.watch.error', { sessionId, error: String(err) }));
-    watchers.set(sessionId, { watcher, workspacePath, webContents });
-    return { ok: true };
   } catch (err) {
-    log.error('fs.watch.start.fail', {
-      sessionId,
+    log.warn('files.watch.start.fail', {
+      designId,
       workspacePath,
       error: err instanceof Error ? err.message : String(err),
     });
-    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+    return null;
   }
+  watcher.on('error', (err) => log.warn('files.watch.error', { designId, error: String(err) }));
+  const entry: ActiveWatcher = {
+    watcher,
+    workspacePath,
+    refCount: 0,
+    pendingEmit: null,
+    idleTimer: null,
+  };
+  watchers.set(designId, entry);
+  return entry;
 }
 
-function stopWatch(sessionId: string): void {
-  const existing = watchers.get(sessionId);
-  if (!existing) return;
-  watchers.delete(sessionId);
+function stopWatcher(designId: string): void {
+  const entry = watchers.get(designId);
+  if (!entry) return;
+  if (entry.pendingEmit) clearTimeout(entry.pendingEmit);
+  if (entry.idleTimer) clearTimeout(entry.idleTimer);
+  watchers.delete(designId);
   try {
-    existing.watcher.close();
+    entry.watcher.close();
   } catch (err) {
-    log.warn('fs.watch.stop.fail', { sessionId, error: String(err) });
+    log.warn('files.watch.stop.fail', { designId, error: String(err) });
   }
 }
 
-async function mtimeOf(p: string): Promise<number> {
-  try {
-    const s = await stat(p);
-    return s.mtimeMs;
-  } catch {
-    return 0;
+export function registerFilesWatcherIpc(
+  db: BetterSqlite3.Database,
+  getWin: () => BrowserWindow | null,
+): void {
+  ipcMain.handle(
+    'codesign:files:v1:subscribe',
+    (_e: unknown, raw: unknown): { ok: true } | { ok: false; reason: string } => {
+      const designId = parseDesignId(raw, 'subscribe');
+      const existing = watchers.get(designId);
+      if (existing) {
+        if (existing.idleTimer) {
+          clearTimeout(existing.idleTimer);
+          existing.idleTimer = null;
+        }
+        existing.refCount += 1;
+        return { ok: true };
+      }
+      const design = getDesign(db, designId);
+      if (design === null) return { ok: false, reason: 'design-not-found' };
+      if (design.workspacePath === null) return { ok: false, reason: 'no-workspace' };
+      const entry = startWatcher(designId, design.workspacePath, getWin);
+      if (!entry) return { ok: false, reason: 'watch-failed' };
+      entry.refCount = 1;
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle('codesign:files:v1:unsubscribe', (_e: unknown, raw: unknown): { ok: true } => {
+    const designId = parseDesignId(raw, 'unsubscribe');
+    const entry = watchers.get(designId);
+    if (!entry) return { ok: true };
+    entry.refCount -= 1;
+    if (entry.refCount > 0) return { ok: true };
+    entry.refCount = 0;
+    if (entry.idleTimer) clearTimeout(entry.idleTimer);
+    entry.idleTimer = setTimeout(() => stopWatcher(designId), IDLE_TEARDOWN_MS);
+    return { ok: true };
+  });
+}
+
+function parseDesignId(raw: unknown, channel: string): string {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError(
+      `codesign:files:v1:${channel} expects { schemaVersion: 1, designId }`,
+      'IPC_BAD_INPUT',
+    );
   }
-}
-
-function parseStart(raw: unknown): { sessionId: string; workspacePath: string } | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const obj = raw as Record<string, unknown>;
-  const sessionId = typeof obj['sessionId'] === 'string' ? obj['sessionId'] : null;
-  const workspacePath = typeof obj['workspacePath'] === 'string' ? obj['workspacePath'] : null;
-  if (!sessionId || !workspacePath) return null;
-  return { sessionId, workspacePath };
-}
-
-function parseStop(raw: unknown): { sessionId: string } | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const obj = raw as Record<string, unknown>;
-  const sessionId = typeof obj['sessionId'] === 'string' ? obj['sessionId'] : null;
-  return sessionId ? { sessionId } : null;
-}
-
-export function shutdownAllWatchers(): void {
-  for (const sessionId of Array.from(watchers.keys())) {
-    stopWatch(sessionId);
+  const r = raw as Record<string, unknown>;
+  if (r['schemaVersion'] !== 1) {
+    throw new CodesignError(
+      `codesign:files:v1:${channel} requires schemaVersion: 1`,
+      'IPC_BAD_INPUT',
+    );
   }
+  const id = r['designId'];
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  return id;
 }
 
-export const __test = { isIgnored, IGNORE_PATTERNS };
+export function shutdownAllFilesWatchers(): void {
+  for (const id of Array.from(watchers.keys())) stopWatcher(id);
+}
+
+export const __test = {
+  isIgnored,
+  watchers,
+  COALESCE_MS,
+  IDLE_TEARDOWN_MS,
+  stopWatcher,
+};

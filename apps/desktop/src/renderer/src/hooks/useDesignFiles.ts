@@ -22,9 +22,12 @@ export interface UseDesignFilesResult {
  * generate_image_asset, the user dragging a file in by hand) shows up
  * because we do not depend on any tool remembering to fire an event.
  *
- * Live updates piggyback on the agent event stream: any `fs_updated`,
- * `tool_call_result`, or `turn_end` event for the current design schedules a
- * re-list. Throttled so a burst of tool calls does not spam `readdir`.
+ * Live updates come from two sources, both of which trigger a re-list:
+ *   1. Agent stream events (`fs_updated`, `tool_call_result`, `turn_end`,
+ *      `agent_end`) — fast path while a turn is in flight.
+ *   2. A main-process `chokidar`-style fs watcher on the bound workspace —
+ *      catches edits made in Finder / a separate IDE while the agent is
+ *      idle. Throttled in main to one IPC emit per 250ms.
  */
 export function useDesignFiles(designId: string | null): UseDesignFilesResult {
   const previewHtml = useCodesignStore((s) => s.previewHtml);
@@ -129,6 +132,31 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
     });
     return () => {
       off?.();
+    };
+  }, [backend, designId, refetch]);
+
+  // Subscribe to filesystem changes outside the agent stream — Finder edits,
+  // a separate IDE saving a file, git checkouts. Main coalesces bursts to
+  // 250ms so this won't fire-hose readdir.
+  useEffect(() => {
+    if (backend !== 'workspace') return;
+    if (!designId) return;
+    const filesApi = window.codesign?.files as
+      | {
+          subscribe?: (id: string) => Promise<unknown>;
+          unsubscribe?: (id: string) => Promise<unknown>;
+          onChanged?: (cb: (e: { designId: string }) => void) => () => void;
+        }
+      | undefined;
+    if (!filesApi?.subscribe || !filesApi.unsubscribe || !filesApi.onChanged) return;
+    void filesApi.subscribe(designId);
+    const off = filesApi.onChanged((event) => {
+      if (event.designId !== designId) return;
+      void refetch();
+    });
+    return () => {
+      off();
+      void filesApi.unsubscribe?.(designId);
     };
   }, [backend, designId, refetch]);
 

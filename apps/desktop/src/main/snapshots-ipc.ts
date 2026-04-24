@@ -33,6 +33,7 @@ import {
   softDeleteDesign,
 } from './snapshots-db';
 import { listWorkspaceFilesAt, type WorkspaceFileEntry } from './workspace-reader';
+import { registerFilesWatcherIpc } from './workspace-watcher';
 
 type Database = BetterSqlite3.Database;
 
@@ -569,6 +570,8 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       }
     },
   );
+
+  registerFilesWatcherIpc(db, getWin);
 }
 
 function parseIdPayload(raw: unknown, channel: string): string {
@@ -609,6 +612,8 @@ export const SNAPSHOTS_CHANNELS_V1 = [
   'snapshots:v1:workspace:open',
   'snapshots:v1:workspace:check',
   'codesign:files:v1:list',
+  'codesign:files:v1:subscribe',
+  'codesign:files:v1:unsubscribe',
 ] as const;
 
 export function registerSnapshotsUnavailableIpc(reason: string): void {
