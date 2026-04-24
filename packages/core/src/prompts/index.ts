@@ -45,7 +45,14 @@ Re-read the current artifact. Make the minimum coherent change. Preserve voice, 
 
 ## Done
 
-Passes step 6 and contains exactly one artifact tag.`;
+Passes step 6 and contains exactly one artifact tag.
+
+## Narration rhythm (for tool-using turns)
+
+Before each tool call, say one sentence about what you're doing and why.
+After each substantial tool result, say one sentence about what you learned and what's next.
+Keep these narrations to ≤15 words each — they're for the user to follow along, not for reasoning.
+Do not narrate trivial tool calls (e.g. repeated \`set_todos\` status flips).`;
 
 const OUTPUT_RULES = `# Output rules
 
