@@ -20,6 +20,11 @@ import {
   shouldForceClaudeCodeIdentity,
 } from './claude-code-compat';
 import { normalizeGeminiModelId } from './gemini-compat';
+import {
+  applyResponsesRoleShaping,
+  inferReasoning,
+  requiresResponsesRoleShaping,
+} from './wire-policy';
 
 /** Subset of pi-ai's `ThinkingLevel` we expose. Maps directly to its `reasoning`
  * field, which Anthropic adapters translate to extended-thinking effort/budget
@@ -177,83 +182,7 @@ const EMPTY_USAGE: PiUsage = {
 
 const MAX_TOTAL_CODEX_IMAGE_BYTES = 4_000_000;
 
-/**
- * `reasoning: true` on a synthesized PiModel makes pi-ai's openai-responses /
- * openai-chat adapters write the system prompt with role `'developer'`
- * instead of `'system'`. That's OpenAI-Responses-only; every OpenAI-compat
- * gateway out there (DashScope/Qwen, DeepSeek, GLM/BigModel, Moonshot, …)
- * rejects `developer` with HTTP 400. So only claim reasoning when we
- * actually know the target accepts it. (#183)
- */
-function isOpenAIOfficial(baseUrl: string | undefined): boolean {
-  if (!baseUrl) return false;
-  return /^https:\/\/api\.openai\.com(\/|$)/.test(baseUrl);
-}
-
-function isOpenRouterOfficial(baseUrl: string | undefined): boolean {
-  if (!baseUrl) return false;
-  return /^https:\/\/openrouter\.ai\/api\/v1(\/|$)/.test(baseUrl);
-}
-
-function isReasoningModelId(modelId: string): boolean {
-  // OpenAI reasoning families: o1, o3, o4, gpt-5 (incl. variants like gpt-5-turbo, gpt-5.4)
-  return /^(o[134]|gpt-5)/i.test(modelId);
-}
-
-/**
- * Matches reasoning-capable model IDs commonly proxied through OpenAI-compatible
- * gateways (OpenRouter, univibe, sub2api, etc). This pattern matches the same
- * set that OPENROUTER_REASONING_MODEL_RE uses for OpenRouter, but applies to
- * custom openai-chat wire endpoints as well.
- */
-const REASONING_MODEL_ID_PATTERN = new RegExp(
-  [
-    ':thinking$',
-    '(^|/)claude-(?:opus|sonnet)-4',
-    '^(?:openai/)?(?:o1|o3|o4|gpt-5)(?:[-.].*)?$',
-    '^minimax/minimax-m\\d',
-    '^deepseek/deepseek-r\\d',
-    '^qwen/qwq',
-  ].join('|'),
-  'i',
-);
-
-export function inferReasoning(
-  wire: GenerateOptions['wire'],
-  modelId: string,
-  baseUrl: string | undefined,
-  capabilities?: ProviderCapabilities,
-  providerId?: string,
-): boolean {
-  if (capabilities?.supportsReasoning === true) {
-    return true;
-  }
-  const preserveChatHeuristics =
-    wire === 'openai-chat' &&
-    ((providerId === 'openai' && isOpenAIOfficial(baseUrl)) ||
-      (providerId === 'openrouter' && isOpenRouterOfficial(baseUrl)));
-  if (capabilities?.supportsReasoning === false && !preserveChatHeuristics) {
-    return false;
-  }
-  switch (wire) {
-    case 'anthropic':
-      return true;
-    case 'openai-responses':
-    case 'openai-codex-responses':
-      return true;
-    case 'openai-chat':
-      // For official OpenAI, check both base URL and model ID pattern
-      if (isOpenAIOfficial(baseUrl)) {
-        return isReasoningModelId(modelId);
-      }
-      // For third-party OpenAI-compatible gateways, heuristically match
-      // common reasoning model IDs — many gateways still require the
-      // reasoning flag to get extended thinking output.
-      return REASONING_MODEL_ID_PATTERN.test(modelId);
-    default:
-      return false;
-  }
-}
+export { inferReasoning } from './wire-policy';
 
 /**
  * Synthesize a PiModel for a wire + custom baseUrl so custom provider ids
@@ -381,26 +310,14 @@ export async function complete(
   if (opts.reasoning !== undefined) piOpts.reasoning = opts.reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };
 
-  // Strict OpenAI-Responses gateways (e.g. sub2api-style routers) 400 when
-  // they see BOTH a system/developer item in `input[]` AND no top-level
-  // `instructions`. pi-ai's plain `openai-responses` wire injects the former
-  // but not the latter, so we mirror the codex wire's strict behavior here:
-  // set `instructions` and strip system/developer entries from `input[]`.
-  if (piModel.api === 'openai-responses' && piContext.systemPrompt) {
+  // Covers both registry-looked-up models (piModel.api) and custom-endpoint
+  // models where the wire is passed explicitly via opts.wire.
+  if (
+    (requiresResponsesRoleShaping(opts.wire) || piModel.api === 'openai-responses') &&
+    piContext.systemPrompt
+  ) {
     const systemPrompt = piContext.systemPrompt;
-    piOpts.onPayload = (payload) => {
-      const params = payload as {
-        instructions?: string;
-        input?: Array<{ role?: string }>;
-      };
-      params.instructions = systemPrompt;
-      if (Array.isArray(params.input)) {
-        params.input = params.input.filter(
-          (entry) => entry.role !== 'system' && entry.role !== 'developer',
-        );
-      }
-      return params;
-    };
+    piOpts.onPayload = (payload) => applyResponsesRoleShaping(payload, systemPrompt);
   }
 
   // sub2api / claude2api gateways 403 requests without claude-cli identity
