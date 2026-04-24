@@ -201,10 +201,14 @@ describe('generate()', () => {
     const opts = completeMock.mock.calls[0]?.[2] as {
       reasoning?: string;
       capabilities?: { supportsReasoning?: boolean; supportsModelsEndpoint?: boolean };
+      explicitCapabilities?: { supportsModelsEndpoint?: boolean };
     };
     expect(opts.reasoning).toBe('high');
     expect(opts.capabilities).toEqual({
       supportsReasoning: false,
+      supportsModelsEndpoint: true,
+    });
+    expect(opts.explicitCapabilities).toEqual({
       supportsModelsEndpoint: true,
     });
   });

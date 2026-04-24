@@ -388,6 +388,9 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
           ...(input.wire !== undefined ? { wire: input.wire } : {}),
           ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
           ...(input.capabilities !== undefined ? { capabilities: input.capabilities } : {}),
+          ...(input.explicitCapabilities !== undefined
+            ? { explicitCapabilities: input.explicitCapabilities }
+            : {}),
           ...(input.userImages !== undefined ? { userImages: input.userImages } : {}),
           ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
           ...(input.signal !== undefined ? { signal: input.signal } : {}),

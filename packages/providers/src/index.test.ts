@@ -306,6 +306,84 @@ describe('complete', () => {
     });
   });
 
+  it('prefers explicitCapabilities over resolved capabilities for imported official providers', async () => {
+    getModelMock.mockReturnValue({
+      id: 'gpt-5.4',
+      api: 'openai-completions',
+      provider: 'codex-openai',
+      reasoning: false,
+    });
+    completeSimpleMock.mockImplementationOnce(async (piModel) => {
+      expect(piModel.reasoning).toBe(true);
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'codex-openai',
+        model: 'gpt-5.4',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'codex-openai', modelId: 'gpt-5.4' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://api.openai.com/v1',
+        capabilities: { supportsReasoning: false, supportsModelsEndpoint: true },
+        explicitCapabilities: { supportsModelsEndpoint: true },
+      },
+    );
+  });
+
+  it('uses explicitCapabilities when synthesizing imported official providers', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (piModel) => {
+      expect(piModel.reasoning).toBe(true);
+      expect(piModel.baseUrl).toBe('https://api.openai.com/v1');
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'codex-openai',
+        model: 'gpt-5.4',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'codex-openai', modelId: 'gpt-5.4' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://api.openai.com/v1',
+        capabilities: { supportsReasoning: false, supportsModelsEndpoint: true },
+        explicitCapabilities: { supportsModelsEndpoint: true },
+      },
+    );
+  });
+
   it('appends image inputs to the final user turn for openai-codex-responses', async () => {
     getModelMock.mockReturnValue({
       id: 'gpt-5.4',

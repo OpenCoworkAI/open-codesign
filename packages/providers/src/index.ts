@@ -66,6 +66,11 @@ export interface GenerateOptions {
    * heuristic inference (e.g. reasoning support, role compatibility).
    */
   capabilities?: ProviderCapabilities;
+  /**
+   * Raw capability overrides explicitly stored on the provider entry.
+   * Preserves the distinction between "explicit false" and resolved defaults.
+   */
+  explicitCapabilities?: ProviderCapabilities;
 }
 
 export interface GenerateResult {
@@ -267,7 +272,7 @@ export async function complete(
         opts.wire,
         effectiveModelId,
         effectiveBaseUrl,
-        opts.capabilities,
+        opts.explicitCapabilities ?? opts.capabilities,
         model.provider,
       ),
     };
@@ -279,7 +284,7 @@ export async function complete(
         effectiveModelId,
         opts.wire,
         opts.baseUrl,
-        opts.capabilities,
+        opts.explicitCapabilities ?? opts.capabilities,
       );
     } else if (model.provider === 'openrouter') {
       piModel = synthesizeOpenRouterModel(effectiveModelId);
