@@ -28,7 +28,6 @@ vi.mock('./codex-oauth-ipc', () => ({
 import { createHash } from 'node:crypto';
 import { hydrateConfig } from '@open-codesign/shared';
 import {
-  registerConnectionIpc,
   CONNECTION_FETCH_TIMEOUT_MS,
   _clearModelsCache,
   buildAuthHeaders,
@@ -40,6 +39,7 @@ import {
   getCacheKey,
   normalizeBaseUrl,
   normalizeOllamaBaseUrl,
+  registerConnectionIpc,
   runProviderTest,
 } from './connection-ipc';
 

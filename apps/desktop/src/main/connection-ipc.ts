@@ -4,7 +4,6 @@ import {
   CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   ERROR_CODES,
-  resolveProviderCapabilities,
   type ProviderCapabilities,
   type ProviderEntry,
   type SupportedOnboardingProvider,
@@ -12,6 +11,7 @@ import {
   canonicalBaseUrl,
   ensureVersionedBase,
   isSupportedOnboardingProvider,
+  resolveProviderCapabilities,
   stripInferenceEndpointSuffix,
 } from '@open-codesign/shared';
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
