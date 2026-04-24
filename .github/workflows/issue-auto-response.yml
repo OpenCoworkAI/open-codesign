@@ -63,7 +63,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           responses-api-endpoint: ${{ secrets.OPENAI_BASE_URL }}
-          model: ${{ vars.OPENAI_MODEL || 'gpt-5.4' }}
+          model: ${{ vars.OPENAI_MODEL || 'gpt-5.3-codex' }}
           effort: ${{ vars.OPENAI_EFFORT || 'high' }}
           sandbox: danger-full-access
           safety-strategy: drop-sudo
