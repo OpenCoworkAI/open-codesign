@@ -278,6 +278,7 @@ export type {
   ProviderModelDiscoveryMode,
   ProviderShortlist,
   ReasoningLevel,
+  ResolvedProviderCapabilities,
   SupportedOnboardingProvider,
   WireApi,
 } from './config';
