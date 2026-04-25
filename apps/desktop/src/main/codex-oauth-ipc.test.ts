@@ -188,6 +188,7 @@ describe('codex-oauth:v1:login', () => {
     expect(writeConfigMock).toHaveBeenCalledTimes(2);
     expect(fakeCachedConfig?.providers['chatgpt-codex']).toMatchObject({
       id: 'chatgpt-codex',
+      name: 'ChatGPT 订阅',
       wire: 'openai-codex-responses',
       baseUrl: 'https://chatgpt.com/backend-api',
       defaultModel: 'gpt-5.3-codex',
@@ -303,7 +304,7 @@ describe('codex-oauth:v1:login', () => {
     });
 
     await register();
-    await expect(handlers.get('codex-oauth:v1:login')?.()).rejects.toThrow(/ChatGPT.*ID/);
+    await expect(handlers.get('codex-oauth:v1:login')?.()).rejects.toThrow('Codex 登录成功但无法读取 ChatGPT 账户 ID，请重试登录。');
     expect(closeMock).toHaveBeenCalledTimes(1);
     expect(writeConfigMock).not.toHaveBeenCalled();
 
