@@ -171,6 +171,52 @@ describe('generate()', () => {
     expect(opts.reasoning).toBe('high');
   });
 
+  it('honors provider capabilities that disable reasoning', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-5' },
+      apiKey: 'sk-test',
+      capabilities: { supportsReasoning: false },
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as {
+      capabilities?: { supportsReasoning?: boolean };
+      reasoning?: string;
+    };
+    expect(opts.capabilities).toEqual({ supportsReasoning: false });
+    expect(opts.reasoning).toBeUndefined();
+  });
+
+  it('does not auto-add reasoning when provider capabilities disable it', async () => {
+    const err = Object.assign(
+      new Error('400 Reasoning is mandatory for this endpoint and cannot be disabled.'),
+      { status: 400 },
+    );
+    completeMock.mockRejectedValueOnce(err);
+
+    await expect(
+      generate({
+        prompt: 'design a meditation app',
+        history: [],
+        model: { provider: 'openrouter', modelId: 'novel-lab/some-new-thinker' },
+        apiKey: 'sk-test',
+        capabilities: { supportsReasoning: false },
+      }),
+    ).rejects.toThrow();
+
+    expect(completeMock).toHaveBeenCalledTimes(1);
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBeUndefined();
+  });
+
   it('passes reasoning=high for OpenAI o-series (o1, o3, o4)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,

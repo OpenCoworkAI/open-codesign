@@ -96,6 +96,16 @@ export type StoredDesignSystem = z.infer<typeof StoredDesignSystem>;
 export const ReasoningLevelSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']);
 export type ReasoningLevel = z.infer<typeof ReasoningLevelSchema>;
 
+export const ProviderCapabilitiesSchema = z.object({
+  /**
+   * Whether this endpoint accepts reasoning/thinking request shape changes.
+   * Set false for strict OpenAI-compatible gateways that reject developer-role
+   * messages or reasoning parameters even when the model id looks reasoning-capable.
+   */
+  supportsReasoning: z.boolean().optional(),
+});
+export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
+
 export const ProviderEntrySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -107,6 +117,7 @@ export const ProviderEntrySchema = z.object({
   modelsHint: z.array(z.string()).optional(),
   httpHeaders: z.record(z.string(), z.string()).optional(),
   queryParams: z.record(z.string(), z.string()).optional(),
+  capabilities: ProviderCapabilitiesSchema.optional(),
   /**
    * Imported providers can explicitly require a stored secret. Codex uses this
    * for providers with `requires_openai_auth = true`; providers without it may

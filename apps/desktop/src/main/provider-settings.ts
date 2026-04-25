@@ -6,6 +6,7 @@ import {
   ERROR_CODES,
   type ModelRef,
   PROVIDER_SHORTLIST,
+  type ProviderCapabilities,
   type ProviderEntry,
   type ReasoningLevel,
   type WireApi,
@@ -207,6 +208,7 @@ export interface ActiveModelResolution {
   httpHeaders: Record<string, string> | undefined;
   queryParams: Record<string, string> | undefined;
   reasoningLevel: ReasoningLevel | undefined;
+  capabilities: ProviderCapabilities | undefined;
   allowKeyless: boolean;
   /** True when the renderer-supplied hint provider didn't match the canonical active. */
   overridden: boolean;
@@ -240,6 +242,7 @@ export function resolveActiveModel(
     httpHeaders: entry.httpHeaders,
     queryParams: entry.queryParams,
     reasoningLevel: entry.reasoningLevel,
+    capabilities: entry.capabilities,
     allowKeyless,
     overridden,
   };

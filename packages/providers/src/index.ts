@@ -11,6 +11,7 @@ import {
   CodesignError,
   ERROR_CODES,
   type ModelRef,
+  type ProviderCapabilities,
   type WireApi,
 } from '@open-codesign/shared';
 import {
@@ -26,7 +27,7 @@ import {
  * Only the named effort levels pi-ai actually understands. Sending this to a
  * non-reasoning model is a silent fallback, so callers must whitelist
  * known-capable models before passing a value (see `reasoningForModel`). */
-export type ReasoningLevel = 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningLevel = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface GenerateOptions {
   apiKey: string;
@@ -47,6 +48,7 @@ export interface GenerateOptions {
   /** Extra HTTP headers (merged last). Supports Codex-style static headers
    *  for gateways that require custom auth keys. */
   httpHeaders?: Record<string, string>;
+  capabilities?: ProviderCapabilities;
   userImages?: Array<{ data: string; mimeType: string }>;
   /**
    * Allow OpenAI-compatible keyless gateways. The upstream SDK still requires
@@ -180,6 +182,7 @@ function synthesizeWireModel(
   modelId: string,
   wire: GenerateOptions['wire'],
   baseUrl: string | undefined,
+  capabilities: ProviderCapabilities | undefined,
 ): PiModel {
   const supportsImageInput = wire === 'openai-codex-responses';
   const api =
@@ -195,7 +198,7 @@ function synthesizeWireModel(
     name: modelId,
     api,
     provider,
-    reasoning: true,
+    reasoning: capabilities?.supportsReasoning !== false,
     input: supportsImageInput ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 131072,
@@ -240,7 +243,13 @@ export async function complete(
   let piModel = pi.getModel(model.provider, model.modelId);
   if (!piModel) {
     if (opts.wire !== undefined) {
-      piModel = synthesizeWireModel(model.provider, model.modelId, opts.wire, opts.baseUrl);
+      piModel = synthesizeWireModel(
+        model.provider,
+        model.modelId,
+        opts.wire,
+        opts.baseUrl,
+        opts.capabilities,
+      );
     } else if (model.provider === 'openrouter') {
       piModel = synthesizeOpenRouterModel(model.modelId);
     } else {
@@ -249,6 +258,9 @@ export async function complete(
         ERROR_CODES.PROVIDER_MODEL_UNKNOWN,
       );
     }
+  }
+  if (opts.capabilities?.supportsReasoning === false) {
+    piModel = { ...piModel, reasoning: false };
   }
 
   const piOpts: {

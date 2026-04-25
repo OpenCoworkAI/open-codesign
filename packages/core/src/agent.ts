@@ -42,6 +42,7 @@ import {
   CodesignError,
   ERROR_CODES,
   type ModelRef,
+  type ProviderCapabilities,
   type StoredDesignSystem,
   type WireApi,
   canonicalBaseUrl,
@@ -251,6 +252,7 @@ function buildPiModel(
   baseUrl: string | undefined,
   httpHeaders?: Record<string, string> | undefined,
   apiKey?: string,
+  capabilities?: ProviderCapabilities | undefined,
 ): PiModel {
   // Fall through to the canonical public endpoint for the 3 first-party
   // BYOK providers when the caller omitted baseUrl. This is a fact about
@@ -279,7 +281,7 @@ function buildPiModel(
     api: apiForWire(wire),
     provider: model.provider,
     baseUrl: canonicalBase,
-    reasoning: true,
+    reasoning: capabilities?.supportsReasoning !== false,
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
@@ -678,6 +680,7 @@ export async function generateViaAgent(
     input.baseUrl,
     input.httpHeaders,
     input.apiKey,
+    input.capabilities,
   );
   log.info('[generate] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
 
@@ -752,7 +755,9 @@ export async function generateViaAgent(
   // neither yields a value the agent runs with 'off', matching
   // pi-agent-core's default.
   const thinkingLevel =
-    input.reasoningLevel ?? reasoningForModel(input.model, input.baseUrl) ?? 'off';
+    input.capabilities?.supportsReasoning === false
+      ? 'off'
+      : (input.reasoningLevel ?? reasoningForModel(input.model, input.baseUrl) ?? 'off');
 
   // Build the Agent. convertToLlm narrows AgentMessage (may include custom
   // types) to the LLM-visible Message subset.

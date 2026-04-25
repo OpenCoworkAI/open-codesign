@@ -198,6 +198,49 @@ describe('complete', () => {
     expect(result.content).toBe('ok');
   });
 
+  it('disables synthesized model reasoning when provider capabilities opt out', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (model, _context, opts) => {
+      expect(model).toMatchObject({
+        id: 'anthropic::claude-4-6-sonnet',
+        api: 'openai-completions',
+        provider: 'bedrock-proxy',
+        reasoning: false,
+      });
+      expect(opts.reasoning).toBeUndefined();
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'bedrock-proxy',
+        model: 'anthropic::claude-4-6-sonnet',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    const result = await complete(
+      { provider: 'bedrock-proxy', modelId: 'anthropic::claude-4-6-sonnet' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://bedrock-proxy.example.test/v1',
+        capabilities: { supportsReasoning: false },
+      },
+    );
+
+    expect(result.content).toBe('ok');
+  });
+
   it('appends image inputs to the final user turn for openai-codex-responses', async () => {
     getModelMock.mockReturnValue({
       id: 'gpt-5.4',

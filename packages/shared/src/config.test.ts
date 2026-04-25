@@ -38,6 +38,29 @@ describe('config v3 schema', () => {
     };
     expect(() => ConfigV3Schema.parse(bad)).toThrow();
   });
+
+  it('parses provider capabilities for strict OpenAI-compatible gateways', () => {
+    const raw = {
+      version: 3,
+      activeProvider: 'bedrock-proxy',
+      activeModel: 'anthropic::claude-4-6-sonnet',
+      secrets: {},
+      providers: {
+        'bedrock-proxy': {
+          id: 'bedrock-proxy',
+          name: 'Bedrock Proxy',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://bedrock-proxy.example.test/v1',
+          defaultModel: 'anthropic::claude-4-6-sonnet',
+          capabilities: { supportsReasoning: false },
+        },
+      },
+    };
+
+    const parsed = ConfigV3Schema.parse(raw);
+    expect(parsed.providers['bedrock-proxy']?.capabilities?.supportsReasoning).toBe(false);
+  });
 });
 
 describe('migrateLegacyToV3', () => {

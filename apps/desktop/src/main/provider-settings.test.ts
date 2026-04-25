@@ -349,6 +349,34 @@ describe('resolveActiveModel', () => {
     expect(result.baseUrl).toBe('https://api.duckcoding.ai/v1');
   });
 
+  it('threads through provider capabilities for the canonical active provider', () => {
+    const cfg = makeCfg({
+      provider: 'bedrock-proxy',
+      modelPrimary: 'anthropic::claude-4-6-sonnet',
+      secrets: {
+        'bedrock-proxy': { ciphertext: 'enc-bedrock' },
+      },
+      providers: {
+        'bedrock-proxy': {
+          id: 'bedrock-proxy',
+          name: 'Bedrock Proxy',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://bedrock-proxy.example.test/v1',
+          defaultModel: 'anthropic::claude-4-6-sonnet',
+          capabilities: { supportsReasoning: false },
+        },
+      },
+    });
+
+    const result = resolveActiveModel(cfg, {
+      provider: 'bedrock-proxy',
+      modelId: 'anthropic::claude-4-6-sonnet',
+    });
+
+    expect(result.capabilities).toEqual({ supportsReasoning: false });
+  });
+
   it('ignores stale hint baseUrl entry and returns active provider baseUrl on override', () => {
     const cfg = makeCfg({
       provider: 'openrouter',
