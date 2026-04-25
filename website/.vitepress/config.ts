@@ -24,7 +24,19 @@ export default defineConfig({
   },
 
   head: [
-    ['link', { rel: 'icon', href: `${SITE_BASE}favicon.ico` }],
+    ['link', { rel: 'icon', type: 'image/x-icon', href: `${SITE_BASE}favicon.ico` }],
+    [
+      'link',
+      { rel: 'icon', type: 'image/png', sizes: '32x32', href: `${SITE_BASE}favicon-32x32.png` },
+    ],
+    [
+      'link',
+      { rel: 'icon', type: 'image/png', sizes: '16x16', href: `${SITE_BASE}favicon-16x16.png` },
+    ],
+    [
+      'link',
+      { rel: 'apple-touch-icon', sizes: '180x180', href: `${SITE_BASE}apple-touch-icon.png` },
+    ],
     ['meta', { name: 'theme-color', content: '#c96442' }],
     ['meta', { name: 'google-site-verification', content: 'c3cbbeaec5437546' }],
     // Open Graph
@@ -86,6 +98,21 @@ export default defineConfig({
         softwareVersion: SOFTWARE_VERSION,
         releaseNotes: `${SITE_URL}#whats-working-today`,
         downloadUrl: 'https://github.com/OpenCoworkAI/open-codesign/releases',
+        screenshot: [
+          `${SITE_ORIGIN}/open-codesign/screenshots/product-hero.png`,
+          `${SITE_ORIGIN}/open-codesign/screenshots/comment-mode.png`,
+        ],
+        applicationSubCategory: 'AI Design Tool',
+        featureList: [
+          'Prompt-to-HTML prototype generation',
+          'Bring your own API key (Anthropic, OpenAI, Gemini, DeepSeek, Ollama, OpenRouter)',
+          'Local-first storage (SQLite + TOML)',
+          'Export to PDF, PPTX, ZIP, Markdown',
+          'Multi-model switching without re-login',
+          'One-click import of Claude Code / Codex API keys',
+          'AI image generation for design assets',
+          'Design history with snapshots and rollback',
+        ],
         offers: {
           '@type': 'Offer',
           price: '0',
@@ -205,6 +232,7 @@ export default defineConfig({
       },
       { text: 'Architecture', link: '/architecture' },
       { text: 'Roadmap', link: '/roadmap' },
+      { text: 'FAQ', link: '/faq' },
       {
         text: 'Changelog',
         link: 'https://github.com/OpenCoworkAI/open-codesign/blob/main/CHANGELOG.md',
@@ -267,6 +295,7 @@ export default defineConfig({
           { text: '首页', link: '/zh/' },
           { text: '快速开始', link: '/zh/quickstart' },
           { text: '对比 Claude Design', link: '/zh/claude-design-alternative' },
+          { text: '常见问题', link: '/zh/faq' },
           { text: 'GitHub', link: 'https://github.com/OpenCoworkAI/open-codesign' },
         ],
         sidebar: [
@@ -276,6 +305,7 @@ export default defineConfig({
               { text: '简介', link: '/zh/' },
               { text: '快速开始', link: '/zh/quickstart' },
               { text: '对比 Claude Design', link: '/zh/claude-design-alternative' },
+              { text: '常见问题', link: '/zh/faq' },
             ],
           },
         ],

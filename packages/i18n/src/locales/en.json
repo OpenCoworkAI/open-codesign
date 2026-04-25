@@ -49,6 +49,31 @@
       "sectionSubtitle": "{{count}} files",
       "empty": "No files yet. Send a prompt to have the agent generate a design — files will show up here."
     },
+    "newDesignDialog": {
+      "title": "New design",
+      "subtitle": "Optionally choose a local folder to sync your design files.",
+      "noWorkspace": "No folder selected",
+      "skip": "Skip",
+      "confirm": "Create"
+    },
+    "workspace": {
+      "sectionTitle": "Workspace",
+      "label": "Folder",
+      "default": "Default internal storage",
+      "choose": "Choose folder",
+      "change": "Change",
+      "open": "Open folder",
+      "clear": "Clear workspace",
+      "unavailable": "Folder not found on disk",
+      "busyGenerating": "Cannot change workspace while generating",
+      "updated": "Workspace updated",
+      "updateFailed": "Failed to update workspace",
+      "rebindTitle": "Change workspace folder?",
+      "rebindDescription": "This design already has a workspace folder. Choose how to proceed:",
+      "rebindCancel": "Cancel",
+      "rebindSwitchOnly": "Switch without copying",
+      "rebindSwitchAndCopy": "Switch and copy files"
+    },
     "rail": {
       "title": "Files",
       "collapse": "Collapse files",
@@ -151,10 +176,38 @@
     "title": "Settings",
     "tabs": {
       "models": "Models",
+      "images": "Image API",
       "appearance": "Appearance",
       "storage": "Storage",
       "diagnostics": "Diagnostics",
       "advanced": "Advanced"
+    },
+    "imageGen": {
+      "tabTitle": "Image generation",
+      "tabHint": "Let the design agent call an image model (e.g. gpt-image-2) for heroes, posters, and background bitmaps. Credentials stay local.",
+      "title": "Image generation assist",
+      "hint": "When enabled, the agent can invoke generate_image_asset during a run.",
+      "enabled": "Enable image generation assist",
+      "provider": "Provider",
+      "credentials": "Credentials",
+      "inherit": "Inherit from model provider",
+      "customKey": "Use a separate key",
+      "keyPlaceholder": "Leave empty to keep {{mask}}",
+      "newKeyPlaceholder": "Paste API key",
+      "model": "Image model",
+      "baseUrl": "Base URL",
+      "quality": "Quality",
+      "size": "Size",
+      "status": {
+        "ready": "Ready",
+        "needsKey": "Needs API key",
+        "disabled": "Disabled"
+      },
+      "toast": {
+        "loadFailed": "Failed to load image generation settings",
+        "saved": "Image generation settings saved",
+        "saveFailed": "Failed to save image generation settings"
+      }
     },
     "shell": {
       "back": "Workspace",
@@ -181,12 +234,14 @@
         "loginFailedTitle": "ChatGPT sign-in failed",
         "logoutFailedTitle": "ChatGPT sign-out failed",
         "statusFailedTitle": "ChatGPT status check failed",
-        "unknownError": "Unknown error"
+        "unknownError": "Unknown error",
+        "unsupportedCountryRegion": "ChatGPT subscription login is not available for this account, country, region, or territory."
       },
       "addProvider": "Add provider",
       "addCustom": "Add custom",
       "empty": "No providers configured yet. Add one to start generating.",
       "active": "Active",
+      "activeNotInList": "(active, not in provider list)",
       "decryptionFailed": "Decryption failed",
       "setActive": "Set active",
       "reEnterKey": "Re-enter key",
@@ -215,8 +270,13 @@
         "apiKey": "API Key",
         "apiKeyEditPlaceholder": "Leave empty to keep {{mask}}",
         "defaultModel": "Default model",
+        "compatibilityHintTitle": "Compatibility note",
+        "compatibilityHintBody": "Some coding plans, relay services, or OpenAI-compatible gateways only allow specific clients such as Claude Code, openclaw, or Hermes. Even if the API looks compatible, Open CoDesign may still be blocked by an app allowlist.",
         "switchToManual": "Enter manually",
         "switchToDropdown": "Pick from list",
+        "discoveringModels": "Discovering models...",
+        "discoveredModels": "Found {{count}} models",
+        "discoveryFailed": "Could not auto-discover models",
         "test": "Test connection",
         "testOk": "OK — {{count}} models available",
         "save": "Save & continue",
@@ -307,10 +367,13 @@
         "presetName": "CLIProxyAPI",
         "presetDescription": "Local proxy that wraps Claude/Codex/Gemini OAuth subscriptions",
         "apiKeyOptional": "API key only required if you configured `api-keys` in CPA config.yaml",
-        "thinkingHint": "Tip: append `(high)` / `(xhigh)` / `(8192)` to model name to control thinking budget",
-        "discoveringModels": "Discovering models...",
-        "discoveredModels": "Found {{count}} models",
-        "discoveryFailed": "Could not connect to CPA"
+        "thinkingHint": "Tip: append `(high)` / `(xhigh)` / `(8192)` to model name to control thinking budget"
+      },
+      "cpaDetection": {
+        "title": "CLIProxyAPI detected on your machine",
+        "body": "Import it as a provider to use your OAuth-authenticated Claude / Codex / Gemini accounts.",
+        "importAction": "Import",
+        "dismissAction": "Dismiss"
       },
       "reasoning": {
         "label": "Reasoning depth",
@@ -333,7 +396,8 @@
       "languageHint": "Language changes take effect immediately.",
       "languageLoadFailed": "Failed to load language",
       "langEn": "English",
-      "langZhCN": "中文 (简体)"
+      "langZhCN": "中文 (简体)",
+      "langPtBR": "Português (BR)"
     },
     "language": {
       "label": "Language",
@@ -567,6 +631,11 @@
     "designSystemCleared": "Design system cleared",
     "clearDesignSystemFailed": "Unable to clear design system",
     "generationFailed": "Generation failed",
+    "generationFailedApplyFix": "Apply fix",
+    "generationFailedBaseUrlUpdated": "Base URL updated. Try the request again.",
+    "generationFailedFixUnavailable": "Auto-fix unavailable",
+    "generationFailedFixUnavailableDescription": "This app version can't apply the fix automatically. Please edit the Base URL manually in Settings.",
+    "generationFailedFixApplyFailed": "Could not apply fix",
     "cancellationFailed": "Cancellation failed",
     "inlineCommentFailed": "Inline comment failed",
     "commentNeedsSnapshot": "Generate a design first before leaving a comment",
@@ -787,6 +856,10 @@
       "timedOut": "Request timed out — check firewall or VPN.",
       "corsError": "CORS error (should not happen in main process). This is a bug.",
       "sslError": "SSL / certificate error (self-signed cert on relay?).",
+      "gatewayIncompatible": "The gateway accepted the connection but does not implement this provider's API. Try switching wire (e.g. openai-chat).",
+      "openaiResponsesMisconfigured": "The endpoint rejected the request shape. The wire may be wrong — try switching to openai-chat.",
+      "relayStreamingBug": "The gateway may mishandle OpenAI Responses API SSE events (older sub2api / claude2api / anyrouter builds cut the stream short).",
+      "serverError": "Upstream server error. May be transient — try again.",
       "unknown": "Unknown error — check the full log for details."
     },
     "fix": {
@@ -798,13 +871,17 @@
       "checkNetwork": "Check network / VPN",
       "checkVpn": "Check VPN / firewall",
       "reportBug": "Report this bug",
-      "disableTls": "Disable TLS verify"
+      "disableTls": "Disable TLS verify",
+      "switchWire": "Switch wire in Settings",
+      "relayStreamingBug": "Upgrade the relay, switch wire to openai-chat, or use api.openai.com directly"
     },
     "applyFix": "Apply this fix",
     "setBaseUrlFirst": "Set a Base URL first",
     "testAgain": "Test again",
     "showLog": "Show full log",
     "showLogFailed": "Failed to open logs folder",
+    "gatewayAllowlistHintTitle": "This endpoint may restrict which apps can connect",
+    "gatewayAllowlistHintBody": "Some coding plans and protocol-conversion gateways keep an app allowlist. Even when they advertise an OpenAI-compatible API, they may still reject Open CoDesign unless this app is explicitly allowed.",
     "dismiss": "Dismiss",
     "report": {
       "title": "Report a bug",
@@ -1030,6 +1107,7 @@
     "PROVIDER_ERROR": "The provider returned an error. Check your API key and try again.",
     "PROVIDER_HTTP_4XX": "The provider rejected the request. Verify your API key and billing.",
     "PROVIDER_UPSTREAM_ERROR": "The provider returned an unexpected error. Details are in the log.",
+    "PROVIDER_GATEWAY_INCOMPATIBLE": "Your gateway returned 'not implemented' for the Messages API. Try switching wire to openai-chat in Settings, or use a gateway that supports the Anthropic Messages API.",
     "PROVIDER_ABORTED": "Generation was cancelled.",
     "PROVIDER_RETRY_EXHAUSTED": "The provider failed after several retries. Check your connection and try again.",
     "CLAUDE_CODE_OAUTH_ONLY": "Your Claude Code login uses an Anthropic subscription (Pro/Max). Third-party apps cannot reuse the subscription quota — generate an API key at console.anthropic.com and use it here.",

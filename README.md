@@ -6,7 +6,7 @@
 >
 > Turn prompts into polished artifacts — locally, openly, and with whichever model you already pay for.
 
-[Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [Docs](https://opencoworkai.github.io/open-codesign/quickstart) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
+[Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [What's new](https://github.com/OpenCoworkAI/open-codesign/releases) · [Changelog](./CHANGELOG.md) · [Discussions](https://github.com/OpenCoworkAI/open-codesign/discussions) · [Docs](https://opencoworkai.github.io/open-codesign/quickstart) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
 
 **Open-source alternative to:** [Claude Design](https://opencoworkai.github.io/open-codesign/claude-design-alternative) · [v0 by Vercel](https://opencoworkai.github.io/open-codesign/v0-alternative) · [Lovable](https://opencoworkai.github.io/open-codesign/lovable-alternative) · [Bolt.new](https://opencoworkai.github.io/open-codesign/bolt-alternative) · [Figma AI](https://opencoworkai.github.io/open-codesign/figma-ai-alternative)
 
@@ -23,8 +23,25 @@
 </p>
 
 <p align="center">
-  <sub><code>claude-code</code> · <code>claude-design-alternative</code> · <code>ai-design</code> · <code>design-to-code</code> · <code>figma-alternative</code> · <code>byok</code> · <code>local-first</code> · <code>multi-model</code> · <code>electron</code></sub>
+  <a href="https://github.com/OpenCoworkAI/open-codesign/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/OpenCoworkAI/open-codesign?label=last%20commit&color=40b4a1" /></a>
+  <a href="https://github.com/OpenCoworkAI/open-codesign/pulse"><img alt="Commit activity" src="https://img.shields.io/github/commit-activity/m/OpenCoworkAI/open-codesign?label=commits%2Fmonth" /></a>
+  <a href="https://github.com/OpenCoworkAI/open-codesign/graphs/contributors"><img alt="Contributors" src="https://img.shields.io/github/contributors/OpenCoworkAI/open-codesign" /></a>
+  <a href="https://github.com/OpenCoworkAI/open-codesign/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/OpenCoworkAI/open-codesign/total?label=downloads&color=6c5ce7" /></a>
 </p>
+
+<p align="center">
+  <sub><code>claude-code</code> · <code>claude-design-alternative</code> · <code>v0-alternative</code> · <code>bolt-alternative</code> · <code>lovable-alternative</code> · <code>figma-alternative</code> · <code>ai-design</code> · <code>design-to-code</code> · <code>prompt-to-design</code> · <code>ai-prototyping</code> · <code>desktop-design-tool</code> · <code>byok</code> · <code>local-first</code> · <code>multi-model</code> · <code>electron</code></sub>
+</p>
+
+---
+
+## What's new
+
+- **v0.1.4** *(coming)* — 🎨 AI image generation · ChatGPT Plus/Codex subscription support · CLIProxyAPI one-click import · API config hardening
+- **v0.1.3** *(2026-04-21)* — Gemini `models/` prefix fix · OpenAI-compatible relay "instructions required" fix · third-party relay SSE-truncation hint
+- **v0.1.2** *(2026-04-21)* — Release pipeline · Homebrew / winget / Scoop packaging manifests
+
+[Full release history →](https://github.com/OpenCoworkAI/open-codesign/releases) · [Changelog →](./CHANGELOG.md)
 
 ---
 
@@ -116,7 +133,17 @@ Open source, desktop-native, and built for people who do not want their design w
 
 ### 1. Install
 
-**Direct download** (v0.1.x) from [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases):
+**One-liner** (recommended):
+
+```bash
+# Windows
+winget install OpenCoworkAI.OpenCoDesign
+
+# macOS
+brew install --cask opencoworkai/tap/open-codesign
+```
+
+**Or direct download** (v0.1.x) from [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases):
 
 | Platform | File |
 |---|---|
@@ -131,13 +158,11 @@ Open source, desktop-native, and built for people who do not want their design w
 Each release ships with `SHA256SUMS.txt` and a CycloneDX SBOM (`*-sbom.cdx.json`) so you can verify what you downloaded.
 
 <details>
-<summary><b>Package managers</b> — status for v0.1.x</summary>
+<summary><b>More package managers</b></summary>
 
 | Manager | Command | Status |
 |---|---|---|
-| Homebrew Cask (macOS) | `brew install --cask opencoworkai/tap/open-codesign` | 🟢 Live |
 | Scoop (Windows) | `scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket && scoop install open-codesign` | 🟢 Live |
-| winget (Windows) | `winget install OpenCoworkAI.OpenCoDesign` | 🟠 [PR #363055](https://github.com/microsoft/winget-pkgs/pull/363055) under Microsoft review |
 | Flathub (Linux) | `flatpak install flathub ai.opencowork.codesign` | ⏸ Deferred to v0.2 (needs signed build + AppStream metadata) |
 | Snap (Linux) | `snap install --dangerous open-codesign-*.snap` | 🟡 Attached to releases best-effort; Snap Store publish not yet wired |
 
@@ -284,8 +309,9 @@ If you like Open CoDesign, you may also want to check out our earlier project, [
 
 Open CoDesign first launched on the [LINUX DO](https://linux.do/) community — thanks to everyone there for the early feedback and discussion.
 
+- **[GitHub Discussions](https://github.com/OpenCoworkAI/open-codesign/discussions)** — share your designs in [Show & Tell](https://github.com/OpenCoworkAI/open-codesign/discussions/categories/show-and-tell), ask questions in [Q&A](https://github.com/OpenCoworkAI/open-codesign/discussions/categories/q-a), and propose features in [Ideas](https://github.com/OpenCoworkAI/open-codesign/discussions/categories/ideas).
 - **[LINUX DO](https://linux.do/)** — Chinese-speaking discussion, use tips, and feedback (primary community).
-- **GitHub Issues** — [bug reports, feature requests, and async discussion](https://github.com/OpenCoworkAI/open-codesign/issues).
+- **GitHub Issues** — [bug reports and reproducible problems](https://github.com/OpenCoworkAI/open-codesign/issues).
 
 ### WeChat group
 

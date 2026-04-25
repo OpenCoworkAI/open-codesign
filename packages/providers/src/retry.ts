@@ -13,8 +13,15 @@
  *   - any AbortSignal abort short-circuits immediately, no retry
  */
 
-import { type ChatMessage, CodesignError, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
+import {
+  type ChatMessage,
+  CodesignError,
+  ERROR_CODES,
+  type ModelRef,
+  type WireApi,
+} from '@open-codesign/shared';
 import { normalizeProviderError } from './errors';
+import { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
 import { type GenerateOptions, type GenerateResult, complete } from './index';
 
 export interface RetryReason {
@@ -31,12 +38,13 @@ export interface CompleteWithRetryOptions {
   onRetry?: (info: RetryReason) => void;
   logger?: { warn: (event: string, data?: Record<string, unknown>) => void };
   provider?: string;
+  wire?: WireApi;
 }
 
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BASE_DELAY_MS = 500;
 
-interface RetryDecision {
+export interface RetryDecision {
   retry: boolean;
   reason: string;
   retryAfterMs?: number;
@@ -50,7 +58,7 @@ const RETRYABLE_NET_CODES = new Set([
   'ECONNREFUSED',
 ]);
 
-function classifyByStatus(status: number, err: unknown): RetryDecision | undefined {
+function classifyByStatus(status: number, err: unknown, wire?: WireApi): RetryDecision | undefined {
   if (status === 429) {
     const retryAfterMs = extractRetryAfterMs(err);
     const decision: RetryDecision = { retry: true, reason: 'rate-limited (429)' };
@@ -58,6 +66,16 @@ function classifyByStatus(status: number, err: unknown): RetryDecision | undefin
     return decision;
   }
   if (status >= 500 && status <= 599) {
+    // Third-party Anthropic relays (sub2api, claude2api, anyrouter…) often
+    // return 5xx + "not implemented" for POST /v1/messages even though their
+    // /v1/models endpoint works. Retrying wastes 3 rounds of exponential
+    // backoff on an endpoint that will never respond; short-circuit so the
+    // user sees the actionable error immediately. Only applies to
+    // anthropic-wire endpoints — OpenAI/Google wires can emit the same text
+    // for unrelated reasons and should retry normally.
+    if (wire === 'anthropic' && looksLikeGatewayMissingMessagesApi(err)) {
+      return { retry: false, reason: 'gateway does not implement Messages API' };
+    }
     return { retry: true, reason: `server error (${status})` };
   }
   if (status >= 400 && status <= 499) {
@@ -76,13 +94,13 @@ function classifyByNetwork(err: unknown): RetryDecision | undefined {
   return undefined;
 }
 
-export function classifyError(err: unknown): RetryDecision {
+export function classifyError(err: unknown, wire?: WireApi): RetryDecision {
   if (err instanceof Error && (err.name === 'AbortError' || err.message === 'aborted')) {
     return { retry: false, reason: 'aborted' };
   }
   const status = extractStatus(err);
   if (status !== undefined) {
-    const byStatus = classifyByStatus(status, err);
+    const byStatus = classifyByStatus(status, err, wire);
     if (byStatus) return byStatus;
   }
   const byNet = classifyByNetwork(err);
@@ -205,6 +223,59 @@ function shouldStop(decision: RetryDecision, attempt: number, maxRetries: number
   return !decision.retry || attempt >= maxRetries;
 }
 
+export interface BackoffOptions {
+  /** Total attempts (initial + retries). Default 3. */
+  maxRetries?: number;
+  /** Exponential-backoff base, ms. Default 500. */
+  baseDelayMs?: number;
+  /** Decide whether a given error is transient. Defaults to {@link classifyError}. */
+  classify?: (err: unknown) => RetryDecision;
+  /** Invoked immediately before each retry sleep. */
+  onRetry?: (info: RetryReason) => void;
+  /** Abort short-circuits both the in-flight call and the inter-retry sleep. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Generic retry wrapper. `completeWithRetry` is a thin wrapper around this that
+ * adds provider-error normalization + structured logging. Call this directly
+ * when you need first-turn retry semantics around an arbitrary transient-prone
+ * async op (e.g. `agent.prompt()` in the pi-agent-core path).
+ */
+export async function withBackoff<T>(fn: () => Promise<T>, opts: BackoffOptions = {}): Promise<T> {
+  const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const baseDelayMs = opts.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+  const classify = opts.classify ?? classifyError;
+  const signal = opts.signal;
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (signal?.aborted) {
+      throw new CodesignError('Generation aborted by user', ERROR_CODES.PROVIDER_ABORTED);
+    }
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      const decision = classify(err);
+      if (shouldStop(decision, attempt, maxRetries)) {
+        if (decision.reason === 'aborted') {
+          throw new CodesignError('Generation aborted by user', ERROR_CODES.PROVIDER_ABORTED, {
+            cause: err,
+          });
+        }
+        throw err;
+      }
+      const info = buildRetryInfo(attempt, maxRetries, decision, baseDelayMs);
+      opts.onRetry?.(info);
+      await sleepWithAbort(info.delayMs, signal);
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new CodesignError('withBackoff exhausted', ERROR_CODES.PROVIDER_RETRY_EXHAUSTED);
+}
+
 export async function completeWithRetry(
   model: ModelRef,
   messages: ChatMessage[],
@@ -216,38 +287,34 @@ export async function completeWithRetry(
   const maxRetries = retryOpts.maxRetries ?? DEFAULT_MAX_RETRIES;
   const baseDelayMs = retryOpts.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
   const onRetry = retryOpts.onRetry;
+  const logger = retryOpts.logger;
+  const provider = retryOpts.provider ?? 'unknown';
 
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    if (opts.signal?.aborted) {
-      throw new CodesignError('Generation aborted by user', ERROR_CODES.PROVIDER_ABORTED);
-    }
-    try {
-      return await _impl(model, messages, opts);
-    } catch (err) {
-      lastError = err;
-      const decision = classifyError(err);
-      const retryCount = attempt - 1;
-      const normalized = normalizeProviderError(err, retryOpts.provider ?? 'unknown', retryCount);
-      if (shouldStop(decision, attempt, maxRetries)) {
-        retryOpts.logger?.warn(
-          'provider.error.final',
-          normalized as unknown as Record<string, unknown>,
-        );
-        if (decision.reason === 'aborted') {
-          throw new CodesignError('Generation aborted by user', ERROR_CODES.PROVIDER_ABORTED, {
-            cause: err,
-          });
-        }
-        throw err;
+  // Thin wrapper around withBackoff: folds provider-error normalization into
+  // the classify/onRetry hooks so each attempt emits structured provider.error
+  // logs and exhaustion surfaces provider.error.final.
+  let attemptForLog = 0;
+  const backoffOpts: BackoffOptions = {
+    maxRetries,
+    baseDelayMs,
+    classify: (err) => {
+      const decision = classifyError(err, retryOpts.wire);
+      const retryCount = Math.max(0, attemptForLog - 1);
+      const normalized = normalizeProviderError(err, provider, retryCount);
+      if (shouldStop(decision, attemptForLog, maxRetries)) {
+        logger?.warn('provider.error.final', normalized as unknown as Record<string, unknown>);
+      } else {
+        logger?.warn('provider.error', normalized as unknown as Record<string, unknown>);
       }
-      const info = buildRetryInfo(attempt, maxRetries, decision, baseDelayMs);
+      return decision;
+    },
+    onRetry: (info) => {
       onRetry?.(info);
-      retryOpts.logger?.warn('provider.error', normalized as unknown as Record<string, unknown>);
-      await sleepWithAbort(info.delayMs, opts.signal);
-    }
-  }
-  throw lastError instanceof Error
-    ? lastError
-    : new CodesignError('completeWithRetry exhausted', ERROR_CODES.PROVIDER_RETRY_EXHAUSTED);
+    },
+  };
+  if (opts.signal) backoffOpts.signal = opts.signal;
+  return withBackoff(() => {
+    attemptForLog += 1;
+    return _impl(model, messages, opts);
+  }, backoffOpts);
 }

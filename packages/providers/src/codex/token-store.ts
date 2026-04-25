@@ -1,5 +1,7 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type TokenSet, decodeJwtClaims, refreshTokens as defaultRefreshTokens } from './oauth';
 
 export interface StoredCodexAuth {
@@ -20,6 +22,7 @@ export interface CodexTokenStoreOptions {
 }
 
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+const NOT_LOGGED_IN_MSG = 'ChatGPT 订阅未登录或已登出，请重新登录。';
 
 function extractEmail(jwt: string): string | null {
   const claims = decodeJwtClaims(jwt);
@@ -49,6 +52,7 @@ export class CodexTokenStore {
   private readonly now: () => number;
   private cache: StoredCodexAuth | null = null;
   private refreshPromise: Promise<string> | null = null;
+  private writeChain: Promise<void> = Promise.resolve();
 
   constructor(opts: CodexTokenStoreOptions) {
     this.filePath = opts.filePath;
@@ -70,20 +74,48 @@ export class CodexTokenStore {
     let parsed: unknown;
     try {
       parsed = JSON.parse(body);
-    } catch {
-      throw new Error(`Invalid Codex token store at ${this.filePath}`);
+    } catch (cause) {
+      throw new CodesignError(
+        `Invalid Codex token store at ${this.filePath}`,
+        ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+        { cause },
+      );
     }
     if (!isStoredCodexAuth(parsed)) {
-      throw new Error(`Invalid Codex token store at ${this.filePath}`);
+      throw new CodesignError(
+        `Invalid Codex token store at ${this.filePath}`,
+        ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+      );
     }
     this.cache = parsed;
     return parsed;
   }
 
   async write(auth: StoredCodexAuth): Promise<void> {
+    const op = this.writeChain.then(() => this.writeNow(auth));
+    this.writeChain = op.catch(() => {});
+    await op;
+  }
+
+  private async writeNow(auth: StoredCodexAuth): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
     const body = JSON.stringify(auth, null, 2);
-    await writeFile(this.filePath, body, { encoding: 'utf8', mode: 0o600 });
+    // Queue writes per store instance, then publish via pid + UUID scoped
+    // temp files. Windows can still reject concurrent rename() calls that
+    // target the same destination with EPERM even when the temp names differ,
+    // so we serialize the final swap while keeping each individual write atomic.
+    const tmpPath = `${this.filePath}.tmp.${process.pid}.${randomUUID()}`;
+    try {
+      await writeFile(tmpPath, body, { encoding: 'utf8', mode: 0o600 });
+      await rename(tmpPath, this.filePath);
+    } catch (err) {
+      try {
+        await unlink(tmpPath);
+      } catch {
+        // ignore — tmp may not exist if writeFile itself failed
+      }
+      throw err;
+    }
     this.cache = auth;
   }
 
@@ -101,7 +133,7 @@ export class CodexTokenStore {
       await this.read();
     }
     if (this.cache === null) {
-      throw new Error('ChatGPT 订阅未登录或已登出，请重新登录。');
+      throw new CodesignError(NOT_LOGGED_IN_MSG, ERROR_CODES.CODEX_TOKEN_NOT_LOGGED_IN);
     }
     if (this.now() >= this.cache.expiresAt - EXPIRY_BUFFER_MS) {
       return this.runRefresh();
@@ -114,7 +146,7 @@ export class CodexTokenStore {
       await this.read();
     }
     if (this.cache === null) {
-      throw new Error('ChatGPT 订阅未登录或已登出，请重新登录。');
+      throw new CodesignError(NOT_LOGGED_IN_MSG, ERROR_CODES.CODEX_TOKEN_NOT_LOGGED_IN);
     }
     return this.runRefresh();
   }
@@ -133,7 +165,7 @@ export class CodexTokenStore {
       await this.read();
     }
     if (this.cache === null) {
-      throw new Error('ChatGPT 订阅未登录或已登出，请重新登录。');
+      throw new CodesignError(NOT_LOGGED_IN_MSG, ERROR_CODES.CODEX_TOKEN_NOT_LOGGED_IN);
     }
     const current = this.cache;
     let next: TokenSet;
@@ -148,7 +180,11 @@ export class CodexTokenStore {
         /\b401\b/.test(msg);
       if (isBadCredential) {
         await this.clear();
-        throw new Error('ChatGPT 订阅已失效，请重新登录', { cause: err });
+        throw new CodesignError(
+          'ChatGPT 订阅已失效，请重新登录',
+          ERROR_CODES.CODEX_TOKEN_NOT_LOGGED_IN,
+          { cause: err },
+        );
       }
       throw err;
     }

@@ -31,6 +31,7 @@ import type {
   SnapshotCreateInput,
 } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
+import { getLogger } from './logger';
 
 // better-sqlite3 is a native module — require() instead of import.
 const require = createRequire(import.meta.url);
@@ -207,6 +208,9 @@ function applyAdditiveMigrations(db: Database): void {
     db.exec('ALTER TABLE designs ADD COLUMN deleted_at TEXT');
     db.exec('CREATE INDEX IF NOT EXISTS idx_designs_deleted_at ON designs(deleted_at)');
   }
+  if (!designCols.includes('workspace_path')) {
+    db.exec('ALTER TABLE designs ADD COLUMN workspace_path TEXT');
+  }
 
   // Comments v2 — add scope ('element'|'global') and parent_outer_html for
   // richer prompt enrichment. Both are additive; old rows backfill to
@@ -304,8 +308,9 @@ export function initSnapshotsDb(dbPath: string): Database {
     // Don't cache a half-open DB — let the next caller retry from scratch.
     try {
       db.close();
-    } catch {
-      /* swallow secondary close failure */
+    } catch (closeErr) {
+      const logger = getLogger('snapshots-db');
+      logger.warn('db.init.close_failed', { cause: closeErr });
     }
     throw cause;
   }
@@ -350,6 +355,7 @@ interface DesignRow {
   updated_at: string;
   thumbnail_text: string | null;
   deleted_at: string | null;
+  workspace_path: string | null;
 }
 
 interface SnapshotRow {
@@ -386,6 +392,7 @@ function rowToDesign(row: DesignRow): Design {
     updatedAt: row.updated_at,
     thumbnailText: row.thumbnail_text ?? null,
     deletedAt: row.deleted_at ?? null,
+    workspacePath: row.workspace_path ?? null,
   };
 }
 
@@ -412,7 +419,7 @@ export function createDesign(db: Database, name = 'Untitled design'): Design {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   db.prepare(
-    'INSERT INTO designs (id, schema_version, name, created_at, updated_at) VALUES (?, 1, ?, ?, ?)',
+    'INSERT INTO designs (id, schema_version, name, created_at, updated_at, workspace_path) VALUES (?, 1, ?, ?, ?, NULL)',
   ).run(id, name, now, now);
   return rowToDesign(db.prepare('SELECT * FROM designs WHERE id = ?').get(id) as DesignRow);
 }
@@ -467,6 +474,28 @@ export function softDeleteDesign(db: Database, id: string): Design | null {
   return getDesign(db, id);
 }
 
+export function updateDesignWorkspace(
+  db: Database,
+  id: string,
+  workspacePath: string,
+): Design | null {
+  const now = new Date().toISOString();
+  const result = db
+    .prepare('UPDATE designs SET workspace_path = ?, updated_at = ? WHERE id = ?')
+    .run(workspacePath, now, id);
+  if (result.changes === 0) return null;
+  return getDesign(db, id);
+}
+
+export function clearDesignWorkspace(db: Database, id: string): Design | null {
+  const now = new Date().toISOString();
+  const result = db
+    .prepare('UPDATE designs SET workspace_path = NULL, updated_at = ? WHERE id = ?')
+    .run(now, id);
+  if (result.changes === 0) return null;
+  return getDesign(db, id);
+}
+
 /**
  * Duplicate a design row + all its messages + all its snapshots. Snapshot
  * parent_id references are remapped to point at the freshly-cloned snapshots
@@ -482,7 +511,7 @@ export function duplicateDesign(db: Database, sourceId: string, newName: string)
 
   const tx = db.transaction(() => {
     db.prepare(
-      'INSERT INTO designs (id, schema_version, name, created_at, updated_at, thumbnail_text, deleted_at) VALUES (?, 1, ?, ?, ?, ?, NULL)',
+      'INSERT INTO designs (id, schema_version, name, created_at, updated_at, thumbnail_text, deleted_at, workspace_path) VALUES (?, 1, ?, ?, ?, ?, NULL, NULL)',
     ).run(newId, trimmed, now, now, source.thumbnailText);
 
     const messages = db
@@ -988,6 +1017,35 @@ export function createDesignFile(
   ).run(id, designId, p, content, now, now);
   const row = db.prepare('SELECT * FROM design_files WHERE id = ?').get(id) as DesignFileRowDb;
   return rowToDesignFile(row);
+}
+
+export function upsertDesignFile(
+  db: Database,
+  designId: string,
+  path: string,
+  content: string,
+): DesignFile {
+  const p = normalizeDesignFilePath(path);
+  const existing = db
+    .prepare('SELECT * FROM design_files WHERE design_id = ? AND path = ?')
+    .get(designId, p) as DesignFileRowDb | undefined;
+  if (existing) {
+    const now = new Date().toISOString();
+    db.prepare('UPDATE design_files SET content = ?, updated_at = ? WHERE id = ?').run(
+      content,
+      now,
+      existing.id,
+    );
+    return rowToDesignFile({ ...existing, content, updated_at: now });
+  }
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  db.prepare(
+    'INSERT INTO design_files (id, design_id, path, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(id, designId, p, content, now, now);
+  return rowToDesignFile(
+    db.prepare('SELECT * FROM design_files WHERE id = ?').get(id) as DesignFileRowDb,
+  );
 }
 
 export function strReplaceInDesignFile(

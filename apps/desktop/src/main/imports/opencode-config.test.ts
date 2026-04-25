@@ -28,22 +28,29 @@ async function writeConfig(home: string, filename: string, body: string): Promis
 }
 
 describe('opencodeAuthPath', () => {
+  // Paths are computed with native path.join so the test must mirror the host
+  // separator (Windows uses \, POSIX uses /) — OpenCode itself uses the same
+  // native join on each platform.
   it('defaults to ~/.local/share/opencode/auth.json on all platforms', () => {
-    const home = '/home/alice';
-    expect(opencodeAuthPath(home, {})).toBe('/home/alice/.local/share/opencode/auth.json');
+    const home = join('/home', 'alice');
+    expect(opencodeAuthPath(home, {})).toBe(join(home, '.local', 'share', 'opencode', 'auth.json'));
   });
 
   it('honors XDG_DATA_HOME when set', () => {
-    const path = opencodeAuthPath('/home/alice', { XDG_DATA_HOME: '/custom/data' });
-    expect(path).toBe('/custom/data/opencode/auth.json');
+    const home = join('/home', 'alice');
+    const xdg = join('/custom', 'data');
+    const path = opencodeAuthPath(home, { XDG_DATA_HOME: xdg });
+    expect(path).toBe(join(xdg, 'opencode', 'auth.json'));
   });
 
   it('lists jsonc/json/config.json candidates for config', () => {
-    const paths = opencodeConfigCandidatePaths('/home/alice', {});
+    const home = join('/home', 'alice');
+    const paths = opencodeConfigCandidatePaths(home, {});
+    const dir = join(home, '.config', 'opencode');
     expect(paths).toEqual([
-      '/home/alice/.config/opencode/opencode.jsonc',
-      '/home/alice/.config/opencode/opencode.json',
-      '/home/alice/.config/opencode/config.json',
+      join(dir, 'opencode.jsonc'),
+      join(dir, 'opencode.json'),
+      join(dir, 'config.json'),
     ]);
   });
 });

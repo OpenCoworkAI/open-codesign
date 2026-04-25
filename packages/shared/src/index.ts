@@ -237,30 +237,48 @@ export {
   CHATGPT_CODEX_PROVIDER_ID,
   ConfigSchema,
   ConfigV3Schema,
+  IMAGE_GENERATION_SCHEMA_VERSION,
   PROVIDER_SHORTLIST,
   ProviderCapabilitiesSchema,
+  ImageGenerationCredentialModeSchema,
+  ImageGenerationOutputFormatSchema,
+  ImageGenerationProviderSchema,
+  ImageGenerationQualitySchema,
+  ImageGenerationSettingsSchema,
+  ImageGenerationSizeSchema,
   ProviderEntrySchema,
+  ProviderModelDiscoveryModeSchema,
   ReasoningLevelSchema,
   SUPPORTED_ONBOARDING_PROVIDERS,
   SecretRef,
   STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
   StoredDesignSystem,
   WireApiSchema,
+  defaultProviderCapabilities,
   detectWireFromBaseUrl,
   hydrateConfig,
   isSupportedOnboardingProvider,
   migrateLegacyToV3,
   parseConfigFlexible,
+  resolveProviderCapabilities,
   toPersistedV3,
 } from './config';
 export type {
   Config,
   ConfigV3,
+  ImageGenerationCredentialMode,
+  ImageGenerationOutputFormat,
+  ImageGenerationProvider,
+  ImageGenerationQuality,
+  ImageGenerationSettings,
+  ImageGenerationSize,
   OnboardingState,
   ProviderCapabilities,
   ProviderEntry,
+  ProviderModelDiscoveryMode,
   ProviderShortlist,
   ReasoningLevel,
+  ResolvedProviderCapabilities,
   SupportedOnboardingProvider,
   WireApi,
 } from './config';
@@ -328,12 +346,13 @@ export type {
 export { SkillFrontmatterV1 } from './skills';
 export type { LoadedSkill } from './skills';
 
-export { diagnose } from './diagnostics';
+export { diagnose, diagnoseGenerateFailure } from './diagnostics';
 export type {
   DiagnosticHypothesis,
   DiagnosticFix,
   DiagnoseContext,
   ErrorCode,
+  GenerateFailureContext,
 } from './diagnostics';
 
 export { ERROR_CODES, ERROR_CODE_DESCRIPTIONS } from './error-codes';

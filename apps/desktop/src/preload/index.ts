@@ -33,10 +33,12 @@ import type {
   ModelsListResponse,
   TestEndpointResponse,
 } from '../main/connection-ipc';
+import type { ImageGenerationSettingsView } from '../main/image-generation-settings';
 
 export type { ConnectionTestError, ConnectionTestResult, ModelsListResponse, TestEndpointResponse };
 export type { ClaudeCodeUserType, ExternalConfigsDetection };
 export type { CodexOAuthStatus };
+export type { ImageGenerationSettingsView };
 
 export interface ValidateKeyResult {
   ok: true;
@@ -338,9 +340,19 @@ const api = {
     update: (patch: Partial<Preferences>) =>
       ipcRenderer.invoke('preferences:v1:update', patch) as Promise<Preferences>,
   },
+  imageGeneration: {
+    get: () =>
+      ipcRenderer.invoke('image-generation:v1:get') as Promise<ImageGenerationSettingsView>,
+    update: (patch: Partial<ImageGenerationSettingsView> & { apiKey?: string }) =>
+      ipcRenderer.invoke(
+        'image-generation:v1:update',
+        patch,
+      ) as Promise<ImageGenerationSettingsView>,
+  },
   codexOAuth: {
     status: () => ipcRenderer.invoke('codex-oauth:v1:status') as Promise<CodexOAuthStatus>,
     login: () => ipcRenderer.invoke('codex-oauth:v1:login') as Promise<CodexOAuthStatus>,
+    cancelLogin: () => ipcRenderer.invoke('codex-oauth:v1:cancel-login') as Promise<boolean>,
     logout: () => ipcRenderer.invoke('codex-oauth:v1:logout') as Promise<CodexOAuthStatus>,
   },
   connection: {
@@ -428,6 +440,27 @@ const api = {
       }) as Promise<DesignSnapshot>,
     delete: (id: string) =>
       ipcRenderer.invoke('snapshots:v1:delete', { schemaVersion: 1, id }) as Promise<void>,
+    pickWorkspaceFolder: () =>
+      ipcRenderer.invoke('snapshots:v1:workspace:pick', {
+        schemaVersion: 1,
+      }) as Promise<string | null>,
+    updateWorkspace: (designId: string, workspacePath: string | null, migrateFiles: boolean) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:update', {
+        schemaVersion: 1,
+        designId,
+        workspacePath,
+        migrateFiles,
+      }) as Promise<Design>,
+    openWorkspaceFolder: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:open', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<void>,
+    checkWorkspaceFolder: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:workspace:check', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ exists: boolean }>,
   },
   chat: {
     list: (designId: string) =>

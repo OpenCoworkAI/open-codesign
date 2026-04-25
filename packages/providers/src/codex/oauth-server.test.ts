@@ -85,12 +85,12 @@ describe('startCallbackServer', () => {
     await assertion;
   });
 
-  it('rejects after the 5-minute timeout', async () => {
+  it('rejects after the 2-minute timeout', async () => {
     vi.useFakeTimers();
     const server = await track(await startCallbackServer(0));
     const waiter = server.waitForCode('foo');
     const assertion = expect(waiter).rejects.toThrow(/timeout/);
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1000);
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000 + 1000);
     await assertion;
   });
 

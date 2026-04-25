@@ -6,7 +6,7 @@
 >
 > Open CoDesign 是一个开源、Local-first 的 AI 设计工具，可以把一句提示词直接变成精致的 HTML 原型、幻灯片和营销素材。
 
-[官网](https://opencoworkai.github.io/open-codesign/) · [快速开始](#快速开始) · [对比 Claude Design](https://opencoworkai.github.io/open-codesign/claude-design-alternative) · [文档](https://opencoworkai.github.io/open-codesign/quickstart) · [参与贡献](./CONTRIBUTING.md) · [安全说明](./SECURITY.md)
+[官网](https://opencoworkai.github.io/open-codesign/) · [快速开始](#快速开始) · [更新日志](./CHANGELOG.md) · [最新发版](https://github.com/OpenCoworkAI/open-codesign/releases) · [社区讨论](https://github.com/OpenCoworkAI/open-codesign/discussions) · [对比 Claude Design](https://opencoworkai.github.io/open-codesign/claude-design-alternative) · [文档](https://opencoworkai.github.io/open-codesign/quickstart) · [参与贡献](./CONTRIBUTING.md) · [安全说明](./SECURITY.md)
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/product-hero.png" alt="Open CoDesign：左边是提示词，右边是实时生成的设计结果" width="1000" />
@@ -21,8 +21,25 @@
 </p>
 
 <p align="center">
-  <sub><code>ai-design</code> · <code>claude-design-alternative</code> · <code>byok</code> · <code>local-first</code> · <code>electron</code> · <code>multi-model</code> · <code>open-source</code></sub>
+  <a href="https://github.com/OpenCoworkAI/open-codesign/commits/main"><img alt="最近提交" src="https://img.shields.io/github/last-commit/OpenCoworkAI/open-codesign?label=%E6%9C%80%E8%BF%91%E6%8F%90%E4%BA%A4&color=40b4a1" /></a>
+  <a href="https://github.com/OpenCoworkAI/open-codesign/pulse"><img alt="月提交量" src="https://img.shields.io/github/commit-activity/m/OpenCoworkAI/open-codesign?label=%E6%9C%88%E6%8F%90%E4%BA%A4" /></a>
+  <a href="https://github.com/OpenCoworkAI/open-codesign/graphs/contributors"><img alt="贡献者" src="https://img.shields.io/github/contributors/OpenCoworkAI/open-codesign?label=%E8%B4%A1%E7%8C%AE%E8%80%85" /></a>
+  <a href="https://github.com/OpenCoworkAI/open-codesign/releases"><img alt="下载量" src="https://img.shields.io/github/downloads/OpenCoworkAI/open-codesign/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&color=6c5ce7" /></a>
 </p>
+
+<p align="center">
+  <sub><code>ai-design</code> · <code>claude-design-alternative</code> · <code>v0-alternative</code> · <code>bolt-alternative</code> · <code>lovable-alternative</code> · <code>prompt-to-design</code> · <code>ai-prototyping</code> · <code>desktop-design-tool</code> · <code>byok</code> · <code>local-first</code> · <code>electron</code> · <code>multi-model</code> · <code>open-source</code></sub>
+</p>
+
+---
+
+## 最近更新
+
+- **v0.1.4** *（即将发布）* — 🎨 AI 图像生成 · 支持 ChatGPT Plus / Codex 订阅登录 · CLIProxyAPI 一键导入 · API 配置稳定性优化
+- **v0.1.3** *（2026-04-21）* — 修复 Gemini `models/` 前缀 key · 修复 OpenAI 兼容中转 "instructions required" 报错 · 新增第三方中转 SSE 截断提示
+- **v0.1.2** *（2026-04-21）* — 发版流程 · Homebrew / winget / Scoop 打包清单
+
+[查看全部发版记录 →](https://github.com/OpenCoworkAI/open-codesign/releases) · [更新日志 →](./CHANGELOG.md)
 
 ---
 
@@ -114,7 +131,17 @@ Open CoDesign 可以把一句自然语言提示词，直接变成一个完成度
 
 ### 1. 安装
 
-从 [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases) 直接下载（v0.1.x）：
+**一行命令**（推荐）：
+
+```bash
+# Windows
+winget install OpenCoworkAI.OpenCoDesign
+
+# macOS
+brew install --cask opencoworkai/tap/open-codesign
+```
+
+**或从 [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases) 直接下载安装包**（v0.1.x）：
 
 | 平台 | 文件 |
 |---|---|
@@ -129,13 +156,11 @@ Open CoDesign 可以把一句自然语言提示词，直接变成一个完成度
 每个 release 都会附带 `SHA256SUMS.txt` 和 CycloneDX SBOM（`*-sbom.cdx.json`），方便你校验下载内容。
 
 <details>
-<summary><b>包管理器</b>：v0.1.x 当前状态</summary>
+<summary><b>其他包管理器</b></summary>
 
 | 管理器 | 命令 | 状态 |
 |---|---|---|
-| Homebrew Cask（macOS） | `brew install --cask opencoworkai/tap/open-codesign` | 🟢 可用 |
 | Scoop（Windows） | `scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket && scoop install open-codesign` | 🟢 可用 |
-| winget（Windows） | `winget install OpenCoworkAI.OpenCoDesign` | 🟠 [PR #363055](https://github.com/microsoft/winget-pkgs/pull/363055) 等 Microsoft 审核 |
 | Flathub（Linux） | `flatpak install flathub ai.opencowork.codesign` | ⏸ 延后到 v0.2（需要签名构建 + AppStream 元数据） |
 | Snap（Linux） | `snap install --dangerous open-codesign-*.snap` | 🟡 随 release 尽量附带，尚未接入 Snap Store |
 
@@ -259,7 +284,11 @@ Open CoDesign 可以把一句自然语言提示词，直接变成一个完成度
 
 ## 社群
 
-Open CoDesign 在 [LINUX DO](https://linux.do/) 社区首发，感谢佬友们的反馈和建议。中文讨论、问题反馈、使用心得欢迎移步社区。
+Open CoDesign 在 [LINUX DO](https://linux.do/) 社区首发，感谢佬友们的反馈和建议。
+
+- **[GitHub Discussions](https://github.com/OpenCoworkAI/open-codesign/discussions)** — 在 [Show & Tell](https://github.com/OpenCoworkAI/open-codesign/discussions/categories/show-and-tell) 晒你生成的设计，[Q&A](https://github.com/OpenCoworkAI/open-codesign/discussions/categories/q-a) 提使用问题，[Ideas](https://github.com/OpenCoworkAI/open-codesign/discussions/categories/ideas) 提功能建议。
+- **[LINUX DO](https://linux.do/)** — 中文讨论、使用心得、反馈（首发社区）。
+- **GitHub Issues** — [可复现的 bug 报告](https://github.com/OpenCoworkAI/open-codesign/issues)。
 
 中文用户交流群（微信）：
 

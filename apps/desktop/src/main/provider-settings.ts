@@ -11,6 +11,7 @@ import {
   type ReasoningLevel,
   type WireApi,
   isSupportedOnboardingProvider,
+  resolveProviderCapabilities,
 } from '@open-codesign/shared';
 import { maskSecret } from './keychain';
 
@@ -71,10 +72,10 @@ export function assertProviderHasStoredSecret(cfg: Config, provider: string): vo
 }
 
 export function isKeylessProviderAllowed(provider: string, entry?: ProviderEntry | null): boolean {
-  // Providers that explicitly opt out of API keys (e.g. local Ollama, a
-  // self-hosted LiteLLM fronting IP-whitelisted models). The flag lets any
-  // provider — builtin or custom — declare keyless-ness at config time.
-  if (entry?.requiresApiKey === false) return true;
+  if (entry !== undefined && entry !== null) {
+    const capabilities = resolveProviderCapabilities(provider, entry);
+    if (capabilities.supportsKeyless) return true;
+  }
   const isCodexFamily = provider.startsWith('codex-') || provider === CHATGPT_CODEX_PROVIDER_ID;
   return isCodexFamily && entry?.requiresApiKey !== true && entry?.envKey === undefined;
 }
@@ -208,10 +209,53 @@ export interface ActiveModelResolution {
   httpHeaders: Record<string, string> | undefined;
   queryParams: Record<string, string> | undefined;
   reasoningLevel: ReasoningLevel | undefined;
-  capabilities: ProviderCapabilities | undefined;
   allowKeyless: boolean;
+  capabilities: Required<ProviderCapabilities>;
+  explicitCapabilities: ProviderCapabilities | undefined;
   /** True when the renderer-supplied hint provider didn't match the canonical active. */
   overridden: boolean;
+}
+
+/**
+ * Shared provider resolution for any main-process path that needs the stored
+ * provider contract as persisted on disk, regardless of whether the caller is
+ * about to generate, list models, or probe the connection.
+ */
+export interface ProviderConfigResolution {
+  provider: string;
+  defaultModel: string;
+  baseUrl: string;
+  wire: WireApi;
+  httpHeaders: Record<string, string> | undefined;
+  queryParams: Record<string, string> | undefined;
+  reasoningLevel: ReasoningLevel | undefined;
+  allowKeyless: boolean;
+  capabilities: Required<ProviderCapabilities>;
+  explicitCapabilities: ProviderCapabilities | undefined;
+}
+
+export function resolveProviderConfig(cfg: Config, providerId: string): ProviderConfigResolution {
+  const entry = resolveEntryFor(cfg, providerId);
+  if (entry === null) {
+    throw new CodesignError(
+      `Provider "${providerId}" has no provider entry on disk.`,
+      ERROR_CODES.PROVIDER_NOT_SUPPORTED,
+    );
+  }
+  const allowKeyless = isKeylessProviderAllowed(providerId, entry);
+  const capabilities = resolveProviderCapabilities(providerId, entry);
+  return {
+    provider: providerId,
+    defaultModel: entry.defaultModel,
+    baseUrl: entry.baseUrl,
+    wire: entry.wire,
+    httpHeaders: entry.httpHeaders,
+    queryParams: entry.queryParams,
+    reasoningLevel: entry.reasoningLevel,
+    allowKeyless,
+    capabilities,
+    explicitCapabilities: entry.capabilities,
+  };
 }
 
 export function resolveActiveModel(
@@ -219,31 +263,19 @@ export function resolveActiveModel(
   hint: { provider: string; modelId: string },
 ): ActiveModelResolution {
   const activeId = cfg.activeProvider;
-  const entry = resolveEntryFor(cfg, activeId);
-  if (entry === null) {
-    throw new CodesignError(
-      `Active provider "${activeId}" has no provider entry on disk.`,
-      ERROR_CODES.PROVIDER_NOT_SUPPORTED,
-    );
-  }
-  const allowKeyless = isKeylessProviderAllowed(activeId, entry);
-  if (cfg.secrets[activeId] === undefined && !allowKeyless) {
-    throw new CodesignError(
-      `No API key stored for active provider "${activeId}". Re-run onboarding to add one.`,
-      ERROR_CODES.PROVIDER_KEY_MISSING,
-    );
-  }
+  const resolved = resolveProviderConfig(cfg, activeId);
   const overridden = activeId !== hint.provider;
   const modelId = overridden ? cfg.activeModel : hint.modelId;
   return {
     model: { provider: activeId, modelId },
-    baseUrl: entry.baseUrl,
-    wire: entry.wire,
-    httpHeaders: entry.httpHeaders,
-    queryParams: entry.queryParams,
-    reasoningLevel: entry.reasoningLevel,
-    capabilities: entry.capabilities,
-    allowKeyless,
+    baseUrl: resolved.baseUrl,
+    wire: resolved.wire,
+    httpHeaders: resolved.httpHeaders,
+    queryParams: resolved.queryParams,
+    reasoningLevel: resolved.reasoningLevel,
+    allowKeyless: resolved.allowKeyless,
+    capabilities: resolved.capabilities,
+    explicitCapabilities: resolved.explicitCapabilities,
     overridden,
   };
 }

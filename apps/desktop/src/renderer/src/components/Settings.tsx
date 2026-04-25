@@ -14,6 +14,7 @@ import {
   Cpu,
   FolderOpen,
   Globe,
+  Image as ImageIcon,
   Loader2,
   MoreHorizontal,
   Palette,
@@ -22,19 +23,27 @@ import {
   RotateCcw,
   Sliders,
   Trash2,
+  Zap,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import type { AppPaths, Preferences, ProviderRow, StorageKind } from '../../../preload/index';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  AppPaths,
+  ImageGenerationSettingsView,
+  Preferences,
+  ProviderRow,
+  StorageKind,
+} from '../../../preload/index';
 import { recordAction } from '../lib/action-timeline';
 import { useCodesignStore } from '../store';
 import { AddCustomProviderModal } from './AddCustomProviderModal';
 import { ChatgptLoginCard } from './ChatgptLoginCard';
 import { DiagnosticsPanel } from './settings/DiagnosticsPanel';
 
-type Tab = 'models' | 'appearance' | 'storage' | 'diagnostics' | 'advanced';
+type Tab = 'models' | 'images' | 'appearance' | 'storage' | 'diagnostics' | 'advanced';
 
 const TABS: ReadonlyArray<{ id: Tab; icon: typeof Cpu }> = [
   { id: 'models', icon: Cpu },
+  { id: 'images', icon: ImageIcon },
   { id: 'appearance', icon: Palette },
   { id: 'storage', icon: FolderOpen },
   { id: 'diagnostics', icon: AlertCircle },
@@ -483,8 +492,16 @@ function RowModelSelector({
     });
   }
 
-  const options =
-    models !== null && models.length > 0 ? models.map((m) => ({ value: m, label: m })) : null;
+  const notInListSuffix = t('settings.providers.activeNotInList');
+  const options = useMemo(
+    () =>
+      computeModelOptions({
+        models,
+        activeModelId: isActive ? primary : null,
+        notInListSuffix,
+      }),
+    [models, isActive, primary, notInListSuffix],
+  );
 
   return (
     <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
@@ -848,6 +865,311 @@ function WarningsList({ warnings }: { warnings: string[] }) {
   );
 }
 
+function defaultImageModelFor(provider: ImageGenerationSettingsView['provider']): string {
+  return provider === 'openrouter' ? 'openai/gpt-5.4-image-2' : 'gpt-image-2';
+}
+
+function defaultImageBaseUrlFor(provider: ImageGenerationSettingsView['provider']): string {
+  return provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1';
+}
+
+function ImageGenerationPanel() {
+  const t = useT();
+  const pushToast = useCodesignStore((s) => s.pushToast);
+  const [settings, setSettings] = useState<ImageGenerationSettingsView | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [model, setModel] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+
+  useEffect(() => {
+    if (!window.codesign?.imageGeneration) return;
+    void window.codesign.imageGeneration
+      .get()
+      .then((next) => {
+        setSettings(next);
+        setModel(next.model);
+        setBaseUrl(next.baseUrl);
+      })
+      .catch((err) => {
+        pushToast({
+          variant: 'error',
+          title: t('settings.imageGen.toast.loadFailed', {
+            defaultValue: 'Image generation settings failed to load',
+          }),
+          description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+        });
+      });
+  }, [pushToast, t]);
+
+  async function save(patch: Partial<ImageGenerationSettingsView> & { apiKey?: string }) {
+    if (!window.codesign?.imageGeneration) return;
+    setSaving(true);
+    try {
+      const next = await window.codesign.imageGeneration.update(patch);
+      setSettings(next);
+      setModel(next.model);
+      setBaseUrl(next.baseUrl);
+      setApiKey('');
+      pushToast({
+        variant: 'success',
+        title: t('settings.imageGen.toast.saved', { defaultValue: 'Image generation saved' }),
+      });
+    } catch (err) {
+      pushToast({
+        variant: 'error',
+        title: t('settings.imageGen.toast.saveFailed', {
+          defaultValue: 'Image generation settings failed to save',
+        }),
+        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (settings === null) {
+    return (
+      <div className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] p-[var(--space-4)] text-[var(--text-sm)] text-[var(--color-text-muted)]">
+        {t('settings.common.loading')}
+      </div>
+    );
+  }
+
+  const keyAvailable =
+    settings.credentialMode === 'custom' ? settings.hasCustomKey : settings.inheritedKeyAvailable;
+  const status: 'ready' | 'needsKey' | 'disabled' = !settings.enabled
+    ? 'disabled'
+    : keyAvailable
+      ? 'ready'
+      : 'needsKey';
+
+  const statusStyles: Record<typeof status, string> = {
+    ready:
+      'bg-[color-mix(in_oklab,var(--color-success)_14%,transparent)] text-[var(--color-success)] border-[color-mix(in_oklab,var(--color-success)_32%,transparent)]',
+    needsKey:
+      'bg-[color-mix(in_oklab,var(--color-warning)_14%,transparent)] text-[var(--color-warning)] border-[color-mix(in_oklab,var(--color-warning)_32%,transparent)]',
+    disabled:
+      'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border-[var(--color-border-muted)]',
+  };
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] p-[var(--space-4)] space-y-[var(--space-4)]">
+      <div className="flex items-start justify-between gap-[var(--space-3)]">
+        <div className="min-w-0 flex items-start gap-[var(--space-2)]">
+          <ImageIcon className="w-4 h-4 mt-0.5 text-[var(--color-text-secondary)]" aria-hidden />
+          <div className="min-w-0">
+            <div className="flex items-center gap-[var(--space-2)]">
+              <SectionTitle>{t('settings.imageGen.title')}</SectionTitle>
+              <span
+                className={`inline-flex items-center h-5 px-1.5 rounded-full border text-[var(--text-xs)] font-medium tracking-wide uppercase ${statusStyles[status]}`}
+              >
+                {t(`settings.imageGen.status.${status}`)}
+              </span>
+            </div>
+            <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] mt-0.5 leading-[var(--leading-body)]">
+              {t('settings.imageGen.hint')}
+            </p>
+          </div>
+        </div>
+        <label className="inline-flex items-center gap-[var(--space-2)] shrink-0 text-[var(--text-xs)] text-[var(--color-text-secondary)] select-none">
+          <span>{t('settings.imageGen.enabled')}</span>
+          <input
+            type="checkbox"
+            checked={settings.enabled}
+            disabled={saving}
+            onChange={(e) => void save({ enabled: e.target.checked })}
+            className="h-4 w-4 accent-[var(--color-accent)]"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-3)]">
+        <Row label={t('settings.imageGen.provider')}>
+          <NativeSelect
+            value={settings.provider}
+            disabled={saving}
+            options={[
+              { value: 'openai', label: 'OpenAI' },
+              { value: 'openrouter', label: 'OpenRouter' },
+            ]}
+            onChange={(value) => {
+              const provider = value as ImageGenerationSettingsView['provider'];
+              void save({
+                provider,
+                model: defaultImageModelFor(provider),
+                baseUrl: defaultImageBaseUrlFor(provider),
+              });
+            }}
+          />
+        </Row>
+        <Row label={t('settings.imageGen.credentials')}>
+          <SegmentedControl
+            value={settings.credentialMode}
+            disabled={saving}
+            options={[
+              { value: 'inherit', label: t('settings.imageGen.inherit') },
+              { value: 'custom', label: t('settings.imageGen.customKey') },
+            ]}
+            onChange={(credentialMode) => void save({ credentialMode })}
+          />
+        </Row>
+      </div>
+
+      {settings.credentialMode === 'custom' ? (
+        <div className="flex items-center gap-[var(--space-2)]">
+          <input
+            type="password"
+            value={apiKey}
+            disabled={saving}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={
+              settings.maskedKey
+                ? t('settings.imageGen.keyPlaceholder', { mask: settings.maskedKey })
+                : t('settings.imageGen.newKeyPlaceholder')
+            }
+            className="min-w-0 flex-1 h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
+          />
+          <button
+            type="button"
+            disabled={saving || apiKey.trim().length === 0}
+            onClick={() => void save({ apiKey })}
+            className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {t('common.save')}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-3)]">
+        <label className="min-w-0">
+          <Label>{t('settings.imageGen.model')}</Label>
+          <input
+            type="text"
+            value={model}
+            disabled={saving}
+            onChange={(e) => setModel(e.target.value)}
+            className="mt-1 w-full h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
+          />
+        </label>
+        <label className="min-w-0">
+          <Label>{t('settings.imageGen.baseUrl')}</Label>
+          <input
+            type="url"
+            value={baseUrl}
+            disabled={saving}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            className="mt-1 w-full h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-3)]">
+        <Row label={t('settings.imageGen.quality')}>
+          <NativeSelect
+            value={settings.quality}
+            disabled={saving}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+            ]}
+            onChange={(quality) =>
+              void save({ quality: quality as ImageGenerationSettingsView['quality'] })
+            }
+          />
+        </Row>
+        <Row label={t('settings.imageGen.size')}>
+          <NativeSelect
+            value={settings.size}
+            disabled={saving}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: '1024x1024', label: '1024 x 1024' },
+              { value: '1536x1024', label: '1536 x 1024' },
+              { value: '1024x1536', label: '1024 x 1536' },
+            ]}
+            onChange={(size) => void save({ size: size as ImageGenerationSettingsView['size'] })}
+          />
+        </Row>
+      </div>
+
+      <div className="flex justify-end pt-[var(--space-1)] border-t border-[var(--color-border-muted)]">
+        <button
+          type="button"
+          disabled={
+            saving ||
+            model.trim().length === 0 ||
+            baseUrl.trim().length === 0 ||
+            (model === settings.model && baseUrl === settings.baseUrl)
+          }
+          onClick={() => void save({ model, baseUrl })}
+          className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {t('common.save')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const CPA_DETECTION_DISMISSED_KEY = 'cpa-detection-dismissed-v1';
+
+function LocalCpaImportCard({
+  onImport,
+  onDismiss,
+}: {
+  onImport: () => void;
+  onDismiss: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-accent)] bg-[var(--color-accent-tint)] px-[var(--space-3)] py-[var(--space-2_5)] flex items-start gap-[var(--space-3)]">
+      <Zap className="w-4 h-4 mt-0.5 shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
+      <div className="flex-1 min-w-0">
+        <p className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)] leading-snug">
+          {t('settings.providers.cpaDetection.title')}
+        </p>
+        <p className="text-[var(--text-xs)] text-[var(--color-text-secondary)] mt-0.5 leading-[var(--leading-body)]">
+          {t('settings.providers.cpaDetection.body')}
+        </p>
+      </div>
+      <div className="flex items-center gap-[var(--space-1_5)] shrink-0">
+        <button
+          type="button"
+          onClick={onImport}
+          className="h-7 px-[var(--space-2_5)] rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-on-accent)] bg-[var(--color-accent)] hover:opacity-90 transition-opacity whitespace-nowrap"
+        >
+          {t('settings.providers.cpaDetection.importAction')}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="h-7 px-[var(--space-2)] rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors whitespace-nowrap"
+        >
+          {t('settings.providers.cpaDetection.dismissAction')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ImageGenerationTab() {
+  const t = useT();
+  return (
+    <div className="space-y-[var(--space-4)]">
+      <div>
+        <SectionTitle>{t('settings.imageGen.tabTitle')}</SectionTitle>
+        <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] mt-1 leading-[var(--leading-body)]">
+          {t('settings.imageGen.tabHint')}
+        </p>
+      </div>
+      <ImageGenerationPanel />
+    </div>
+  );
+}
+
 function ModelsTab() {
   const t = useT();
   const config = useCodesignStore((s) => s.config);
@@ -858,6 +1180,9 @@ function ModelsTab() {
   const [loading, setLoading] = useState(true);
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [cpaDetection, setCpaDetection] = useState<
+    'idle' | 'detecting' | 'available' | 'unavailable'
+  >('idle');
   const [externalConfigs, setExternalConfigs] = useState<{
     codex?: { count: number } | undefined;
     claudeCode?:
@@ -985,6 +1310,44 @@ function ModelsTab() {
         // non-fatal; banner just doesn't appear
       });
   }, [pushToast, t]);
+
+  useEffect(() => {
+    if (!window.codesign?.config?.testEndpoint) return;
+    // Only probe once — once we've reached a terminal state, skip.
+    if (cpaDetection !== 'idle') return;
+    // Skip if user already dismissed this banner for this install.
+    try {
+      if (window.localStorage.getItem(CPA_DETECTION_DISMISSED_KEY) === '1') return;
+    } catch {
+      // localStorage unavailable — proceed with detection
+    }
+    // Skip detection if a provider is already pointing at the CPA port.
+    // We wait for the rows load to settle before probing so we don't flash
+    // the banner and immediately hide it on the next render tick.
+    if (loading) return;
+    const alreadyConfigured = rows.some((r) =>
+      /^https?:\/\/(localhost|127\.0\.0\.1):8317/.test(r.baseUrl ?? ''),
+    );
+    if (alreadyConfigured) return;
+
+    setCpaDetection('detecting');
+    void window.codesign.config
+      .testEndpoint({ wire: 'anthropic', baseUrl: 'http://127.0.0.1:8317', apiKey: '' })
+      .then((res) => {
+        setCpaDetection(res.ok ? 'available' : 'unavailable');
+      })
+      .catch((err) => {
+        reportableErrorToast({
+          code: 'CPA_DETECTION_FAILED',
+          scope: 'settings',
+          title: t('settings.imageGen.toast.loadFailed', {
+            defaultValue: 'Image generation settings failed to load',
+          }),
+          description: cleanIpcError(err) || t('settings.common.unknownError'),
+        });
+        setCpaDetection('unavailable');
+      });
+  }, [cpaDetection, loading, rows, reportableErrorToast, t]);
 
   async function reloadRows() {
     if (!window.codesign) return;
@@ -1305,6 +1668,28 @@ function ModelsTab() {
 
       <div className="space-y-[var(--space-3)]">
         <ChatgptLoginCard onStatusChange={reloadRows} />
+        {cpaDetection === 'available' && (
+          <LocalCpaImportCard
+            onImport={() => {
+              setCustomProviderPreset({
+                name: 'CLIProxyAPI',
+                baseUrl: 'http://127.0.0.1:8317',
+                wire: 'anthropic',
+                defaultModel: '',
+              });
+              setShowAddCustom(true);
+              setCpaDetection('unavailable');
+            }}
+            onDismiss={() => {
+              try {
+                window.localStorage.setItem(CPA_DETECTION_DISMISSED_KEY, '1');
+              } catch {
+                // non-fatal
+              }
+              setCpaDetection('unavailable');
+            }}
+          />
+        )}
         {externalConfigs !== null &&
           (externalConfigs.codex !== undefined ||
             externalConfigs.claudeCode !== undefined ||
@@ -1619,6 +2004,56 @@ export async function applyLocaleChange(
   return applied;
 }
 
+/**
+ * Build the <select> options for the active-provider model dropdown.
+ *
+ * The /models endpoint may return a partial list (or none at all), and the
+ * active model id may have been set via TOML import or a previous list that
+ * the gateway no longer returns. If the active id is not in `models`, the
+ * native <select> would silently fall back to options[0] and lie about which
+ * model is in use (issue #136). Pin the active id at the top with a hint so
+ * the UI always matches reality.
+ *
+ * Returns null when there is nothing to render (loading completed, no models,
+ * no active id) so the caller can fall back to a plain text label.
+ */
+export function computeModelOptions(input: {
+  models: string[] | null;
+  activeModelId: string | null;
+  notInListSuffix: string;
+}): { value: string; label: string }[] | null {
+  const { models, activeModelId, notInListSuffix } = input;
+  if (models === null || models.length === 0) return null;
+  const base = models.map((m) => ({ value: m, label: m }));
+  if (activeModelId && !models.includes(activeModelId)) {
+    return [{ value: activeModelId, label: `${activeModelId} ${notInListSuffix}` }, ...base];
+  }
+  return base;
+}
+
+/**
+ * Canonical timeout choices shown in Settings → Advanced. The default prefs
+ * value is 1200s (20 min); long generations (full PDP runs) need 30-60 min,
+ * so the dropdown tops out at 2h. The old 60-300s ceiling silently clamped
+ * the stored value when the UI couldn't represent it.
+ */
+export const TIMEOUT_OPTION_SECONDS = [60, 120, 180, 300, 600, 1200, 1800, 3600, 7200] as const;
+
+/**
+ * Returns the canonical timeout list with `currentSec` merged in when it is a
+ * positive finite value that isn't already present. Prevents the select from
+ * rendering with no selection when the user (or an earlier build) stored a
+ * custom value — and prevents a silent downgrade on the next save.
+ */
+export function resolveTimeoutOptions(currentSec: number): number[] {
+  const base: number[] = [...TIMEOUT_OPTION_SECONDS];
+  if (Number.isFinite(currentSec) && currentSec > 0 && !base.includes(currentSec)) {
+    base.push(currentSec);
+    base.sort((a, b) => a - b);
+  }
+  return base;
+}
+
 function AppearanceTab() {
   const t = useT();
   const theme = useCodesignStore((s) => s.theme);
@@ -1719,6 +2154,7 @@ function AppearanceTab() {
             options={[
               { value: 'en', label: t('settings.appearance.langEn') },
               { value: 'zh-CN', label: t('settings.appearance.langZhCN') },
+              { value: 'pt-BR', label: t('settings.appearance.langPtBR') },
             ]}
           />
         </Row>
@@ -2083,12 +2519,10 @@ function AdvancedTab() {
         <NativeSelect
           value={String(prefs.generationTimeoutSec)}
           onChange={(v) => void updatePref({ generationTimeoutSec: Number(v) })}
-          options={[
-            { value: '60', label: t('settings.advanced.timeoutSeconds', { value: 60 }) },
-            { value: '120', label: t('settings.advanced.timeoutSeconds', { value: 120 }) },
-            { value: '180', label: t('settings.advanced.timeoutSeconds', { value: 180 }) },
-            { value: '300', label: t('settings.advanced.timeoutSeconds', { value: 300 }) },
-          ]}
+          options={resolveTimeoutOptions(prefs.generationTimeoutSec).map((sec) => ({
+            value: String(sec),
+            label: t('settings.advanced.timeoutSeconds', { value: sec }),
+          }))}
         />
       </Row>
 
@@ -2149,6 +2583,7 @@ export function Settings() {
 
         <section className="flex flex-col min-h-0 overflow-y-auto p-[var(--space-6)]">
           {tab === 'models' ? <ModelsTab /> : null}
+          {tab === 'images' ? <ImageGenerationTab /> : null}
           {tab === 'appearance' ? <AppearanceTab /> : null}
           {tab === 'storage' ? <StorageTab /> : null}
           {tab === 'diagnostics' ? <DiagnosticsPanel /> : null}

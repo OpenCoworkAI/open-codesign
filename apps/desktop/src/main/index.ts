@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
+import path_module from 'node:path';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -7,12 +8,14 @@ import {
   type CoreLogger,
   DESIGN_SKILLS,
   FRAME_TEMPLATES,
+  type GenerateImageAssetRequest,
+  type GenerateImageAssetResult,
   applyComment,
   generate,
   generateTitle,
   generateViaAgent,
 } from '@open-codesign/core';
-import { detectProviderFromKey } from '@open-codesign/providers';
+import { detectProviderFromKey, generateImage } from '@open-codesign/providers';
 import {
   ApplyCommentPayload,
   BRAND,
@@ -43,7 +46,16 @@ import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { makeRuntimeVerifier } from './done-verify';
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
-import { armGenerationTimeout, cancelGenerationRequest } from './generation-ipc';
+import {
+  armGenerationTimeout,
+  cancelGenerationRequest,
+  extractGenerationTimeoutError,
+} from './generation-ipc';
+import {
+  registerImageGenerationSettingsIpc,
+  resolveImageGenerationConfig,
+  toGenerateImageOptions,
+} from './image-generation-settings';
 import { maybeAbortIfRunningFromDmg } from './install-check';
 import { registerLocaleIpc } from './locale-ipc';
 import { getLogPath, getLogger, initLogger } from './logger';
@@ -63,8 +75,19 @@ import { resolveActiveModel } from './provider-settings';
 import { cleanupStaleTmps } from './reported-fingerprints';
 import { resolveActiveApiKey, resolveApiKeyWithKeylessFallback } from './resolve-api-key';
 import { withRun } from './runContext';
-import { pruneDiagnosticEvents, recordDiagnosticEvent, safeInitSnapshotsDb } from './snapshots-db';
-import { registerSnapshotsIpc, registerSnapshotsUnavailableIpc } from './snapshots-ipc';
+import {
+  getDesign,
+  normalizeDesignFilePath,
+  pruneDiagnosticEvents,
+  recordDiagnosticEvent,
+  safeInitSnapshotsDb,
+  upsertDesignFile,
+} from './snapshots-db';
+import {
+  registerSnapshotsIpc,
+  registerSnapshotsUnavailableIpc,
+  registerWorkspaceIpc,
+} from './snapshots-ipc';
 import { initStorageSettings } from './storage-settings';
 
 // ESM shim: package.json "type": "module" means the built bundle is ESM and
@@ -103,6 +126,8 @@ const USE_AGENT_RUNTIME = (() => {
   if (raw === '0' || raw === 'false') return false;
   return true;
 })();
+
+const IS_VITEST = process.env['VITEST'] === 'true';
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -160,6 +185,35 @@ function createWindow(): void {
 
 type Database = BetterSqlite3.Database;
 
+/**
+ * Pull an HTTP status code out of a caught provider error. Mirrors
+ * `packages/providers/src/retry.ts::extractStatus` intentionally — we don't
+ * import from retry.ts to avoid coupling main to a retry-internal helper
+ * that might get reshaped. Used by the generate catch block to tag the
+ * thrown err with `upstream_status` so the renderer's diagnose pipeline
+ * can pick up a hypothesis.
+ */
+function extractUpstreamHttpStatus(err: unknown): number | undefined {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const candidates: unknown[] = [
+    (err as { status?: unknown }).status,
+    (err as { statusCode?: unknown }).statusCode,
+    (err as { upstream_status?: unknown }).upstream_status,
+    (err as { response?: { status?: unknown } }).response?.status,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c) && c >= 100 && c < 600) return c;
+  }
+  if (err instanceof Error) {
+    const m = /\b(\d{3})\b/.exec(err.message);
+    if (m?.[1]) {
+      const n = Number(m[1]);
+      if (n >= 400 && n < 600) return n;
+    }
+  }
+  return undefined;
+}
+
 function resolveActiveApiKeyFromState(providerId: string): Promise<string> {
   return resolveActiveApiKey(providerId, {
     getCodexAccessToken: () => getCodexTokenStore().getValidAccessToken(),
@@ -172,6 +226,170 @@ function resolveApiKeyForActive(providerId: string, allowKeyless: boolean): Prom
     getCodexAccessToken: () => getCodexTokenStore().getValidAccessToken(),
     getApiKeyForProvider,
   });
+}
+
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function resolveLocalAssetRefs(source: string, files: Map<string, string>): string {
+  let resolved = source;
+  for (const [path, content] of files.entries()) {
+    if (!path.startsWith('assets/') || !content.startsWith('data:')) continue;
+    resolved = resolved.replace(new RegExp(escapeRegExp(path), 'g'), content);
+  }
+  return resolved;
+}
+
+function extensionFromMimeType(mimeType: string): string {
+  if (mimeType === 'image/jpeg') return 'jpg';
+  if (mimeType === 'image/webp') return 'webp';
+  return 'png';
+}
+
+function sanitizeAssetStem(input: string | undefined, fallback: string): string {
+  const raw = input?.trim() || fallback;
+  const stem = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return stem.length > 0 ? stem : 'image-asset';
+}
+
+function allocateAssetPath(
+  files: Map<string, string>,
+  request: GenerateImageAssetRequest,
+  mimeType: string,
+): string {
+  const stem = sanitizeAssetStem(request.filenameHint, request.purpose);
+  const ext = extensionFromMimeType(mimeType);
+  let path = `assets/${stem}.${ext}`;
+  for (let i = 2; files.has(path); i++) {
+    path = `assets/${stem}-${i}.${ext}`;
+  }
+  return path;
+}
+
+interface CreateRuntimeTextEditorFsOptions {
+  db: BetterSqlite3.Database | null;
+  generationId: string;
+  designId: string | null;
+  previousHtml: string | null;
+  sendEvent: (event: AgentStreamEvent) => void;
+  logger: Pick<CoreLogger, 'error'>;
+}
+
+export function createRuntimeTextEditorFs({
+  db,
+  generationId,
+  designId,
+  previousHtml,
+  sendEvent,
+  logger,
+}: CreateRuntimeTextEditorFsOptions) {
+  const baseCtx = { designId: designId ?? '', generationId } as const;
+  const fsMap = new Map<string, string>();
+  if (previousHtml && previousHtml.trim().length > 0) {
+    fsMap.set('index.html', previousHtml);
+  }
+  for (const [name, content] of FRAME_TEMPLATES) {
+    fsMap.set(`frames/${name}`, content);
+  }
+  for (const [name, content] of DESIGN_SKILLS) {
+    fsMap.set(`skills/${name}`, content);
+  }
+
+  function emitFsUpdated(filePath: string, content: string): void {
+    if (designId === null) return;
+    const resolved = filePath === 'index.html' ? resolveLocalAssetRefs(content, fsMap) : content;
+    sendEvent({ ...baseCtx, type: 'fs_updated', path: filePath, content: resolved });
+  }
+
+  function emitIndexIfAssetChanged(filePath: string): void {
+    if (!filePath.startsWith('assets/')) return;
+    const index = fsMap.get('index.html');
+    if (index !== undefined) emitFsUpdated('index.html', index);
+  }
+
+  async function persistMutation(filePath: string, content: string): Promise<void> {
+    if (designId === null || db === null) return;
+    const normalizedPath = normalizeDesignFilePath(filePath);
+    const design = getDesign(db, designId);
+    if (design?.workspacePath !== null && design !== null) {
+      const destinationPath = path_module.join(design.workspacePath, normalizedPath);
+      try {
+        await mkdir(path_module.dirname(destinationPath), { recursive: true });
+        await writeFile(destinationPath, content, 'utf8');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('runtime.fs.writeThrough.fail', {
+          designId,
+          filePath,
+          workspacePath: design.workspacePath,
+          message,
+        });
+        throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
+      }
+    }
+
+    upsertDesignFile(db, designId, normalizedPath, content);
+  }
+
+  const fs = {
+    view(path: string) {
+      const content = fsMap.get(path);
+      if (content === undefined) return null;
+      return { content, numLines: content.split('\n').length };
+    },
+    async create(path: string, content: string) {
+      await persistMutation(path, content);
+      fsMap.set(path, content);
+      emitFsUpdated(path, content);
+      emitIndexIfAssetChanged(path);
+      return { path };
+    },
+    async strReplace(path: string, oldStr: string, newStr: string) {
+      const current = fsMap.get(path);
+      if (current === undefined) throw new Error(`File not found: ${path}`);
+      const idx = current.indexOf(oldStr);
+      if (idx === -1) throw new Error(`old_str not found in ${path}`);
+      if (current.indexOf(oldStr, idx + oldStr.length) !== -1) {
+        throw new Error(`old_str is ambiguous in ${path}; provide more context`);
+      }
+      const next = current.slice(0, idx) + newStr + current.slice(idx + oldStr.length);
+      await persistMutation(path, next);
+      fsMap.set(path, next);
+      emitFsUpdated(path, next);
+      emitIndexIfAssetChanged(path);
+      return { path };
+    },
+    async insert(path: string, line: number, text: string) {
+      const current = fsMap.get(path) ?? '';
+      const lines = current.split('\n');
+      const clamped = Math.max(0, Math.min(line, lines.length));
+      lines.splice(clamped, 0, text);
+      const next = lines.join('\n');
+      await persistMutation(path, next);
+      fsMap.set(path, next);
+      emitFsUpdated(path, next);
+      emitIndexIfAssetChanged(path);
+      return { path };
+    },
+    listDir(dir: string) {
+      const prefix = dir.length === 0 || dir === '.' ? '' : `${dir.replace(/\/+$/, '')}/`;
+      const entries = new Set<string>();
+      for (const p of fsMap.keys()) {
+        if (!p.startsWith(prefix)) continue;
+        const rest = p.slice(prefix.length);
+        const firstSegment = rest.split('/')[0];
+        if (firstSegment) entries.add(firstSegment);
+      }
+      return [...entries].sort();
+    },
+  };
+
+  return { fs, fsMap };
 }
 
 function registerIpcHandlers(db: Database | null): void {
@@ -283,82 +501,71 @@ function registerIpcHandlers(db: Database | null): void {
     const baseCtx = { designId: designId ?? '', generationId: id } as const;
     const toolStartedAt = new Map<string, number>();
     const runtimeVerify = makeRuntimeVerifier();
-
-    // In-memory virtual FS for the text_editor tool. Scoped to this
-    // generation — fresh Map per run. Seeded with the design's current
-    // HTML under index.html so the agent can view/edit incrementally.
-    const fsMap = new Map<string, string>();
-    if (previousHtml && previousHtml.trim().length > 0) {
-      fsMap.set('index.html', previousHtml);
-    }
-    // Seed the virtual fs with optional device-frame starter templates. The
-    // agent decides whether to view/use them based on the brief — there is
-    // no keyword detection here. See packages/core/src/frames/README.md.
-    for (const [name, content] of FRAME_TEMPLATES) {
-      fsMap.set(`frames/${name}`, content);
-    }
-    // Same shape for design-skill snippets — `view skills/<name>.md` to learn
-    // a reusable pattern, then adapt. Pure progressive disclosure: model
-    // decides, no keyword router. See packages/core/src/design-skills/.
-    for (const [name, content] of DESIGN_SKILLS) {
-      fsMap.set(`skills/${name}`, content);
-    }
-    const fs = {
-      view(path: string) {
-        const content = fsMap.get(path);
-        if (content === undefined) return null;
-        return { content, numLines: content.split('\n').length };
-      },
-      create(path: string, content: string) {
-        fsMap.set(path, content);
-        emitFsUpdated(path, content);
-        return { path };
-      },
-      strReplace(path: string, oldStr: string, newStr: string) {
-        const current = fsMap.get(path);
-        if (current === undefined) throw new Error(`File not found: ${path}`);
-        const idx = current.indexOf(oldStr);
-        if (idx === -1) throw new Error(`old_str not found in ${path}`);
-        if (current.indexOf(oldStr, idx + oldStr.length) !== -1) {
-          throw new Error(`old_str is ambiguous in ${path}; provide more context`);
+    const { fs, fsMap } = createRuntimeTextEditorFs({
+      db,
+      designId,
+      generationId: id,
+      logger: logIpc,
+      previousHtml,
+      sendEvent,
+    });
+    const cfg = getCachedConfig();
+    const imageConfig = cfg ? resolveImageGenerationConfig(cfg) : null;
+    const imageLog = getLogger('image-generation');
+    const generateImageAsset = imageConfig
+      ? async (
+          request: GenerateImageAssetRequest,
+          signal?: AbortSignal,
+        ): Promise<GenerateImageAssetResult> => {
+          const started = Date.now();
+          const options = toGenerateImageOptions(
+            imageConfig,
+            request.prompt,
+            signal,
+            request.aspectRatio,
+          );
+          imageLog.info('provider.request', {
+            generationId: id,
+            provider: options.provider,
+            model: options.model,
+            size: options.size,
+            aspectRatio: request.aspectRatio ?? 'default',
+            purpose: request.purpose,
+            quality: options.quality,
+            outputFormat: options.outputFormat,
+            promptChars: options.prompt.length,
+          });
+          try {
+            const image = await generateImage(options);
+            const path = allocateAssetPath(fsMap, request, image.mimeType);
+            imageLog.info('provider.ok', {
+              generationId: id,
+              provider: image.provider,
+              model: image.model,
+              path,
+              ms: Date.now() - started,
+              revised: image.revisedPrompt !== undefined,
+            });
+            return {
+              path,
+              dataUrl: image.dataUrl,
+              mimeType: image.mimeType,
+              model: image.model,
+              provider: image.provider,
+              ...(image.revisedPrompt !== undefined ? { revisedPrompt: image.revisedPrompt } : {}),
+            };
+          } catch (err) {
+            imageLog.warn('provider.fail', {
+              generationId: id,
+              provider: options.provider,
+              model: options.model,
+              ms: Date.now() - started,
+              message: err instanceof Error ? err.message : String(err),
+            });
+            throw err;
+          }
         }
-        const next = current.slice(0, idx) + newStr + current.slice(idx + oldStr.length);
-        fsMap.set(path, next);
-        emitFsUpdated(path, next);
-        return { path };
-      },
-      insert(path: string, line: number, text: string) {
-        const current = fsMap.get(path) ?? '';
-        const lines = current.split('\n');
-        const clamped = Math.max(0, Math.min(line, lines.length));
-        lines.splice(clamped, 0, text);
-        const next = lines.join('\n');
-        fsMap.set(path, next);
-        emitFsUpdated(path, next);
-        return { path };
-      },
-      listDir(dir: string) {
-        const prefix = dir.length === 0 || dir === '.' ? '' : `${dir.replace(/\/+$/, '')}/`;
-        const entries = new Set<string>();
-        for (const p of fsMap.keys()) {
-          if (!p.startsWith(prefix)) continue;
-          const rest = p.slice(prefix.length);
-          const firstSegment = rest.split('/')[0];
-          if (firstSegment) entries.add(firstSegment);
-        }
-        return [...entries].sort();
-      },
-    };
-
-    // Fan virtual-fs writes to the renderer so the iframe can re-render the
-    // artifact in near real time. Routed through the existing agent:event:v1
-    // channel as a `fs_updated` variant — single-channel keeps ordering with
-    // tool_call_start/end. Skip emission when the run isn't tied to a design
-    // (no preview pane to update).
-    function emitFsUpdated(path: string, content: string): void {
-      if (designId === null) return;
-      sendEvent({ ...baseCtx, type: 'fs_updated', path, content });
-    }
+      : undefined;
 
     // Per-turn counters so we can emit a single summary line at turn_end
     // instead of a log per token delta.
@@ -368,6 +575,7 @@ function registerIpcHandlers(db: Database | null): void {
     return generateViaAgent(input, {
       fs,
       runtimeVerify,
+      ...(generateImageAsset !== undefined ? { generateImageAsset } : {}),
       onEvent: (event: AgentEvent) => {
         // High-signal only. Skip per-token deltas and inner message_*
         // markers. Emit a concise summary at turn_end.
@@ -459,7 +667,13 @@ function registerIpcHandlers(db: Database | null): void {
           return;
         }
       },
-    });
+    }).then((result) => ({
+      ...result,
+      artifacts: result.artifacts.map((artifact) => ({
+        ...artifact,
+        content: resolveLocalAssetRefs(artifact.content, fsMap),
+      })),
+    }));
   };
 
   /** In-flight requests: generationId → AbortController */
@@ -670,13 +884,11 @@ function registerIpcHandlers(db: Database | null): void {
             ...(baseUrl !== undefined ? { baseUrl } : {}),
             wire: active.wire,
             ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-            ...(active.capabilities !== undefined ? { capabilities: active.capabilities } : {}),
-            ...(active.reasoningLevel !== undefined
-              ? { reasoningLevel: active.reasoningLevel }
-              : {}),
+            explicitCapabilities: active.explicitCapabilities,
             ...(allowKeyless ? { allowKeyless: true } : {}),
             signal: controller.signal,
             logger: coreLogger,
+            capabilities: active.capabilities,
           },
           id,
           payload.designId ?? null,
@@ -690,17 +902,46 @@ function registerIpcHandlers(db: Database | null): void {
         });
         return result;
       } catch (err) {
+        // Attach upstream metadata to the thrown err so the renderer's
+        // diagnostic pipeline (store.ts::applyGenerateError →
+        // diagnoseGenerateFailure) can map this failure to a "most likely
+        // cause + suggested fix" hypothesis. Without this, renderer only
+        // sees err.message + err.code and cannot offer actionable hints
+        // (e.g. the #130 404-page-not-found case that needs /v1 appended).
+        const upstreamStatus = extractUpstreamHttpStatus(err);
+        if (err !== null && typeof err === 'object') {
+          const errAsRec = err as Record<string, unknown>;
+          if (upstreamStatus !== undefined && errAsRec['upstream_status'] === undefined) {
+            errAsRec['upstream_status'] = upstreamStatus;
+          }
+          if (errAsRec['upstream_provider'] === undefined) {
+            errAsRec['upstream_provider'] = active.model.provider;
+          }
+          if (errAsRec['upstream_baseurl'] === undefined && baseUrl !== undefined) {
+            errAsRec['upstream_baseurl'] = baseUrl;
+          }
+          if (errAsRec['upstream_wire'] === undefined && active.wire !== undefined) {
+            errAsRec['upstream_wire'] = active.wire;
+          }
+        }
+        // The SDK catches our AbortController and rethrows a generic
+        // `'Request was aborted.'` that drops signal.reason. Prefer the
+        // CodesignError we stashed on the signal so the user sees the
+        // configured timeout + Settings path instead of an opaque message.
+        const timeoutErr = extractGenerationTimeoutError(controller.signal);
+        const rethrow = timeoutErr ?? err;
         logIpc.error('generate.fail', {
           generationId: id,
           ms: Date.now() - t0,
           provider: active.model.provider,
           modelId: active.model.modelId,
           baseUrl: baseUrl ?? '<default>',
-          message: err instanceof Error ? err.message : String(err),
-          code: err instanceof CodesignError ? err.code : undefined,
+          status: upstreamStatus,
+          message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+          code: rethrow instanceof CodesignError ? rethrow.code : undefined,
         });
-        recordFinalError('generate', id, err);
-        throw err;
+        recordFinalError('generate', id, rethrow);
+        throw rethrow;
       } finally {
         clearTimeoutGuard();
         inFlight.delete(id);
@@ -783,10 +1024,8 @@ function registerIpcHandlers(db: Database | null): void {
             ...(baseUrl !== undefined ? { baseUrl } : {}),
             wire: active.wire,
             ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-            ...(active.capabilities !== undefined ? { capabilities: active.capabilities } : {}),
-            ...(active.reasoningLevel !== undefined
-              ? { reasoningLevel: active.reasoningLevel }
-              : {}),
+            capabilities: active.capabilities,
+            explicitCapabilities: active.explicitCapabilities,
             ...(allowKeyless ? { allowKeyless: true } : {}),
             signal: controller.signal,
           },
@@ -802,17 +1041,23 @@ function registerIpcHandlers(db: Database | null): void {
         });
         return result;
       } catch (err) {
+        // The SDK catches our AbortController and rethrows a generic
+        // `'Request was aborted.'` that drops signal.reason. Prefer the
+        // CodesignError we stashed on the signal so the user sees the
+        // configured timeout + Settings path instead of an opaque message.
+        const timeoutErr = extractGenerationTimeoutError(controller.signal);
+        const rethrow = timeoutErr ?? err;
         logIpc.error('generate.fail', {
           generationId: id,
           ms: Date.now() - t0,
           provider: active.model.provider,
           modelId: active.model.modelId,
           baseUrl: baseUrl ?? '<default>',
-          message: err instanceof Error ? err.message : String(err),
-          code: err instanceof CodesignError ? err.code : undefined,
+          message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+          code: rethrow instanceof CodesignError ? rethrow.code : undefined,
         });
-        recordFinalError('generate', id, err);
-        throw err;
+        recordFinalError('generate', id, rethrow);
+        throw rethrow;
       } finally {
         clearTimeoutGuard();
         inFlight.delete(id);
@@ -877,8 +1122,8 @@ function registerIpcHandlers(db: Database | null): void {
           ...(baseUrl !== undefined ? { baseUrl } : {}),
           wire: active.wire,
           ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-          ...(active.capabilities !== undefined ? { capabilities: active.capabilities } : {}),
-          ...(active.reasoningLevel !== undefined ? { reasoningLevel: active.reasoningLevel } : {}),
+          capabilities: active.capabilities,
+          explicitCapabilities: active.explicitCapabilities,
           ...(allowKeyless ? { allowKeyless: true } : {}),
         });
         logIpc.info('applyComment.ok', {
@@ -934,7 +1179,8 @@ function registerIpcHandlers(db: Database | null): void {
           ...(baseUrl !== undefined ? { baseUrl } : {}),
           wire: active.wire,
           ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-          ...(active.capabilities !== undefined ? { capabilities: active.capabilities } : {}),
+          capabilities: active.capabilities,
+          explicitCapabilities: active.explicitCapabilities,
           ...(allowKeyless ? { allowKeyless: true } : {}),
           logger: titleLogger,
         });
@@ -1005,144 +1251,141 @@ async function scheduleStartupUpdateCheck(): Promise<void> {
   }, 30_000);
 }
 
-void app.whenReady().then(async () => {
-  // Extracted so the outer try/catch AND post-init listeners (whose callbacks
-  // fire outside this block) can route failures through the same boot-fallback
-  // path. Without this, a later createWindow() throw from app.on('activate')
-  // would bypass writeBootErrorSync and leave the user with nothing to attach.
-  const handleBootFailure = (err: unknown, title: string, message: string): void => {
-    let logsDir: string;
-    try {
-      logsDir = app.getPath('logs');
-    } catch {
-      logsDir = app.getPath('temp');
-    }
-    const bootLogPath = writeBootErrorSync({
-      error: err,
-      logsDir,
-      appVersion: app.getVersion(),
-      platform: process.platform,
-      electronVersion: process.versions.electron ?? 'unknown',
-      nodeVersion: process.versions.node,
-    });
-    const choice = showBootDialog(app, dialog, {
-      type: 'error',
-      title,
-      message,
-      detail: `Error: ${err instanceof Error ? err.message : String(err)}\n\nDiagnostic log: ${bootLogPath}`,
-      buttons: ['Copy diagnostic path', 'Open log folder', 'Quit'],
-      defaultId: 2,
-      cancelId: 2,
-    });
-    if (choice === 0) clipboard.writeText(bootLogPath);
-    if (choice === 1) shell.showItemInFolder(bootLogPath);
-  };
-
-  try {
-    initLogger();
-    // Single-instance lock. Two simultaneous Electron instances would race
-    // `cleanupStaleTmps` vs `writeAtomic` (B's cleanup unlinks A's in-flight
-    // tmp → ENOENT rename) and collide on the SQLite WAL. macOS usually
-    // enforces this at the OS level, but `open -n` defeats that — so we
-    // acquire the lock explicitly before touching any shared files.
-    const gotLock = app.requestSingleInstanceLock();
-    if (!gotLock) {
-      app.quit();
-      return;
-    }
-    app.on('second-instance', () => {
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.focus();
-      }
-    });
-    // Show a blocking dialog if the user launched from the DMG mount. If
-    // they accept the remedy, we quit here before touching safeStorage / the
-    // snapshots DB so nothing half-initialises against a bad install.
-    const aborted = await maybeAbortIfRunningFromDmg();
-    if (aborted) return;
-    await loadConfigOnBoot();
-    // One-shot migration for feat-branch testers whose config.toml still
-    // carries Phase 1's stale codex wire/baseUrl. No-op on fresh installs
-    // and for everyone else. A failure here means the config file itself
-    // is unwritable (disk full, permissions, etc.) — let it bubble up to
-    // the outer boot-error dialog rather than silently hiding it, so the
-    // user sees the diagnostic instead of a mysteriously broken codex flow.
-    await migrateStaleCodexEntryIfNeeded();
-    // Best-effort sweep of leftover `<file>.tmp.<pid>` siblings from previous
-    // crashes. pid changes across restarts so without this the config dir
-    // accumulates 0o600 litter forever.
-    cleanupStaleTmps(join(configDir(), 'reported-fingerprints.json'));
-    // Snapshot persistence is best-effort at boot — a failure here (corrupt DB,
-    // permission denied, missing native binding) must NOT block the BrowserWindow
-    // from opening. Surface it via an error dialog and skip registering the
-    // snapshots IPC channels; the rest of the app stays usable.
-    const dbResult = safeInitSnapshotsDb(join(app.getPath('userData'), 'designs.db'));
-    const diagnosticsDb: Database | null = dbResult.ok ? dbResult.db : null;
-    if (dbResult.ok) {
-      registerSnapshotsIpc(dbResult.db);
-      registerChatMessagesIpc(dbResult.db);
-      registerCommentsIpc(dbResult.db);
+if (!IS_VITEST) {
+  void app.whenReady().then(async () => {
+    // Extracted so the outer try/catch AND post-init listeners (whose callbacks
+    // fire outside this block) can route failures through the same boot-fallback
+    // path. Without this, a later createWindow() throw from app.on('activate')
+    // would bypass writeBootErrorSync and leave the user with nothing to attach.
+    const handleBootFailure = (err: unknown, title: string, message: string): void => {
+      let logsDir: string;
       try {
-        pruneDiagnosticEvents(dbResult.db, 500);
-      } catch (err) {
-        getLogger('main:boot').warn('diagnosticEvents.prune.fail', {
-          message: err instanceof Error ? err.message : String(err),
-        });
+        logsDir = app.getPath('logs');
+      } catch {
+        logsDir = app.getPath('temp');
       }
-    } else {
-      const bootLog = getLogger('main:boot');
-      bootLog.error('snapshotsDb.init.fail', {
-        message: dbResult.error.message,
-        stack: dbResult.error.stack,
+      const bootLogPath = writeBootErrorSync({
+        error: err,
+        logsDir,
+        appVersion: app.getVersion(),
+        platform: process.platform,
+        electronVersion: process.versions.electron ?? 'unknown',
+        nodeVersion: process.versions.node,
       });
-      // Install stub handlers so renderer-side calls reject with a typed
-      // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
-      // "No handler registered" rejection — see snapshots-ipc.ts.
-      registerSnapshotsUnavailableIpc(dbResult.error.message);
-      registerChatMessagesUnavailableIpc(dbResult.error.message);
-      registerCommentsUnavailableIpc(dbResult.error.message);
-      dialog.showErrorBox(
-        'Design history unavailable',
-        `Could not open the local snapshots database. Version history will be disabled for this session.\n\n${dbResult.error.message}`,
-      );
-    }
-    registerIpcHandlers(diagnosticsDb);
-    registerLocaleIpc();
-    registerConnectionIpc();
-    registerOnboardingIpc();
-    registerCodexOAuthIpc();
-    registerPreferencesIpc();
-    registerExporterIpc(() => mainWindow);
-    registerDiagnosticsIpc(diagnosticsDb);
-    setupAutoUpdater();
-    registerAppMenu();
-    createWindow();
-    void scheduleStartupUpdateCheck();
+      const choice = showBootDialog(app, dialog, {
+        type: 'error',
+        title,
+        message,
+        detail: `Error: ${err instanceof Error ? err.message : String(err)}\n\nDiagnostic log: ${bootLogPath}`,
+        buttons: ['Copy diagnostic path', 'Open log folder', 'Quit'],
+        defaultId: 2,
+        cancelId: 2,
+      });
+      if (choice === 0) clipboard.writeText(bootLogPath);
+      if (choice === 1) shell.showItemInFolder(bootLogPath);
+    };
 
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        try {
-          createWindow();
-        } catch (err) {
-          handleBootFailure(err, 'Cannot reopen window', 'Window failed to open.');
-        }
+    try {
+      initLogger();
+      // Single-instance lock. Two simultaneous Electron instances would race
+      // `cleanupStaleTmps` vs `writeAtomic` (B's cleanup unlinks A's in-flight
+      // tmp → ENOENT rename) and collide on the SQLite WAL. macOS usually
+      // enforces this at the OS level, but `open -n` defeats that — so we
+      // acquire the lock explicitly before touching any shared files.
+      const gotLock = app.requestSingleInstanceLock();
+      if (!gotLock) {
+        app.quit();
+        return;
       }
-    });
-  } catch (err) {
-    // Last-resort boot-phase handler. Reached when something before
-    // `initLogger()` finishes (or during the first few setup calls)
-    // throws — our electron-log sink might not exist yet, so write a
-    // best-effort sync log and show a native three-button dialog.
-    handleBootFailure(
-      err,
-      'Open CoDesign failed to start',
-      'A startup error prevented the app from loading.',
-    );
-    app.quit();
-  }
-});
+      app.on('second-instance', () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+        }
+      });
+      // Show a blocking dialog if the user launched from the DMG mount. If
+      // they accept the remedy, we quit here before touching safeStorage / the
+      // snapshots DB so nothing half-initialises against a bad install.
+      const aborted = await maybeAbortIfRunningFromDmg();
+      if (aborted) return;
+      await loadConfigOnBoot();
+      // Best-effort sweep of leftover `<file>.tmp.<pid>` siblings from previous
+      // crashes. pid changes across restarts so without this the config dir
+      // accumulates 0o600 litter forever.
+      cleanupStaleTmps(join(configDir(), 'reported-fingerprints.json'));
+      // Snapshot persistence is best-effort at boot — a failure here (corrupt DB,
+      // permission denied, missing native binding) must NOT block the BrowserWindow
+      // from opening. Surface it via an error dialog and skip registering the
+      // snapshots IPC channels; the rest of the app stays usable.
+      const dbResult = safeInitSnapshotsDb(join(app.getPath('userData'), 'designs.db'));
+      const diagnosticsDb: Database | null = dbResult.ok ? dbResult.db : null;
+      if (dbResult.ok) {
+        registerSnapshotsIpc(dbResult.db);
+        registerWorkspaceIpc(dbResult.db, () => mainWindow);
+        registerChatMessagesIpc(dbResult.db);
+        registerCommentsIpc(dbResult.db);
+        try {
+          pruneDiagnosticEvents(dbResult.db, 500);
+        } catch (err) {
+          getLogger('main:boot').warn('diagnosticEvents.prune.fail', {
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      } else {
+        const bootLog = getLogger('main:boot');
+        bootLog.error('snapshotsDb.init.fail', {
+          message: dbResult.error.message,
+          stack: dbResult.error.stack,
+        });
+        // Install stub handlers so renderer-side calls reject with a typed
+        // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
+        // "No handler registered" rejection — see snapshots-ipc.ts.
+        registerSnapshotsUnavailableIpc(dbResult.error.message);
+        registerChatMessagesUnavailableIpc(dbResult.error.message);
+        registerCommentsUnavailableIpc(dbResult.error.message);
+        dialog.showErrorBox(
+          'Design history unavailable',
+          `Could not open the local snapshots database. Version history will be disabled for this session.\n\n${dbResult.error.message}`,
+        );
+      }
+      registerIpcHandlers(diagnosticsDb);
+      registerLocaleIpc();
+      registerConnectionIpc();
+      registerOnboardingIpc();
+      registerCodexOAuthIpc();
+      registerPreferencesIpc();
+      registerImageGenerationSettingsIpc();
+      registerExporterIpc(() => mainWindow);
+      registerDiagnosticsIpc(diagnosticsDb);
+      setupAutoUpdater();
+      registerAppMenu();
+      createWindow();
+      void scheduleStartupUpdateCheck();
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+          try {
+            createWindow();
+          } catch (err) {
+            handleBootFailure(err, 'Cannot reopen window', 'Window failed to open.');
+          }
+        }
+      });
+    } catch (err) {
+      // Last-resort boot-phase handler. Reached when something before
+      // `initLogger()` finishes (or during the first few setup calls)
+      // throws — our electron-log sink might not exist yet, so write a
+      // best-effort sync log and show a native three-button dialog.
+      handleBootFailure(
+        err,
+        'Open CoDesign failed to start',
+        'A startup error prevented the app from loading.',
+      );
+      app.quit();
+    }
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+}

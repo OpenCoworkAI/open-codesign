@@ -121,17 +121,37 @@ jobs:
   # We do NOT sign in v0.1 — notarization deferred to Stage 2.
   # ------------------------------------------------------------------
   build:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.label }})
     needs: [gate, changelog]
     strategy:
       fail-fast: false
       matrix:
+        # macOS is split into two native-arch runners. Cross-building both
+        # DMGs on a single arm64 host (what we used to do) shipped the host
+        # arch's native module inside the x64 DMG because electron-builder
+        # does not re-stage our per-arch better-sqlite3 prebuilds per target
+        # arch — see #176 (dlopen fails on Intel Macs). Using a native-arch
+        # runner per DMG guarantees `pnpm install` stages the right
+        # better_sqlite3.node* files for each target and keeps the legacy
+        # alias (better_sqlite3.node-electron.node) matching the DMG arch.
         include:
-          - os: macos-latest
+          - os: macos-latest # arm64 Apple Silicon runner
+            label: macos-arm64
+            mac_arch: arm64
+            artifact_name: installer-macos-arm64
+            artifact_glob: 'apps/desktop/release/*.dmg'
+          - os: macos-13 # Intel x64 runner (macos-latest is arm64)
+            label: macos-x64
+            mac_arch: x64
+            artifact_name: installer-macos-x64
             artifact_glob: 'apps/desktop/release/*.dmg'
           - os: windows-latest
+            label: windows-latest
+            artifact_name: installer-windows-latest
             artifact_glob: 'apps/desktop/release/*.exe'
           - os: ubuntu-latest
+            label: ubuntu-latest
+            artifact_name: installer-ubuntu-latest
             artifact_glob: |
               apps/desktop/release/*.AppImage
               apps/desktop/release/*.deb
@@ -170,16 +190,29 @@ jobs:
       # Package the Electron app.
       # CSC_IDENTITY_AUTO_DISCOVERY=false: skip ad-hoc Mac signing prompt.
       # WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD: intentionally unset (no cert in v0.1).
-      - name: Package desktop
+      # On macOS we force-pin the target arch to the runner's host arch
+      # (--arm64 on macos-latest, --x64 on macos-13) so each DMG is packaged
+      # natively instead of cross-built (see matrix comment + #176).
+      - name: Package desktop (non-mac)
+        if: runner.os != 'macOS'
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm --filter @open-codesign/desktop release
 
+      - name: Package desktop (mac, per-arch)
+        if: runner.os == 'macOS'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm --filter @open-codesign/desktop exec electron-vite build
+          pnpm --filter @open-codesign/desktop exec electron-builder --mac --${{ matrix.mac_arch }} --publish never
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: installer-${{ matrix.os }}
+          name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_glob }}
           if-no-files-found: error
           retention-days: 7

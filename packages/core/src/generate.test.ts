@@ -17,12 +17,15 @@ vi.mock('@open-codesign/providers', async () => {
     ...actual,
     complete: (...args: unknown[]) => completeMock(...args),
     completeWithRetry: (
-      _model: unknown,
-      _messages: unknown,
-      _opts: unknown,
+      model: unknown,
+      messages: unknown,
+      opts: unknown,
       _retryOpts: unknown,
-      impl: (...args: unknown[]) => unknown,
-    ) => impl(_model, _messages, _opts),
+      impl?: (...args: unknown[]) => unknown,
+    ) =>
+      typeof impl === 'function'
+        ? impl(model, messages, opts)
+        : completeMock(model, messages, opts),
   };
 });
 
@@ -34,7 +37,7 @@ vi.mock('./skills/loader.js', async () => {
   };
 });
 
-import { applyComment, generate } from './index';
+import { applyComment, generate, generateTitle } from './index';
 
 const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
 
@@ -152,6 +155,64 @@ describe('generate()', () => {
     expect(opts.reasoning).toBeUndefined();
   });
 
+  it('omits reasoning for builtin OpenAI rows repointed to non-reasoning proxies', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-5.4' },
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://api.duckcoding.ai/v1',
+      capabilities: { supportsReasoning: false },
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as {
+      reasoning?: string;
+    };
+    expect(opts.reasoning).toBeUndefined();
+  });
+
+  it('keeps official OpenAI heuristics for imported providers when explicitCapabilities omit supportsReasoning', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'codex-openai', modelId: 'gpt-5.4' },
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://api.openai.com/v1',
+      capabilities: { supportsReasoning: false, supportsModelsEndpoint: true },
+      explicitCapabilities: { supportsModelsEndpoint: true },
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as {
+      reasoning?: string;
+      capabilities?: { supportsReasoning?: boolean; supportsModelsEndpoint?: boolean };
+      explicitCapabilities?: { supportsModelsEndpoint?: boolean };
+    };
+    expect(opts.reasoning).toBe('high');
+    expect(opts.capabilities).toEqual({
+      supportsReasoning: false,
+      supportsModelsEndpoint: true,
+    });
+    expect(opts.explicitCapabilities).toEqual({
+      supportsModelsEndpoint: true,
+    });
+  });
+
   it('passes reasoning=high for OpenAI gpt-5 (whitelisted reasoning model)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
@@ -171,7 +232,7 @@ describe('generate()', () => {
     expect(opts.reasoning).toBe('high');
   });
 
-  it('honors provider capabilities that disable reasoning', async () => {
+  it('passes reasoning=medium for imported providers on official OpenRouter base URLs', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -182,39 +243,16 @@ describe('generate()', () => {
     await generate({
       prompt: 'design a meditation app',
       history: [],
-      model: { provider: 'openai', modelId: 'gpt-5' },
+      model: { provider: 'opencode-openrouter', modelId: 'openai/o3-mini' },
       apiKey: 'sk-test',
-      capabilities: { supportsReasoning: false },
+      wire: 'openai-chat',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      capabilities: { supportsReasoning: false, supportsModelsEndpoint: true },
+      explicitCapabilities: { supportsModelsEndpoint: true },
     });
 
-    const opts = completeMock.mock.calls[0]?.[2] as {
-      capabilities?: { supportsReasoning?: boolean };
-      reasoning?: string;
-    };
-    expect(opts.capabilities).toEqual({ supportsReasoning: false });
-    expect(opts.reasoning).toBeUndefined();
-  });
-
-  it('does not auto-add reasoning when provider capabilities disable it', async () => {
-    const err = Object.assign(
-      new Error('400 Reasoning is mandatory for this endpoint and cannot be disabled.'),
-      { status: 400 },
-    );
-    completeMock.mockRejectedValueOnce(err);
-
-    await expect(
-      generate({
-        prompt: 'design a meditation app',
-        history: [],
-        model: { provider: 'openrouter', modelId: 'novel-lab/some-new-thinker' },
-        apiKey: 'sk-test',
-        capabilities: { supportsReasoning: false },
-      }),
-    ).rejects.toThrow();
-
-    expect(completeMock).toHaveBeenCalledTimes(1);
     const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
-    expect(opts.reasoning).toBeUndefined();
+    expect(opts.reasoning).toBe('medium');
   });
 
   it('passes reasoning=high for OpenAI o-series (o1, o3, o4)', async () => {
@@ -867,6 +905,39 @@ ${SAMPLE_HTML}
     const userContent = userMessages.map((m) => m.content).join('\n');
     expect(userContent).toContain('untrusted_scanned_content');
     expect(userContent).toContain('Ignore previous instructions');
+  });
+});
+
+describe('generateTitle()', () => {
+  it('passes explicitCapabilities through completeWithRetry for imported official providers', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: 'Calm Spaces',
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generateTitle({
+      prompt: 'design a meditation app',
+      model: { provider: 'codex-openai', modelId: 'gpt-5.4' },
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://api.openai.com/v1',
+      capabilities: { supportsReasoning: false, supportsModelsEndpoint: true },
+      explicitCapabilities: { supportsModelsEndpoint: true },
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as {
+      explicitCapabilities?: { supportsModelsEndpoint?: boolean };
+      capabilities?: { supportsReasoning?: boolean; supportsModelsEndpoint?: boolean };
+    };
+    expect(opts.capabilities).toEqual({
+      supportsReasoning: false,
+      supportsModelsEndpoint: true,
+    });
+    expect(opts.explicitCapabilities).toEqual({
+      supportsModelsEndpoint: true,
+    });
   });
 });
 

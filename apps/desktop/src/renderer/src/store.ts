@@ -10,6 +10,7 @@ import type {
   CommentScope,
   Design,
   DiagnosticEventRow,
+  DiagnosticHypothesis,
   LocalInputFile,
   ModelRef,
   OnboardingState,
@@ -18,6 +19,7 @@ import type {
   ReportableError,
   SelectedElement,
 } from '@open-codesign/shared';
+import { diagnoseGenerateFailure } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
@@ -196,8 +198,11 @@ interface CodesignState {
   currentDesignId: string | null;
   designsLoaded: boolean;
   designsViewOpen: boolean;
+  newDesignDialogOpen: boolean;
   designToDelete: Design | null;
   designToRename: Design | null;
+  /** Workspace rebind confirmation state: { design, newPath } when user picks a different folder */
+  workspaceRebindPending: { design: Design; newPath: string } | null;
 
   theme: Theme;
   view: AppView;
@@ -345,7 +350,9 @@ interface CodesignState {
 
   loadDesigns: () => Promise<void>;
   ensureCurrentDesign: () => Promise<void>;
-  createNewDesign: () => Promise<Design | null>;
+  openNewDesignDialog: () => void;
+  closeNewDesignDialog: () => void;
+  createNewDesign: (workspacePath?: string | null) => Promise<Design | null>;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string) => Promise<void>;
@@ -355,6 +362,10 @@ interface CodesignState {
   closeDesignsView: () => void;
   requestDeleteDesign: (design: Design | null) => void;
   requestRenameDesign: (design: Design | null) => void;
+
+  requestWorkspaceRebind: (design: Design, newPath: string) => void;
+  cancelWorkspaceRebind: () => void;
+  confirmWorkspaceRebind: (migrateFiles: boolean) => Promise<void>;
 
   pushToast: (toast: Omit<Toast, 'id'>) => string;
   /**
@@ -974,6 +985,41 @@ export function extractUpstreamContext(err: unknown): Record<string, unknown> | 
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/**
+ * Pull an HTTP status code off a caught generate error. Looks at the
+ * `upstream_status` field main/index.ts attaches first, then falls back to
+ * common SDK locations, and finally regex-scans `err.message` for the
+ * #130-style "404 page not found" text that arrives with no structured status.
+ */
+export function extractGenerateStatus(err: unknown): number | undefined {
+  if (err === null || typeof err !== 'object') return undefined;
+  const rec = err as Record<string, unknown>;
+  const candidates: unknown[] = [
+    rec['upstream_status'],
+    rec['status'],
+    rec['statusCode'],
+    (rec['response'] as { status?: unknown } | undefined)?.status,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c) && c >= 100 && c < 600) return c;
+  }
+  if (err instanceof Error) {
+    const m = /\b([45]\d{2})\b/.exec(err.message);
+    if (m?.[1]) return Number(m[1]);
+  }
+  return undefined;
+}
+
+/**
+ * Pick an upstream-* string field off an err, guarding the "wrong type"
+ * and "empty string" cases so callers can use `?? fallback`.
+ */
+function pickUpstreamString(err: unknown, key: string): string | undefined {
+  if (err === null || typeof err !== 'object') return undefined;
+  const v = (err as Record<string, unknown>)[key];
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
 function applyGenerateError(
   get: GetState,
   set: SetState,
@@ -1009,10 +1055,21 @@ function applyGenerateError(
   }
   const code = extractCodesignErrorCode(err) ?? 'GENERATION_FAILED';
   const upstream = extractUpstreamContext(err);
+
+  // Bridge the failure into the connection-test diagnostics system so the
+  // toast tells the user WHY and WHAT TO TRY instead of just dumping the
+  // upstream message. Fixes #130 (404 → "add /v1") and gives #158 / #134 a
+  // home for gateway / instructions-required hints.
+  const cfg = get().config;
+  const hypothesis = deriveGenerateHypothesis(err, cfg);
+  const description = buildGenerateErrorDescription(msg, hypothesis);
+  const action = buildGenerateFixAction(get, set, hypothesis, err, cfg);
+
   get().pushToast({
     variant: 'error',
     title: tr('notifications.generationFailed'),
-    description: msg,
+    description,
+    ...(action !== undefined ? { action } : {}),
     localId: get().createReportableError({
       code,
       scope: 'generate',
@@ -1022,6 +1079,113 @@ function applyGenerateError(
       ...(upstream !== undefined ? { context: upstream } : {}),
     }),
   });
+}
+
+function deriveGenerateHypothesis(
+  err: unknown,
+  cfg: OnboardingState | null,
+): DiagnosticHypothesis | undefined {
+  const provider = pickUpstreamString(err, 'upstream_provider') ?? cfg?.provider ?? 'unknown';
+  const baseUrl = pickUpstreamString(err, 'upstream_baseurl') ?? cfg?.baseUrl ?? undefined;
+  const wire = pickUpstreamString(err, 'upstream_wire');
+  const status = extractGenerateStatus(err);
+  const message = err instanceof Error ? err.message : undefined;
+  const ctx = {
+    provider,
+    ...(baseUrl !== undefined && baseUrl !== null ? { baseUrl } : {}),
+    ...(wire !== undefined ? { wire } : {}),
+    ...(status !== undefined ? { status } : {}),
+    ...(message !== undefined ? { message } : {}),
+  };
+  const hypotheses = diagnoseGenerateFailure(ctx);
+  const primary = hypotheses[0];
+  // Skip the bare "unknown" hypothesis — appending "Unknown error" to a
+  // toast that already shows the upstream message is just noise.
+  if (primary === undefined || primary.cause === 'diagnostics.cause.unknown') {
+    return undefined;
+  }
+  return primary;
+}
+
+function buildGenerateErrorDescription(
+  originalMessage: string,
+  hypothesis: DiagnosticHypothesis | undefined,
+): string {
+  if (hypothesis === undefined) return originalMessage;
+  const hint = tr(hypothesis.cause);
+  // When the i18n key was missing, tr() falls back to returning the key
+  // itself; don't double up "diagnostics.cause.x" in the toast.
+  if (hint === hypothesis.cause) return originalMessage;
+  return `${originalMessage}\n\n${tr('diagnostics.mostLikelyCause')} ${hint}`;
+}
+
+function buildGenerateFixAction(
+  get: GetState,
+  set: SetState,
+  hypothesis: DiagnosticHypothesis | undefined,
+  err: unknown,
+  cfg: OnboardingState | null,
+): Toast['action'] | undefined {
+  const fix = hypothesis?.suggestedFix;
+  if (fix === undefined) return undefined;
+  if (fix.baseUrlTransform === undefined) return undefined;
+  const providerId = pickUpstreamString(err, 'upstream_provider') ?? cfg?.provider;
+  const baseUrl = pickUpstreamString(err, 'upstream_baseurl') ?? cfg?.baseUrl ?? null;
+  if (
+    providerId === undefined ||
+    providerId === null ||
+    baseUrl === null ||
+    !/^https?:\/\/\S+/i.test(baseUrl.trim())
+  ) {
+    return undefined;
+  }
+  const nextBaseUrl = fix.baseUrlTransform(baseUrl);
+  if (nextBaseUrl === baseUrl) return undefined;
+  return {
+    label: tr('notifications.generationFailedApplyFix'),
+    onClick: () => {
+      void applyGenerateBaseUrlFix(get, set, providerId, nextBaseUrl);
+    },
+  };
+}
+
+export async function applyGenerateBaseUrlFix(
+  get: GetState,
+  set: SetState,
+  providerId: string,
+  nextBaseUrl: string,
+): Promise<void> {
+  const api = window.codesign?.config?.updateProvider;
+  // Don't silently swallow "this app version lacks the IPC" — surface it as a
+  // reportable error so users know why the Apply-fix button did nothing and
+  // can fall back to editing baseUrl manually in Settings.
+  if (api === undefined) {
+    get().reportableErrorToast({
+      code: 'GENERATE_FIX_APPLY_UNAVAILABLE',
+      scope: 'generate',
+      title: tr('notifications.generationFailedFixUnavailable'),
+      description: tr('notifications.generationFailedFixUnavailableDescription'),
+    });
+    return;
+  }
+  try {
+    const next = await api({ id: providerId, baseUrl: nextBaseUrl });
+    set({ config: next });
+    get().pushToast({
+      variant: 'success',
+      title: tr('notifications.generationFailedBaseUrlUpdated'),
+    });
+  } catch (updateErr) {
+    get().reportableErrorToast({
+      code: 'GENERATE_FIX_APPLY_FAILED',
+      scope: 'generate',
+      title: tr('notifications.generationFailedFixApplyFailed'),
+      description: updateErr instanceof Error ? updateErr.message : String(updateErr),
+      ...(updateErr instanceof Error && updateErr.stack !== undefined
+        ? { stack: updateErr.stack }
+        : {}),
+    });
+  }
 }
 
 function advanceStageIfCurrent(
@@ -1204,8 +1368,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   currentDesignId: null,
   designsLoaded: false,
   designsViewOpen: false,
+  newDesignDialogOpen: false,
   designToDelete: null,
   designToRename: null,
+  workspaceRebindPending: null,
 
   inputFiles: [],
   referenceUrl: '',
@@ -1760,7 +1926,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     await get().createNewDesign();
   },
 
-  async createNewDesign() {
+  async createNewDesign(workspacePath?: string | null) {
     if (!window.codesign) return null;
     if (get().isGenerating) {
       // Don't silently drop the request — callers like the Examples flow
@@ -1800,6 +1966,19 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       await get().loadDesigns();
       void get().loadChatForCurrentDesign();
       void get().loadCommentsForCurrentDesign();
+      if (workspacePath) {
+        try {
+          await window.codesign.snapshots.updateWorkspace(design.id, workspacePath, false);
+          await get().loadDesigns();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : tr('errors.unknown');
+          get().pushToast({
+            variant: 'error',
+            title: tr('canvas.workspace.updateFailed'),
+            description: msg,
+          });
+        }
+      }
       return design;
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
@@ -2030,11 +2209,56 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   closeDesignsView() {
     set({ designsViewOpen: false });
   },
+  openNewDesignDialog() {
+    set({ newDesignDialogOpen: true });
+  },
+  closeNewDesignDialog() {
+    set({ newDesignDialogOpen: false });
+  },
   requestDeleteDesign(design) {
     set({ designToDelete: design });
   },
   requestRenameDesign(design) {
     set({ designToRename: design });
+  },
+
+  requestWorkspaceRebind(design, newPath) {
+    // Block workspace changes while the current design is generating
+    const state = get();
+    if (state.isGenerating && state.generatingDesignId === state.currentDesignId) {
+      return;
+    }
+    set({ workspaceRebindPending: { design, newPath } });
+  },
+
+  cancelWorkspaceRebind() {
+    set({ workspaceRebindPending: null });
+  },
+
+  async confirmWorkspaceRebind(migrateFiles) {
+    if (!window.codesign) return;
+    const pending = get().workspaceRebindPending;
+    if (!pending) return;
+
+    const { design, newPath } = pending;
+    try {
+      await window.codesign.snapshots.updateWorkspace(design.id, newPath, migrateFiles);
+      const updated = await window.codesign.snapshots.listDesigns();
+      set({ designs: updated, workspaceRebindPending: null });
+      get().pushToast({
+        variant: 'success',
+        title: tr('canvas.workspace.updated'),
+      });
+    } catch (err) {
+      set({ workspaceRebindPending: null });
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('canvas.workspace.updateFailed'),
+        description: msg,
+      });
+      throw err;
+    }
   },
 
   pushToast(toast) {

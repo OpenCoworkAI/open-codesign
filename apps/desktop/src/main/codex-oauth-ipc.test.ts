@@ -303,7 +303,7 @@ describe('codex-oauth:v1:login', () => {
     });
 
     await register();
-    await expect(handlers.get('codex-oauth:v1:login')?.()).rejects.toThrow(/无法读取.*账户/);
+    await expect(handlers.get('codex-oauth:v1:login')?.()).rejects.toThrow(/ChatGPT.*ID/);
     expect(closeMock).toHaveBeenCalledTimes(1);
     expect(writeConfigMock).not.toHaveBeenCalled();
 
@@ -311,6 +311,30 @@ describe('codex-oauth:v1:login', () => {
     const stored = await getCodexTokenStore().read();
     expect(stored).toBeNull();
     expect(fakeCachedConfig).toBeNull();
+  });
+
+  it('aborts an in-flight login when cancel-login is invoked', async () => {
+    waitForCodeMock.mockImplementation(
+      async (_expectedState: string, signal?: AbortSignal) =>
+        await new Promise<never>((_resolve, reject) => {
+          if (signal?.aborted) {
+            reject(new Error('Codex OAuth callback aborted'));
+            return;
+          }
+          signal?.addEventListener(
+            'abort',
+            () => reject(new Error('Codex OAuth callback aborted')),
+            { once: true },
+          );
+        }),
+    );
+
+    await register();
+    const loginPromise = handlers.get('codex-oauth:v1:login')?.() as Promise<unknown>;
+    await expect(handlers.get('codex-oauth:v1:cancel-login')?.()).resolves.toBe(true);
+    await expect(loginPromise).rejects.toThrow(/Codex login cancelled/);
+    expect(closeMock).toHaveBeenCalled();
+    expect(writeConfigMock).not.toHaveBeenCalled();
   });
 });
 

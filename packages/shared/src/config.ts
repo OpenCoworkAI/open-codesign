@@ -96,15 +96,53 @@ export type StoredDesignSystem = z.infer<typeof StoredDesignSystem>;
 export const ReasoningLevelSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']);
 export type ReasoningLevel = z.infer<typeof ReasoningLevelSchema>;
 
+export const ProviderModelDiscoveryModeSchema = z.enum(['models', 'static-hint', 'manual']);
+export type ProviderModelDiscoveryMode = z.infer<typeof ProviderModelDiscoveryModeSchema>;
+
 export const ProviderCapabilitiesSchema = z.object({
-  /**
-   * Whether this endpoint accepts reasoning/thinking request shape changes.
-   * Set false for strict OpenAI-compatible gateways that reject developer-role
-   * messages or reasoning parameters even when the model id looks reasoning-capable.
-   */
+  supportsKeyless: z.boolean().optional(),
+  supportsModelsEndpoint: z.boolean().optional(),
+  supportsChatCompletions: z.boolean().optional(),
+  supportsResponsesApi: z.boolean().optional(),
+  supportsSystemRole: z.boolean().optional(),
+  supportsDeveloperRole: z.boolean().optional(),
   supportsReasoning: z.boolean().optional(),
+  supportsToolCalling: z.boolean().optional(),
+  requiresClaudeCodeIdentity: z.boolean().optional(),
+  modelDiscoveryMode: ProviderModelDiscoveryModeSchema.optional(),
 });
 export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
+
+export const IMAGE_GENERATION_SCHEMA_VERSION = 1 as const;
+
+export const ImageGenerationProviderSchema = z.enum(['openai', 'openrouter']);
+export type ImageGenerationProvider = z.infer<typeof ImageGenerationProviderSchema>;
+
+export const ImageGenerationCredentialModeSchema = z.enum(['inherit', 'custom']);
+export type ImageGenerationCredentialMode = z.infer<typeof ImageGenerationCredentialModeSchema>;
+
+export const ImageGenerationQualitySchema = z.enum(['auto', 'low', 'medium', 'high']);
+export type ImageGenerationQuality = z.infer<typeof ImageGenerationQualitySchema>;
+
+export const ImageGenerationSizeSchema = z.enum(['auto', '1024x1024', '1536x1024', '1024x1536']);
+export type ImageGenerationSize = z.infer<typeof ImageGenerationSizeSchema>;
+
+export const ImageGenerationOutputFormatSchema = z.enum(['png', 'jpeg', 'webp']);
+export type ImageGenerationOutputFormat = z.infer<typeof ImageGenerationOutputFormatSchema>;
+
+export const ImageGenerationSettingsSchema = z.object({
+  schemaVersion: z.literal(IMAGE_GENERATION_SCHEMA_VERSION),
+  enabled: z.boolean().default(false),
+  provider: ImageGenerationProviderSchema.default('openai'),
+  credentialMode: ImageGenerationCredentialModeSchema.default('inherit'),
+  model: z.string().min(1).default('gpt-image-2'),
+  baseUrl: z.string().url().optional(),
+  apiKey: SecretRef.optional(),
+  quality: ImageGenerationQualitySchema.default('high'),
+  size: ImageGenerationSizeSchema.default('1536x1024'),
+  outputFormat: ImageGenerationOutputFormatSchema.default('png'),
+});
+export type ImageGenerationSettings = z.infer<typeof ImageGenerationSettingsSchema>;
 
 export const ProviderEntrySchema = z.object({
   id: z.string().min(1),
@@ -117,7 +155,6 @@ export const ProviderEntrySchema = z.object({
   modelsHint: z.array(z.string()).optional(),
   httpHeaders: z.record(z.string(), z.string()).optional(),
   queryParams: z.record(z.string(), z.string()).optional(),
-  capabilities: ProviderCapabilitiesSchema.optional(),
   /**
    * Imported providers can explicitly require a stored secret. Codex uses this
    * for providers with `requires_openai_auth = true`; providers without it may
@@ -132,8 +169,81 @@ export const ProviderEntrySchema = z.object({
    * per endpoint. The UI surfaces this as a "Reasoning depth" dropdown.
    */
   reasoningLevel: ReasoningLevelSchema.optional(),
+  capabilities: ProviderCapabilitiesSchema.optional(),
 });
 export type ProviderEntry = z.infer<typeof ProviderEntrySchema>;
+
+interface ProviderCapabilityInput {
+  wire: WireApi;
+  baseUrl?: string | undefined;
+  requiresApiKey?: boolean | undefined;
+  modelsHint?: string[] | undefined;
+  reasoningLevel?: ReasoningLevel | undefined;
+  capabilities?: ProviderCapabilities | undefined;
+}
+
+function isAnthropicOfficialHost(baseUrl: string | undefined): boolean {
+  if (baseUrl === undefined || baseUrl.length === 0) return true;
+  let host: string;
+  try {
+    host = new URL(baseUrl).host.toLowerCase();
+  } catch {
+    return false;
+  }
+  const normalized = host.replace(/:(?:80|443)$/, '');
+  return normalized === 'api.anthropic.com' || normalized.endsWith('.anthropic.com');
+}
+
+export function defaultProviderCapabilities(
+  _providerId: string,
+  entry: ProviderCapabilityInput,
+): Required<ProviderCapabilities> {
+  const supportsModelsEndpoint =
+    entry.capabilities?.supportsModelsEndpoint ?? entry.wire !== 'openai-codex-responses';
+  const wire = entry.wire;
+  return {
+    supportsKeyless: entry.requiresApiKey === false,
+    supportsModelsEndpoint,
+    supportsChatCompletions: wire === 'openai-chat',
+    supportsResponsesApi: wire === 'openai-responses' || wire === 'openai-codex-responses',
+    supportsSystemRole: wire !== 'openai-responses' && wire !== 'openai-codex-responses',
+    supportsDeveloperRole: wire === 'openai-responses' || wire === 'openai-codex-responses',
+    supportsReasoning:
+      entry.reasoningLevel !== undefined ||
+      wire === 'anthropic' ||
+      wire === 'openai-responses' ||
+      wire === 'openai-codex-responses',
+    supportsToolCalling:
+      wire === 'anthropic' || wire === 'openai-chat' || wire === 'openai-responses',
+    requiresClaudeCodeIdentity: wire === 'anthropic' && !isAnthropicOfficialHost(entry.baseUrl),
+    modelDiscoveryMode:
+      entry.modelsHint !== undefined ? 'static-hint' : supportsModelsEndpoint ? 'models' : 'manual',
+  };
+}
+
+export function resolveProviderCapabilities(
+  providerId: string,
+  entry: ProviderCapabilityInput,
+): Required<ProviderCapabilities> {
+  const defaults = defaultProviderCapabilities(providerId, entry);
+  const explicit = entry.capabilities ?? {};
+  return {
+    supportsKeyless: explicit.supportsKeyless ?? defaults.supportsKeyless,
+    supportsModelsEndpoint: explicit.supportsModelsEndpoint ?? defaults.supportsModelsEndpoint,
+    supportsChatCompletions: explicit.supportsChatCompletions ?? defaults.supportsChatCompletions,
+    supportsResponsesApi: explicit.supportsResponsesApi ?? defaults.supportsResponsesApi,
+    supportsSystemRole: explicit.supportsSystemRole ?? defaults.supportsSystemRole,
+    supportsDeveloperRole: explicit.supportsDeveloperRole ?? defaults.supportsDeveloperRole,
+    supportsReasoning: explicit.supportsReasoning ?? defaults.supportsReasoning,
+    supportsToolCalling: explicit.supportsToolCalling ?? defaults.supportsToolCalling,
+    requiresClaudeCodeIdentity:
+      explicit.requiresClaudeCodeIdentity ?? defaults.requiresClaudeCodeIdentity,
+    modelDiscoveryMode: explicit.modelDiscoveryMode ?? defaults.modelDiscoveryMode,
+  };
+}
+
+/** Alias for `Required<ProviderCapabilities>` — all capability fields resolved. */
+export type ResolvedProviderCapabilities = Required<ProviderCapabilities>;
 
 export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, ProviderEntry>> = {
   anthropic: {
@@ -143,6 +253,18 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     wire: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
     defaultModel: 'claude-sonnet-4-6',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsChatCompletions: false,
+      supportsResponsesApi: false,
+      supportsSystemRole: true,
+      supportsDeveloperRole: false,
+      supportsReasoning: true,
+      supportsToolCalling: true,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
   },
   openai: {
     id: 'openai',
@@ -151,6 +273,18 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     wire: 'openai-chat',
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-4o',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsChatCompletions: true,
+      supportsResponsesApi: false,
+      supportsSystemRole: true,
+      supportsDeveloperRole: false,
+      supportsReasoning: false,
+      supportsToolCalling: true,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
   },
   openrouter: {
     id: 'openrouter',
@@ -159,6 +293,18 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     wire: 'openai-chat',
     baseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'anthropic/claude-sonnet-4.6',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsChatCompletions: true,
+      supportsResponsesApi: false,
+      supportsSystemRole: true,
+      supportsDeveloperRole: false,
+      supportsReasoning: false,
+      supportsToolCalling: true,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
   },
   ollama: {
     id: 'ollama',
@@ -168,6 +314,18 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     baseUrl: OLLAMA_DEFAULT_BASE_URL,
     defaultModel: OLLAMA_DEFAULT_MODEL,
     requiresApiKey: false,
+    capabilities: {
+      supportsKeyless: true,
+      supportsModelsEndpoint: true,
+      supportsChatCompletions: true,
+      supportsResponsesApi: false,
+      supportsSystemRole: true,
+      supportsDeveloperRole: false,
+      supportsReasoning: false,
+      supportsToolCalling: true,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
   },
 } as const;
 
@@ -197,6 +355,7 @@ export const ConfigV3Schema = z.object({
   secrets: z.record(z.string(), SecretRef).default({}),
   providers: z.record(z.string(), ProviderEntrySchema).default({}),
   designSystem: StoredDesignSystem.optional(),
+  imageGeneration: ImageGenerationSettingsSchema.optional(),
 });
 export type ConfigV3 = z.infer<typeof ConfigV3Schema>;
 
@@ -310,6 +469,7 @@ export function toPersistedV3(cfg: Config | ConfigV3): ConfigV3 {
     secrets: cfg.secrets,
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...(cfg.imageGeneration !== undefined ? { imageGeneration: cfg.imageGeneration } : {}),
   };
 }
 

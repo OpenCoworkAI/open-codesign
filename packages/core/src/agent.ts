@@ -30,11 +30,14 @@ import {
 } from '@mariozechner/pi-agent-core';
 import type { Message as PiAiMessage, Model as PiAiModel } from '@mariozechner/pi-ai';
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
-import type { RetryReason } from '@open-codesign/providers';
+import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
+  classifyError,
   claudeCodeIdentityHeaders,
+  inferReasoning,
   looksLikeClaudeOAuthToken,
   shouldForceClaudeCodeIdentity,
+  withBackoff,
 } from '@open-codesign/providers';
 import {
   type Artifact,
@@ -61,6 +64,10 @@ import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt } from './prompts/index.js';
 import { makeDeclareTweakSchemaTool } from './tools/declare-tweak-schema.js';
 import { type DoneRuntimeVerifier, makeDoneTool } from './tools/done.js';
+import {
+  type GenerateImageAssetFn,
+  makeGenerateImageAssetTool,
+} from './tools/generate-image-asset.js';
 import { makeListFilesTool } from './tools/list-files.js';
 import { makeReadDesignSystemTool } from './tools/read-design-system.js';
 import { makeReadUrlTool } from './tools/read-url.js';
@@ -252,7 +259,8 @@ function buildPiModel(
   baseUrl: string | undefined,
   httpHeaders?: Record<string, string> | undefined,
   apiKey?: string,
-  capabilities?: ProviderCapabilities | undefined,
+  capabilities?: ProviderCapabilities,
+  explicitCapabilities?: ProviderCapabilities,
 ): PiModel {
   // Fall through to the canonical public endpoint for the 3 first-party
   // BYOK providers when the caller omitted baseUrl. This is a fact about
@@ -281,7 +289,13 @@ function buildPiModel(
     api: apiForWire(wire),
     provider: model.provider,
     baseUrl: canonicalBase,
-    reasoning: capabilities?.supportsReasoning !== false,
+    reasoning: inferReasoning(
+      wire,
+      model.modelId,
+      canonicalBase,
+      explicitCapabilities ?? capabilities,
+      model.provider,
+    ),
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
@@ -601,6 +615,37 @@ const AGENTIC_TOOL_GUIDANCE = [
   'italic serif numbers visually collide and feel low-quality.',
 ].join('\n');
 
+const IMAGE_ASSET_TOOL_GUIDANCE = [
+  '## Bitmap asset generation',
+  '',
+  'You also have `generate_image_asset` for high-quality bitmap assets.',
+  'Use it when the brief asks for, or clearly benefits from, a generated hero image, product image, poster illustration, painterly/photo background, marketing visual, or brand/logo-like bitmap.',
+  '',
+  'MANDATORY asset inventory (do this BEFORE any `str_replace_based_edit_tool` call that writes `index.html`):',
+  '1. Re-read the user brief and list every distinct visual asset it names or strongly implies: background / hero / logo / product / illustration / poster / mascot / texture / avatar, etc.',
+  '2. For each item in that list, decide exactly one of: `generate_image_asset` (bitmap), inline `<svg>` (pure geometric / flat brand-mark / icon), or pure CSS (gradients, patterns). Record the decision.',
+  '3. Emit ALL chosen `generate_image_asset` calls together in a single assistant turn — do NOT start writing or editing `index.html` until every required bitmap asset has been requested.',
+  '',
+  'When the brief explicitly asks for a bitmap for a given slot (e.g. "生图做 bg 和 logo", "generate a hero image and a product shot"), you MUST call `generate_image_asset` for each of those slots. One call per named asset. Do NOT collapse multiple named assets into a single call, and do NOT silently substitute SVG/CSS for one of them and bitmap for the other — that violates the brief.',
+  '',
+  'Default choices when the brief is ambiguous:',
+  "- Logo: if the user asked for it to be *generated* / *illustrated* / *rendered* / any language implying a painted or photographic mark → `generate_image_asset` with `purpose='logo'`, `aspectRatio='1:1'`. Only fall back to inline SVG when the user clearly wants a flat geometric wordmark or when no logo was requested at all.",
+  '- Background / hero / poster / marketing illustration: always `generate_image_asset` unless the brief explicitly says "no images" or "CSS-only".',
+  '- Decorative gradients, UI chrome, charts, simple icons (search, menu, arrow, etc.): use HTML/CSS/SVG, never `generate_image_asset`.',
+  '',
+  'Timing: each call is synchronous and takes ~20–60 seconds. To minimise wall-clock time:',
+  '- Finish the asset inventory above FIRST, then emit every `generate_image_asset` call in ONE turn before touching `index.html`.',
+  '- The host runs tool calls back-to-back within a turn, so batching N image calls costs ~N × 30s of wall clock, but sprinkling them across turns costs N × (image time + LLM round-trip) which is much slower.',
+  '- Never interleave one image call with HTML edits — that serialises the waits across many LLM round trips.',
+  '',
+  'When you call it:',
+  '- Provide a production-ready visual prompt: subject, medium/style, composition, lighting, palette, and any text constraints.',
+  '- Pick the most accurate `purpose` (hero / product / poster / background / illustration / logo / other) — the host appends structural constraints (composition, overlay-safety, no-text) based on it.',
+  '- Set `aspectRatio` to match where the image lands (16:9 heroes, 9:16 mobile, 1:1 logos, etc.) — the host maps it to a concrete size.',
+  '- Provide a meaningful `alt` and optional `filenameHint` (used as the asset stem).',
+  '- Use the returned local `assets/...` path in `index.html`, e.g. `<img src="assets/hero.png" alt="...">` or `backgroundImage: "url(\'assets/hero.png\')"`. The host resolves those local paths for preview and persistence.',
+].join('\n');
+
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -641,6 +686,12 @@ export interface GenerateViaAgentDeps {
    * to static lint only.
    */
   runtimeVerify?: DoneRuntimeVerifier | undefined;
+  /**
+   * Optional bitmap asset generator. When provided, the default toolset adds
+   * `generate_image_asset`; the main design agent decides when a hero/product/
+   * poster/background asset is worth generating.
+   */
+  generateImageAsset?: GenerateImageAssetFn | undefined;
 }
 
 /**
@@ -681,6 +732,7 @@ export async function generateViaAgent(
     input.httpHeaders,
     input.apiKey,
     input.capabilities,
+    input.explicitCapabilities,
   );
   log.info('[generate] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
 
@@ -731,10 +783,21 @@ export async function generateViaAgent(
       makeDoneTool(deps.fs, deps.runtimeVerify) as unknown as AgentTool<TSchema, unknown>,
     );
   }
+  if (deps.generateImageAsset) {
+    defaultTools.push(
+      makeGenerateImageAssetTool(deps.generateImageAsset, deps.fs, log) as unknown as AgentTool<
+        TSchema,
+        unknown
+      >,
+    );
+  }
   const tools = deps.tools ?? defaultTools;
   const encourageToolUse = deps.encourageToolUse ?? tools.length > 0;
+  const activeGuidance = deps.generateImageAsset
+    ? `${AGENTIC_TOOL_GUIDANCE}\n\n${IMAGE_ASSET_TOOL_GUIDANCE}`
+    : AGENTIC_TOOL_GUIDANCE;
   const augmentedSystemPrompt = encourageToolUse
-    ? `${systemPrompt}\n\n${AGENTIC_TOOL_GUIDANCE}`
+    ? `${systemPrompt}\n\n${activeGuidance}`
     : systemPrompt;
 
   // Seed the transcript with prior history (already in ChatMessage shape).
@@ -754,10 +817,19 @@ export async function generateViaAgent(
   // precedence, then the model-family default from reasoningForModel. If
   // neither yields a value the agent runs with 'off', matching
   // pi-agent-core's default.
+  const effectiveBaseUrl = piModel.baseUrl;
   const thinkingLevel =
-    input.capabilities?.supportsReasoning === false
-      ? 'off'
-      : (input.reasoningLevel ?? reasoningForModel(input.model, input.baseUrl) ?? 'off');
+    input.reasoningLevel ??
+    (inferReasoning(
+      input.wire,
+      input.model.modelId,
+      effectiveBaseUrl,
+      input.explicitCapabilities ?? input.capabilities,
+      input.model.provider,
+    )
+      ? reasoningForModel(input.model, effectiveBaseUrl)
+      : undefined) ??
+    'off';
 
   // Build the Agent. convertToLlm narrows AgentMessage (may include custom
   // types) to the LLM-visible Message subset.
@@ -827,16 +899,66 @@ export async function generateViaAgent(
 
   log.info('[generate] step=send_request', ctx);
   const sendStart = Date.now();
+  // First-turn-only retry, further guarded by a side-effect check. Multi-turn
+  // requests carry half-complete agent state (tool calls mid-flight, transcript
+  // accumulated in pi-agent-core's internal loop) — retrying would replay
+  // partial progress and corrupt the session. Even on the first turn, retrying
+  // is safe only before any assistant message has landed in `agent.state`:
+  // once the model has emitted tokens or tool calls, side effects (text_editor
+  // writes, set_todos state) have already fired and a retry would re-run them.
+  // The pre-attempt snapshot of `agent.state.messages.length` lets us detect
+  // whether the failed attempt produced any such artefact and, if so, mark the
+  // error as non-retryable.
+  const isFirstTurn = input.history.length === 0;
+  const RETRY_BLOCKED = Symbol.for('open-codesign.retry.blocked');
+  type RetryBlockedError = Error & { [RETRY_BLOCKED]?: true };
+  const sendOnce = async (): Promise<void> => {
+    const preLen = agent.state.messages.length;
+    try {
+      await agent.prompt(userContent);
+      await agent.waitForIdle();
+    } catch (err) {
+      if (agent.state.messages.length > preLen) {
+        const tagged = (err instanceof Error ? err : new Error(String(err))) as RetryBlockedError;
+        tagged[RETRY_BLOCKED] = true;
+        throw tagged;
+      }
+      throw err;
+    }
+  };
   try {
-    await agent.prompt(userContent);
-    await agent.waitForIdle();
+    if (isFirstTurn) {
+      const retryOpts: Parameters<typeof withBackoff>[1] = {
+        maxRetries: 3,
+        classify: (err): RetryDecision => {
+          if ((err as RetryBlockedError)[RETRY_BLOCKED]) {
+            return { retry: false, reason: 'agent already produced side effects' };
+          }
+          return classifyError(err, input.wire);
+        },
+        onRetry: (info: RetryReason) => {
+          log.warn('[generate] step=send_request.retry', {
+            ...ctx,
+            attempt: info.attempt,
+            totalAttempts: info.totalAttempts,
+            delayMs: info.delayMs,
+            reason: info.reason,
+          });
+          deps.onRetry?.(info);
+        },
+      };
+      if (input.signal) retryOpts.signal = input.signal;
+      await withBackoff(sendOnce, retryOpts);
+    } else {
+      await sendOnce();
+    }
   } catch (err) {
     log.error('[generate] step=send_request.fail', {
       ...ctx,
       ms: Date.now() - sendStart,
       errorClass: err instanceof Error ? err.constructor.name : typeof err,
     });
-    throw remapProviderError(err, input.model.provider);
+    throw remapProviderError(err, input.model.provider, input.wire);
   }
 
   const finalAssistant = findFinalAssistantMessage(agent.state.messages);
@@ -866,6 +988,7 @@ export async function generateViaAgent(
     throw remapProviderError(
       new CodesignError(message, ERROR_CODES.PROVIDER_ERROR),
       input.model.provider,
+      input.wire,
     );
   }
   log.info('[generate] step=send_request.ok', { ...ctx, ms: Date.now() - sendStart });

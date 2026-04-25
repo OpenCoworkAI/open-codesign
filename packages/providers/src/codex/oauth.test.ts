@@ -179,6 +179,33 @@ describe('exchangeCode', () => {
     );
     await expect(exchangeCode('c', 'v', 'r')).rejects.toThrow(/400.*bad thing/);
   });
+
+  it('exposes structured OpenAI OAuth error details on exchange failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                code: 'unsupported_country_region_territory',
+                message: 'Country, region, or territory not supported',
+                param: null,
+                type: 'request_forbidden',
+              },
+            }),
+            { status: 403, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    await expect(exchangeCode('c', 'v', 'r')).rejects.toMatchObject({
+      name: 'CodexOAuthTokenError',
+      status: 403,
+      oauthErrorCode: 'unsupported_country_region_territory',
+      upstreamMessage: 'Country, region, or territory not supported',
+    });
+  });
 });
 
 describe('refreshTokens', () => {

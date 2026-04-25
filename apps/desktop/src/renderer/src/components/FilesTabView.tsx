@@ -1,9 +1,158 @@
 import { useT } from '@open-codesign/i18n';
 import { buildSrcdoc } from '@open-codesign/runtime';
-import { FileCode2 } from 'lucide-react';
+import { FileCode2, Folder, FolderOpen } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDesignFiles } from '../hooks/useDesignFiles';
+import { workspacePathComparisonKey } from '../lib/workspace-path';
 import { useCodesignStore } from '../store';
+
+function truncatePath(path: string, maxLength = 40): string {
+  if (path.length <= maxLength) return path;
+  const start = path.substring(0, maxLength / 2 - 2);
+  const end = path.substring(path.length - maxLength / 2 + 2);
+  return `${start}…${end}`;
+}
+
+function WorkspaceSection() {
+  const t = useT();
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const designs = useCodesignStore((s) => s.designs);
+  const isGenerating = useCodesignStore((s) => s.isGenerating);
+  const generatingDesignId = useCodesignStore((s) => s.generatingDesignId);
+  const requestWorkspaceRebind = useCodesignStore((s) => s.requestWorkspaceRebind);
+  const [picking, setPicking] = useState(false);
+  const [folderExists, setFolderExists] = useState<boolean | null>(null);
+
+  const currentDesign = designs.find((d) => d.id === currentDesignId);
+  const workspacePath = currentDesign?.workspacePath ?? null;
+  const isCurrentDesignGenerating = isGenerating && generatingDesignId === currentDesignId;
+  const disabled = picking || isCurrentDesignGenerating;
+
+  useEffect(() => {
+    if (!workspacePath || !currentDesignId) {
+      setFolderExists(null);
+      return;
+    }
+    window.codesign?.snapshots
+      .checkWorkspaceFolder?.(currentDesignId)
+      .then((r) => setFolderExists(r.exists))
+      .catch((err) => {
+        setFolderExists(null);
+        useCodesignStore.getState().pushToast({
+          variant: 'error',
+          title: t('canvas.workspace.updateFailed'),
+          description: err instanceof Error ? err.message : t('errors.unknown'),
+        });
+      });
+  }, [currentDesignId, workspacePath, t]);
+
+  async function handlePickWorkspace() {
+    if (!window.codesign?.snapshots.pickWorkspaceFolder) return;
+    if (isCurrentDesignGenerating) {
+      useCodesignStore
+        .getState()
+        .pushToast({ variant: 'info', title: t('canvas.workspace.busyGenerating') });
+      return;
+    }
+    try {
+      setPicking(true);
+      const path = await window.codesign.snapshots.pickWorkspaceFolder();
+      if (path && currentDesign && currentDesignId) {
+        if (
+          currentDesign.workspacePath &&
+          workspacePathComparisonKey(currentDesign.workspacePath) !==
+            workspacePathComparisonKey(path)
+        ) {
+          requestWorkspaceRebind(currentDesign, path);
+        } else if (!currentDesign.workspacePath) {
+          try {
+            await window.codesign.snapshots.updateWorkspace(currentDesignId, path, false);
+            const updated = await window.codesign.snapshots.listDesigns();
+            useCodesignStore.setState({ designs: updated });
+          } catch (err) {
+            useCodesignStore.getState().pushToast({
+              variant: 'error',
+              title: t('canvas.workspace.updateFailed'),
+              description: err instanceof Error ? err.message : t('errors.unknown'),
+            });
+          }
+        }
+      }
+    } finally {
+      setPicking(false);
+    }
+  }
+
+  async function handleOpenWorkspace() {
+    if (!currentDesignId || !window.codesign?.snapshots.openWorkspaceFolder) return;
+    if (isCurrentDesignGenerating) {
+      useCodesignStore
+        .getState()
+        .pushToast({ variant: 'info', title: t('canvas.workspace.busyGenerating') });
+      return;
+    }
+    try {
+      await window.codesign.snapshots.openWorkspaceFolder(currentDesignId);
+    } catch (err) {
+      useCodesignStore.getState().pushToast({
+        variant: 'error',
+        title: t('canvas.workspace.updateFailed'),
+        description: err instanceof Error ? err.message : t('errors.unknown'),
+      });
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-[var(--space-2)] px-[var(--space-4)] py-[var(--space-2)] border-b border-[var(--color-border-muted)] min-w-0">
+      <span className="text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium shrink-0">
+        {t('canvas.workspace.sectionTitle')}
+      </span>
+      <span
+        className="flex-1 min-w-0 truncate text-[10px] text-[var(--color-text-secondary)]"
+        title={workspacePath ?? undefined}
+        style={{ fontFamily: 'var(--font-mono)' }}
+      >
+        {workspacePath ? (
+          <>
+            {truncatePath(workspacePath)}
+            {folderExists === false && (
+              <span className="ml-1 text-[var(--color-text-warning,_theme(colors.amber.500))]">
+                !
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-[var(--color-text-muted)] not-italic">
+            {t('canvas.workspace.default')}
+          </span>
+        )}
+      </span>
+      <div className="flex items-center gap-[var(--space-1)] shrink-0">
+        <button
+          type="button"
+          onClick={handlePickWorkspace}
+          disabled={disabled}
+          className="h-6 px-2 rounded-[var(--radius-sm)] text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1"
+          title={workspacePath ? t('canvas.workspace.change') : t('canvas.workspace.choose')}
+        >
+          <Folder className="w-3 h-3" aria-hidden />
+          {workspacePath ? t('canvas.workspace.change') : t('canvas.workspace.choose')}
+        </button>
+        {workspacePath && (
+          <button
+            type="button"
+            onClick={handleOpenWorkspace}
+            disabled={isCurrentDesignGenerating}
+            className="h-6 px-2 rounded-[var(--radius-sm)] text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title={t('canvas.workspace.open')}
+          >
+            <FolderOpen className="w-3 h-3" aria-hidden />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function formatBytes(n: number | undefined): string {
   if (n === undefined) return '';
@@ -44,8 +193,16 @@ export function FilesTabView() {
 
   if (files.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
-        {t('canvas.filesTabEmpty')}
+      <div className="flex h-full min-h-0">
+        <aside className="w-[35%] shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] overflow-y-auto flex flex-col">
+          <WorkspaceSection />
+          <div className="flex-1 flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)] px-[var(--space-6)]">
+            {t('canvas.filesTabEmpty')}
+          </div>
+        </aside>
+        <div className="flex-1 min-w-0 h-full bg-[var(--color-background-secondary)] flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
+          {t('canvas.filesTabEmpty')}
+        </div>
       </div>
     );
   }
@@ -54,7 +211,8 @@ export function FilesTabView() {
 
   return (
     <div className="flex h-full min-h-0">
-      <aside className="w-[35%] shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] overflow-y-auto">
+      <aside className="w-[35%] shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] overflow-y-auto flex flex-col">
+        <WorkspaceSection />
         <div className="px-[var(--space-6)] py-[var(--space-6)]">
           <div className="mb-[var(--space-4)] flex items-center gap-[var(--space-2)]">
             <h2 className="text-[11px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium m-0">
@@ -139,7 +297,7 @@ export function FilesTabView() {
             {t('canvas.openInTab')}
           </button>
         </div>
-        <div className="flex-1 min-h-0 bg-white">
+        <div className="flex-1 min-h-0 bg-[var(--color-background-secondary)]">
           {srcDoc ? (
             <iframe
               ref={iframeRef}

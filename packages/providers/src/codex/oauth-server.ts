@@ -19,7 +19,7 @@ interface PendingWait {
 }
 
 const DEFAULT_PORT = 1455;
-const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
+const CALLBACK_TIMEOUT_MS = 2 * 60 * 1000;
 
 function escapeHtml(s: string): string {
   return s
@@ -132,7 +132,7 @@ export async function startCallbackServer(preferredPort?: number): Promise<Callb
       const timeout = setTimeout(() => {
         settle();
         pending = null;
-        reject(new Error('Codex OAuth callback timeout (5 minutes)'));
+        reject(new Error('Codex OAuth callback timeout (2 minutes)'));
       }, CALLBACK_TIMEOUT_MS);
 
       const onAbort = () => {

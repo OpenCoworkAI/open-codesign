@@ -3,10 +3,12 @@ import {
   BUILTIN_PROVIDERS,
   ConfigV3Schema,
   SUPPORTED_ONBOARDING_PROVIDERS,
+  defaultProviderCapabilities,
   detectWireFromBaseUrl,
   hydrateConfig,
   migrateLegacyToV3,
   parseConfigFlexible,
+  resolveProviderCapabilities,
   toPersistedV3,
 } from './config';
 
@@ -26,6 +28,32 @@ describe('config v3 schema', () => {
     expect(parsed.activeProvider).toBe('anthropic');
   });
 
+  it('accepts provider capability profiles', () => {
+    const parsed = ConfigV3Schema.parse({
+      version: 3,
+      activeProvider: 'custom-lite',
+      activeModel: 'gpt-4.1',
+      secrets: {},
+      providers: {
+        'custom-lite': {
+          id: 'custom-lite',
+          name: 'Lite Gateway',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://proxy.example.com/v1',
+          defaultModel: 'gpt-4.1',
+          capabilities: {
+            supportsKeyless: true,
+            supportsModelsEndpoint: false,
+            modelDiscoveryMode: 'manual',
+          },
+        },
+      },
+    });
+    expect(parsed.providers['custom-lite']?.capabilities?.supportsKeyless).toBe(true);
+    expect(parsed.providers['custom-lite']?.capabilities?.modelDiscoveryMode).toBe('manual');
+  });
+
   it('rejects unknown wire values', () => {
     const bad = {
       version: 3,
@@ -39,27 +67,27 @@ describe('config v3 schema', () => {
     expect(() => ConfigV3Schema.parse(bad)).toThrow();
   });
 
-  it('parses provider capabilities for strict OpenAI-compatible gateways', () => {
-    const raw = {
+  it('parses schema-versioned image generation settings', () => {
+    const parsed = ConfigV3Schema.parse({
       version: 3,
-      activeProvider: 'bedrock-proxy',
-      activeModel: 'anthropic::claude-4-6-sonnet',
+      activeProvider: 'openai',
+      activeModel: 'gpt-4o',
       secrets: {},
       providers: {
-        'bedrock-proxy': {
-          id: 'bedrock-proxy',
-          name: 'Bedrock Proxy',
-          builtin: false,
-          wire: 'openai-chat',
-          baseUrl: 'https://bedrock-proxy.example.test/v1',
-          defaultModel: 'anthropic::claude-4-6-sonnet',
-          capabilities: { supportsReasoning: false },
-        },
+        openai: BUILTIN_PROVIDERS.openai,
       },
-    };
-
-    const parsed = ConfigV3Schema.parse(raw);
-    expect(parsed.providers['bedrock-proxy']?.capabilities?.supportsReasoning).toBe(false);
+      imageGeneration: {
+        schemaVersion: 1,
+        enabled: true,
+        provider: 'openrouter',
+        credentialMode: 'custom',
+        model: 'openai/gpt-5.4-image-2',
+        apiKey: { ciphertext: 'plain:sk-test', mask: 'sk-***test' },
+      },
+    });
+    expect(parsed.imageGeneration?.enabled).toBe(true);
+    expect(parsed.imageGeneration?.quality).toBe('high');
+    expect(parsed.imageGeneration?.size).toBe('1536x1024');
   });
 });
 
@@ -197,5 +225,151 @@ describe('hydrateConfig / toPersistedV3', () => {
     expect(persisted).not.toHaveProperty('provider');
     expect(persisted).not.toHaveProperty('baseUrls');
     expect(persisted.version).toBe(3);
+  });
+
+  it('preserves image generation settings when stripping derived fields', () => {
+    const hydrated = hydrateConfig({
+      version: 3,
+      activeProvider: 'openai',
+      activeModel: 'gpt-4o',
+      secrets: {},
+      providers: { openai: BUILTIN_PROVIDERS.openai },
+      imageGeneration: {
+        schemaVersion: 1,
+        enabled: true,
+        provider: 'openai',
+        credentialMode: 'inherit',
+        model: 'gpt-image-2',
+        quality: 'high',
+        size: '1536x1024',
+        outputFormat: 'png',
+      },
+    });
+    expect(toPersistedV3(hydrated).imageGeneration?.model).toBe('gpt-image-2');
+  });
+});
+
+describe('provider capability helpers', () => {
+  it('derives static-hint model discovery for providers with modelsHint', () => {
+    const caps = defaultProviderCapabilities('chatgpt-codex', {
+      wire: 'openai-codex-responses',
+      requiresApiKey: false,
+      modelsHint: ['gpt-5.4'],
+    });
+    expect(caps.supportsKeyless).toBe(true);
+    expect(caps.supportsModelsEndpoint).toBe(false);
+    expect(caps.modelDiscoveryMode).toBe('static-hint');
+  });
+
+  it('keeps /models enabled for static-hint providers on wires that still support it', () => {
+    const caps = defaultProviderCapabilities('anthropic-static', {
+      wire: 'anthropic',
+      modelsHint: ['claude-sonnet-4-6'],
+    });
+    expect(caps.supportsModelsEndpoint).toBe(true);
+    expect(caps.modelDiscoveryMode).toBe('static-hint');
+  });
+
+  it('lets explicit capability overrides win over defaults', () => {
+    const caps = resolveProviderCapabilities('custom-lite', {
+      wire: 'openai-chat',
+      capabilities: {
+        supportsKeyless: true,
+        supportsModelsEndpoint: false,
+        modelDiscoveryMode: 'manual',
+      },
+    });
+    expect(caps.supportsKeyless).toBe(true);
+    expect(caps.supportsModelsEndpoint).toBe(false);
+    expect(caps.modelDiscoveryMode).toBe('manual');
+  });
+
+  it('fills in omitted capability fields from defaults when merging overrides', () => {
+    const caps = resolveProviderCapabilities('custom-lite', {
+      wire: 'openai-chat',
+      capabilities: {
+        supportsModelsEndpoint: false,
+      },
+    });
+    expect(caps.supportsKeyless).toBe(false);
+    expect(caps.supportsModelsEndpoint).toBe(false);
+    expect(caps.supportsChatCompletions).toBe(true);
+    expect(caps.supportsResponsesApi).toBe(false);
+    expect(caps.supportsToolCalling).toBe(true);
+    expect(caps.modelDiscoveryMode).toBe('manual');
+  });
+
+  it('keeps default reasoning heuristics separate from omitted explicit supportsReasoning', () => {
+    const caps = resolveProviderCapabilities('imported-openai', {
+      wire: 'openai-chat',
+      capabilities: {
+        supportsModelsEndpoint: true,
+      },
+    });
+    expect(caps.supportsReasoning).toBe(false);
+    expect(caps.supportsModelsEndpoint).toBe(true);
+  });
+
+  it('defaults openai-chat wire to chat-completions + system-role + tool-calling', () => {
+    const caps = defaultProviderCapabilities('custom-proxy', { wire: 'openai-chat' });
+    expect(caps.supportsChatCompletions).toBe(true);
+    expect(caps.supportsResponsesApi).toBe(false);
+    expect(caps.supportsSystemRole).toBe(true);
+    expect(caps.supportsDeveloperRole).toBe(false);
+    expect(caps.supportsToolCalling).toBe(true);
+  });
+
+  it('defaults anthropic wire to no-chat-completions + system-role + tool-calling', () => {
+    const caps = defaultProviderCapabilities('custom-anthropic', { wire: 'anthropic' });
+    expect(caps.supportsChatCompletions).toBe(false);
+    expect(caps.supportsResponsesApi).toBe(false);
+    expect(caps.supportsSystemRole).toBe(true);
+    expect(caps.supportsDeveloperRole).toBe(false);
+    expect(caps.supportsToolCalling).toBe(true);
+  });
+
+  it('defaults openai-responses wire to responses-api + developer-role', () => {
+    const caps = defaultProviderCapabilities('custom-responses', { wire: 'openai-responses' });
+    expect(caps.supportsChatCompletions).toBe(false);
+    expect(caps.supportsResponsesApi).toBe(true);
+    expect(caps.supportsSystemRole).toBe(false);
+    expect(caps.supportsDeveloperRole).toBe(true);
+    expect(caps.supportsToolCalling).toBe(true);
+  });
+
+  it('defaults openai-codex-responses wire to responses-api + no-tool-calling', () => {
+    const caps = defaultProviderCapabilities('codex-proxy', { wire: 'openai-codex-responses' });
+    expect(caps.supportsChatCompletions).toBe(false);
+    expect(caps.supportsResponsesApi).toBe(true);
+    expect(caps.supportsSystemRole).toBe(false);
+    expect(caps.supportsDeveloperRole).toBe(true);
+    expect(caps.supportsToolCalling).toBe(false);
+  });
+});
+
+describe('requiresClaudeCodeIdentity — host-based detection', () => {
+  it('official api.anthropic.com → requiresClaudeCodeIdentity: false', () => {
+    const caps = resolveProviderCapabilities('anthropic', {
+      wire: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+    });
+    expect(caps.requiresClaudeCodeIdentity).toBe(false);
+  });
+
+  it('custom relay host → requiresClaudeCodeIdentity: true', () => {
+    const caps = resolveProviderCapabilities('sub2api', {
+      wire: 'anthropic',
+      baseUrl: 'https://sub2api.example.com/v1',
+    });
+    expect(caps.requiresClaudeCodeIdentity).toBe(true);
+  });
+
+  it('declared capabilities.requiresClaudeCodeIdentity: false overrides host detection', () => {
+    const caps = resolveProviderCapabilities('relay', {
+      wire: 'anthropic',
+      baseUrl: 'https://my-relay.example.com',
+      capabilities: { requiresClaudeCodeIdentity: false },
+    });
+    expect(caps.requiresClaudeCodeIdentity).toBe(false);
   });
 });

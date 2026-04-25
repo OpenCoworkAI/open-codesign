@@ -40,11 +40,11 @@ export { CHATGPT_CODEX_PROVIDER_ID };
 
 const CHATGPT_CODEX_PROVIDER: ProviderEntry = {
   id: CHATGPT_CODEX_PROVIDER_ID,
-  name: 'ChatGPT 订阅',
+  name: 'ChatGPT 璁㈤槄',
   builtin: false,
   wire: 'openai-codex-responses',
   // pi-ai's openai-codex-responses wire appends `/codex/responses` itself, so
-  // we store the bare base. Do not add `/codex` here — it'd produce
+  // we store the bare base. Do not add `/codex` here 鈥?it'd produce
   // `/codex/codex/responses`.
   baseUrl: 'https://chatgpt.com/backend-api',
   defaultModel: 'gpt-5.3-codex',
@@ -64,9 +64,18 @@ const CHATGPT_CODEX_PROVIDER: ProviderEntry = {
     'gpt-5.1-codex-mini',
   ],
   requiresApiKey: false,
+  capabilities: {
+    supportsKeyless: true,
+    supportsModelsEndpoint: false,
+    supportsReasoning: true,
+    requiresClaudeCodeIdentity: false,
+    modelDiscoveryMode: 'static-hint',
+  },
 };
 
 let tokenStoreSingleton: CodexTokenStore | null = null;
+let activeLoginAbortController: AbortController | null = null;
+let activeLoginPromise: Promise<CodexOAuthStatus> | null = null;
 
 /**
  * Lazily instantiated module-scoped store. Shared with Task 7's generate flow
@@ -81,9 +90,11 @@ export function getCodexTokenStore(): CodexTokenStore {
   return tokenStoreSingleton;
 }
 
-/** Test-only reset hook — vitest resets module state between test cases. */
+/** Test-only reset hook 鈥?vitest resets module state between test cases. */
 export function __resetCodexTokenStoreForTests(): void {
   tokenStoreSingleton = null;
+  activeLoginAbortController = null;
+  activeLoginPromise = null;
 }
 
 function extractEmail(jwt: string): string | null {
@@ -150,7 +161,7 @@ async function claimActiveProviderIfUnset(): Promise<void> {
   setCachedConfig(next);
 }
 
-async function runLogin(): Promise<CodexOAuthStatus> {
+async function runLoginFlow(abortController: AbortController): Promise<CodexOAuthStatus> {
   const pkce = generatePkce();
   const state = randomBytes(16).toString('hex');
   let server: CallbackServer | null = null;
@@ -163,11 +174,11 @@ async function runLogin(): Promise<CodexOAuthStatus> {
     });
     await shell.openExternal(authorizeUrl);
     logger.info('codex.oauth.login.started', { redirectUri: server.redirectUri });
-    const { code } = await server.waitForCode(state);
+    const { code } = await server.waitForCode(state, abortController.signal);
     const tokenSet: TokenSet = await exchangeCode(code, pkce.verifier, server.redirectUri);
     if (tokenSet.accountId === null) {
       throw new CodesignError(
-        'Codex 登录成功但无法读取 ChatGPT 账户 ID，请重试登录。',
+        'Codex 鐧诲綍鎴愬姛浣嗘棤娉曡鍙?ChatGPT 璐︽埛 ID锛岃閲嶈瘯鐧诲綍銆?',
         ERROR_CODES.PROVIDER_ERROR,
         { cause: null },
       );
@@ -192,6 +203,12 @@ async function runLogin(): Promise<CodexOAuthStatus> {
     logger.info('codex.oauth.login.ok', { accountId: stored.accountId, hasEmail: email !== null });
     return toStatus(stored);
   } catch (err) {
+    if (abortController.signal.aborted) {
+      logger.info('codex.oauth.login.cancelled');
+      throw new CodesignError('Codex login cancelled', ERROR_CODES.PROVIDER_ABORTED, {
+        cause: err,
+      });
+    }
     logger.error('codex.oauth.login.fail', {
       message: err instanceof Error ? err.message : String(err),
     });
@@ -204,6 +221,34 @@ async function runLogin(): Promise<CodexOAuthStatus> {
   } finally {
     server?.close();
   }
+}
+
+async function runLogin(): Promise<CodexOAuthStatus> {
+  if (activeLoginPromise !== null) return activeLoginPromise;
+
+  const abortController = new AbortController();
+  activeLoginAbortController = abortController;
+
+  const promise = runLoginFlow(abortController);
+  const trackedPromise = promise.finally(() => {
+    if (activeLoginAbortController === abortController) {
+      activeLoginAbortController = null;
+    }
+    if (activeLoginPromise === trackedPromise) {
+      activeLoginPromise = null;
+    }
+  });
+
+  activeLoginPromise = trackedPromise;
+  return trackedPromise;
+}
+
+async function runCancelLogin(): Promise<boolean> {
+  if (activeLoginAbortController === null || activeLoginAbortController.signal.aborted) {
+    return false;
+  }
+  activeLoginAbortController.abort();
+  return true;
 }
 
 async function runLogout(): Promise<CodexOAuthStatus> {
@@ -230,7 +275,7 @@ async function runLogout(): Promise<CodexOAuthStatus> {
  * `chatgpt-codex` with Phase 1's stale `wire`/`baseUrl`, overwrite with the
  * Phase 2 canonical values so the first generate after upgrade works without
  * requiring a manual re-login. No-op when the entry is absent or already
- * canonical. Safe to call on every boot — writes only when state diverges.
+ * canonical. Safe to call on every boot 鈥?writes only when state diverges.
  *
  * Phase 1 released the card in "coming soon" disabled mode, so this migration
  * only fires for users who ran this feat branch directly; zero writes on
@@ -256,5 +301,6 @@ export async function migrateStaleCodexEntryIfNeeded(): Promise<void> {
 export function registerCodexOAuthIpc(): void {
   ipcMain.handle('codex-oauth:v1:status', async (): Promise<CodexOAuthStatus> => runStatus());
   ipcMain.handle('codex-oauth:v1:login', async (): Promise<CodexOAuthStatus> => runLogin());
+  ipcMain.handle('codex-oauth:v1:cancel-login', async (): Promise<boolean> => runCancelLogin());
   ipcMain.handle('codex-oauth:v1:logout', async (): Promise<CodexOAuthStatus> => runLogout());
 }

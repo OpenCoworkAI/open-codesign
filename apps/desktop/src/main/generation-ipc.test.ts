@@ -1,6 +1,10 @@
 import { CancelGenerationPayloadV1, CodesignError } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { armGenerationTimeout, cancelGenerationRequest } from './generation-ipc';
+import {
+  armGenerationTimeout,
+  cancelGenerationRequest,
+  extractGenerationTimeoutError,
+} from './generation-ipc';
 
 function makeController() {
   return { abort: vi.fn() } as unknown as AbortController;
@@ -180,5 +184,45 @@ describe('armGenerationTimeout', () => {
       armGenerationTimeout('gen-1', controller, async () => -1, logger),
     ).rejects.toMatchObject({ name: 'CodesignError', code: 'PREFERENCES_INVALID_TIMEOUT' });
     expect(controller.signal.aborted).toBe(false);
+  });
+});
+
+describe('extractGenerationTimeoutError', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('returns the CodesignError stashed by armGenerationTimeout so the SDK-rewritten AbortError can be upgraded back to GENERATION_TIMEOUT', async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+
+    await armGenerationTimeout('gen-1', controller, async () => 3, logger);
+    vi.advanceTimersByTime(3000);
+
+    const recovered = extractGenerationTimeoutError(controller.signal);
+    expect(recovered).toBeInstanceOf(CodesignError);
+    expect(recovered?.code).toBe('GENERATION_TIMEOUT');
+    expect(recovered?.message).toContain('3s');
+    expect(recovered?.message).toContain('Settings');
+  });
+
+  it('returns null when the controller was aborted by a user-initiated cancel (no reason set)', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(extractGenerationTimeoutError(controller.signal)).toBeNull();
+  });
+
+  it('returns null when the signal has not been aborted', () => {
+    const controller = new AbortController();
+    expect(extractGenerationTimeoutError(controller.signal)).toBeNull();
+  });
+
+  it('returns null when the abort reason is some other CodesignError (not a timeout)', () => {
+    const controller = new AbortController();
+    controller.abort(new CodesignError('something else', 'PROVIDER_ABORTED'));
+    expect(extractGenerationTimeoutError(controller.signal)).toBeNull();
   });
 });

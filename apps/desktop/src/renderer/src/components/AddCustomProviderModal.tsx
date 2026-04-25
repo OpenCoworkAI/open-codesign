@@ -108,27 +108,31 @@ export function AddCustomProviderModal({
   const userPickedModel = useRef(false);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const discoverySeq = useRef(0);
 
-  function scheduleDiscovery(currentBaseUrl: string, currentApiKey: string, currentWire: WireApi) {
+  function scheduleDiscovery(currentBaseUrl: string, currentWire: WireApi) {
     if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
     if (!currentBaseUrl.trim().match(/^https?:\/\//)) {
+      discoverySeq.current += 1;
       setDiscovery({ kind: 'idle' });
       return;
     }
     debounceTimer.current = setTimeout(() => {
-      void runDiscovery(currentBaseUrl, currentApiKey, currentWire);
+      void runDiscovery(currentBaseUrl, currentWire);
     }, 500);
   }
 
-  async function runDiscovery(currentBaseUrl: string, currentApiKey: string, currentWire: WireApi) {
+  async function runDiscovery(currentBaseUrl: string, currentWire: WireApi) {
     if (!window.codesign?.config) return;
+    const seq = ++discoverySeq.current;
     setDiscovery({ kind: 'discovering' });
     try {
       const res = await window.codesign.config.testEndpoint({
         wire: currentWire,
         baseUrl: currentBaseUrl.trim(),
-        apiKey: currentApiKey.trim(),
+        apiKey: '',
       });
+      if (seq !== discoverySeq.current) return;
       if (res.ok && res.models.length > 0) {
         setDiscovery({ kind: 'found', models: res.models });
         if (!userPickedModel.current) {
@@ -139,7 +143,7 @@ export function AddCustomProviderModal({
         setDiscovery({ kind: 'failed' });
       }
     } catch {
-      setDiscovery({ kind: 'failed' });
+      if (seq === discoverySeq.current) setDiscovery({ kind: 'failed' });
     }
   }
 
@@ -147,18 +151,17 @@ export function AddCustomProviderModal({
     setBaseUrl(v);
     if (wireAuto) setWire(detectWireFromBaseUrl(v));
     setTest({ kind: 'idle' });
-    scheduleDiscovery(v, apiKey, wireAuto ? detectWireFromBaseUrl(v) : wire);
+    scheduleDiscovery(v, wireAuto ? detectWireFromBaseUrl(v) : wire);
   }
 
   function handleApiKeyChange(v: string) {
     setApiKey(v);
-    scheduleDiscovery(baseUrl, v, wire);
   }
 
   function handleWireChange(v: WireApi) {
     setWire(v);
     setWireAuto(false);
-    scheduleDiscovery(baseUrl, apiKey, v);
+    scheduleDiscovery(baseUrl, v);
   }
 
   function handleModelSelect(v: string) {
@@ -323,6 +326,17 @@ export function AddCustomProviderModal({
             placeholder="https://api.example.com/v1"
             disabled={lockEndpoint}
           />
+          {!lockEndpoint && (
+            <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-[var(--text-xs)] text-[var(--color-text-secondary)]">
+              <div className="flex items-center gap-1.5 font-medium text-[var(--color-text-primary)]">
+                <AlertCircle className="w-3.5 h-3.5 text-[var(--color-warning)]" />
+                <span>{t('settings.providers.custom.compatibilityHintTitle')}</span>
+              </div>
+              <p className="mt-1 leading-5">
+                {t('settings.providers.custom.compatibilityHintBody')}
+              </p>
+            </div>
+          )}
         </Field>
 
         <Field label={t('settings.providers.custom.apiKey')}>
@@ -346,19 +360,19 @@ export function AddCustomProviderModal({
             discovery.kind === 'discovering' ? (
               <span className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
                 <Loader2 className="w-3 h-3 animate-spin" />
-                {t('settings.providers.cliProxyApi.discoveringModels')}
+                {t('settings.providers.custom.discoveringModels')}
               </span>
             ) : discovery.kind === 'found' ? (
               <span className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-success)]">
                 <Check className="w-3 h-3" />
-                {t('settings.providers.cliProxyApi.discoveredModels', {
+                {t('settings.providers.custom.discoveredModels', {
                   count: discovery.models.length,
                 })}
               </span>
             ) : discovery.kind === 'failed' ? (
               <span className="inline-flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
                 <AlertCircle className="w-3 h-3" />
-                {t('settings.providers.cliProxyApi.discoveryFailed')}
+                {t('settings.providers.custom.discoveryFailed')}
               </span>
             ) : null
           }

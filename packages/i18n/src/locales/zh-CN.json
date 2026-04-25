@@ -49,6 +49,31 @@
       "sectionSubtitle": "共 {{count}} 个文件",
       "empty": "还没有文件。发送一个 prompt 让 AI 生成设计后，文件会出现在这里。"
     },
+    "newDesignDialog": {
+      "title": "新建项目",
+      "subtitle": "可选择一个本地文件夹，用于同步设计文件。",
+      "noWorkspace": "未选择文件夹",
+      "skip": "跳过",
+      "confirm": "创建"
+    },
+    "workspace": {
+      "sectionTitle": "工作区",
+      "label": "文件夹",
+      "default": "默认内部存储",
+      "choose": "选择文件夹",
+      "change": "更改",
+      "open": "打开文件夹",
+      "clear": "清除工作区",
+      "unavailable": "文件夹在磁盘上不存在",
+      "busyGenerating": "生成中无法更改工作区",
+      "updated": "工作区已更新",
+      "updateFailed": "更新工作区失败",
+      "rebindTitle": "更改工作区文件夹？",
+      "rebindDescription": "此设计已有工作区文件夹。请选择如何继续：",
+      "rebindCancel": "取消",
+      "rebindSwitchOnly": "仅切换（不复制文件）",
+      "rebindSwitchAndCopy": "切换并复制文件"
+    },
     "rail": {
       "title": "文件",
       "collapse": "折叠文件",
@@ -151,10 +176,38 @@
     "title": "设置",
     "tabs": {
       "models": "模型",
+      "images": "图像 API",
       "appearance": "外观",
       "storage": "存储",
       "diagnostics": "诊断",
       "advanced": "高级"
+    },
+    "imageGen": {
+      "tabTitle": "图像生成",
+      "tabHint": "允许设计 Agent 调用图像模型（如 gpt-image-2）生成 hero、海报或背景位图。凭据仅保存在本机。",
+      "title": "图像生成辅助",
+      "hint": "开启后，Agent 在生成设计时可以调用 generate_image_asset 工具。",
+      "enabled": "启用图像生成辅助",
+      "provider": "服务商",
+      "credentials": "凭据方式",
+      "inherit": "沿用模型服务商",
+      "customKey": "单独设置 Key",
+      "keyPlaceholder": "留空则保留 {{mask}}",
+      "newKeyPlaceholder": "粘贴 API Key",
+      "model": "图像模型",
+      "baseUrl": "接入地址",
+      "quality": "画质",
+      "size": "尺寸",
+      "status": {
+        "ready": "可用",
+        "needsKey": "缺少 API Key",
+        "disabled": "未启用"
+      },
+      "toast": {
+        "loadFailed": "加载图像生成设置失败",
+        "saved": "图像生成设置已保存",
+        "saveFailed": "保存图像生成设置失败"
+      }
     },
     "shell": {
       "back": "工作区",
@@ -181,12 +234,14 @@
         "loginFailedTitle": "ChatGPT 登录失败",
         "logoutFailedTitle": "ChatGPT 登出失败",
         "statusFailedTitle": "ChatGPT 登录状态读取失败",
-        "unknownError": "未知错误"
+        "unknownError": "未知错误",
+        "unsupportedCountryRegion": "当前账号、国家、地区或区域暂不支持 ChatGPT 订阅登录。"
       },
       "addProvider": "添加服务",
       "addCustom": "添加自定义",
       "empty": "还没有配置任何服务，添加一个即可开始生成。",
       "active": "当前",
+      "activeNotInList": "（当前，不在服务返回的列表中）",
       "decryptionFailed": "解密失败",
       "setActive": "设为当前",
       "reEnterKey": "重新输入 Key",
@@ -215,8 +270,13 @@
         "apiKey": "API Key",
         "apiKeyEditPlaceholder": "留空则保留 {{mask}}",
         "defaultModel": "默认模型",
+        "compatibilityHintTitle": "\u517c\u5bb9\u6027\u63d0\u793a",
+        "compatibilityHintBody": "\u90e8\u5206 coding plan\uff0c\u534f\u8bae\u8f6c\u6362\u670d\u52a1\u6216 OpenAI \u517c\u5bb9\u7f51\u5173\u53ea\u5141\u8bb8\u7279\u5b9a\u5ba2\u6237\u7aef\uff08\u5982 Claude Code\uff0copenclaw\uff0cHermes\uff09\u8bbf\u95ee\u3002\u5373\u4f7f API \u770b\u8d77\u6765\u517c\u5bb9\uff0cOpen CoDesign \u4e5f\u53ef\u80fd\u56e0\u4e3a\u5e94\u7528\u767d\u540d\u5355\u800c\u65e0\u6cd5\u4f7f\u7528\u3002",
         "switchToManual": "手动输入",
         "switchToDropdown": "从列表选择",
+        "discoveringModels": "正在发现模型…",
+        "discoveredModels": "发现 {{count}} 个模型",
+        "discoveryFailed": "无法自动发现模型",
         "test": "测试连接",
         "testOk": "正常 — 共 {{count}} 个模型",
         "save": "保存并继续",
@@ -307,10 +367,13 @@
         "presetName": "CLIProxyAPI",
         "presetDescription": "本地反代，将 Claude/Codex/Gemini 的订阅账号包装成统一 API",
         "apiKeyOptional": "仅当你在 CPA config.yaml 里配置了 api-keys 才需要填",
-        "thinkingHint": "提示：在 model 名后加 `(high)` / `(xhigh)` / `(8192)` 可控制思考力度",
-        "discoveringModels": "正在发现模型…",
-        "discoveredModels": "发现 {{count}} 个模型",
-        "discoveryFailed": "连接 CPA 失败"
+        "thinkingHint": "提示：在 model 名后加 `(high)` / `(xhigh)` / `(8192)` 可控制思考力度"
+      },
+      "cpaDetection": {
+        "title": "检测到本机运行的 CLIProxyAPI",
+        "body": "一键导入即可使用你已登录的 Claude / Codex / Gemini 订阅账号。",
+        "importAction": "导入",
+        "dismissAction": "忽略"
       },
       "reasoning": {
         "label": "推理深度",
@@ -333,7 +396,8 @@
       "languageHint": "切换语言会立即生效。",
       "languageLoadFailed": "加载语言设置失败",
       "langEn": "English",
-      "langZhCN": "中文 (简体)"
+      "langZhCN": "中文 (简体)",
+      "langPtBR": "Português (BR)"
     },
     "language": {
       "label": "语言",
@@ -567,6 +631,11 @@
     "designSystemCleared": "设计系统已清除",
     "clearDesignSystemFailed": "无法清除设计系统",
     "generationFailed": "生成失败",
+    "generationFailedApplyFix": "应用修复",
+    "generationFailedBaseUrlUpdated": "Base URL 已更新，请重试。",
+    "generationFailedFixUnavailable": "自动修复不可用",
+    "generationFailedFixUnavailableDescription": "当前 app 版本无法自动应用此修复，请到设置中手动编辑 Base URL。",
+    "generationFailedFixApplyFailed": "应用修复失败",
     "cancellationFailed": "取消失败",
     "inlineCommentFailed": "局部修改失败",
     "commentNeedsSnapshot": "请先生成一个设计，再添加批注",
@@ -783,6 +852,10 @@
       "timedOut": "请求超时——检查防火墙或 VPN。",
       "corsError": "CORS 跨域错误（主进程中不应出现此错误，这是一个 Bug）。",
       "sslError": "SSL / 证书错误（中转服务使用了自签证书？）。",
+      "gatewayIncompatible": "网关接受了连接但没有实现该 Provider 的 API。尝试切换 wire（例如改为 openai-chat）。",
+      "openaiResponsesMisconfigured": "端点拒绝了请求格式。wire 可能配错了——尝试切换到 openai-chat。",
+      "relayStreamingBug": "网关可能错误处理了 OpenAI Responses API 的 SSE 事件（老版本 sub2api / claude2api / anyrouter 会把流提前截断）。",
+      "serverError": "上游服务错误。可能是暂时性的，稍后重试。",
       "unknown": "未知错误——请查看完整日志以获取详情。"
     },
     "fix": {
@@ -794,13 +867,17 @@
       "checkNetwork": "检查网络 / VPN",
       "checkVpn": "检查 VPN / 防火墙",
       "reportBug": "报告此 Bug",
-      "disableTls": "禁用 TLS 验证"
+      "disableTls": "禁用 TLS 验证",
+      "switchWire": "到设置页切换 wire",
+      "relayStreamingBug": "升级中转服务；或把 wire 切到 openai-chat；或改用 api.openai.com"
     },
     "applyFix": "应用此修复",
     "setBaseUrlFirst": "请先填写 Base URL",
     "testAgain": "再次测试",
     "showLog": "查看完整日志",
     "showLogFailed": "无法打开日志文件夹",
+    "gatewayAllowlistHintTitle": "\u8fd9\u4e2a\u7aef\u70b9\u53ef\u80fd\u9650\u5236\u53ef\u63a5\u5165\u7684\u5e94\u7528",
+    "gatewayAllowlistHintBody": "\u90e8\u5206 coding plan \u548c\u534f\u8bae\u8f6c\u6362\u7f51\u5173\u4f1a\u914d\u7f6e\u5e94\u7528\u767d\u540d\u5355\u3002\u5b83\u4eec\u5373\u4f7f\u58f0\u79f0\u63d0\u4f9b OpenAI \u517c\u5bb9 API\uff0c\u4e5f\u53ef\u80fd\u5728\u6ca1\u6709\u663e\u5f0f\u5141\u8bb8 Open CoDesign \u7684\u60c5\u51b5\u4e0b\u62d2\u7edd\u8bf7\u6c42\u3002",
     "dismiss": "关闭",
     "report": {
       "title": "上报问题",
@@ -1026,6 +1103,7 @@
     "PROVIDER_ERROR": "provider 返回错误，请检查 API key 后重试。",
     "PROVIDER_HTTP_4XX": "provider 拒绝请求，请检查 API key 和账户余额。",
     "PROVIDER_UPSTREAM_ERROR": "provider 返回未知错误，详情见日志。",
+    "PROVIDER_GATEWAY_INCOMPATIBLE": "网关对 Messages API 返回 “not implemented”。请到设置中把 wire 切换为 openai-chat，或更换支持 Anthropic Messages API 的网关。",
     "PROVIDER_ABORTED": "生成已取消。",
     "PROVIDER_RETRY_EXHAUSTED": "多次重试后 provider 仍然失败，请检查网络后重试。",
     "CLAUDE_CODE_OAUTH_ONLY": "你的 Claude Code 使用的是 Anthropic 订阅（Pro/Max），第三方应用无法复用订阅额度——请到 console.anthropic.com 生成 API key 后填入。",

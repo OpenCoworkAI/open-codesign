@@ -24,6 +24,7 @@ export function resolveViewState(
 interface CodexOAuthApi {
   status(): Promise<CodexOAuthStatus>;
   login(): Promise<CodexOAuthStatus>;
+  cancelLogin(): Promise<boolean>;
   logout(): Promise<CodexOAuthStatus>;
 }
 
@@ -35,7 +36,25 @@ export interface PerformLoginDeps {
   setLoading: (v: boolean) => void;
   pushToast: PushToastLike;
   onStatusChange?: () => void | Promise<void>;
-  strings: { failedTitle: string; unknownError: string };
+  strings: { failedTitle: string; unknownError: string; unsupportedCountryRegion: string };
+}
+
+function isCodexLoginCancelledError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /Codex login cancelled|Codex OAuth callback aborted/.test(err.message);
+}
+
+function isUnsupportedCountryRegionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.message.includes('unsupported_country_region_territory');
+}
+
+function formatLoginErrorDescription(
+  err: unknown,
+  strings: { unknownError: string; unsupportedCountryRegion: string },
+): string {
+  if (isUnsupportedCountryRegionError(err)) return strings.unsupportedCountryRegion;
+  return err instanceof Error ? err.message : strings.unknownError;
 }
 
 export async function performLogin(deps: PerformLoginDeps): Promise<void> {
@@ -45,10 +64,11 @@ export async function performLogin(deps: PerformLoginDeps): Promise<void> {
     deps.setStatus(next);
     await deps.onStatusChange?.();
   } catch (err) {
+    if (isCodexLoginCancelledError(err)) return;
     deps.pushToast({
       variant: 'error',
       title: deps.strings.failedTitle,
-      description: err instanceof Error ? err.message : deps.strings.unknownError,
+      description: formatLoginErrorDescription(err, deps.strings),
     });
   } finally {
     deps.setLoading(false);
@@ -152,10 +172,19 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
       strings: {
         failedTitle: t('settings.providers.chatgptLogin.loginFailedTitle'),
         unknownError: t('settings.providers.chatgptLogin.unknownError'),
+        unsupportedCountryRegion: t('settings.providers.chatgptLogin.unsupportedCountryRegion'),
       },
       ...(onStatusChange !== undefined ? { onStatusChange } : {}),
     });
   }, [onStatusChange, pushToast, t]);
+
+  const handleCancel = useCallback(async () => {
+    if (!window.codesign) return;
+    const cancelled = await window.codesign.codexOAuth.cancelLogin();
+    // When cancellation succeeds, the in-flight login promise will settle
+    // immediately and clear loading via performLogin's finally block.
+    if (!cancelled && mountedRef.current) setLoading(false);
+  }, []);
 
   const handleLogout = useCallback(async () => {
     if (!window.codesign) return;
@@ -211,12 +240,17 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
           {t('settings.providers.chatgptLogin.description')}
         </p>
       </div>
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center gap-[var(--space-2)]">
         {viewState === 'loading' ? (
-          <Button variant="primary" size="sm" disabled>
-            <Loader2 className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] animate-spin" />
-            {t('settings.providers.chatgptLogin.inProgress')}
-          </Button>
+          <>
+            <Button variant="primary" size="sm" disabled>
+              <Loader2 className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] animate-spin" />
+              {t('settings.providers.chatgptLogin.inProgress')}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => void handleCancel()}>
+              {t('common.cancel')}
+            </Button>
+          </>
         ) : (
           <Button variant="primary" size="sm" onClick={() => void handleLogin()}>
             <Sparkles className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" />

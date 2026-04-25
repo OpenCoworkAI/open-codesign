@@ -6,6 +6,7 @@ import {
   completeWithRetry,
   filterActive,
   formatSkillsForPrompt,
+  inferReasoning,
 } from '@open-codesign/providers';
 import type {
   Artifact,
@@ -46,6 +47,13 @@ export {
 export { makeSetTodosTool, type SetTodosDetails } from './tools/set-todos.js';
 export { makeListFilesTool, type ListFilesDetails } from './tools/list-files.js';
 export { makeReadUrlTool, type ReadUrlDetails } from './tools/read-url.js';
+export {
+  makeGenerateImageAssetTool,
+  type GenerateImageAssetDetails,
+  type GenerateImageAssetFn,
+  type GenerateImageAssetRequest,
+  type GenerateImageAssetResult,
+} from './tools/generate-image-asset.js';
 export {
   makeReadDesignSystemTool,
   type ReadDesignSystemDetails,
@@ -91,7 +99,10 @@ export interface GenerateInput {
   wire?: WireApi | undefined;
   /** v3 extra HTTP headers merged into the outbound request (gateway auth). */
   httpHeaders?: Record<string, string> | undefined;
+  /** Explicit provider capability profile resolved by desktop main. */
   capabilities?: ProviderCapabilities | undefined;
+  /** Raw capability overrides explicitly stored on the provider entry. */
+  explicitCapabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   /**
    * Per-call reasoning level override. Typically sourced from
@@ -124,6 +135,7 @@ export interface ApplyCommentInput {
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   capabilities?: ProviderCapabilities | undefined;
+  explicitCapabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   /** @see GenerateInput.reasoningLevel */
   reasoningLevel?: ReasoningLevel | undefined;
@@ -161,6 +173,7 @@ interface ModelRunInput {
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   capabilities?: ProviderCapabilities | undefined;
+  explicitCapabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
   signal?: AbortSignal | undefined;
@@ -348,10 +361,19 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
   log.info(`[${scope}] step=send_request`, ctx);
   const sendStart = Date.now();
   let result: GenerateResult;
-  const reasoningDisabled = input.capabilities?.supportsReasoning === false;
-  let reasoning = reasoningDisabled
-    ? undefined
-    : (input.reasoningLevel ?? reasoningForModel(input.model, input.baseUrl));
+  const inferredReasoning =
+    input.wire === undefined && input.capabilities === undefined
+      ? true
+      : inferReasoning(
+          input.wire,
+          input.model.modelId,
+          input.baseUrl,
+          input.explicitCapabilities ?? input.capabilities,
+          input.model.provider,
+        );
+  let reasoning =
+    input.reasoningLevel ??
+    (inferredReasoning ? reasoningForModel(input.model, input.baseUrl) : undefined);
   // Self-healing: if the upstream rejects on reasoning mismatch, flip the
   // knob once and retry. Handles new reasoning-mandatory models (and
   // not-supported models) without code changes.
@@ -366,6 +388,9 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
           ...(input.wire !== undefined ? { wire: input.wire } : {}),
           ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
           ...(input.capabilities !== undefined ? { capabilities: input.capabilities } : {}),
+          ...(input.explicitCapabilities !== undefined
+            ? { explicitCapabilities: input.explicitCapabilities }
+            : {}),
           ...(input.userImages !== undefined ? { userImages: input.userImages } : {}),
           ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
           ...(input.signal !== undefined ? { signal: input.signal } : {}),
@@ -376,13 +401,13 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
           ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
           logger: log,
           provider: input.model.provider,
+          ...(input.wire !== undefined ? { wire: input.wire } : {}),
         },
         complete,
       );
       break;
     } catch (err) {
-      const adjustment =
-        attempt === 1 && !reasoningDisabled ? reasoningMismatch(err, reasoning) : null;
+      const adjustment = attempt === 1 ? reasoningMismatch(err, reasoning) : null;
       if (adjustment === 'add') {
         log.info(`[${scope}] step=send_request.retry_with_reasoning`, ctx);
         input.onRetry?.({
@@ -405,7 +430,7 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
         reasoning = undefined;
         continue;
       }
-      const remapped = remapProviderError(err, input.model.provider);
+      const remapped = remapProviderError(err, input.model.provider, input.wire);
       log.error(`[${scope}] step=send_request.fail`, {
         ...ctx,
         ms: Date.now() - sendStart,
@@ -578,6 +603,18 @@ export function reasoningForModel(
   model: ModelRef,
   baseUrl?: string | undefined,
 ): ReasoningLevel | undefined {
+  const isOfficialOpenAI =
+    baseUrl !== undefined && /(^|\/\/)api\.openai\.com\/v1($|[/?#])/i.test(baseUrl);
+  const isOfficialOpenRouter =
+    baseUrl !== undefined && /(^|\/\/)openrouter\.ai\/api\/v1($|[/?#])/i.test(baseUrl);
+
+  if (isOfficialOpenAI) {
+    return OPENAI_REASONING_MODEL_RE.test(model.modelId) ? 'high' : undefined;
+  }
+  if (isOfficialOpenRouter) {
+    return OPENROUTER_REASONING_MODEL_RE.test(model.modelId) ? 'medium' : undefined;
+  }
+
   // Proxy detection: when the provider id is 'anthropic' but baseUrl points
   // somewhere other than api.anthropic.com, we're talking to a Claude Code-
   // style proxy. Those commonly gate reasoning by plan and consumer-tier
@@ -676,6 +713,7 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     wire: input.wire,
     httpHeaders: input.httpHeaders,
     capabilities: input.capabilities,
+    explicitCapabilities: input.explicitCapabilities,
     allowKeyless: input.allowKeyless,
     reasoningLevel: input.reasoningLevel,
     signal: input.signal,
@@ -731,6 +769,7 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     wire: input.wire,
     httpHeaders: input.httpHeaders,
     capabilities: input.capabilities,
+    explicitCapabilities: input.explicitCapabilities,
     allowKeyless: input.allowKeyless,
     reasoningLevel: input.reasoningLevel,
     signal: input.signal,
@@ -757,6 +796,7 @@ export interface GenerateTitleInput {
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   capabilities?: ProviderCapabilities | undefined;
+  explicitCapabilities?: ProviderCapabilities | undefined;
   allowKeyless?: boolean | undefined;
   signal?: AbortSignal | undefined;
   logger?: CoreLogger | undefined;
@@ -814,6 +854,9 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
         ...(input.wire !== undefined ? { wire: input.wire } : {}),
         ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
         ...(input.capabilities !== undefined ? { capabilities: input.capabilities } : {}),
+        ...(input.explicitCapabilities !== undefined
+          ? { explicitCapabilities: input.explicitCapabilities }
+          : {}),
         ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
         ...(input.signal !== undefined ? { signal: input.signal } : {}),
         maxTokens: 200,
@@ -821,6 +864,7 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
       {
         logger: log,
         provider: input.model.provider,
+        ...(input.wire !== undefined ? { wire: input.wire } : {}),
       },
     );
     log.info('[title] step=send_request.ok', { ms: Date.now() - started });
@@ -834,6 +878,6 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
       ms: Date.now() - started,
       errorClass: err instanceof Error ? err.constructor.name : typeof err,
     });
-    throw remapProviderError(err, input.model.provider);
+    throw remapProviderError(err, input.model.provider, input.wire);
   }
 }
