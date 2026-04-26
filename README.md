@@ -233,6 +233,9 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 
   ![Decompose to UI Kit — source image vs agent-emitted ui_kit, side-by-side parity check](https://raw.githubusercontent.com/HomenShum/open-codesign/feat/decompose-to-ui-kit/website/public/screenshots/decompose-to-ui-kit.png)
   <sub>Source image (gpt-image input) on the left, agent-emitted <code>ui_kit</code> rendered headlessly on the right. Parity score and status are derived deterministically — <code>parityScore = passCount / totalChecks</code> — from the 12-check boolean rubric. Numbers are from a real <code>e2e-opus-final</code> run, not a mock.</sub>
+
+  ![Iter-0 → iter-1 reconcile loop with honest score drift](https://raw.githubusercontent.com/HomenShum/open-codesign/feat/decompose-to-ui-kit/website/public/demos/decompose-iter-reel.gif)
+  <sub>4-frame reel from the <code>e2e-nodebench-iter</code> run: source → iter-0 (parityScore 0.82, 6 gaps) → iter-1 (parityScore 0.78, 5 gaps) → honest verdict. The agent fixed some gaps and introduced new layout drift; the boolean rubric exposes the regression instead of hiding it. <a href="https://raw.githubusercontent.com/HomenShum/open-codesign/feat/decompose-to-ui-kit/website/public/demos/decompose-iter-reel.mp4">MP4 version</a>.</sub>
 - **Generation cancellation** — stop mid-stream without losing prior turns
 
 ### Preview and workflow
