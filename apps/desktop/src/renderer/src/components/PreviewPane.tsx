@@ -21,7 +21,7 @@ import { FilesTabView } from './FilesTabView';
 import { HistoryPanel } from './HistoryPanel';
 import { PageTabBar } from './PageTabBar';
 import { PhoneFrame } from './PhoneFrame';
-import { PreviewToolbar, type PreviewToolbarExternalProps } from './PreviewToolbar';
+import { PreviewToolbar } from './PreviewToolbar';
 import { TweakPanel } from './TweakPanel';
 import { CommentBubble } from './comment/CommentBubble';
 import { PinOverlay } from './comment/PinOverlay';
@@ -303,6 +303,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const chatMessages = useCodesignStore((s) => s.chatMessages);
   const canvasTabs = useCodesignStore((s) => s.canvasTabs);
   const activeCanvasTab = useCodesignStore((s) => s.activeCanvasTab);
+  const setActiveCanvasTab = useCodesignStore((s) => s.setActiveCanvasTab);
   const errorMessage = useCodesignStore((s) => s.errorMessage);
   const retry = useCodesignStore((s) => s.retryLastPrompt);
   const clearError = useCodesignStore((s) => s.clearError);
@@ -324,17 +325,21 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const pageFiles = useCodesignStore((s) => s.pageFiles);
   const activePagePath = useCodesignStore((s) => s.activePagePath);
   const activeTab = canvasTabs[activeCanvasTab];
+  const activeKind = activeTab?.kind;
   const showFilesOverPreview =
-    activeTab?.kind === 'files' && typeof previewHtml === 'string' && previewHtml.length > 0;
+    activeKind === 'files' && typeof previewHtml === 'string' && previewHtml.length > 0;
   const [filesLayerKept, setFilesLayerKept] = useState(false);
   const hasPreviewText = typeof previewHtml === 'string' && previewHtml.length > 0;
   const filesLayerInDom = hasPreviewText && (showFilesOverPreview || filesLayerKept);
 
+  const goToFilesTab = useCallback(() => {
+    const i = canvasTabs.findIndex((t) => t.kind === 'files');
+    if (i >= 0) setActiveCanvasTab(i);
+  }, [canvasTabs, setActiveCanvasTab]);
+
   // Active iframe ref consumed by TweakPanel (postMessage target) and by the
   // window.message guard. We re-point this whenever the active design changes
   // or the active iframe element re-mounts.
-  const [showHistory, setShowHistory] = useState(false);
-  const [showCodeView, setShowCodeView] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   // Unsent bubble drafts, keyed by bubbleKey (edit:<id> | new:<selector>).
   // Lives across bubble remounts so switching to another chip / element and
@@ -618,24 +623,26 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         {isWelcome ? null : (
           <div className="flex items-stretch justify-between gap-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] pl-[var(--space-2)]">
             {hasTabs ? <CanvasTabBar /> : <div />}
-            <PreviewToolbar
-              onToggleHistory={() => setShowHistory((v) => !v)}
-              historyOpen={showHistory}
-              showCodeView={showCodeView}
-              onToggleCodeView={() => setShowCodeView((v) => !v)}
-            />
+            <PreviewToolbar />
           </div>
         )}
         <PageTabBar />
         <CanvasErrorBar />
-        <div className="relative flex-1 overflow-hidden">
-          {showCodeView && previewHtml ? (
+        <div className="relative flex-1 min-h-0 overflow-hidden">
+          {activeKind === 'code' && typeof previewHtml === 'string' && previewHtml.length > 0 ? (
             <CodeViewPanel html={previewHtml} isGenerating={isGenerating} onSave={setPreviewHtml} />
+          ) : activeKind === 'code' ? (
+            <div className="flex h-full min-h-0 items-center justify-center px-6 text-center text-[12px] text-[var(--color-text-muted)]">
+              {t('canvas.codeTabEmpty')}
+            </div>
+          ) : activeKind === 'history' ? (
+            <HistoryPanel onClose={goToFilesTab} />
           ) : (
             body
           )}
-          {!showCodeView && previewHtml ? <TweakPanel iframeRef={iframeRef} /> : null}
-          {showHistory ? <HistoryPanel onClose={() => setShowHistory(false)} /> : null}
+          {activeKind !== 'code' && activeKind !== 'history' && previewHtml ? (
+            <TweakPanel iframeRef={iframeRef} />
+          ) : null}
         </div>
         <ConsolePanel />
         {commentBubble && interactionMode === 'comment'

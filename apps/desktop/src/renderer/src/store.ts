@@ -129,12 +129,18 @@ export type InteractionMode = 'default' | 'comment';
 export type PreviewViewport = 'desktop' | 'tablet' | 'mobile';
 
 // Workstream G — canvas tabs.
-// 'files' is the pinned tab that hosts the file list + inline preview; 'file'
-// tabs wrap a single file preview opened by double-clicking the list. Closing
-// a 'file' tab is purely UI state — it does NOT delete anything.
-export type CanvasTab = { kind: 'files' } | { kind: 'file'; path: string };
+// 'files', 'history', and 'code' are pinned (not closable). 'file' tabs wrap a
+// single file preview opened from the list. Closing a 'file' tab is UI only.
+export type CanvasTab =
+  | { kind: 'files' }
+  | { kind: 'history' }
+  | { kind: 'code' }
+  | { kind: 'file'; path: string };
 
 export const FILES_TAB: CanvasTab = { kind: 'files' };
+export const HISTORY_TAB: CanvasTab = { kind: 'history' };
+export const CODE_TAB: CanvasTab = { kind: 'code' };
+export const DEFAULT_CANVAS_TABS: CanvasTab[] = [FILES_TAB, HISTORY_TAB, CODE_TAB];
 
 // Pure reducers, exported for unit tests so we don't need RTL for slice logic.
 export function openFileTab(tabs: CanvasTab[], path: string): { tabs: CanvasTab[]; index: number } {
@@ -151,8 +157,9 @@ export function closeTabAt(
 ): { tabs: CanvasTab[]; activeIndex: number } {
   const tab = tabs[target];
   if (!tab) return { tabs, activeIndex };
-  // The pinned 'files' tab cannot be closed — it always anchors index 0.
-  if (tab.kind === 'files') return { tabs, activeIndex };
+  if (tab.kind === 'files' || tab.kind === 'history' || tab.kind === 'code') {
+    return { tabs, activeIndex };
+  }
   const next = tabs.filter((_, i) => i !== target);
   let nextActive = activeIndex;
   if (activeIndex === target) {
@@ -1458,7 +1465,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   currentSnapshotId: null,
   liveRects: {},
 
-  canvasTabs: [FILES_TAB],
+  canvasTabs: DEFAULT_CANVAS_TABS,
   activeCanvasTab: 0,
 
   recentEvents: [],
@@ -2081,7 +2088,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         commentsLoaded: false,
         commentBubble: null,
         currentSnapshotId: null,
-        canvasTabs: [FILES_TAB],
+        canvasTabs: DEFAULT_CANVAS_TABS,
         activeCanvasTab: 0,
       });
       await get().loadDesigns();
@@ -2166,8 +2173,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         commentsLoaded: false,
         commentBubble: null,
         currentSnapshotId: null,
-        canvasTabs: [FILES_TAB, { kind: 'file', path: 'index.html' }],
-        activeCanvasTab: 1,
+        canvasTabs: [...DEFAULT_CANVAS_TABS, { kind: 'file', path: 'index.html' }],
+        activeCanvasTab: 3,
       });
       void get().loadChatForCurrentDesign();
       void get().loadCommentsForCurrentDesign();
@@ -2224,8 +2231,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         commentsLoaded: false,
         commentBubble: null,
         currentSnapshotId: null,
-        canvasTabs: latest ? [FILES_TAB, { kind: 'file', path: 'index.html' }] : [FILES_TAB],
-        activeCanvasTab: latest ? 1 : 0,
+        canvasTabs: latest
+          ? [...DEFAULT_CANVAS_TABS, { kind: 'file', path: 'index.html' }]
+          : DEFAULT_CANVAS_TABS,
+        activeCanvasTab: latest ? 3 : 0,
       });
       void get().loadChatForCurrentDesign();
       void get().loadCommentsForCurrentDesign();
@@ -2310,7 +2319,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         set({
           currentDesignId: null,
           previewHtml: null,
-          canvasTabs: [FILES_TAB],
+          canvasTabs: DEFAULT_CANVAS_TABS,
           activeCanvasTab: 0,
         });
         if (remaining.length > 0 && remaining[0]) {
@@ -2854,7 +2863,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   },
 
   resetCanvasTabs() {
-    set({ canvasTabs: [FILES_TAB], activeCanvasTab: 0 });
+    set({ canvasTabs: DEFAULT_CANVAS_TABS, activeCanvasTab: 0 });
   },
 
   async refreshDiagnosticEvents() {

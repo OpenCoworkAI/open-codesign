@@ -73,7 +73,7 @@ export function HistoryPanel({ onClose }: HistoryPanelProps) {
   }
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-[var(--color-background)] border-l border-[var(--color-border)]">
+    <div className="flex h-full min-h-0 w-full flex-col bg-[var(--color-background)]">
       {/* Header */}
       <div className="flex items-center gap-[var(--space-2)] px-[var(--space-4)] py-[var(--space-3)] border-b border-[var(--color-border)] shrink-0">
         <Clock className="w-[14px] h-[14px] text-[var(--color-text-muted)]" aria-hidden />
