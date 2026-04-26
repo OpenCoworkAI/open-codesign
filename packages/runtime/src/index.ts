@@ -192,6 +192,13 @@ function compileAndRunScript(source: string, kind: 'jsx' | 'tsx'): string {
 </script>`;
 }
 
+function jsxRuntimeComponentScripts(): string {
+  return [
+    compileAndRunScript(IOS_FRAME_JSX, 'jsx'),
+    compileAndRunScript(DESIGN_CANVAS_JSX, 'jsx'),
+  ].join('\n');
+}
+
 function wrapJsxAsSrcdoc(
   jsx: string,
   opts: { kind?: 'jsx' | 'tsx'; baseHref?: string | undefined } = {},
@@ -222,8 +229,7 @@ ${baseTag(opts.baseHref)}<link rel="preconnect" href="https://fonts.googleapis.c
 <script>${REACT_DOM_UMD}</script>
 <script>${BABEL_STANDALONE}</script>
 <script>${TWEAKS_BRIDGE_SETUP}</script>
-<script type="text/babel" data-presets="react">${IOS_FRAME_JSX}</script>
-<script type="text/babel" data-presets="react">${DESIGN_CANVAS_JSX}</script>
+${jsxRuntimeComponentScripts()}
 ${JSX_TEMPLATE_BEGIN}
 ${compileAndRunScript(normalized, kind)}
 ${JSX_TEMPLATE_END}
@@ -266,8 +272,7 @@ function jsxRuntimeScripts(): string {
     `<script>${REACT_DOM_UMD}</script>`,
     `<script>${BABEL_STANDALONE}</script>`,
     `<script>${TWEAKS_BRIDGE_SETUP}</script>`,
-    `<script type="text/babel" data-presets="react">${IOS_FRAME_JSX}</script>`,
-    `<script type="text/babel" data-presets="react">${DESIGN_CANVAS_JSX}</script>`,
+    jsxRuntimeComponentScripts(),
   ].join('\n');
 }
 

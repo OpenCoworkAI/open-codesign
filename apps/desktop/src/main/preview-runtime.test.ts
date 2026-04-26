@@ -173,6 +173,26 @@ describeIfChrome('runPreview with real Chrome', () => {
     expect(result.domOutline).toContain('main#jsx-root');
   }, 30_000);
 
+  it('renders JSX saved as HTML when it uses vendored runtime components', async () => {
+    writeFileSync(
+      join(tempDir, 'RuntimeFrame.html'),
+      [
+        'function App() {',
+        '  return <IOSDevice><main id="runtime-frame-root">Inside iOS frame</main></IOSDevice>;',
+        '}',
+        'ReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
+      ].join('\n'),
+      'utf8',
+    );
+    const result = await runPreview({
+      path: 'RuntimeFrame.html',
+      vision: false,
+      workspaceRoot: tempDir,
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.metrics.nodes).toBeGreaterThan(20);
+  }, 30_000);
+
   it('does not follow source-reference-looking strings inside JSX files', async () => {
     writeFileSync(
       join(tempDir, 'Marker.jsx'),

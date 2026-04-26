@@ -96,7 +96,7 @@ describe('buildSrcdoc', () => {
   it('wraps a fragment via the JSX path (no legacy HTML branch)', () => {
     const out = buildSrcdoc('<div>plain</div>');
     expect(out).toContain('AGENT_BODY_BEGIN');
-    expect(out).toContain('<script type="text/babel"');
+    expect(out).toContain('window.Babel.transform');
     expect(out).toContain('<div>plain</div>');
   });
 });
@@ -110,7 +110,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`;
     const out = buildSrcdoc(jsxArtifact);
     expect(out).toContain('AGENT_BODY_BEGIN');
     expect(out).toContain('AGENT_BODY_END');
-    expect(out).toContain('text/babel');
+    expect(out).toContain('window.Babel.transform');
     // Vendored runtime + frame snippets must be inlined.
     expect(out).toContain('IOSDevice');
     expect(out).toContain('DesignCanvas');
@@ -135,7 +135,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`;
   it('extractAndUpgradeArtifact also wraps bare HTML (JSX-only contract)', () => {
     const wrapped = extractAndUpgradeArtifact('<html><body>x</body></html>');
     expect(wrapped).toContain('AGENT_BODY_BEGIN');
-    expect(wrapped).toContain('<script type="text/babel"');
+    expect(wrapped).toContain('window.Babel.transform');
   });
 
   it('extractAndUpgradeArtifact passes already-wrapped payloads through unchanged', () => {
