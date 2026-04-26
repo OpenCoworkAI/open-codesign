@@ -63,6 +63,7 @@ import { reasoningForModel } from './index.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt } from './prompts/index.js';
 import { makeDeclareTweakSchemaTool } from './tools/declare-tweak-schema.js';
+import { makeDecomposeToUiKitTool } from './tools/decompose-to-ui-kit.js';
 import { type DoneRuntimeVerifier, makeDoneTool } from './tools/done.js';
 import {
   type GenerateImageAssetFn,
@@ -73,6 +74,12 @@ import { makeReadDesignSystemTool } from './tools/read-design-system.js';
 import { makeReadUrlTool } from './tools/read-url.js';
 import { makeSetTodosTool } from './tools/set-todos.js';
 import { type TextEditorFsCallbacks, makeTextEditorTool } from './tools/text-editor.js';
+import { makeVerifyUiKitParityTool } from './tools/verify-ui-kit-parity.js';
+import {
+  type JudgeVisualParityFn,
+  type RenderUiKitFn,
+  makeVerifyUiKitVisualParityTool,
+} from './tools/verify-ui-kit-visual-parity.js';
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via
  *  pi-ai). Declared here so this file does not take a direct dependency on
@@ -692,6 +699,21 @@ export interface GenerateViaAgentDeps {
    * poster/background asset is worth generating.
    */
   generateImageAsset?: GenerateImageAssetFn | undefined;
+  /**
+   * Optional vision-LLM judge for ui_kit visual parity. When provided alongside
+   * `renderUiKit`, the default toolset adds `verify_ui_kit_visual_parity`.
+   * Without these, the agent has the deterministic verifier only.
+   *
+   * The judge is host-injected (mirrors `generateImageAsset`) so the core
+   * package stays free of provider SDK imports.
+   */
+  judgeVisualParity?: JudgeVisualParityFn | undefined;
+  /**
+   * Optional headless renderer that loads ui_kit HTML in a hidden window and
+   * returns a screenshot data URL. Paired with `judgeVisualParity` — both must
+   * be present for the visual-parity tool to register.
+   */
+  renderUiKit?: RenderUiKitFn | undefined;
 }
 
 /**
@@ -781,6 +803,20 @@ export async function generateViaAgent(
     );
     defaultTools.push(
       makeDoneTool(deps.fs, deps.runtimeVerify) as unknown as AgentTool<TSchema, unknown>,
+    );
+    defaultTools.push(
+      makeDecomposeToUiKitTool(deps.fs, log) as unknown as AgentTool<TSchema, unknown>,
+    );
+    defaultTools.push(
+      makeVerifyUiKitParityTool(deps.fs, log) as unknown as AgentTool<TSchema, unknown>,
+    );
+    defaultTools.push(
+      makeVerifyUiKitVisualParityTool(
+        deps.fs,
+        deps.renderUiKit,
+        deps.judgeVisualParity,
+        log,
+      ) as unknown as AgentTool<TSchema, unknown>,
     );
   }
   if (deps.generateImageAsset) {

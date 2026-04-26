@@ -317,6 +317,12 @@ interface CodesignState {
    *  if the condition is met (first round succeeded, no prior polish). Call
    *  from useAgentStream's agent_end handler. */
   tryAutoPolish: (designId: string, locale: string) => void;
+  /** User-triggered decompose follow-up. Sends a structured prompt asking the
+   *  agent to call `decompose_to_ui_kit` and emit a ui_kits/<slug>/ folder
+   *  shaped for downstream coding-agent handoff. Unlike `tryAutoPolish` this
+   *  is NOT auto-fired — the user explicitly clicks the menu item. No dedup
+   *  since the user can decide to re-decompose with a different slug. */
+  triggerDecompose: (designId: string, locale: string) => void;
   cancelGeneration: () => void;
   retryLastPrompt: () => Promise<void>;
   applyInlineComment: (comment: string) => Promise<void>;
@@ -1351,6 +1357,39 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     // load time — the store is imported by the hook and vice-versa.
     void import('./hooks/polishPrompt').then(({ pickPolishPrompt }) => {
       const prompt = pickPolishPrompt(locale);
+      void get().sendPrompt({ prompt, silent: true });
+    });
+  },
+
+  triggerDecompose: (designId, locale) => {
+    const s = get();
+    // Branch 1: a generation is in flight — block & tell the user
+    if (s.isGenerating) {
+      get().pushToast({
+        variant: 'info',
+        title: tr('sidebar.decomposeBusyTitle'),
+        description: tr('sidebar.decomposeBusyDescription'),
+      });
+      return;
+    }
+    // Branch 2: no artifact yet — decompose has nothing to operate on
+    const designMessages = s.chatMessages.filter((m) => m.designId === designId);
+    if (!designMessages.some((m) => m.kind === 'assistant_text')) {
+      get().pushToast({
+        variant: 'info',
+        title: tr('sidebar.decomposeUnavailableTitle'),
+        description: tr('sidebar.decomposeToUiKitDisabled'),
+      });
+      return;
+    }
+    // Branch 3: fire the structured prompt + tell the user something is happening
+    get().pushToast({
+      variant: 'info',
+      title: tr('sidebar.decomposeStartedTitle'),
+      description: tr('sidebar.decomposeStartedDescription'),
+    });
+    void import('./hooks/decomposePrompt').then(({ pickDecomposePrompt }) => {
+      const prompt = pickDecomposePrompt(locale);
       void get().sendPrompt({ prompt, silent: true });
     });
   },
@@ -2406,6 +2445,38 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
           ...(durationMs !== undefined ? { durationMs } : {}),
         },
       });
+    }
+    // Surface the visual judge's cost + pass count as a toast every time the
+    // verify_ui_kit_visual_parity tool completes — gives the operator a per-
+    // decompose cost row without needing a new dashboard. Reads defensively
+    // from result.details (the structured ParityReport) so a shape change in
+    // the tool contract degrades to silent rather than crashing the renderer.
+    if (toolName === 'verify_ui_kit_visual_parity' && result && typeof result === 'object') {
+      const r = result as Record<string, unknown>;
+      const details = (
+        typeof r['details'] === 'object' && r['details'] !== null
+          ? (r['details'] as Record<string, unknown>)
+          : r
+      ) as Record<string, unknown>;
+      const passCount = typeof details['passCount'] === 'number' ? details['passCount'] : 0;
+      const totalChecks = typeof details['totalChecks'] === 'number' ? details['totalChecks'] : 0;
+      const judgeCostUsd =
+        typeof details['judgeCostUsd'] === 'number' ? details['judgeCostUsd'] : 0;
+      const status = typeof details['status'] === 'string' ? details['status'] : 'unknown';
+      if (totalChecks > 0) {
+        const ok = status === 'verified' || status === 'needs_review';
+        get().pushToast({
+          variant: ok ? 'success' : 'info',
+          title: tr('sidebar.decomposeJudgeResultTitle', {
+            passed: passCount,
+            total: totalChecks,
+            status,
+          }),
+          description: tr('sidebar.decomposeJudgeResultDescription', {
+            cost: `$${judgeCostUsd.toFixed(4)}`,
+          }),
+        });
+      }
     }
   },
 
