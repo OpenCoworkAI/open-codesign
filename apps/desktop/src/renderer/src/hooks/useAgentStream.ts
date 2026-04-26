@@ -151,10 +151,16 @@ export function useAgentStream(): void {
       // for this turn. Without this the iframe only refreshes at agent_end
       // which could be minutes away.
       const slotTurn = fsThrottle.current;
-      if (slotTurn.timer !== null) { clearTimeout(slotTurn.timer); slotTurn.timer = null; }
+      if (slotTurn.timer !== null) {
+        clearTimeout(slotTurn.timer);
+        slotTurn.timer = null;
+      }
       const pendingTurn = slotTurn.pending;
       slotTurn.pending = null;
-      if (pendingTurn) { slotTurn.lastFlushAt = Date.now(); setPreviewHtmlFromAgent(pendingTurn); }
+      if (pendingTurn) {
+        slotTurn.lastFlushAt = Date.now();
+        setPreviewHtmlFromAgent(pendingTurn);
+      }
     };
 
     const handleToolCallStart = (event: AgentStreamEvent) => {
@@ -166,7 +172,8 @@ export function useAgentStream(): void {
       const basename = opPath ? (opPath.split('/').pop() ?? opPath) : null;
       const opLabel = (() => {
         if (toolName === 'set_todos') return 'planning';
-        if ((event.command === 'str_replace' || event.command === 'insert') && basename) return `editing ${basename}`;
+        if ((event.command === 'str_replace' || event.command === 'insert') && basename)
+          return `editing ${basename}`;
         if (event.command === 'create' && basename) return `creating ${basename}`;
         if (event.command === 'view' && basename) return `reading ${basename}`;
         if (toolName === 'read_url') return 'reading url';
@@ -239,7 +246,9 @@ export function useAgentStream(): void {
                 : 'pending';
           return { text, status };
         })
-        .filter((x): x is { text: string; status: 'pending' | 'in_progress' | 'completed' } => x !== null);
+        .filter(
+          (x): x is { text: string; status: 'pending' | 'in_progress' | 'completed' } => x !== null,
+        );
       return items.length > 0 ? items : null;
     };
 

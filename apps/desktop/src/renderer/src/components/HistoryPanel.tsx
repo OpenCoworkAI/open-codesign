@@ -1,5 +1,5 @@
-import type { DesignSnapshot } from '@open-codesign/shared';
 import { buildSrcdoc } from '@open-codesign/runtime';
+import type { DesignSnapshot } from '@open-codesign/shared';
 import { Clock, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useCodesignStore } from '../store';
@@ -96,7 +96,9 @@ export function HistoryPanel({ onClose }: HistoryPanelProps) {
           {loading ? (
             <div className="px-4 py-3 text-[12px] text-[var(--color-text-muted)]">Loading…</div>
           ) : snapshots.length === 0 ? (
-            <div className="px-4 py-3 text-[12px] text-[var(--color-text-muted)]">No history yet.</div>
+            <div className="px-4 py-3 text-[12px] text-[var(--color-text-muted)]">
+              No history yet.
+            </div>
           ) : (
             snapshots.map((snap, i) => (
               <button
@@ -110,7 +112,11 @@ export function HistoryPanel({ onClose }: HistoryPanelProps) {
                 }`}
               >
                 <div className="text-[11.5px] font-medium truncate">
-                  {i === 0 ? 'Current' : snap.type === 'fork' ? 'Restored' : `v${snapshots.length - i}`}
+                  {i === 0
+                    ? 'Current'
+                    : snap.type === 'fork'
+                      ? 'Restored'
+                      : `v${snapshots.length - i}`}
                 </div>
                 <div className="text-[10.5px] text-[var(--color-text-muted)] mt-[2px]">
                   {formatDate(snap.createdAt)}
@@ -149,7 +155,11 @@ export function HistoryPanel({ onClose }: HistoryPanelProps) {
                 className="inline-flex items-center gap-[var(--space-1_5)] px-[var(--space-3)] py-[var(--space-1_5)] rounded-[var(--radius-md)] bg-[var(--color-accent)] text-white text-[12px] font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
               >
                 <RotateCcw className="w-[12px] h-[12px]" aria-hidden />
-                {restoring ? 'Restoring…' : snapshots[0]?.id === selected.id ? 'Current version' : 'Restore this version'}
+                {restoring
+                  ? 'Restoring…'
+                  : snapshots[0]?.id === selected.id
+                    ? 'Current version'
+                    : 'Restore this version'}
               </button>
             </div>
           )}

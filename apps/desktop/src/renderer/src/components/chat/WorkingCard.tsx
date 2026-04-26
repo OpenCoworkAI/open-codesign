@@ -68,7 +68,7 @@ interface ToolRow {
 type ToolSnippet =
   | { kind: 'diff'; minus: string; plus: string }
   | { kind: 'text'; lines: string[] }
-  | { kind: 'range'; start: number; end: number }
+  | { kind: 'range'; start: number; end: number };
 
 function extractTodos(call: ChatToolCallPayload): TodoItem[] {
   const raw = (call.args?.['todos'] as unknown) ?? (call.args?.['items'] as unknown) ?? null;
@@ -109,18 +109,25 @@ function computeSnippet(call: ChatToolCallPayload): ToolSnippet | undefined {
   const cmd = call.command;
   const args = call.args;
   if (cmd === 'str_replace') {
-    const minus = typeof args?.['old_str'] === 'string' ? firstMeaningfulLine(args['old_str']) : null;
-    const plus = typeof args?.['new_str'] === 'string' ? firstMeaningfulLine(args['new_str']) : null;
+    const minus =
+      typeof args?.['old_str'] === 'string' ? firstMeaningfulLine(args['old_str']) : null;
+    const plus =
+      typeof args?.['new_str'] === 'string' ? firstMeaningfulLine(args['new_str']) : null;
     if (minus && plus && minus !== plus) return { kind: 'diff', minus, plus };
   }
   if (cmd === 'create' || cmd === 'insert') {
-    const src = typeof args?.['file_text'] === 'string'
-      ? args['file_text']
-      : typeof args?.['new_str'] === 'string'
-        ? args['new_str']
-        : null;
+    const src =
+      typeof args?.['file_text'] === 'string'
+        ? args['file_text']
+        : typeof args?.['new_str'] === 'string'
+          ? args['new_str']
+          : null;
     if (src) {
-      const lines = src.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 3);
+      const lines = src
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .slice(0, 3);
       if (lines.length > 0) return { kind: 'text', lines };
     }
   }

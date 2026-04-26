@@ -47,8 +47,10 @@ function loadPins(): PinnedEntry[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
       (x): x is PinnedEntry =>
-        typeof x === 'object' && x !== null &&
-        typeof x.provider === 'string' && typeof x.modelId === 'string',
+        typeof x === 'object' &&
+        x !== null &&
+        typeof x.provider === 'string' &&
+        typeof x.modelId === 'string',
     );
   } catch {
     return [];
@@ -153,7 +155,11 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
           const cur = prev.get(row.provider);
           if (cur?.models !== null) return prev; // already loaded
           const next = new Map(prev);
-          next.set(row.provider, { ...(cur ?? { expanded: row.provider === activeProvider }), loading: true, models: null });
+          next.set(row.provider, {
+            ...(cur ?? { expanded: row.provider === activeProvider }),
+            loading: true,
+            models: null,
+          });
           return next;
         });
 
@@ -162,7 +168,12 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
           .then((res) => {
             setSections((prev) => {
               const cur = prev.get(row.provider);
-              const models = res.ok ? mergeActiveModelIfMissing(res.models, row.provider === activeProvider ? currentModel : null) : [];
+              const models = res.ok
+                ? mergeActiveModelIfMissing(
+                    res.models,
+                    row.provider === activeProvider ? currentModel : null,
+                  )
+                : [];
               const next = new Map(prev);
               next.set(row.provider, { ...(cur ?? { expanded: false }), loading: false, models });
               return next;
@@ -172,13 +183,17 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
             setSections((prev) => {
               const cur = prev.get(row.provider);
               const next = new Map(prev);
-              next.set(row.provider, { ...(cur ?? { expanded: false }), loading: false, models: [] });
+              next.set(row.provider, {
+                ...(cur ?? { expanded: false }),
+                loading: false,
+                models: [],
+              });
               return next;
             });
           });
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Auto-focus search when any section has models
@@ -194,24 +209,39 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
     }
   }, [open, totalModels]);
 
-  const handleTogglePin = useCallback((provider: string, modelId: string, e: import('react').MouseEvent) => {
-    e.stopPropagation();
-    setPins((prev) => {
-      const next = togglePin(prev, provider, modelId);
-      savePins(next);
-      return next;
-    });
-  }, []);
+  const handleTogglePin = useCallback(
+    (provider: string, modelId: string, e: import('react').MouseEvent) => {
+      e.stopPropagation();
+      setPins((prev) => {
+        const next = togglePin(prev, provider, modelId);
+        savePins(next);
+        return next;
+      });
+    },
+    [],
+  );
 
   async function switchModel(provider: string, modelId: string) {
-    if (!window.codesign) { setOpen(false); return; }
-    if (provider === activeProvider && modelId === currentModel) { setOpen(false); return; }
+    if (!window.codesign) {
+      setOpen(false);
+      return;
+    }
+    if (provider === activeProvider && modelId === currentModel) {
+      setOpen(false);
+      return;
+    }
     try {
       let next: typeof config;
       if (provider !== activeProvider) {
-        next = await window.codesign.config.setActiveProviderAndModel({ provider, modelPrimary: modelId });
+        next = await window.codesign.config.setActiveProviderAndModel({
+          provider,
+          modelPrimary: modelId,
+        });
       } else {
-        next = await window.codesign.settings.setActiveProvider({ provider, modelPrimary: modelId });
+        next = await window.codesign.settings.setActiveProvider({
+          provider,
+          modelPrimary: modelId,
+        });
       }
       recordAction({ type: 'provider.switch', data: { provider, modelId } });
       setConfig(next);
@@ -243,7 +273,9 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
   const filteredPins = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length === 0) return pins;
-    return pins.filter((p) => p.modelId.toLowerCase().includes(q) || p.provider.toLowerCase().includes(q));
+    return pins.filter(
+      (p) => p.modelId.toLowerCase().includes(q) || p.provider.toLowerCase().includes(q),
+    );
   }, [pins, query]);
 
   if (!activeProvider || !currentModel) return null;
@@ -312,7 +344,10 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
             {query.length > 0 && (
               <button
                 type="button"
-                onClick={() => { setQuery(''); searchInputRef.current?.focus(); }}
+                onClick={() => {
+                  setQuery('');
+                  searchInputRef.current?.focus();
+                }}
                 aria-label="Clear"
                 className="absolute right-[calc(var(--space-2)+var(--space-1))] top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
               >
@@ -326,13 +361,19 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
             {/* Pinned section */}
             {filteredPins.length > 0 && (
               <div>
-                <SectionHeader label="Pinned" icon={<Star className="w-[11px] h-[11px]" />} expanded />
+                <SectionHeader
+                  label="Pinned"
+                  icon={<Star className="w-[11px] h-[11px]" />}
+                  expanded
+                />
                 {filteredPins.map((pin) => (
                   <ModelRow
                     key={`pin:${pin.provider}:${pin.modelId}`}
                     modelId={pin.modelId}
                     provider={pin.provider}
-                    providerLabel={providerRows?.find((r) => r.provider === pin.provider)?.label ?? pin.provider}
+                    providerLabel={
+                      providerRows?.find((r) => r.provider === pin.provider)?.label ?? pin.provider
+                    }
                     isActive={pin.provider === activeProvider && pin.modelId === currentModel}
                     isPinned
                     showProvider
@@ -351,12 +392,17 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
             ) : (
               providerRows.map((row) => {
                 const sec = sections.get(row.provider);
-                const expanded = sec?.expanded ?? (row.provider === activeProvider);
+                const expanded = sec?.expanded ?? row.provider === activeProvider;
                 const models = sec?.models ?? null;
                 const loading = sec?.loading ?? false;
                 const q = query.trim().toLowerCase();
                 const filtered = models
-                  ? (q ? models.filter((m) => m.toLowerCase().includes(q) || row.provider.toLowerCase().includes(q)) : models)
+                  ? q
+                    ? models.filter(
+                        (m) =>
+                          m.toLowerCase().includes(q) || row.provider.toLowerCase().includes(q),
+                      )
+                    : models
                   : null;
 
                 // When searching, skip sections with no matches (only if models loaded)
@@ -405,7 +451,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
                           ))
                         ) : models !== null ? (
                           <div className="px-[var(--space-3)] py-[var(--space-1_5)] text-[11px] text-[var(--color-text-muted)]">
-                            {q ? `No matches` : t('settings.providers.noModel')}
+                            {q ? 'No matches' : t('settings.providers.noModel')}
                           </div>
                         ) : null}
                       </div>
@@ -464,9 +510,7 @@ function ModelRow({
   return (
     <div
       className={`group relative flex items-center gap-[var(--space-1)] px-[var(--space-3)] pl-[calc(var(--space-3)+var(--space-4))] py-[5px] cursor-pointer transition-colors ${
-        isActive
-          ? 'bg-[var(--color-surface-hover)]'
-          : 'hover:bg-[var(--color-surface-hover)]'
+        isActive ? 'bg-[var(--color-surface-hover)]' : 'hover:bg-[var(--color-surface-hover)]'
       }`}
       onClick={onSelect}
       role="option"
@@ -485,9 +529,7 @@ function ModelRow({
           {modelId}
         </div>
         {showProvider && (
-          <div className="text-[10px] text-[var(--color-text-muted)] truncate">
-            {providerLabel}
-          </div>
+          <div className="text-[10px] text-[var(--color-text-muted)] truncate">{providerLabel}</div>
         )}
       </div>
       <button

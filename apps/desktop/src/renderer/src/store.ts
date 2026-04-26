@@ -1,5 +1,5 @@
-import type { ConsoleLevel } from '@open-codesign/runtime';
 import { i18n } from '@open-codesign/i18n';
+import type { ConsoleLevel } from '@open-codesign/runtime';
 import type {
   ChatAppendInput,
   ChatMessage,
@@ -348,7 +348,9 @@ interface CodesignState {
   clearConsoleLogs: () => void;
   pushConsoleLog: (entry: IframeConsoleLogEntry) => void;
   setCurrentOperation: (op: string | null) => void;
-  setLatestTodos: (todos: Array<{ text: string; status: 'pending' | 'in_progress' | 'completed' }> | null) => void;
+  setLatestTodos: (
+    todos: Array<{ text: string; status: 'pending' | 'in_progress' | 'completed' }> | null,
+  ) => void;
   upsertPageFile: (path: string, content: string) => void;
   setActivePagePath: (path: string) => void;
   exportActive: (format: ExportFormat) => Promise<void>;
@@ -876,8 +878,7 @@ function finishIfCurrent(
     // than by the store's single activeGenerationId (which is overwritten when
     // a second generation starts for a different design).
     const designKnown = designId ? state.activeGenerations.has(designId) : false;
-    const isCurrent =
-      designKnown || state.activeGenerationId === _generationId;
+    const isCurrent = designKnown || state.activeGenerationId === _generationId;
     if (!isCurrent) return {};
     const base = update(state);
     if (designId) {
@@ -912,29 +913,34 @@ function applyGenerateSuccess(
   const assistantMessage = result.message || tr('common.done');
   const { usage, rejected: rejectedUsageFields } = coerceUsageSnapshot(result);
   let didApply = false;
-  finishIfCurrent(set, generationId, (_state) => {
-    didApply = true;
-    const nextHtml = firstArtifact?.content ?? _state.previewHtml;
-    const pool =
-      _state.currentDesignId !== null && nextHtml !== null
-        ? recordPreviewInPool(
-            _state.previewHtmlByDesign,
-            _state.recentDesignIds,
-            _state.currentDesignId,
-            nextHtml,
-          )
-        : { cache: _state.previewHtmlByDesign, recent: _state.recentDesignIds };
-    return {
-      previewHtml: nextHtml,
-      previewHtmlByDesign: pool.cache,
-      recentDesignIds: pool.recent,
-      isGenerating: false,
-      activeGenerationId: null,
-      generatingDesignId: null,
-      generationStage: 'done' as GenerationStage,
-      lastUsage: usage,
-    };
-  }, designIdAtStart);
+  finishIfCurrent(
+    set,
+    generationId,
+    (_state) => {
+      didApply = true;
+      const nextHtml = firstArtifact?.content ?? _state.previewHtml;
+      const pool =
+        _state.currentDesignId !== null && nextHtml !== null
+          ? recordPreviewInPool(
+              _state.previewHtmlByDesign,
+              _state.recentDesignIds,
+              _state.currentDesignId,
+              nextHtml,
+            )
+          : { cache: _state.previewHtmlByDesign, recent: _state.recentDesignIds };
+      return {
+        previewHtml: nextHtml,
+        previewHtmlByDesign: pool.cache,
+        recentDesignIds: pool.recent,
+        isGenerating: false,
+        activeGenerationId: null,
+        generatingDesignId: null,
+        generationStage: 'done' as GenerationStage,
+        lastUsage: usage,
+      };
+    },
+    designIdAtStart,
+  );
   // If the user switched designs mid-generation, didApply is false but we
   // still want the fresh artifact in the pool so the design they generated
   // for shows the new content the next time they switch back to it.
@@ -1086,15 +1092,20 @@ function applyGenerateError(
     message: msg,
   });
 
-  finishIfCurrent(set, generationId, () => ({
-    isGenerating: false,
-    activeGenerationId: null,
-    generatingDesignId: null,
-    streamingAssistantText: null,
-    errorMessage: msg,
-    lastError: msg,
-    generationStage: 'error' as GenerationStage,
-  }), designIdAtStart);
+  finishIfCurrent(
+    set,
+    generationId,
+    () => ({
+      isGenerating: false,
+      activeGenerationId: null,
+      generatingDesignId: null,
+      streamingAssistantText: null,
+      errorMessage: msg,
+      lastError: msg,
+      generationStage: 'error' as GenerationStage,
+    }),
+    designIdAtStart,
+  );
   const designId = designIdAtStart ?? get().currentDesignId;
   if (designId) {
     void get().appendChatMessage({
@@ -1477,7 +1488,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   pushConsoleLog(entry) {
     set((s) => {
       const next = [...s.consoleLogs, entry];
-      return { consoleLogs: next.length > MAX_CONSOLE_LOGS ? next.slice(next.length - MAX_CONSOLE_LOGS) : next };
+      return {
+        consoleLogs:
+          next.length > MAX_CONSOLE_LOGS ? next.slice(next.length - MAX_CONSOLE_LOGS) : next,
+      };
     });
   },
 
@@ -1768,13 +1782,18 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     void window.codesign
       .cancelGeneration(id)
       .then(() => {
-        finishIfCurrent(set, id, () => ({
-          isGenerating: false,
-          activeGenerationId: null,
-          generatingDesignId: null,
-          streamingAssistantText: null,
-          generationStage: 'idle' as GenerationStage,
-        }), cancelDesignId);
+        finishIfCurrent(
+          set,
+          id,
+          () => ({
+            isGenerating: false,
+            activeGenerationId: null,
+            generatingDesignId: null,
+            streamingAssistantText: null,
+            generationStage: 'idle' as GenerationStage,
+          }),
+          cancelDesignId,
+        );
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');

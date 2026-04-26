@@ -32,7 +32,8 @@ export function FilesPanel() {
 
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const workspacePath = currentDesign?.workspacePath ?? null;
-  const isCurrentDesignGenerating = currentDesignId !== null && activeGenerations.has(currentDesignId);
+  const isCurrentDesignGenerating =
+    currentDesignId !== null && activeGenerations.has(currentDesignId);
 
   useEffect(() => {
     if (!workspacePath || !currentDesignId) {

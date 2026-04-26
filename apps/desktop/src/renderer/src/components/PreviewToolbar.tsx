@@ -21,7 +21,12 @@ interface ExportItem {
 
 const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200] as const;
 
-export function PreviewToolbar({ onToggleHistory, historyOpen, showCodeView, onToggleCodeView }: PreviewToolbarExternalProps): ReactElement {
+export function PreviewToolbar({
+  onToggleHistory,
+  historyOpen,
+  showCodeView,
+  onToggleCodeView,
+}: PreviewToolbarExternalProps): ReactElement {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const exportActive = useCodesignStore((s) => s.exportActive);

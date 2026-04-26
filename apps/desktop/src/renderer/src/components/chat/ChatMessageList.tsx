@@ -258,7 +258,9 @@ function LiveThinkingBlock({
     const lastAssistant = [...messages].reverse().find((m) => m.kind === 'assistant_text');
     const lastText = (lastAssistant?.payload as { text?: string } | undefined)?.text?.trim() ?? '';
     const streamingTrim = streamingText.trim();
-    const isDupe = Boolean(lastText && (lastText === streamingTrim || lastText.startsWith(streamingTrim)));
+    const isDupe = Boolean(
+      lastText && (lastText === streamingTrim || lastText.startsWith(streamingTrim)),
+    );
     if (!isDupe) {
       return (
         <div key="streaming-assistant">
@@ -286,7 +288,11 @@ function LiveThinkingBlock({
   for (let i = 0; i < pendingToolCalls.length; i += 1) {
     const c = pendingToolCalls[i];
     if (!c) continue;
-    if (c.toolName === 'set_todos') { flushBucket(i); latestSetTodosCall = c; continue; }
+    if (c.toolName === 'set_todos') {
+      flushBucket(i);
+      latestSetTodosCall = c;
+      continue;
+    }
     bucket.push(c);
   }
   flushBucket(pendingToolCalls.length);
@@ -294,16 +300,26 @@ function LiveThinkingBlock({
   // Extract plan items from the latest set_todos call for inline display
   const planItems: { text: string; status: 'pending' | 'in_progress' | 'completed' }[] = [];
   if (latestSetTodosCall) {
-    const raw = (latestSetTodosCall.args?.['todos'] ?? latestSetTodosCall.args?.['items']) as unknown;
+    const raw = (latestSetTodosCall.args?.['todos'] ??
+      latestSetTodosCall.args?.['items']) as unknown;
     if (Array.isArray(raw)) {
       for (const it of raw) {
         if (typeof it !== 'object' || it === null) continue;
         const o = it as Record<string, unknown>;
-        const text = typeof o['content'] === 'string' ? o['content'] : typeof o['text'] === 'string' ? o['text'] : null;
+        const text =
+          typeof o['content'] === 'string'
+            ? o['content']
+            : typeof o['text'] === 'string'
+              ? o['text']
+              : null;
         if (!text) continue;
         const rs = o['status'];
         const status: 'pending' | 'in_progress' | 'completed' =
-          rs === 'completed' || rs === 'in_progress' || rs === 'pending' ? rs : o['checked'] === true ? 'completed' : 'pending';
+          rs === 'completed' || rs === 'in_progress' || rs === 'pending'
+            ? rs
+            : o['checked'] === true
+              ? 'completed'
+              : 'pending';
         planItems.push({ text, status });
       }
     }
@@ -323,16 +339,28 @@ function LiveThinkingBlock({
         className="w-full flex items-center gap-[var(--space-2)] px-[var(--space-3)] py-[var(--space-2)] text-[12px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors duration-100"
       >
         {expanded ? (
-          <ChevronDown className="w-[13px] h-[13px] shrink-0 text-[var(--color-text-muted)]" aria-hidden />
+          <ChevronDown
+            className="w-[13px] h-[13px] shrink-0 text-[var(--color-text-muted)]"
+            aria-hidden
+          />
         ) : (
-          <ChevronRight className="w-[13px] h-[13px] shrink-0 text-[var(--color-text-muted)]" aria-hidden />
+          <ChevronRight
+            className="w-[13px] h-[13px] shrink-0 text-[var(--color-text-muted)]"
+            aria-hidden
+          />
         )}
         <span className="flex items-center gap-[var(--space-1_5)]">
           {isGenerating ? (
             <>
               <span className="codesign-stream-dot shrink-0" style={{ width: 6, height: 6 }} />
-              <span className="codesign-stream-dot shrink-0" style={{ width: 6, height: 6, animationDelay: '150ms' }} />
-              <span className="codesign-stream-dot shrink-0" style={{ width: 6, height: 6, animationDelay: '300ms' }} />
+              <span
+                className="codesign-stream-dot shrink-0"
+                style={{ width: 6, height: 6, animationDelay: '150ms' }}
+              />
+              <span
+                className="codesign-stream-dot shrink-0"
+                style={{ width: 6, height: 6, animationDelay: '300ms' }}
+              />
             </>
           ) : null}
           <span className="font-medium text-[var(--color-text-primary)]">

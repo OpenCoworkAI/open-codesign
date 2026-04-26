@@ -27,11 +27,17 @@ function ConsoleRow({ entry }: { entry: IframeConsoleLogEntry }) {
     <div
       className={`flex items-start gap-[var(--space-2)] px-[var(--space-3)] py-[2px] font-[ui-monospace,Menlo,monospace] text-[11.5px] leading-[1.5] border-b border-[var(--color-border-muted)]/40 last:border-0 ${LEVEL_BG[entry.level]}`}
     >
-      <span className="shrink-0 text-[var(--color-text-muted)] tabular-nums select-none">{time}</span>
-      <span className={`shrink-0 w-[36px] uppercase text-[10px] font-bold tracking-wide ${LEVEL_STYLE[entry.level]}`}>
+      <span className="shrink-0 text-[var(--color-text-muted)] tabular-nums select-none">
+        {time}
+      </span>
+      <span
+        className={`shrink-0 w-[36px] uppercase text-[10px] font-bold tracking-wide ${LEVEL_STYLE[entry.level]}`}
+      >
         {entry.level}
       </span>
-      <span className={`flex-1 break-all whitespace-pre-wrap ${LEVEL_STYLE[entry.level]}`}>{text}</span>
+      <span className={`flex-1 break-all whitespace-pre-wrap ${LEVEL_STYLE[entry.level]}`}>
+        {text}
+      </span>
     </div>
   );
 }
@@ -89,8 +95,13 @@ export function ConsolePanel() {
           onClick={() => setOpen((v) => !v)}
           className="flex items-center gap-[var(--space-2)] flex-1 min-w-0 text-left"
         >
-          <Terminal className="w-[13px] h-[13px] shrink-0 text-[var(--color-text-muted)]" aria-hidden />
-          <span className="text-[11.5px] font-medium text-[var(--color-text-secondary)]">Console</span>
+          <Terminal
+            className="w-[13px] h-[13px] shrink-0 text-[var(--color-text-muted)]"
+            aria-hidden
+          />
+          <span className="text-[11.5px] font-medium text-[var(--color-text-secondary)]">
+            Console
+          </span>
           {badge}
           <span className="ml-auto">
             {open ? (
