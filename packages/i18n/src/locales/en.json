@@ -132,6 +132,8 @@
     "linkDesignSystemRepo": "Link design system repo",
     "refreshDesignSystemRepo": "Refresh design system repo",
     "referenceUrl": "Reference URL",
+    "decomposeToUiKit": "Decompose to UI Kit",
+    "decomposeToUiKitDisabled": "Generate a design first, then decompose it",
     "attachedFiles": "Attached files",
     "removeFile": "Remove {{name}}",
     "activeDesignSystem": "Active design system",

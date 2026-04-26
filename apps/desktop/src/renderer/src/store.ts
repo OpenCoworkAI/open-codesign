@@ -317,6 +317,12 @@ interface CodesignState {
    *  if the condition is met (first round succeeded, no prior polish). Call
    *  from useAgentStream's agent_end handler. */
   tryAutoPolish: (designId: string, locale: string) => void;
+  /** User-triggered decompose follow-up. Sends a structured prompt asking the
+   *  agent to call `decompose_to_ui_kit` and emit a ui_kits/<slug>/ folder
+   *  shaped for downstream coding-agent handoff. Unlike `tryAutoPolish` this
+   *  is NOT auto-fired — the user explicitly clicks the menu item. No dedup
+   *  since the user can decide to re-decompose with a different slug. */
+  triggerDecompose: (designId: string, locale: string) => void;
   cancelGeneration: () => void;
   retryLastPrompt: () => Promise<void>;
   applyInlineComment: (comment: string) => Promise<void>;
@@ -1351,6 +1357,19 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     // load time — the store is imported by the hook and vice-versa.
     void import('./hooks/polishPrompt').then(({ pickPolishPrompt }) => {
       const prompt = pickPolishPrompt(locale);
+      void get().sendPrompt({ prompt, silent: true });
+    });
+  },
+
+  triggerDecompose: (designId, locale) => {
+    const s = get();
+    if (s.isGenerating) return;
+    // Decompose only makes sense once an artifact exists; require at least one
+    // assistant_text on this design (mirrors the gate used by tryAutoPolish).
+    const designMessages = s.chatMessages.filter((m) => m.designId === designId);
+    if (!designMessages.some((m) => m.kind === 'assistant_text')) return;
+    void import('./hooks/decomposePrompt').then(({ pickDecomposePrompt }) => {
+      const prompt = pickDecomposePrompt(locale);
       void get().sendPrompt({ prompt, silent: true });
     });
   },

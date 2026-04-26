@@ -63,6 +63,7 @@ import { reasoningForModel } from './index.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt } from './prompts/index.js';
 import { makeDeclareTweakSchemaTool } from './tools/declare-tweak-schema.js';
+import { makeDecomposeToUiKitTool } from './tools/decompose-to-ui-kit.js';
 import { type DoneRuntimeVerifier, makeDoneTool } from './tools/done.js';
 import {
   type GenerateImageAssetFn,
@@ -781,6 +782,9 @@ export async function generateViaAgent(
     );
     defaultTools.push(
       makeDoneTool(deps.fs, deps.runtimeVerify) as unknown as AgentTool<TSchema, unknown>,
+    );
+    defaultTools.push(
+      makeDecomposeToUiKitTool(deps.fs, log) as unknown as AgentTool<TSchema, unknown>,
     );
   }
   if (deps.generateImageAsset) {

@@ -132,6 +132,8 @@
     "linkDesignSystemRepo": "关联设计系统仓库",
     "refreshDesignSystemRepo": "刷新设计系统仓库",
     "referenceUrl": "参考链接",
+    "decomposeToUiKit": "拆解为 UI Kit",
+    "decomposeToUiKitDisabled": "先生成一个设计, 然后再拆解",
     "attachedFiles": "已附加文件",
     "removeFile": "移除 {{name}}",
     "activeDesignSystem": "当前设计系统",

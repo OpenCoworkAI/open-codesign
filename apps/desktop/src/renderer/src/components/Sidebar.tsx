@@ -1,4 +1,4 @@
-import { useT } from '@open-codesign/i18n';
+import { getCurrentLocale, useT, useTranslation } from '@open-codesign/i18n';
 import type { LocalInputFile, OnboardingState } from '@open-codesign/shared';
 import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -76,6 +76,8 @@ function ContextIcon({ icon }: { icon: ComposerContextItem['icon'] }) {
  */
 export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   const t = useT();
+  const { i18n } = useTranslation();
+  const triggerDecompose = useCodesignStore((s) => s.triggerDecompose);
   const config = useCodesignStore((s) => s.config);
   const isGenerating = useCodesignStore(
     (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
@@ -225,6 +227,14 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
                 onReferenceUrlChange={setReferenceUrl}
                 hasDesignSystem={Boolean(designSystem)}
                 disabled={isGenerating}
+                onDecomposeToUiKit={
+                  currentDesignId
+                    ? () => {
+                        triggerDecompose(currentDesignId, i18n.language || getCurrentLocale());
+                      }
+                    : undefined
+                }
+                canDecompose={Boolean(currentDesignId) && !isGenerating}
               />
             }
           />
