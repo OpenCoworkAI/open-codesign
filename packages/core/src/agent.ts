@@ -111,6 +111,7 @@ import { makeSetTodosTool } from './tools/set-todos.js';
 import { makeSkillTool } from './tools/skill.js';
 import { makeTextEditorTool, type TextEditorFsCallbacks } from './tools/text-editor.js';
 import { makeTweaksTool } from './tools/tweaks.js';
+import { makeVerifyUiKitParityTool } from './tools/verify-ui-kit-parity.js';
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via
  *  pi-ai). Declared here so this file does not take a direct dependency on
@@ -1137,6 +1138,13 @@ export async function generateViaAgent(
       'decompose_to_ui_kit',
       wrapPlanningGate(
         makeDecomposeToUiKitTool(trackedFs, log) as unknown as AgentTool<TSchema, unknown>,
+        runProtocolState,
+      ),
+    );
+    defaultToolsByName.set(
+      'verify_ui_kit_parity',
+      wrapPlanningGate(
+        makeVerifyUiKitParityTool(trackedFs, log) as unknown as AgentTool<TSchema, unknown>,
         runProtocolState,
       ),
     );
