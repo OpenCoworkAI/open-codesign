@@ -97,6 +97,7 @@ import {
 import { buildRunProtocolPreflight, type RunProtocolState } from './run-protocol.js';
 import { availableToolNames } from './tool-manifest.js';
 import { makeAskTool } from './tools/ask.js';
+import { makeDecomposeToUiKitTool } from './tools/decompose-to-ui-kit.js';
 import { type DoneDetails, type DoneRuntimeVerifier, makeDoneTool } from './tools/done.js';
 import {
   type GenerateImageAssetFn,
@@ -1129,6 +1130,13 @@ export async function generateViaAgent(
             doneRepairLimitReached = true;
           },
         ),
+        runProtocolState,
+      ),
+    );
+    defaultToolsByName.set(
+      'decompose_to_ui_kit',
+      wrapPlanningGate(
+        makeDecomposeToUiKitTool(trackedFs, log) as unknown as AgentTool<TSchema, unknown>,
         runProtocolState,
       ),
     );

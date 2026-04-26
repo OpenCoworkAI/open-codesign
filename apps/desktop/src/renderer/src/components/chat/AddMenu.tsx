@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { IconButton, Tooltip } from '@open-codesign/ui';
-import { FolderOpen, Link2, Paperclip, Plus } from 'lucide-react';
+import { FolderOpen, Layers, Link2, Paperclip, Plus } from 'lucide-react';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -16,6 +16,12 @@ export interface AddMenuProps {
   onReferenceUrlChange: (value: string) => void;
   hasDesignSystem: boolean;
   disabled?: boolean;
+  /** When provided, renders a "Decompose to UI Kit" item that asks the agent
+   *  to emit a ui_kits/<slug>/ folder for downstream coding-agent handoff.
+   *  Hidden when undefined. The parent decides whether the action is meaningful
+   *  for the current design (requires a generated artifact). */
+  onDecomposeToUiKit?: (() => void) | undefined;
+  canDecompose?: boolean | undefined;
 }
 
 /**
@@ -32,6 +38,8 @@ export function AddMenu({
   onReferenceUrlChange,
   hasDesignSystem,
   disabled,
+  onDecomposeToUiKit,
+  canDecompose,
 }: AddMenuProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -135,6 +143,22 @@ export function AddMenu({
               className="flex-1 min-w-0 bg-transparent text-[var(--text-xs)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none"
             />
           </div>
+          {onDecomposeToUiKit ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleItem(onDecomposeToUiKit)}
+              disabled={!canDecompose}
+              className="flex w-full items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] px-[var(--space-2_5)] py-[var(--space-2)] text-left text-[var(--text-sm)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={canDecompose ? undefined : t('sidebar.decomposeToUiKitDisabled')}
+            >
+              <Layers
+                className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] text-[var(--color-text-secondary)]"
+                aria-hidden
+              />
+              <span className="truncate">{t('sidebar.decomposeToUiKit')}</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
