@@ -30,7 +30,7 @@
     "better-sqlite3": "^12.9.0",
     "electron-log": "^5",
     "electron-updater": "^6.3.9",
-    "lucide-react": "^1.8.0",
+    "lucide-react": "^1.11.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "smol-toml": "^1.6.1",
