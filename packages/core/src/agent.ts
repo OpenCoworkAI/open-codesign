@@ -74,6 +74,7 @@ import { makeReadDesignSystemTool } from './tools/read-design-system.js';
 import { makeReadUrlTool } from './tools/read-url.js';
 import { makeSetTodosTool } from './tools/set-todos.js';
 import { type TextEditorFsCallbacks, makeTextEditorTool } from './tools/text-editor.js';
+import { makeVerifyUiKitParityTool } from './tools/verify-ui-kit-parity.js';
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via
  *  pi-ai). Declared here so this file does not take a direct dependency on
@@ -785,6 +786,9 @@ export async function generateViaAgent(
     );
     defaultTools.push(
       makeDecomposeToUiKitTool(deps.fs, log) as unknown as AgentTool<TSchema, unknown>,
+    );
+    defaultTools.push(
+      makeVerifyUiKitParityTool(deps.fs, log) as unknown as AgentTool<TSchema, unknown>,
     );
   }
   if (deps.generateImageAsset) {
