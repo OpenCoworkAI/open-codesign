@@ -37,6 +37,7 @@
 
 ## What's new
 
+- **`feat/decompose-to-ui-kit`** *(branch)* — Image -> componentized `ui_kits/<slug>/` bundle for coding-agent handoff · Boolean-per-dimension visual parity judge (12 standard checks) · Verify-and-iterate loop · Per-decompose cost row · See [BENCHMARKS.md](./BENCHMARKS.md). Refs [#225](https://github.com/OpenCoworkAI/open-codesign/issues/225).
 - **v0.2.0** *(2026-05-09)* — Agentic Design: workspace-backed sessions · permissioned local tools · Files panel upgrades · provider diagnostics · security hardening · `DESIGN.md` design systems
 - **v0.1.4** *(2026-04-23)* — AI image generation · ChatGPT Plus/Codex subscription support · CLIProxyAPI one-click import · API config hardening
 - **v0.1.3** *(2026-04-21)* — Gemini `models/` prefix fix · OpenAI-compatible relay "instructions required" fix · third-party relay SSE-truncation hint
@@ -232,6 +233,7 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 - **AI image generation** — opt-in bitmap assets for heroes, product shots, backgrounds, and illustrations via OpenAI, OpenRouter, or signed-in ChatGPT subscription
 - **AI-generated sliders** — the model emits the parameters worth tweaking (color, spacing, font)
 - **Comment mode** — click any element in the preview to drop a pin, leave a note, and let the model rewrite only that region
+- **Decompose to UI Kit** — one click in the chat sidebar emits a `ui_kits/<slug>/` folder (`index.html` + `components/*.tsx` + `tokens.css` + `manifest.json` + `README.md`) shaped for coding-agent handoff. Built-in deterministic + vision verifiers self-check parity using a 12-question boolean rubric (no floating-point arbitrary scores) and re-iterate on gaps. Per-decompose cost surfaces inline as a toast. See [BENCHMARKS.md](./BENCHMARKS.md).
 - **Generation cancellation** — stop mid-stream without losing prior turns
 
 ### Preview and workflow
