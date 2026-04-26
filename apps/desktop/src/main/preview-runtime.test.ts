@@ -134,6 +134,26 @@ describeIfChrome('runPreview with real Chrome', () => {
     expect(result.domOutline).toContain('main#jsx-root');
   }, 30_000);
 
+  it('renders placeholder HTML files through their referenced JSX source', async () => {
+    writeFileSync(
+      join(tempDir, 'index.html'),
+      '<!doctype html><html><body><!-- artifact source lives in index.jsx --></body></html>',
+      'utf8',
+    );
+    writeFileSync(
+      join(tempDir, 'index.jsx'),
+      'function App() { return <main id="placeholder-jsx-root">Placeholder JSX</main>; }',
+      'utf8',
+    );
+    const result = await runPreview({
+      path: 'index.html',
+      vision: false,
+      workspaceRoot: tempDir,
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.domOutline).toContain('main#placeholder-jsx-root');
+  }, 30_000);
+
   it('renders standalone TSX files through the preview runtime', async () => {
     writeFileSync(
       join(tempDir, 'App.tsx'),

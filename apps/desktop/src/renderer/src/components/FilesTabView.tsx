@@ -1,5 +1,10 @@
 import { useT } from '@open-codesign/i18n';
-import { buildPreviewDocument, isRenderablePath } from '@open-codesign/runtime';
+import {
+  buildPreviewDocument,
+  findArtifactSourceReference,
+  isRenderablePath,
+  resolveArtifactSourceReferencePath,
+} from '@open-codesign/runtime';
 import { FileCode2, Folder, FolderOpen } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type DesignFileEntry, type DesignFileKind, useDesignFiles } from '../hooks/useDesignFiles';
@@ -198,9 +203,19 @@ export function chooseWorkspacePreviewSourceMode(input: {
   return 'unavailable';
 }
 
+export function resolveReferencedWorkspacePreviewPath(source: string, path: string): string | null {
+  const reference = findArtifactSourceReference(source);
+  return reference === null ? null : resolveArtifactSourceReferencePath(path, reference);
+}
+
 interface WorkspaceFilePreviewProps {
   path: string;
   file?: DesignFileEntry | null | undefined;
+}
+
+interface WorkspacePreviewSource {
+  content: string;
+  path: string;
 }
 
 export function WorkspaceFilePreview({ path, file }: WorkspaceFilePreviewProps) {
@@ -220,7 +235,7 @@ export function WorkspaceFilePreview({ path, file }: WorkspaceFilePreviewProps) 
   const fileRevision = effectiveFile
     ? `${effectiveFile.updatedAt}:${effectiveFile.size ?? ''}`
     : null;
-  const [diskSource, setDiskSource] = useState<string | null>(null);
+  const [previewSource, setPreviewSource] = useState<WorkspacePreviewSource | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -228,7 +243,7 @@ export function WorkspaceFilePreview({ path, file }: WorkspaceFilePreviewProps) 
     // Re-read when the file watcher reports changed metadata for the same path.
     void fileRevision;
     if (!renderable || !currentDesignId) {
-      setDiskSource(null);
+      setPreviewSource(null);
       setReadError(null);
       return;
     }
@@ -239,25 +254,31 @@ export function WorkspaceFilePreview({ path, file }: WorkspaceFilePreviewProps) 
       hasPreviewHtml: Boolean(previewHtml),
     });
     if (sourceMode === 'preview-html-fallback' && previewHtml) {
-      setDiskSource(previewHtml);
+      setPreviewSource({ content: previewHtml, path });
       setReadError(null);
       return;
     }
     if (sourceMode === 'unavailable' || !read) {
-      setDiskSource(null);
+      setPreviewSource(null);
       setReadError(t('canvas.filesTabEmpty'));
       return;
     }
     let cancelled = false;
     setReadError(null);
     void read(currentDesignId, path)
+      .then(async (result) => {
+        const referencedPath = resolveReferencedWorkspacePreviewPath(result.content, result.path);
+        if (referencedPath === null) return { content: result.content, path: result.path };
+        const referenced = await read(currentDesignId, referencedPath);
+        return { content: referenced.content, path: referenced.path };
+      })
       .then((result) => {
         if (cancelled) return;
-        setDiskSource(result.content);
+        setPreviewSource(result);
       })
       .catch((err) => {
         if (cancelled) return;
-        setDiskSource(null);
+        setPreviewSource(null);
         setReadError(err instanceof Error ? err.message : t('errors.unknown'));
       });
     return () => {
@@ -266,14 +287,14 @@ export function WorkspaceFilePreview({ path, file }: WorkspaceFilePreviewProps) 
   }, [currentDesignId, fileRevision, path, previewHtml, renderable, t]);
 
   const srcDoc = useMemo(() => {
-    if (!diskSource || !renderable) return null;
+    if (!previewSource || !renderable) return null;
     try {
-      return buildPreviewDocument(diskSource, { path, baseHref });
+      return buildPreviewDocument(previewSource.content, { path: previewSource.path, baseHref });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return `<!doctype html><html><body style="font: 13px system-ui; color: #71717a; display: grid; place-items: center; min-height: 100vh; margin: 0;">${escapeHtmlText(message)}</body></html>`;
     }
-  }, [baseHref, diskSource, path, renderable]);
+  }, [baseHref, previewSource, renderable]);
 
   if (!renderable) {
     return (

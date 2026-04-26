@@ -3,6 +3,7 @@ import { openFileTab } from '../store/slices/tabs';
 import {
   chooseWorkspacePreviewSourceMode,
   isRenderableDesignFileKind,
+  resolveReferencedWorkspacePreviewPath,
   workspaceBaseHrefFromPath,
 } from './FilesTabView';
 
@@ -60,5 +61,29 @@ describe('FilesTabView preview helpers', () => {
         hasPreviewHtml: true,
       }),
     ).toBe('unavailable');
+  });
+
+  it('resolves placeholder HTML previews to their referenced JSX/TSX source path', () => {
+    expect(
+      resolveReferencedWorkspacePreviewPath(
+        '<!doctype html><body><!-- artifact source lives in index.jsx --></body>',
+        'index.html',
+      ),
+    ).toBe('index.jsx');
+    expect(
+      resolveReferencedWorkspacePreviewPath(
+        '<!-- artifact source lives in App.tsx -->',
+        'ui/demo.html',
+      ),
+    ).toBe('ui/App.tsx');
+  });
+
+  it('ignores unsafe placeholder source paths', () => {
+    expect(
+      resolveReferencedWorkspacePreviewPath(
+        '<!-- artifact source lives in ../App.jsx -->',
+        'index.html',
+      ),
+    ).toBeNull();
   });
 });

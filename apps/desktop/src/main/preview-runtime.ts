@@ -19,7 +19,11 @@ import { join, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { PreviewResult } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
-import { buildPreviewDocument } from '@open-codesign/runtime';
+import {
+  buildPreviewDocument,
+  findArtifactSourceReference,
+  resolveArtifactSourceReferencePath,
+} from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
 
 export interface RunPreviewOptions {
@@ -28,7 +32,7 @@ export interface RunPreviewOptions {
   workspaceRoot: string;
 }
 
-const LOAD_TIMEOUT_MS = 5000;
+const LOAD_TIMEOUT_MS = 15_000;
 const SETTLE_AFTER_LOAD_MS = 800;
 const MAX_CONSOLE_ENTRIES = 50;
 const MAX_ASSET_ERRORS = 20;
@@ -36,28 +40,25 @@ const DEFAULT_VIEWPORT = { width: 1280, height: 800 } as const;
 
 export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult> {
   const absWorkspace = resolve(opts.workspaceRoot);
-  const absPath = resolve(absWorkspace, opts.path);
-  // Path-escape guard: the agent passes workspace-relative paths, but a crafted
-  // `../../etc/passwd` would otherwise resolve outside the sandbox and serve
-  // whatever the main-process user can read.
-  if (absPath !== absWorkspace && !absPath.startsWith(absWorkspace + sep)) {
-    return emptyFail(`path "${opts.path}" escapes workspace root`);
-  }
-
   let source: string;
+  let sourcePath = opts.path;
   try {
-    source = await readFile(absPath, 'utf8');
+    source = await readPreviewSource(absWorkspace, opts.path);
+    const reference = findArtifactSourceReference(source);
+    const referencedPath =
+      reference === null ? null : resolveArtifactSourceReferencePath(opts.path, reference);
+    if (referencedPath !== null) {
+      source = await readPreviewSource(absWorkspace, referencedPath);
+      sourcePath = referencedPath;
+    }
   } catch (err) {
-    return emptyFail(`read failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
-  if (source.indexOf('\u0000') !== -1) {
-    return emptyFail(`binary file cannot be previewed: ${opts.path}`);
+    return emptyFail(err instanceof Error ? err.message : String(err));
   }
 
   let html: string;
   try {
     html = buildPreviewDocument(source, {
-      path: opts.path,
+      path: sourcePath,
       baseHref: pathToFileURL(absWorkspace.endsWith(sep) ? absWorkspace : `${absWorkspace}${sep}`)
         .href,
     });
@@ -221,6 +222,30 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
       /* noop */
     }
   }
+}
+
+function resolveWorkspaceChild(absWorkspace: string, relPath: string): string {
+  const absPath = resolve(absWorkspace, relPath);
+  // Path-escape guard: the agent passes workspace-relative paths, but a crafted
+  // `../../etc/passwd` would otherwise resolve outside the sandbox and serve
+  // whatever the main-process user can read.
+  if (absPath !== absWorkspace && !absPath.startsWith(absWorkspace + sep)) {
+    throw new Error(`path "${relPath}" escapes workspace root`);
+  }
+  return absPath;
+}
+
+async function readPreviewSource(absWorkspace: string, relPath: string): Promise<string> {
+  let source: string;
+  try {
+    source = await readFile(resolveWorkspaceChild(absWorkspace, relPath), 'utf8');
+  } catch (err) {
+    throw new Error(`read failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (source.indexOf('\u0000') !== -1) {
+    throw new Error(`binary file cannot be previewed: ${relPath}`);
+  }
+  return source;
 }
 
 function mapConsoleLevel(raw: string): PreviewResult['consoleErrors'][number]['level'] | null {
