@@ -476,6 +476,35 @@ export function toPersistedV3(cfg: Config | ConfigV3): ConfigV3 {
   };
 }
 
+/**
+ * Spreads for `hydrateConfig` so a partial v3 write does not drop optional
+ * top-level fields from the current config (e.g. `modelFast` when saving a
+ * provider key, or `imageGeneration` when editing providers).
+ */
+export function preservedV3OptionalsForWrite(
+  source: Config | ConfigV3 | null | undefined,
+  options?: {
+    /** Set when `designSystem` is being set or removed in the same write. */
+    clearDesignSystem?: boolean;
+    /** Set when `imageGeneration` is overwritten in the same object. */
+    skipImageGeneration?: boolean;
+  },
+): Partial<Pick<ConfigV3, 'modelFast' | 'imageGeneration' | 'designSystem'>> {
+  if (source == null) return {};
+  const p = toPersistedV3(source);
+  const out: Partial<Pick<ConfigV3, 'modelFast' | 'imageGeneration' | 'designSystem'>> = {};
+  if (p.modelFast !== undefined) {
+    out.modelFast = p.modelFast;
+  }
+  if (p.imageGeneration !== undefined && options?.skipImageGeneration !== true) {
+    out.imageGeneration = p.imageGeneration;
+  }
+  if (p.designSystem !== undefined && options?.clearDesignSystem !== true) {
+    out.designSystem = p.designSystem;
+  }
+  return out;
+}
+
 // ── OnboardingState ──────────────────────────────────────────────────────────
 
 export interface OnboardingState {

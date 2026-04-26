@@ -18,6 +18,7 @@ import {
   ERROR_CODES,
   type ProviderEntry,
   hydrateConfig,
+  preservedV3OptionalsForWrite,
 } from '@open-codesign/shared';
 import { configDir, writeConfig } from './config';
 import { ipcMain, shell } from './electron-runtime';
@@ -133,7 +134,7 @@ async function persistProviderMutation(
     activeModel: cfg?.activeModel ?? '',
     secrets: cfg?.secrets ?? {},
     providers: nextProviders,
-    ...(cfg?.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...preservedV3OptionalsForWrite(cfg),
   });
   await writeConfig(next);
   setCachedConfig(next);
@@ -155,7 +156,7 @@ async function claimActiveProviderIfUnset(): Promise<void> {
     activeModel: CHATGPT_CODEX_PROVIDER.defaultModel,
     secrets: cfg.secrets,
     providers: cfg.providers,
-    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...preservedV3OptionalsForWrite(cfg),
   });
   await writeConfig(next);
   setCachedConfig(next);

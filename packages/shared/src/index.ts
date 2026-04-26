@@ -260,6 +260,7 @@ export {
   isSupportedOnboardingProvider,
   migrateLegacyToV3,
   parseConfigFlexible,
+  preservedV3OptionalsForWrite,
   resolveProviderCapabilities,
   toPersistedV3,
 } from './config';

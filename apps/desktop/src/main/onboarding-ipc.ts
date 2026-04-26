@@ -22,6 +22,8 @@ import {
   hydrateConfig,
   isSupportedOnboardingProvider,
   modelsEndpointUrl,
+  preservedV3OptionalsForWrite,
+  toPersistedV3,
 } from '@open-codesign/shared';
 import { buildAuthHeadersForWire } from './auth-headers';
 import { defaultConfigDir, readConfig, writeConfig } from './config';
@@ -227,6 +229,7 @@ export async function setDesignSystem(
     activeModel: cfg.activeModel,
     secrets: cfg.secrets,
     providers: cfg.providers,
+    ...preservedV3OptionalsForWrite(cfg, { clearDesignSystem: designSystem === null }),
     ...(designSystem !== null ? { designSystem: StoredDesignSystem.parse(designSystem) } : {}),
   });
   await writeConfig(next);
@@ -379,9 +382,7 @@ async function runSetProviderAndModels(input: SetProviderAndModelsInput): Promis
     activeModel: nextActiveModel,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...preservedV3OptionalsForWrite(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -431,7 +432,7 @@ async function runDeleteProvider(raw: unknown): Promise<ProviderRow[]> {
       activeModel: '',
       secrets: {},
       providers: nextProviders,
-      ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+      ...preservedV3OptionalsForWrite(cfg),
     });
     await writeConfig(emptyNext);
     cachedConfig = emptyNext;
@@ -444,7 +445,7 @@ async function runDeleteProvider(raw: unknown): Promise<ProviderRow[]> {
     activeModel: modelPrimary,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...preservedV3OptionalsForWrite(cfg),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -475,7 +476,7 @@ async function runSetActiveProvider(raw: unknown): Promise<OnboardingState> {
     activeModel: modelPrimary,
     secrets: cfg.secrets,
     providers: cfg.providers,
-    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...preservedV3OptionalsForWrite(cfg),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -543,7 +544,7 @@ async function runResetOnboarding(): Promise<void> {
     activeModel: cfg.activeModel,
     secrets: {},
     providers: cfg.providers,
-    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...preservedV3OptionalsForWrite(cfg),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -655,9 +656,7 @@ async function runAddCustomProvider(input: AddCustomProviderInput): Promise<Onbo
       : (cachedConfig?.activeModel ?? input.defaultModel),
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...preservedV3OptionalsForWrite(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -784,7 +783,7 @@ async function runUpdateProvider(input: UpdateProviderInput): Promise<Onboarding
     activeModel: cfg.activeModel,
     secrets: nextSecrets,
     providers: { ...cfg.providers, [input.id]: updated },
-    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...preservedV3OptionalsForWrite(cfg),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -879,9 +878,7 @@ async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
     activeModel,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...preservedV3OptionalsForWrite(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -936,9 +933,7 @@ async function runImportClaudeCode(imported: ClaudeCodeImport): Promise<Onboardi
     activeModel: nextActiveModel,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...preservedV3OptionalsForWrite(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -984,9 +979,7 @@ async function runImportGemini(imported: GeminiImport): Promise<OnboardingState>
     activeModel: nextActiveModel,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...preservedV3OptionalsForWrite(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -1030,9 +1023,7 @@ async function runImportOpencode(imported: OpencodeImport): Promise<OnboardingSt
     activeModel,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...preservedV3OptionalsForWrite(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -1156,22 +1147,25 @@ export function registerOnboardingIpc(): void {
     },
   );
 
-  ipcMain.handle(
-    'config:v1:set-fast-model',
-    async (_e, raw: unknown): Promise<OnboardingState> => {
-      const input = raw as { modelFast: string | null };
-      if (typeof input !== 'object' || input === null || !('modelFast' in input)) {
-        throw new CodesignError(
-          'config:v1:set-fast-model expects { modelFast: string | null }',
-          ERROR_CODES.IPC_BAD_INPUT,
-        );
-      }
-      const modelFast = input.modelFast === '' ? null : input.modelFast;
-      cachedConfig = hydrateConfig({ ...cachedConfig, modelFast: modelFast ?? undefined });
-      await writeConfig(cachedConfig);
-      return toState(cachedConfig);
-    },
-  );
+  ipcMain.handle('config:v1:set-fast-model', async (_e, raw: unknown): Promise<OnboardingState> => {
+    const input = raw as { modelFast: string | null };
+    if (typeof input !== 'object' || input === null || !('modelFast' in input)) {
+      throw new CodesignError(
+        'config:v1:set-fast-model expects { modelFast: string | null }',
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+    const modelFast = input.modelFast === '' ? null : input.modelFast;
+    if (cachedConfig === null) {
+      throw new CodesignError('No configuration found', ERROR_CODES.CONFIG_MISSING);
+    }
+    cachedConfig = hydrateConfig({
+      ...toPersistedV3(cachedConfig),
+      modelFast: modelFast ?? undefined,
+    });
+    await writeConfig(cachedConfig);
+    return toState(cachedConfig);
+  });
 
   ipcMain.handle(
     'config:v1:detect-external-configs',
