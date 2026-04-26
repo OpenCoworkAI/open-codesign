@@ -9,9 +9,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
-  useState,
 } from 'react';
-import { useCodesignStore } from '../../store';
 
 const MAX_TEXTAREA_ROWS = 6;
 
@@ -64,47 +62,6 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
 ) {
   const t = useT();
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const generationStage = useCodesignStore((s) => s.generationStage);
-
-  const runningLabel = isGenerating
-    ? (() => {
-        switch (generationStage) {
-          case 'sending':
-            return t('loading.stage.sending');
-          case 'thinking':
-            return t('loading.stage.thinking');
-          case 'streaming':
-            return t('loading.stage.streaming');
-          case 'parsing':
-            return t('loading.stage.parsing');
-          case 'rendering':
-            return t('loading.stage.rendering');
-          default:
-            return t('loading.stage.thinking');
-        }
-      })()
-    : null;
-
-  // Elapsed timer — reassures users that long agent runs are still alive.
-  // Only ticks while isGenerating; resets to 0 on each new run.
-  const [elapsedSec, setElapsedSec] = useState(0);
-  useEffect(() => {
-    if (!isGenerating) {
-      setElapsedSec(0);
-      return;
-    }
-    const start = Date.now();
-    setElapsedSec(0);
-    const id = setInterval(() => {
-      setElapsedSec(Math.floor((Date.now() - start) / 1000));
-    }, 500);
-    return () => clearInterval(id);
-  }, [isGenerating]);
-
-  const elapsedText =
-    elapsedSec < 60
-      ? `${elapsedSec}s`
-      : `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`;
 
   useEffect(() => {
     if (taRef.current) resizeTextarea(taRef.current);
@@ -192,26 +149,6 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
           )}
         </div>
       </div>
-      {runningLabel ? (
-        <div
-          aria-live="polite"
-          className="mt-[var(--space-2)] flex items-center justify-between gap-[var(--space-2)] px-[var(--space-1)]"
-        >
-          <div className="inline-flex items-center gap-[var(--space-1_5)] rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-[var(--space-2)] py-[3px] text-[11px] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)]">
-            <span aria-hidden className="relative inline-flex h-[6px] w-[6px] shrink-0">
-              <span className="absolute inset-0 rounded-full bg-[var(--color-accent)] opacity-45 animate-ping" />
-              <span className="relative inline-block h-full w-full rounded-full bg-[var(--color-accent)]" />
-            </span>
-            <span className="whitespace-nowrap">{runningLabel}</span>
-          </div>
-          <span
-            className="text-[11px] text-[var(--color-text-muted)]"
-            style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
-          >
-            {elapsedText}
-          </span>
-        </div>
-      ) : null}
     </form>
   );
 });

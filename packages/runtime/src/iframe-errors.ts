@@ -31,3 +31,23 @@ export function isIframeErrorMessage(data: unknown): data is IframeErrorMessage 
     typeof (data as { message?: unknown }).message === 'string'
   );
 }
+
+export type ConsoleLevel = 'log' | 'warn' | 'error' | 'info' | 'debug';
+
+export interface IframeConsoleMessage {
+  __codesign: true;
+  type: 'CONSOLE_LOG';
+  level: ConsoleLevel;
+  args: string[];
+  timestamp: number;
+}
+
+export function isIframeConsoleMessage(data: unknown): data is IframeConsoleMessage {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { __codesign?: boolean }).__codesign === true &&
+    (data as { type?: string }).type === 'CONSOLE_LOG' &&
+    Array.isArray((data as { args?: unknown }).args)
+  );
+}

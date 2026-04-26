@@ -28,8 +28,8 @@ import { TWEAKS_BRIDGE_LISTENER, TWEAKS_BRIDGE_SETUP } from './tweaks-bridge';
 
 export { OVERLAY_SCRIPT, isOverlayMessage, isElementRectsMessage } from './overlay';
 export type { OverlayMessage, ElementRectsMessage } from './overlay';
-export { isIframeErrorMessage } from './iframe-errors';
-export type { IframeErrorMessage } from './iframe-errors';
+export { isIframeErrorMessage, isIframeConsoleMessage } from './iframe-errors';
+export type { IframeErrorMessage, IframeConsoleMessage, ConsoleLevel } from './iframe-errors';
 
 const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
 const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
@@ -85,18 +85,37 @@ function overlayScriptTag(): string {
   return `${OVERLAY_MARKER}<script>${OVERLAY_SCRIPT}</script>`;
 }
 
+function injectVendorsIfNeeded(html: string): string {
+  // Full HTML docs that include type="text/babel" scripts need React/Babel
+  // pre-loaded. Detect by absence of react UMD and presence of babel script.
+  const hasBabel = /<script[^>]*type=["']text\/babel["']/i.test(html);
+  if (!hasBabel) return html;
+  // Only treat React as "already loaded" when there's a <script> tag that
+  // references a react library file — NOT when "React" or "ReactDOM" merely
+  // appears inside JSX source code (e.g. ReactDOM.createRoot(...)).
+  const hasReactScript =
+    /<script[^>]*(?:react(?:[-.]dom)?)\.(?:development|production|min|umd)/i.test(html) ||
+    /<script[^>]*src=["'][^"']*react/i.test(html) ||
+    /window\.(React|ReactDOM)\s*=/i.test(html);
+  if (hasReactScript) return html;
+  const vendors = `<script>${REACT_UMD}</script>\n<script>${REACT_DOM_UMD}</script>\n<script>${BABEL_STANDALONE}</script>\n`;
+  // Inject before the first text/babel script tag so vendors load first
+  return html.replace(/<script[^>]*type=["']text\/babel["']/i, `${vendors}$&`);
+}
+
 function injectOverlayIntoHtmlDocument(html: string): string {
   if (html.includes(OVERLAY_MARKER) || html.includes("type: 'ELEMENT_SELECTED'")) {
     return html;
   }
+  const withVendors = injectVendorsIfNeeded(html);
   const script = overlayScriptTag();
-  if (/<\/body\s*>/i.test(html)) {
-    return html.replace(/<\/body\s*>/i, `${script}</body>`);
+  if (/<\/body\s*>/i.test(withVendors)) {
+    return withVendors.replace(/<\/body\s*>/i, `${script}</body>`);
   }
-  if (/<\/html\s*>/i.test(html)) {
-    return html.replace(/<\/html\s*>/i, `${script}</html>`);
+  if (/<\/html\s*>/i.test(withVendors)) {
+    return withVendors.replace(/<\/html\s*>/i, `${script}</html>`);
   }
-  return `${html}${script}`;
+  return `${withVendors}${script}`;
 }
 
 /**

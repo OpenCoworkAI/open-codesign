@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterModels } from './ModelSwitcher';
+import { filterModels, mergeActiveModelIfMissing } from './ModelSwitcher';
 
 describe('filterModels', () => {
   const models = [
@@ -34,5 +34,21 @@ describe('filterModels', () => {
 
   it('returns an empty array when nothing matches', () => {
     expect(filterModels(models, 'xyz-nonexistent')).toEqual([]);
+  });
+});
+
+describe('mergeActiveModelIfMissing', () => {
+  it('returns the catalog unchanged when active is empty', () => {
+    expect(mergeActiveModelIfMissing(['a', 'b'], undefined)).toEqual(['a', 'b']);
+    expect(mergeActiveModelIfMissing(['a', 'b'], null)).toEqual(['a', 'b']);
+    expect(mergeActiveModelIfMissing(['a', 'b'], '')).toEqual(['a', 'b']);
+  });
+
+  it('returns the catalog unchanged when the active id is in the list', () => {
+    expect(mergeActiveModelIfMissing(['a', 'b'], 'a')).toEqual(['a', 'b']);
+  });
+
+  it('prepends the active id when it is missing (partial /models, TOML, …)', () => {
+    expect(mergeActiveModelIfMissing(['a', 'b'], 'x')).toEqual(['x', 'a', 'b']);
   });
 });

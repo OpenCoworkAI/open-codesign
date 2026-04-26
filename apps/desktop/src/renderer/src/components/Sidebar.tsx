@@ -4,12 +4,13 @@ import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useAgentStream } from '../hooks/useAgentStream';
 import { useCodesignStore } from '../store';
-import { ModelSwitcher } from './ModelSwitcher';
 import { AddMenu } from './chat/AddMenu';
 import { ChatMessageList } from './chat/ChatMessageList';
 import { CommentChipBar } from './chat/CommentChipBar';
 import { EmptyState } from './chat/EmptyState';
+import { GenerationStatusBar } from './chat/GenerationStatusBar';
 import { PromptInput, type PromptInputHandle } from './chat/PromptInput';
+import { StickyTodoHeader } from './chat/StickyTodoHeader';
 
 export interface SidebarProps {
   prompt: string;
@@ -78,7 +79,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   const t = useT();
   const config = useCodesignStore((s) => s.config);
   const isGenerating = useCodesignStore(
-    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
+    (s) => s.currentDesignId !== null && s.activeGenerations.has(s.currentDesignId),
   );
   const cancelGeneration = useCodesignStore((s) => s.cancelGeneration);
   const inputFiles = useCodesignStore((s) => s.inputFiles);
@@ -88,7 +89,6 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   const removeInputFile = useCodesignStore((s) => s.removeInputFile);
   const pickDesignSystemDirectory = useCodesignStore((s) => s.pickDesignSystemDirectory);
   const clearDesignSystem = useCodesignStore((s) => s.clearDesignSystem);
-  const lastUsage = useCodesignStore((s) => s.lastUsage);
 
   const chatMessages = useCodesignStore((s) => s.chatMessages);
   const chatLoaded = useCodesignStore((s) => s.chatLoaded);
@@ -97,8 +97,6 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   const loadChatForCurrentDesign = useCodesignStore((s) => s.loadChatForCurrentDesign);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
-  const sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
-  const setSidebarCollapsed = useCodesignStore((s) => s.setSidebarCollapsed);
 
   // Mount useAgentStream here so streaming events route into the chat
   // as soon as the Sidebar is in the tree — matches the lifecycle of
@@ -121,10 +119,6 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
     }
   }, [currentDesignId, chatLoaded, loadChatForCurrentDesign]);
 
-  const activeModelLine =
-    config?.hasKey && config.modelPrimary ? config.modelPrimary : t('sidebar.chat.noModel');
-  const lastTokens = lastUsage ? lastUsage.inputTokens + lastUsage.outputTokens : null;
-
   return (
     <aside
       className="flex flex-col h-full overflow-x-hidden border-r border-[var(--color-border)] bg-[var(--color-background-secondary)]"
@@ -135,6 +129,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
       <div className="h-[var(--space-3)] shrink-0" />
 
       <>
+        <StickyTodoHeader />
         {/* Chat scroll area */}
         <div className="flex-1 overflow-y-auto px-[var(--space-4)] py-[var(--space-4)]">
           <ChatMessageList
@@ -148,10 +143,16 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
                 : null
             }
             empty={<EmptyState onPickStarter={handlePickStarter} />}
+            onEditMessage={(text) => {
+              setPrompt(text);
+              promptInputRef.current?.focus();
+            }}
           />
         </div>
 
-        {/* Skill chips + prompt input + model/tokens line */}
+        <GenerationStatusBar />
+
+        {/* Skill chips + prompt input */}
         <div className="border-t border-[var(--color-border-subtle)] px-[var(--space-4)] pt-[var(--space-3)] pb-[var(--space-3)] space-y-[10px] bg-[var(--color-background-secondary)]">
           <CommentChipBar />
           <PromptInput
@@ -228,17 +229,6 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
               />
             }
           />
-          <div className="flex items-center justify-between gap-[var(--space-2)] px-[2px]">
-            <ModelSwitcher variant="sidebar" />
-            {lastTokens !== null ? (
-              <span
-                className="shrink-0 tabular-nums text-[10.5px] text-[var(--color-text-muted)]"
-                style={{ fontFamily: 'var(--font-mono)' }}
-              >
-                {t('sidebar.chat.tokensLine', { count: lastTokens })}
-              </span>
-            ) : null}
-          </div>
         </div>
       </>
     </aside>

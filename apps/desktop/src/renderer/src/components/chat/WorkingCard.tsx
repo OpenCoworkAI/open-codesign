@@ -21,9 +21,8 @@ export interface WorkingCardProps {
 
 /**
  * Renders a tight vertical cluster of tool rows — no border, no card.
- * Visual grouping is intentional only when consecutive tool calls arrived
- * between two prose flushes; the chronological position of `set_todos` is
- * preserved by ChatMessageList rendering it as its own item via TodoListView.
+ * `set_todos` is omitted here (and not rendered inline in ChatMessageList);
+ * the sidebar sticky header shows the live checklist.
  */
 export function WorkingCard({ calls }: WorkingCardProps) {
   const rows = useMemo(() => buildRows(calls).filter((r) => !r.todos), [calls]);
@@ -62,7 +61,14 @@ interface ToolRow {
   status: 'running' | 'done' | 'error';
   todos?: TodoItem[];
   editCount?: number;
+  /** Rich inline content snippet shown below the header line. */
+  snippet?: ToolSnippet;
 }
+
+type ToolSnippet =
+  | { kind: 'diff'; minus: string; plus: string }
+  | { kind: 'text'; lines: string[] }
+  | { kind: 'range'; start: number; end: number };
 
 function extractTodos(call: ChatToolCallPayload): TodoItem[] {
   const raw = (call.args?.['todos'] as unknown) ?? (call.args?.['items'] as unknown) ?? null;
@@ -88,6 +94,49 @@ function extractTodos(call: ChatToolCallPayload): TodoItem[] {
       return { text, status };
     })
     .filter((x): x is TodoItem => x !== null);
+}
+
+function firstMeaningfulLine(text: string): string {
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.length > 0) return trimmed.slice(0, 120);
+  }
+  return text.slice(0, 120).trim();
+}
+
+function computeSnippet(call: ChatToolCallPayload): ToolSnippet | undefined {
+  if (call.toolName !== 'str_replace_based_edit_tool' && call.toolName !== 'text_editor') return;
+  const cmd = call.command;
+  const args = call.args;
+  if (cmd === 'str_replace') {
+    const minus =
+      typeof args?.['old_str'] === 'string' ? firstMeaningfulLine(args['old_str']) : null;
+    const plus =
+      typeof args?.['new_str'] === 'string' ? firstMeaningfulLine(args['new_str']) : null;
+    if (minus && plus && minus !== plus) return { kind: 'diff', minus, plus };
+  }
+  if (cmd === 'create' || cmd === 'insert') {
+    const src =
+      typeof args?.['file_text'] === 'string'
+        ? args['file_text']
+        : typeof args?.['new_str'] === 'string'
+          ? args['new_str']
+          : null;
+    if (src) {
+      const lines = src
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      if (lines.length > 0) return { kind: 'text', lines };
+    }
+  }
+  if (cmd === 'view') {
+    const range = args?.['view_range'];
+    if (Array.isArray(range) && typeof range[0] === 'number' && typeof range[1] === 'number') {
+      return { kind: 'range', start: range[0] as number, end: range[1] as number };
+    }
+  }
 }
 
 function isEditCommand(call: ChatToolCallPayload): boolean {
@@ -183,12 +232,14 @@ export function buildRows(calls: ChatToolCallPayload[]): ToolRow[] {
       }
     }
 
+    const snippet = computeSnippet(call);
     rows.push({
       key: `c-${i}`,
       Icon,
       label,
       detail,
       status: call.status,
+      ...(snippet !== undefined ? { snippet } : {}),
     });
     if (isFileEdit) lastEditIdx = rows.length - 1;
   }
@@ -264,27 +315,56 @@ function ToolRowView({ row }: { row: ToolRow }) {
       : row.detail;
 
   return (
-    <div
-      className="flex items-center gap-[6px] text-[12.5px] py-[1px]"
-      title={detailText ?? row.label}
-    >
-      {row.status === 'running' ? (
-        <span className="relative inline-flex w-[14px] h-[14px] items-center justify-center shrink-0">
-          <span className="absolute inline-block w-[7px] h-[7px] rounded-full bg-[var(--color-accent)] animate-pulse" />
-          <span className="absolute inline-block w-[12px] h-[12px] rounded-full border border-[var(--color-accent)]/30 animate-ping" />
+    <div className="py-[2px]" title={detailText ?? row.label}>
+      {/* Header line */}
+      <div className="flex items-center gap-[6px] text-[12.5px]">
+        {row.status === 'running' ? (
+          <span className="relative inline-flex w-[14px] h-[14px] items-center justify-center shrink-0">
+            <span className="absolute inline-block w-[7px] h-[7px] rounded-full bg-[var(--color-accent)] animate-pulse" />
+            <span className="absolute inline-block w-[12px] h-[12px] rounded-full border border-[var(--color-accent)]/30 animate-ping" />
+          </span>
+        ) : row.status === 'error' ? (
+          <Icon className="w-[14px] h-[14px] shrink-0 text-[var(--color-error)]" aria-hidden />
+        ) : (
+          <Icon className="w-[14px] h-[14px] shrink-0 text-[var(--color-text-muted)]" aria-hidden />
+        )}
+        <span className="font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-secondary)]">
+          {row.label}
         </span>
-      ) : row.status === 'error' ? (
-        <Icon className="w-[14px] h-[14px] shrink-0 text-[var(--color-error)]" aria-hidden />
-      ) : (
-        <Icon className="w-[14px] h-[14px] shrink-0 text-[var(--color-text-muted)]" aria-hidden />
-      )}
-      <span className="font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-secondary)]">
-        {row.label}
-      </span>
-      {detailText ? (
-        <span className="font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-primary)] truncate">
-          {detailText}
-        </span>
+        {detailText ? (
+          <span className="font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-primary)] truncate">
+            {detailText}
+          </span>
+        ) : null}
+        {row.snippet?.kind === 'range' ? (
+          <span className="font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-muted)] text-[11px]">
+            :{row.snippet.start}–{row.snippet.end}
+          </span>
+        ) : null}
+      </div>
+
+      {/* Content snippet */}
+      {row.snippet && row.snippet.kind !== 'range' ? (
+        <div className="mt-[3px] ml-[20px] rounded-[4px] bg-[var(--color-background-secondary)] border border-[var(--color-border-subtle)] px-[8px] py-[4px] font-[ui-monospace,Menlo,monospace] text-[11px] leading-[1.55] overflow-hidden">
+          {row.snippet.kind === 'diff' ? (
+            <>
+              <div className="text-[#e06c75] truncate">
+                <span className="select-none mr-[4px] opacity-60">−</span>
+                {row.snippet.minus}
+              </div>
+              <div className="text-[#98c379] truncate">
+                <span className="select-none mr-[4px] opacity-60">+</span>
+                {row.snippet.plus}
+              </div>
+            </>
+          ) : (
+            row.snippet.lines.map((line, i) => (
+              <div key={i} className="text-[var(--color-text-secondary)] truncate">
+                {line}
+              </div>
+            ))
+          )}
+        </div>
       ) : null}
     </div>
   );

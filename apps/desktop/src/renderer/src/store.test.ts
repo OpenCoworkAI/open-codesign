@@ -12,6 +12,7 @@ const READY_CONFIG: OnboardingState = {
   hasKey: true,
   provider: 'anthropic',
   modelPrimary: 'claude-sonnet-4-6',
+  modelFast: null,
   baseUrl: null,
   designSystem: null,
 };
@@ -385,6 +386,7 @@ describe('useCodesignStore active provider routing', () => {
       hasKey: true,
       provider: 'openai',
       modelPrimary: 'gpt-4o',
+      modelFast: null,
       baseUrl: null,
       designSystem: null,
     };
@@ -549,6 +551,7 @@ describe('useCodesignStore design management', () => {
     useCodesignStore.setState({
       currentDesignId: 'design-a',
       isGenerating: true,
+      activeGenerations: new Set(['design-a']),
     });
 
     await useCodesignStore.getState().softDeleteDesign('design-a');
@@ -1172,6 +1175,7 @@ describe('useCodesignStore generation-blocking workspace guards', () => {
       currentDesignId: 'design-1',
       isGenerating: true,
       generatingDesignId: 'design-1',
+      activeGenerations: new Set(['design-1']),
       workspaceRebindPending: null,
     });
 
@@ -1187,6 +1191,7 @@ describe('useCodesignStore generation-blocking workspace guards', () => {
       currentDesignId: 'design-1',
       isGenerating: true,
       generatingDesignId: 'design-2',
+      activeGenerations: new Set(['design-2']),
       workspaceRebindPending: null,
     });
 

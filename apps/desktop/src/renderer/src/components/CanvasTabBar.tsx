@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { FolderOpen, X } from 'lucide-react';
+import { Clock, Code2, FolderOpen, X } from 'lucide-react';
 import { useCodesignStore } from '../store';
 
 function fileTabLabel(path: string): string {
@@ -25,9 +25,31 @@ export function CanvasTabBar() {
       {tabs.map((tab, index) => {
         const isActive = index === active;
         const isFiles = tab.kind === 'files';
-        const label = isFiles ? t('canvas.filesTab') : fileTabLabel((tab as { path: string }).path);
-        const title = isFiles ? t('canvas.filesTab') : (tab as { path: string }).path;
-        const key: string = isFiles ? 'files' : `file:${(tab as { path: string }).path}`;
+        const isHistory = tab.kind === 'history';
+        const isCode = tab.kind === 'code';
+        const isFile = tab.kind === 'file';
+        const isPinned = isFiles || isHistory || isCode;
+        const label = isFiles
+          ? t('canvas.filesTab')
+          : isHistory
+            ? t('canvas.historyTab')
+            : isCode
+              ? t('canvas.codeTab')
+              : fileTabLabel((tab as { path: string }).path);
+        const title = isFiles
+          ? t('canvas.filesTab')
+          : isHistory
+            ? t('canvas.historyTab')
+            : isCode
+              ? t('canvas.codeTab')
+              : (tab as { path: string }).path;
+        const key: string = isFiles
+          ? 'files'
+          : isHistory
+            ? 'history'
+            : isCode
+              ? 'code'
+              : `file:${(tab as { path: string }).path}`;
         return (
           <div
             key={key}
@@ -46,14 +68,16 @@ export function CanvasTabBar() {
               className="flex items-center gap-[var(--space-1_5)] focus:outline-none"
             >
               {isFiles ? <FolderOpen className="w-3.5 h-3.5 opacity-80" aria-hidden /> : null}
+              {isHistory ? <Clock className="w-3.5 h-3.5 opacity-80" aria-hidden /> : null}
+              {isCode ? <Code2 className="w-3.5 h-3.5 opacity-80" aria-hidden /> : null}
               <span
                 className="truncate max-w-[220px]"
-                style={isFiles ? undefined : { fontFamily: 'var(--font-mono)' }}
+                style={isFile ? { fontFamily: 'var(--font-mono)' } : undefined}
               >
                 {label}
               </span>
             </button>
-            {isFiles ? null : (
+            {isPinned ? null : (
               <button
                 type="button"
                 onClick={() => close(index)}

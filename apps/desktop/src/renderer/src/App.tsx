@@ -29,7 +29,7 @@ export function App() {
   const switchDesign = useCodesignStore((s) => s.switchDesign);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
   const isGenerating = useCodesignStore(
-    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
+    (s) => s.currentDesignId !== null && s.activeGenerations.has(s.currentDesignId),
   );
   const setView = useCodesignStore((s) => s.setView);
   const view = useCodesignStore((s) => s.view);

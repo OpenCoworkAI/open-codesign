@@ -39,10 +39,13 @@
   },
   "canvas": {
     "filesTab": "Arquivos",
+    "historyTab": "Histórico",
+    "codeTab": "Código",
+    "codeTabEmpty": "Gere uma pré-visualização para editar o HTML aqui.",
     "filesTabEmpty": "Nenhum arquivo ainda",
     "openInTab": "Abrir em nova aba",
     "previewHint": "Pré-visualização em miniatura · clique duas vezes no arquivo ou use Abrir em nova aba para ver em tela cheia",
-    "tabsAriaLabel": "Arquivos abertos",
+    "tabsAriaLabel": "Tela de artefato",
     "closeTab": "Fechar {{name}}",
     "files": {
       "sectionTitle": "Arquivos de design",

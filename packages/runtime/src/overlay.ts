@@ -297,6 +297,38 @@ export const OVERLAY_SCRIPT = `(function() {
     }
   } catch (err) { try { console.warn('[overlay] setInterval reattach failed:', err); } catch (_) {} }
 
+  // Console interception — forward log/warn/error/info/debug to parent.
+  // Re-entrancy guard prevents our own postMessage call (which can itself
+  // trigger framework logging) from creating an infinite loop.
+  try {
+    if (!window.__cs_console) {
+      window.__cs_console = true;
+      var _cs_posting = false;
+      var _consoleMethods = ['log', 'warn', 'error', 'info', 'debug'];
+      for (var _cmi = 0; _cmi < _consoleMethods.length; _cmi++) {
+        (function(level, origFn) {
+          console[level] = function() {
+            if (_cs_posting) { try { origFn.apply(console, arguments); } catch(_) {} return; }
+            _cs_posting = true;
+            try {
+              var args = [];
+              for (var ai = 0; ai < arguments.length; ai++) {
+                try {
+                  var v = arguments[ai];
+                  if (typeof v === 'string') { args.push(v); }
+                  else { try { args.push(JSON.stringify(v)); } catch(_) { args.push(String(v)); } }
+                } catch(_) { args.push('[unserializable]'); }
+              }
+              window.parent.postMessage({ __codesign: true, type: 'CONSOLE_LOG', level: level, args: args, timestamp: Date.now() }, '*');
+            } catch(_) {}
+            _cs_posting = false;
+            try { origFn.apply(console, arguments); } catch(_) {}
+          };
+        })(_consoleMethods[_cmi], console[_consoleMethods[_cmi]]);
+      }
+    }
+  } catch(err) { try { console.warn('[overlay] console interception failed:', err); } catch(_) {} }
+
   // Neutralize programmatic navigation — generated code may call
   // window.location = '/foo', location.assign('/x'), or window.open(...)
   // in button onclick handlers. None of those routes exist in the sandbox and

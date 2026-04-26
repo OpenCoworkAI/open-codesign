@@ -21,6 +21,7 @@ import {
   type ImageGenerationSize,
   ImageGenerationSizeSchema,
   hydrateConfig,
+  preservedV3OptionalsForWrite,
 } from '@open-codesign/shared';
 import { writeConfig } from './config';
 import { ipcMain } from './electron-runtime';
@@ -281,7 +282,7 @@ async function updateImageGenerationSettings(
     activeModel: cfg.activeModel,
     secrets: cfg.secrets,
     providers: cfg.providers,
-    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...preservedV3OptionalsForWrite(cfg, { skipImageGeneration: true }),
     imageGeneration: parsed,
   });
   await writeConfig(config);

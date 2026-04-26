@@ -39,10 +39,13 @@
   },
   "canvas": {
     "filesTab": "Files",
+    "historyTab": "History",
+    "codeTab": "Code",
+    "codeTabEmpty": "Generate a preview to edit HTML source here.",
     "filesTabEmpty": "No files yet",
     "openInTab": "Open in tab",
     "previewHint": "Thumbnail preview · double-click the file or use Open in tab for full view",
-    "tabsAriaLabel": "Open files",
+    "tabsAriaLabel": "Canvas",
     "closeTab": "Close {{name}}",
     "files": {
       "sectionTitle": "Design files",
@@ -254,6 +257,7 @@
       "moreActions": "More actions",
       "editModel": "Change model",
       "deleteAria": "Delete {{label}} provider",
+      "noModel": "No model selected",
       "primary": "Primary",
       "fast": "Fast",
       "custom": {
@@ -329,6 +333,7 @@
         "ollamaDone": "Ollama provider added",
         "customMenu": "Custom provider",
         "customMenuDesc": "Enter API key and URL manually",
+        "openrouterMenuDesc": "Access 200+ models with one API key",
         "alreadyImported": "Already imported"
       },
       "modal": {
@@ -467,6 +472,19 @@
       "prefsLoadFailed": "Failed to load preferences",
       "prefsSaveFailed": "Failed to save preference",
       "devtoolsFailed": "Could not toggle DevTools"
+    },
+    "modelRouting": {
+      "title": "Model routing",
+      "hint": "Route quick tasks (inline edits, lint passes) to a cheaper/faster model to reduce cost.",
+      "primaryLabel": "Primary model",
+      "primaryHint": "Used for full design generation runs.",
+      "fastLabel": "Fast model",
+      "fastHint": "Used for quick inline edits and lint passes. Falls back to primary if unset.",
+      "fastPlaceholder": "e.g. claude-haiku-4-5",
+      "usePrimary": "Same as primary",
+      "saveButton": "Save",
+      "saved": "Model routing saved",
+      "saveFailed": "Failed to save model routing"
     }
   },
   "updates": {

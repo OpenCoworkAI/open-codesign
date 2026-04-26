@@ -8,6 +8,7 @@ import {
   hydrateConfig,
   migrateLegacyToV3,
   parseConfigFlexible,
+  preservedV3OptionalsForWrite,
   resolveProviderCapabilities,
   toPersistedV3,
 } from './config';
@@ -246,6 +247,49 @@ describe('hydrateConfig / toPersistedV3', () => {
       },
     });
     expect(toPersistedV3(hydrated).imageGeneration?.model).toBe('gpt-image-2');
+  });
+
+  it('preservedV3OptionalsForWrite copies optionals; skipImageGeneration omits image gen', () => {
+    const cfg = hydrateConfig({
+      version: 3,
+      activeProvider: 'openai',
+      activeModel: 'gpt-4o',
+      modelFast: 'gpt-4o-mini',
+      secrets: {},
+      providers: { openai: BUILTIN_PROVIDERS.openai },
+      designSystem: {
+        schemaVersion: 1,
+        rootPath: '/a',
+        summary: 's',
+        extractedAt: 't',
+        sourceFiles: [],
+        colors: [],
+        fonts: [],
+        spacing: [],
+        radius: [],
+        shadows: [],
+      },
+      imageGeneration: {
+        schemaVersion: 1,
+        enabled: true,
+        provider: 'openai',
+        credentialMode: 'inherit',
+        model: 'gpt-image-2',
+        quality: 'high',
+        size: '1024x1024',
+        outputFormat: 'png',
+      },
+    });
+    const full = preservedV3OptionalsForWrite(cfg);
+    expect(full.modelFast).toBe('gpt-4o-mini');
+    expect(full.imageGeneration?.model).toBe('gpt-image-2');
+    expect(full.designSystem).toBeDefined();
+    const skipImage = preservedV3OptionalsForWrite(cfg, { skipImageGeneration: true });
+    expect(skipImage.modelFast).toBe('gpt-4o-mini');
+    expect(skipImage.imageGeneration).toBeUndefined();
+    const clearDesign = preservedV3OptionalsForWrite(cfg, { clearDesignSystem: true });
+    expect(clearDesign.modelFast).toBe('gpt-4o-mini');
+    expect(clearDesign.designSystem).toBeUndefined();
   });
 });
 

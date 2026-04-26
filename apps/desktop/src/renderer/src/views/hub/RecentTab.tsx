@@ -10,7 +10,7 @@ export function RecentTab() {
   const designs = useCodesignStore((s) => s.designs);
   const openNewDesignDialog = useCodesignStore((s) => s.openNewDesignDialog);
   const isGenerating = useCodesignStore(
-    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
+    (s) => s.currentDesignId !== null && s.activeGenerations.has(s.currentDesignId),
   );
   const recent = [...designs]
     .filter((d) => d.deletedAt === null)

@@ -37,6 +37,7 @@ describe('action timeline wiring', () => {
       hasKey: true,
       provider: 'anthropic',
       modelPrimary: 'claude-sonnet-4-6',
+      modelFast: null,
       baseUrl: null,
       designSystem: null,
     });

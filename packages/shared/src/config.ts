@@ -352,6 +352,8 @@ export const ConfigV3Schema = z.object({
   // hanging the main process before the window could open.
   activeProvider: z.string(),
   activeModel: z.string(),
+  /** Optional cheaper/faster model used for quick tasks (inline edits, lint passes). */
+  modelFast: z.string().optional(),
   secrets: z.record(z.string(), SecretRef).default({}),
   providers: z.record(z.string(), ProviderEntrySchema).default({}),
   designSystem: StoredDesignSystem.optional(),
@@ -466,11 +468,41 @@ export function toPersistedV3(cfg: Config | ConfigV3): ConfigV3 {
     version: 3,
     activeProvider: cfg.activeProvider,
     activeModel: cfg.activeModel,
+    ...(cfg.modelFast !== undefined ? { modelFast: cfg.modelFast } : {}),
     secrets: cfg.secrets,
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
     ...(cfg.imageGeneration !== undefined ? { imageGeneration: cfg.imageGeneration } : {}),
   };
+}
+
+/**
+ * Spreads for `hydrateConfig` so a partial v3 write does not drop optional
+ * top-level fields from the current config (e.g. `modelFast` when saving a
+ * provider key, or `imageGeneration` when editing providers).
+ */
+export function preservedV3OptionalsForWrite(
+  source: Config | ConfigV3 | null | undefined,
+  options?: {
+    /** Set when `designSystem` is being set or removed in the same write. */
+    clearDesignSystem?: boolean;
+    /** Set when `imageGeneration` is overwritten in the same object. */
+    skipImageGeneration?: boolean;
+  },
+): Partial<Pick<ConfigV3, 'modelFast' | 'imageGeneration' | 'designSystem'>> {
+  if (source == null) return {};
+  const p = toPersistedV3(source);
+  const out: Partial<Pick<ConfigV3, 'modelFast' | 'imageGeneration' | 'designSystem'>> = {};
+  if (p.modelFast !== undefined) {
+    out.modelFast = p.modelFast;
+  }
+  if (p.imageGeneration !== undefined && options?.skipImageGeneration !== true) {
+    out.imageGeneration = p.imageGeneration;
+  }
+  if (p.designSystem !== undefined && options?.clearDesignSystem !== true) {
+    out.designSystem = p.designSystem;
+  }
+  return out;
 }
 
 // ── OnboardingState ──────────────────────────────────────────────────────────
@@ -479,6 +511,8 @@ export interface OnboardingState {
   hasKey: boolean;
   provider: string | null;
   modelPrimary: string | null;
+  /** Optional cheaper/faster model used for quick tasks (inline edits, lint passes). */
+  modelFast: string | null;
   baseUrl: string | null;
   designSystem: StoredDesignSystem | null;
 }

@@ -23,8 +23,7 @@ export function FilesPanel() {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
-  const isGenerating = useCodesignStore((s) => s.isGenerating);
-  const generatingDesignId = useCodesignStore((s) => s.generatingDesignId);
+  const activeGenerations = useCodesignStore((s) => s.activeGenerations);
   const openFileTab = useCodesignStore((s) => s.openCanvasFileTab);
   const requestWorkspaceRebind = useCodesignStore((s) => s.requestWorkspaceRebind);
   const { files, loading } = useDesignFiles(currentDesignId);
@@ -33,7 +32,8 @@ export function FilesPanel() {
 
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const workspacePath = currentDesign?.workspacePath ?? null;
-  const isCurrentDesignGenerating = isGenerating && generatingDesignId === currentDesignId;
+  const isCurrentDesignGenerating =
+    currentDesignId !== null && activeGenerations.has(currentDesignId);
 
   useEffect(() => {
     if (!workspacePath || !currentDesignId) {

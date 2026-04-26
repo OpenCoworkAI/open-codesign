@@ -62,6 +62,7 @@ export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps)
   const setView = useCodesignStore((s) => s.setView);
   const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
   const requestDeleteDesign = useCodesignStore((s) => s.requestDeleteDesign);
+  const activeGenerations = useCodesignStore((s) => s.activeGenerations);
   const { pos, open, close } = useMenu();
 
   if (designs.length === 0 && !prefixTile) {
@@ -89,6 +90,7 @@ export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps)
         {prefixTile ? <li>{prefixTile}</li> : null}
         {designs.map((d) => {
           const updated = formatRelativeTime(d.updatedAt);
+          const isActive = activeGenerations.has(d.id);
           return (
             <li key={d.id}>
               <div
@@ -109,6 +111,12 @@ export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps)
 
                 <div className="relative aspect-[4/3] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] bg-[var(--color-background-secondary)] transition-[transform,border-color,box-shadow] duration-[var(--duration-fast)] ease-[var(--ease-out)] group-hover:-translate-y-[2px] group-hover:border-[var(--color-border)] group-hover:shadow-[var(--shadow-card)] focus-within:ring-2 focus-within:ring-[var(--color-focus-ring)]">
                   <DesignCardPreview design={d} />
+                  {isActive && (
+                    <div className="absolute top-[var(--space-2)] left-[var(--space-2)] z-[2] flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-white text-[10px] font-medium shadow-[var(--shadow-soft)]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                      Generating
+                    </div>
+                  )}
                 </div>
 
                 <button

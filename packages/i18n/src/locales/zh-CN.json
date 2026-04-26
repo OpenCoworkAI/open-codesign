@@ -39,10 +39,13 @@
   },
   "canvas": {
     "filesTab": "文件",
+    "historyTab": "历史",
+    "codeTab": "代码",
+    "codeTabEmpty": "生成预览后可在此编辑 HTML 源码。",
     "filesTabEmpty": "还没有文件",
     "openInTab": "在新标签打开",
     "previewHint": "缩略预览 · 双击文件名或点击「在新标签打开」可在独立标签查看",
-    "tabsAriaLabel": "已打开文件",
+    "tabsAriaLabel": "画布",
     "closeTab": "关闭 {{name}}",
     "files": {
       "sectionTitle": "设计文件",
