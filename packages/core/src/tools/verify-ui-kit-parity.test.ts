@@ -154,6 +154,56 @@ describe('makeVerifyUiKitParityTool', () => {
     expect(result.details.signals.visibleTextCoverage).toBe(1);
   });
 
+  // Regression for CodeQL js/bad-tag-filter (HIGH) flagged on PR #241.
+  // The pre-fix regex `<\/script>` literally missed end tags with trailing
+  // whitespace or attributes, both of which HTML5 parsers tolerate. A crafted
+  // source could leak script body text into the visible-word coverage check.
+  // This test asserts that a script body using the previously-vulnerable
+  // syntax does NOT contribute words to the source vocabulary, so a faithful
+  // decomposition that omits the script still scores OK.
+  it('strips script + style bodies even with attrs/whitespace in end tags', async () => {
+    const sourceWithCraftedScript = `
+      <html>
+        <body>
+          <header><h1>Acme Analytics</h1></header>
+          <main>
+            <div class="metric"><span>MRR</span><span>$12,400</span></div>
+          </main>
+          <script>secretLeakedTokenAaa()</script >
+          <script>anotherLeakedTokenBbb()</script foo="bar">
+          <style>.x{color:#f00}/*secretLeakedCssCcc*/</style >
+          <SCRIPT>upperCaseLeakedTokenDdd()</SCRIPT>
+        </body>
+      </html>
+    `;
+    const cleanDecomp = `
+      <html>
+        <body>
+          <header><h1>Acme Analytics</h1></header>
+          <main>
+            <div class="metric"><span>MRR</span><span>$12,400</span></div>
+          </main>
+        </body>
+      </html>
+    `;
+    const fs = makeFs({
+      'index.html': sourceWithCraftedScript,
+      'ui_kits/x/index.html': cleanDecomp,
+      'ui_kits/x/tokens.css': '',
+    });
+    const tool = makeVerifyUiKitParityTool(fs);
+    const result = await tool.execute('t', { slug: 'x' }, undefined);
+    const first = result.content[0];
+    if (first?.type !== 'text') throw new Error('expected text');
+    // None of the leaked tokens should appear in the parity report — if they
+    // did, it would mean stripTags failed to remove the script/style bodies
+    // and they leaked into the visible-word vocabulary.
+    expect(first.text.toLowerCase()).not.toContain('secretleakedtoken');
+    expect(first.text.toLowerCase()).not.toContain('anotherleakedtoken');
+    expect(first.text.toLowerCase()).not.toContain('secretleakedcss');
+    expect(first.text.toLowerCase()).not.toContain('uppercaseleakedtoken');
+  });
+
   it('summary text reflects pass/fail status', async () => {
     const fsOk = makeFs({
       'index.html': SOURCE_HTML,

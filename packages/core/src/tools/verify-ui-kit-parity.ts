@@ -127,9 +127,15 @@ function elementParityScore(
 }
 
 function stripTags(html: string): string {
+  // Close-tag patterns mirror the opening pattern's `\b[^>]*` so we strip
+  // the full `<script>...</script foo="bar" >` form. HTML5 parsers tolerate
+  // attributes and trailing whitespace inside end tags (silently ignored)
+  // and CodeQL's "Bad HTML filtering regexp" rule flags the literal
+  // `</script>` form because it leaves bodies behind for `</script >` etc.
+  // The `\b` after the tag name prevents over-matching like `</scripts>`.
   return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, ' ')
     .replace(/<[^>]+>/g, ' ');
 }
 
