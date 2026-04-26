@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { runPreview } from './preview-runtime';
+import { isRuntimeConsoleNoise, isRuntimeOptionalFontUrl, runPreview } from './preview-runtime';
 
 // Puppeteer-core is a thin Chrome DevTools client — when no system Chrome is
 // discoverable (typical CI sandbox), the module itself still imports fine but
@@ -62,6 +62,45 @@ describe('runPreview path guards', () => {
     });
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/Unsupported preview file type/);
+  });
+});
+
+describe('runtime noise filtering', () => {
+  it('recognizes only the optional fonts injected by the JSX preview wrapper', () => {
+    expect(
+      isRuntimeOptionalFontUrl(
+        'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300&display=swap',
+      ),
+    ).toBe(true);
+    expect(isRuntimeOptionalFontUrl('https://fonts.gstatic.com/s/dmsans/v16/example.woff2')).toBe(
+      true,
+    );
+    expect(isRuntimeOptionalFontUrl('https://example.com/assets/hero.png')).toBe(false);
+    expect(isRuntimeOptionalFontUrl('file:///tmp/workspace/assets/hero.png')).toBe(false);
+  });
+
+  it('filters optional runtime font console failures only when the wrapper is active', () => {
+    const message = 'Failed to load resource: net::ERR_NETWORK_CHANGED';
+    const locationUrl =
+      'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300&display=swap';
+    expect(
+      isRuntimeConsoleNoise(message, {
+        ignoreOptionalRuntimeFontFailures: true,
+        locationUrl,
+      }),
+    ).toBe(true);
+    expect(
+      isRuntimeConsoleNoise(message, {
+        ignoreOptionalRuntimeFontFailures: false,
+        locationUrl,
+      }),
+    ).toBe(false);
+    expect(
+      isRuntimeConsoleNoise(message, {
+        ignoreOptionalRuntimeFontFailures: true,
+        locationUrl: 'https://example.com/assets/hero.png',
+      }),
+    ).toBe(false);
   });
 });
 

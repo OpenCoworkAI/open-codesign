@@ -16,7 +16,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, URL } from 'node:url';
 import type { PreviewResult } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
 import {
@@ -37,6 +37,18 @@ const SETTLE_AFTER_LOAD_MS = 800;
 const MAX_CONSOLE_ENTRIES = 50;
 const MAX_ASSET_ERRORS = 20;
 const DEFAULT_VIEWPORT = { width: 1280, height: 800 } as const;
+const RUNTIME_FONT_FAMILY_PREFIXES = [
+  'Fraunces:',
+  'DM Serif Display:',
+  'DM Sans:',
+  'JetBrains Mono:',
+] as const;
+const RUNTIME_FONT_PATH_PREFIXES = [
+  '/s/fraunces/',
+  '/s/dmsans/',
+  '/s/dmserifdisplay/',
+  '/s/jetbrainsmono/',
+] as const;
 
 export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult> {
   const absWorkspace = resolve(opts.workspaceRoot);
@@ -81,6 +93,7 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
 
   const consoleErrors: PreviewResult['consoleErrors'] = [];
   const assetErrors: PreviewResult['assetErrors'] = [];
+  const ignoreOptionalRuntimeFontFailures = previewIncludesRuntimeFontLinks(html);
   const startTs = Date.now();
   let browser: Browser | null = null;
   let page: Page | null = null;
@@ -112,7 +125,14 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
     page.on('console', (msg: ConsoleMessage) => {
       if (consoleErrors.length >= MAX_CONSOLE_ENTRIES) return;
       const message = msg.text();
-      if (isRuntimeConsoleNoise(message)) return;
+      if (
+        isRuntimeConsoleNoise(message, {
+          ignoreOptionalRuntimeFontFailures,
+          locationUrl: msg.location().url,
+        })
+      ) {
+        return;
+      }
       const level = mapConsoleLevel(msg.type());
       if (level === null) return;
       consoleErrors.push({ level, message });
@@ -124,12 +144,18 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
     });
     page.on('requestfailed', (req: HTTPRequest) => {
       if (assetErrors.length >= MAX_ASSET_ERRORS) return;
+      if (ignoreOptionalRuntimeFontFailures && isRuntimeOptionalFontUrl(req.url())) {
+        return;
+      }
       const type = req.resourceType();
       assetErrors.push({ url: req.url(), status: 0, ...(type ? { type } : {}) });
     });
     page.on('response', (res: HTTPResponse) => {
       const status = res.status();
       if (status < 400 || assetErrors.length >= MAX_ASSET_ERRORS) return;
+      if (ignoreOptionalRuntimeFontFailures && isRuntimeOptionalFontUrl(res.url())) {
+        return;
+      }
       const type = res.request().resourceType();
       assetErrors.push({ url: res.url(), status, ...(type ? { type } : {}) });
     });
@@ -271,8 +297,47 @@ function mapConsoleLevel(raw: string): PreviewResult['consoleErrors'][number]['l
   }
 }
 
-function isRuntimeConsoleNoise(message: string): boolean {
-  return message.startsWith('You are using the in-browser Babel transformer.');
+interface RuntimeConsoleNoiseOptions {
+  ignoreOptionalRuntimeFontFailures?: boolean | undefined;
+  locationUrl?: string | undefined;
+}
+
+export function isRuntimeOptionalFontUrl(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:') return false;
+  if (url.hostname === 'fonts.googleapis.com') {
+    if (url.pathname !== '/css2') return false;
+    return url.searchParams
+      .getAll('family')
+      .some((family) => RUNTIME_FONT_FAMILY_PREFIXES.some((prefix) => family.startsWith(prefix)));
+  }
+  if (url.hostname !== 'fonts.gstatic.com') return false;
+  return RUNTIME_FONT_PATH_PREFIXES.some((prefix) => url.pathname.startsWith(prefix));
+}
+
+export function isRuntimeConsoleNoise(
+  message: string,
+  opts: RuntimeConsoleNoiseOptions = {},
+): boolean {
+  if (message.startsWith('You are using the in-browser Babel transformer.')) {
+    return true;
+  }
+  if (!opts.ignoreOptionalRuntimeFontFailures) return false;
+  if (!message.startsWith('Failed to load resource:')) return false;
+  if (opts.locationUrl && isRuntimeOptionalFontUrl(opts.locationUrl)) return true;
+  return /https:\/\/fonts\.(?:googleapis|gstatic)\.com\//.test(message);
+}
+
+function previewIncludesRuntimeFontLinks(html: string): boolean {
+  return (
+    html.includes('<!-- AGENT_BODY_BEGIN -->') &&
+    html.includes('https://fonts.googleapis.com/css2?family=Fraunces:')
+  );
 }
 
 function emptyFail(reason: string): PreviewResult {
