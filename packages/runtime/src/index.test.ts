@@ -4,6 +4,8 @@ import {
   buildSrcdoc,
   classifyRenderableSource,
   extractAndUpgradeArtifact,
+  findArtifactSourceReference,
+  resolveArtifactSourceReferencePath,
 } from './index';
 
 describe('buildSrcdoc', () => {
@@ -214,6 +216,34 @@ describe('standalone renderable classification', () => {
   it('throws for non-renderable workspace paths', () => {
     expect(() => buildPreviewDocument('body {}', { path: 'style.css' })).toThrow(
       /Unsupported preview file type/,
+    );
+  });
+});
+
+describe('artifact source references', () => {
+  it('finds strict JSX/TSX source reference comments in placeholder HTML', () => {
+    expect(
+      findArtifactSourceReference(
+        '<!doctype html><html><body><!-- artifact source lives in index.jsx --></body></html>',
+      ),
+    ).toBe('index.jsx');
+    expect(findArtifactSourceReference('<!-- artifact source lives in ./src/App.tsx -->')).toBe(
+      'src/App.tsx',
+    );
+  });
+
+  it('rejects unsafe or non-renderable source reference comments', () => {
+    expect(findArtifactSourceReference('<!-- artifact source lives in ../App.jsx -->')).toBeNull();
+    expect(
+      findArtifactSourceReference('<!-- artifact source lives in /tmp/App.jsx -->'),
+    ).toBeNull();
+    expect(findArtifactSourceReference('<!-- artifact source lives in app.js -->')).toBeNull();
+  });
+
+  it('resolves source references relative to the placeholder HTML path', () => {
+    expect(resolveArtifactSourceReferencePath('index.html', 'index.jsx')).toBe('index.jsx');
+    expect(resolveArtifactSourceReferencePath('screens/index.html', 'App.tsx')).toBe(
+      'screens/App.tsx',
     );
   });
 });

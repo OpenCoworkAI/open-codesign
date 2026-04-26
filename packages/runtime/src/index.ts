@@ -31,6 +31,8 @@ const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
 const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
 const OVERLAY_MARKER = '<!-- CODESIGN_OVERLAY_SCRIPT -->';
 const JSX_RUNTIME_MARKER = '<!-- CODESIGN_JSX_RUNTIME -->';
+const ARTIFACT_SOURCE_REFERENCE_RE =
+  /<!--\s*artifact source lives in\s+([^<>]+?\.(?:jsx|tsx))\s*-->/i;
 
 export type RenderableSourceKind = 'html' | 'jsx' | 'tsx' | 'unknown';
 
@@ -83,6 +85,47 @@ export function isRenderableSourceKind(kind: RenderableSourceKind): kind is 'htm
 
 export function isRenderablePath(path: string): boolean {
   return isRenderableSourceKind(extensionKind(path));
+}
+
+function normalizeArtifactSourceReferencePath(reference: string): string | null {
+  let normalized = reference.trim().replaceAll('\\', '/');
+  while (normalized.startsWith('./')) normalized = normalized.slice(2);
+  if (
+    normalized.length === 0 ||
+    normalized.startsWith('/') ||
+    /^[A-Za-z]:\//.test(normalized) ||
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(normalized)
+  ) {
+    return null;
+  }
+  const lower = normalized.toLowerCase();
+  if (!isRenderablePath(normalized) || (!lower.endsWith('.jsx') && !lower.endsWith('.tsx'))) {
+    return null;
+  }
+  const parts = normalized.split('/');
+  if (parts.some((part) => part.length === 0 || part === '.' || part === '..')) {
+    return null;
+  }
+  return normalized;
+}
+
+export function findArtifactSourceReference(source: string): string | null {
+  const match = ARTIFACT_SOURCE_REFERENCE_RE.exec(source);
+  if (!match) return null;
+  return normalizeArtifactSourceReferencePath(match[1] ?? '');
+}
+
+export function resolveArtifactSourceReferencePath(
+  currentPath: string,
+  reference: string,
+): string | null {
+  const normalizedReference = normalizeArtifactSourceReferencePath(reference);
+  if (normalizedReference === null) return null;
+  const normalizedCurrent = currentPath.replaceAll('\\', '/');
+  const slash = normalizedCurrent.lastIndexOf('/');
+  if (slash === -1) return normalizedReference;
+  const base = normalizedCurrent.slice(0, slash);
+  return base.length > 0 ? `${base}/${normalizedReference}` : normalizedReference;
 }
 
 export function requiresPreviewScripts(source: string, path?: string | undefined): boolean {
