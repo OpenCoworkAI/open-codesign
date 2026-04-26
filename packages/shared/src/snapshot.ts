@@ -74,6 +74,7 @@ export interface ChatAppendInput {
 export interface ChatUserPayload {
   text: string;
   attachedSkills?: string[];
+  contextBadges?: string[];
 }
 export interface ChatAssistantTextPayload {
   text: string;

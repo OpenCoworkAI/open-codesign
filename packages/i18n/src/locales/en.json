@@ -39,6 +39,10 @@
   },
   "canvas": {
     "filesTab": "Files",
+    "canvasTab": "Canvas",
+    "contextBadge": "Canvas context",
+    "contextReady": "Canvas context ready",
+    "contextUpToDate": "Canvas unchanged",
     "filesTabEmpty": "No files yet",
     "openInTab": "Open in tab",
     "previewHint": "Thumbnail preview · double-click the file or use Open in tab for full view",

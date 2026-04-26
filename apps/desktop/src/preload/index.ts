@@ -117,6 +117,17 @@ export interface Preferences {
   diagnosticsLastReadTs: number;
 }
 
+export interface CanvasStoredState {
+  sceneJson: string | null;
+  importedFiles: LocalInputFile[];
+}
+
+export interface CanvasContextFile {
+  name: string;
+  content: string;
+  encoding?: 'utf8' | 'base64';
+}
+
 /**
  * Streaming events emitted by the (future) Agent runtime. Phase 1 emits
  * turn_start / text_delta / turn_end. Phase 2 adds tool_call_*. Kept
@@ -527,6 +538,27 @@ const api = {
         ids,
         snapshotId,
       }) as Promise<CommentRow[]>,
+  },
+  canvas: {
+    loadState: (designId: string) =>
+      ipcRenderer.invoke('canvas:v1:load-state', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<CanvasStoredState>,
+    saveState: (input: {
+      designId: string;
+      sceneJson: string | null;
+      importedFiles: LocalInputFile[];
+    }) =>
+      ipcRenderer.invoke('canvas:v1:save-state', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<{ ok: true }>,
+    writeContextFiles: (input: { designId: string; files: CanvasContextFile[] }) =>
+      ipcRenderer.invoke('canvas:v1:write-context-files', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<LocalInputFile[]>,
   },
   diagnostics: {
     log: (entry: {
