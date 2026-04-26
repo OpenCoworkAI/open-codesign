@@ -2446,6 +2446,38 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         },
       });
     }
+    // Surface the visual judge's cost + pass count as a toast every time the
+    // verify_ui_kit_visual_parity tool completes — gives the operator a per-
+    // decompose cost row without needing a new dashboard. Reads defensively
+    // from result.details (the structured ParityReport) so a shape change in
+    // the tool contract degrades to silent rather than crashing the renderer.
+    if (toolName === 'verify_ui_kit_visual_parity' && result && typeof result === 'object') {
+      const r = result as Record<string, unknown>;
+      const details = (
+        typeof r['details'] === 'object' && r['details'] !== null
+          ? (r['details'] as Record<string, unknown>)
+          : r
+      ) as Record<string, unknown>;
+      const passCount = typeof details['passCount'] === 'number' ? details['passCount'] : 0;
+      const totalChecks = typeof details['totalChecks'] === 'number' ? details['totalChecks'] : 0;
+      const judgeCostUsd =
+        typeof details['judgeCostUsd'] === 'number' ? details['judgeCostUsd'] : 0;
+      const status = typeof details['status'] === 'string' ? details['status'] : 'unknown';
+      if (totalChecks > 0) {
+        const ok = status === 'verified' || status === 'needs_review';
+        get().pushToast({
+          variant: ok ? 'success' : 'info',
+          title: tr('sidebar.decomposeJudgeResultTitle', {
+            passed: passCount,
+            total: totalChecks,
+            status,
+          }),
+          description: tr('sidebar.decomposeJudgeResultDescription', {
+            cost: `$${judgeCostUsd.toFixed(4)}`,
+          }),
+        });
+      }
+    }
   },
 
   async updateChatToolStatus({ designId, seq, status, result, durationMs, errorMessage }) {

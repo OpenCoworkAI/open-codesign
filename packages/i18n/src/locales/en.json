@@ -139,6 +139,8 @@
     "decomposeUnavailableTitle": "Nothing to decompose yet",
     "decomposeStartedTitle": "Decomposing to UI Kit…",
     "decomposeStartedDescription": "Reading the artifact, extracting components and tokens, then verifying parity. Watch the agent panel for progress.",
+    "decomposeJudgeResultTitle": "Visual judge: {{passed}}/{{total}} checks passed · {{status}}",
+    "decomposeJudgeResultDescription": "Self-verify spent {{cost}}. Open BENCHMARKS.md for the boolean rubric methodology.",
     "attachedFiles": "Attached files",
     "removeFile": "Remove {{name}}",
     "activeDesignSystem": "Active design system",
