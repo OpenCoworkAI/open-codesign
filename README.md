@@ -230,6 +230,9 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 - **AI-generated sliders** — the model emits the parameters worth tweaking (color, spacing, font)
 - **Comment mode** — click any element in the preview to drop a pin, leave a note, and let the model rewrite only that region
 - **Decompose to UI Kit** — one click in the chat sidebar emits a `ui_kits/<slug>/` folder (`index.html` + `components/*.tsx` + `tokens.css` + `manifest.json` + `README.md`) shaped for coding-agent handoff. Built-in deterministic + vision verifiers self-check parity using a 12-question boolean rubric (no floating-point arbitrary scores) and re-iterate on gaps. Per-decompose cost surfaces inline as a toast. See [BENCHMARKS.md](./BENCHMARKS.md).
+
+  ![Decompose to UI Kit — source image vs agent-emitted ui_kit, side-by-side parity check](https://raw.githubusercontent.com/HomenShum/open-codesign/feat/decompose-to-ui-kit/website/public/screenshots/decompose-to-ui-kit.png)
+  <sub>Source image (gpt-image input) on the left, agent-emitted <code>ui_kit</code> rendered headlessly on the right. Parity score and status are derived deterministically — <code>parityScore = passCount / totalChecks</code> — from the 12-check boolean rubric. Numbers are from a real <code>e2e-opus-final</code> run, not a mock.</sub>
 - **Generation cancellation** — stop mid-stream without losing prior turns
 
 ### Preview and workflow
