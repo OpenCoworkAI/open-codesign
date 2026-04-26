@@ -12,6 +12,7 @@ const READY_CONFIG: OnboardingState = {
   hasKey: true,
   provider: 'anthropic',
   modelPrimary: 'claude-sonnet-4-6',
+  modelFast: null,
   baseUrl: null,
   designSystem: null,
 };
@@ -385,6 +386,7 @@ describe('useCodesignStore active provider routing', () => {
       hasKey: true,
       provider: 'openai',
       modelPrimary: 'gpt-4o',
+      modelFast: null,
       baseUrl: null,
       designSystem: null,
     };

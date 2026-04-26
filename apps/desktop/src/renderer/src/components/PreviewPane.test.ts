@@ -71,6 +71,7 @@ describe('handlePreviewMessage trust boundary', () => {
       onElementSelected: vi.fn(),
       onIframeError: vi.fn(),
       onElementRects: vi.fn(),
+      onConsoleLog: vi.fn(),
     };
   }
 
