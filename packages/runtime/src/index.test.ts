@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildSrcdoc, extractAndUpgradeArtifact } from './index';
+import {
+  buildPreviewDocument,
+  buildSrcdoc,
+  classifyRenderableSource,
+  extractAndUpgradeArtifact,
+} from './index';
 
 describe('buildSrcdoc', () => {
   it('strips CSP meta tags', () => {
@@ -141,5 +146,74 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`;
     const wrapped = buildSrcdoc(jsxArtifact);
     const wrappedTwice = buildSrcdoc(wrapped);
     expect(wrappedTwice).toBe(wrapped);
+  });
+});
+
+describe('standalone renderable classification', () => {
+  it('classifies renderable file paths and rejects non-renderable paths', () => {
+    expect(classifyRenderableSource('<main/>', 'index.html')).toBe('html');
+    expect(classifyRenderableSource('function App(){ return <main/>; }', 'App.jsx')).toBe('jsx');
+    expect(
+      classifyRenderableSource('function App(): JSX.Element { return <main/>; }', 'App.tsx'),
+    ).toBe('tsx');
+    expect(classifyRenderableSource('body {}', 'style.css')).toBe('unknown');
+  });
+
+  it('injects a base href into HTML preview documents', () => {
+    const out = buildPreviewDocument('<!doctype html><html><head></head><body>x</body></html>', {
+      path: 'index.html',
+      baseHref: 'file:///tmp/workspace/',
+    });
+    expect(out).toContain('<base href="file:///tmp/workspace/" />');
+  });
+
+  it('auto-mounts JSX snippets that define _App without an explicit root render', () => {
+    const out = buildPreviewDocument('function _App() { return <div>hi</div>; }', {
+      path: 'demo.jsx',
+    });
+    expect(out).toContain("ReactDOM.createRoot(document.getElementById('root')).render(<_App />);");
+  });
+
+  it('preserves explicit mount code without adding an _App fallback', () => {
+    const out = buildPreviewDocument(
+      'function App() { return <div>hi</div>; }\nReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
+      { path: 'demo.jsx' },
+    );
+    expect(out).toContain('render(<App/>);');
+    expect(out).not.toContain('render(<_App />);');
+  });
+
+  it('uses the TypeScript Babel preset for TSX files', () => {
+    const out = buildPreviewDocument(
+      'function App(): JSX.Element { const label: string = "typed"; return <div>{label}</div>; }',
+      { path: 'App.tsx' },
+    );
+    expect(out).toContain('"filename":"artifact.tsx"');
+    expect(out).toContain('"typescript"');
+  });
+
+  it('injects base href once into already-wrapped preview documents', () => {
+    const wrapped = buildPreviewDocument(
+      'function App() { return <img src="assets/hero.png" />; }',
+      {
+        path: 'App.jsx',
+      },
+    );
+    const withBase = buildPreviewDocument(wrapped, {
+      path: 'App.jsx',
+      baseHref: 'file:///tmp/workspace/',
+    });
+    const twice = buildPreviewDocument(withBase, {
+      path: 'App.jsx',
+      baseHref: 'file:///tmp/workspace/',
+    });
+    expect(withBase.match(/<base /g)).toHaveLength(1);
+    expect(twice.match(/<base /g)).toHaveLength(1);
+  });
+
+  it('throws for non-renderable workspace paths', () => {
+    expect(() => buildPreviewDocument('body {}', { path: 'style.css' })).toThrow(
+      /Unsupported preview file type/,
+    );
   });
 });

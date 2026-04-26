@@ -32,7 +32,12 @@ import {
   setDesignThumbnail,
   softDeleteDesign,
 } from './snapshots-db';
-import { listWorkspaceFilesAt, type WorkspaceFileEntry } from './workspace-reader';
+import {
+  listWorkspaceFilesAt,
+  readWorkspaceFileAt,
+  type WorkspaceFileEntry,
+  type WorkspaceFileReadResult,
+} from './workspace-reader';
 import { registerFilesWatcherIpc } from './workspace-watcher';
 
 type Database = BetterSqlite3.Database;
@@ -567,6 +572,35 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         return await listWorkspaceFilesAt(design.workspacePath);
       } catch (cause) {
         throw new CodesignError('Failed to list workspace files', 'IPC_DB_ERROR', { cause });
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'codesign:files:v1:read',
+    async (_e: unknown, raw: unknown): Promise<WorkspaceFileReadResult> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError(
+          'codesign:files:v1:read expects { designId, path }',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'codesign:files:v1:read');
+      if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+        throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      if (typeof r['path'] !== 'string' || r['path'].trim().length === 0) {
+        throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      const design = runDb('files:read', () => getDesign(db, r['designId'] as string));
+      if (design === null || design.workspacePath === null) {
+        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+      }
+      try {
+        return await readWorkspaceFileAt(design.workspacePath, r['path'] as string);
+      } catch (cause) {
+        throw new CodesignError('Failed to read workspace file', 'IPC_BAD_INPUT', { cause });
       }
     },
   );

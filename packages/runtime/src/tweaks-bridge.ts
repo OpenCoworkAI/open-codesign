@@ -15,7 +15,7 @@
 export const TWEAKS_BRIDGE_SETUP = `(function() {
   'use strict';
   if (!window.ReactDOM || typeof window.ReactDOM.createRoot !== 'function') return;
-  window.__codesign_tweaks__ = { root: null, originalScript: null };
+  window.__codesign_tweaks__ = { root: null, originalScript: null, transformOptions: null };
   var origCreateRoot = window.ReactDOM.createRoot;
   window.ReactDOM.createRoot = function(el) {
     if (window.__codesign_tweaks__.root) return window.__codesign_tweaks__.root;
@@ -40,7 +40,10 @@ export const TWEAKS_BRIDGE_LISTENER = `(function() {
     );
     var compiled;
     try {
-      compiled = window.Babel.transform(nextScript, { presets: ['react'] }).code;
+      compiled = window.Babel.transform(
+        nextScript,
+        state.transformOptions || { presets: ['react'] }
+      ).code;
     } catch (err) {
       console.warn('[tweaks-bridge] babel compile failed:', err && err.message);
       return;

@@ -3,20 +3,23 @@
  *
  * Separate from `done-verify.ts` on purpose: `done` renders agent JSX through
  * Electron's hidden BrowserWindow + `buildSrcdoc` (React+Babel wrapper), while
- * `preview` loads an already-standalone workspace artifact file in a
- * puppeteer-core page. Keeping the two paths separate lets preview's wire
- * shape (screenshot + metrics) evolve without perturbing done's lint +
+ * `preview` reads an already-standalone workspace artifact file, wraps JSX/TSX
+ * through the same runtime builder used by the renderer, and loads the final
+ * HTML in a puppeteer-core page. Keeping the two paths separate lets preview's
+ * wire shape (screenshot + metrics) evolve without perturbing done's lint +
  * console contract.
  *
  * Reuses `findSystemChrome` from `@open-codesign/exporters` so we match the
  * PDF exporter's discovery rules (no bundled Chromium — PRINCIPLES §1).
  */
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { PreviewResult } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
+import { buildPreviewDocument } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
 
 export interface RunPreviewOptions {
@@ -41,10 +44,25 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
     return emptyFail(`path "${opts.path}" escapes workspace root`);
   }
 
+  let source: string;
   try {
-    await readFile(absPath, 'utf8');
+    source = await readFile(absPath, 'utf8');
   } catch (err) {
     return emptyFail(`read failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (source.indexOf('\u0000') !== -1) {
+    return emptyFail(`binary file cannot be previewed: ${opts.path}`);
+  }
+
+  let html: string;
+  try {
+    html = buildPreviewDocument(source, {
+      path: opts.path,
+      baseHref: pathToFileURL(absWorkspace.endsWith(sep) ? absWorkspace : `${absWorkspace}${sep}`)
+        .href,
+    });
+  } catch (err) {
+    return emptyFail(err instanceof Error ? err.message : String(err));
   }
 
   let executablePath: string;
@@ -90,9 +108,11 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
 
     page.on('console', (msg: ConsoleMessage) => {
       if (consoleErrors.length >= MAX_CONSOLE_ENTRIES) return;
+      const message = msg.text();
+      if (isRuntimeConsoleNoise(message)) return;
       const level = mapConsoleLevel(msg.type());
       if (level === null) return;
-      consoleErrors.push({ level, message: msg.text() });
+      consoleErrors.push({ level, message });
     });
     page.on('pageerror', (err: unknown) => {
       if (consoleErrors.length >= MAX_CONSOLE_ENTRIES) return;
@@ -111,9 +131,12 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
       assetErrors.push({ url: res.url(), status, ...(type ? { type } : {}) });
     });
 
-    // file:// so relative asset references resolve against the workspace.
-    const fileUrl = `file://${absPath}`;
-    await page.goto(fileUrl, { waitUntil: 'load', timeout: LOAD_TIMEOUT_MS });
+    const previewFilePath = join(userDataDir, 'preview.html');
+    await writeFile(previewFilePath, html, 'utf8');
+    await page.goto(pathToFileURL(previewFilePath).href, {
+      waitUntil: 'domcontentloaded',
+      timeout: LOAD_TIMEOUT_MS,
+    });
     await new Promise<void>((r) => setTimeout(r, SETTLE_AFTER_LOAD_MS));
 
     const metrics = await page.evaluate(() => {
@@ -214,6 +237,10 @@ function mapConsoleLevel(raw: string): PreviewResult['consoleErrors'][number]['l
     default:
       return null;
   }
+}
+
+function isRuntimeConsoleNoise(message: string): boolean {
+  return message.startsWith('You are using the in-browser Babel transformer.');
 }
 
 function emptyFail(reason: string): PreviewResult {

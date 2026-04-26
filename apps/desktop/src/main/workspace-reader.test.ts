@@ -2,7 +2,11 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readWorkspaceFilesAt } from './workspace-reader';
+import {
+  classifyWorkspaceFileKind,
+  readWorkspaceFileAt,
+  readWorkspaceFilesAt,
+} from './workspace-reader';
 
 async function makeTmp(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'workspace-reader-'));
@@ -45,6 +49,12 @@ describe('readWorkspaceFilesAt', () => {
     expect(result.map((f) => f.file)).toEqual(['src/components/Button.jsx']);
   });
 
+  it('includes tsx files in the default source scan', async () => {
+    await writeFile(join(root, 'App.tsx'), 'function App(): JSX.Element { return <main/>; }');
+    const result = await readWorkspaceFilesAt(root);
+    expect(result.map((f) => f.file)).toEqual(['App.tsx']);
+  });
+
   it('caps output at 200 files', async () => {
     await Promise.all(
       Array.from({ length: 250 }, (_, i) =>
@@ -77,7 +87,47 @@ describe('readWorkspaceFilesAt', () => {
     // A stray NUL byte is our binary sniff. Writing .html keeps it on the
     // default pattern so we prove the binary filter (not the glob) drops it.
     await writeFile(join(root, 'binary.html'), Buffer.from([0x00, 0x01, 0x02, 0x03]));
+    await writeFile(join(root, 'invalid.html'), Buffer.from([0xff, 0xfe, 0xfd]));
     const result = await readWorkspaceFilesAt(root);
     expect(result.map((f) => f.file)).toEqual(['ok.html']);
+  });
+});
+
+describe('workspace file metadata/read helpers', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await makeTmp();
+  });
+
+  it('classifies common source file extensions', () => {
+    expect(classifyWorkspaceFileKind('index.html')).toBe('html');
+    expect(classifyWorkspaceFileKind('App.jsx')).toBe('jsx');
+    expect(classifyWorkspaceFileKind('App.tsx')).toBe('tsx');
+    expect(classifyWorkspaceFileKind('style.css')).toBe('css');
+    expect(classifyWorkspaceFileKind('app.js')).toBe('js');
+    expect(classifyWorkspaceFileKind('assets/logo.png')).toBe('asset');
+  });
+
+  it('reads a single workspace file with metadata', async () => {
+    await writeFile(join(root, 'App.jsx'), 'function App() { return <main/>; }');
+    const result = await readWorkspaceFileAt(root, 'App.jsx');
+    expect(result.kind).toBe('jsx');
+    expect(result.content).toContain('function App');
+    expect(result.size).toBeGreaterThan(0);
+  });
+
+  it('rejects path escapes in single-file reads', async () => {
+    await expect(readWorkspaceFileAt(root, '../outside.jsx')).rejects.toThrow(/escapes/);
+  });
+
+  it('rejects binary single-file reads', async () => {
+    await writeFile(join(root, 'binary.jsx'), Buffer.from([0x00, 0x01, 0x02]));
+    await expect(readWorkspaceFileAt(root, 'binary.jsx')).rejects.toThrow(/binary/);
+  });
+
+  it('rejects invalid UTF-8 single-file reads', async () => {
+    await writeFile(join(root, 'invalid.jsx'), Buffer.from([0xff, 0xfe, 0xfd]));
+    await expect(readWorkspaceFileAt(root, 'invalid.jsx')).rejects.toThrow(/read failed/);
   });
 });

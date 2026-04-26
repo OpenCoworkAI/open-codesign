@@ -1,8 +1,8 @@
 import { useT } from '@open-codesign/i18n';
-import { buildSrcdoc } from '@open-codesign/runtime';
+import { buildPreviewDocument, isRenderablePath } from '@open-codesign/runtime';
 import { FileCode2, Folder, FolderOpen } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useDesignFiles } from '../hooks/useDesignFiles';
+import { type DesignFileEntry, type DesignFileKind, useDesignFiles } from '../hooks/useDesignFiles';
 import { workspacePathComparisonKey } from '../lib/workspace-path';
 import { useCodesignStore } from '../store';
 
@@ -11,6 +11,15 @@ function truncatePath(path: string, maxLength = 40): string {
   const start = path.substring(0, maxLength / 2 - 2);
   const end = path.substring(path.length - maxLength / 2 + 2);
   return `${start}…${end}`;
+}
+
+function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function WorkspaceSection() {
@@ -161,13 +170,152 @@ function formatBytes(n: number | undefined): string {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+export function isRenderableDesignFileKind(kind: DesignFileKind | undefined): boolean {
+  return kind === 'html' || kind === 'jsx' || kind === 'tsx';
+}
+
+export function workspaceBaseHrefFromPath(path: string | null | undefined): string | undefined {
+  if (!path) return undefined;
+  let normalized = path.replaceAll('\\', '/');
+  if (/^[A-Za-z]:\//.test(normalized)) normalized = `/${normalized}`;
+  if (!normalized.endsWith('/')) normalized = `${normalized}/`;
+  const encoded = normalized
+    .split('/')
+    .map((segment, index) => (index === 0 ? '' : encodeURIComponent(segment).replace(/%3A/g, ':')))
+    .join('/');
+  return `file://${encoded}`;
+}
+
+export type WorkspacePreviewSourceMode = 'read-workspace' | 'preview-html-fallback' | 'unavailable';
+
+export function chooseWorkspacePreviewSourceMode(input: {
+  path: string;
+  hasReadApi: boolean;
+  hasPreviewHtml: boolean;
+}): WorkspacePreviewSourceMode {
+  if (input.hasReadApi) return 'read-workspace';
+  if (input.path === 'index.html' && input.hasPreviewHtml) return 'preview-html-fallback';
+  return 'unavailable';
+}
+
+interface WorkspaceFilePreviewProps {
+  path: string;
+  file?: DesignFileEntry | null | undefined;
+}
+
+export function WorkspaceFilePreview({ path, file }: WorkspaceFilePreviewProps) {
+  const t = useT();
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const designs = useCodesignStore((s) => s.designs);
+  const previewHtml = useCodesignStore((s) => s.previewHtml);
+  const interactionMode = useCodesignStore((s) => s.interactionMode);
+  const pushIframeError = useCodesignStore((s) => s.pushIframeError);
+  const { files: observedFiles } = useDesignFiles(file ? null : currentDesignId);
+  const currentDesign = designs.find((d) => d.id === currentDesignId);
+  const effectiveFile = file ?? observedFiles.find((f) => f.path === path) ?? null;
+  const baseHref = workspaceBaseHrefFromPath(currentDesign?.workspacePath);
+  const renderable = effectiveFile
+    ? isRenderableDesignFileKind(effectiveFile.kind)
+    : isRenderablePath(path);
+  const fileRevision = effectiveFile
+    ? `${effectiveFile.updatedAt}:${effectiveFile.size ?? ''}`
+    : null;
+  const [diskSource, setDiskSource] = useState<string | null>(null);
+  const [readError, setReadError] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    // Re-read when the file watcher reports changed metadata for the same path.
+    void fileRevision;
+    if (!renderable || !currentDesignId) {
+      setDiskSource(null);
+      setReadError(null);
+      return;
+    }
+    const read = window.codesign?.files?.read;
+    const sourceMode = chooseWorkspacePreviewSourceMode({
+      path,
+      hasReadApi: typeof read === 'function',
+      hasPreviewHtml: Boolean(previewHtml),
+    });
+    if (sourceMode === 'preview-html-fallback' && previewHtml) {
+      setDiskSource(previewHtml);
+      setReadError(null);
+      return;
+    }
+    if (sourceMode === 'unavailable' || !read) {
+      setDiskSource(null);
+      setReadError(t('canvas.filesTabEmpty'));
+      return;
+    }
+    let cancelled = false;
+    setReadError(null);
+    void read(currentDesignId, path)
+      .then((result) => {
+        if (cancelled) return;
+        setDiskSource(result.content);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setDiskSource(null);
+        setReadError(err instanceof Error ? err.message : t('errors.unknown'));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentDesignId, fileRevision, path, previewHtml, renderable, t]);
+
+  const srcDoc = useMemo(() => {
+    if (!diskSource || !renderable) return null;
+    try {
+      return buildPreviewDocument(diskSource, { path, baseHref });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return `<!doctype html><html><body style="font: 13px system-ui; color: #71717a; display: grid; place-items: center; min-height: 100vh; margin: 0;">${escapeHtmlText(message)}</body></html>`;
+    }
+  }, [baseHref, diskSource, path, renderable]);
+
+  if (!renderable) {
+    return (
+      <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
+        {t('canvas.filesTabEmpty')}
+      </div>
+    );
+  }
+
+  if (!srcDoc) {
+    return (
+      <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
+        {readError ?? t('canvas.filesTabEmpty')}
+      </div>
+    );
+  }
+
+  return (
+    <iframe
+      ref={iframeRef}
+      title={`design-preview-${path}`}
+      sandbox="allow-scripts"
+      srcDoc={srcDoc}
+      onLoad={() => {
+        const win = iframeRef.current?.contentWindow;
+        if (!win) return;
+        try {
+          win.postMessage({ __codesign: true, type: 'SET_MODE', mode: interactionMode }, '*');
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          pushIframeError(`SET_MODE postMessage failed: ${reason}`);
+        }
+      }}
+      className="w-full h-full bg-white border-0 block"
+    />
+  );
+}
+
 export function FilesTabView() {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
-  const previewHtml = useCodesignStore((s) => s.previewHtml);
   const openFileTab = useCodesignStore((s) => s.openCanvasFileTab);
-  const interactionMode = useCodesignStore((s) => s.interactionMode);
-  const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const { files } = useDesignFiles(currentDesignId);
 
   const defaultPath = useMemo(() => {
@@ -182,14 +330,6 @@ export function FilesTabView() {
       setSelectedPath(defaultPath);
     }
   }, [defaultPath, files, selectedPath]);
-
-  const selectedSource = selectedPath === 'index.html' ? previewHtml : null;
-  const srcDoc = useMemo(
-    () => (selectedSource ? buildSrcdoc(selectedSource) : null),
-    [selectedSource],
-  );
-
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   if (files.length === 0) {
     return (
@@ -298,27 +438,8 @@ export function FilesTabView() {
           </button>
         </div>
         <div className="flex-1 min-h-0 bg-[var(--color-background-secondary)]">
-          {srcDoc ? (
-            <iframe
-              ref={iframeRef}
-              title={`design-preview-${selectedPath ?? ''}`}
-              sandbox="allow-scripts"
-              srcDoc={srcDoc}
-              onLoad={() => {
-                const win = iframeRef.current?.contentWindow;
-                if (!win) return;
-                try {
-                  win.postMessage(
-                    { __codesign: true, type: 'SET_MODE', mode: interactionMode },
-                    '*',
-                  );
-                } catch (err) {
-                  const reason = err instanceof Error ? err.message : String(err);
-                  pushIframeError(`SET_MODE postMessage failed: ${reason}`);
-                }
-              }}
-              className="w-full h-full bg-white border-0 block"
-            />
+          {selectedPath ? (
+            <WorkspaceFilePreview path={selectedPath} file={selectedFile} />
           ) : (
             <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
               {t('canvas.filesTabEmpty')}

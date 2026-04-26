@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { WorkspaceFileKind } from '../../../preload/index';
 import { useCodesignStore } from '../store';
 
-export type DesignFileKind = 'html' | 'asset';
+export type DesignFileKind = WorkspaceFileKind;
 
 export interface DesignFileEntry {
   path: string;

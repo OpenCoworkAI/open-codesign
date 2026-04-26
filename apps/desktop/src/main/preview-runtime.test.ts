@@ -52,6 +52,17 @@ describe('runPreview path guards', () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/read failed/);
   });
+
+  it('reports unsupported file types before launching Chrome', async () => {
+    writeFileSync(join(tempDir, 'style.css'), 'body { color: red; }', 'utf8');
+    const result = await runPreview({
+      path: 'style.css',
+      vision: false,
+      workspaceRoot: tempDir,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/Unsupported preview file type/);
+  });
 });
 
 describeIfChrome('runPreview with real Chrome', () => {
@@ -86,5 +97,55 @@ describeIfChrome('runPreview with real Chrome', () => {
     expect(result.screenshot).toBeUndefined();
     expect(typeof result.domOutline).toBe('string');
     expect((result.domOutline ?? '').length).toBeGreaterThan(0);
+  }, 30_000);
+
+  it('resolves relative scripts from HTML files against the workspace', async () => {
+    writeFileSync(
+      join(tempDir, 'relative.html'),
+      '<!doctype html><html><body><div id="root"></div><script src="./relative.js"></script></body></html>',
+      'utf8',
+    );
+    writeFileSync(
+      join(tempDir, 'relative.js'),
+      'document.getElementById("root").innerHTML = "<main id=\\"relative-root\\">Relative</main>";',
+      'utf8',
+    );
+    const result = await runPreview({
+      path: 'relative.html',
+      vision: false,
+      workspaceRoot: tempDir,
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.domOutline).toContain('main#relative-root');
+  }, 30_000);
+
+  it('renders standalone JSX files through the preview runtime', async () => {
+    writeFileSync(
+      join(tempDir, 'App.jsx'),
+      'function App() { return <main id="jsx-root">Hello JSX</main>; }',
+      'utf8',
+    );
+    const result = await runPreview({
+      path: 'App.jsx',
+      vision: false,
+      workspaceRoot: tempDir,
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.domOutline).toContain('main#jsx-root');
+  }, 30_000);
+
+  it('renders standalone TSX files through the preview runtime', async () => {
+    writeFileSync(
+      join(tempDir, 'App.tsx'),
+      'function App(): JSX.Element { const label: string = "Hello TSX"; return <main id="tsx-root">{label}</main>; }',
+      'utf8',
+    );
+    const result = await runPreview({
+      path: 'App.tsx',
+      vision: false,
+      workspaceRoot: tempDir,
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.domOutline).toContain('main#tsx-root');
   }, 30_000);
 });

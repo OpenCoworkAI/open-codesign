@@ -16,7 +16,7 @@ import { CanvasErrorBar } from './CanvasErrorBar';
 import { CanvasTabBar } from './CanvasTabBar';
 import { CommentBubble } from './comment/CommentBubble';
 import { PinOverlay } from './comment/PinOverlay';
-import { FilesTabView } from './FilesTabView';
+import { FilesTabView, WorkspaceFilePreview } from './FilesTabView';
 import { PhoneFrame } from './PhoneFrame';
 import { PreviewToolbar } from './PreviewToolbar';
 
@@ -402,8 +402,10 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         onDismiss={clearError}
       />
     );
-  } else if (activeTab?.kind === 'files' && previewHtml) {
+  } else if (activeTab?.kind === 'files') {
     body = <FilesTabView />;
+  } else if (activeTab?.kind === 'file') {
+    body = <WorkspaceFilePreview path={activeTab.path} />;
   } else {
     // Pool slots stay mounted even when the current design has no preview —
     // background iframes for recently-visited designs keep their documents

@@ -56,6 +56,17 @@ export interface ValidateKeyError {
 }
 
 export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip' | 'markdown';
+export type WorkspaceFileKind = 'html' | 'jsx' | 'tsx' | 'css' | 'js' | 'asset';
+export interface WorkspaceFileEntry {
+  path: string;
+  kind: WorkspaceFileKind;
+  size: number;
+  updatedAt: string;
+}
+export interface WorkspaceFileReadResult extends WorkspaceFileEntry {
+  content: string;
+}
+
 export interface ExportInvokeResponse {
   status: 'saved' | 'cancelled';
   path?: string;
@@ -473,9 +484,13 @@ const api = {
       ipcRenderer.invoke('codesign:files:v1:list', {
         schemaVersion: 1,
         designId,
-      }) as Promise<
-        Array<{ path: string; kind: 'html' | 'asset'; size: number; updatedAt: string }>
-      >,
+      }) as Promise<WorkspaceFileEntry[]>,
+    read: (designId: string, path: string) =>
+      ipcRenderer.invoke('codesign:files:v1:read', {
+        schemaVersion: 1,
+        designId,
+        path,
+      }) as Promise<WorkspaceFileReadResult>,
     subscribe: (designId: string) =>
       ipcRenderer.invoke('codesign:files:v1:subscribe', {
         schemaVersion: 1,

@@ -1,8 +1,15 @@
 import type { Dirent } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
+import { TextDecoder } from 'node:util';
 
-export const DEFAULT_WORKSPACE_PATTERNS = ['**/*.html', '**/*.jsx', '**/*.css', '**/*.js'] as const;
+export const DEFAULT_WORKSPACE_PATTERNS = [
+  '**/*.html',
+  '**/*.jsx',
+  '**/*.tsx',
+  '**/*.css',
+  '**/*.js',
+] as const;
 
 /** Dirs we never recurse into. Matches the set used by design-system.ts plus a
  * few electron-era additions (.vite, __pycache__) and our own workspace cache
@@ -23,6 +30,7 @@ const IGNORED_DIRS = new Set<string>([
  * vendored deps or build outputs leak in. */
 const MAX_FILES = 200;
 const MAX_BYTES = 2 * 1024 * 1024;
+const MAX_SINGLE_FILE_BYTES = 2 * 1024 * 1024;
 
 export interface WorkspaceFile {
   file: string;
@@ -66,13 +74,10 @@ export async function readWorkspaceFilesAt(
       if (!matchers.some((re) => re.test(rel))) continue;
       let contents: string;
       try {
-        contents = await readFile(abs, 'utf8');
+        contents = await readUtf8TextFile(abs);
       } catch {
         continue;
       }
-      // Crude binary sniff — an embedded NUL byte means this file isn't the
-      // source text we care about. Skip rather than feed garbage to the model.
-      if (contents.indexOf('\u0000') !== -1) continue;
       out.push({ file: rel, contents });
       totalBytes += Buffer.byteLength(contents, 'utf8');
     }
@@ -89,14 +94,19 @@ function normalizeSlashes(p: string): string {
 export interface WorkspaceFileEntry {
   /** Workspace-relative POSIX path (e.g. `index.html`, `assets/logo.png`). */
   path: string;
-  /** Coarse file kind — `html` for the rendered artifact, `asset` for anything
-   *  else. Renderer uses this for icon / ordering; finer mime detection is the
-   *  viewer's job. */
-  kind: 'html' | 'asset';
+  /** Coarse file kind. Renderer uses this for icon / preview routing; finer
+   *  mime detection is the viewer's job. */
+  kind: WorkspaceFileKind;
   /** File size in bytes. */
   size: number;
   /** ISO-8601 mtime string. */
   updatedAt: string;
+}
+
+export type WorkspaceFileKind = 'html' | 'jsx' | 'tsx' | 'css' | 'js' | 'asset';
+
+export interface WorkspaceFileReadResult extends WorkspaceFileEntry {
+  content: string;
 }
 
 /** Ignored by `listWorkspaceFilesAt`, `readWorkspaceFilesAt`, and the
@@ -116,6 +126,35 @@ export const WORKSPACE_IGNORED_DIRS = new Set<string>([
 const LIST_IGNORED_DIRS = WORKSPACE_IGNORED_DIRS;
 
 const LIST_MAX_FILES = 2_000;
+const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+
+export function classifyWorkspaceFileKind(path: string): WorkspaceFileKind {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'html';
+  if (lower.endsWith('.jsx')) return 'jsx';
+  if (lower.endsWith('.tsx')) return 'tsx';
+  if (lower.endsWith('.css')) return 'css';
+  if (lower.endsWith('.js')) return 'js';
+  return 'asset';
+}
+
+function resolveWorkspaceChild(root: string, relPath: string): string {
+  const absRoot = resolve(root);
+  const absPath = resolve(absRoot, relPath);
+  if (absPath !== absRoot && !absPath.startsWith(absRoot + sep)) {
+    throw new Error(`path "${relPath}" escapes workspace root`);
+  }
+  return absPath;
+}
+
+async function readUtf8TextFile(abs: string): Promise<string> {
+  const bytes = await readFile(abs);
+  const content = UTF8_DECODER.decode(bytes);
+  if (content.indexOf('\u0000') !== -1) {
+    throw new Error('binary file contains NUL byte');
+  }
+  return content;
+}
 
 /**
  * Recursively list all files under `root`, returning metadata only (path,
@@ -158,7 +197,7 @@ export async function listWorkspaceFilesAt(root: string): Promise<WorkspaceFileE
       const rel = normalizeSlashes(relative(root, abs));
       out.push({
         path: rel,
-        kind: rel.endsWith('.html') ? 'html' : 'asset',
+        kind: classifyWorkspaceFileKind(rel),
         size,
         updatedAt: mtime.toISOString(),
       });
@@ -225,4 +264,39 @@ function globToRegExp(pattern: string): RegExp {
   }
   re += '$';
   return new RegExp(re);
+}
+
+export async function readWorkspaceFileAt(
+  root: string,
+  relPath: string,
+): Promise<WorkspaceFileReadResult> {
+  const abs = resolveWorkspaceChild(root, relPath);
+  const rel = normalizeSlashes(relative(resolve(root), abs));
+  let size = 0;
+  let mtime = new Date();
+  try {
+    const s = await stat(abs);
+    if (!s.isFile()) throw new Error(`not a file: ${relPath}`);
+    size = s.size;
+    mtime = s.mtime;
+  } catch (err) {
+    throw new Error(`stat failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (size > MAX_SINGLE_FILE_BYTES) {
+    throw new Error(`file too large: ${relPath} (${size} bytes)`);
+  }
+
+  let content: string;
+  try {
+    content = await readUtf8TextFile(abs);
+  } catch (err) {
+    throw new Error(`read failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return {
+    path: rel,
+    kind: classifyWorkspaceFileKind(rel),
+    size,
+    updatedAt: mtime.toISOString(),
+    content,
+  };
 }
