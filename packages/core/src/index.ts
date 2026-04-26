@@ -126,6 +126,18 @@ export {
   type WorkspaceInspection,
 } from './tools/inspect-workspace.js';
 export {
+  makeVerifyUiKitVisualParityTool,
+  STANDARD_VISUAL_PARITY_CHECKS,
+  visualParityStatusFromChecks,
+  type JudgeVisualParityFn,
+  type RenderUiKitFn,
+  type VisualParityCheck,
+  type VisualParityGap,
+  type VisualParityImageRef,
+  type VisualParityReport,
+  type VisualParityStatus,
+} from './tools/verify-ui-kit-visual-parity.js';
+export {
   makePreviewTool,
   type PreviewResult,
   type RunPreviewFn,
