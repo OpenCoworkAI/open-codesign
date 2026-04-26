@@ -45,7 +45,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
-    "electron": "^39.8.8",
+    "electron": "^39.8.9",
     "electron-builder": "^26.8.1",
     "electron-builder-squirrel-windows": "26.8.1",
     "electron-vite": "^2.3.0",
