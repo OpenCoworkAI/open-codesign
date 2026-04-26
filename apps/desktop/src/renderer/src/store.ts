@@ -1,3 +1,4 @@
+import type { ConsoleLevel } from '@open-codesign/runtime';
 import { i18n } from '@open-codesign/i18n';
 import type {
   ChatAppendInput,
@@ -32,6 +33,14 @@ declare global {
     codesign?: CodesignApi;
   }
 }
+
+export interface IframeConsoleLogEntry {
+  level: ConsoleLevel;
+  args: string[];
+  timestamp: number;
+}
+
+export const MAX_CONSOLE_LOGS = 200;
 
 export type GenerationStage =
   | 'idle'
@@ -181,7 +190,19 @@ interface CodesignState {
    *  design via designIdAtStart) — UI only shows "generating" affordances on
    *  the design that actually has the run. */
   generatingDesignId: string | null;
+  /** Set of design IDs currently being generated (parallel support). */
+  activeGenerations: Set<string>;
   generationStage: GenerationStage;
+  /** Epoch ms when the current generation started. Used to render elapsed time. */
+  generationStartedAt: number | null;
+  /** Human-readable label for the agent's current operation (e.g. "edit index.html"). */
+  currentOperation: string | null;
+  /** Most-recent set_todos payload for the current design — sticky header above chat. */
+  latestTodos: Array<{ text: string; status: 'pending' | 'in_progress' | 'completed' }> | null;
+  /** All page HTML files from the agent's virtual FS, keyed by path (e.g. "index.html", "page-about.html"). */
+  pageFiles: Record<string, string>;
+  /** Path of the currently-displayed page tab. */
+  activePagePath: string;
   /** Live assistant text buffered during the current agent turn. Rendered as
    *  an ephemeral chat bubble so the UI shows incremental output instead of
    *  waiting for the turn to settle. Cleared on turn_end (the persisted
@@ -214,6 +235,7 @@ interface CodesignState {
   previewViewport: PreviewViewport;
   toasts: Toast[];
   iframeErrors: string[];
+  consoleLogs: IframeConsoleLogEntry[];
 
   inputFiles: LocalInputFile[];
   referenceUrl: string;
@@ -323,6 +345,12 @@ interface CodesignState {
   clearError: () => void;
   clearIframeErrors: () => void;
   pushIframeError: (message: string) => void;
+  clearConsoleLogs: () => void;
+  pushConsoleLog: (entry: IframeConsoleLogEntry) => void;
+  setCurrentOperation: (op: string | null) => void;
+  setLatestTodos: (todos: Array<{ text: string; status: 'pending' | 'in_progress' | 'completed' }> | null) => void;
+  upsertPageFile: (path: string, content: string) => void;
+  setActivePagePath: (path: string) => void;
   exportActive: (format: ExportFormat) => Promise<void>;
 
   pickInputFiles: () => Promise<void>;
@@ -839,10 +867,31 @@ function isReadyConfig(cfg: OnboardingState | null): cfg is ReadyConfig {
 
 function finishIfCurrent(
   set: SetState,
-  generationId: string,
+  _generationId: string,
   update: (state: CodesignState) => Partial<CodesignState>,
+  designId?: string | null,
 ): void {
-  set((state) => (state.activeGenerationId === generationId ? update(state) : {}));
+  set((state) => {
+    // For parallel support, check by design ID in activeGenerations rather
+    // than by the store's single activeGenerationId (which is overwritten when
+    // a second generation starts for a different design).
+    const designKnown = designId ? state.activeGenerations.has(designId) : false;
+    const isCurrent =
+      designKnown || state.activeGenerationId === _generationId;
+    if (!isCurrent) return {};
+    const base = update(state);
+    if (designId) {
+      const nextActiveGenerations = new Set(state.activeGenerations);
+      nextActiveGenerations.delete(designId);
+      const remaining = nextActiveGenerations.size;
+      return {
+        ...base,
+        activeGenerations: nextActiveGenerations,
+        isGenerating: remaining > 0 ? true : (base.isGenerating ?? false),
+      };
+    }
+    return base;
+  });
 }
 
 function applyGenerateSuccess(
@@ -885,7 +934,7 @@ function applyGenerateSuccess(
       generationStage: 'done' as GenerationStage,
       lastUsage: usage,
     };
-  });
+  }, designIdAtStart);
   // If the user switched designs mid-generation, didApply is false but we
   // still want the fresh artifact in the pool so the design they generated
   // for shows the new content the next time they switch back to it.
@@ -1028,7 +1077,8 @@ function applyGenerateError(
   designIdAtStart: string | null,
 ): void {
   const msg = err instanceof Error ? err.message : tr('errors.unknown');
-  if (get().activeGenerationId !== generationId) return;
+  // For parallel support: don't bail if activeGenerationId was overwritten by a
+  // second gen — still need to clean up this gen's entry in activeGenerations.
   // TODO: replace with rendererLogger once renderer-logger lands
   console.error('[store] applyGenerateError', {
     generationId,
@@ -1044,7 +1094,7 @@ function applyGenerateError(
     errorMessage: msg,
     lastError: msg,
     generationStage: 'error' as GenerationStage,
-  }));
+  }), designIdAtStart);
   const designId = designIdAtStart ?? get().currentDesignId;
   if (designId) {
     void get().appendChatMessage({
@@ -1309,7 +1359,13 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   isGenerating: false,
   activeGenerationId: null,
   generatingDesignId: null,
+  activeGenerations: new Set<string>(),
   generationStage: 'idle' as GenerationStage,
+  generationStartedAt: null,
+  currentOperation: null,
+  latestTodos: null,
+  pageFiles: {} as Record<string, string>,
+  activePagePath: 'index.html',
   streamingAssistantText: null,
   pendingToolCalls: [],
   lastUsage: null,
@@ -1324,7 +1380,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     const s = get();
     if (!s.autoPolishEnabled) return;
     if (s.autoPolishFired.has(designId)) return;
-    if (s.isGenerating) return;
+    if (s.activeGenerations.has(designId)) return;
     // Require that the design has at least one completed assistant_text row
     // for the just-finished round. If the agent ended without producing
     // prose, the run likely errored or was trivial — skip polish.
@@ -1363,6 +1419,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   previewViewport: 'desktop' as PreviewViewport,
   toasts: [],
   iframeErrors: [],
+  consoleLogs: [],
 
   designs: [],
   currentDesignId: null,
@@ -1401,7 +1458,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   activeReportLocalId: null,
 
   clearIframeErrors() {
-    set({ iframeErrors: [] });
+    set({ iframeErrors: [], consoleLogs: [] });
   },
 
   pushIframeError(message) {
@@ -1411,6 +1468,33 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       const next = [...s.iframeErrors, message];
       return { iframeErrors: next.length > 50 ? next.slice(1) : next };
     });
+  },
+
+  clearConsoleLogs() {
+    set({ consoleLogs: [] });
+  },
+
+  pushConsoleLog(entry) {
+    set((s) => {
+      const next = [...s.consoleLogs, entry];
+      return { consoleLogs: next.length > MAX_CONSOLE_LOGS ? next.slice(next.length - MAX_CONSOLE_LOGS) : next };
+    });
+  },
+
+  setCurrentOperation(op) {
+    set({ currentOperation: op });
+  },
+
+  setLatestTodos(todos) {
+    set({ latestTodos: todos });
+  },
+
+  upsertPageFile(path, content) {
+    set((s) => ({ pageFiles: { ...s.pageFiles, [path]: content } }));
+  },
+
+  setActivePagePath(path) {
+    set({ activePagePath: path });
   },
 
   async loadConfig() {
@@ -1498,7 +1582,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         hasAttachments: (input.attachments?.length ?? 0) > 0,
       },
     });
-    if (get().isGenerating) return;
+    const targetDesignId = get().currentDesignId;
+    if (targetDesignId !== null && get().activeGenerations.has(targetDesignId)) return;
     if (!window.codesign) {
       const msg = tr('errors.rendererDisconnected');
       set({ errorMessage: msg, lastError: msg });
@@ -1548,18 +1633,26 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     const pendingEditIds = pendingEdits.map((c) => c.id);
 
     const generationId = newId();
-    const designIdAtStart = get().currentDesignId;
-    set(() => ({
-      isGenerating: true,
-      activeGenerationId: generationId,
-      generatingDesignId: designIdAtStart,
-      generationStage: 'sending',
-      streamingAssistantText: null,
-      errorMessage: null,
-      lastPromptInput: request,
-      selectedElement: null,
-      iframeErrors: [],
-    }));
+    const designIdAtStart = targetDesignId ?? get().currentDesignId;
+    set((s) => {
+      const nextActiveGenerations = new Set(s.activeGenerations);
+      if (designIdAtStart) nextActiveGenerations.add(designIdAtStart);
+      return {
+        isGenerating: true,
+        activeGenerationId: generationId,
+        generatingDesignId: designIdAtStart,
+        activeGenerations: nextActiveGenerations,
+        generationStage: 'sending',
+        generationStartedAt: Date.now(),
+        currentOperation: null,
+        streamingAssistantText: null,
+        errorMessage: null,
+        lastPromptInput: request,
+        selectedElement: null,
+        iframeErrors: [],
+        consoleLogs: [],
+      };
+    });
 
     // Cap cross-generate history to the most recent turns. The agent re-reads
     // the current HTML via text_editor.view() when needed, so older prose in
@@ -1671,6 +1764,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       return;
     }
 
+    const cancelDesignId = get().generatingDesignId;
     void window.codesign
       .cancelGeneration(id)
       .then(() => {
@@ -1680,7 +1774,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
           generatingDesignId: null,
           streamingAssistantText: null,
           generationStage: 'idle' as GenerationStage,
-        }));
+        }), cancelDesignId);
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
@@ -1709,7 +1803,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   async applyInlineComment(comment) {
     const trimmed = comment.trim();
-    if (!trimmed || get().isGenerating) return;
+    const currentId = get().currentDesignId;
+    if (!trimmed || (currentId !== null && get().activeGenerations.has(currentId))) return;
     if (!window.codesign) return;
     const cfg = get().config;
     const html = get().previewHtml;
@@ -1721,12 +1816,18 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     const attachments = uniqueFiles(get().inputFiles);
     const designIdAtStart = get().currentDesignId;
 
-    set(() => ({
-      isGenerating: true,
-      generatingDesignId: designIdAtStart,
-      errorMessage: null,
-      iframeErrors: [],
-    }));
+    set((s) => {
+      const nextActiveGenerations = new Set(s.activeGenerations);
+      if (designIdAtStart) nextActiveGenerations.add(designIdAtStart);
+      return {
+        isGenerating: true,
+        generatingDesignId: designIdAtStart,
+        activeGenerations: nextActiveGenerations,
+        errorMessage: null,
+        iframeErrors: [],
+        consoleLogs: [],
+      };
+    });
 
     if (designIdAtStart) {
       void get().appendChatMessage({
@@ -1758,12 +1859,15 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
                 nextHtml,
               )
             : { cache: s.previewHtmlByDesign, recent: s.recentDesignIds };
+        const nextActiveGenerations = new Set(s.activeGenerations);
+        if (designIdAtStart) nextActiveGenerations.delete(designIdAtStart);
         return {
           previewHtml: nextHtml,
           previewHtmlByDesign: pool.cache,
           recentDesignIds: pool.recent,
-          isGenerating: false,
+          isGenerating: nextActiveGenerations.size > 0,
           generatingDesignId: null,
+          activeGenerations: nextActiveGenerations,
           selectedElement: null,
           lastUsage: usage,
         };
@@ -1783,12 +1887,17 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
-      set(() => ({
-        isGenerating: false,
-        generatingDesignId: null,
-        errorMessage: msg,
-        lastError: msg,
-      }));
+      set((s) => {
+        const nextActiveGenerations = new Set(s.activeGenerations);
+        if (designIdAtStart) nextActiveGenerations.delete(designIdAtStart);
+        return {
+          isGenerating: nextActiveGenerations.size > 0,
+          generatingDesignId: null,
+          activeGenerations: nextActiveGenerations,
+          errorMessage: msg,
+          lastError: msg,
+        };
+      });
       if (designIdAtStart) {
         void get().appendChatMessage({
           designId: designIdAtStart,
@@ -1928,17 +2037,6 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   async createNewDesign(workspacePath?: string | null) {
     if (!window.codesign) return null;
-    if (get().isGenerating) {
-      // Don't silently drop the request — callers like the Examples flow
-      // assume "clicked = new design". A hidden no-op makes the prompt appear
-      // to have vanished into the current design instead.
-      get().pushToast({
-        variant: 'info',
-        title: tr('projects.notifications.createFailed'),
-        description: tr('projects.notifications.busyGenerating'),
-      });
-      return null;
-    }
     const existingNames = new Set(get().designs.map((d) => d.name));
     let n = 1;
     while (existingNames.has(`Untitled design ${n}`)) n += 1;
@@ -1950,6 +2048,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         previewHtml: null,
         errorMessage: null,
         iframeErrors: [],
+        consoleLogs: [],
+        latestTodos: null,
+        pageFiles: {},
+        activePagePath: 'index.html',
         selectedElement: null,
         lastPromptInput: null,
         designsViewOpen: false,
@@ -2031,6 +2133,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         recentDesignIds: incomingPool.recent,
         errorMessage: null,
         iframeErrors: [],
+        consoleLogs: [],
+        latestTodos: null,
+        pageFiles: {},
+        activePagePath: 'index.html',
         selectedElement: null,
         lastPromptInput: null,
         designsViewOpen: false,
@@ -2085,6 +2191,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         recentDesignIds: incomingPool.recent,
         errorMessage: null,
         iframeErrors: [],
+        consoleLogs: [],
+        latestTodos: null,
+        pageFiles: {},
+        activePagePath: 'index.html',
         selectedElement: null,
         lastPromptInput: null,
         designsViewOpen: false,
@@ -2160,7 +2270,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   async softDeleteDesign(id: string) {
     if (!window.codesign) return;
-    if (get().isGenerating) {
+    if (get().activeGenerations.has(id)) {
       get().pushToast({
         variant: 'info',
         title: tr('projects.notifications.deleteBlockedGenerating'),
@@ -2225,7 +2335,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   requestWorkspaceRebind(design, newPath) {
     // Block workspace changes while the current design is generating
     const state = get();
-    if (state.isGenerating && state.generatingDesignId === state.currentDesignId) {
+    if (state.currentDesignId !== null && state.activeGenerations.has(state.currentDesignId)) {
       return;
     }
     set({ workspaceRebindPending: { design, newPath } });
@@ -2449,7 +2559,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     // is looking at OR what is actively generating. This prevents a background
     // run on design A from blowing away the preview while the user has switched
     // to design B.
-    if (state.currentDesignId !== designId && state.generatingDesignId !== designId) {
+    if (state.currentDesignId !== designId && !state.activeGenerations.has(designId)) {
       // The event's design isn't visible — still update its pool entry so
       // switching back later reflects the streamed-in HTML.
       const pool = recordPreviewInPool(

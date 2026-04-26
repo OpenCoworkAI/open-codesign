@@ -180,6 +180,7 @@ function toState(cfg: Config | null): OnboardingState {
       hasKey: false,
       provider: null,
       modelPrimary: null,
+      modelFast: null,
       baseUrl: null,
       designSystem: null,
     };
@@ -191,6 +192,7 @@ function toState(cfg: Config | null): OnboardingState {
       hasKey: false,
       provider: active,
       modelPrimary: null,
+      modelFast: null,
       baseUrl: null,
       designSystem: cfg.designSystem ?? null,
     };
@@ -199,6 +201,7 @@ function toState(cfg: Config | null): OnboardingState {
     hasKey: true,
     provider: active,
     modelPrimary: cfg.activeModel,
+    modelFast: cfg.modelFast ?? null,
     baseUrl: cfg.providers[active]?.baseUrl ?? null,
     designSystem: cfg.designSystem ?? null,
   };
@@ -1150,6 +1153,23 @@ export function registerOnboardingIpc(): void {
     'config:v1:set-active-provider-and-model',
     async (_e, raw: unknown): Promise<OnboardingState> => {
       return runSetActiveProvider(raw);
+    },
+  );
+
+  ipcMain.handle(
+    'config:v1:set-fast-model',
+    async (_e, raw: unknown): Promise<OnboardingState> => {
+      const input = raw as { modelFast: string | null };
+      if (typeof input !== 'object' || input === null || !('modelFast' in input)) {
+        throw new CodesignError(
+          'config:v1:set-fast-model expects { modelFast: string | null }',
+          ERROR_CODES.IPC_BAD_INPUT,
+        );
+      }
+      const modelFast = input.modelFast === '' ? null : input.modelFast;
+      cachedConfig = hydrateConfig({ ...cachedConfig, modelFast: modelFast ?? undefined });
+      await writeConfig(cachedConfig);
+      return toState(cachedConfig);
     },
   );
 

@@ -1,10 +1,12 @@
 import { useT } from '@open-codesign/i18n';
 import {
   type ElementRectsMessage,
+  type IframeConsoleMessage,
   type IframeErrorMessage,
   type OverlayMessage,
   buildSrcdoc,
   isElementRectsMessage,
+  isIframeConsoleMessage,
   isIframeErrorMessage,
   isOverlayMessage,
 } from '@open-codesign/runtime';
@@ -14,9 +16,12 @@ import { ErrorState } from '../preview/ErrorState';
 import { useCodesignStore } from '../store';
 import { CanvasErrorBar } from './CanvasErrorBar';
 import { CanvasTabBar } from './CanvasTabBar';
+import { ConsolePanel } from './ConsolePanel';
 import { FilesTabView } from './FilesTabView';
+import { HistoryPanel } from './HistoryPanel';
+import { PageTabBar } from './PageTabBar';
 import { PhoneFrame } from './PhoneFrame';
-import { PreviewToolbar } from './PreviewToolbar';
+import { PreviewToolbar, type PreviewToolbarExternalProps } from './PreviewToolbar';
 import { TweakPanel } from './TweakPanel';
 import { CommentBubble } from './comment/CommentBubble';
 import { PinOverlay } from './comment/PinOverlay';
@@ -87,12 +92,17 @@ export function stablePreviewSourceKey(source: string): string {
     );
 }
 
-export type AllowedPreviewMessageType = 'ELEMENT_SELECTED' | 'IFRAME_ERROR' | 'ELEMENT_RECTS';
+export type AllowedPreviewMessageType =
+  | 'ELEMENT_SELECTED'
+  | 'IFRAME_ERROR'
+  | 'ELEMENT_RECTS'
+  | 'CONSOLE_LOG';
 
 export interface PreviewMessageHandlers {
   onElementSelected: (msg: OverlayMessage) => void;
   onIframeError: (msg: IframeErrorMessage) => void;
   onElementRects: (msg: ElementRectsMessage) => void;
+  onConsoleLog: (msg: IframeConsoleMessage) => void;
 }
 
 export type PreviewMessageOutcome =
@@ -128,6 +138,12 @@ export function handlePreviewMessage(
       if (isElementRectsMessage(data)) {
         handlers.onElementRects(data);
         return { status: 'handled', type: 'ELEMENT_RECTS' };
+      }
+      return { status: 'rejected', reason: 'shape', type: envelope.type };
+    case 'CONSOLE_LOG':
+      if (isIframeConsoleMessage(data)) {
+        handlers.onConsoleLog(data);
+        return { status: 'handled', type: 'CONSOLE_LOG' };
       }
       return { status: 'rejected', reason: 'shape', type: envelope.type };
     default:
@@ -276,9 +292,13 @@ function PreviewSlot({
 export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
+  const setPreviewHtml = useCodesignStore((s) => s.setPreviewHtml);
   const previewHtmlByDesign = useCodesignStore((s) => s.previewHtmlByDesign);
   const recentDesignIds = useCodesignStore((s) => s.recentDesignIds);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const isGenerating = useCodesignStore(
+    (s) => s.currentDesignId !== null && s.activeGenerations.has(s.currentDesignId),
+  );
   const designs = useCodesignStore((s) => s.designs);
   const chatMessages = useCodesignStore((s) => s.chatMessages);
   const canvasTabs = useCodesignStore((s) => s.canvasTabs);
@@ -287,6 +307,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const retry = useCodesignStore((s) => s.retryLastPrompt);
   const clearError = useCodesignStore((s) => s.clearError);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
+  const pushConsoleLog = useCodesignStore((s) => s.pushConsoleLog);
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
@@ -300,10 +321,20 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const applyLiveRects = useCodesignStore((s) => s.applyLiveRects);
   const clearLiveRects = useCodesignStore((s) => s.clearLiveRects);
   const liveRects = useCodesignStore((s) => s.liveRects);
+  const pageFiles = useCodesignStore((s) => s.pageFiles);
+  const activePagePath = useCodesignStore((s) => s.activePagePath);
+  const activeTab = canvasTabs[activeCanvasTab];
+  const showFilesOverPreview =
+    activeTab?.kind === 'files' && typeof previewHtml === 'string' && previewHtml.length > 0;
+  const [filesLayerKept, setFilesLayerKept] = useState(false);
+  const hasPreviewText = typeof previewHtml === 'string' && previewHtml.length > 0;
+  const filesLayerInDom = hasPreviewText && (showFilesOverPreview || filesLayerKept);
 
   // Active iframe ref consumed by TweakPanel (postMessage target) and by the
   // window.message guard. We re-point this whenever the active design changes
   // or the active iframe element re-mounts.
+  const [showHistory, setShowHistory] = useState(false);
+  const [showCodeView, setShowCodeView] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   // Unsent bubble drafts, keyed by bubbleKey (edit:<id> | new:<selector>).
   // Lives across bubble remounts so switching to another chip / element and
@@ -315,6 +346,14 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // the WATCH_SELECTORS effect so we don't race past overlay installation
   // on first mount.
   const [iframeLoadTick, setIframeLoadTick] = useState(0);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run on design id only — effect body is intentionally idempotent
+  useEffect(() => {
+    setFilesLayerKept(false);
+  }, [currentDesignId]);
+  useEffect(() => {
+    if (showFilesOverPreview) setFilesLayerKept(true);
+  }, [showFilesOverPreview]);
 
   const registerIframe = useCallback((designId: string, el: HTMLIFrameElement | null) => {
     if (el) {
@@ -405,6 +444,8 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         onElementRects: (msg) => {
           applyLiveRects(msg.entries);
         },
+        onConsoleLog: (msg) =>
+          pushConsoleLog({ level: msg.level, args: msg.args, timestamp: msg.timestamp }),
       });
 
       if (outcome.status === 'rejected' && outcome.reason === 'unknown-type') {
@@ -414,7 +455,14 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [pushIframeError, selectCanvasElement, openCommentBubble, previewZoom, applyLiveRects]);
+  }, [
+    pushIframeError,
+    pushConsoleLog,
+    selectCanvasElement,
+    openCommentBubble,
+    previewZoom,
+    applyLiveRects,
+  ]);
 
   // Pool entries: active design first (using the freshest in-memory
   // previewHtml), then any other recently-visited designs that still have a
@@ -424,7 +472,9 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     const seen = new Set<string>();
     const out: Array<{ id: string; html: string }> = [];
     if (currentDesignId !== null) {
-      const html = previewHtml ?? previewHtmlByDesign[currentDesignId];
+      // When viewing a non-index page, show that page's content instead.
+      const pageHtml = activePagePath !== 'index.html' ? pageFiles[activePagePath] : undefined;
+      const html = pageHtml ?? previewHtml ?? previewHtmlByDesign[currentDesignId];
       if (typeof html === 'string' && html.length > 0) {
         out.push({ id: currentDesignId, html });
         seen.add(currentDesignId);
@@ -439,9 +489,15 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       }
     }
     return out;
-  }, [currentDesignId, previewHtml, previewHtmlByDesign, recentDesignIds]);
+  }, [
+    currentDesignId,
+    previewHtml,
+    previewHtmlByDesign,
+    recentDesignIds,
+    activePagePath,
+    pageFiles,
+  ]);
 
-  const activeTab = canvasTabs[activeCanvasTab];
   const showCommentUi = interactionMode === 'comment';
   const snapshotComments = currentSnapshotId
     ? comments.filter((c) => c.snapshotId === currentSnapshotId)
@@ -494,14 +550,14 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         onDismiss={clearError}
       />
     );
-  } else if (activeTab?.kind === 'files' && previewHtml) {
-    body = <FilesTabView />;
   } else {
+    // Stack Files above the pool and toggle with `hidden` (HubView pattern) so
+    // iframes are not torn down on tab switch.
     // Pool slots stay mounted even when the current design has no preview —
     // background iframes for recently-visited designs keep their documents
     // alive for instant switch-back. EmptyState is overlaid in the same
     // stacking context when the active design has no content yet.
-    body = (
+    const previewStack = (
       <div className="relative h-full w-full">
         {poolEntries.map((entry) => (
           <PreviewSlot
@@ -531,6 +587,26 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         ) : null}
       </div>
     );
+    body = (
+      <div className="relative h-full w-full">
+        {filesLayerInDom ? (
+          <div
+            className="absolute inset-0 z-10 min-h-0"
+            hidden={!showFilesOverPreview}
+            aria-hidden={!showFilesOverPreview}
+          >
+            <FilesTabView />
+          </div>
+        ) : null}
+        <div
+          className="absolute inset-0 min-h-0"
+          hidden={showFilesOverPreview}
+          aria-hidden={showFilesOverPreview}
+        >
+          {previewStack}
+        </div>
+      </div>
+    );
   }
 
   const hasTabs = canvasTabs.length > 0;
@@ -542,14 +618,26 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         {isWelcome ? null : (
           <div className="flex items-stretch justify-between gap-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] pl-[var(--space-2)]">
             {hasTabs ? <CanvasTabBar /> : <div />}
-            <PreviewToolbar />
+            <PreviewToolbar
+              onToggleHistory={() => setShowHistory((v) => !v)}
+              historyOpen={showHistory}
+              showCodeView={showCodeView}
+              onToggleCodeView={() => setShowCodeView((v) => !v)}
+            />
           </div>
         )}
+        <PageTabBar />
         <CanvasErrorBar />
         <div className="relative flex-1 overflow-hidden">
-          {body}
-          {previewHtml ? <TweakPanel iframeRef={iframeRef} /> : null}
+          {showCodeView && previewHtml ? (
+            <CodeViewPanel html={previewHtml} isGenerating={isGenerating} onSave={setPreviewHtml} />
+          ) : (
+            body
+          )}
+          {!showCodeView && previewHtml ? <TweakPanel iframeRef={iframeRef} /> : null}
+          {showHistory ? <HistoryPanel onClose={() => setShowHistory(false)} /> : null}
         </div>
+        <ConsolePanel />
         {commentBubble && interactionMode === 'comment'
           ? (() => {
               const liveForBubble = liveRects[commentBubble.selector];
@@ -627,6 +715,70 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             })()
           : null}
       </div>
+    </div>
+  );
+}
+
+/* ── Code view panel ─────────────────────────────────────────────────── */
+
+interface CodeViewPanelProps {
+  html: string;
+  isGenerating: boolean;
+  onSave: (html: string) => void;
+}
+
+function CodeViewPanel({ html, isGenerating, onSave }: CodeViewPanelProps) {
+  const [draft, setDraft] = useState(html);
+  const [saved, setSaved] = useState(false);
+  const dirty = draft !== html;
+
+  // Keep draft in sync when html changes externally (e.g. agent streaming)
+  useEffect(() => {
+    setDraft(html);
+  }, [html]);
+
+  function handleSave(): void {
+    onSave(draft);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
+
+  function handleKeyDown(e: import('react').KeyboardEvent): void {
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      e.preventDefault();
+      if (!isGenerating) handleSave();
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-[var(--color-background-secondary)]">
+      {isGenerating ? (
+        <div className="flex items-center gap-[var(--space-2)] px-[var(--space-3)] py-[var(--space-1_5)] text-[11.5px] bg-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] border-b border-[var(--color-accent)]/20 text-[var(--color-text-secondary)]">
+          <span className="w-[7px] h-[7px] rounded-full bg-[var(--color-accent)] animate-pulse shrink-0" />
+          Code view is read-only while the agent is running.
+        </div>
+      ) : dirty ? (
+        <div className="flex items-center justify-between gap-[var(--space-2)] px-[var(--space-3)] py-[var(--space-1_5)] text-[11.5px] bg-[color-mix(in_srgb,#f59e0b_10%,transparent)] border-b border-[#f59e0b]/30 text-[var(--color-text-secondary)]">
+          <span>Unsaved edits — save to apply to preview.</span>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="shrink-0 inline-flex items-center h-[22px] px-[10px] rounded-[var(--radius-sm)] text-[11px] font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors duration-100"
+          >
+            {saved ? 'Saved ✓' : 'Save (⌘S)'}
+          </button>
+        </div>
+      ) : null}
+      <textarea
+        value={draft}
+        onChange={(e) => !isGenerating && setDraft(e.target.value)}
+        onKeyDown={handleKeyDown}
+        readOnly={isGenerating}
+        spellCheck={false}
+        className="flex-1 w-full resize-none border-0 bg-transparent p-[var(--space-4)] text-[12.5px] leading-[1.6] font-[ui-monospace,Menlo,monospace] text-[var(--color-text-primary)] outline-none focus:outline-none"
+        style={{ tabSize: 2 }}
+        aria-label="HTML source"
+      />
     </div>
   );
 }

@@ -22,7 +22,7 @@ function InlineCommentComposerCard({ selectedElement }: InlineCommentComposerCar
   const clearCanvasElement = useCodesignStore((s) => s.clearCanvasElement);
   const applyInlineComment = useCodesignStore((s) => s.applyInlineComment);
   const isGenerating = useCodesignStore(
-    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
+    (s) => s.currentDesignId !== null && s.activeGenerations.has(s.currentDesignId),
   );
   const [draft, setDraft] = useState('');
   const applyDisabledReason = isGenerating

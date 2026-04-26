@@ -47,18 +47,21 @@ export function useAgentStream(): void {
   const setPreviewHtmlFromAgent = useCodesignStore((s) => s.setPreviewHtmlFromAgent);
   const updateChatToolStatus = useCodesignStore((s) => s.updateChatToolStatus);
   const persistAgentRunSnapshot = useCodesignStore((s) => s.persistAgentRunSnapshot);
-  const inFlight = useRef<InFlightTurn | null>(null);
+  const setCurrentOperation = useCodesignStore((s) => s.setCurrentOperation);
+  const setLatestTodos = useCodesignStore((s) => s.setLatestTodos);
+  const upsertPageFile = useCodesignStore((s) => s.upsertPageFile);
+  const inFlight = useRef<Map<string, InFlightTurn>>(new Map());
 
-  // Throttled live-preview push. iframe srcdoc reloads the whole page on every
-  // change, so a flurry of str_replace events (10+ per turn is normal) would
-  // strobe. Coalesce to ~250ms with a guaranteed trailing edge so the final
-  // state always lands.
+  // Buffered live-preview push. iframe srcdoc reloads on every change, so
+  // accumulate fs_updated writes and flush once at turn_end instead.
   const fsThrottle = useRef<{
     timer: ReturnType<typeof setTimeout> | null;
     pending: { designId: string; content: string } | null;
     lastFlushAt: number;
   }>({ timer: null, pending: null, lastFlushAt: 0 });
-  const FS_THROTTLE_MS = 250;
+  // Never auto-fire during a turn — flush explicitly at turn_end so the
+  // iframe reloads at most once per LLM response instead of 50+ times.
+  const FS_THROTTLE_MS = 30_000;
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.codesign) return;
@@ -91,28 +94,23 @@ export function useAgentStream(): void {
         generationId: event.generationId,
         designId: event.designId,
       });
-      const previous = inFlight.current;
-      const sameRun =
-        previous &&
-        previous.designId === event.designId &&
-        previous.generationId === event.generationId;
-      inFlight.current = {
+      const gid = event.generationId;
+      const previous = inFlight.current.get(gid);
+      inFlight.current.set(gid, {
         designId: event.designId,
-        generationId: event.generationId,
+        generationId: gid,
         textBuffer: '',
-        lastPersistedText: sameRun ? previous.lastPersistedText : null,
-        pendingTools: sameRun ? previous.pendingTools : [],
-      };
+        lastPersistedText: previous?.lastPersistedText ?? null,
+        pendingTools: previous?.pendingTools ?? [],
+      });
       setStreamingAssistantText({ designId: event.designId, text: '' });
     };
 
     const handleTextDelta = (event: AgentStreamEvent) => {
-      if (!inFlight.current || typeof event.delta !== 'string') return;
-      inFlight.current.textBuffer += event.delta;
-      setStreamingAssistantText({
-        designId: inFlight.current.designId,
-        text: inFlight.current.textBuffer,
-      });
+      const turn = inFlight.current.get(event.generationId);
+      if (!turn || typeof event.delta !== 'string') return;
+      turn.textBuffer += event.delta;
+      setStreamingAssistantText({ designId: turn.designId, text: turn.textBuffer });
     };
 
     const drainPendingTools = (current: InFlightTurn, finalStatus: 'done' | 'error'): void => {
@@ -129,7 +127,7 @@ export function useAgentStream(): void {
     };
 
     const handleTurnEnd = (event: AgentStreamEvent) => {
-      const current = inFlight.current;
+      const current = inFlight.current.get(event.generationId);
       // TODO: replace with rendererLogger once renderer-logger lands
       console.debug('[agent] turn_end', {
         generationId: event.generationId,
@@ -149,12 +147,40 @@ export function useAgentStream(): void {
       if (current) drainPendingTools(current, 'done');
       setStreamingAssistantText(null);
       if (current) current.textBuffer = '';
+      // Flush any buffered fs_updated so the preview shows the latest state
+      // for this turn. Without this the iframe only refreshes at agent_end
+      // which could be minutes away.
+      const slotTurn = fsThrottle.current;
+      if (slotTurn.timer !== null) { clearTimeout(slotTurn.timer); slotTurn.timer = null; }
+      const pendingTurn = slotTurn.pending;
+      slotTurn.pending = null;
+      if (pendingTurn) { slotTurn.lastFlushAt = Date.now(); setPreviewHtmlFromAgent(pendingTurn); }
     };
 
     const handleToolCallStart = (event: AgentStreamEvent) => {
-      const current = inFlight.current;
+      const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
       const toolName = event.toolName ?? 'unknown';
+      // Build a human-readable operation label for the progress bar.
+      const opPath = (event.args as { path?: string } | undefined)?.path;
+      const basename = opPath ? (opPath.split('/').pop() ?? opPath) : null;
+      const opLabel = (() => {
+        if (toolName === 'set_todos') return 'planning';
+        if ((event.command === 'str_replace' || event.command === 'insert') && basename) return `editing ${basename}`;
+        if (event.command === 'create' && basename) return `creating ${basename}`;
+        if (event.command === 'view' && basename) return `reading ${basename}`;
+        if (toolName === 'read_url') return 'reading url';
+        if (toolName === 'read_design_system') return 'reading design system';
+        if (toolName === 'list_files') return 'listing files';
+        if (toolName === 'verify_html') return 'verifying';
+        return basename ? `${toolName} ${basename}` : toolName;
+      })();
+      setCurrentOperation(opLabel);
+      // Update sticky todo header immediately when agent calls set_todos.
+      if (toolName === 'set_todos') {
+        const todos = extractTodosFromArgs(event.args as Record<string, unknown> | undefined);
+        if (todos) setLatestTodos(todos);
+      }
       // TODO: replace with rendererLogger once renderer-logger lands
       console.debug('[agent] tool_call_start', {
         generationId: event.generationId,
@@ -188,8 +214,37 @@ export function useAgentStream(): void {
       }
     };
 
+    const extractTodosFromArgs = (
+      args: Record<string, unknown> | undefined,
+    ): Array<{ text: string; status: 'pending' | 'in_progress' | 'completed' }> | null => {
+      const raw = (args?.['todos'] ?? args?.['items']) as unknown;
+      if (!Array.isArray(raw)) return null;
+      const items = raw
+        .map((it) => {
+          if (typeof it !== 'object' || it === null) return null;
+          const o = it as Record<string, unknown>;
+          const text =
+            typeof o['content'] === 'string'
+              ? o['content']
+              : typeof o['text'] === 'string'
+                ? o['text']
+                : null;
+          if (text === null) return null;
+          const rawStatus = o['status'];
+          const status: 'pending' | 'in_progress' | 'completed' =
+            rawStatus === 'completed' || rawStatus === 'in_progress' || rawStatus === 'pending'
+              ? rawStatus
+              : o['checked'] === true
+                ? 'completed'
+                : 'pending';
+          return { text, status };
+        })
+        .filter((x): x is { text: string; status: 'pending' | 'in_progress' | 'completed' } => x !== null);
+      return items.length > 0 ? items : null;
+    };
+
     const handleToolCallResult = (event: AgentStreamEvent) => {
-      const current = inFlight.current;
+      const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
       if (!current) return;
       const idx = current.pendingTools.findIndex(
@@ -218,16 +273,21 @@ export function useAgentStream(): void {
     };
 
     const handleFsUpdated = (event: AgentStreamEvent) => {
-      // Live mirror of the agent's text_editor mutations into the iframe.
-      // We only react to index.html — other paths (frames/, skills/) are
-      // read-only context and never become the rendered artifact.
-      if (event.path === 'index.html' && typeof event.content === 'string') {
-        scheduleFs({ designId: event.designId, content: event.content });
+      const path = event.path;
+      const content = event.content;
+      if (typeof path !== 'string' || typeof content !== 'string') return;
+      // index.html → primary live preview (throttled).
+      if (path === 'index.html') {
+        scheduleFs({ designId: event.designId, content });
+      }
+      // page-*.html → additional page files tracked in store for tab rendering.
+      if (path === 'index.html' || /^page-[^/]+\.html$/.test(path)) {
+        upsertPageFile(path, content);
       }
     };
 
     const handleError = (event: AgentStreamEvent) => {
-      const current = inFlight.current;
+      setCurrentOperation(null);
       // TODO: replace with rendererLogger once renderer-logger lands
       console.error('[agent] error', {
         generationId: event.generationId,
@@ -236,7 +296,7 @@ export function useAgentStream(): void {
         code: event.code,
       });
       setStreamingAssistantText(null);
-      inFlight.current = null;
+      inFlight.current.delete(event.generationId);
       void appendChatMessage({
         designId: event.designId,
         kind: 'error',
@@ -249,17 +309,23 @@ export function useAgentStream(): void {
       // "running" if the IPC promise that drives sendPrompt hangs. Only clear
       // when the error belongs to the design the store thinks is generating.
       const s = useCodesignStore.getState();
+      const nextActiveGenerations = new Set(s.activeGenerations);
+      nextActiveGenerations.delete(event.designId);
       if (s.generatingDesignId === event.designId) {
         useCodesignStore.setState({
-          isGenerating: false,
+          isGenerating: nextActiveGenerations.size > 0,
           generatingDesignId: null,
           generationStage: 'error',
           streamingAssistantText: null,
+          activeGenerations: nextActiveGenerations,
         });
+      } else {
+        useCodesignStore.setState({ activeGenerations: nextActiveGenerations });
       }
     };
 
     const handleAgentEnd = (event: AgentStreamEvent) => {
+      setCurrentOperation(null);
       // Flush any throttled fs_updated payload synchronously so the preview
       // store reflects the final html before we read it back for persistence.
       const slot = fsThrottle.current;
@@ -273,24 +339,30 @@ export function useAgentStream(): void {
         slot.lastFlushAt = Date.now();
         setPreviewHtmlFromAgent(pending);
       }
-      const finalText = inFlight.current?.lastPersistedText ?? undefined;
+      const turn = inFlight.current.get(event.generationId);
+      const finalText = turn?.lastPersistedText ?? undefined;
       void persistAgentRunSnapshot({
         designId: event.designId,
         ...(finalText ? { finalText } : {}),
       });
-      inFlight.current = null;
+      inFlight.current.delete(event.generationId);
       // Defensive: clear generation flags. The sendPrompt Promise resolution
       // would normally clear them shortly after, but if the main-process IPC
       // hangs for any reason the UI would be stuck in "running" forever.
       // Mirror the happy-path terminal state here as a belt-and-suspenders.
       const s = useCodesignStore.getState();
+      const nextActiveGenerations = new Set(s.activeGenerations);
+      nextActiveGenerations.delete(event.designId);
       if (s.generatingDesignId === event.designId) {
         useCodesignStore.setState({
-          isGenerating: false,
+          isGenerating: nextActiveGenerations.size > 0,
           generatingDesignId: null,
           generationStage: 'done',
           streamingAssistantText: null,
+          activeGenerations: nextActiveGenerations,
         });
+      } else {
+        useCodesignStore.setState({ activeGenerations: nextActiveGenerations });
       }
       // Fire the auto-polish follow-up exactly once per design. Delay so the
       // isGenerating flag and persisted assistant_text row have settled before
@@ -341,6 +413,7 @@ export function useAgentStream(): void {
     });
     return () => {
       off();
+      inFlight.current.clear();
       const slot = fsThrottle.current;
       if (slot.timer !== null) {
         clearTimeout(slot.timer);
@@ -354,5 +427,8 @@ export function useAgentStream(): void {
     setPreviewHtmlFromAgent,
     updateChatToolStatus,
     persistAgentRunSnapshot,
+    setCurrentOperation,
+    setLatestTodos,
+    upsertPageFile,
   ]);
 }

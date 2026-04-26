@@ -352,6 +352,8 @@ export const ConfigV3Schema = z.object({
   // hanging the main process before the window could open.
   activeProvider: z.string(),
   activeModel: z.string(),
+  /** Optional cheaper/faster model used for quick tasks (inline edits, lint passes). */
+  modelFast: z.string().optional(),
   secrets: z.record(z.string(), SecretRef).default({}),
   providers: z.record(z.string(), ProviderEntrySchema).default({}),
   designSystem: StoredDesignSystem.optional(),
@@ -466,6 +468,7 @@ export function toPersistedV3(cfg: Config | ConfigV3): ConfigV3 {
     version: 3,
     activeProvider: cfg.activeProvider,
     activeModel: cfg.activeModel,
+    ...(cfg.modelFast !== undefined ? { modelFast: cfg.modelFast } : {}),
     secrets: cfg.secrets,
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
@@ -479,6 +482,8 @@ export interface OnboardingState {
   hasKey: boolean;
   provider: string | null;
   modelPrimary: string | null;
+  /** Optional cheaper/faster model used for quick tasks (inline edits, lint passes). */
+  modelFast: string | null;
   baseUrl: string | null;
   designSystem: StoredDesignSystem | null;
 }

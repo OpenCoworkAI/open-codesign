@@ -21,8 +21,10 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Search,
   Sliders,
   Trash2,
+  X,
   Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -37,6 +39,11 @@ import { recordAction } from '../lib/action-timeline';
 import { useCodesignStore } from '../store';
 import { AddCustomProviderModal } from './AddCustomProviderModal';
 import { ChatgptLoginCard } from './ChatgptLoginCard';
+import {
+  MODEL_LIST_SEARCH_THRESHOLD,
+  filterModels,
+  mergeActiveModelIfMissing,
+} from './ModelSwitcher';
 import { DiagnosticsPanel } from './settings/DiagnosticsPanel';
 
 type Tab = 'models' | 'images' | 'appearance' | 'storage' | 'diagnostics' | 'advanced';
@@ -1931,6 +1938,16 @@ function ModelsTab() {
               setShowAddMenu(false);
               void handleAddOllama();
             }}
+            onAddOpenRouter={() => {
+              setShowAddMenu(false);
+              setCustomProviderPreset({
+                name: 'OpenRouter',
+                baseUrl: 'https://openrouter.ai/api/v1',
+                wire: 'openai-chat',
+                defaultModel: SHORTLIST.openrouter.defaultPrimary,
+              });
+              setShowAddCustom(true);
+            }}
             onAddCustom={() => {
               setShowAddMenu(false);
               setShowAddCustom(true);
@@ -1978,8 +1995,285 @@ function ModelsTab() {
             ))}
           </div>
         )}
+
+        <ModelRoutingSection config={config} setConfig={setConfig} />
       </div>
     </>
+  );
+}
+
+// ─── Model routing section ────────────────────────────────────────────────────
+
+function ModelRoutingSection({
+  config,
+  setConfig,
+}: {
+  config: OnboardingState | null;
+  setConfig: (next: OnboardingState) => void;
+}) {
+  const t = useT();
+  const pushToast = useCodesignStore((s) => s.pushToast);
+  const [fastModel, setFastModel] = useState<string>(config?.modelFast ?? '');
+  const [saving, setSaving] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [listLoading, setListLoading] = useState(() => Boolean(config?.provider));
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const notInListSuffix = t('settings.providers.activeNotInList');
+
+  useEffect(() => {
+    setFastModel(config?.modelFast ?? '');
+  }, [config?.modelFast]);
+
+  useEffect(() => {
+    if (!window.codesign?.models?.listForProvider || !config?.provider) {
+      setQuery('');
+      setAvailableModels([]);
+      setListLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setQuery('');
+    setListLoading(true);
+    setAvailableModels([]);
+    void window.codesign.models.listForProvider(config.provider).then((res) => {
+      if (cancelled) return;
+      setListLoading(false);
+      if (res.ok) setAvailableModels(res.models);
+      else setAvailableModels([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [config?.provider]);
+
+  const modelIdsForList = useMemo(
+    () => mergeActiveModelIfMissing(availableModels, fastModel),
+    [availableModels, fastModel],
+  );
+  const showSearch = modelIdsForList.length > MODEL_LIST_SEARCH_THRESHOLD;
+  const filteredModelIds = useMemo(
+    () => filterModels(modelIdsForList, query),
+    [modelIdsForList, query],
+  );
+
+  function modelLabel(m: string) {
+    return m && !availableModels.includes(m) ? `${m} ${notInListSuffix}` : m;
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
+  async function handleSave() {
+    if (!window.codesign) return;
+    setSaving(true);
+    try {
+      const next = await window.codesign.config.setFastModel(fastModel.trim() || null);
+      setConfig(next);
+      pushToast({ variant: 'success', title: t('settings.modelRouting.saved') });
+    } catch (err) {
+      pushToast({
+        variant: 'error',
+        title: t('settings.modelRouting.saveFailed'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const buttonLabel = fastModel || t('settings.modelRouting.usePrimary');
+
+  return (
+    <div className="pt-4 border-t border-[var(--color-border-subtle)] space-y-3">
+      <div>
+        <SectionTitle>{t('settings.modelRouting.title')}</SectionTitle>
+        <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] mt-1 leading-[var(--leading-body)]">
+          {t('settings.modelRouting.hint')}
+        </p>
+      </div>
+
+      <Row
+        label={t('settings.modelRouting.primaryLabel')}
+        hint={t('settings.modelRouting.primaryHint')}
+      >
+        <span className="text-[var(--text-sm)] text-[var(--color-text-secondary)] font-mono">
+          {config?.modelPrimary ?? '—'}
+        </span>
+      </Row>
+
+      <Row label={t('settings.modelRouting.fastLabel')} hint={t('settings.modelRouting.fastHint')}>
+        <div className="flex items-start gap-2">
+          {listLoading && availableModels.length === 0 && config?.provider ? (
+            <div className="flex h-8 w-80 max-w-full items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--color-text-muted)]" />
+            </div>
+          ) : availableModels.length > 0 ? (
+            <div ref={rootRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                className="flex min-w-[200px] items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2_5)] py-[var(--space-1)] select-none hover:bg-[var(--color-surface-hover)] transition-colors"
+              >
+                <span
+                  className="text-[var(--text-xs)] text-[var(--color-text-primary)] truncate"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                >
+                  {buttonLabel}
+                </span>
+                <ChevronDown
+                  className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''} text-[var(--color-text-muted)]`}
+                  aria-hidden
+                />
+              </button>
+              {open ? (
+                <div className="absolute z-50 top-full mt-[var(--space-1)] left-0 min-w-[260px] overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] shadow-[var(--shadow-card)]">
+                  {showSearch && (
+                    <div className="relative border-b border-[var(--color-border-muted)] p-[var(--space-2)]">
+                      <Search
+                        className="pointer-events-none absolute left-[calc(var(--space-2)+var(--space-2))] top-1/2 h-[var(--size-icon-xs)] w-[var(--size-icon-xs)] -translate-y-1/2 text-[var(--color-text-muted)]"
+                        aria-hidden
+                      />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder={t('topbar.modelSwitcher.searchPlaceholder', {
+                          defaultValue: 'Search models…',
+                        })}
+                        aria-label={t('topbar.modelSwitcher.searchAriaLabel', {
+                          defaultValue: 'Filter models by name',
+                        })}
+                        className="h-[var(--size-control-xs)] w-full rounded-[var(--radius-sm)] border-0 bg-transparent pl-[calc(var(--space-2)+var(--size-icon-xs)+var(--space-1_5))] pr-[calc(var(--space-2)+var(--size-icon-sm))] text-[var(--text-xs)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-focus-ring)]"
+                        style={{ fontFamily: 'var(--font-mono)' }}
+                      />
+                      {query.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuery('');
+                            searchInputRef.current?.focus();
+                          }}
+                          aria-label={t('topbar.modelSwitcher.clearSearch', {
+                            defaultValue: 'Clear search',
+                          })}
+                          className="absolute right-[calc(var(--space-2)+var(--space-1))] top-1/2 inline-flex h-[var(--size-icon-sm)] w-[var(--size-icon-sm)] -translate-y-1/2 items-center justify-center rounded-full text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                        >
+                          <X
+                            className="h-[var(--size-icon-xs)] w-[var(--size-icon-xs)]"
+                            aria-hidden
+                          />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div className="max-h-[280px] overflow-y-auto py-[var(--space-1)]">
+                    {listLoading && availableModels.length === 0 ? (
+                      <div className="flex items-center justify-center py-[var(--space-3)]">
+                        <Loader2 className="h-4 w-4 animate-spin text-[var(--color-text-muted)]" />
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFastModel('');
+                            setOpen(false);
+                          }}
+                          className={`relative w-full py-[var(--space-1_5)] pl-[var(--space-3)] pr-[var(--space-3)] text-left text-[12px] transition-colors ${
+                            fastModel === ''
+                              ? 'bg-[var(--color-surface-hover)] font-medium text-[var(--color-text-primary)]'
+                              : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]'
+                          }`}
+                        >
+                          {fastModel === '' && (
+                            <span
+                              aria-hidden
+                              className="absolute bottom-[3px] left-0 top-[3px] w-[2px] rounded-r-full bg-[var(--color-accent)]"
+                            />
+                          )}
+                          {t('settings.modelRouting.usePrimary')}
+                        </button>
+                        {filteredModelIds.length > 0 ? (
+                          filteredModelIds.map((m) => {
+                            const isActive = m === fastModel;
+                            return (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => {
+                                  setFastModel(m);
+                                  setOpen(false);
+                                }}
+                                className={`relative w-full py-[var(--space-1_5)] pl-[var(--space-3)] pr-[var(--space-3)] text-left text-[12px] transition-colors ${
+                                  isActive
+                                    ? 'bg-[var(--color-surface-hover)] font-medium text-[var(--color-text-primary)]'
+                                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]'
+                                }`}
+                                style={{ fontFamily: 'var(--font-mono)' }}
+                              >
+                                {isActive && (
+                                  <span
+                                    aria-hidden
+                                    className="absolute bottom-[3px] left-0 top-[3px] w-[2px] rounded-r-full bg-[var(--color-accent)]"
+                                  />
+                                )}
+                                {modelLabel(m)}
+                              </button>
+                            );
+                          })
+                        ) : availableModels.length > 0 && query.trim().length > 0 ? (
+                          <div className="px-[var(--space-3)] py-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
+                            {t('topbar.modelSwitcher.noMatches', {
+                              defaultValue: 'No models match "{{query}}"',
+                              query: query.trim(),
+                            })}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : config?.provider ? (
+            <input
+              type="text"
+              value={fastModel}
+              onChange={(e) => setFastModel(e.target.value)}
+              placeholder={t('settings.modelRouting.fastPlaceholder')}
+              className="h-8 w-56 max-w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+            />
+          ) : (
+            <span className="text-[var(--text-sm)] text-[var(--color-text-muted)]">—</span>
+          )}
+          <Button size="sm" variant="secondary" onClick={() => void handleSave()} disabled={saving}>
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+            {t('settings.modelRouting.saveButton')}
+          </Button>
+        </div>
+      </Row>
+    </div>
   );
 }
 
@@ -2602,6 +2896,7 @@ interface AddProviderMenuProps {
   onImportCodex: () => void;
   onImportClaudeCode: () => void;
   onAddOllama: () => void;
+  onAddOpenRouter: () => void;
   onAddCustom: () => void;
   onAddCliProxyApi: () => void;
 }
@@ -2614,6 +2909,7 @@ function AddProviderMenu({
   onImportCodex,
   onImportClaudeCode,
   onAddOllama,
+  onAddOpenRouter,
   onAddCustom,
   onAddCliProxyApi,
 }: AddProviderMenuProps) {
@@ -2662,6 +2958,15 @@ function AddProviderMenu({
       }),
       disabled: hasClaudeCodeImported,
       onClick: onImportClaudeCode,
+    },
+    {
+      key: 'openrouter',
+      label: 'OpenRouter',
+      desc: t('settings.providers.import.openrouterMenuDesc', {
+        defaultValue: 'Access 200+ models with one API key',
+      }),
+      disabled: false,
+      onClick: onAddOpenRouter,
     },
     {
       key: 'ollama',

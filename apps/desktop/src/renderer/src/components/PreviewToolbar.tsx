@@ -1,9 +1,16 @@
 import { useT } from '@open-codesign/i18n';
-import { Download, MessageSquare } from 'lucide-react';
+import { Clock, Code2, Download, MessageSquare } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
 import type { PreviewViewport } from '../store';
 import { useCodesignStore } from '../store';
+
+export interface PreviewToolbarExternalProps {
+  onToggleHistory: () => void;
+  historyOpen: boolean;
+  showCodeView?: boolean;
+  onToggleCodeView?: () => void;
+}
 
 interface ExportItem {
   format: ExportFormat;
@@ -14,7 +21,7 @@ interface ExportItem {
 
 const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200] as const;
 
-export function PreviewToolbar(): ReactElement {
+export function PreviewToolbar({ onToggleHistory, historyOpen, showCodeView, onToggleCodeView }: PreviewToolbarExternalProps): ReactElement {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const exportActive = useCodesignStore((s) => s.exportActive);
@@ -96,6 +103,38 @@ export function PreviewToolbar(): ReactElement {
           {toastMessage}
         </output>
       )}
+
+      {onToggleCodeView ? (
+        <button
+          type="button"
+          disabled={disabled}
+          aria-pressed={showCodeView}
+          onClick={onToggleCodeView}
+          className={`inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)] disabled:opacity-40 disabled:pointer-events-none ${
+            showCodeView
+              ? 'text-[var(--color-accent)]'
+              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'
+          }`}
+        >
+          <Code2 className="w-3.5 h-3.5" aria-hidden="true" />
+          Code
+        </button>
+      ) : null}
+
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={historyOpen}
+        onClick={onToggleHistory}
+        className={`inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)] disabled:opacity-40 disabled:pointer-events-none ${
+          historyOpen
+            ? 'text-[var(--color-accent)]'
+            : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'
+        }`}
+      >
+        <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+        History
+      </button>
 
       <button
         type="button"

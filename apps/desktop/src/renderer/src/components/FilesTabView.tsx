@@ -17,15 +17,15 @@ function WorkspaceSection() {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
-  const isGenerating = useCodesignStore((s) => s.isGenerating);
-  const generatingDesignId = useCodesignStore((s) => s.generatingDesignId);
+  const activeGenerations = useCodesignStore((s) => s.activeGenerations);
   const requestWorkspaceRebind = useCodesignStore((s) => s.requestWorkspaceRebind);
   const [picking, setPicking] = useState(false);
   const [folderExists, setFolderExists] = useState<boolean | null>(null);
 
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const workspacePath = currentDesign?.workspacePath ?? null;
-  const isCurrentDesignGenerating = isGenerating && generatingDesignId === currentDesignId;
+  const isCurrentDesignGenerating =
+    currentDesignId !== null && activeGenerations.has(currentDesignId);
   const disabled = picking || isCurrentDesignGenerating;
 
   useEffect(() => {
@@ -317,7 +317,7 @@ export function FilesTabView() {
                   pushIframeError(`SET_MODE postMessage failed: ${reason}`);
                 }
               }}
-              className="w-full h-full bg-white border-0 block"
+              className="w-full h-full bg-transparent border-0 block"
             />
           ) : (
             <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">

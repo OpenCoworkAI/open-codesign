@@ -129,14 +129,27 @@ const USE_AGENT_RUNTIME = (() => {
 
 const IS_VITEST = process.env['VITEST'] === 'true';
 
+/** No OS title bar; renderer draws TopBar with -webkit-app-region. Register once (not in createWindow — macOS can call createWindow again on activate). */
+function registerWindowChromeIpc(): void {
+  ipcMain.on('window:minimize', () => mainWindow?.minimize());
+  ipcMain.on('window:maximize', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+  });
+  ipcMain.on('window:close', () => mainWindow?.close());
+}
+
 function createWindow(): void {
+  // frame: false removes the native title bar and window controls; we provide
+  // a custom top bar in the renderer (see TopBar, WindowControls).
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 960,
     minHeight: 640,
-    autoHideMenuBar: process.platform !== 'darwin',
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    frame: false,
+    autoHideMenuBar: true,
     backgroundColor: BRAND.backgroundColor,
     icon: join(__dirname, '../../resources/icon.png'),
     show: false,
@@ -148,7 +161,12 @@ function createWindow(): void {
     },
   });
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show());
+  mainWindow.on('ready-to-show', () => {
+    if (process.platform === 'win32' || process.platform === 'linux') {
+      mainWindow?.setMenuBarVisibility(false);
+    }
+    mainWindow?.show();
+  });
   // Null the reference on close so stale IPC sends from async emitters
   // (autoUpdater, long-running generate runs) become clean no-ops rather
   // than throwing "Object has been destroyed" on a discarded webContents.
@@ -1084,7 +1102,12 @@ function registerIpcHandlers(db: Database | null): void {
       // Inline-comment edits don't need to be tied to whatever provider was
       // pinned in the original generate; resolve fresh against the canonical
       // active provider so a switch in Settings takes effect immediately.
-      const hint = payload.model ?? { provider: cfg.provider, modelId: cfg.modelPrimary };
+      // Prefer modelFast when configured — it's cheaper for quick edits.
+      const fastModelId = cfg.modelFast ?? null;
+      const hint = payload.model ?? {
+        provider: cfg.provider,
+        modelId: fastModelId ?? cfg.modelPrimary,
+      };
       const active = resolveActiveModel(cfg, hint);
       const allowKeyless = active.allowKeyless;
       const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
@@ -1359,6 +1382,7 @@ if (!IS_VITEST) {
       registerDiagnosticsIpc(diagnosticsDb);
       setupAutoUpdater();
       registerAppMenu();
+      registerWindowChromeIpc();
       createWindow();
       void scheduleStartupUpdateCheck();
 

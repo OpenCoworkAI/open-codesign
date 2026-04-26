@@ -314,6 +314,8 @@ const api = {
         'config:v1:set-active-provider-and-model',
         input,
       ) as Promise<OnboardingState>,
+    setFastModel: (modelFast: string | null) =>
+      ipcRenderer.invoke('config:v1:set-fast-model', { modelFast }) as Promise<OnboardingState>,
     testEndpoint: (input: {
       wire: WireApi;
       baseUrl: string;
@@ -572,6 +574,9 @@ const api = {
   },
   openExternal: (url: string) =>
     ipcRenderer.invoke('codesign:v1:open-external', url) as Promise<void>,
+  minimize: () => ipcRenderer.send('window:minimize'),
+  maximize: () => ipcRenderer.send('window:maximize'),
+  close: () => ipcRenderer.send('window:close'),
 };
 
 contextBridge.exposeInMainWorld('codesign', api);

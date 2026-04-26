@@ -22,7 +22,7 @@ export function CommentChipBar() {
   const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const config = useCodesignStore((s) => s.config);
   const isGenerating = useCodesignStore(
-    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
+    (s) => s.currentDesignId !== null && s.activeGenerations.has(s.currentDesignId),
   );
 
   const pending = comments.filter((c) => c.kind === 'edit' && c.status === 'pending');
