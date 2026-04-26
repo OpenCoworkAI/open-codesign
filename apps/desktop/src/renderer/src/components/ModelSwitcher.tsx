@@ -193,8 +193,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
           });
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, activeProvider, currentModel]);
 
   // Auto-focus search when any section has models
   const totalModels = useMemo(() => {

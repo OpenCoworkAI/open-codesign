@@ -551,6 +551,7 @@ describe('useCodesignStore design management', () => {
     useCodesignStore.setState({
       currentDesignId: 'design-a',
       isGenerating: true,
+      activeGenerations: new Set(['design-a']),
     });
 
     await useCodesignStore.getState().softDeleteDesign('design-a');
@@ -1174,6 +1175,7 @@ describe('useCodesignStore generation-blocking workspace guards', () => {
       currentDesignId: 'design-1',
       isGenerating: true,
       generatingDesignId: 'design-1',
+      activeGenerations: new Set(['design-1']),
       workspaceRebindPending: null,
     });
 
@@ -1189,6 +1191,7 @@ describe('useCodesignStore generation-blocking workspace guards', () => {
       currentDesignId: 'design-1',
       isGenerating: true,
       generatingDesignId: 'design-2',
+      activeGenerations: new Set(['design-2']),
       workspaceRebindPending: null,
     });
 

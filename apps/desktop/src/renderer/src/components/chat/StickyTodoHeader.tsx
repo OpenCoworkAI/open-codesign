@@ -53,8 +53,7 @@ export function StickyTodoHeader() {
         <div className="px-[var(--space-4)] pb-[var(--space-2)] space-y-[3px]">
           {todos.map((todo, i) => (
             <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: todo list is replaced atomically, index is stable per snapshot
-              key={i}
+              key={`todo-${i}-${todo.text}`}
               className="flex items-start gap-[var(--space-2)] text-[12px] leading-[1.4]"
             >
               {todo.status === 'completed' ? (

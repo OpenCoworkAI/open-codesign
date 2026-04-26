@@ -53,10 +53,11 @@ export function ConsolePanel() {
   const errorCount = logs.filter((l) => l.level === 'error').length;
   const warnCount = logs.filter((l) => l.level === 'warn').length;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: autoscroll when the log list updates
   useEffect(() => {
     if (!open || !stickyRef.current) return;
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [logs.length, open]);
+  }, [open, logs]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -134,8 +135,7 @@ export function ConsolePanel() {
             </div>
           ) : (
             logs.map((entry, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: console logs are append-only, index is stable within a session
-              <ConsoleRow key={i} entry={entry} />
+              <ConsoleRow key={`log-${i}-${entry.timestamp}-${entry.level}`} entry={entry} />
             ))
           )}
           <div ref={bottomRef} />
