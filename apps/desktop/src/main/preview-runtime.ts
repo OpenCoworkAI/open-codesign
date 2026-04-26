@@ -44,12 +44,14 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
   let sourcePath = opts.path;
   try {
     source = await readPreviewSource(absWorkspace, opts.path);
-    const reference = findArtifactSourceReference(source);
-    const referencedPath =
-      reference === null ? null : resolveArtifactSourceReferencePath(opts.path, reference);
-    if (referencedPath !== null) {
-      source = await readPreviewSource(absWorkspace, referencedPath);
-      sourcePath = referencedPath;
+    if (isHtmlPreviewPath(opts.path)) {
+      const reference = findArtifactSourceReference(source);
+      const referencedPath =
+        reference === null ? null : resolveArtifactSourceReferencePath(opts.path, reference);
+      if (referencedPath !== null) {
+        source = await readPreviewSource(absWorkspace, referencedPath);
+        sourcePath = referencedPath;
+      }
     }
   } catch (err) {
     return emptyFail(err instanceof Error ? err.message : String(err));
@@ -222,6 +224,11 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
       /* noop */
     }
   }
+}
+
+function isHtmlPreviewPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return lower.endsWith('.html') || lower.endsWith('.htm');
 }
 
 function resolveWorkspaceChild(absWorkspace: string, relPath: string): string {

@@ -134,6 +134,21 @@ describeIfChrome('runPreview with real Chrome', () => {
     expect(result.domOutline).toContain('main#jsx-root');
   }, 30_000);
 
+  it('does not follow source-reference-looking strings inside JSX files', async () => {
+    writeFileSync(
+      join(tempDir, 'Marker.jsx'),
+      'const marker = "<!-- artifact source lives in missing.jsx -->";\nfunction App() { return <main id="marker-root">{marker}</main>; }',
+      'utf8',
+    );
+    const result = await runPreview({
+      path: 'Marker.jsx',
+      vision: false,
+      workspaceRoot: tempDir,
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.domOutline).toContain('main#marker-root');
+  }, 30_000);
+
   it('renders placeholder HTML files through their referenced JSX source', async () => {
     writeFileSync(
       join(tempDir, 'index.html'),

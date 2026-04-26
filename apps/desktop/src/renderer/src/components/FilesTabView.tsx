@@ -179,6 +179,17 @@ export function isRenderableDesignFileKind(kind: DesignFileKind | undefined): bo
   return kind === 'html' || kind === 'jsx' || kind === 'tsx';
 }
 
+export function defaultWorkspacePreviewPath(files: DesignFileEntry[]): string | null {
+  return (
+    files.find((f) => f.path === 'index.html')?.path ??
+    files.find((f) => f.path === 'index.jsx')?.path ??
+    files.find((f) => f.path === 'index.tsx')?.path ??
+    files.find((f) => isRenderableDesignFileKind(f.kind))?.path ??
+    files[0]?.path ??
+    null
+  );
+}
+
 export function workspaceBaseHrefFromPath(path: string | null | undefined): string | undefined {
   if (!path) return undefined;
   let normalized = path.replaceAll('\\', '/');
@@ -203,14 +214,39 @@ export function chooseWorkspacePreviewSourceMode(input: {
   return 'unavailable';
 }
 
+function isHtmlPreviewPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return lower.endsWith('.html') || lower.endsWith('.htm');
+}
+
 export function resolveReferencedWorkspacePreviewPath(source: string, path: string): string | null {
+  if (!isHtmlPreviewPath(path)) return null;
   const reference = findArtifactSourceReference(source);
   return reference === null ? null : resolveArtifactSourceReferencePath(path, reference);
+}
+
+function designFileRevisionKey(file: DesignFileEntry | null | undefined): string | null {
+  if (!file) return null;
+  return `${file.path}:${file.updatedAt}:${file.size ?? ''}`;
+}
+
+export function workspacePreviewDependencyKey(
+  files: DesignFileEntry[],
+  selectedPath: string,
+  sourcePath: string | null | undefined,
+): string | null {
+  const selected = designFileRevisionKey(files.find((f) => f.path === selectedPath));
+  const source =
+    sourcePath && sourcePath !== selectedPath
+      ? designFileRevisionKey(files.find((f) => f.path === sourcePath))
+      : null;
+  return [selected, source].filter((part): part is string => part !== null).join('|') || null;
 }
 
 interface WorkspaceFilePreviewProps {
   path: string;
   file?: DesignFileEntry | null | undefined;
+  files?: DesignFileEntry[] | null | undefined;
 }
 
 interface WorkspacePreviewSource {
@@ -218,30 +254,34 @@ interface WorkspacePreviewSource {
   path: string;
 }
 
-export function WorkspaceFilePreview({ path, file }: WorkspaceFilePreviewProps) {
+export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreviewProps) {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
-  const { files: observedFiles } = useDesignFiles(file ? null : currentDesignId);
+  const { files: observedFiles } = useDesignFiles(files ? null : currentDesignId);
+  const workspaceFiles = files ?? observedFiles;
   const currentDesign = designs.find((d) => d.id === currentDesignId);
-  const effectiveFile = file ?? observedFiles.find((f) => f.path === path) ?? null;
+  const effectiveFile = file ?? workspaceFiles.find((f) => f.path === path) ?? null;
   const baseHref = workspaceBaseHrefFromPath(currentDesign?.workspacePath);
   const renderable = effectiveFile
     ? isRenderableDesignFileKind(effectiveFile.kind)
     : isRenderablePath(path);
-  const fileRevision = effectiveFile
-    ? `${effectiveFile.updatedAt}:${effectiveFile.size ?? ''}`
-    : null;
   const [previewSource, setPreviewSource] = useState<WorkspacePreviewSource | null>(null);
+  const previewDependencyKey = workspacePreviewDependencyKey(
+    workspaceFiles,
+    path,
+    previewSource?.path,
+  );
   const [readError, setReadError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    // Re-read when the file watcher reports changed metadata for the same path.
-    void fileRevision;
+    // Re-read when the file watcher reports changed metadata for either the
+    // selected file or an HTML placeholder's resolved JSX/TSX source.
+    void previewDependencyKey;
     if (!renderable || !currentDesignId) {
       setPreviewSource(null);
       setReadError(null);
@@ -284,7 +324,7 @@ export function WorkspaceFilePreview({ path, file }: WorkspaceFilePreviewProps) 
     return () => {
       cancelled = true;
     };
-  }, [currentDesignId, fileRevision, path, previewHtml, renderable, t]);
+  }, [currentDesignId, previewDependencyKey, path, previewHtml, renderable, t]);
 
   const srcDoc = useMemo(() => {
     if (!previewSource || !renderable) return null;
@@ -339,10 +379,7 @@ export function FilesTabView() {
   const openFileTab = useCodesignStore((s) => s.openCanvasFileTab);
   const { files } = useDesignFiles(currentDesignId);
 
-  const defaultPath = useMemo(() => {
-    if (files.find((f) => f.path === 'index.html')) return 'index.html';
-    return files[0]?.path ?? null;
-  }, [files]);
+  const defaultPath = useMemo(() => defaultWorkspacePreviewPath(files), [files]);
 
   const [selectedPath, setSelectedPath] = useState<string | null>(defaultPath);
 
@@ -460,7 +497,7 @@ export function FilesTabView() {
         </div>
         <div className="flex-1 min-h-0 bg-[var(--color-background-secondary)]">
           {selectedPath ? (
-            <WorkspaceFilePreview path={selectedPath} file={selectedFile} />
+            <WorkspaceFilePreview path={selectedPath} file={selectedFile} files={files} />
           ) : (
             <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
               {t('canvas.filesTabEmpty')}

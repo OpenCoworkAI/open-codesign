@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { openFileTab } from '../store/slices/tabs';
 import {
   chooseWorkspacePreviewSourceMode,
+  defaultWorkspacePreviewPath,
   isRenderableDesignFileKind,
   resolveReferencedWorkspacePreviewPath,
   workspaceBaseHrefFromPath,
+  workspacePreviewDependencyKey,
 } from './FilesTabView';
 
 describe('FilesTabView preview helpers', () => {
@@ -27,6 +29,21 @@ describe('FilesTabView preview helpers', () => {
     const result = openFileTab([{ kind: 'files' }], 'src/App.jsx');
     expect(result.tabs).toEqual([{ kind: 'files' }, { kind: 'file', path: 'src/App.jsx' }]);
     expect(result.index).toBe(1);
+  });
+
+  it('chooses renderable entry files before non-renderable assets by default', () => {
+    expect(
+      defaultWorkspacePreviewPath([
+        { path: '.DS_Store', kind: 'asset', updatedAt: '2026-04-26T00:00:00Z', size: 1 },
+        { path: 'index.jsx', kind: 'jsx', updatedAt: '2026-04-26T00:00:00Z', size: 100 },
+      ]),
+    ).toBe('index.jsx');
+    expect(
+      defaultWorkspacePreviewPath([
+        { path: 'assets/logo.png', kind: 'asset', updatedAt: '2026-04-26T00:00:00Z', size: 1 },
+        { path: 'App.tsx', kind: 'tsx', updatedAt: '2026-04-26T00:00:00Z', size: 100 },
+      ]),
+    ).toBe('App.tsx');
   });
 
   it('prefers actual workspace reads over previewHtml when the files API is available', () => {
@@ -85,5 +102,28 @@ describe('FilesTabView preview helpers', () => {
         'index.html',
       ),
     ).toBeNull();
+  });
+
+  it('does not resolve artifact source comments from non-HTML files', () => {
+    expect(
+      resolveReferencedWorkspacePreviewPath(
+        'const marker = "<!-- artifact source lives in other.jsx -->";',
+        'App.jsx',
+      ),
+    ).toBeNull();
+  });
+
+  it('tracks both the selected placeholder and resolved source file revisions', () => {
+    const files = [
+      { path: 'index.html', kind: 'html' as const, updatedAt: '2026-04-26T00:00:00Z', size: 100 },
+      { path: 'index.jsx', kind: 'jsx' as const, updatedAt: '2026-04-26T00:00:01Z', size: 200 },
+    ];
+
+    expect(workspacePreviewDependencyKey(files, 'index.html', 'index.jsx')).toBe(
+      'index.html:2026-04-26T00:00:00Z:100|index.jsx:2026-04-26T00:00:01Z:200',
+    );
+    expect(workspacePreviewDependencyKey(files, 'index.html', 'index.html')).toBe(
+      'index.html:2026-04-26T00:00:00Z:100',
+    );
   });
 });
