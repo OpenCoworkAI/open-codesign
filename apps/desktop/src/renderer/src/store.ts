@@ -1363,11 +1363,31 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   triggerDecompose: (designId, locale) => {
     const s = get();
-    if (s.isGenerating) return;
-    // Decompose only makes sense once an artifact exists; require at least one
-    // assistant_text on this design (mirrors the gate used by tryAutoPolish).
+    // Branch 1: a generation is in flight — block & tell the user
+    if (s.isGenerating) {
+      get().pushToast({
+        variant: 'info',
+        title: tr('sidebar.decomposeBusyTitle'),
+        description: tr('sidebar.decomposeBusyDescription'),
+      });
+      return;
+    }
+    // Branch 2: no artifact yet — decompose has nothing to operate on
     const designMessages = s.chatMessages.filter((m) => m.designId === designId);
-    if (!designMessages.some((m) => m.kind === 'assistant_text')) return;
+    if (!designMessages.some((m) => m.kind === 'assistant_text')) {
+      get().pushToast({
+        variant: 'info',
+        title: tr('sidebar.decomposeUnavailableTitle'),
+        description: tr('sidebar.decomposeToUiKitDisabled'),
+      });
+      return;
+    }
+    // Branch 3: fire the structured prompt + tell the user something is happening
+    get().pushToast({
+      variant: 'info',
+      title: tr('sidebar.decomposeStartedTitle'),
+      description: tr('sidebar.decomposeStartedDescription'),
+    });
     void import('./hooks/decomposePrompt').then(({ pickDecomposePrompt }) => {
       const prompt = pickDecomposePrompt(locale);
       void get().sendPrompt({ prompt, silent: true });

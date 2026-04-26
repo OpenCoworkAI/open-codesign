@@ -15,7 +15,7 @@ import {
   generateTitle,
   generateViaAgent,
 } from '@open-codesign/core';
-import { detectProviderFromKey, generateImage } from '@open-codesign/providers';
+import { complete, detectProviderFromKey, generateImage } from '@open-codesign/providers';
 import {
   ApplyCommentPayload,
   BRAND,
@@ -57,6 +57,7 @@ import {
   toGenerateImageOptions,
 } from './image-generation-settings';
 import { maybeAbortIfRunningFromDmg } from './install-check';
+import { makeJudgeVisualParity } from './judge-visual-parity';
 import { registerLocaleIpc } from './locale-ipc';
 import { getLogPath, getLogger, initLogger } from './logger';
 import {
@@ -72,6 +73,7 @@ import { readPersisted as readPreferences, registerPreferencesIpc } from './pref
 import { preparePromptContext } from './prompt-context';
 import { createProviderContextStore } from './provider-context';
 import { resolveActiveModel } from './provider-settings';
+import { makeUiKitRenderer } from './render-ui-kit';
 import { cleanupStaleTmps } from './reported-fingerprints';
 import { resolveActiveApiKey, resolveApiKeyWithKeylessFallback } from './resolve-api-key';
 import { withRun } from './runContext';
@@ -572,9 +574,40 @@ function registerIpcHandlers(db: Database | null): void {
     let deltaCount = 0;
     let toolCount = 0;
 
+    // Visual parity verification — render decomposed ui_kits HTML in a hidden
+    // BrowserWindow + ask the user's primary vision-capable model to score 12
+    // boolean parity checks (boolean-per-dimension, no floating-point arbitrary
+    // scores). Uses the SAME model/apiKey/baseUrl as the active generation so
+    // we don't need a separate judge config. If the user's model isn't vision-
+    // capable, the judge call will throw and the agent falls back to the
+    // deterministic verify_ui_kit_parity tool.
+    const renderUiKit = makeUiKitRenderer();
+    const judgeVisualParity = makeJudgeVisualParity(
+      async ({ systemPrompt, userText, userImages, maxTokens, signal: judgeSignal }) => {
+        const judgeMessages = [
+          { role: 'system' as const, content: systemPrompt },
+          { role: 'user' as const, content: userText },
+        ];
+        const judgeOpts: Parameters<typeof complete>[2] = {
+          apiKey: input.apiKey ?? '',
+          maxTokens,
+          userImages,
+          ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
+          ...(input.wire ? { wire: input.wire } : {}),
+          ...(input.httpHeaders ? { httpHeaders: input.httpHeaders } : {}),
+          ...(input.capabilities ? { capabilities: input.capabilities } : {}),
+          ...(judgeSignal ? { signal: judgeSignal } : {}),
+        };
+        const r = await complete(input.model, judgeMessages, judgeOpts);
+        return { content: r.content, costUsd: r.costUsd };
+      },
+    );
+
     return generateViaAgent(input, {
       fs,
       runtimeVerify,
+      renderUiKit,
+      judgeVisualParity,
       ...(generateImageAsset !== undefined ? { generateImageAsset } : {}),
       onEvent: (event: AgentEvent) => {
         // High-signal only. Skip per-token deltas and inner message_*
