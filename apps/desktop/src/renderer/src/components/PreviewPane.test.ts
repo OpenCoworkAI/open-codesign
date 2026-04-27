@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { useCodesignStore } from '../store';
 import {
+  decideCodeDraftSync,
   handlePreviewMessage,
   isTrustedPreviewMessageSource,
   postModeToPreviewWindow,
@@ -62,6 +63,38 @@ function App(){ return <div />; }`;
       '<!doctype html><html><body><script>const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"accent":"#000"}/*EDITMODE-END*/;</script></body></html>';
 
     expect(stablePreviewSourceKey(source)).toBe(source);
+  });
+});
+
+describe('decideCodeDraftSync', () => {
+  it('adopts incoming html when draft still matches previous committed html', () => {
+    expect(
+      decideCodeDraftSync({
+        previousCommittedHtml: '<h1>old</h1>',
+        nextHtml: '<h1>new</h1>',
+        currentDraft: '<h1>old</h1>',
+      }),
+    ).toEqual({ nextDraft: '<h1>new</h1>', pendingRemoteUpdate: false });
+  });
+
+  it('keeps local draft and marks pending update when incoming html arrives while dirty', () => {
+    expect(
+      decideCodeDraftSync({
+        previousCommittedHtml: '<h1>old</h1>',
+        nextHtml: '<h1>new remote</h1>',
+        currentDraft: '<h1>local edits</h1>',
+      }),
+    ).toEqual({ nextDraft: '<h1>local edits</h1>', pendingRemoteUpdate: true });
+  });
+
+  it('returns unchanged draft when html has not changed', () => {
+    expect(
+      decideCodeDraftSync({
+        previousCommittedHtml: '<h1>same</h1>',
+        nextHtml: '<h1>same</h1>',
+        currentDraft: '<h1>local edits</h1>',
+      }),
+    ).toEqual({ nextDraft: '<h1>local edits</h1>', pendingRemoteUpdate: false });
   });
 });
 

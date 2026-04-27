@@ -21,12 +21,14 @@ function formatDate(iso: string): string {
 export function HistoryPanel({ onClose }: HistoryPanelProps) {
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const setPreviewHtml = useCodesignStore((s) => s.setPreviewHtml);
+  const loadCommentsForCurrentDesign = useCodesignStore((s) => s.loadCommentsForCurrentDesign);
   const pushToast = useCodesignStore((s) => s.pushToast);
 
   const [snapshots, setSnapshots] = useState<DesignSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<DesignSnapshot | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (!currentDesignId || !window.codesign) return;
@@ -46,11 +48,15 @@ export function HistoryPanel({ onClose }: HistoryPanelProps) {
     [selected],
   );
 
+  useEffect(() => {
+    setPreviewLoading(Boolean(previewSrc));
+  }, [previewSrc]);
+
   async function handleRestore() {
     if (!selected || !currentDesignId || !window.codesign) return;
     setRestoring(true);
     try {
-      await window.codesign.snapshots.create({
+      const restored = await window.codesign.snapshots.create({
         designId: currentDesignId,
         parentId: selected.id,
         type: 'fork',
@@ -58,7 +64,8 @@ export function HistoryPanel({ onClose }: HistoryPanelProps) {
         artifactType: selected.artifactType,
         artifactSource: selected.artifactSource,
       });
-      setPreviewHtml(selected.artifactSource);
+      setPreviewHtml(restored.artifactSource);
+      await loadCommentsForCurrentDesign();
       pushToast({ variant: 'success', title: 'Restored to selected version' });
       onClose();
     } catch (err) {
@@ -134,12 +141,22 @@ export function HistoryPanel({ onClose }: HistoryPanelProps) {
         {/* Preview area */}
         <div className="flex-1 flex flex-col min-w-0">
           {previewSrc ? (
-            <iframe
-              title="history-preview"
-              sandbox="allow-scripts"
-              srcDoc={previewSrc}
-              className="flex-1 w-full border-0 bg-white"
-            />
+            <div className="relative flex-1 min-h-0 bg-[var(--color-surface)]">
+              <iframe
+                title="history-preview"
+                sandbox="allow-scripts"
+                srcDoc={previewSrc}
+                onLoad={() => setPreviewLoading(false)}
+                className={`h-full w-full border-0 bg-[var(--color-surface)] transition-opacity ${
+                  previewLoading ? 'opacity-0' : 'opacity-100'
+                }`}
+              />
+              {previewLoading ? (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[12px] text-[var(--color-text-muted)]">
+                  Loading preview…
+                </div>
+              ) : null}
+            </div>
           ) : (
             <div className="flex-1 flex items-center justify-center text-[12px] text-[var(--color-text-muted)]">
               Select a version to preview.

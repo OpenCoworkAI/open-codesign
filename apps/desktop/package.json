@@ -18,6 +18,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@open-codesign/artifacts": "workspace:*",
     "@open-codesign/core": "workspace:*",
     "@open-codesign/exporters": "workspace:*",
@@ -27,12 +28,15 @@
     "@open-codesign/shared": "workspace:*",
     "@open-codesign/templates": "workspace:*",
     "@open-codesign/ui": "workspace:*",
+    "@shikijs/monaco": "^4.0.2",
     "better-sqlite3": "^12.9.0",
     "electron-log": "^5",
     "electron-updater": "^6.3.9",
     "lucide-react": "^1.8.0",
+    "monaco-editor": "^0.55.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "shiki": "^4.0.2",
     "smol-toml": "^1.6.1",
     "zip-lib": "^1.0.4",
     "zustand": "^5.0.2"

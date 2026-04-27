@@ -6,8 +6,8 @@ import { useCodesignStore } from '../store';
 
 const LEVEL_STYLE: Record<ConsoleLevel, string> = {
   log: 'text-[var(--color-text-primary)]',
-  info: 'text-[#3b82f6]',
-  warn: 'text-[#f59e0b]',
+  info: 'text-[var(--color-accent)]',
+  warn: 'text-[var(--color-warning)]',
   error: 'text-[var(--color-error)]',
   debug: 'text-[var(--color-text-muted)]',
 };
@@ -15,7 +15,7 @@ const LEVEL_STYLE: Record<ConsoleLevel, string> = {
 const LEVEL_BG: Record<ConsoleLevel, string> = {
   log: '',
   info: '',
-  warn: 'bg-[color-mix(in_srgb,#f59e0b_6%,transparent)]',
+  warn: 'bg-[color-mix(in_srgb,var(--color-warning)_6%,transparent)]',
   error: 'bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)]',
   debug: '',
 };
@@ -25,7 +25,7 @@ function ConsoleRow({ entry }: { entry: IframeConsoleLogEntry }) {
   const text = entry.args.join(' ');
   return (
     <div
-      className={`flex items-start gap-[var(--space-2)] px-[var(--space-3)] py-[2px] font-[ui-monospace,Menlo,monospace] text-[11.5px] leading-[1.5] border-b border-[var(--color-border-muted)]/40 last:border-0 ${LEVEL_BG[entry.level]}`}
+      className={`flex items-start gap-[var(--space-2)] px-[var(--space-3)] py-[2px] font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[11.5px] leading-[1.5] border-b border-[var(--color-border-muted)]/40 last:border-0 ${LEVEL_BG[entry.level]}`}
     >
       <span className="shrink-0 text-[var(--color-text-muted)] tabular-nums select-none">
         {time}
@@ -78,7 +78,7 @@ export function ConsolePanel() {
         {errorCount}
       </span>
     ) : warnCount > 0 ? (
-      <span className="rounded-[3px] bg-[#f59e0b] text-white text-[10px] px-[5px] py-[1px] tabular-nums font-bold">
+      <span className="rounded-[3px] bg-[var(--color-warning)] text-[var(--color-on-accent)] text-[10px] px-[5px] py-[1px] tabular-nums font-bold">
         {warnCount}
       </span>
     ) : logs.length > 0 ? (
@@ -130,7 +130,7 @@ export function ConsolePanel() {
           className="max-h-[200px] overflow-y-auto border-t border-[var(--color-border-muted)]"
         >
           {logs.length === 0 ? (
-            <div className="px-[var(--space-3)] py-[var(--space-2)] text-[11.5px] text-[var(--color-text-muted)] font-[ui-monospace,Menlo,monospace]">
+            <div className="px-[var(--space-3)] py-[var(--space-2)] text-[11.5px] text-[var(--color-text-muted)] font-[var(--font-mono),ui-monospace,Menlo,monospace]">
               No output yet.
             </div>
           ) : (

@@ -2038,16 +2038,36 @@ function ModelRoutingSection({
     setQuery('');
     setListLoading(true);
     setAvailableModels([]);
-    void window.codesign.models.listForProvider(config.provider).then((res) => {
-      if (cancelled) return;
-      setListLoading(false);
-      if (res.ok) setAvailableModels(res.models);
-      else setAvailableModels([]);
-    });
+    void window.codesign.models
+      .listForProvider(config.provider)
+      .then((res) => {
+        if (cancelled) return;
+        setListLoading(false);
+        if (res.ok) {
+          setAvailableModels(res.models);
+          return;
+        }
+        setAvailableModels([]);
+        pushToast({
+          variant: 'error',
+          title: t('settings.modelRouting.saveFailed'),
+          description: res.message ?? t('settings.common.unknownError'),
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setListLoading(false);
+        setAvailableModels([]);
+        pushToast({
+          variant: 'error',
+          title: t('settings.modelRouting.saveFailed'),
+          description: cleanIpcError(err) || t('settings.common.unknownError'),
+        });
+      });
     return () => {
       cancelled = true;
     };
-  }, [config?.provider]);
+  }, [config?.provider, pushToast, t]);
 
   const modelIdsForList = useMemo(
     () => mergeActiveModelIfMissing(availableModels, fastModel),

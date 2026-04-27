@@ -1,3 +1,4 @@
+import type { Monaco } from '@monaco-editor/react';
 import { useT } from '@open-codesign/i18n';
 import {
   type ElementRectsMessage,
@@ -10,9 +11,25 @@ import {
   isIframeErrorMessage,
   isOverlayMessage,
 } from '@open-codesign/runtime';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { editor as MonacoEditorNS } from 'monaco-editor';
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  SHIKI_THEME_DARK,
+  SHIKI_THEME_LIGHT,
+  setupTextmateGrammars,
+} from '../lib/setupMonacoTextmate';
 import { EmptyState } from '../preview/EmptyState';
 import { ErrorState } from '../preview/ErrorState';
+import type { Theme } from '../store';
 import { useCodesignStore } from '../store';
 import { CanvasErrorBar } from './CanvasErrorBar';
 import { CanvasTabBar } from './CanvasTabBar';
@@ -29,6 +46,12 @@ import { PinOverlay } from './comment/PinOverlay';
 export interface PreviewPaneProps {
   onPickStarter: (prompt: string) => void;
 }
+
+const ENABLE_MONACO_CODE_EDITOR = true;
+const MonacoEditor = lazy(async () => {
+  const mod = await import('@monaco-editor/react');
+  return { default: mod.default };
+});
 
 export function formatIframeError(
   kind: string,
@@ -293,6 +316,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const setPreviewHtml = useCodesignStore((s) => s.setPreviewHtml);
+  const theme = useCodesignStore((s) => s.theme);
   const previewHtmlByDesign = useCodesignStore((s) => s.previewHtmlByDesign);
   const recentDesignIds = useCodesignStore((s) => s.recentDesignIds);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
@@ -630,7 +654,12 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         <CanvasErrorBar />
         <div className="relative flex-1 min-h-0 overflow-hidden">
           {activeKind === 'code' && typeof previewHtml === 'string' && previewHtml.length > 0 ? (
-            <CodeViewPanel html={previewHtml} isGenerating={isGenerating} onSave={setPreviewHtml} />
+            <CodeViewPanel
+              html={previewHtml}
+              isGenerating={isGenerating}
+              onSave={setPreviewHtml}
+              theme={theme}
+            />
           ) : activeKind === 'code' ? (
             <div className="flex h-full min-h-0 items-center justify-center px-6 text-center text-[12px] text-[var(--color-text-muted)]">
               {t('canvas.codeTabEmpty')}
@@ -728,64 +757,440 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
 /* ── Code view panel ─────────────────────────────────────────────────── */
 
+type EditorThemeSetting = 'system' | 'light' | 'dark';
+
+interface EditorSettings {
+  theme: EditorThemeSetting;
+  fontSize: number;
+  wordWrap: 'on' | 'off';
+  minimap: boolean;
+  lineNumbers: 'on' | 'off';
+  tabSize: 2 | 4;
+}
+
+const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
+  theme: 'system',
+  fontSize: 12.5,
+  wordWrap: 'on',
+  minimap: false,
+  lineNumbers: 'on',
+  tabSize: 2,
+};
+
+const FONT_SIZES = [11, 12, 13, 14, 16, 18, 20] as const;
+
 interface CodeViewPanelProps {
   html: string;
   isGenerating: boolean;
   onSave: (html: string) => void;
+  theme: Theme;
 }
 
-function CodeViewPanel({ html, isGenerating, onSave }: CodeViewPanelProps) {
+export function decideCodeDraftSync(input: {
+  previousCommittedHtml: string;
+  nextHtml: string;
+  currentDraft: string;
+}): { nextDraft: string; pendingRemoteUpdate: boolean } {
+  const { previousCommittedHtml, nextHtml, currentDraft } = input;
+  if (nextHtml === previousCommittedHtml) {
+    return { nextDraft: currentDraft, pendingRemoteUpdate: false };
+  }
+  const draftMatchesPreviousCommitted = currentDraft === previousCommittedHtml;
+  if (draftMatchesPreviousCommitted) {
+    return { nextDraft: nextHtml, pendingRemoteUpdate: false };
+  }
+  return { nextDraft: currentDraft, pendingRemoteUpdate: true };
+}
+
+function CodeViewPanel({ html, isGenerating, onSave, theme }: CodeViewPanelProps) {
   const [draft, setDraft] = useState(html);
   const [saved, setSaved] = useState(false);
+  const [pendingRemoteUpdate, setPendingRemoteUpdate] = useState(false);
+  const [settings, setSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const lastCommittedHtmlRef = useRef(html);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+  const resolvedThemeRef = useRef<string>('');
   const dirty = draft !== html;
 
-  // Keep draft in sync when html changes externally (e.g. agent streaming)
   useEffect(() => {
-    setDraft(html);
-  }, [html]);
+    if (!settingsOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      const target = e.target as Node;
+      if (
+        !settingsPanelRef.current?.contains(target) &&
+        !settingsBtnRef.current?.contains(target)
+      ) {
+        setSettingsOpen(false);
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [settingsOpen]);
+
+  function setSetting<K extends keyof EditorSettings>(key: K, value: EditorSettings[K]) {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // Keep draft synced to external html changes unless the user is editing a
+  // dirty draft; in that case keep local edits and surface that a newer server
+  // version is waiting.
+  useEffect(() => {
+    const prevHtml = lastCommittedHtmlRef.current;
+    if (html === prevHtml) return;
+    const sync = decideCodeDraftSync({
+      previousCommittedHtml: prevHtml,
+      nextHtml: html,
+      currentDraft: draft,
+    });
+    lastCommittedHtmlRef.current = html;
+    if (sync.nextDraft !== draft) {
+      setDraft(sync.nextDraft);
+      return;
+    }
+    setPendingRemoteUpdate(sync.pendingRemoteUpdate);
+  }, [html, draft]);
+
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (draft === html) setPendingRemoteUpdate(false);
+  }, [draft, html]);
 
   function handleSave(): void {
     onSave(draft);
     setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => setSaved(false), 1500);
   }
 
-  function handleKeyDown(e: import('react').KeyboardEvent): void {
+  function handleKeyDown(e: ReactKeyboardEvent): void {
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
       if (!isGenerating) handleSave();
     }
   }
 
+  function handleMonacoMount(editor: MonacoEditorNS.IStandaloneCodeEditor, monaco: Monaco): void {
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      if (!isGenerating) handleSave();
+    });
+
+    const { typescript, html } = monaco.languages;
+    const { ScriptTarget, ModuleKind, JsxEmit } = typescript;
+
+    typescript.javascriptDefaults.setCompilerOptions({
+      target: ScriptTarget.ESNext,
+      module: ModuleKind.ESNext,
+      jsx: JsxEmit.React,
+      allowJs: true,
+      allowNonTsExtensions: true,
+      allowSyntheticDefaultImports: true,
+      esModuleInterop: true,
+      lib: ['es2022', 'dom'],
+    });
+
+    // Suppress errors that don't apply to inline scripts: missing imports,
+    // top-level module semantics, and implicit-any on browser globals.
+    typescript.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: false,
+      noSyntaxValidation: false,
+      noSuggestionDiagnostics: false,
+      diagnosticCodesToIgnore: [
+        2304, // Cannot find name (browser globals like 'document', 'React')
+        2580, // Cannot find module 'X' (CDN imports)
+        2792, // Cannot find module (ESM specifiers)
+        7026, // JSX element implicitly has type 'any'
+      ],
+    });
+
+    html.htmlDefaults.setOptions({
+      validate: true,
+      suggest: { html5: true },
+      format: { indentInnerHtml: true, wrapLineLength: 120 },
+    });
+
+    monacoRef.current = monaco;
+    setupTextmateGrammars(monaco).then(() => {
+      monaco.editor.setTheme(resolvedThemeRef.current);
+    });
+  }
+
+  const resolvedTheme =
+    settings.theme === 'light'
+      ? SHIKI_THEME_LIGHT
+      : settings.theme === 'dark'
+        ? SHIKI_THEME_DARK
+        : theme === 'dark'
+          ? SHIKI_THEME_DARK
+          : SHIKI_THEME_LIGHT;
+
+  // Keep ref current so the post-Shiki .then() callback always reads the
+  // latest value regardless of which render's closure captured handleMonacoMount.
+  resolvedThemeRef.current = resolvedTheme;
+
+  // Imperatively apply the theme whenever it changes. The theme prop alone is
+  // insufficient because shikiToMonaco registers Monaco themes asynchronously —
+  // Monaco ignores setTheme calls for unregistered names, so we re-apply once
+  // Shiki is done (in handleMonacoMount) and on every subsequent change here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    monacoRef.current?.editor.setTheme(resolvedTheme);
+  }, [resolvedTheme]);
+
+  const showMonaco = ENABLE_MONACO_CODE_EDITOR;
+
+  function SegmentedControl<T extends string | number>({
+    value,
+    options,
+    onChange,
+  }: {
+    value: T;
+    options: { label: string; value: T }[];
+    onChange: (v: T) => void;
+  }) {
+    return (
+      <div className="inline-flex rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-background)] p-[2px] gap-[2px]">
+        {options.map((opt) => (
+          <button
+            key={String(opt.value)}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            aria-pressed={value === opt.value}
+            className={`h-[22px] rounded-[calc(var(--radius-sm)-2px)] px-[var(--space-2)] text-[10px] font-medium transition-colors ${
+              value === opt.value
+                ? 'bg-[var(--color-accent)] text-[var(--color-on-accent)]'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-[var(--color-background-secondary)]">
+      {/* Permanent header: language badge + settings toggle */}
+      <div className="relative flex items-center justify-between px-[var(--space-3)] h-8 border-b border-[var(--color-border-muted)] bg-[var(--color-background)] shrink-0">
+        <span className="text-[10px] font-medium text-[var(--color-text-muted)] tracking-wide uppercase select-none">
+          HTML
+        </span>
+        <button
+          ref={settingsBtnRef}
+          type="button"
+          onClick={() => setSettingsOpen((o) => !o)}
+          aria-label="Editor settings"
+          aria-expanded={settingsOpen}
+          className={`w-6 h-6 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors ${
+            settingsOpen
+              ? 'bg-[var(--color-accent)] text-[var(--color-on-accent)]'
+              : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'
+          }`}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+
+        {/* Settings panel */}
+        {settingsOpen && (
+          <div
+            ref={settingsPanelRef}
+            className="absolute right-0 top-full z-20 w-64 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-b-[var(--radius-base)] shadow-lg overflow-hidden"
+          >
+            <div className="px-[var(--space-3)] py-[var(--space-2)] flex flex-col gap-[var(--space-3)]">
+              {/* Theme */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-[var(--color-text-secondary)] shrink-0">
+                  Theme
+                </span>
+                <SegmentedControl
+                  value={settings.theme}
+                  options={[
+                    { label: 'System', value: 'system' as const },
+                    { label: 'Light', value: 'light' as const },
+                    { label: 'Dark', value: 'dark' as const },
+                  ]}
+                  onChange={(v) => setSetting('theme', v)}
+                />
+              </div>
+
+              {/* Font size */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-[var(--color-text-secondary)] shrink-0">
+                  Font size
+                </span>
+                <div className="inline-flex rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-background)] p-[2px] gap-[2px]">
+                  {FONT_SIZES.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => setSetting('fontSize', size)}
+                      aria-pressed={settings.fontSize === size}
+                      className={`h-[22px] min-w-[22px] rounded-[calc(var(--radius-sm)-2px)] px-[3px] text-[10px] font-medium transition-colors ${
+                        settings.fontSize === size
+                          ? 'bg-[var(--color-accent)] text-[var(--color-on-accent)]'
+                          : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Word wrap */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-[var(--color-text-secondary)] shrink-0">
+                  Word wrap
+                </span>
+                <SegmentedControl
+                  value={settings.wordWrap}
+                  options={[
+                    { label: 'On', value: 'on' as const },
+                    { label: 'Off', value: 'off' as const },
+                  ]}
+                  onChange={(v) => setSetting('wordWrap', v)}
+                />
+              </div>
+
+              {/* Minimap */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-[var(--color-text-secondary)] shrink-0">
+                  Minimap
+                </span>
+                <SegmentedControl
+                  value={settings.minimap ? 'show' : 'hide'}
+                  options={[
+                    { label: 'Show', value: 'show' },
+                    { label: 'Hide', value: 'hide' },
+                  ]}
+                  onChange={(v) => setSetting('minimap', v === 'show')}
+                />
+              </div>
+
+              {/* Line numbers */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-[var(--color-text-secondary)] shrink-0">
+                  Line numbers
+                </span>
+                <SegmentedControl
+                  value={settings.lineNumbers}
+                  options={[
+                    { label: 'On', value: 'on' as const },
+                    { label: 'Off', value: 'off' as const },
+                  ]}
+                  onChange={(v) => setSetting('lineNumbers', v)}
+                />
+              </div>
+
+              {/* Tab size */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-[var(--color-text-secondary)] shrink-0">
+                  Tab size
+                </span>
+                <SegmentedControl
+                  value={settings.tabSize}
+                  options={[
+                    { label: '2', value: 2 as const },
+                    { label: '4', value: 4 as const },
+                  ]}
+                  onChange={(v) => setSetting('tabSize', v)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {isGenerating ? (
         <div className="flex items-center gap-[var(--space-2)] px-[var(--space-3)] py-[var(--space-1_5)] text-[11.5px] bg-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] border-b border-[var(--color-accent)]/20 text-[var(--color-text-secondary)]">
           <span className="w-[7px] h-[7px] rounded-full bg-[var(--color-accent)] animate-pulse shrink-0" />
           Code view is read-only while the agent is running.
         </div>
       ) : dirty ? (
-        <div className="flex items-center justify-between gap-[var(--space-2)] px-[var(--space-3)] py-[var(--space-1_5)] text-[11.5px] bg-[color-mix(in_srgb,#f59e0b_10%,transparent)] border-b border-[#f59e0b]/30 text-[var(--color-text-secondary)]">
+        <div className="flex items-center justify-between gap-[var(--space-2)] px-[var(--space-3)] py-[var(--space-1_5)] text-[11.5px] bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border-b border-[color-mix(in_srgb,var(--color-warning)_36%,transparent)] text-[var(--color-text-secondary)]">
           <span>Unsaved edits — save to apply to preview.</span>
           <button
             type="button"
             onClick={handleSave}
-            className="shrink-0 inline-flex items-center h-[22px] px-[10px] rounded-[var(--radius-sm)] text-[11px] font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors duration-100"
+            className="shrink-0 inline-flex items-center h-[22px] px-[10px] rounded-[var(--radius-sm)] text-[11px] font-medium bg-[var(--color-accent)] text-[var(--color-on-accent)] hover:bg-[var(--color-accent-hover)] transition-colors duration-100"
           >
             {saved ? 'Saved ✓' : 'Save (⌘S)'}
           </button>
         </div>
       ) : null}
-      <textarea
-        value={draft}
-        onChange={(e) => !isGenerating && setDraft(e.target.value)}
-        onKeyDown={handleKeyDown}
-        readOnly={isGenerating}
-        spellCheck={false}
-        className="flex-1 w-full resize-none border-0 bg-transparent p-[var(--space-4)] text-[12.5px] leading-[1.6] font-[ui-monospace,Menlo,monospace] text-[var(--color-text-primary)] outline-none focus:outline-none"
-        style={{ tabSize: 2 }}
-        aria-label="HTML source"
-      />
+      {pendingRemoteUpdate ? (
+        <div className="flex items-center gap-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-1_5)] text-[11px] text-[var(--color-text-muted)]">
+          A newer preview update is available. Save your local edits to apply your version.
+        </div>
+      ) : null}
+      {showMonaco ? (
+        <div className="flex-1 min-h-0">
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-[12px] text-[var(--color-text-muted)]">
+                Loading editor…
+              </div>
+            }
+          >
+            <MonacoEditor
+              value={draft}
+              onChange={(value) => {
+                if (isGenerating) return;
+                setDraft(value ?? '');
+              }}
+              language="html"
+              theme={resolvedTheme}
+              onMount={handleMonacoMount}
+              options={{
+                readOnly: isGenerating,
+                minimap: { enabled: settings.minimap },
+                wordWrap: settings.wordWrap,
+                tabSize: settings.tabSize,
+                lineNumbers: settings.lineNumbers,
+                automaticLayout: true,
+                scrollBeyondLastLine: false,
+                fontSize: settings.fontSize,
+                lineHeight: Math.round(settings.fontSize * 1.6),
+                fontFamily: 'var(--font-mono), ui-monospace, Menlo, monospace',
+              }}
+            />
+          </Suspense>
+        </div>
+      ) : (
+        <textarea
+          value={draft}
+          onChange={(e) => !isGenerating && setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          readOnly={isGenerating}
+          spellCheck={false}
+          className="flex-1 w-full resize-none border-0 bg-transparent p-[var(--space-4)] text-[12.5px] leading-[1.6] font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-primary)] outline-none focus:outline-none"
+          style={{ tabSize: settings.tabSize }}
+          aria-label="HTML source"
+        />
+      )}
     </div>
   );
 }
