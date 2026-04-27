@@ -180,17 +180,6 @@ export interface AgentStreamEvent {
   code?: string;
 }
 
-// T2.4: stubs for the deleted snapshots / chat / comments IPC channels.
-// The `crypto.randomUUID()` global is available in the Electron renderer
-// preload context (Chromium 128+). See snapshots / chat / comments stubs
-// below — kept top-level so each stub stays a one-liner.
-function _stubId(): string {
-  return crypto.randomUUID();
-}
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
 /**
  * Ask-tool wire shape. Mirrors packages/core/src/tools/ask.ts — duplicated
  * here so the preload does not take a hard dep on `@open-codesign/core`.
@@ -582,26 +571,33 @@ const api = {
       }) as Promise<{ exists: boolean }>,
   },
   chat: {
-    // TODO(v0.2): re-route through session JSONL — see T2.5.
-    list: (_designId: string) => Promise.resolve([] as ChatMessageRow[]),
-    append: (input: ChatAppendInput) =>
-      Promise.resolve({
+    list: (designId: string) =>
+      ipcRenderer.invoke('chat:v1:list', {
         schemaVersion: 1,
-        id: 0,
-        designId: input.designId,
-        seq: 0,
-        kind: input.kind,
-        payload: input.payload ?? {},
-        snapshotId: input.snapshotId ?? null,
-        createdAt: nowIso(),
-      } satisfies ChatMessageRow),
-    seedFromSnapshots: (_designId: string) => Promise.resolve({ inserted: 0 }),
+        designId,
+      }) as Promise<ChatMessageRow[]>,
+    append: (input: ChatAppendInput) =>
+      ipcRenderer.invoke('chat:v1:append', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<ChatMessageRow>,
+    seedFromSnapshots: (designId: string) =>
+      ipcRenderer.invoke('chat:v1:seed-from-snapshots', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ inserted: number }>,
     updateToolStatus: (_input: {
       designId: string;
       seq: number;
       status: 'done' | 'error';
+      result?: unknown;
+      durationMs?: number;
       errorMessage?: string;
-    }) => Promise.resolve({ ok: true } as const),
+    }) =>
+      ipcRenderer.invoke('chat:v1:update-tool-status', {
+        schemaVersion: 1,
+        ..._input,
+      }) as Promise<{ ok: true }>,
     onAgentEvent: (cb: (event: AgentStreamEvent) => void) => {
       const listener = (_e: unknown, event: AgentStreamEvent) => cb(event);
       ipcRenderer.on('agent:event:v1', listener);

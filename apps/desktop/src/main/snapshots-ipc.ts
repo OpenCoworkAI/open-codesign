@@ -12,13 +12,27 @@
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import type { Design, DesignSnapshot, SnapshotCreateInput } from '@open-codesign/shared';
-import { CodesignError } from '@open-codesign/shared';
+import type {
+  ChatAppendInput,
+  ChatMessageRow,
+  Design,
+  DesignSnapshot,
+  SnapshotCreateInput,
+} from '@open-codesign/shared';
+import { ChatMessageKind, CodesignError } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import type { BrowserWindow } from 'electron';
 import { bindWorkspace, checkWorkspaceFolderExists, openWorkspaceFolder } from './design-workspace';
 import { app, dialog, ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
+import {
+  appendSessionChatMessage,
+  appendSessionToolStatus,
+  type ChatToolStatusUpdate,
+  listSessionChatMessages,
+  type SessionChatStoreOptions,
+  seedSessionChatFromSnapshots,
+} from './session-chat';
 import {
   createDesign,
   createSnapshot,
@@ -187,6 +201,88 @@ function parseSnapshotCreateInput(raw: unknown): SnapshotCreateInput {
     return { ...base, message: r['message'] };
   }
   return base;
+}
+
+function parseDesignIdPayload(raw: unknown, channel: string): string {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError(`${channel} expects an object with designId`, 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, channel);
+  if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  return r['designId'] as string;
+}
+
+function parseChatAppendInput(raw: unknown): ChatAppendInput {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError('chat:v1:append expects a chat message object', 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, 'chat:v1:append');
+  if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  const kind = ChatMessageKind.safeParse(r['kind']);
+  if (!kind.success) {
+    throw new CodesignError('kind must be a valid chat message kind', 'IPC_BAD_INPUT');
+  }
+  const snapshotId = r['snapshotId'];
+  if (snapshotId !== undefined && snapshotId !== null && typeof snapshotId !== 'string') {
+    throw new CodesignError('snapshotId must be a string or null', 'IPC_BAD_INPUT');
+  }
+  const base: ChatAppendInput = {
+    designId: r['designId'] as string,
+    kind: kind.data,
+    payload: r['payload'] ?? {},
+  };
+  if (snapshotId !== undefined) {
+    return { ...base, snapshotId: snapshotId as string | null };
+  }
+  return base;
+}
+
+function parseToolStatusInput(raw: unknown): ChatToolStatusUpdate {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError(
+      'chat:v1:update-tool-status expects an object payload',
+      'IPC_BAD_INPUT',
+    );
+  }
+  const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, 'chat:v1:update-tool-status');
+  if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  if (!Number.isInteger(r['seq']) || (r['seq'] as number) < 0) {
+    throw new CodesignError('seq must be a non-negative integer', 'IPC_BAD_INPUT');
+  }
+  if (r['status'] !== 'done' && r['status'] !== 'error') {
+    throw new CodesignError('status must be done or error', 'IPC_BAD_INPUT');
+  }
+  if (r['durationMs'] !== undefined && typeof r['durationMs'] !== 'number') {
+    throw new CodesignError('durationMs must be a number when provided', 'IPC_BAD_INPUT');
+  }
+  if (r['errorMessage'] !== undefined && typeof r['errorMessage'] !== 'string') {
+    throw new CodesignError('errorMessage must be a string when provided', 'IPC_BAD_INPUT');
+  }
+  return {
+    designId: r['designId'] as string,
+    seq: r['seq'] as number,
+    status: r['status'] as 'done' | 'error',
+    ...(r['result'] !== undefined ? { result: r['result'] } : {}),
+    ...(typeof r['durationMs'] === 'number' ? { durationMs: r['durationMs'] } : {}),
+    ...(typeof r['errorMessage'] === 'string' ? { errorMessage: r['errorMessage'] } : {}),
+  };
+}
+
+function chatStoreOptions(db: Database): SessionChatStoreOptions {
+  return {
+    db,
+    sessionDir: path.join(app.getPath('userData'), 'sessions'),
+    fallbackCwd: app.getPath('documents'),
+  };
 }
 
 export function registerSnapshotsIpc(db: Database): void {
@@ -396,6 +492,32 @@ export function registerSnapshotsIpc(db: Database): void {
     }
     logger.info('design.duplicated', { sourceId: r['id'], newId: cloned.id });
     return cloned;
+  });
+
+  ipcMain.handle('chat:v1:list', (_e: unknown, raw: unknown): ChatMessageRow[] => {
+    const designId = parseDesignIdPayload(raw, 'chat:v1:list');
+    return runDb('chat:list', () => listSessionChatMessages(chatStoreOptions(db), designId));
+  });
+
+  ipcMain.handle('chat:v1:append', (_e: unknown, raw: unknown): ChatMessageRow => {
+    const input = parseChatAppendInput(raw);
+    return runDb('chat:append', () => appendSessionChatMessage(chatStoreOptions(db), input));
+  });
+
+  ipcMain.handle(
+    'chat:v1:seed-from-snapshots',
+    (_e: unknown, raw: unknown): { inserted: number } => {
+      const designId = parseDesignIdPayload(raw, 'chat:v1:seed-from-snapshots');
+      return runDb('chat:seed-from-snapshots', () => ({
+        inserted: seedSessionChatFromSnapshots(chatStoreOptions(db), designId),
+      }));
+    },
+  );
+
+  ipcMain.handle('chat:v1:update-tool-status', (_e: unknown, raw: unknown): { ok: true } => {
+    const input = parseToolStatusInput(raw);
+    runDb('chat:update-tool-status', () => appendSessionToolStatus(chatStoreOptions(db), input));
+    return { ok: true };
   });
 }
 
@@ -649,6 +771,10 @@ export const SNAPSHOTS_CHANNELS_V1 = [
   'codesign:files:v1:read',
   'codesign:files:v1:subscribe',
   'codesign:files:v1:unsubscribe',
+  'chat:v1:list',
+  'chat:v1:append',
+  'chat:v1:seed-from-snapshots',
+  'chat:v1:update-tool-status',
 ] as const;
 
 export function registerSnapshotsUnavailableIpc(reason: string): void {
