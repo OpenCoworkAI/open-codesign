@@ -7,18 +7,15 @@
  * skill (if any) applies before opening the file.
  */
 
-import calendarJsx from './calendar.jsx?raw';
-import chartSvgJsx from './chart-svg.jsx?raw';
-import chatUiJsx from './chat-ui.jsx?raw';
-import dashboardJsx from './dashboard.jsx?raw';
-import dataTableJsx from './data-table.jsx?raw';
-import editorialTypographyJsx from './editorial-typography.jsx?raw';
-import footersJsx from './footers.jsx?raw';
-import glassmorphismJsx from './glassmorphism.jsx?raw';
-import heroesJsx from './heroes.jsx?raw';
-import landingPageJsx from './landing-page.jsx?raw';
-import pricingJsx from './pricing.jsx?raw';
-import slideDeckJsx from './slide-deck.jsx?raw';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function loadSkill(name: string): string {
+  return readFileSync(resolve(__dirname, name), 'utf-8');
+}
 
 const DESIGN_SKILL_FILES = [
   'slide-deck.jsx',
@@ -38,16 +35,16 @@ const DESIGN_SKILL_FILES = [
 export type DesignSkillName = (typeof DESIGN_SKILL_FILES)[number];
 
 export const DESIGN_SKILLS: ReadonlyArray<readonly [string, string]> = Object.freeze([
-  ['slide-deck.jsx', slideDeckJsx],
-  ['dashboard.jsx', dashboardJsx],
-  ['landing-page.jsx', landingPageJsx],
-  ['chart-svg.jsx', chartSvgJsx],
-  ['glassmorphism.jsx', glassmorphismJsx],
-  ['editorial-typography.jsx', editorialTypographyJsx],
-  ['heroes.jsx', heroesJsx],
-  ['pricing.jsx', pricingJsx],
-  ['footers.jsx', footersJsx],
-  ['chat-ui.jsx', chatUiJsx],
-  ['data-table.jsx', dataTableJsx],
-  ['calendar.jsx', calendarJsx],
+  ['slide-deck.jsx', loadSkill('slide-deck.jsx')],
+  ['dashboard.jsx', loadSkill('dashboard.jsx')],
+  ['landing-page.jsx', loadSkill('landing-page.jsx')],
+  ['chart-svg.jsx', loadSkill('chart-svg.jsx')],
+  ['glassmorphism.jsx', loadSkill('glassmorphism.jsx')],
+  ['editorial-typography.jsx', loadSkill('editorial-typography.jsx')],
+  ['heroes.jsx', loadSkill('heroes.jsx')],
+  ['pricing.jsx', loadSkill('pricing.jsx')],
+  ['footers.jsx', loadSkill('footers.jsx')],
+  ['chat-ui.jsx', loadSkill('chat-ui.jsx')],
+  ['data-table.jsx', loadSkill('data-table.jsx')],
+  ['calendar.jsx', loadSkill('calendar.jsx')],
 ] as const);
