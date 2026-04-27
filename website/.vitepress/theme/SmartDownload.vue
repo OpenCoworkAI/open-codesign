@@ -68,7 +68,7 @@ const isMac = ref(false);
 const xattrCmd = 'xattr -cr "/Applications/Open CoDesign.app"';
 const copied = ref(false);
 
-async function _copyXattr() {
+async function copyXattr() {
   try {
     await navigator.clipboard.writeText(xattrCmd);
     copied.value = true;
@@ -120,7 +120,7 @@ onMounted(() => {
   isMac.value = mac;
 });
 
-const _secondaryAssets = () => {
+const secondaryAssets = () => {
   const p = primary.value;
   return p ? allAssets.filter((a) => a.file !== p.file) : allAssets;
 };

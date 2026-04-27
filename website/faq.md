@@ -63,7 +63,7 @@ Yes. Open CoDesign supports ChatGPT Plus / Codex OAuth subscription login as of 
 
 ## Does Open CoDesign send my prompts or designs to any third party?
 
-No. All designs, prompts, snapshots, and codebase scans live on your machine — SQLite for design history, and a TOML config at `~/.config/open-codesign/config.toml` with file mode 0600 (matching Claude Code / Codex / gh CLI conventions). The only outbound network traffic is directly to the model provider you configure with your own API key. No telemetry by default.
+No. Designs, prompts, and scans live on your machine. v0.1 uses SQLite for design history plus a TOML config at `~/.config/open-codesign/config.toml` with file mode 0600; v0.2 migrates designs into JSONL sessions and workspace files. The only outbound network traffic is directly to the model provider you configure with your own API key. No telemetry by default.
 
 ## Which AI models does Open CoDesign support?
 
@@ -123,17 +123,17 @@ Yes, when used with a local model runtime like Ollama. All generation flows thro
 
 ## What's coming in v0.2?
 
-v0.2 is an architectural upgrade — the "Agentic Design Loop". Instead of a one-shot prompt-to-artifact generator, v0.2 gives you:
+v0.2 is the Agentic Design update, expected in about one week. It turns Open CoDesign from a one-shot prompt-to-artifact generator into a local design agent:
 
-- **Per-project workspace** — bind any folder on disk; all generated files live there, usable with git
-- **Agent reads your workspace** — `read_file`, `list_files`, `grep`, `find` tools so the agent understands context before generating
-- **Agent edits real files** — str-replace-style targeted edits plus full-file writes, with opt-in permission UX
-- **Point-and-prompt revision** — click any region in the preview, describe the change, the agent edits just that region
-- **Visual verification** — the agent can screenshot its own preview to verify what it built
-- **Progressive skill disclosure** — design skills become tool-invoked resources instead of always-injected prompt text
-- **Snapshot-per-turn rollback** — never lose a good iteration
+- **Workspace-backed designs** — every design is a pi session with JSONL history and real files on disk
+- **Permissioned local tools** — read, write, edit, bash, grep, find, and ls flow through Open CoDesign's permission UI
+- **Design-specific tools** — `ask`, `scaffold`, `skill`, `preview`, `gen_image`, `tweaks`, `todos`, and `done`
+- **Preview self-checks** — the agent can render artifacts, inspect console and asset errors, and use screenshots when the model supports vision
+- **Progressive skill disclosure** — design skills, scaffolds, and brand references lazy-load when the agent needs them
+- **`DESIGN.md` as design-system memory** — brand values and tokens stay in editable files, not model memory
+- **v0.1 migration** — existing SQLite designs migrate into workspaces and session history
 
-The full design doc is public and under community review. See the [roadmap](/roadmap) for the milestone plan.
+See the [roadmap](/roadmap) for the milestone plan.
 
 ## Is Open CoDesign secure?
 

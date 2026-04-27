@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useData } from 'vitepress';
+import { useData, withBase } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
 
 const { Layout } = DefaultTheme;

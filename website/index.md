@@ -7,7 +7,7 @@ description: Open CoDesign is an open-source desktop AI design tool — a self-h
 hero:
   name: Open CoDesign
   text: Design with intent.
-  tagline: An open-source desktop AI design tool. Bring your own model, keep everything local — a self-hosted alternative to Claude Design, built for teams who can't afford subscription lock-in.
+  tagline: An open-source desktop AI design tool. v0.1.4 is out; v0.2.0 is preparing the Agentic Design update with workspace-backed sessions and permissioned local tools.
   image:
     src: /logo-hero.png
     alt: Open CoDesign — open-source AI design tool
@@ -31,7 +31,7 @@ features:
     details: Already using Claude Code or Codex? Open CoDesign reads your existing config — providers, models, API keys — and brings it all in with a single click.
   - icon: 🏡
     title: Your laptop is the cloud
-    details: Designs, prompts, codebase scans — SQLite + encrypted TOML on disk. No mandatory account, no telemetry by default. 100% local.
+    details: Designs, prompts, and settings stay on disk. v0.1 keeps design history in local SQLite; v0.2 moves sessions into JSONL plus real workspace files. No mandatory account, no telemetry by default.
   - icon: 🪄
     title: Twelve design skills, not magic
     details: Twelve built-in design skill modules ship out of the box — dashboards, landing pages, slide decks, pricing pages, chat UIs, data tables, calendars, glassmorphism, editorial typography and more. Drop a SKILL.md into any project to teach the model your own taste.
@@ -40,7 +40,7 @@ features:
     details: The model emits the parameters worth tweaking — color, spacing, font — and you drag to refine. No round-tripping the LLM for every nudge.
   - icon: 🔀
     title: Instant design switching
-    details: Hop between your last five designs with zero delay. Preview iframes stay alive in memory — no reparse, no white flash, no waiting for snapshots to reload.
+    details: Hop between your last five designs with zero delay. Preview iframes stay alive in memory, so there is no reparse, white flash, or reload wait.
   - icon: 📱
     title: Desktop, tablet, phone
     details: Preview any artifact in a true phone frame or tablet width, side-by-side with the full canvas. See the responsive story before you export.
@@ -48,11 +48,11 @@ features:
     title: Comment, don't retype
     details: Click any element in the preview to drop a pin. Leave a note. The model rewrites only that region — no more re-prompting the whole page to move a button.
   - icon: 🧬
-    title: Codebase to design system
-    details: Point at a local repo. We extract Tailwind tokens, CSS vars, and W3C design tokens — every subsequent generation respects them. Coming soon.
+    title: "v0.2: Agentic Design"
+    details: Each design becomes a long-running session with a real workspace. The agent can read, edit, run permissioned tools, preview its work, and keep design-system decisions in files.
   - icon: 📐
-    title: Versions, diffs, snapshots
-    details: Every iteration is a snapshot. Diff two versions side-by-side. Roll back. Fork. The history Claude Design doesn't have. Coming soon.
+    title: DESIGN.md as memory
+    details: Brand values and design tokens live in DESIGN.md, not model memory. Bring your own design system, or let the agent write one as the artifact evolves.
   - icon: 💸
     title: Cost transparency
     details: Token estimate before each generation. Weekly spend in the toolbar. Set a budget, get warned, never get surprised. Coming soon.
@@ -85,7 +85,7 @@ import { withBase } from 'vitepress'
   <div class="codesign-step">
     <span class="num">3</span>
     <h3>Refine, export, hand off</h3>
-    <p>Inline comments, AI sliders, snapshot timeline. Export to HTML, PDF, PPTX, ZIP, or Markdown — all on-device.</p>
+    <p>Inline comments, AI sliders, and local files. Export to HTML, PDF, PPTX, ZIP, or Markdown — all on-device.</p>
   </div>
 </div>
 
@@ -112,7 +112,7 @@ import { withBase } from 'vitepress'
   </figure>
   <figure>
     <img :src="withBase('/screenshots/hub-your-designs.png')" alt="Your Designs hub, filled with real generated artifacts" />
-    <figcaption><b>Every iteration, kept.</b> Designs live on disk as SQLite snapshots; switch between five in zero ms.</figcaption>
+    <figcaption><b>Every iteration, kept.</b> Designs are saved locally; v0.2 moves sessions into JSONL plus real workspace files.</figcaption>
   </figure>
   <figure>
     <img :src="withBase('/screenshots/hub-examples.png')" alt="Built-in example library — fifteen ready-to-run design briefs" />
