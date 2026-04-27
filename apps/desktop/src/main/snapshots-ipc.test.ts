@@ -5,13 +5,24 @@
  * calls the registered handlers directly with an in-memory DB.
  */
 
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Collect registered handlers so tests can invoke them directly.
 const handlers = new Map<string, (e: unknown, raw: unknown) => unknown>();
+const mockPaths = vi.hoisted(() => ({ userData: '', documents: '' }));
 
 vi.mock('./electron-runtime', () => ({
+  app: {
+    getPath: vi.fn((name: string) => {
+      if (name === 'userData') return mockPaths.userData;
+      if (name === 'documents') return mockPaths.documents;
+      return mockPaths.userData;
+    }),
+  },
   ipcMain: {
     handle: (channel: string, fn: (e: unknown, raw: unknown) => unknown) => {
       handlers.set(channel, fn);
@@ -39,6 +50,7 @@ vi.mock('./design-workspace', () => ({
 import { bindWorkspace, checkWorkspaceFolderExists, openWorkspaceFolder } from './design-workspace';
 import { dialog } from './electron-runtime';
 import {
+  clearDesignWorkspace,
   createDesign,
   createSnapshot,
   initInMemoryDb,
@@ -70,13 +82,29 @@ function v1<T extends object>(payload: T): T & { schemaVersion: 1 } {
 }
 
 let db: ReturnType<typeof initInMemoryDb>;
+let tempRoot: string;
 
 beforeEach(() => {
+  tempRoot = mkdtempSync(path.join(tmpdir(), 'codesign-snapshots-ipc-'));
+  mockPaths.userData = path.join(tempRoot, 'user-data');
+  mockPaths.documents = path.join(tempRoot, 'documents');
   handlers.clear();
   db = initInMemoryDb();
+  vi.mocked(bindWorkspace).mockImplementation(async (targetDb, designId, workspacePath) => {
+    const updated =
+      workspacePath === null
+        ? clearDesignWorkspace(targetDb, designId)
+        : updateDesignWorkspace(targetDb, designId, workspacePath);
+    if (updated === null) throw new Error('Design not found');
+    return updated;
+  });
   registerSnapshotsIpc(db);
   // biome-ignore lint/suspicious/noExplicitAny: test mock
   registerWorkspaceIpc(db, () => ({}) as any);
+});
+
+afterEach(() => {
+  rmSync(tempRoot, { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -93,6 +121,134 @@ describe('snapshots:v1:list-designs', () => {
     createDesign(db, 'Test design');
     const result = call('snapshots:v1:list-designs', v1({})) as unknown[];
     expect(result).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// chat:v1:* session JSONL persistence
+// ---------------------------------------------------------------------------
+
+describe('chat:v1 session persistence', () => {
+  it('persists user chat rows to per-design session JSONL and reloads them', () => {
+    const design = createDesign(db, 'Chat design');
+    updateDesignWorkspace(db, design.id, path.join(tempRoot, 'workspace'));
+
+    const appended = call(
+      'chat:v1:append',
+      v1({
+        designId: design.id,
+        kind: 'user',
+        payload: { text: 'build a dashboard' },
+      }),
+    ) as Record<string, unknown>;
+
+    expect(appended).toMatchObject({
+      designId: design.id,
+      seq: 0,
+      kind: 'user',
+      payload: { text: 'build a dashboard' },
+    });
+
+    const sessionFile = path.join(mockPaths.userData, 'sessions', `${design.id}.jsonl`);
+    expect(existsSync(sessionFile)).toBe(true);
+    const sessionText = readFileSync(sessionFile, 'utf8');
+    expect(sessionText).toContain('"type":"session"');
+    expect(sessionText).toContain('"customType":"open-codesign.chat.message"');
+    expect(sessionText).toContain('build a dashboard');
+
+    const sqliteCount = db
+      .prepare('SELECT COUNT(*) AS n FROM chat_messages WHERE design_id = ?')
+      .get(design.id) as { n: number };
+    expect(sqliteCount.n).toBe(0);
+
+    handlers.clear();
+    registerSnapshotsIpc(db);
+
+    const rows = call('chat:v1:list', v1({ designId: design.id })) as Array<{
+      kind: string;
+      payload: { text?: string };
+    }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: 'user',
+      payload: { text: 'build a dashboard' },
+    });
+  });
+
+  it('seeds legacy snapshots into session JSONL once', () => {
+    const design = createDesign(db, 'Snapshot-backed design');
+    updateDesignWorkspace(db, design.id, path.join(tempRoot, 'workspace'));
+    createSnapshot(db, {
+      designId: design.id,
+      parentId: null,
+      type: 'initial',
+      prompt: 'make a product card',
+      artifactType: 'html',
+      artifactSource: '<html>card</html>',
+    });
+
+    expect(call('chat:v1:seed-from-snapshots', v1({ designId: design.id }))).toEqual({
+      inserted: 2,
+    });
+    expect(call('chat:v1:seed-from-snapshots', v1({ designId: design.id }))).toEqual({
+      inserted: 0,
+    });
+
+    const files = readdirSync(path.join(mockPaths.userData, 'sessions'));
+    expect(files).toEqual([`${design.id}.jsonl`]);
+
+    const rows = call('chat:v1:list', v1({ designId: design.id })) as Array<{
+      kind: string;
+      payload: { text?: string };
+    }>;
+    expect(rows.map((row) => row.kind)).toEqual(['user', 'artifact_delivered']);
+    expect(rows[0]?.payload.text).toBe('make a product card');
+  });
+
+  it('replays tool-call status updates without mutating prior JSONL entries', () => {
+    const design = createDesign(db, 'Tool design');
+    updateDesignWorkspace(db, design.id, path.join(tempRoot, 'workspace'));
+    const row = call(
+      'chat:v1:append',
+      v1({
+        designId: design.id,
+        kind: 'tool_call',
+        payload: {
+          toolName: 'text_editor',
+          args: {},
+          status: 'running',
+          startedAt: '2026-04-27T00:00:00.000Z',
+          verbGroup: 'Working',
+        },
+      }),
+    ) as { seq: number };
+
+    expect(
+      call(
+        'chat:v1:update-tool-status',
+        v1({
+          designId: design.id,
+          seq: row.seq,
+          status: 'done',
+          result: { ok: true },
+          durationMs: 42,
+        }),
+      ),
+    ).toEqual({ ok: true });
+
+    const rows = call('chat:v1:list', v1({ designId: design.id })) as Array<{
+      payload: { status?: string; result?: unknown; durationMs?: number };
+    }>;
+    expect(rows[0]?.payload).toMatchObject({
+      status: 'done',
+      result: { ok: true },
+      durationMs: 42,
+    });
+
+    const sessionFile = path.join(mockPaths.userData, 'sessions', `${design.id}.jsonl`);
+    const lines = readFileSync(sessionFile, 'utf8').trim().split('\n');
+    expect(lines.filter((line) => line.includes('open-codesign.chat.message'))).toHaveLength(1);
+    expect(lines.filter((line) => line.includes('open-codesign.chat.tool_status'))).toHaveLength(1);
   });
 });
 

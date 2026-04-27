@@ -111,6 +111,8 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
           designId,
           seq,
           status,
+          ...(result !== undefined ? { result } : {}),
+          ...(durationMs !== undefined ? { durationMs } : {}),
           ...(errorMessage !== undefined ? { errorMessage } : {}),
         });
       } catch (err) {
