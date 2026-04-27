@@ -304,7 +304,9 @@ describe('codex-oauth:v1:login', () => {
     });
 
     await register();
-    await expect(handlers.get('codex-oauth:v1:login')?.()).rejects.toThrow('Codex 登录成功但无法读取 ChatGPT 账户 ID，请重试登录。');
+    await expect(handlers.get('codex-oauth:v1:login')?.()).rejects.toThrow(
+      'Codex 登录成功但无法读取 ChatGPT 账户 ID，请重试登录。',
+    );
     expect(closeMock).toHaveBeenCalledTimes(1);
     expect(writeConfigMock).not.toHaveBeenCalled();
 
