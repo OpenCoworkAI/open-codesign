@@ -126,24 +126,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS is split into two native-arch runners. Cross-building both
-        # DMGs on a single arm64 host (what we used to do) shipped the host
-        # arch's native module inside the x64 DMG because electron-builder
-        # does not re-stage our per-arch better-sqlite3 prebuilds per target
-        # arch — see #176 (dlopen fails on Intel Macs). Using a native-arch
-        # runner per DMG guarantees `pnpm install` stages the right
-        # better_sqlite3.node* files for each target and keeps the legacy
-        # alias (better_sqlite3.node-electron.node) matching the DMG arch.
+        # macOS packaging is temporarily limited to Apple Silicon runners.
+        # The Intel macOS queue is chronically unavailable on our current
+        # Actions capacity, which blocks the whole release pipeline because
+        # `publish` waits for the full `build` matrix to finish.
         include:
           - os: macos-latest # arm64 Apple Silicon runner
             label: macos-arm64
             mac_arch: arm64
             artifact_name: installer-macos-arm64
-            artifact_glob: 'apps/desktop/release/*.dmg'
-          - os: macos-13 # Intel x64 runner (macos-latest is arm64)
-            label: macos-x64
-            mac_arch: x64
-            artifact_name: installer-macos-x64
             artifact_glob: 'apps/desktop/release/*.dmg'
           - os: windows-latest
             label: windows-latest
@@ -190,9 +181,8 @@ jobs:
       # Package the Electron app.
       # CSC_IDENTITY_AUTO_DISCOVERY=false: skip ad-hoc Mac signing prompt.
       # WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD: intentionally unset (no cert in v0.1).
-      # On macOS we force-pin the target arch to the runner's host arch
-      # (--arm64 on macos-latest, --x64 on macos-13) so each DMG is packaged
-      # natively instead of cross-built (see matrix comment + #176).
+      # On macOS we force-pin the target arch to the Apple Silicon runner's
+      # host arch so the DMG is packaged natively instead of cross-built.
       - name: Package desktop (non-mac)
         if: runner.os != 'macOS'
         env:
