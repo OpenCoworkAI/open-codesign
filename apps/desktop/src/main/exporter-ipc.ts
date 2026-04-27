@@ -11,6 +11,8 @@ const FORMAT_FILTERS: Record<ExporterFormat, Electron.FileFilter[]> = {
   markdown: [{ name: 'Markdown', extensions: ['md'] }],
 };
 
+const MAX_HTML_CONTENT_BYTES = 10 * 1024 * 1024;
+
 export interface ExportRequest {
   format: ExporterFormat;
   htmlContent: string;
@@ -45,6 +47,9 @@ export function parseRequest(raw: unknown): ExportRequest {
   }
   if (typeof html !== 'string' || html.length === 0) {
     throw new CodesignError('export requires non-empty htmlContent', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  if (Buffer.byteLength(html, 'utf8') > MAX_HTML_CONTENT_BYTES) {
+    throw new CodesignError('export htmlContent exceeds size limit', ERROR_CODES.IPC_BAD_INPUT);
   }
   const out: ExportRequest = { format, htmlContent: html };
   if (typeof defaultFilename === 'string' && defaultFilename.length > 0) {
