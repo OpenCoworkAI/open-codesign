@@ -10,7 +10,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Design, DesignSnapshot, SnapshotCreateInput } from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
@@ -28,9 +28,11 @@ import {
   getSnapshot,
   listDesigns,
   listSnapshots,
+  normalizeDesignFilePath,
   renameDesign,
   setDesignThumbnail,
   softDeleteDesign,
+  upsertDesignFile,
 } from './snapshots-db';
 import {
   listWorkspaceFilesAt,
@@ -605,6 +607,66 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
     },
   );
 
+  ipcMain.handle(
+    'codesign:files:v1:write',
+    async (_e: unknown, raw: unknown): Promise<WorkspaceFileReadResult> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError(
+          'codesign:files:v1:write expects { designId, path, content }',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'codesign:files:v1:write');
+      if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+        throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      if (typeof r['path'] !== 'string' || r['path'].trim().length === 0) {
+        throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      if (typeof r['content'] !== 'string') {
+        throw new CodesignError('content must be a string', 'IPC_BAD_INPUT');
+      }
+
+      let normalizedPath: string;
+      try {
+        normalizedPath = normalizeDesignFilePath(r['path'] as string);
+      } catch (cause) {
+        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+      }
+
+      const designId = r['designId'] as string;
+      const content = r['content'] as string;
+      const design = runDb('files:write.lookup-design', () => getDesign(db, designId));
+      if (design === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      if (design.workspacePath === null) {
+        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+      }
+
+      const destinationPath = path.join(design.workspacePath, normalizedPath);
+      try {
+        await mkdir(path.dirname(destinationPath), { recursive: true });
+        await writeFile(destinationPath, content, 'utf8');
+      } catch (cause) {
+        throw new CodesignError('Failed to write workspace file', 'IPC_DB_ERROR', { cause });
+      }
+
+      runDb('files:write.upsert-design-file', () =>
+        upsertDesignFile(db, designId, normalizedPath, content),
+      );
+
+      try {
+        return await readWorkspaceFileAt(design.workspacePath, normalizedPath);
+      } catch (cause) {
+        throw new CodesignError('Failed to read written workspace file', 'IPC_DB_ERROR', {
+          cause,
+        });
+      }
+    },
+  );
+
   registerFilesWatcherIpc(db, getWin);
 }
 
@@ -647,6 +709,7 @@ export const SNAPSHOTS_CHANNELS_V1 = [
   'snapshots:v1:workspace:check',
   'codesign:files:v1:list',
   'codesign:files:v1:read',
+  'codesign:files:v1:write',
   'codesign:files:v1:subscribe',
   'codesign:files:v1:unsubscribe',
 ] as const;

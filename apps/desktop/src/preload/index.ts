@@ -491,6 +491,13 @@ const api = {
         designId,
         path,
       }) as Promise<WorkspaceFileReadResult>,
+    write: (designId: string, path: string, content: string) =>
+      ipcRenderer.invoke('codesign:files:v1:write', {
+        schemaVersion: 1,
+        designId,
+        path,
+        content,
+      }) as Promise<WorkspaceFileReadResult>,
     subscribe: (designId: string) =>
       ipcRenderer.invoke('codesign:files:v1:subscribe', {
         schemaVersion: 1,

@@ -9,6 +9,7 @@ import {
 } from '@open-codesign/shared';
 import { RotateCcw, SlidersHorizontal, X } from 'lucide-react';
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { persistTweakTokensToWorkspace } from '../preview/tweak-persistence';
 import { useCodesignStore } from '../store';
 import {
   ColorSwatch,
@@ -273,6 +274,7 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
   // Debounced persist back to the artifact source so reload / snapshot / export
   // see the tweaked state. Live updates have already gone via postMessage.
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
@@ -310,9 +312,38 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
   function schedulePersist(tokens: Tokens): void {
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
       const html = useCodesignStore.getState().previewHtml;
       if (!html) return;
-      setPreviewHtml(replaceEditmodeBlock(html, tokens));
+      const designId = useCodesignStore.getState().currentDesignId;
+      const optimistic = replaceEditmodeBlock(html, tokens);
+      setPreviewHtml(optimistic);
+
+      const files = window.codesign?.files;
+      if (!designId || !files?.write) return;
+
+      persistQueueRef.current = persistQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          const latestHtml = useCodesignStore.getState().previewHtml ?? optimistic;
+          const result = await persistTweakTokensToWorkspace({
+            designId,
+            previewHtml: latestHtml,
+            tokens,
+            read: files.read,
+            write: files.write,
+          });
+          if (useCodesignStore.getState().currentDesignId === designId) {
+            setPreviewHtml(result.content);
+          }
+        })
+        .catch((err) => {
+          useCodesignStore.getState().pushToast({
+            variant: 'error',
+            title: t('projects.notifications.saveFailed'),
+            description: err instanceof Error ? err.message : t('errors.unknown'),
+          });
+        });
     }, 400);
   }
 
