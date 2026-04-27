@@ -1,6 +1,7 @@
 import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ERROR_CODES } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import { MAX_IMPORT_FILE_BYTES, safeReadImportFile } from './safe-read';
 
@@ -23,17 +24,21 @@ describe('safeReadImportFile', () => {
     expect(await safeReadImportFile(path)).toBe('{"a":1}');
   });
 
-  it('returns null when the path is a directory', async () => {
+  it('throws CONFIG_READ_FAILED when the path is a directory', async () => {
     const dir = await freshPath();
-    expect(await safeReadImportFile(dir)).toBeNull();
+    await expect(safeReadImportFile(dir)).rejects.toMatchObject({
+      code: ERROR_CODES.CONFIG_READ_FAILED,
+    });
   });
 
-  it('returns null when the file exceeds MAX_IMPORT_FILE_BYTES', async () => {
+  it('throws CONFIG_READ_FAILED when the file exceeds MAX_IMPORT_FILE_BYTES', async () => {
     const dir = await freshPath();
     const path = join(dir, 'huge.txt');
     const content = 'x'.repeat(MAX_IMPORT_FILE_BYTES + 1);
     await writeFile(path, content, 'utf8');
-    expect(await safeReadImportFile(path)).toBeNull();
+    await expect(safeReadImportFile(path)).rejects.toMatchObject({
+      code: ERROR_CODES.CONFIG_READ_FAILED,
+    });
   });
 
   it('accepts a symlink to a regular small file (legitimate dotfile repo pattern)', async (ctx) => {

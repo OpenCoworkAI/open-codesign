@@ -5,7 +5,7 @@
  * calls the registered handlers directly with an in-memory DB.
  */
 
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
@@ -14,6 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Collect registered handlers so tests can invoke them directly.
 const handlers = new Map<string, (e: unknown, raw: unknown) => unknown>();
 const mockPaths = vi.hoisted(() => ({ userData: '', documents: '' }));
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_HEADER_DATA_URL = `data:image/png;base64,${PNG_HEADER.toString('base64')}`;
 
 vi.mock('./electron-runtime', () => ({
   app: {
@@ -250,6 +252,58 @@ describe('chat:v1 session persistence', () => {
     const lines = readFileSync(sessionFile, 'utf8').trim().split('\n');
     expect(lines.filter((line) => line.includes('open-codesign.chat.message'))).toHaveLength(1);
     expect(lines.filter((line) => line.includes('open-codesign.chat.tool_status'))).toHaveLength(1);
+  });
+
+  it('throws when an Open CoDesign chat JSONL entry is malformed', () => {
+    const design = createDesign(db, 'Corrupt chat design');
+    updateDesignWorkspace(db, design.id, path.join(tempRoot, 'workspace'));
+    call(
+      'chat:v1:append',
+      v1({
+        designId: design.id,
+        kind: 'user',
+        payload: { text: 'hello' },
+      }),
+    );
+    const sessionFile = path.join(mockPaths.userData, 'sessions', `${design.id}.jsonl`);
+    const corruptEntry = {
+      type: 'custom',
+      customType: 'open-codesign.chat.message',
+      data: { schemaVersion: 1, id: 'bad', seq: 1, kind: 'user', snapshotId: null },
+      timestamp: '2026-04-27T00:00:00.000Z',
+    };
+    writeFileSync(
+      sessionFile,
+      `${readFileSync(sessionFile, 'utf8')}${JSON.stringify(corruptEntry)}\n`,
+    );
+
+    expect(() => call('chat:v1:list', v1({ designId: design.id }))).toThrow(CodesignError);
+  });
+
+  it('throws when a tool-status JSONL entry references a missing message sequence', () => {
+    const design = createDesign(db, 'Orphan tool status design');
+    updateDesignWorkspace(db, design.id, path.join(tempRoot, 'workspace'));
+    call(
+      'chat:v1:append',
+      v1({
+        designId: design.id,
+        kind: 'user',
+        payload: { text: 'hello' },
+      }),
+    );
+    const sessionFile = path.join(mockPaths.userData, 'sessions', `${design.id}.jsonl`);
+    const orphanEntry = {
+      type: 'custom',
+      customType: 'open-codesign.chat.tool_status',
+      data: { schemaVersion: 1, seq: 99, status: 'done' },
+      timestamp: '2026-04-27T00:00:00.000Z',
+    };
+    writeFileSync(
+      sessionFile,
+      `${readFileSync(sessionFile, 'utf8')}${JSON.stringify(orphanEntry)}\n`,
+    );
+
+    expect(() => call('chat:v1:list', v1({ designId: design.id }))).toThrow(CodesignError);
   });
 });
 
@@ -980,6 +1034,31 @@ describe('codesign:files:v1:write', () => {
       expect(result.content).toBe(content);
       expect(readFileSync(path.join(workspace, 'index.html'), 'utf8')).toBe(content);
       expect(viewDesignFile(db, design.id, 'index.html')?.content).toBe(content);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('writes data-url assets as binary workspace files while mirroring virtual content', async () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), 'codesign-files-asset-'));
+    try {
+      const design = createDesign(db, 'Asset Writable');
+      updateDesignWorkspace(db, design.id, workspace);
+      const content = PNG_HEADER_DATA_URL;
+
+      const result = (await callAsync(
+        'codesign:files:v1:write',
+        v1({ designId: design.id, path: 'assets/hero.png', content }),
+      )) as { path: string; content: string; size: number; kind: string };
+
+      expect(result).toMatchObject({
+        path: 'assets/hero.png',
+        content,
+        size: PNG_HEADER.length,
+        kind: 'asset',
+      });
+      expect(readFileSync(path.join(workspace, 'assets/hero.png'))).toEqual(PNG_HEADER);
+      expect(viewDesignFile(db, design.id, 'assets/hero.png')?.content).toBe(content);
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }

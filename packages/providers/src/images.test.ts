@@ -1,5 +1,9 @@
+import { ERROR_CODES } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defaultImageModel, generateImage } from './images';
+
+const PNG_HEADER_BASE64 = 'iVBORw0KGgo=';
+const WEBP_HEADER_BASE64 = 'UklGRgAAAABXRUJQ';
 
 describe('generateImage', () => {
   afterEach(() => {
@@ -10,7 +14,7 @@ describe('generateImage', () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
         JSON.stringify({
-          data: [{ b64_json: 'aW1hZ2U=', revised_prompt: 'A clean hero image' }],
+          data: [{ b64_json: PNG_HEADER_BASE64, revised_prompt: 'A clean hero image' }],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
@@ -45,7 +49,7 @@ describe('generateImage', () => {
       provider: 'openai',
       model: 'gpt-image-2',
       mimeType: 'image/png',
-      dataUrl: 'data:image/png;base64,aW1hZ2U=',
+      dataUrl: `data:image/png;base64,${PNG_HEADER_BASE64}`,
       revisedPrompt: 'A clean hero image',
     });
   });
@@ -60,7 +64,7 @@ describe('generateImage', () => {
                 images: [
                   {
                     type: 'image_url',
-                    image_url: { url: 'data:image/webp;base64,d2VicA==' },
+                    image_url: { url: `\n data:image/webp;base64,${WEBP_HEADER_BASE64} \n` },
                   },
                 ],
               },
@@ -100,7 +104,7 @@ describe('generateImage', () => {
       provider: 'openrouter',
       model: defaultImageModel('openrouter'),
       mimeType: 'image/webp',
-      base64: 'd2VicA==',
+      base64: WEBP_HEADER_BASE64,
     });
   });
 
@@ -112,5 +116,107 @@ describe('generateImage', () => {
       generateImage({ provider: 'openai', apiKey: '', prompt: 'hero image' }),
     ).rejects.toThrow(/Missing image generation API key/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('wraps non-JSON image responses in a typed provider error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('not json', { status: 200 })),
+    );
+
+    await expect(
+      generateImage({ provider: 'openai', apiKey: 'sk-test', prompt: 'hero image' }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringContaining('not valid JSON'),
+    });
+  });
+
+  it('rejects malformed OpenAI base64 image data', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () => new Response(JSON.stringify({ data: [{ b64_json: '%%%%' }] }), { status: 200 }),
+      ),
+    );
+
+    await expect(
+      generateImage({ provider: 'openai', apiKey: 'sk-test', prompt: 'hero image' }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringContaining('malformed base64'),
+    });
+  });
+
+  it('rejects image data that does not match its MIME type', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () => new Response(JSON.stringify({ data: [{ b64_json: 'aW1n' }] }), { status: 200 }),
+      ),
+    );
+
+    await expect(
+      generateImage({ provider: 'openai', apiKey: 'sk-test', prompt: 'hero image' }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringContaining('did not match image/png'),
+    });
+  });
+
+  it('rejects malformed OpenRouter data URL image data', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    images: [{ image_url: { url: 'data:image/png;base64,%%%%' } }],
+                  },
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+
+    await expect(
+      generateImage({ provider: 'openrouter', apiKey: 'sk-or-test', prompt: 'poster' }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringContaining('malformed'),
+    });
+  });
+
+  it('rejects unsupported generated image MIME types', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    images: [{ image_url: { url: 'data:image/svg+xml;base64,PHN2Zy8+' } }],
+                  },
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+
+    await expect(
+      generateImage({ provider: 'openrouter', apiKey: 'sk-or-test', prompt: 'poster' }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringContaining('unsupported image MIME type'),
+    });
   });
 });

@@ -27,12 +27,16 @@ describe('parseEditmodeBlock', () => {
     expect(parseEditmodeBlock('const x = 1;')).toBeNull();
   });
 
-  it('returns null on invalid JSON', () => {
-    expect(parseEditmodeBlock('/*EDITMODE-BEGIN*/{"a":}/*EDITMODE-END*/')).toBeNull();
+  it('throws on invalid JSON inside a marked block', () => {
+    expect(() => parseEditmodeBlock('/*EDITMODE-BEGIN*/{"a":}/*EDITMODE-END*/')).toThrow(
+      /EDITMODE block contains invalid JSON/,
+    );
   });
 
-  it('returns null when inner is not an object', () => {
-    expect(parseEditmodeBlock('/*EDITMODE-BEGIN*/[1,2,3]/*EDITMODE-END*/')).toBeNull();
+  it('throws when marked inner JSON is not an object', () => {
+    expect(() => parseEditmodeBlock('/*EDITMODE-BEGIN*/[1,2,3]/*EDITMODE-END*/')).toThrow(
+      /EDITMODE block must contain a JSON object/,
+    );
   });
 
   it('treats empty inner as empty tokens', () => {
@@ -43,18 +47,9 @@ describe('parseEditmodeBlock', () => {
     });
   });
 
-  it('falls back to bare const TWEAK_DEFAULTS when markers absent', () => {
+  it('does not infer bare const TWEAK_DEFAULTS when markers are absent', () => {
     const src = `const TWEAK_DEFAULTS = {"accent":"#CC785C","weight":500};`;
-    expect(parseEditmodeBlock(src)).toEqual({
-      tokens: { accent: '#CC785C', weight: 500 },
-      raw: '{"accent":"#CC785C","weight":500}',
-      source: 'inferred',
-    });
-  });
-
-  it('bare-const fallback handles nested objects via brace balancing', () => {
-    const src = `const TWEAK_DEFAULTS = {"a":{"nested":1},"b":2};\nfunction App(){}`;
-    expect(parseEditmodeBlock(src)?.tokens).toEqual({ a: { nested: 1 }, b: 2 });
+    expect(parseEditmodeBlock(src)).toBeNull();
   });
 });
 
@@ -64,10 +59,9 @@ describe('ensureEditmodeMarkers', () => {
     expect(ensureEditmodeMarkers(src)).toBe(src);
   });
 
-  it('wraps a bare const TWEAK_DEFAULTS literal with markers', () => {
+  it('does not repair a bare const TWEAK_DEFAULTS literal', () => {
     const src = `const TWEAK_DEFAULTS = {"a":1};`;
-    const out = ensureEditmodeMarkers(src);
-    expect(out).toBe(`const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"a":1}/*EDITMODE-END*/;`);
+    expect(ensureEditmodeMarkers(src)).toBe(src);
   });
 
   it('returns source unchanged when no TWEAK_DEFAULTS to wrap', () => {
@@ -125,27 +119,42 @@ describe('parseTweakSchema', () => {
     expect(parseTweakSchema('/*TWEAK-SCHEMA-BEGIN*//*TWEAK-SCHEMA-END*/')).toEqual({});
   });
 
-  it('returns null on invalid JSON', () => {
-    expect(parseTweakSchema('/*TWEAK-SCHEMA-BEGIN*/{not json}/*TWEAK-SCHEMA-END*/')).toBeNull();
+  it('throws on invalid JSON', () => {
+    expect(() => parseTweakSchema('/*TWEAK-SCHEMA-BEGIN*/{not json}/*TWEAK-SCHEMA-END*/')).toThrow(
+      /TWEAK_SCHEMA block contains invalid JSON/,
+    );
   });
 
-  it('skips entries without a recognized kind', () => {
+  it('throws for entries without a recognized kind', () => {
     const src = `/*TWEAK-SCHEMA-BEGIN*/{
       "good": { "kind": "color" },
       "missing": { "label": "no kind" },
       "unknown": { "kind": "rainbow" }
     }/*TWEAK-SCHEMA-END*/`;
-    expect(parseTweakSchema(src)).toEqual({ good: { kind: 'color' } });
+    expect(() => parseTweakSchema(src)).toThrow(/TWEAK_SCHEMA entry "missing" is invalid/);
   });
 
-  it('rejects enum without options', () => {
+  it('throws for enum without options', () => {
     const src = `/*TWEAK-SCHEMA-BEGIN*/{ "x": { "kind": "enum" } }/*TWEAK-SCHEMA-END*/`;
-    expect(parseTweakSchema(src)).toEqual({});
+    expect(() => parseTweakSchema(src)).toThrow(/TWEAK_SCHEMA entry "x" is invalid/);
   });
 
-  it('rejects enum with empty options array', () => {
+  it('throws for enum with empty options array', () => {
     const src = `/*TWEAK-SCHEMA-BEGIN*/{ "x": { "kind": "enum", "options": [] } }/*TWEAK-SCHEMA-END*/`;
-    expect(parseTweakSchema(src)).toEqual({});
+    expect(() => parseTweakSchema(src)).toThrow(/TWEAK_SCHEMA entry "x" is invalid/);
+  });
+
+  it('throws for enum with non-string options', () => {
+    const src = `/*TWEAK-SCHEMA-BEGIN*/{ "x": { "kind": "enum", "options": ["a", 1] } }/*TWEAK-SCHEMA-END*/`;
+    expect(() => parseTweakSchema(src)).toThrow(/TWEAK_SCHEMA entry "x" is invalid/);
+  });
+
+  it('throws when optional schema fields have the wrong type', () => {
+    const src = `/*TWEAK-SCHEMA-BEGIN*/{
+      "radius": { "kind": "number", "min": "0" },
+      "label": { "kind": "string", "placeholder": 42 }
+    }/*TWEAK-SCHEMA-END*/`;
+    expect(() => parseTweakSchema(src)).toThrow(/TWEAK_SCHEMA entry "radius" is invalid/);
   });
 });
 
@@ -168,10 +177,10 @@ describe('replaceTweakSchema', () => {
     expect(out.match(/TWEAK-SCHEMA-BEGIN/g)?.length).toBe(1);
   });
 
-  it('inserts after a bare TWEAK_DEFAULTS when no markers present', () => {
+  it('does not insert after a bare TWEAK_DEFAULTS when no markers present', () => {
     const src = `const TWEAK_DEFAULTS = {"a":1};`;
     const out = replaceTweakSchema(src, { a: { kind: 'color' } });
-    expect(parseTweakSchema(out)).toEqual({ a: { kind: 'color' } });
+    expect(out).toBe(src);
   });
 
   it('returns source unchanged when there is no TWEAK_DEFAULTS to anchor to', () => {

@@ -14,7 +14,7 @@ import {
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
 import { getCodexTokenStore } from './codex-oauth-ipc';
 import { ipcMain } from './electron-runtime';
-import { getApiKeyForProvider, getCachedConfig } from './onboarding-ipc';
+import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from './onboarding-ipc';
 import { isKeylessProviderAllowed } from './provider-settings';
 
 // Re-export so existing importers (tests, other main-process modules) keep
@@ -36,6 +36,25 @@ interface ModelsListPayloadV1 {
   provider: SupportedOnboardingProvider;
   apiKey: string;
   baseUrl: string;
+}
+
+const CONNECTION_TEST_FIELDS = ['provider', 'apiKey', 'baseUrl'] as const;
+const MODELS_LIST_FIELDS = ['provider', 'apiKey', 'baseUrl'] as const;
+const TEST_ENDPOINT_FIELDS = ['wire', 'baseUrl', 'apiKey', 'httpHeaders'] as const;
+
+function assertKnownFields(
+  record: Record<string, unknown>,
+  allowed: readonly string[],
+  context: string,
+): void {
+  for (const key of Object.keys(record)) {
+    if (!allowed.includes(key)) {
+      throw new CodesignError(
+        `${context} contains unsupported field "${key}"`,
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+  }
 }
 
 export interface ConnectionTestResult {
@@ -78,6 +97,7 @@ function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
     );
   }
   const r = raw as Record<string, unknown>;
+  assertKnownFields(r, CONNECTION_TEST_FIELDS, 'connection:v1:test');
   if (typeof r['provider'] !== 'string' || !isSupportedOnboardingProvider(r['provider'])) {
     throw new CodesignError(
       `Unsupported provider: ${String(r['provider'])}`,
@@ -94,13 +114,10 @@ function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
   if (apiKey.length === 0 && BUILTIN_PROVIDERS[provider].requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
-  if (typeof r['baseUrl'] !== 'string' || r['baseUrl'].trim().length === 0) {
-    throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
-  }
   return {
     provider,
     apiKey,
-    baseUrl: r['baseUrl'].trim(),
+    baseUrl: parseHttpBaseUrl(r['baseUrl'], 'baseUrl'),
   };
 }
 
@@ -109,6 +126,7 @@ function parseModelsListPayload(raw: unknown): ModelsListPayloadV1 {
     throw new CodesignError('models:v1:list expects an object payload', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
+  assertKnownFields(r, MODELS_LIST_FIELDS, 'models:v1:list');
   if (typeof r['provider'] !== 'string' || !isSupportedOnboardingProvider(r['provider'])) {
     throw new CodesignError(
       `Unsupported provider: ${String(r['provider'])}`,
@@ -123,14 +141,31 @@ function parseModelsListPayload(raw: unknown): ModelsListPayloadV1 {
   if (apiKey.length === 0 && BUILTIN_PROVIDERS[provider].requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
-  if (typeof r['baseUrl'] !== 'string' || r['baseUrl'].trim().length === 0) {
-    throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
-  }
   return {
     provider,
     apiKey,
-    baseUrl: r['baseUrl'].trim(),
+    baseUrl: parseHttpBaseUrl(r['baseUrl'], 'baseUrl'),
   };
+}
+
+function parseHttpBaseUrl(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new CodesignError(`${field} must be a non-empty string`, ERROR_CODES.IPC_BAD_INPUT);
+  }
+  const trimmed = value.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new CodesignError(`${field} "${trimmed}" is not a valid URL`, ERROR_CODES.IPC_BAD_INPUT);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new CodesignError(
+      `${field} must use http(s), got "${parsed.protocol}"`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  return trimmed;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,10 +297,10 @@ export function extractIds(items: unknown[]): string[] | null {
     if (item && typeof item === 'object') {
       const rec = item as { id?: unknown; name?: unknown };
       // OpenAI/Anthropic/OpenRouter all return a canonical `id` string; we
-      // prefer it unconditionally. The `name` fallback exists solely for
+      // prefer it unconditionally. The `name` alternative exists solely for
       // Ollama's /api/tags shape (`{models: [{ name: "llama3.2:latest" }]}`)
       // which has no `id` field. No known API-key provider returns objects
-      // with `name` but no `id`, so this fallback never silently misroutes
+      // with `name` but no `id`, so this branch never silently misroutes
       // for existing providers — but a future provider that ships display
       // names without ids would also land here.
       if (typeof rec.id === 'string') {
@@ -387,12 +422,13 @@ function resolveCredentialsForProvider(
       hint: 'Re-add the provider from Settings',
     };
   }
-  let apiKey: string;
-  try {
-    apiKey = getApiKeyForProvider(providerId);
-  } catch (err) {
-    // No stored key — provider may be keyless (IP-whitelisted proxy).
-    if (!isKeylessProviderAllowed(providerId, entry)) {
+  let apiKey = '';
+  if (isKeylessProviderAllowed(providerId, entry) && !hasApiKeyForProvider(providerId)) {
+    apiKey = '';
+  } else {
+    try {
+      apiKey = getApiKeyForProvider(providerId);
+    } catch (err) {
       return {
         ok: false,
         code: 'IPC_BAD_INPUT',
@@ -401,7 +437,6 @@ function resolveCredentialsForProvider(
         hint: 'Open Settings and import Codex again, or add an API key for this provider',
       };
     }
-    apiKey = '';
   }
   return {
     provider: providerId,
@@ -751,19 +786,19 @@ function resolveApiKeyForListing(
   providerId: string,
   entry: ProviderEntry,
 ): { apiKey: string } | Extract<ModelsListResponse, { ok: false }> {
+  if (isKeylessProviderAllowed(providerId, entry) && !hasApiKeyForProvider(providerId)) {
+    return { apiKey: '' };
+  }
   try {
     return { apiKey: getApiKeyForProvider(providerId) };
   } catch (err) {
-    if (!isKeylessProviderAllowed(providerId, entry)) {
-      return {
-        ok: false,
-        code: 'IPC_BAD_INPUT',
-        message:
-          err instanceof Error ? err.message : `No API key stored for provider "${providerId}"`,
-        hint: 'Open Settings and import Codex again, or add an API key for this provider',
-      };
-    }
-    return { apiKey: '' };
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message:
+        err instanceof Error ? err.message : `No API key stored for provider "${providerId}"`,
+      hint: 'Open Settings and import Codex again, or add an API key for this provider',
+    };
   }
 }
 
@@ -847,7 +882,7 @@ async function fetchModelListResponse(
   return { ok: true, models: ids };
 }
 
-async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndpointResponse> {
+export async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndpointResponse> {
   let payload: TestEndpointPayload;
   try {
     payload = parseTestEndpointPayload(raw);
@@ -888,7 +923,14 @@ async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndpointRes
     return { ok: false, error: 'parse', message: 'Provider returned non-JSON' };
   }
   const ids = extractModelIds(body);
-  return { ok: true, modelCount: ids?.length ?? 0, models: ids ?? [] };
+  if (ids === null) {
+    return {
+      ok: false,
+      error: 'parse',
+      message: 'Provider returned unexpected models response shape',
+    };
+  }
+  return { ok: true, modelCount: ids.length, models: ids };
 }
 
 function classifyTestEndpointStatus(status: number): TestEndpointResponse | null {
@@ -904,7 +946,7 @@ function classifyTestEndpointStatus(status: number): TestEndpointResponse | null
   return null;
 }
 
-async function handleOllamaV1Probe(raw: unknown): Promise<OllamaProbeResponse> {
+export async function handleOllamaV1Probe(raw: unknown): Promise<OllamaProbeResponse> {
   let baseUrl: string;
   try {
     baseUrl = parseOllamaProbePayload(raw);
@@ -955,7 +997,10 @@ export type OllamaProbeResponse =
   | { ok: false; code: string; message: string };
 
 function parseOllamaProbePayload(raw: unknown): string {
-  return normalizeOllamaBaseUrl(typeof raw === 'string' ? raw : '');
+  if (typeof raw !== 'string') {
+    throw new CodesignError('ollama:v1:probe expects a baseUrl string', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  return normalizeOllamaBaseUrl(raw);
 }
 
 /**
@@ -1024,22 +1069,24 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
     throw new CodesignError('config:v1:test-endpoint expects an object', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
+  assertKnownFields(r, TEST_ENDPOINT_FIELDS, 'config:v1:test-endpoint');
   const wire = r['wire'];
   const baseUrl = r['baseUrl'];
   const apiKey = r['apiKey'];
   if (wire !== 'openai-chat' && wire !== 'openai-responses' && wire !== 'anthropic') {
     throw new CodesignError(`Unsupported wire: ${String(wire)}`, ERROR_CODES.IPC_BAD_INPUT);
   }
-  if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
-    throw new CodesignError('baseUrl must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
-  }
   if (typeof apiKey !== 'string') {
     throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
   }
+  const trimmedApiKey = apiKey.trim();
+  if (trimmedApiKey.length === 0) {
+    throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
+  }
   const out: TestEndpointPayload = {
     wire,
-    baseUrl: baseUrl.trim(),
-    apiKey: apiKey.trim(),
+    baseUrl: parseHttpBaseUrl(baseUrl, 'baseUrl'),
+    apiKey: trimmedApiKey,
   };
   const headers = parseTestEndpointHttpHeaders(r['httpHeaders']);
   if (headers !== undefined) out.httpHeaders = headers;
@@ -1047,13 +1094,16 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
 }
 
 function parseTestEndpointHttpHeaders(value: unknown): Record<string, string> | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'object') {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new CodesignError('httpHeaders must be an object', ERROR_CODES.IPC_BAD_INPUT);
   }
   const map: Record<string, string> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof v === 'string') map[k] = v;
+    if (typeof v !== 'string') {
+      throw new CodesignError(`httpHeaders.${k} must be a string`, ERROR_CODES.IPC_BAD_INPUT);
+    }
+    map[k] = v;
   }
   return map;
 }

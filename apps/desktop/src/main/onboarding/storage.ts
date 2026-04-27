@@ -67,11 +67,12 @@ export async function runOpenFolder(raw: unknown): Promise<void> {
 export async function runResetOnboarding(): Promise<void> {
   const cfg = getCachedConfig();
   if (cfg === null) return;
-  // Clear secrets so onboarding flow triggers again on next load.
+  // Clear active provider too: keyless providers have no secret to remove, so
+  // clearing only `secrets` would leave onboarding marked complete.
   const next: Config = hydrateConfig({
     version: 3,
-    activeProvider: cfg.activeProvider,
-    activeModel: cfg.activeModel,
+    activeProvider: '',
+    activeModel: '',
     secrets: {},
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),

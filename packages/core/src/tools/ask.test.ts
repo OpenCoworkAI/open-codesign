@@ -27,6 +27,32 @@ describe('validateAskInput', () => {
     expect(validateAskInput(null).ok).toBe(false);
     expect(validateAskInput('hi').ok).toBe(false);
   });
+
+  it('rejects malformed question objects', () => {
+    expect(
+      validateAskInput({
+        questions: [{ id: 'q1', type: 'freeform', prompt: 'who?', typo: true }],
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateAskInput({
+        questions: [{ id: 'q1', type: 'text-options', prompt: 'style?', options: ['Only one'] }],
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateAskInput({
+        questions: [{ id: 'q1', type: 'slider', prompt: 'density', min: 24, max: 8, step: 2 }],
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateAskInput({
+        questions: [
+          { id: 'q1', type: 'freeform', prompt: 'one' },
+          { id: 'q1', type: 'freeform', prompt: 'two' },
+        ],
+      }).ok,
+    ).toBe(false);
+  });
 });
 
 describe('makeAskTool', () => {

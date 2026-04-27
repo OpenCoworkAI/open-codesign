@@ -35,11 +35,9 @@ interface ProviderMapping {
   defaultModel: string;
   /** Display name used in the Settings list — "OpenCode · Anthropic" etc. */
   label: string;
-  /** Upstream env var the provider's native CLI honors. Set so our runtime's
-   *  env-key fallback (`getApiKeyForProvider`) can rescue the row when the
-   *  stored secret is wiped or the user exports the key after import —
-   *  symmetric with how Claude Code sets `ANTHROPIC_AUTH_TOKEN` and Gemini
-   *  sets `GEMINI_API_KEY`. */
+  /** Upstream env var the provider's native CLI honors. Kept as import
+   *  metadata; runtime credential resolution requires a persisted secret or an
+   *  explicit keyless provider. */
   envKey: string;
 }
 
@@ -173,7 +171,7 @@ export interface OpencodeImport {
  *  The final arm catches any future `type` strings opencode might add so we
  *  can narrow-and-warn rather than silently dropping them as "unknown". All
  *  arms carry an optional `key` since TS can't narrow `string` literal from
- *  the wide `string` fallback on a negative check like `type !== 'api'`. */
+ *  the wide `string` branch on a negative check like `type !== 'api'`. */
 type AuthEntry =
   | { type: 'api'; key?: unknown; metadata?: unknown }
   | { type: 'oauth'; refresh?: unknown; access?: unknown; expires?: unknown; key?: unknown }
@@ -265,10 +263,18 @@ export function stripJsonComments(input: string): string {
   return out.join('');
 }
 
-function extractModelField(parsed: unknown): string | null {
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+function extractModelField(path: string, parsed: unknown, warnings: string[]): string | null {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    warnings.push(`Could not read active OpenCode model from ${path}: expected an object`);
+    return null;
+  }
   const model = (parsed as Record<string, unknown>)['model'];
-  return typeof model === 'string' && model.length > 0 ? model : null;
+  if (model === undefined) return null;
+  if (typeof model !== 'string' || model.trim().length === 0) {
+    warnings.push(`Could not read active OpenCode model from ${path}: model must be a string`);
+    return null;
+  }
+  return model.trim();
 }
 
 /** Parse the text of a single opencode config candidate and extract `model`.
@@ -282,7 +288,7 @@ function parseConfigCandidate(
 ): { first: string | null } {
   try {
     const parsed: unknown = JSON.parse(path.endsWith('.jsonc') ? stripJsonComments(text) : text);
-    return { first: extractModelField(parsed) };
+    return { first: extractModelField(path, parsed, warnings) };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(`Could not parse ${path}: ${msg}`);
@@ -388,17 +394,24 @@ function collectProvidersFromAuthJson(
 function resolveActiveSelection(
   providers: ProviderEntry[],
   rawActiveModel: string | null,
+  warnings: string[],
 ): { activeProvider: string | null; activeModel: string | null } {
   if (rawActiveModel === null) return { activeProvider: null, activeModel: null };
   const slash = rawActiveModel.indexOf('/');
   if (slash <= 0 || slash >= rawActiveModel.length - 1) {
+    warnings.push(`OpenCode active model "${rawActiveModel}" must use provider/model format`);
     return { activeProvider: null, activeModel: null };
   }
   const providerPart = rawActiveModel.slice(0, slash);
   const modelPart = rawActiveModel.slice(slash + 1);
   const candidateId = `opencode-${providerPart}`;
   const entry = providers.find((p) => p.id === candidateId);
-  if (entry === undefined) return { activeProvider: null, activeModel: null };
+  if (entry === undefined) {
+    warnings.push(
+      `OpenCode active model "${rawActiveModel}" references provider "${providerPart}", but that provider was not imported`,
+    );
+    return { activeProvider: null, activeModel: null };
+  }
   entry.defaultModel = modelPart;
   return { activeProvider: candidateId, activeModel: modelPart };
 }
@@ -418,7 +431,11 @@ export async function readOpencodeConfig(
     raw !== null ? collectProvidersFromAuthJson(raw, warnings) : { providers: [], apiKeyMap: {} };
 
   const rawActiveModel = await readActiveModelFromConfig(home, env, warnings);
-  const { activeProvider, activeModel } = resolveActiveSelection(providers, rawActiveModel);
+  const { activeProvider, activeModel } = resolveActiveSelection(
+    providers,
+    rawActiveModel,
+    warnings,
+  );
 
   return {
     providers,

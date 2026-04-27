@@ -164,7 +164,7 @@ function signalGroup(entry: ProcessEntry, signal: NodeJS.Signals): void {
     process.kill(-pid, signal);
   } catch (err) {
     // Group kill may fail with ESRCH if the process already exited, or with
-    // EPERM on the rare case where the child changed its gid. Fall back to
+    // EPERM on the rare case where the child changed its gid. Then signal
     // signalling just the direct child so at least the parent dies.
     try {
       entry.child.kill(signal);

@@ -85,7 +85,7 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
     // etc.), suggesting "add /v1" is wrong — Zhipu GLM uses /v4, AI Studio
     // uses /v1beta, and some Cloudflare Workers AI gateways already carry
     // /v1. A 404 on such endpoints usually means /models simply isn't
-    // exposed, not that the path is malformed. Fall back to the generic
+    // exposed, not that the path is malformed. Use the generic
     // hypothesis so the user isn't pushed into corrupting a correct baseUrl.
     const hasVersionSegment = /\/v\d+[a-z]*(?:\/|$)/i.test(ctx.baseUrl);
     if (hasVersionSegment) {
@@ -268,7 +268,7 @@ export function diagnoseGenerateFailure(ctx: GenerateFailureContext): Diagnostic
   }
 
   // No status attached — the Win11 gateway case surfaces as a plain
-  // "404 page not found" message with no HTTP metadata. Fall back to
+  // "404 page not found" message with no HTTP metadata. Use
   // pattern-matching so #130 reaches a helpful hypothesis anyway.
   if (message.includes('404') && message.includes('page not found')) {
     return diagnose('404', {

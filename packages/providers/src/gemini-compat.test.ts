@@ -39,6 +39,12 @@ describe('isGeminiOpenAICompat', () => {
   it('rejects spoofed URLs with Gemini host hyphenated into attacker domain', () => {
     expect(isGeminiOpenAICompat('https://generativelanguage-googleapis-com.evil.com')).toBe(false);
   });
+
+  it('returns false for non-OpenAI-compat paths on the Gemini host', () => {
+    expect(isGeminiOpenAICompat('https://generativelanguage.googleapis.com/v1beta/models')).toBe(
+      false,
+    );
+  });
 });
 
 describe('normalizeGeminiModelId', () => {
@@ -61,5 +67,14 @@ describe('normalizeGeminiModelId', () => {
 
   it('is a no-op when baseUrl is undefined', () => {
     expect(normalizeGeminiModelId('models/gemini-2-pro', undefined)).toBe('models/gemini-2-pro');
+  });
+
+  it('does not strip models/ prefix for native Gemini endpoints', () => {
+    expect(
+      normalizeGeminiModelId(
+        'models/gemini-2-pro',
+        'https://generativelanguage.googleapis.com/v1beta/models',
+      ),
+    ).toBe('models/gemini-2-pro');
   });
 });

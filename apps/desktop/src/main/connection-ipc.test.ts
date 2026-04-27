@@ -16,6 +16,8 @@ import {
   extractModelIds,
   fetchWithTimeout,
   getCacheKey,
+  handleConfigV1TestEndpoint,
+  handleOllamaV1Probe,
   normalizeBaseUrl,
   normalizeOllamaBaseUrl,
   runProviderTest,
@@ -223,7 +225,7 @@ describe('extractIds', () => {
   });
 
   // Ollama's /api/tags returns `{ models: [{ name: "llama3.2:latest" }] }`
-  // instead of OpenAI/Anthropic's `id` field. Without this fallback, a user
+  // instead of OpenAI/Anthropic's `id` field. Without this alternative, a user
   // who points a custom provider at `http://localhost:11434` (no /v1 suffix)
   // would silently get a PARSE error from the model list endpoint.
   it('accepts items with a `name` field for Ollama /api/tags shape', () => {
@@ -372,7 +374,7 @@ describe('classifyHttpError', () => {
 });
 
 // ---------------------------------------------------------------------------
-// models:v1:list — error union (no more silent [] fallback)
+// models:v1:list — error union (no more silent [] default)
 // ---------------------------------------------------------------------------
 
 describe('models:v1:list error union', () => {
@@ -804,6 +806,15 @@ describe('Claude Code identity header injection', () => {
 // ---------------------------------------------------------------------------
 
 describe('normalizeOllamaBaseUrl', () => {
+  it('rejects non-string probe payloads instead of probing default localhost', async () => {
+    const result = await handleOllamaV1Probe({ baseUrl: 'http://localhost:11434' });
+    expect(result).toEqual({
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: 'ollama:v1:probe expects a baseUrl string',
+    });
+  });
+
   it('returns the default localhost URL when input is empty or whitespace', () => {
     expect(normalizeOllamaBaseUrl('')).toBe('http://localhost:11434');
     expect(normalizeOllamaBaseUrl('   ')).toBe('http://localhost:11434');
@@ -825,7 +836,7 @@ describe('normalizeOllamaBaseUrl', () => {
     expect(normalizeOllamaBaseUrl('http://localhost:11434/v1/')).toBe('http://localhost:11434');
   });
 
-  it('throws IPC_BAD_INPUT on non-http(s) schemes (no silent localhost fallback)', () => {
+  it('throws IPC_BAD_INPUT on non-http(s) schemes (no silent localhost default)', () => {
     // `file://` has an explicit scheme and reaches the protocol check.
     expect(() => normalizeOllamaBaseUrl('file:///etc/passwd')).toThrow(/must use http/);
     expect(() => normalizeOllamaBaseUrl('ftp://example.com')).toThrow(/must use http/);
@@ -1068,6 +1079,139 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       }
       // /chat/completions must NOT have been probed for an openai-responses wire.
       expect(calls.some((c) => c.url.endsWith('/chat/completions'))).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('config:v1:test-endpoint response parsing', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('returns a parse error when the provider response shape has no model ids', async () => {
+    const { restore } = installFakeFetch(() => ({ status: 200, body: { unexpected: [] } }));
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://provider.example/v1',
+          apiKey: 'sk-test',
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'parse',
+        message: 'Provider returned unexpected models response shape',
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects malformed baseUrl before attempting fetch', async () => {
+    const { restore } = installFakeFetch(() => {
+      throw new Error('fetch should not be called');
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'not a url',
+          apiKey: 'sk-test',
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'bad-input',
+        message: 'baseUrl "not a url" is not a valid URL',
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects unknown fields before attempting fetch', async () => {
+    const { restore } = installFakeFetch(() => {
+      throw new Error('fetch should not be called');
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://provider.example/v1',
+          apiKey: 'sk-test',
+          typoedField: true,
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'bad-input',
+        message: 'config:v1:test-endpoint contains unsupported field "typoedField"',
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects malformed httpHeaders before attempting fetch', async () => {
+    const { restore } = installFakeFetch(() => {
+      throw new Error('fetch should not be called');
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://provider.example/v1',
+          apiKey: 'sk-test',
+          httpHeaders: { 'x-ok': 'yes', 'x-bad': 42 },
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'bad-input',
+        message: 'httpHeaders.x-bad must be a string',
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects null httpHeaders before attempting fetch', async () => {
+    const { restore } = installFakeFetch(() => {
+      throw new Error('fetch should not be called');
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://provider.example/v1',
+          apiKey: 'sk-test',
+          httpHeaders: null,
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'bad-input',
+        message: 'httpHeaders must be an object',
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects empty API keys before attempting fetch', async () => {
+    const { restore } = installFakeFetch(() => {
+      throw new Error('fetch should not be called');
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://provider.example/v1',
+          apiKey: '   ',
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'bad-input',
+        message: 'apiKey must be a non-empty string',
+      });
     } finally {
       restore();
     }

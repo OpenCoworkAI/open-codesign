@@ -24,7 +24,7 @@ function rowToDesignFile(row: DesignFileRowDb): DesignFile {
     schemaVersion: 1,
     id: row.id,
     designId: row.design_id,
-    path: row.path,
+    path: normalizeDesignFilePath(row.path),
     content: row.content,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

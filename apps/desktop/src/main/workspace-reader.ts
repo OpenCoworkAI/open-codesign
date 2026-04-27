@@ -39,8 +39,9 @@ export interface WorkspaceFile {
 
 /**
  * Scan `root` for files whose workspace-relative path matches any of
- * `patterns` (default: HTML/JSX/CSS/JS). Returns UTF-8 contents. Unreadable or
- * binary files are skipped, not thrown. Results are truncated to
+ * `patterns` (default: HTML/JSX/CSS/JS). Returns UTF-8 contents. Matching
+ * files must be readable text; otherwise the caller gets a visible source-scan
+ * error instead of a silently partial tweak scan. Results are truncated to
  * `MAX_FILES` / `MAX_BYTES`.
  */
 export async function readWorkspaceFilesAt(
@@ -58,8 +59,12 @@ export async function readWorkspaceFilesAt(
     let entries: Dirent[] = [];
     try {
       entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
+    } catch (err) {
+      throw new Error(
+        `Failed to scan workspace directory ${normalizeSlashes(relative(root, dir)) || '.'}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
     for (const entry of entries) {
       if (out.length >= MAX_FILES || totalBytes >= MAX_BYTES) return;
@@ -75,8 +80,10 @@ export async function readWorkspaceFilesAt(
       let contents: string;
       try {
         contents = await readUtf8TextFile(abs);
-      } catch {
-        continue;
+      } catch (err) {
+        throw new Error(
+          `Failed to read workspace file ${rel}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
       out.push({ file: rel, contents });
       totalBytes += Buffer.byteLength(contents, 'utf8');
@@ -162,8 +169,8 @@ async function readUtf8TextFile(abs: string): Promise<string> {
  * `readWorkspaceFilesAt` this does NOT read file contents — the renderer's
  * files panel only needs the directory listing, not the bytes.
  *
- * Returns entries sorted by path (POSIX-style separators). Silently returns
- * `[]` when `root` does not exist.
+ * Returns entries sorted by path (POSIX-style separators). A bound workspace
+ * that cannot be scanned is an invalid runtime state, so scan failures throw.
  */
 export async function listWorkspaceFilesAt(root: string): Promise<WorkspaceFileEntry[]> {
   const out: WorkspaceFileEntry[] = [];
@@ -173,8 +180,12 @@ export async function listWorkspaceFilesAt(root: string): Promise<WorkspaceFileE
     let entries: Dirent[] = [];
     try {
       entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
+    } catch (err) {
+      throw new Error(
+        `Failed to scan workspace directory ${normalizeSlashes(relative(root, dir)) || '.'}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
     for (const entry of entries) {
       if (out.length >= LIST_MAX_FILES) return;
@@ -191,8 +202,11 @@ export async function listWorkspaceFilesAt(root: string): Promise<WorkspaceFileE
         const s = await stat(abs);
         size = s.size;
         mtime = s.mtime;
-      } catch {
-        continue;
+      } catch (err) {
+        const rel = normalizeSlashes(relative(root, abs));
+        throw new Error(
+          `Failed to stat workspace file ${rel}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
       const rel = normalizeSlashes(relative(root, abs));
       out.push({

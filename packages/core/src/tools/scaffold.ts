@@ -28,15 +28,70 @@ interface Manifest {
   scaffolds: Record<string, ManifestEntry>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseScaffoldManifest(value: unknown): Manifest {
+  if (!isRecord(value)) {
+    throw new Error('manifest must be an object');
+  }
+  if (value['schemaVersion'] !== 1) {
+    throw new Error('manifest.schemaVersion must be 1');
+  }
+  const scaffolds = value['scaffolds'];
+  if (!isRecord(scaffolds)) {
+    throw new Error('manifest.scaffolds must be an object');
+  }
+  const parsed: Record<string, ManifestEntry> = {};
+  for (const [kind, rawEntry] of Object.entries(scaffolds)) {
+    if (kind.trim().length === 0) {
+      throw new Error('manifest scaffold kind must be non-empty');
+    }
+    if (!isRecord(rawEntry)) {
+      throw new Error(`manifest.scaffolds.${kind} must be an object`);
+    }
+    if (typeof rawEntry['description'] !== 'string') {
+      throw new Error(`manifest.scaffolds.${kind}.description must be a string`);
+    }
+    if (typeof rawEntry['path'] !== 'string' || rawEntry['path'].trim().length === 0) {
+      throw new Error(`manifest.scaffolds.${kind}.path must be a non-empty string`);
+    }
+    const entry: ManifestEntry = {
+      description: rawEntry['description'],
+      path: rawEntry['path'],
+    };
+    if (rawEntry['category'] !== undefined) {
+      if (typeof rawEntry['category'] !== 'string') {
+        throw new Error(`manifest.scaffolds.${kind}.category must be a string`);
+      }
+      entry.category = rawEntry['category'];
+    }
+    if (rawEntry['license'] !== undefined) {
+      if (typeof rawEntry['license'] !== 'string') {
+        throw new Error(`manifest.scaffolds.${kind}.license must be a string`);
+      }
+      entry.license = rawEntry['license'];
+    }
+    parsed[kind] = entry;
+  }
+  return { schemaVersion: 1, scaffolds: parsed };
+}
+
 export async function loadScaffoldManifest(scaffoldsRoot: string): Promise<Manifest> {
   const manifestPath = path.join(scaffoldsRoot, 'manifest.json');
   const raw = await readFile(manifestPath, 'utf8');
-  return JSON.parse(raw) as Manifest;
+  return parseScaffoldManifest(JSON.parse(raw) as unknown);
 }
 
 export async function listScaffoldKinds(scaffoldsRoot: string): Promise<string[]> {
   const manifest = await loadScaffoldManifest(scaffoldsRoot);
   return Object.keys(manifest.scaffolds).sort();
+}
+
+function isWithinRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 export interface ScaffoldRequest {
@@ -65,6 +120,9 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
   if (!entry) return { ok: false, reason: `unknown scaffold kind: ${req.kind}` };
 
   const source = path.resolve(req.scaffoldsRoot, entry.path);
+  if (!isWithinRoot(req.scaffoldsRoot, source)) {
+    return { ok: false, reason: `scaffold source outside templates root: ${entry.path}` };
+  }
   let contents: string;
   try {
     contents = await readFile(source, 'utf8');
@@ -77,7 +135,7 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
   }
 
   const dest = path.resolve(req.workspaceRoot, req.destPath);
-  if (!dest.startsWith(req.workspaceRoot)) {
+  if (!isWithinRoot(req.workspaceRoot, dest)) {
     return { ok: false, reason: 'destination outside workspace' };
   }
   await mkdir(path.dirname(dest), { recursive: true });

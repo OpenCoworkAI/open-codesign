@@ -4,6 +4,7 @@ import type { CoreLogger, GenerateImageAssetRequest } from '@open-codesign/core'
 import type BetterSqlite3 from 'better-sqlite3';
 import type { AgentStreamEvent } from '../../preload/index';
 import { getDesign, normalizeDesignFilePath, upsertDesignFile } from '../snapshots-db';
+import { prepareWorkspaceWriteContent } from '../workspace-file-content';
 
 function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -24,8 +25,8 @@ function extensionFromMimeType(mimeType: string): string {
   return 'png';
 }
 
-function sanitizeAssetStem(input: string | undefined, fallback: string): string {
-  const raw = input?.trim() || fallback;
+function sanitizeAssetStem(input: string | undefined, defaultStem: string): string {
+  const raw = input?.trim() || defaultStem;
   const stem = raw
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -93,15 +94,20 @@ export function createRuntimeTextEditorFs({
     if (index !== undefined) emitFsUpdated('index.html', index);
   }
 
-  async function persistMutation(filePath: string, content: string): Promise<void> {
-    if (designId === null || db === null) return;
+  async function persistMutation(filePath: string, content: string): Promise<string> {
     const normalizedPath = normalizeDesignFilePath(filePath);
+    const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
+    if (designId === null || db === null) return writeContent.storedContent;
     const design = getDesign(db, designId);
     if (design?.workspacePath !== null && design !== null) {
       const destinationPath = path_module.join(design.workspacePath, normalizedPath);
       try {
         await mkdir(path_module.dirname(destinationPath), { recursive: true });
-        await writeFile(destinationPath, content, 'utf8');
+        if (typeof writeContent.diskContent === 'string') {
+          await writeFile(destinationPath, writeContent.diskContent, 'utf8');
+        } else {
+          await writeFile(destinationPath, writeContent.diskContent);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('runtime.fs.writeThrough.fail', {
@@ -114,7 +120,8 @@ export function createRuntimeTextEditorFs({
       }
     }
 
-    upsertDesignFile(db, designId, normalizedPath, content);
+    upsertDesignFile(db, designId, normalizedPath, writeContent.storedContent);
+    return writeContent.storedContent;
   }
 
   const fs = {
@@ -124,9 +131,9 @@ export function createRuntimeTextEditorFs({
       return { content, numLines: content.split('\n').length };
     },
     async create(path: string, content: string) {
-      await persistMutation(path, content);
-      fsMap.set(path, content);
-      emitFsUpdated(path, content);
+      const persisted = await persistMutation(path, content);
+      fsMap.set(path, persisted);
+      emitFsUpdated(path, persisted);
       emitIndexIfAssetChanged(path);
       return { path };
     },
@@ -139,9 +146,9 @@ export function createRuntimeTextEditorFs({
         throw new Error(`old_str is ambiguous in ${path}; provide more context`);
       }
       const next = current.slice(0, idx) + newStr + current.slice(idx + oldStr.length);
-      await persistMutation(path, next);
-      fsMap.set(path, next);
-      emitFsUpdated(path, next);
+      const persisted = await persistMutation(path, next);
+      fsMap.set(path, persisted);
+      emitFsUpdated(path, persisted);
       emitIndexIfAssetChanged(path);
       return { path };
     },
@@ -151,9 +158,9 @@ export function createRuntimeTextEditorFs({
       const clamped = Math.max(0, Math.min(line, lines.length));
       lines.splice(clamped, 0, text);
       const next = lines.join('\n');
-      await persistMutation(path, next);
-      fsMap.set(path, next);
-      emitFsUpdated(path, next);
+      const persisted = await persistMutation(path, next);
+      fsMap.set(path, persisted);
+      emitFsUpdated(path, persisted);
       emitIndexIfAssetChanged(path);
       return { path };
     },

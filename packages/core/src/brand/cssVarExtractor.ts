@@ -28,7 +28,7 @@ function inferType(prop: string, value: string): TokenType | null {
   )
     return 'color';
 
-  // Value-based fallback (handles e.g. `--border-primary: #fff` after broad keywords).
+  // Value-based classifier (handles e.g. `--border-primary: #fff` after broad keywords).
   if (looksLikeColor(value)) return 'color';
 
   return null;

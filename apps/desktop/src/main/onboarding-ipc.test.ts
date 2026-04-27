@@ -1,9 +1,10 @@
 /**
  * Tests for settings IPC channel versioning.
  *
- * These tests verify that registerOnboardingIpc registers both the versioned
- * v1 channels and the legacy shim channels, ensuring backward compat for
- * callers that haven't migrated yet.
+ * These tests verify that registerOnboardingIpc exposes only the versioned
+ * v1 settings channels. v0.2 has not shipped yet, so renderer/main IPC drift
+ * should fail loudly instead of being hidden by unversioned compatibility
+ * handlers.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -116,17 +117,21 @@ vi.mock('./imports/opencode-config', () => ({
 }));
 
 vi.mock('@open-codesign/providers', () => ({
+  looksLikeClaudeOAuthToken: vi.fn(() => false),
   pingProvider: vi.fn(async () => ({ ok: true, modelCount: 1 })),
+  withClaudeCodeIdentity: vi.fn(
+    (_wire: unknown, _baseUrl: unknown, headers: Record<string, string>) => headers,
+  ),
 }));
 
 describe('registerOnboardingIpc — channel versioning', () => {
-  it('registers settings:v1:list-providers alongside the legacy settings:list-providers shim', async () => {
+  it('registers settings:v1:list-providers without the unversioned settings:list-providers shim', async () => {
     // Import after mocks are in place.
     const { registerOnboardingIpc } = await import('./onboarding-ipc');
     registerOnboardingIpc();
 
     expect(registeredChannels).toContain('settings:v1:list-providers');
-    expect(registeredChannels).toContain('settings:list-providers');
+    expect(registeredChannels).not.toContain('settings:list-providers');
   });
 
   it('registers all settings v1 channels', async () => {
@@ -147,8 +152,8 @@ describe('registerOnboardingIpc — channel versioning', () => {
     }
   });
 
-  it('preserves all legacy settings shim channels for backward compat', async () => {
-    const legacyChannels = [
+  it('does not register unversioned settings channels', async () => {
+    const unversionedChannels = [
       'settings:list-providers',
       'settings:add-provider',
       'settings:delete-provider',
@@ -160,8 +165,8 @@ describe('registerOnboardingIpc — channel versioning', () => {
       'settings:toggle-devtools',
     ];
 
-    for (const ch of legacyChannels) {
-      expect(registeredChannels).toContain(ch);
+    for (const ch of unversionedChannels) {
+      expect(registeredChannels).not.toContain(ch);
     }
   });
 
@@ -195,6 +200,30 @@ describe('registerOnboardingIpc — channel versioning', () => {
     expect(rows.some((row) => row.provider === 'ollama')).toBe(true);
   });
 
+  it('trims modelPrimary before writing builtin provider settings', async () => {
+    const { readConfig, writeConfig } = await import('./config');
+    vi.mocked(readConfig).mockResolvedValueOnce(null);
+    vi.mocked(writeConfig).mockClear();
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+
+    const handler = handlers.get('settings:v1:add-provider');
+    expect(handler).toBeDefined();
+
+    await handler?.(
+      {},
+      {
+        provider: 'openai',
+        apiKey: 'sk-test',
+        modelPrimary: '  gpt-5.4  ',
+      },
+    );
+
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.activeModel).toBe('gpt-5.4');
+  });
+
   it('registers the canonical config:v1:set-provider-and-models handler', async () => {
     const { registerOnboardingIpc } = await import('./onboarding-ipc');
     registerOnboardingIpc();
@@ -203,6 +232,22 @@ describe('registerOnboardingIpc — channel versioning', () => {
 });
 
 describe('config:v1:set-provider-and-models — payload validation', () => {
+  it('rejects unsupported provider ids instead of inventing a custom provider', async () => {
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:set-provider-and-models');
+    expect(handler).toBeDefined();
+    if (!handler) return;
+    await expect(
+      handler({} as never, {
+        provider: 'openia',
+        apiKey: 'sk-test',
+        modelPrimary: 'gpt-4o',
+        setAsActive: true,
+      }),
+    ).rejects.toThrow(/not supported/);
+  });
+
   it('rejects payloads without a setAsActive boolean', async () => {
     const { registerOnboardingIpc } = await import('./onboarding-ipc');
     registerOnboardingIpc();
@@ -234,6 +279,379 @@ describe('config:v1:set-provider-and-models — payload validation', () => {
     ).rejects.toThrow(/schemaVersion/);
   });
 });
+
+describe('settings:v1:set-active-provider — payload validation', () => {
+  it('rejects unknown fields instead of dropping them', async () => {
+    const { readConfig, writeConfig } = await import('./config');
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(readConfig).mockResolvedValueOnce({
+      version: 3,
+      activeProvider: 'openai',
+      activeModel: 'gpt-4o',
+      secrets: { openai: { ciphertext: 'enc:sk-openai', mask: 'sk-***ai' } },
+      providers: {
+        openai: {
+          id: 'openai',
+          name: 'OpenAI',
+          builtin: true,
+          wire: 'openai-chat',
+          baseUrl: 'https://api.openai.com/v1',
+          defaultModel: 'gpt-4o',
+        },
+      },
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      baseUrls: {},
+    });
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+    const handler = handlers.get('settings:v1:set-active-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await expect(
+      handler({} as never, {
+        provider: 'openai',
+        modelPrimary: 'gpt-4o',
+        typoedField: true,
+      }),
+    ).rejects.toThrow(/unsupported field "typoedField"/);
+    expect(writeConfig).not.toHaveBeenCalled();
+  });
+
+  it('trims provider and model before persisting active settings', async () => {
+    const { readConfig, writeConfig } = await import('./config');
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(readConfig).mockResolvedValueOnce({
+      version: 3,
+      activeProvider: 'openai',
+      activeModel: 'gpt-4o',
+      secrets: { openai: { ciphertext: 'enc:sk-openai', mask: 'sk-***ai' } },
+      providers: {
+        openai: {
+          id: 'openai',
+          name: 'OpenAI',
+          builtin: true,
+          wire: 'openai-chat',
+          baseUrl: 'https://api.openai.com/v1',
+          defaultModel: 'gpt-4o',
+        },
+      },
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      baseUrls: {},
+    });
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+    const handler = handlers.get('settings:v1:set-active-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await handler({} as never, {
+      provider: ' openai ',
+      modelPrimary: ' gpt-4o-mini ',
+    });
+
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.activeProvider).toBe('openai');
+    expect(written?.activeModel).toBe('gpt-4o-mini');
+  });
+});
+
+describe('config:v1:remove-provider — empty-state normalization', () => {
+  it('returns provider:null after removing the last configured provider', async () => {
+    const { hydrateConfig } = await import('@open-codesign/shared');
+    const { readConfig, writeConfig } = await import('./config');
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(readConfig).mockResolvedValueOnce(
+      hydrateConfig({
+        version: 3,
+        activeProvider: 'custom-only',
+        activeModel: 'gpt-test',
+        secrets: {
+          'custom-only': { ciphertext: 'enc:sk-test', mask: 'sk-***test' },
+        },
+        providers: {
+          'custom-only': {
+            id: 'custom-only',
+            name: 'Custom Only',
+            builtin: false,
+            wire: 'openai-chat',
+            baseUrl: 'https://proxy.example.com/v1',
+            defaultModel: 'gpt-test',
+          },
+        },
+      }),
+    );
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:remove-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await expect(handler({} as never, 'custom-only')).resolves.toMatchObject({
+      hasKey: false,
+      provider: null,
+      modelPrimary: null,
+      baseUrl: null,
+    });
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.activeProvider).toBe('');
+    expect(written?.activeModel).toBe('');
+  });
+});
+
+describe('settings:v1:reset-onboarding — empty-state normalization', () => {
+  it('clears the active provider even when the old active provider is keyless', async () => {
+    const { BUILTIN_PROVIDERS, hydrateConfig } = await import('@open-codesign/shared');
+    const { readConfig, writeConfig } = await import('./config');
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(readConfig).mockResolvedValueOnce(
+      hydrateConfig({
+        version: 3,
+        activeProvider: 'ollama',
+        activeModel: 'llama3.2',
+        secrets: {},
+        providers: {
+          ollama: BUILTIN_PROVIDERS.ollama,
+        },
+      }),
+    );
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+    const reset = handlers.get('settings:v1:reset-onboarding');
+    const getState = handlers.get('onboarding:get-state');
+    if (!reset || !getState) throw new Error('handler missing');
+
+    await reset({} as never);
+
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.activeProvider).toBe('');
+    expect(written?.activeModel).toBe('');
+    expect(written?.providers['ollama']).toBeDefined();
+    expect(await getState({} as never)).toMatchObject({
+      hasKey: false,
+      provider: null,
+      modelPrimary: null,
+    });
+  });
+});
+
+describe('config:v1 provider mutations — fail-fast key handling', () => {
+  it('rejects custom provider creation with an empty API key before touching storage', async () => {
+    const { buildSecretRef } = await import('./keychain');
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    vi.mocked(buildSecretRef).mockClear();
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:add-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await expect(
+      handler({} as never, {
+        id: 'custom-empty',
+        name: 'Custom Empty',
+        wire: 'openai-chat',
+        baseUrl: 'https://proxy.example.com/v1',
+        apiKey: '',
+        defaultModel: 'gpt-test',
+      }),
+    ).rejects.toThrow(/apiKey must be a non-empty string/);
+    expect(buildSecretRef).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed custom-provider header maps instead of dropping bad entries', async () => {
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:add-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await expect(
+      handler({} as never, {
+        id: 'custom-bad-headers',
+        name: 'Custom Bad Headers',
+        wire: 'openai-chat',
+        baseUrl: 'https://proxy.example.com/v1',
+        apiKey: 'sk-test',
+        defaultModel: 'gpt-test',
+        httpHeaders: { 'x-ok': 'yes', 'x-bad': 42 },
+        setAsActive: false,
+      }),
+    ).rejects.toThrow(/httpHeaders\.x-bad must be a string/);
+  });
+
+  it('rejects clearing a non-keyless provider secret instead of writing a broken config', async () => {
+    const { hydrateConfig } = await import('@open-codesign/shared');
+    const { readConfig, writeConfig } = await import('./config');
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(readConfig).mockResolvedValueOnce(
+      hydrateConfig({
+        version: 3,
+        activeProvider: 'custom-required',
+        activeModel: 'gpt-test',
+        secrets: {
+          'custom-required': { ciphertext: 'enc:sk-test', mask: 'sk-***test' },
+        },
+        providers: {
+          'custom-required': {
+            id: 'custom-required',
+            name: 'Custom Required',
+            builtin: false,
+            wire: 'openai-chat',
+            baseUrl: 'https://proxy.example.com/v1',
+            defaultModel: 'gpt-test',
+          },
+        },
+      }),
+    );
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:update-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await expect(
+      handler({} as never, {
+        id: 'custom-required',
+        apiKey: '',
+      }),
+    ).rejects.toThrow(/Cannot clear API key/);
+    expect(writeConfig).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid provider updates instead of silently keeping old values', async () => {
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:update-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await expect(
+      handler({} as never, {
+        id: 'custom-required',
+        wire: 'not-a-wire',
+      }),
+    ).rejects.toThrow(/Unsupported wire/);
+  });
+
+  it('rejects invalid add-provider setAsActive instead of coercing to false', async () => {
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:add-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await expect(
+      handler({} as never, {
+        id: 'custom-add',
+        name: 'Custom Add',
+        wire: 'openai-chat',
+        baseUrl: 'https://proxy.example.com/v1',
+        apiKey: 'sk-test',
+        defaultModel: 'gpt-test',
+        setAsActive: 'yes',
+      }),
+    ).rejects.toThrow(/setAsActive must be a boolean/);
+  });
+
+  it('rejects missing add-provider setAsActive instead of defaulting to false', async () => {
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:add-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await expect(
+      handler({} as never, {
+        id: 'custom-add',
+        name: 'Custom Add',
+        wire: 'openai-chat',
+        baseUrl: 'https://proxy.example.com/v1',
+        apiKey: 'sk-test',
+        defaultModel: 'gpt-test',
+      }),
+    ).rejects.toThrow(/setAsActive must be a boolean/);
+  });
+
+  it('rejects unknown provider mutation fields instead of dropping them', async () => {
+    const { registerOnboardingIpc } = await import('./onboarding-ipc');
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:add-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await expect(
+      handler({} as never, {
+        id: 'custom-add',
+        name: 'Custom Add',
+        wire: 'openai-chat',
+        baseUrl: 'https://proxy.example.com/v1',
+        apiKey: 'sk-test',
+        defaultModel: 'gpt-test',
+        typoedField: 'would have been ignored',
+      }),
+    ).rejects.toThrow(/unsupported field "typoedField"/);
+  });
+});
+
+describe('config:v1:list-endpoint-models — response parsing', () => {
+  it('returns a parse error for unknown payload fields before fetching', async () => {
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('fetch should not be called');
+    }) as unknown as typeof fetch;
+    try {
+      const { runListEndpointModels } = await import('./onboarding/providers-crud');
+      await expect(
+        runListEndpointModels({
+          wire: 'openai-chat',
+          baseUrl: 'https://proxy.example.com/v1',
+          apiKey: 'sk-test',
+          typoedField: true,
+        }),
+      ).resolves.toEqual({ ok: false, error: 'unsupported field "typoedField"' });
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+  });
+
+  it('returns a parse error for malformed baseUrl before fetching', async () => {
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('fetch should not be called');
+    }) as unknown as typeof fetch;
+    try {
+      const { runListEndpointModels } = await import('./onboarding/providers-crud');
+      await expect(
+        runListEndpointModels({
+          wire: 'openai-chat',
+          baseUrl: 'not a url',
+          apiKey: 'sk-test',
+        }),
+      ).resolves.toEqual({ ok: false, error: 'baseUrl "not a url" is not a valid URL' });
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+  });
+
+  it('returns a parse error when a model item has neither id nor name', async () => {
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: [{ id: 'good-model' }, { label: 'display only' }] }),
+    })) as unknown as typeof fetch;
+    try {
+      const { runListEndpointModels } = await import('./onboarding/providers-crud');
+      await expect(
+        runListEndpointModels({
+          wire: 'openai-chat',
+          baseUrl: 'https://proxy.example.com/v1',
+          apiKey: 'sk-test',
+        }),
+      ).resolves.toEqual({ ok: false, error: 'unexpected response shape' });
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+  });
+});
+
 describe('registerOnboardingIpc — validate-key passes baseUrl to pingProvider', () => {
   it('forwards baseUrl to pingProvider when provided', async () => {
     const { pingProvider } = await import('@open-codesign/providers');
@@ -262,6 +680,53 @@ describe('registerOnboardingIpc — validate-key passes baseUrl to pingProvider'
     await handler?.({} as unknown, { provider: 'anthropic', apiKey: 'sk-ant-test' });
 
     expect(pingProvider).toHaveBeenCalledWith('anthropic', 'sk-ant-test', undefined);
+  });
+
+  it('allows explicitly keyless Ollama validation with an empty apiKey', async () => {
+    const { pingProvider } = await import('@open-codesign/providers');
+    vi.mocked(pingProvider).mockClear();
+    const handler = handlers.get('onboarding:validate-key');
+    expect(handler).toBeDefined();
+
+    await handler?.({} as unknown, {
+      provider: 'ollama',
+      apiKey: '',
+      baseUrl: 'http://localhost:11434/v1',
+    });
+
+    expect(pingProvider).toHaveBeenCalledWith('ollama', '', 'http://localhost:11434/v1');
+  });
+
+  it('rejects malformed baseUrl before calling pingProvider', async () => {
+    const { pingProvider } = await import('@open-codesign/providers');
+    vi.mocked(pingProvider).mockClear();
+    const handler = handlers.get('onboarding:validate-key');
+    expect(handler).toBeDefined();
+
+    await expect(
+      handler?.({} as unknown, {
+        provider: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'not a url',
+      }),
+    ).rejects.toThrow(/baseUrl .* is not a valid URL/);
+    expect(pingProvider).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-http provider baseUrls before calling pingProvider', async () => {
+    const { pingProvider } = await import('@open-codesign/providers');
+    vi.mocked(pingProvider).mockClear();
+    const handler = handlers.get('onboarding:validate-key');
+    expect(handler).toBeDefined();
+
+    await expect(
+      handler?.({} as unknown, {
+        provider: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'file:///tmp/socket',
+      }),
+    ).rejects.toThrow(/baseUrl must use http\(s\)/);
+    expect(pingProvider).not.toHaveBeenCalled();
   });
 });
 
@@ -304,7 +769,7 @@ describe('getApiKeyForProvider — API key retrieval', () => {
 });
 
 describe('config:v1:import-codex-config empty env handling', () => {
-  it('imports providers without encrypting empty env secrets', async () => {
+  it('rejects imports that only found an empty env credential', async () => {
     const { readCodexConfig } = await import('./imports/codex-config');
     const { encryptSecret } = await import('./keychain');
     const { writeConfig } = await import('./config');
@@ -332,14 +797,10 @@ describe('config:v1:import-codex-config empty env handling', () => {
 
     const handler = handlers.get('config:v1:import-codex-config');
     expect(handler).toBeDefined();
-    await expect(handler?.({} as unknown)).resolves.toMatchObject({
-      provider: 'codex-empty-env',
-      hasKey: false,
-    });
+    await expect(handler?.({} as unknown)).rejects.toThrow(/usable API key/);
 
     expect(encryptSecret).not.toHaveBeenCalled();
-    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
-    expect(written?.secrets['codex-empty-env']).toBeUndefined();
+    expect(writeConfig).not.toHaveBeenCalled();
     process.env['OPEN_CODESIGN_EMPTY_ENV_FOR_TEST'] = undefined;
   });
 
@@ -405,7 +866,7 @@ describe('config:v1:import-claude-code-config — user-type branching', () => {
     expect(writeConfig).not.toHaveBeenCalled();
   });
 
-  it('creates a Claude Code entry without flipping active when local-proxy has no key', async () => {
+  it('rejects Claude Code import without a stored key instead of writing an inactive row', async () => {
     const { readClaudeCodeSettings } = await import('./imports/claude-code-config');
     const { readConfig, writeConfig } = await import('./config');
     vi.mocked(writeConfig).mockClear();
@@ -454,14 +915,8 @@ describe('config:v1:import-claude-code-config — user-type branching', () => {
     });
 
     const handler = handlers.get('config:v1:import-claude-code-config');
-    const state = (await handler?.({} as unknown)) as { provider: string };
-    // Active provider stays on 'anthropic' because the new entry has no key.
-    expect(state.provider).toBe('anthropic');
-
-    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
-    expect(written?.activeProvider).toBe('anthropic');
-    expect(written?.providers['claude-code-imported']).toBeDefined();
-    expect(written?.secrets['claude-code-imported']).toBeUndefined();
+    await expect(handler?.({} as unknown)).rejects.toThrow(/usable API key/);
+    expect(writeConfig).not.toHaveBeenCalled();
   });
 
   it('activates the imported provider when a key was extracted', async () => {
@@ -499,24 +954,21 @@ describe('config:v1:import-claude-code-config — user-type branching', () => {
   });
 });
 
-describe('getApiKeyForProvider — envKey runtime fallback', () => {
-  it('returns process.env[entry.envKey] when secret is absent but env is set', async () => {
-    // Use an allowlisted env var name so the defense-in-depth check in
-    // getApiKeyForProvider doesn't block the lookup. ANTHROPIC_API_KEY is
-    // on the allowlist and unlikely to be set in CI.
+describe('getApiKeyForProvider — no runtime envKey credential rescue', () => {
+  it('throws PROVIDER_KEY_MISSING when secret is absent even if envKey is set', async () => {
     const ENV_NAME = 'ANTHROPIC_API_KEY';
     const saved = process.env[ENV_NAME];
     process.env[ENV_NAME] = 'sk-from-shell-env';
     const { readConfig } = await import('./config');
     vi.mocked(readConfig).mockResolvedValueOnce({
       version: 3,
-      activeProvider: 'fallback-test',
+      activeProvider: 'env-only-test',
       activeModel: 'x',
       secrets: {},
       providers: {
-        'fallback-test': {
-          id: 'fallback-test',
-          name: 'Env Fallback',
+        'env-only-test': {
+          id: 'env-only-test',
+          name: 'Env Only',
           builtin: false,
           wire: 'anthropic',
           baseUrl: 'https://api.anthropic.com',
@@ -524,20 +976,21 @@ describe('getApiKeyForProvider — envKey runtime fallback', () => {
           envKey: ENV_NAME,
         },
       },
-      provider: 'fallback-test',
+      provider: 'env-only-test',
       modelPrimary: 'x',
       baseUrls: {},
     });
     const { loadConfigOnBoot, getApiKeyForProvider } = await import('./onboarding-ipc');
     await loadConfigOnBoot();
 
-    expect(getApiKeyForProvider('fallback-test')).toBe('sk-from-shell-env');
+    expect(() => getApiKeyForProvider('env-only-test')).toThrow(
+      /PROVIDER_KEY_MISSING|No API key stored/,
+    );
     if (saved === undefined) delete process.env[ENV_NAME];
     else process.env[ENV_NAME] = saved;
   });
 
   it('throws PROVIDER_KEY_MISSING when both secret and envKey are absent', async () => {
-    // Pick an allowlisted name that we know is not set in CI.
     const ENV_NAME = 'CEREBRAS_API_KEY';
     const saved = process.env[ENV_NAME];
     delete process.env[ENV_NAME];
@@ -569,10 +1022,7 @@ describe('getApiKeyForProvider — envKey runtime fallback', () => {
     if (saved !== undefined) process.env[ENV_NAME] = saved;
   });
 
-  it('refuses to resolve non-allowlisted envKey (defense-in-depth against legacy configs)', async () => {
-    // A pre-allowlist config might carry `envKey: "AWS_SECRET_ACCESS_KEY"`
-    // from a malicious Codex config.toml that landed before the guard was
-    // installed. getApiKeyForProvider must still refuse to exfiltrate it.
+  it('ignores arbitrary envKey values in stale configs', async () => {
     const ENV_NAME = 'AWS_SECRET_ACCESS_KEY';
     const saved = process.env[ENV_NAME];
     process.env[ENV_NAME] = 'should-never-be-returned';
@@ -879,7 +1329,7 @@ describe('config:v1:import-opencode-config — merge logic', () => {
     expect(written?.activeModel).toBe('claude-opus-4-1');
   });
 
-  it('falls back to the first imported provider when activeProvider is null', async () => {
+  it('uses the first imported provider when activeProvider is null', async () => {
     const { readOpencodeConfig } = await import('./imports/opencode-config');
     const { writeConfig } = await import('./config');
     vi.mocked(writeConfig).mockClear();
@@ -920,6 +1370,33 @@ describe('config:v1:import-opencode-config — merge logic', () => {
 
     const handler = handlers.get('config:v1:import-opencode-config');
     await expect(handler?.({} as unknown)).rejects.toThrow(/importable API provider/i);
+  });
+
+  it('rejects providers that have metadata but no imported credential', async () => {
+    const { readOpencodeConfig } = await import('./imports/opencode-config');
+    const { writeConfig } = await import('./config');
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(readOpencodeConfig).mockResolvedValueOnce({
+      providers: [
+        {
+          id: 'opencode-missing-key',
+          name: 'OpenCode · Missing Key',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://api.openai.com/v1',
+          defaultModel: 'gpt-4o',
+          envKey: 'OPENAI_API_KEY',
+        },
+      ],
+      apiKeyMap: {},
+      activeProvider: 'opencode-missing-key',
+      activeModel: 'gpt-4o',
+      warnings: [],
+    });
+
+    const handler = handlers.get('config:v1:import-opencode-config');
+    await expect(handler?.({} as unknown)).rejects.toThrow(/usable API key/);
+    expect(writeConfig).not.toHaveBeenCalled();
   });
 });
 

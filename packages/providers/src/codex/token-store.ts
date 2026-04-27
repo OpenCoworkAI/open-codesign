@@ -24,6 +24,14 @@ export interface CodexTokenStoreOptions {
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 const NOT_LOGGED_IN_MSG = 'ChatGPT 订阅未登录或已登出，请重新登录。';
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value === value.trim();
+}
+
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
 function extractEmail(jwt: string): string | null {
   const claims = decodeJwtClaims(jwt);
   if (claims === null) return null;
@@ -36,14 +44,41 @@ function isStoredCodexAuth(value: unknown): value is StoredCodexAuth {
   const v = value as Record<string, unknown>;
   return (
     v['schemaVersion'] === 1 &&
-    typeof v['accessToken'] === 'string' &&
-    typeof v['refreshToken'] === 'string' &&
-    typeof v['idToken'] === 'string' &&
-    typeof v['expiresAt'] === 'number' &&
-    (v['accountId'] === null || typeof v['accountId'] === 'string') &&
-    (v['email'] === null || typeof v['email'] === 'string') &&
-    typeof v['updatedAt'] === 'number'
+    isNonEmptyString(v['accessToken']) &&
+    isNonEmptyString(v['refreshToken']) &&
+    isNonEmptyString(v['idToken']) &&
+    isPositiveFiniteNumber(v['expiresAt']) &&
+    (v['accountId'] === null || isNonEmptyString(v['accountId'])) &&
+    (v['email'] === null || isNonEmptyString(v['email'])) &&
+    isPositiveFiniteNumber(v['updatedAt'])
   );
+}
+
+function assertStoredCodexAuth(value: unknown, message: string): asserts value is StoredCodexAuth {
+  if (isStoredCodexAuth(value)) return;
+  throw new CodesignError(message, ERROR_CODES.CODEX_TOKEN_PARSE_FAILED);
+}
+
+function assertRefreshedTokenSet(value: unknown): asserts value is TokenSet {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new CodesignError(
+      'Codex token refresh returned an invalid token set',
+      ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    );
+  }
+  const v = value as Record<string, unknown>;
+  if (
+    !isNonEmptyString(v['accessToken']) ||
+    !isNonEmptyString(v['idToken']) ||
+    typeof v['refreshToken'] !== 'string' ||
+    !isPositiveFiniteNumber(v['expiresAt']) ||
+    !(v['accountId'] === null || isNonEmptyString(v['accountId']))
+  ) {
+    throw new CodesignError(
+      'Codex token refresh returned an invalid token set',
+      ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    );
+  }
 }
 
 export class CodexTokenStore {
@@ -80,17 +115,13 @@ export class CodexTokenStore {
         { cause },
       );
     }
-    if (!isStoredCodexAuth(parsed)) {
-      throw new CodesignError(
-        `Invalid Codex token store at ${this.filePath}`,
-        ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
-      );
-    }
+    assertStoredCodexAuth(parsed, `Invalid Codex token store at ${this.filePath}`);
     this.cache = parsed;
     return parsed;
   }
 
   async write(auth: StoredCodexAuth): Promise<void> {
+    assertStoredCodexAuth(auth, `Invalid Codex token store write at ${this.filePath}`);
     await mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
     const body = JSON.stringify(auth, null, 2);
     // Write to a pid + UUID scoped tmp then atomically rename. The UUID
@@ -183,6 +214,7 @@ export class CodexTokenStore {
       }
       throw err;
     }
+    assertRefreshedTokenSet(next);
     const newRefreshToken = next.refreshToken ? next.refreshToken : current.refreshToken;
     const emailFromNew = extractEmail(next.idToken);
     const newAuth: StoredCodexAuth = {

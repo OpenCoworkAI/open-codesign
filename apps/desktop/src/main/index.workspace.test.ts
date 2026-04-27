@@ -70,6 +70,9 @@ vi.mock('./storage-settings', () => ({
 
 import { createRuntimeTextEditorFs } from './index';
 
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_HEADER_DATA_URL = `data:image/png;base64,${PNG_HEADER.toString('base64')}`;
+
 function makeTempDir(prefix: string): string {
   return mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -137,6 +140,132 @@ describe('createRuntimeTextEditorFs', () => {
       );
       expect(readFileSync(diskPath, 'utf8')).toBe('<main>created</main>');
       expect(listFsUpdatedEvents(sendEvent)).toHaveLength(1);
+    } finally {
+      cleanupDir(workspaceDir);
+    }
+  });
+
+  it('writes generated data-url assets as binary files in a bound workspace', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Asset Workspace');
+    const workspaceDir = makeTempDir('ocd-runtime-asset-');
+    updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceDir));
+    const sendEvent = vi.fn();
+    const logger = { error: vi.fn() };
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: design.id,
+      generationId: 'gen-create-asset',
+      logger,
+      previousHtml: null,
+      sendEvent,
+    });
+    const dataUrl = `\n ${PNG_HEADER_DATA_URL} \n`;
+
+    try {
+      await fs.create('assets/hero.png', dataUrl);
+
+      const diskPath = path.join(workspaceDir, 'assets/hero.png');
+      expect(readFileSync(diskPath)).toEqual(PNG_HEADER);
+      expect(viewDesignFile(db, design.id, 'assets/hero.png')?.content).toBe(PNG_HEADER_DATA_URL);
+      expect(listFsUpdatedEvents(sendEvent)).toEqual([
+        expect.objectContaining({
+          type: 'fs_updated',
+          path: 'assets/hero.png',
+          content: PNG_HEADER_DATA_URL,
+        }),
+      ]);
+    } finally {
+      cleanupDir(workspaceDir);
+    }
+  });
+
+  it('rejects malformed generated asset data URLs before reporting a file update', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Bad Asset Workspace');
+    const workspaceDir = makeTempDir('ocd-runtime-bad-asset-');
+    updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceDir));
+    const sendEvent = vi.fn();
+    const logger = { error: vi.fn() };
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: design.id,
+      generationId: 'gen-bad-asset',
+      logger,
+      previousHtml: null,
+      sendEvent,
+    });
+
+    try {
+      await expect(fs.create('assets/hero.png', 'data:image/png;base64,%')).rejects.toMatchObject({
+        code: 'ARTIFACT_PROTOCOL_INVALID',
+      });
+
+      expect(existsSync(path.join(workspaceDir, 'assets/hero.png'))).toBe(false);
+      expect(viewDesignFile(db, design.id, 'assets/hero.png')).toBeNull();
+      expect(listFsUpdatedEvents(sendEvent)).toHaveLength(0);
+    } finally {
+      cleanupDir(workspaceDir);
+    }
+  });
+
+  it('rejects image data URLs whose bytes do not match the MIME type', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Wrong Signature Asset Workspace');
+    const workspaceDir = makeTempDir('ocd-runtime-wrong-signature-');
+    updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceDir));
+    const sendEvent = vi.fn();
+    const logger = { error: vi.fn() };
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: design.id,
+      generationId: 'gen-wrong-signature-asset',
+      logger,
+      previousHtml: null,
+      sendEvent,
+    });
+
+    try {
+      await expect(
+        fs.create('assets/hero.png', 'data:image/png;base64,aW1n'),
+      ).rejects.toMatchObject({
+        code: 'ARTIFACT_PROTOCOL_INVALID',
+      });
+
+      expect(existsSync(path.join(workspaceDir, 'assets/hero.png'))).toBe(false);
+      expect(viewDesignFile(db, design.id, 'assets/hero.png')).toBeNull();
+      expect(listFsUpdatedEvents(sendEvent)).toHaveLength(0);
+    } finally {
+      cleanupDir(workspaceDir);
+    }
+  });
+
+  it('rejects unsupported generated asset image MIME types', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Unsupported Asset Mime Workspace');
+    const workspaceDir = makeTempDir('ocd-runtime-unsupported-mime-');
+    updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceDir));
+    const sendEvent = vi.fn();
+    const logger = { error: vi.fn() };
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: design.id,
+      generationId: 'gen-unsupported-mime-asset',
+      logger,
+      previousHtml: null,
+      sendEvent,
+    });
+
+    try {
+      await expect(
+        fs.create('assets/hero.png', 'data:image/svg+xml;base64,PHN2Zy8+'),
+      ).rejects.toMatchObject({
+        code: 'ARTIFACT_PROTOCOL_INVALID',
+      });
+
+      expect(existsSync(path.join(workspaceDir, 'assets/hero.png'))).toBe(false);
+      expect(viewDesignFile(db, design.id, 'assets/hero.png')).toBeNull();
+      expect(listFsUpdatedEvents(sendEvent)).toHaveLength(0);
     } finally {
       cleanupDir(workspaceDir);
     }

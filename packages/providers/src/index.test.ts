@@ -1,4 +1,9 @@
-import type { ChatMessage, ModelRef } from '@open-codesign/shared';
+import {
+  type ChatMessage,
+  type CodesignError,
+  ERROR_CODES,
+  type ModelRef,
+} from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const getModelMock = vi.fn();
@@ -105,6 +110,38 @@ describe('complete', () => {
     });
   });
 
+  it('throws instead of returning truncated output when pi-ai stops on length', async () => {
+    getModelMock.mockReturnValue({
+      id: 'gpt-4o',
+      api: 'openai-completions',
+      provider: 'openai',
+    });
+    completeSimpleMock.mockResolvedValueOnce({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'partial artifact' }],
+      api: 'openai-completions',
+      provider: 'openai',
+      model: 'gpt-4o',
+      usage: {
+        input: 1,
+        output: 1,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 2,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'length',
+      timestamp: Date.now(),
+    });
+
+    await expect(
+      complete(MODEL, [{ role: 'user', content: 'hi' }], { apiKey: 'sk-test' }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringContaining('token limit'),
+    } satisfies Partial<CodesignError>);
+  });
+
   it('synthesizes a pass-through Model when openrouter id is missing from registry', async () => {
     getModelMock.mockReturnValue(undefined);
     completeSimpleMock.mockImplementationOnce(async (model, _context) => {
@@ -192,6 +229,50 @@ describe('complete', () => {
         wire: 'openai-chat',
         baseUrl: 'https://proxy.example.test/v1',
         httpHeaders: { 'x-proxy-auth': 'local' },
+      },
+    );
+
+    expect(result.content).toBe('ok');
+  });
+
+  it('rejects whitespace-only apiKey unless keyless mode is explicit', async () => {
+    await expect(
+      complete(MODEL, [{ role: 'user', content: 'hi' }], { apiKey: '   ' }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.PROVIDER_AUTH_MISSING });
+    expect(completeSimpleMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the keyless placeholder for whitespace-only apiKey in explicit keyless mode', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
+      expect(opts.apiKey).toBe('open-codesign-keyless');
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'local-proxy',
+        model: 'llama3',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    const result = await complete(
+      { provider: 'local-proxy', modelId: 'llama3' },
+      [{ role: 'user', content: 'hi' }],
+      {
+        apiKey: '   ',
+        allowKeyless: true,
+        wire: 'openai-chat',
+        baseUrl: 'http://localhost:11434/v1',
       },
     );
 

@@ -10,7 +10,7 @@ import { safeReadImportFile } from './safe-read';
  * apps and threatens account suspension for anyone who does. This importer
  * therefore ONLY handles the static API-key path: the user has set
  * `GEMINI_API_KEY=AIzaSy…` either in `~/.gemini/.env`, `~/.env`, or the shell
- * environment, and we extract it. The encrypted keychain fallback
+ * environment, and we extract it. The encrypted keychain recovery
  * (`~/.gemini/gemini-credentials.json`) is ignored because its encryption key
  * is derived from hostname+username and cannot be read outside the CLI.
  *
@@ -283,9 +283,13 @@ export async function readGeminiCliConfig(
 
   const warnings: string[] = [...earlyWarnings];
   if (!GEMINI_API_KEY_PATTERN.test(resolved.apiKey)) {
-    warnings.push(
-      `GEMINI_API_KEY does not match the expected format (AIzaSy + 33 chars). Found at ${resolved.keyPath ?? 'shell env'}. The import will proceed but the key may be rejected at validation.`,
-    );
+    return {
+      kind: 'blocked',
+      warnings: [
+        ...warnings,
+        `GEMINI_API_KEY does not match the expected format (AIzaSy + 33 chars). Found at ${resolved.keyPath ?? 'shell env'}. Fix the key before importing Gemini.`,
+      ],
+    };
   }
 
   const provider: ProviderEntry = {

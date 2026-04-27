@@ -13,7 +13,6 @@ import { readOpencodeConfig } from '../imports/opencode-config';
 import { getLogger } from '../logger';
 import type { ProviderRow } from '../provider-settings';
 import type { AppPaths } from '../storage-settings';
-import { createWarnOnce } from '../warnOnce';
 import { getCachedConfig, toState } from './config-cache';
 import {
   runImportClaudeCode,
@@ -41,7 +40,6 @@ import {
 import { runChooseStorageFolder, runGetPaths, runOpenFolder, runResetOnboarding } from './storage';
 
 const logger = getLogger('settings-ipc');
-const warnLegacy = createWarnOnce(logger);
 
 // `ExternalConfigsDetection` and its four `*DetectionMeta` satellites live in
 // `packages/shared/src/detection.ts` so the main process and the preload
@@ -307,62 +305,6 @@ export function registerOnboardingIpc(): void {
   ipcMain.handle('settings:v1:reset-onboarding', async (): Promise<void> => runResetOnboarding());
 
   ipcMain.handle('settings:v1:toggle-devtools', (_e) => {
-    _e.sender.toggleDevTools();
-  });
-
-  // ── Settings legacy shims (schedule removal next minor) ────────────────────
-
-  ipcMain.handle('settings:list-providers', async (): Promise<ProviderRow[]> => {
-    warnLegacy('legacy.settings.list-providers', 'channel used, schedule removal next minor');
-    return runListProviders();
-  });
-
-  ipcMain.handle('settings:add-provider', async (_e, raw: unknown): Promise<ProviderRow[]> => {
-    warnLegacy('legacy.settings.add-provider', 'channel used, schedule removal next minor');
-    return runAddProvider(raw);
-  });
-
-  ipcMain.handle('settings:delete-provider', async (_e, raw: unknown): Promise<ProviderRow[]> => {
-    warnLegacy('legacy.settings.delete-provider', 'channel used, schedule removal next minor');
-    return runDeleteProvider(raw);
-  });
-
-  ipcMain.handle(
-    'settings:set-active-provider',
-    async (_e, raw: unknown): Promise<OnboardingState> => {
-      warnLegacy(
-        'legacy.settings.set-active-provider',
-        'channel used, schedule removal next minor',
-      );
-      return runSetActiveProvider(raw);
-    },
-  );
-
-  ipcMain.handle('settings:get-paths', async (): Promise<AppPaths> => {
-    warnLegacy('legacy.settings.get-paths', 'channel used, schedule removal next minor');
-    return runGetPaths();
-  });
-
-  ipcMain.handle('settings:choose-storage-folder', async (_e, raw: unknown): Promise<AppPaths> => {
-    warnLegacy(
-      'legacy.settings.choose-storage-folder',
-      'channel used, schedule removal next minor',
-    );
-    return runChooseStorageFolder(raw);
-  });
-
-  ipcMain.handle('settings:open-folder', async (_e, raw: unknown) => {
-    warnLegacy('legacy.settings.open-folder', 'channel used, schedule removal next minor');
-    return runOpenFolder(raw);
-  });
-
-  ipcMain.handle('settings:reset-onboarding', async (): Promise<void> => {
-    warnLegacy('legacy.settings.reset-onboarding', 'channel used, schedule removal next minor');
-    return runResetOnboarding();
-  });
-
-  ipcMain.handle('settings:toggle-devtools', (_e) => {
-    warnLegacy('legacy.settings.toggle-devtools', 'channel used, schedule removal next minor');
     _e.sender.toggleDevTools();
   });
 }

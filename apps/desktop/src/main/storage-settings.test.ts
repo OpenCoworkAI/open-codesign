@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ERROR_CODES } from '@open-codesign/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildAppPaths,
@@ -73,5 +74,14 @@ describe('buildAppPaths', () => {
     expect(next).toEqual({ dataDir });
     await expect(readPersistedStorageLocations(root)).resolves.toEqual({ dataDir });
     await expect(readFile(storageSettingsPath(root), 'utf8')).resolves.toContain('"dataDir":');
+  });
+
+  it('fails fast when boot-time storage settings are malformed', async () => {
+    const root = await tempRoot();
+    await writeFile(storageSettingsPath(root), '{"dataDir":', 'utf8');
+
+    expect(() => initStorageSettings(root)).toThrow(
+      expect.objectContaining({ code: ERROR_CODES.STORAGE_SETTINGS_PARSE_FAILED }),
+    );
   });
 });

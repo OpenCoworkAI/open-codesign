@@ -10,7 +10,7 @@ import { looksLikeClaudeOAuthToken, withClaudeCodeIdentity } from './claude-code
 
 export type ValidateResult =
   | { ok: true; modelCount: number }
-  | { ok: false; code: '401' | '402' | '429' | 'network'; message: string };
+  | { ok: false; code: '401' | '402' | '429' | 'network' | 'parse'; message: string };
 
 interface ProviderEndpoint {
   url: string;
@@ -136,18 +136,30 @@ export async function pingProvider(
     body = await res.json();
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Invalid JSON in response';
-    return { ok: false, code: 'network', message };
+    return { ok: false, code: 'parse', message };
   }
 
   const modelCount = countModels(body);
+  if (modelCount === null) {
+    return { ok: false, code: 'parse', message: 'Unexpected /models response shape' };
+  }
   return { ok: true, modelCount };
 }
 
-function countModels(body: unknown): number {
-  if (body === null || typeof body !== 'object') return 0;
+function countModelItems(items: unknown[]): number | null {
+  for (const item of items) {
+    if (item === null || typeof item !== 'object') return null;
+    const record = item as { id?: unknown; name?: unknown };
+    if (typeof record.id !== 'string' && typeof record.name !== 'string') return null;
+  }
+  return items.length;
+}
+
+function countModels(body: unknown): number | null {
+  if (body === null || typeof body !== 'object') return null;
   const data = (body as { data?: unknown }).data;
-  if (Array.isArray(data)) return data.length;
+  if (Array.isArray(data)) return countModelItems(data);
   const models = (body as { models?: unknown }).models;
-  if (Array.isArray(models)) return models.length;
-  return 0;
+  if (Array.isArray(models)) return countModelItems(models);
+  return null;
 }

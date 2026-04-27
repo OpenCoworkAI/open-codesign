@@ -8,7 +8,7 @@
  *     anti-slop-digest, device-frames-hint.
  *   - Layer 2 (keyword-matched): chart-rendering, ios-starter-template,
  *     and individual craft-directives subsections triggered by dashboard /
- *     mobile / marketing / logo cues. If no keyword matches, fall back to
+ *     mobile / marketing / logo cues. If no keyword matches, use
  *     the full craft-directives section.
  *
  * Layer 3 — retry-on-quality-fail injection of full ANTI_SLOP +

@@ -228,7 +228,7 @@ export interface GenerateOutput {
   /**
    * Non-fatal issues surfaced during this generate call (e.g. builtin skill
    * loader failed). Callers MUST forward these to the UI — this is the
-   * "no silent fallbacks" escape hatch for best-effort substeps.
+   * "no silent failure" escape hatch for best-effort substeps.
    */
   warnings?: string[];
 }
@@ -456,7 +456,7 @@ export async function applyComment(
 // Title generation — small synchronous completion used after the first prompt
 // to replace "Untitled design" with a 2-5 word summary. Uses the same provider
 // the user already configured so no extra key is needed. Failures bubble as
-// CodesignError so the caller can fall back to a simple truncation.
+// CodesignError so the caller can choose a simple truncation recovery.
 // ---------------------------------------------------------------------------
 
 export interface GenerateTitleInput {

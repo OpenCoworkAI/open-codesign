@@ -186,7 +186,7 @@ function hasTailwindV4Theme(source: string): boolean {
 }
 
 function inferTypeFromCssProp(prop: string, value: string): TokenType | null {
-  // Order matters: specific shape patterns must run before broad keyword fallbacks
+  // Order matters: specific shape patterns must run before broad keyword classifiers.
   // so Tailwind v4 `--text-*` size tokens are not misclassified as color.
   if (/font-size|text-size/.test(prop)) return 'fontSize';
   if (/font-family/.test(prop)) return 'fontFamily';

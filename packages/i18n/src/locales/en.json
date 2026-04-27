@@ -1118,6 +1118,8 @@
     "INPUT_EMPTY_HTML": "Existing HTML is required for this operation.",
     "INPUT_UNSUPPORTED_MODE": "This generation mode is not supported.",
     "GENERATION_TIMEOUT": "Generation timed out. Try a shorter prompt or increase the timeout in Settings.",
+    "ARTIFACT_PROTOCOL_INVALID": "The generated artifact did not follow the required protocol.",
+    "TOOL_EXECUTION_FAILED": "A design tool failed while running. Details are in the log.",
     "CONFIG_READ_FAILED": "Failed to read configuration file. Check file permissions.",
     "CONFIG_PARSE_FAILED": "Configuration file could not be parsed. It may be corrupt.",
     "CONFIG_SCHEMA_INVALID": "Configuration file has an unrecognised format. Please reconfigure.",

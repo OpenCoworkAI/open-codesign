@@ -16,7 +16,6 @@ import {
   ApplyCommentPayload,
   CancelGenerationPayloadV1,
   CodesignError,
-  GeneratePayload,
   GeneratePayloadV1,
 } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
@@ -34,13 +33,13 @@ import {
 } from '../generation-ipc';
 import { resolveImageGenerationConfig, toGenerateImageOptions } from '../image-generation-settings';
 import { getLogger } from '../logger';
-import { getApiKeyForProvider, getCachedConfig } from '../onboarding-ipc';
+import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from '../onboarding-ipc';
 import { readPersisted as readPreferences } from '../preferences-ipc';
 import { runPreview } from '../preview-runtime';
 import { preparePromptContext } from '../prompt-context';
 import { createProviderContextStore } from '../provider-context';
 import { resolveActiveModel } from '../provider-settings';
-import { resolveActiveApiKey, resolveApiKeyWithKeylessFallback } from '../resolve-api-key';
+import { resolveActiveApiKey, resolveCredentialForProvider } from '../resolve-api-key';
 import { withRun } from '../runContext';
 import { getDesign, recordDiagnosticEvent } from '../snapshots-db';
 import { readWorkspaceFilesAt } from '../workspace-reader';
@@ -85,9 +84,10 @@ function resolveActiveApiKeyFromState(providerId: string): Promise<string> {
 }
 
 function resolveApiKeyForActive(providerId: string, allowKeyless: boolean): Promise<string> {
-  return resolveApiKeyWithKeylessFallback(providerId, allowKeyless, {
+  return resolveCredentialForProvider(providerId, allowKeyless, {
     getCodexAccessToken: () => getCodexTokenStore().getValidAccessToken(),
     getApiKeyForProvider,
+    hasApiKeyForProvider,
   });
 }
 
@@ -599,117 +599,6 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           modelId: active.model.modelId,
           baseUrl: baseUrl ?? '<default>',
           status: upstreamStatus,
-          message: rethrow instanceof Error ? rethrow.message : String(rethrow),
-          code: rethrow instanceof CodesignError ? rethrow.code : undefined,
-        });
-        recordFinalError('generate', id, rethrow);
-        throw rethrow;
-      } finally {
-        clearTimeoutGuard();
-        inFlight.delete(id);
-      }
-    });
-  });
-
-  // Legacy shim — kept for one minor release while older renderer builds still
-  // send codesign:generate without schemaVersion. Remove after v0.3.
-  ipcMain.handle('codesign:generate', async (_e, raw: unknown) => {
-    logIpc.warn('legacy codesign:generate channel used, schedule removal next minor');
-    const legacy = GeneratePayload.parse(raw);
-    const id = legacy.generationId ?? `gen-${Date.now()}`;
-    return withRun(id, async () => {
-      const v1Raw = { schemaVersion: 1 as const, ...legacy, generationId: id };
-      const payload = GeneratePayloadV1.parse(v1Raw);
-      const controller = new AbortController();
-      inFlight.set(id, controller);
-
-      const cfg = getCachedConfig();
-      if (cfg === null) {
-        inFlight.delete(id);
-        throw new CodesignError(
-          'No configuration found. Complete onboarding first.',
-          'CONFIG_MISSING',
-        );
-      }
-      const active = resolveActiveModel(cfg, payload.model);
-      const allowKeyless = active.allowKeyless;
-      let apiKey: string;
-      try {
-        apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
-      } catch (err) {
-        inFlight.delete(id);
-        throw err;
-      }
-      // See codesign:v1:generate above — renderer baseUrl is ignored post-snap.
-      const baseUrl = active.baseUrl ?? undefined;
-      if (active.overridden) {
-        payload.baseUrl = baseUrl;
-      }
-      const promptContext = await preparePromptContext({
-        attachments: payload.attachments,
-        referenceUrl: payload.referenceUrl,
-        designSystem: cfg.designSystem ?? null,
-      });
-
-      logIpc.info('generate', {
-        generationId: id,
-        provider: active.model.provider,
-        modelId: active.model.modelId,
-        ...(active.overridden
-          ? { requestedProvider: payload.model.provider, requestedModelId: payload.model.modelId }
-          : {}),
-        promptLen: payload.prompt.length,
-        historyLen: payload.history.length,
-        attachmentCount: payload.attachments.length,
-        hasReferenceUrl: payload.referenceUrl !== undefined,
-        hasDesignSystem: promptContext.designSystem !== null,
-        baseUrl: baseUrl ?? '<default>',
-      });
-
-      const t0 = Date.now();
-      let clearTimeoutGuard: () => void = () => {};
-      try {
-        clearTimeoutGuard = await armTimeout(id, controller);
-        const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
-        const result = await runGenerate(
-          {
-            prompt: payload.prompt,
-            history: payload.history,
-            model: active.model,
-            apiKey,
-            ...(isCodex
-              ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
-              : {}),
-            attachments: promptContext.attachments,
-            referenceUrl: promptContext.referenceUrl,
-            designSystem: promptContext.designSystem ?? null,
-            ...(baseUrl !== undefined ? { baseUrl } : {}),
-            wire: active.wire,
-            ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-            ...(allowKeyless ? { allowKeyless: true } : {}),
-            signal: controller.signal,
-          },
-          id,
-          null,
-          null,
-          null,
-        );
-        logIpc.info('generate.ok', {
-          generationId: id,
-          ms: Date.now() - t0,
-          artifacts: result.artifacts.length,
-          cost: result.costUsd,
-        });
-        return result;
-      } catch (err) {
-        const timeoutErr = extractGenerationTimeoutError(controller.signal);
-        const rethrow = timeoutErr ?? err;
-        logIpc.error('generate.fail', {
-          generationId: id,
-          ms: Date.now() - t0,
-          provider: active.model.provider,
-          modelId: active.model.modelId,
-          baseUrl: baseUrl ?? '<default>',
           message: rethrow instanceof Error ? rethrow.message : String(rethrow),
           code: rethrow instanceof CodesignError ? rethrow.code : undefined,
         });

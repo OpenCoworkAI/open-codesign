@@ -12,6 +12,11 @@ export interface ResolveActiveApiKeyDeps {
   getApiKeyForProvider: (providerId: string) => string;
 }
 
+export interface ResolveCredentialForProviderDeps extends ResolveActiveApiKeyDeps {
+  /** True when config has a persisted secret row for this provider. */
+  hasApiKeyForProvider: (providerId: string) => boolean;
+}
+
 /**
  * Resolve the bearer credential for the active provider.
  *
@@ -22,11 +27,8 @@ export interface ResolveActiveApiKeyDeps {
  *
  * For all other providers, reads the stored API key and propagates any
  * underlying error as a `CodesignError(PROVIDER_AUTH_MISSING)` with the
- * original attached as `cause`. Callers that support keyless endpoints
- * (Ollama, IP-whitelisted LiteLLM, etc.) are expected to gate this call on
- * `entry.requiresApiKey !== false` and fall back to an empty bearer
- * themselves; the helper never silently swallows a failure, so a keychain
- * corruption or missing secret always leaves a breadcrumb.
+ * original attached as `cause`. Keyless endpoints are handled by
+ * `resolveCredentialForProvider`; this helper never suppresses a failure.
  */
 export async function resolveActiveApiKey(
   providerId: string,
@@ -56,37 +58,24 @@ export async function resolveActiveApiKey(
 }
 
 /**
- * Wrap `resolveActiveApiKey` with the keyless-fallback rule every IPC handler
- * wants: Ollama / IP-gated LiteLLM proxies (providers with
- * `requiresApiKey: false`) may run with an empty bearer, so a missing-
- * credential error from the resolver is swallowed only when `allowKeyless`
- * is true AND the provider is not the ChatGPT subscription (codex must
- * always surface a structured auth error so the renderer shows the
- * sign-in-again affordance).
+ * Resolve the bearer credential for an IPC handler.
  *
- * Both `PROVIDER_KEY_MISSING` (raised by `getApiKeyForProvider` when no
- * secret is stored) and `PROVIDER_AUTH_MISSING` (raised by the resolver
- * when it wraps an arbitrary read failure) count as missing-credential
- * errors. Any other failure (codex logout surfacing a different code, a
- * downstream shim error) rethrows verbatim.
+ * Keyless mode is explicit: providers with `requiresApiKey: false` may run
+ * with an empty bearer only when there is no persisted secret row. If a secret
+ * row exists, read it so keychain/plaintext corruption still surfaces. ChatGPT
+ * subscription auth is never keyless.
  */
-export async function resolveApiKeyWithKeylessFallback(
+export async function resolveCredentialForProvider(
   providerId: string,
   allowKeyless: boolean,
-  deps: ResolveActiveApiKeyDeps,
+  deps: ResolveCredentialForProviderDeps,
 ): Promise<string> {
-  try {
-    return await resolveActiveApiKey(providerId, deps);
-  } catch (err) {
-    if (
-      allowKeyless &&
-      providerId !== CHATGPT_CODEX_PROVIDER_ID &&
-      err instanceof CodesignError &&
-      (err.code === ERROR_CODES.PROVIDER_AUTH_MISSING ||
-        err.code === ERROR_CODES.PROVIDER_KEY_MISSING)
-    ) {
-      return '';
-    }
-    throw err;
+  if (
+    allowKeyless &&
+    providerId !== CHATGPT_CODEX_PROVIDER_ID &&
+    !deps.hasApiKeyForProvider(providerId)
+  ) {
+    return '';
   }
+  return resolveActiveApiKey(providerId, deps);
 }

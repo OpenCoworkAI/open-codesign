@@ -254,15 +254,22 @@ async function runCancelLogin(): Promise<boolean> {
 async function runLogout(): Promise<CodexOAuthStatus> {
   await getCodexTokenStore().clear();
   const cfg = getCachedConfig();
-  if (cfg?.providers[CHATGPT_CODEX_PROVIDER_ID] !== undefined) {
-    await persistProviderMutation((providers) => {
-      delete providers[CHATGPT_CODEX_PROVIDER_ID];
-      return providers;
+  if (
+    cfg !== null &&
+    (cfg.providers[CHATGPT_CODEX_PROVIDER_ID] !== undefined ||
+      cfg.activeProvider === CHATGPT_CODEX_PROVIDER_ID)
+  ) {
+    const nextProviders = { ...cfg.providers };
+    delete nextProviders[CHATGPT_CODEX_PROVIDER_ID];
+    const activeWasCodex = cfg.activeProvider === CHATGPT_CODEX_PROVIDER_ID;
+    const next: Config = hydrateConfig({
+      version: 3,
+      activeProvider: activeWasCodex ? '' : cfg.activeProvider,
+      activeModel: activeWasCodex ? '' : cfg.activeModel,
+      secrets: cfg.secrets,
+      providers: nextProviders,
+      ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
     });
-  }
-  const cfgAfter = getCachedConfig();
-  if (cfgAfter !== null && cfgAfter.activeProvider === CHATGPT_CODEX_PROVIDER_ID) {
-    const next: Config = { ...cfgAfter, activeProvider: '', activeModel: '' };
     await writeConfig(next);
     setCachedConfig(next);
   }

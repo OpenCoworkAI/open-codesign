@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   appendChatMessage,
   clearDesignWorkspace,
+  createComment,
   createDesign,
   createSnapshot,
   deleteSnapshot,
@@ -16,6 +17,7 @@ import {
   getSnapshot,
   initInMemoryDb,
   listChatMessages,
+  listComments,
   listDesigns,
   listSnapshots,
   renameDesign,
@@ -643,6 +645,46 @@ describe('updateChatToolCallStatus', () => {
     updateChatToolCallStatus(db, d.id, row.seq, 'done');
     const list = listChatMessages(db, d.id);
     expect((list[0]?.payload as { text: string }).text).toBe('hi');
+  });
+});
+
+describe('persisted JSON materialization', () => {
+  it('throws when a chat message payload row is corrupt JSON', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    db.prepare(
+      `INSERT INTO chat_messages (design_id, seq, kind, payload, snapshot_id, created_at)
+       VALUES (?, 0, 'user', ?, NULL, ?)`,
+    ).run(d.id, '{"text":', new Date().toISOString());
+
+    expect(() => listChatMessages(db, d.id)).toThrow(/Corrupt chat message payload/);
+  });
+
+  it('throws when a comment rect row is corrupt JSON', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    const s = createSnapshot(db, {
+      designId: d.id,
+      parentId: null,
+      type: 'initial',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<main></main>',
+    });
+    const comment = createComment(db, {
+      designId: d.id,
+      snapshotId: s.id,
+      kind: 'note',
+      selector: 'main',
+      tag: 'main',
+      outerHTML: '<main></main>',
+      rect: { top: 1, left: 2, width: 3, height: 4 },
+      text: 'Needs work',
+      scope: 'element',
+    });
+    db.prepare('UPDATE comments SET rect = ? WHERE id = ?').run('{"top":', comment.id);
+
+    expect(() => listComments(db, d.id)).toThrow(/Corrupt comment rect/);
   });
 });
 

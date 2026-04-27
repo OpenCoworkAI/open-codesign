@@ -7,6 +7,7 @@ import type {
   CommentStatus,
   CommentUpdateInput,
 } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type { Database } from './native-binding';
 
 interface CommentRowDb {
@@ -28,17 +29,25 @@ interface CommentRowDb {
 }
 
 function rowToComment(row: CommentRowDb): CommentRow {
-  let rect: CommentRect = { top: 0, left: 0, width: 0, height: 0 };
+  let rect: CommentRect;
   try {
     const parsed = JSON.parse(row.rect) as Partial<CommentRect>;
+    if (
+      typeof parsed.top !== 'number' ||
+      typeof parsed.left !== 'number' ||
+      typeof parsed.width !== 'number' ||
+      typeof parsed.height !== 'number'
+    ) {
+      throw new Error('rect fields must be numbers');
+    }
     rect = {
-      top: typeof parsed.top === 'number' ? parsed.top : 0,
-      left: typeof parsed.left === 'number' ? parsed.left : 0,
-      width: typeof parsed.width === 'number' ? parsed.width : 0,
-      height: typeof parsed.height === 'number' ? parsed.height : 0,
+      top: parsed.top,
+      left: parsed.left,
+      width: parsed.width,
+      height: parsed.height,
     };
-  } catch {
-    /* keep zero rect */
+  } catch (cause) {
+    throw new CodesignError('Corrupt comment rect JSON', ERROR_CODES.IPC_DB_ERROR, { cause });
   }
   const scope: CommentScope = row.scope === 'global' ? 'global' : 'element';
   return {

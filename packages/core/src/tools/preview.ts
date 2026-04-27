@@ -1,4 +1,5 @@
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type Static, Type } from '@sinclair/typebox';
 
 /**
@@ -100,17 +101,13 @@ export function makePreviewTool(
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        const fallback: PreviewResult = {
-          ok: false,
-          consoleErrors: [],
-          assetErrors: [],
-          metrics: { nodes: 0, width: 0, height: 0, loadMs: 0 },
-          reason: `preview executor threw: ${message}`,
-        };
-        return {
-          content: [{ type: 'text', text: `preview failed: ${message}` }],
-          details: fallback,
-        };
+        throw new CodesignError(
+          `Preview executor failed: ${message}`,
+          ERROR_CODES.TOOL_EXECUTION_FAILED,
+          {
+            cause: err,
+          },
+        );
       }
     },
   };

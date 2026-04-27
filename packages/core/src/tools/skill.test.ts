@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { CodesignError } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { invokeSkill, listSkillManifest, makeSkillTool } from './skill';
 
@@ -58,6 +59,23 @@ describe('skill tool', () => {
       roots: { skillsRoot, brandRefsRoot },
     });
     expect(r.status).toBe('not-found');
+  });
+
+  it('treats missing roots as explicit empty manifests', async () => {
+    const m = await listSkillManifest({
+      skillsRoot: path.join(skillsRoot, 'missing'),
+      brandRefsRoot: path.join(brandRefsRoot, 'missing'),
+    });
+    expect(m).toEqual([]);
+  });
+
+  it('throws when a registered skill file cannot be read', async () => {
+    rmSync(path.join(brandRefsRoot, 'demo', 'DESIGN.md'));
+    await expect(
+      invokeSkill({ name: 'brand:demo', roots: { skillsRoot, brandRefsRoot } }),
+    ).rejects.toSatisfy(
+      (err: unknown) => err instanceof CodesignError && err.code === 'SKILL_LOAD_FAILED',
+    );
   });
 });
 

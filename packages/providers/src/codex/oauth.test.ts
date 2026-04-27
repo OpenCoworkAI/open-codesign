@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { ERROR_CODES } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AUTH_BASE,
@@ -100,14 +101,14 @@ describe('extractAccountId', () => {
     expect(extractAccountId(jwt)).toBe('acct_top');
   });
 
-  it('falls back to https://api.openai.com/auth claim', () => {
+  it('uses the https://api.openai.com/auth claim when top-level id is absent', () => {
     const jwt = makeJwt({
       'https://api.openai.com/auth': { chatgpt_account_id: 'acct_nested' },
     });
     expect(extractAccountId(jwt)).toBe('acct_nested');
   });
 
-  it('falls back to organizations[0].id', () => {
+  it('uses organizations[0].id when account id claims are absent', () => {
     const jwt = makeJwt({ organizations: [{ id: 'org_first' }, { id: 'org_second' }] });
     expect(extractAccountId(jwt)).toBe('org_first');
   });
@@ -115,6 +116,18 @@ describe('extractAccountId', () => {
   it('returns null when no claim matches', () => {
     const jwt = makeJwt({ sub: 'user_123' });
     expect(extractAccountId(jwt)).toBeNull();
+  });
+
+  it('returns null when account id claims are empty strings', () => {
+    expect(extractAccountId(makeJwt({ chatgpt_account_id: '' }))).toBeNull();
+    expect(
+      extractAccountId(
+        makeJwt({
+          'https://api.openai.com/auth': { chatgpt_account_id: '' },
+          organizations: [{ id: '' }],
+        }),
+      ),
+    ).toBeNull();
   });
 
   it('returns null for a malformed JWT', () => {
@@ -177,7 +190,43 @@ describe('exchangeCode', () => {
       'fetch',
       vi.fn(async () => new Response('bad thing', { status: 400 })),
     );
-    await expect(exchangeCode('c', 'v', 'r')).rejects.toThrow(/400.*bad thing/);
+    await expect(exchangeCode('c', 'v', 'r')).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringMatching(/400.*bad thing/),
+    });
+  });
+
+  it('rejects token responses with missing required fields', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ access_token: 'at', id_token: makeJwt({}), expires_in: 60 }),
+            {
+              status: 200,
+            },
+          ),
+      ),
+    );
+
+    await expect(exchangeCode('c', 'v', 'r')).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    });
+  });
+
+  it('rejects non-object token responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(['not', 'a', 'token']), { status: 200 })),
+    );
+
+    await expect(exchangeCode('c', 'v', 'r')).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    });
   });
 });
 
@@ -212,12 +261,13 @@ describe('refreshTokens', () => {
     expect(result.accountId).toBe('acct_rt');
   });
 
-  it('falls back to input refresh_token when response omits one', async () => {
+  it('uses input refresh_token when response omits a replacement', async () => {
+    const idToken = makeJwt({ chatgpt_account_id: 'acct_keep' });
     vi.stubGlobal(
       'fetch',
       vi.fn(
         async () =>
-          new Response(JSON.stringify({ access_token: 'at2', id_token: '', expires_in: 60 }), {
+          new Response(JSON.stringify({ access_token: 'at2', id_token: idToken, expires_in: 60 }), {
             status: 200,
           }),
       ),
@@ -226,11 +276,59 @@ describe('refreshTokens', () => {
     expect(result.refreshToken).toBe('keep-me');
   });
 
+  it('rejects refresh responses with empty access tokens', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              access_token: '',
+              id_token: makeJwt({ chatgpt_account_id: 'acct_rt' }),
+              expires_in: 60,
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+
+    await expect(refreshTokens('rt')).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    });
+  });
+
+  it('rejects refresh responses with invalid expiry', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              access_token: 'at2',
+              id_token: makeJwt({ chatgpt_account_id: 'acct_rt' }),
+              expires_in: 0,
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+
+    await expect(refreshTokens('rt')).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    });
+  });
+
   it('throws on non-2xx refresh', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response('nope', { status: 401 })),
     );
-    await expect(refreshTokens('rt')).rejects.toThrow(/refresh failed: 401 nope/);
+    await expect(refreshTokens('rt')).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringMatching(/refresh failed: 401 nope/),
+    });
   });
 });

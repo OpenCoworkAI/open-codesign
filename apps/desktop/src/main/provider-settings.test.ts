@@ -71,6 +71,26 @@ describe('getAddProviderDefaults', () => {
       modelPrimary: 'claude-sonnet-4-6',
     });
   });
+
+  it('preserves an explicitly keyless active provider when adding another provider', () => {
+    const cfg = makeCfg({
+      provider: 'ollama',
+      modelPrimary: 'llama3.2',
+      providers: {
+        ollama: BUILTIN_PROVIDERS.ollama,
+      },
+    });
+
+    const defaults = getAddProviderDefaults(cfg, {
+      provider: 'anthropic',
+      modelPrimary: 'claude-sonnet-4-6',
+    });
+
+    expect(defaults).toEqual({
+      activeProvider: 'ollama',
+      modelPrimary: 'llama3.2',
+    });
+  });
 });
 
 describe('toProviderRows', () => {
@@ -168,7 +188,7 @@ describe('assertProviderHasStoredSecret', () => {
     expect(() => assertProviderHasStoredSecret(cfg, 'anthropic')).toThrow(CodesignError);
   });
 
-  it('allows imported Codex providers without a stored API key', () => {
+  it('throws for imported Codex providers without explicit keyless support', () => {
     const cfg = makeCfg({
       provider: 'codex-proxy',
       modelPrimary: 'gpt-5.3-codex',
@@ -180,6 +200,26 @@ describe('assertProviderHasStoredSecret', () => {
           wire: 'openai-responses',
           baseUrl: 'https://proxy.example.com/v1',
           defaultModel: 'gpt-5.3-codex',
+        },
+      },
+    });
+
+    expect(() => assertProviderHasStoredSecret(cfg, 'codex-proxy')).toThrow(CodesignError);
+  });
+
+  it('allows imported Codex providers that explicitly declare keyless support', () => {
+    const cfg = makeCfg({
+      provider: 'codex-proxy',
+      modelPrimary: 'gpt-5.3-codex',
+      providers: {
+        'codex-proxy': {
+          id: 'codex-proxy',
+          name: 'Codex (imported)',
+          builtin: false,
+          wire: 'openai-responses',
+          baseUrl: 'https://proxy.example.com/v1',
+          defaultModel: 'gpt-5.3-codex',
+          requiresApiKey: false,
         },
       },
     });
@@ -239,7 +279,7 @@ describe('isKeylessProviderAllowed', () => {
     expect(isKeylessProviderAllowed('litellm-proxy', entry)).toBe(true);
   });
 
-  it('allows codex-family providers without an envKey (legacy contract)', () => {
+  it('rejects codex-family providers that do not explicitly declare keyless support', () => {
     const entry = {
       id: 'codex-oss',
       name: 'Codex (imported)',
@@ -248,7 +288,7 @@ describe('isKeylessProviderAllowed', () => {
       baseUrl: 'https://proxy.example.com/v1',
       defaultModel: 'gpt-5-codex',
     } as const;
-    expect(isKeylessProviderAllowed('codex-oss', entry)).toBe(true);
+    expect(isKeylessProviderAllowed('codex-oss', entry)).toBe(false);
   });
 
   it('rejects generic custom providers that never opted out of API keys', () => {
@@ -308,6 +348,21 @@ describe('computeDeleteProviderResult', () => {
 
     expect(result.nextActive).toBeNull();
     expect(result.modelPrimary).toBe('');
+  });
+
+  it('does not preserve an unusable active provider when deleting a different provider', () => {
+    const cfg = makeCfg({
+      provider: 'anthropic',
+      modelPrimary: 'claude-sonnet-4-6',
+      secrets: {
+        openrouter: { ciphertext: 'enc-or' },
+      },
+    });
+
+    const result = computeDeleteProviderResult(cfg, 'openai');
+
+    expect(result.nextActive).toBe('openrouter');
+    expect(result.modelPrimary).toBe('anthropic/claude-sonnet-4.6');
   });
 });
 
@@ -409,7 +464,7 @@ describe('resolveActiveModel', () => {
     ).toThrowError(CodesignError);
   });
 
-  it('allows active imported Codex providers without a stored secret', () => {
+  it('throws for active imported Codex providers without explicit keyless support', () => {
     const cfg = makeCfg({
       provider: 'codex-proxy',
       modelPrimary: 'gpt-5.3-codex',
@@ -425,11 +480,35 @@ describe('resolveActiveModel', () => {
       },
     });
 
+    expect(() =>
+      resolveActiveModel(cfg, {
+        provider: 'codex-proxy',
+        modelId: 'gpt-5.3-codex',
+      }),
+    ).toThrowError(CodesignError);
+  });
+
+  it('allows active imported Codex providers that explicitly declare keyless support', () => {
+    const cfg = makeCfg({
+      provider: 'codex-proxy',
+      modelPrimary: 'gpt-5.3-codex',
+      providers: {
+        'codex-proxy': {
+          id: 'codex-proxy',
+          name: 'Codex (imported)',
+          builtin: false,
+          wire: 'openai-responses',
+          baseUrl: 'https://proxy.example.com/v1',
+          defaultModel: 'gpt-5.3-codex',
+          requiresApiKey: false,
+        },
+      },
+    });
+
     const result = resolveActiveModel(cfg, {
       provider: 'codex-proxy',
       modelId: 'gpt-5.3-codex',
     });
-
     expect(result.model).toEqual({ provider: 'codex-proxy', modelId: 'gpt-5.3-codex' });
     expect(result.baseUrl).toBe('https://proxy.example.com/v1');
     expect(result.allowKeyless).toBe(true);

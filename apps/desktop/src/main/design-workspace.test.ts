@@ -203,6 +203,26 @@ describe('bindWorkspace', () => {
     expect(await readFile(path.join(source, 'ignored.txt'), 'utf8')).toBe('untracked');
   });
 
+  it('rejects corrupt tracked file paths before workspace migration copies', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db);
+    const source = await makeTempDir('ocd-ws-source-');
+    const destination = await makeTempDir('ocd-ws-dest-');
+    const sourcePath = normalizeWorkspacePath(source);
+    updateDesignWorkspace(db, design.id, sourcePath);
+    const now = new Date().toISOString();
+    db.prepare(
+      'INSERT INTO design_files (id, design_id, path, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run('corrupt-path', design.id, '../escaped.txt', 'escaped', now, now);
+
+    await expect(bindWorkspace(db, design.id, destination, true)).rejects.toThrow(
+      'invalid path segment',
+    );
+    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
+      workspace_path: sourcePath,
+    });
+  });
+
   it('aborts migration on destination collision and leaves the binding unchanged', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db);

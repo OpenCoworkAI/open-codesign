@@ -217,7 +217,7 @@ describe('diagnoseGenerateFailure', () => {
     expect(result[0]?.cause).toBe('diagnostics.cause.rateLimit');
   });
 
-  it('falls back to unknown when nothing matches', () => {
+  it('uses unknown when nothing matches', () => {
     const result = diagnoseGenerateFailure({ ...ctx, message: 'something odd' });
     expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
   });

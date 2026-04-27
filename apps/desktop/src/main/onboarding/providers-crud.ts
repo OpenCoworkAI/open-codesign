@@ -18,6 +18,7 @@ import {
   assertProviderHasStoredSecret,
   computeDeleteProviderResult,
   getAddProviderDefaults,
+  isKeylessProviderAllowed,
   type ProviderRow,
   toProviderRows,
 } from '../provider-settings';
@@ -35,7 +36,7 @@ export function runListProviders(): ProviderRow[] {
   // `migrateSecrets`). By the time Settings is opened, every row has a
   // persisted plaintext + mask and `toProviderRows` never touches any
   // decrypt path for render. `decryptSecret` is only passed in as a
-  // late-stage fallback for exotic rows that somehow slipped through.
+  // Late-stage normalization for exotic rows that somehow slipped through.
   return toProviderRows(getCachedConfig(), decryptSecret);
 }
 
@@ -163,23 +164,33 @@ export async function runSetActiveProvider(raw: unknown): Promise<OnboardingStat
     throw new CodesignError('set-active-provider expects an object', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
+  for (const key of Object.keys(r)) {
+    if (key !== 'provider' && key !== 'modelPrimary') {
+      throw new CodesignError(
+        `set-active-provider contains unsupported field "${key}"`,
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+  }
   const provider = r['provider'];
   const modelPrimary = r['modelPrimary'];
-  if (typeof provider !== 'string' || provider.length === 0) {
+  if (typeof provider !== 'string' || provider.trim().length === 0) {
     throw new CodesignError('provider must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
+  const providerId = provider.trim();
   if (typeof modelPrimary !== 'string' || modelPrimary.trim().length === 0) {
     throw new CodesignError('modelPrimary must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
+  const activeModel = modelPrimary.trim();
   const cfg = getCachedConfig();
   if (cfg === null) {
     throw new CodesignError('No configuration found', ERROR_CODES.CONFIG_MISSING);
   }
-  assertProviderHasStoredSecret(cfg, provider);
+  assertProviderHasStoredSecret(cfg, providerId);
   const next: Config = hydrateConfig({
     version: 3,
-    activeProvider: provider,
-    activeModel: modelPrimary,
+    activeProvider: providerId,
+    activeModel,
     secrets: cfg.secrets,
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
@@ -231,7 +242,7 @@ export async function runUpdateProvider(input: UpdateProviderInput): Promise<Onb
     throw new CodesignError('No configuration found', ERROR_CODES.CONFIG_MISSING);
   }
   // Builtin providers may not have an entry on disk yet on a fresh install
-  // (the providers map is seeded lazily). Fall back to BUILTIN_PROVIDERS so
+  // (the providers map is seeded lazily). Read BUILTIN_PROVIDERS so
   // "change my Ollama baseUrl" works before the user ever opened onboarding.
   const existing =
     cfg.providers[input.id] ??
@@ -264,6 +275,12 @@ export async function runUpdateProvider(input: UpdateProviderInput): Promise<Onb
   if (input.apiKey !== undefined) {
     const trimmed = input.apiKey.trim();
     if (trimmed.length === 0) {
+      if (!isKeylessProviderAllowed(input.id, updated)) {
+        throw new CodesignError(
+          `Cannot clear API key for provider "${input.id}" unless it explicitly supports keyless mode.`,
+          ERROR_CODES.PROVIDER_KEY_MISSING,
+        );
+      }
       const { [input.id]: _removed, ...rest } = cfg.secrets;
       nextSecrets = rest;
     } else {
@@ -291,32 +308,86 @@ export interface ListEndpointModelsResponse {
   error?: string;
 }
 
+const LIST_ENDPOINT_MODELS_FIELDS = ['wire', 'baseUrl', 'apiKey'] as const;
+
+function hasOnlyListEndpointModelFields(r: Record<string, unknown>): string | null {
+  for (const key of Object.keys(r)) {
+    if (!(LIST_ENDPOINT_MODELS_FIELDS as readonly string[]).includes(key)) return key;
+  }
+  return null;
+}
+
+function extractEndpointModelIds(items: unknown[]): string[] | null {
+  const ids: string[] = [];
+  for (const item of items) {
+    if (item === null || typeof item !== 'object') return null;
+    const record = item as { id?: unknown; name?: unknown };
+    if (typeof record.id === 'string') {
+      ids.push(record.id);
+      continue;
+    }
+    if (typeof record.name === 'string') {
+      ids.push(record.name);
+      continue;
+    }
+    return null;
+  }
+  return ids;
+}
+
+function parseEndpointBaseUrl(
+  value: unknown,
+): { ok: true; baseUrl: string } | { ok: false; error: string } {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return { ok: false, error: 'baseUrl required' };
+  }
+  const baseUrl = value.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    return { ok: false, error: `baseUrl "${baseUrl}" is not a valid URL` };
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { ok: false, error: `baseUrl must use http(s), got "${parsed.protocol}"` };
+  }
+  return { ok: true, baseUrl };
+}
+
 export async function runListEndpointModels(raw: unknown): Promise<ListEndpointModelsResponse> {
   if (typeof raw !== 'object' || raw === null) {
     return { ok: false, error: 'expected an object payload' };
   }
   const r = raw as Record<string, unknown>;
+  const unsupportedField = hasOnlyListEndpointModelFields(r);
+  if (unsupportedField !== null) {
+    return { ok: false, error: `unsupported field "${unsupportedField}"` };
+  }
   const wireRaw = r['wire'];
   const baseUrl = r['baseUrl'];
   const apiKey = r['apiKey'];
   const parsedWire = WireApiSchema.safeParse(wireRaw);
   if (!parsedWire.success) return { ok: false, error: `unsupported wire: ${String(wireRaw)}` };
-  if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
-    return { ok: false, error: 'baseUrl required' };
-  }
+  const parsedBaseUrl = parseEndpointBaseUrl(baseUrl);
+  if (!parsedBaseUrl.ok) return { ok: false, error: parsedBaseUrl.error };
   if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
     return { ok: false, error: 'apiKey required' };
   }
   let url: string;
   try {
-    url = modelsEndpointUrl(baseUrl, parsedWire.data);
+    url = modelsEndpointUrl(parsedBaseUrl.baseUrl, parsedWire.data);
   } catch (err) {
     return {
       ok: false,
       error: err instanceof Error ? err.message : 'unsupported wire for /models lookup',
     };
   }
-  const headers = buildAuthHeadersForWire(parsedWire.data, apiKey, undefined, baseUrl);
+  const headers = buildAuthHeadersForWire(
+    parsedWire.data,
+    apiKey.trim(),
+    undefined,
+    parsedBaseUrl.baseUrl,
+  );
   try {
     const res = await fetch(url, {
       method: 'GET',
@@ -327,12 +398,8 @@ export async function runListEndpointModels(raw: unknown): Promise<ListEndpointM
     const body = (await res.json()) as Record<string, unknown>;
     const data = body['data'] ?? body['models'];
     if (!Array.isArray(data)) return { ok: false, error: 'unexpected response shape' };
-    const ids = data
-      .filter(
-        (it) =>
-          typeof it === 'object' && it !== null && typeof (it as { id?: unknown }).id === 'string',
-      )
-      .map((it) => (it as { id: string }).id);
+    const ids = extractEndpointModelIds(data);
+    if (ids === null) return { ok: false, error: 'unexpected response shape' };
     return { ok: true, models: ids };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

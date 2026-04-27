@@ -156,6 +156,25 @@ Body.
     );
   });
 
+  it('throws SKILL_LOAD_FAILED when a skill omits its manifest name', async () => {
+    await writeSkill(
+      testDir,
+      'filename-only.md',
+      `---
+schemaVersion: 1
+description: Filename must not become the skill name.
+---
+Body.
+`,
+    );
+    await expect(loadSkillsFromDir(testDir, 'user')).rejects.toSatisfy(
+      (err: unknown) =>
+        err instanceof CodesignError &&
+        err.code === 'SKILL_LOAD_FAILED' &&
+        err.message.includes('filename-only.md'),
+    );
+  });
+
   it('ignores non-.md files in the directory', async () => {
     await writeSkill(testDir, 'my-skill.md', MINIMAL_SKILL);
     await writeFile(join(testDir, 'readme.txt'), 'ignore me', 'utf-8');

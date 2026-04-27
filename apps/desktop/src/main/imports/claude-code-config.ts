@@ -100,6 +100,31 @@ type ParsedSettings =
   | { kind: 'error'; warning: string }
   | { kind: 'ok'; settings: ClaudeCodeSettings };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function validateSettingsShape(parsed: Record<string, unknown>): ParsedSettings {
+  const env = parsed['env'];
+  if (env !== undefined) {
+    if (!isRecord(env)) {
+      return { kind: 'error', warning: 'settings.env must be an object of string values' };
+    }
+    for (const [key, value] of Object.entries(env)) {
+      if (typeof value !== 'string') {
+        return { kind: 'error', warning: `settings.env.${key} must be a string` };
+      }
+    }
+  }
+
+  const apiKeyHelper = parsed['apiKeyHelper'];
+  if (apiKeyHelper !== undefined && typeof apiKeyHelper !== 'string') {
+    return { kind: 'error', warning: 'settings.apiKeyHelper must be a string' };
+  }
+
+  return { kind: 'ok', settings: parsed as ClaudeCodeSettings };
+}
+
 function parseSettingsJson(json: string): ParsedSettings {
   let parsed: unknown;
   try {
@@ -111,10 +136,10 @@ function parseSettingsJson(json: string): ParsedSettings {
     const msg = err instanceof Error ? err.message : String(err);
     return { kind: 'error', warning: msg };
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     return { kind: 'error', warning: PARSE_REASON_NOT_JSON_OBJECT };
   }
-  return { kind: 'ok', settings: parsed as ClaudeCodeSettings };
+  return validateSettingsShape(parsed);
 }
 
 function buildUnusableImport(
@@ -154,6 +179,25 @@ function resolveApiKey(
   return { apiKey: null, apiKeySource: 'none' };
 }
 
+function readOptionalEnvSetting(env: Record<string, string>, key: string): string | undefined {
+  const value = env[key];
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function validateAnthropicBaseUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return `ANTHROPIC_BASE_URL must use http(s), got "${parsed.protocol}"`;
+    }
+    return null;
+  } catch {
+    return `ANTHROPIC_BASE_URL "${value}" is not a valid URL`;
+  }
+}
+
 export function parseClaudeCodeSettings(
   json: string,
   options: ParseClaudeCodeOptions = {},
@@ -169,8 +213,15 @@ export function parseClaudeCodeSettings(
 
   const settings = parsed.settings;
   const settingsEnv = settings.env ?? {};
-  const baseUrl = settingsEnv['ANTHROPIC_BASE_URL'] ?? 'https://api.anthropic.com';
-  const model = settingsEnv['ANTHROPIC_MODEL'] ?? 'claude-sonnet-4-6';
+  const suppliedBaseUrl = readOptionalEnvSetting(settingsEnv, 'ANTHROPIC_BASE_URL');
+  if (suppliedBaseUrl !== undefined) {
+    const baseUrlError = validateAnthropicBaseUrl(suppliedBaseUrl);
+    if (baseUrlError !== null) {
+      return buildUnusableImport('parse-error', oauthEvidence, settingsPath, [baseUrlError]);
+    }
+  }
+  const baseUrl = suppliedBaseUrl ?? 'https://api.anthropic.com';
+  const model = readOptionalEnvSetting(settingsEnv, 'ANTHROPIC_MODEL') ?? 'claude-sonnet-4-6';
 
   const warnings: string[] = [];
   const { apiKey, apiKeySource } = resolveApiKey(settingsEnv, env);
@@ -203,10 +254,8 @@ export function parseClaudeCodeSettings(
     wire: 'anthropic',
     baseUrl,
     defaultModel: model,
-    // Always attach the env key hint. Runtime `getApiKeyForProvider` uses
-    // it as a last-resort fallback: if the stored secret gets wiped or the
-    // user exports the token after import, we still resolve it without a
-    // round-trip through onboarding.
+    // Keep the declared env key as import metadata. Runtime credential
+    // resolution requires a persisted secret or an explicit keyless provider.
     envKey: 'ANTHROPIC_AUTH_TOKEN',
     // Claude Code proxies commonly gate reasoning effort by plan — the
     // consumer-tier endpoint accepts only 'medium'. Seed this default so
@@ -269,7 +318,7 @@ export async function readClaudeCodeSettings(
     // settings.json absent or rejected by size/type guard. If OAuth evidence
     // is present, synthesize a minimal ClaudeCodeImport so the Settings
     // banner still offers the subscription-user guidance — otherwise
-    // return null and stay silent.
+    // return null without showing a detection banner.
     if (!oauthEvidence) return null;
     return {
       provider: null,

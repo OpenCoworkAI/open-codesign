@@ -211,6 +211,7 @@ describe('readOpencodeConfig', () => {
     const out = await readOpencodeConfig(home, {});
     expect(out?.activeProvider).toBeNull();
     expect(out?.activeModel).toBeNull();
+    expect(out?.warnings.join('\n')).toMatch(/mistral\/large.*provider "mistral".*not imported/);
   });
 
   it('parses opencode.jsonc with line comments', async () => {
@@ -239,7 +240,7 @@ describe('readOpencodeConfig', () => {
     expect(out?.apiKeyMap['opencode-openai']).toBe('sk-xdg');
   });
 
-  it('sets envKey per provider so the runtime env-fallback can rescue the row', async () => {
+  it('sets envKey per provider as import metadata', async () => {
     const home = await makeHome();
     await writeAuth(home, {
       anthropic: { type: 'api', key: 'sk-ant' },
@@ -317,6 +318,7 @@ describe('readOpencodeConfig', () => {
     const out = await readOpencodeConfig(home, {});
     expect(out?.activeProvider).toBeNull();
     expect(out?.activeModel).toBeNull();
+    expect(out?.warnings.join('\n')).toMatch(/provider\/model format/);
   });
 
   it('surfaces a warning when opencode.jsonc has a parse error', async () => {
@@ -325,6 +327,16 @@ describe('readOpencodeConfig', () => {
     await writeConfig(home, 'opencode.jsonc', '// comment\n{"model": "anthropic/x",}'); // trailing comma
     const out = await readOpencodeConfig(home, {});
     expect(out?.warnings.some((w) => /Could not parse/.test(w))).toBe(true);
+  });
+
+  it('surfaces a warning when active model field has the wrong type', async () => {
+    const home = await makeHome();
+    await writeAuth(home, { anthropic: { type: 'api', key: 'sk-ant' } });
+    await writeConfig(home, 'opencode.json', JSON.stringify({ model: 123 }));
+    const out = await readOpencodeConfig(home, {});
+    expect(out?.activeProvider).toBeNull();
+    expect(out?.activeModel).toBeNull();
+    expect(out?.warnings.join('\n')).toMatch(/model must be a string/);
   });
 });
 

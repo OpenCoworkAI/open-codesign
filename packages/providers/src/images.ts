@@ -59,6 +59,7 @@ const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const DEFAULT_OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const DEFAULT_OPENROUTER_IMAGE_MODEL = 'openai/gpt-5.4-image-2';
+const BASE64_IMAGE_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export function defaultImageModel(provider: ImageGenerationProvider): string {
   return provider === 'openrouter' ? DEFAULT_OPENROUTER_IMAGE_MODEL : DEFAULT_OPENAI_IMAGE_MODEL;
@@ -113,16 +114,18 @@ async function generateOpenAIImage(
       : undefined;
   if (typeof first.b64_json === 'string' && first.b64_json.length > 0) {
     const mimeType = mimeFromFormat(options.outputFormat ?? 'png');
+    const base64 = normalizeBase64ImageData(first.b64_json, 'OpenAI image response');
+    validateImageSignature(mimeType, base64, 'OpenAI image response');
     return {
-      dataUrl: `data:${mimeType};base64,${first.b64_json}`,
-      base64: first.b64_json,
+      dataUrl: `data:${mimeType};base64,${base64}`,
+      base64,
       mimeType,
       model,
       provider: 'openai',
       ...(revisedPrompt !== undefined ? { revisedPrompt } : {}),
     };
   }
-  if (typeof first.url === 'string' && first.url.startsWith('data:')) {
+  if (typeof first.url === 'string' && first.url.trim().startsWith('data:')) {
     return {
       ...parseDataUrl(first.url),
       model,
@@ -162,7 +165,7 @@ async function generateOpenRouterImage(
   const message = json.choices?.[0]?.message;
   const image = message?.images?.[0];
   const url = image?.image_url?.url ?? image?.imageUrl?.url;
-  if (typeof url === 'string' && url.startsWith('data:')) {
+  if (typeof url === 'string' && url.trim().startsWith('data:')) {
     return {
       ...parseDataUrl(url),
       model,
@@ -210,7 +213,16 @@ async function postJson<T>(
       ERROR_CODES.PROVIDER_ERROR,
     );
   }
-  return (await res.json()) as T;
+  try {
+    return (await res.json()) as T;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new CodesignError(
+      `Image generation response was not valid JSON: ${message}`,
+      ERROR_CODES.PROVIDER_ERROR,
+      { cause: err },
+    );
+  }
 }
 
 function joinEndpoint(baseUrl: string, path: string): string {
@@ -230,17 +242,76 @@ function mimeFromFormat(format: ImageOutputFormat): string {
 }
 
 function parseDataUrl(dataUrl: string): { dataUrl: string; mimeType: string; base64: string } {
-  const match = /^data:([^;,]+);base64,(.+)$/i.exec(dataUrl);
+  const trimmedDataUrl = dataUrl.trim();
+  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(trimmedDataUrl);
   if (!match || match[1] === undefined || match[2] === undefined) {
     throw new CodesignError('Generated image data URL is malformed', ERROR_CODES.PROVIDER_ERROR);
   }
-  return { dataUrl, mimeType: match[1], base64: match[2] };
+  const base64 = normalizeBase64ImageData(match[2], 'Generated image data URL');
+  validateImageSignature(match[1], base64, 'Generated image data URL');
+  return { dataUrl: `data:${match[1]};base64,${base64}`, mimeType: match[1], base64 };
+}
+
+function normalizeBase64ImageData(base64: string, source: string): string {
+  const trimmed = base64.trim();
+  if (trimmed.length === 0 || trimmed.length % 4 === 1 || !BASE64_IMAGE_RE.test(trimmed)) {
+    throw new CodesignError(
+      `${source} included malformed base64 image data`,
+      ERROR_CODES.PROVIDER_ERROR,
+    );
+  }
+  return trimmed;
+}
+
+function validateImageSignature(mimeType: string, base64: string, source: string): void {
+  const normalizedMime = mimeType.toLowerCase();
+  if (!normalizedMime.startsWith('image/')) {
+    throw new CodesignError(`${source} was not an image MIME type`, ERROR_CODES.PROVIDER_ERROR);
+  }
+  if (
+    normalizedMime !== 'image/png' &&
+    normalizedMime !== 'image/jpeg' &&
+    normalizedMime !== 'image/jpg' &&
+    normalizedMime !== 'image/webp'
+  ) {
+    throw new CodesignError(
+      `${source} used unsupported image MIME type ${normalizedMime}`,
+      ERROR_CODES.PROVIDER_ERROR,
+    );
+  }
+  const bytes = Buffer.from(base64, 'base64');
+  const valid =
+    normalizedMime === 'image/png'
+      ? bytes.length >= 8 &&
+        bytes[0] === 0x89 &&
+        bytes[1] === 0x50 &&
+        bytes[2] === 0x4e &&
+        bytes[3] === 0x47 &&
+        bytes[4] === 0x0d &&
+        bytes[5] === 0x0a &&
+        bytes[6] === 0x1a &&
+        bytes[7] === 0x0a
+      : normalizedMime === 'image/jpeg' || normalizedMime === 'image/jpg'
+        ? bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+        : normalizedMime === 'image/webp'
+          ? bytes.length >= 12 &&
+            bytes.toString('ascii', 0, 4) === 'RIFF' &&
+            bytes.toString('ascii', 8, 12) === 'WEBP'
+          : false;
+  if (!valid) {
+    throw new CodesignError(
+      `${source} bytes did not match ${normalizedMime}`,
+      ERROR_CODES.PROVIDER_ERROR,
+    );
+  }
 }
 
 async function safeResponseText(res: Response): Promise<string> {
   try {
     return (await res.text()).slice(0, 500);
-  } catch {
+  } catch (err) {
+    void err;
+    // The non-2xx HTTP status is already the failure; the body is diagnostic.
     return '';
   }
 }

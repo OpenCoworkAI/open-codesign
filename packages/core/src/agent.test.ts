@@ -34,7 +34,7 @@ interface AgentScript {
       total: number;
     };
   };
-  stopReason?: 'stop' | 'error' | 'aborted';
+  stopReason?: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted';
   errorMessage?: string;
   promptThrows?: Error;
   /**
@@ -275,6 +275,13 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     expect(agentCalls).toHaveLength(0);
   });
 
+  it('rejects missing apiKey unless keyless mode is explicit', async () => {
+    await expect(
+      generateViaAgent({ prompt: 'design a card', history: [], model: MODEL, apiKey: '' }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.PROVIDER_AUTH_MISSING });
+    expect(agentCalls).toHaveLength(0);
+  });
+
   it('throws INPUT_UNSUPPORTED_MODE when mode is not create (no systemPrompt)', async () => {
     await expect(
       generateViaAgent({
@@ -314,6 +321,40 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     expect(seed?.role).toBe('user');
   });
 
+  it('normalizes Gemini OpenAI-compat model IDs before constructing the Agent model', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-gemini', modelId: 'models/gemini-2-pro' },
+      apiKey: 'AIzaSy-test',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      wire: 'openai-chat',
+    });
+
+    const model = agentCalls[0]?.options.initialState?.model as
+      | { id?: string; name?: string; reasoning?: boolean }
+      | undefined;
+    expect(model?.id).toBe('gemini-2-pro');
+    expect(model?.name).toBe('gemini-2-pro');
+    expect(model?.reasoning).toBe(false);
+  });
+
+  it('leaves native Gemini endpoint model IDs untouched', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-gemini', modelId: 'models/gemini-2-pro' },
+      apiKey: 'AIzaSy-test',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+      wire: 'openai-chat',
+    });
+
+    const model = agentCalls[0]?.options.initialState?.model as { id?: string } | undefined;
+    expect(model?.id).toBe('models/gemini-2-pro');
+  });
+
   it('forwards apiKey through getApiKey callback', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent({
@@ -325,6 +366,19 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
 
     const resolver = agentCalls[0]?.options.getApiKey;
     expect(resolver).toBeDefined();
+    await expect(Promise.resolve(resolver?.('anthropic'))).resolves.toBe('sk-token-123');
+  });
+
+  it('trims the static apiKey before exposing it to the Agent', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a meditation app',
+      history: [],
+      model: MODEL,
+      apiKey: '  sk-token-123  ',
+    });
+
+    const resolver = agentCalls[0]?.options.getApiKey;
     await expect(Promise.resolve(resolver?.('anthropic'))).resolves.toBe('sk-token-123');
   });
 
@@ -345,18 +399,77 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     await expect(Promise.resolve(resolver?.('openai-codex'))).resolves.toBe('fresh-rotating-token');
   });
 
-  it('falls back to static apiKey when input.getApiKey returns an empty string', async () => {
+  it('trims the dynamic input.getApiKey result before exposing it to the Agent', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent({
-      prompt: 'fallback behavior',
+      prompt: 'long-running agent task',
       history: [],
       model: MODEL,
-      apiKey: 'fallback-token',
+      apiKey: 'stale-static-token',
+      getApiKey: async () => '  fresh-rotating-token  ',
+    });
+
+    const resolver = agentCalls[0]?.options.getApiKey;
+    await expect(Promise.resolve(resolver?.('openai-codex'))).resolves.toBe('fresh-rotating-token');
+  });
+
+  it('throws when dynamic getApiKey returns empty for a non-keyless provider', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT, invokeGetApiKey: true };
+    await expect(
+      generateViaAgent({
+        prompt: 'empty getter behavior',
+        history: [],
+        model: MODEL,
+        apiKey: 'static-token',
+        getApiKey: async () => '',
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.PROVIDER_AUTH_MISSING });
+  });
+
+  it('throws when dynamic getApiKey returns whitespace for a non-keyless provider', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT, invokeGetApiKey: true };
+    await expect(
+      generateViaAgent({
+        prompt: 'empty getter behavior',
+        history: [],
+        model: MODEL,
+        apiKey: 'static-token',
+        getApiKey: async () => '   ',
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.PROVIDER_AUTH_MISSING });
+  });
+
+  it('uses the placeholder only when dynamic getApiKey is empty in explicit keyless mode', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'empty getter behavior',
+      history: [],
+      model: MODEL,
+      apiKey: '',
+      allowKeyless: true,
       getApiKey: async () => '',
     });
 
     const resolver = agentCalls[0]?.options.getApiKey;
-    await expect(Promise.resolve(resolver?.('openai-codex'))).resolves.toBe('fallback-token');
+    await expect(Promise.resolve(resolver?.('openai-codex'))).resolves.toBe(
+      'open-codesign-keyless',
+    );
+  });
+
+  it('uses the placeholder when static apiKey is whitespace in explicit keyless mode', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'empty getter behavior',
+      history: [],
+      model: MODEL,
+      apiKey: '   ',
+      allowKeyless: true,
+    });
+
+    const resolver = agentCalls[0]?.options.getApiKey;
+    await expect(Promise.resolve(resolver?.('openai-codex'))).resolves.toBe(
+      'open-codesign-keyless',
+    );
   });
 
   it('rethrows the original input.getApiKey error (preserves structured code)', async () => {
@@ -462,6 +575,24 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     ).rejects.toMatchObject({ message: expect.stringContaining('upstream blew up') });
   });
 
+  it('throws instead of treating stopReason=length as a successful design', async () => {
+    scriptedAgent = {
+      assistantText: RESPONSE_WITH_ARTIFACT,
+      stopReason: 'length',
+    };
+    await expect(
+      generateViaAgent({
+        prompt: 'design a dashboard',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringContaining('token limit'),
+    });
+  });
+
   it('abort signal cascades into agent.abort()', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     const controller = new AbortController();
@@ -518,7 +649,7 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
   });
 
   it('returns no artifacts when prose contains a fenced ```html block but no <artifact> wrapper and no fs is provided', async () => {
-    // Locks in the post-fallback contract: prose-only HTML is no longer
+    // Locks in the post-recovery contract: prose-only HTML is no longer
     // rescued. The host must rely on the text_editor + fs path.
     scriptedAgent = {
       assistantText: 'Here you go:\n\n```html\n<!doctype html><html><body>Hi</body></html>\n```',
@@ -715,6 +846,32 @@ describe('loadFrameTemplates — device frame starter assets', () => {
       }
       const entries = await loadFrameTemplates(dir);
       expect(entries.map(([n]) => n)).toEqual([...FRAME_FILES]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns an explicit empty state when the frames directory is missing', async () => {
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    const { loadFrameTemplates } = await import('./frames/index.js');
+    const dir = path.join(tmpdir(), `codesign-frames-missing-${process.pid}-${Date.now()}`);
+
+    await expect(loadFrameTemplates(dir)).resolves.toEqual([]);
+  });
+
+  it('throws when a declared frame file is missing from an existing directory', async () => {
+    const { mkdirSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    const { FRAME_FILES, loadFrameTemplates } = await import('./frames/index.js');
+    const dir = path.join(tmpdir(), `codesign-frames-missing-file-${process.pid}-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    try {
+      for (const name of FRAME_FILES.slice(0, 1)) {
+        writeFileSync(path.join(dir, name), `// ${name}\nplaceholder\n`, 'utf8');
+      }
+      await expect(loadFrameTemplates(dir)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

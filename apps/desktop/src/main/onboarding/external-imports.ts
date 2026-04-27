@@ -12,8 +12,53 @@ import type { CodexImport } from '../imports/codex-config';
 import type { GeminiImport } from '../imports/gemini-cli-config';
 import type { OpencodeImport } from '../imports/opencode-config';
 import { buildSecretRef } from '../keychain';
+import { isKeylessProviderAllowed } from '../provider-settings';
 import { detectChatgptSubscription } from './chatgpt-detect';
 import { getCachedConfig, setCachedConfig, toState } from './config-cache';
+
+function providerHasUsableCredential(
+  entry: ProviderEntry,
+  secrets: Record<string, unknown>,
+): boolean {
+  return secrets[entry.id] !== undefined || isKeylessProviderAllowed(entry.id, entry);
+}
+
+function firstUsableImportedProvider(
+  providers: ProviderEntry[],
+  secrets: Record<string, unknown>,
+): ProviderEntry | null {
+  return providers.find((entry) => providerHasUsableCredential(entry, secrets)) ?? null;
+}
+
+function chooseUsableImportedProvider(
+  providers: ProviderEntry[],
+  preferredProviderId: string | null,
+  secrets: Record<string, unknown>,
+): ProviderEntry | null {
+  const preferred =
+    preferredProviderId !== null
+      ? (providers.find((entry) => entry.id === preferredProviderId) ?? null)
+      : null;
+  if (preferred !== null && providerHasUsableCredential(preferred, secrets)) return preferred;
+  return firstUsableImportedProvider(providers, secrets);
+}
+
+function throwNoUsableImport(source: string): never {
+  throw new CodesignError(
+    `${source} import did not find a usable API key. Paste a key in Settings or export the provider key before importing.`,
+    ERROR_CODES.PROVIDER_KEY_MISSING,
+  );
+}
+
+function activeModelForImport(
+  activeEntry: ProviderEntry,
+  preferredProviderId: string | null,
+  preferredModel: string | null,
+): string {
+  return activeEntry.id === preferredProviderId && preferredModel !== null
+    ? preferredModel
+    : activeEntry.defaultModel;
+}
 
 export async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
   if (imported.providers.length === 0) {
@@ -27,7 +72,7 @@ export async function runImportCodex(imported: CodexImport): Promise<OnboardingS
   const cachedConfig = getCachedConfig();
   const nextProviders: Record<string, ProviderEntry> = { ...(cachedConfig?.providers ?? {}) };
   const nextSecrets = { ...(cachedConfig?.secrets ?? {}) };
-  // Seed builtins if we're on a fresh install so the user keeps a fallback.
+  // Seed builtins if we're on a fresh install so the user keeps a usable default.
   if (cachedConfig === null) {
     for (const [id, entry] of Object.entries(BUILTIN_PROVIDERS)) {
       if (nextProviders[id] === undefined) nextProviders[id] = { ...entry };
@@ -47,25 +92,28 @@ export async function runImportCodex(imported: CodexImport): Promise<OnboardingS
         continue;
       }
     }
-    const fallbackApiKey =
+    const importTimeApiKey =
       importedApiKey !== undefined && importedApiKey.length > 0
         ? importedApiKey
         : entry.requiresApiKey === true
           ? process.env['OPENAI_API_KEY']?.trim()
           : undefined;
-    if (fallbackApiKey !== undefined && fallbackApiKey.length > 0) {
-      nextSecrets[entry.id] = buildSecretRef(fallbackApiKey);
+    if (importTimeApiKey !== undefined && importTimeApiKey.length > 0) {
+      nextSecrets[entry.id] = buildSecretRef(importTimeApiKey);
     }
   }
-  const fallbackActive = imported.providers[0];
-  if (fallbackActive === undefined) {
-    throw new CodesignError('Codex config parse produced no providers', ERROR_CODES.CONFIG_MISSING);
-  }
-  const activeProvider =
-    imported.activeProvider !== null && nextProviders[imported.activeProvider] !== undefined
-      ? imported.activeProvider
-      : fallbackActive.id;
-  const activeModel = imported.activeModel ?? nextProviders[activeProvider]?.defaultModel ?? '';
+  const activeEntry = chooseUsableImportedProvider(
+    imported.providers,
+    imported.activeProvider,
+    nextSecrets,
+  );
+  if (activeEntry === null) throwNoUsableImport('Codex');
+  const activeProvider = activeEntry.id;
+  const activeModel = activeModelForImport(
+    activeEntry,
+    imported.activeProvider,
+    imported.activeModel,
+  );
   const next = hydrateConfig({
     version: 3,
     activeProvider,
@@ -110,23 +158,14 @@ export async function runImportClaudeCode(imported: ClaudeCodeImport): Promise<O
   if (keySaved) {
     nextSecrets[imported.provider.id] = buildSecretRef(importedApiKey);
   }
-
-  // Flip active only when we have a key the new provider can actually use,
-  // or when the user is on a fresh install (no existing active to preserve).
-  // This is what kills the "active swapped to claude-code-imported but no
-  // key stored → hasKey:false → Onboarding is not complete" death path.
-  const shouldActivate = keySaved || cachedConfig === null;
-  const nextActiveProvider = shouldActivate
-    ? imported.provider.id
-    : (cachedConfig?.activeProvider ?? '');
-  const nextActiveModel = shouldActivate
-    ? (imported.activeModel ?? imported.provider.defaultModel)
-    : (cachedConfig?.activeModel ?? '');
+  if (!providerHasUsableCredential(imported.provider, nextSecrets)) {
+    throwNoUsableImport('Claude Code');
+  }
 
   const next = hydrateConfig({
     version: 3,
-    activeProvider: nextActiveProvider,
-    activeModel: nextActiveModel,
+    activeProvider: imported.provider.id,
+    activeModel: imported.activeModel ?? imported.provider.defaultModel,
     secrets: nextSecrets,
     providers: nextProviders,
     ...(cachedConfig?.designSystem !== undefined
@@ -162,19 +201,14 @@ export async function runImportGemini(imported: GeminiImport): Promise<Onboardin
   if (keySaved) {
     nextSecrets[imported.provider.id] = buildSecretRef(importedApiKey);
   }
-
-  const shouldActivate = keySaved || cachedConfig === null;
-  const nextActiveProvider = shouldActivate
-    ? imported.provider.id
-    : (cachedConfig?.activeProvider ?? '');
-  const nextActiveModel = shouldActivate
-    ? imported.provider.defaultModel
-    : (cachedConfig?.activeModel ?? '');
+  if (!providerHasUsableCredential(imported.provider, nextSecrets)) {
+    throwNoUsableImport('Gemini CLI');
+  }
 
   const next = hydrateConfig({
     version: 3,
-    activeProvider: nextActiveProvider,
-    activeModel: nextActiveModel,
+    activeProvider: imported.provider.id,
+    activeModel: imported.provider.defaultModel,
     secrets: nextSecrets,
     providers: nextProviders,
     ...(cachedConfig?.designSystem !== undefined
@@ -208,15 +242,18 @@ export async function runImportOpencode(imported: OpencodeImport): Promise<Onboa
       nextSecrets[entry.id] = buildSecretRef(importedApiKey);
     }
   }
-  const fallbackActive = imported.providers[0];
-  if (fallbackActive === undefined) {
-    throw new CodesignError('OpenCode import produced no providers', ERROR_CODES.CONFIG_MISSING);
-  }
-  const activeProvider =
-    imported.activeProvider !== null && nextProviders[imported.activeProvider] !== undefined
-      ? imported.activeProvider
-      : fallbackActive.id;
-  const activeModel = imported.activeModel ?? nextProviders[activeProvider]?.defaultModel ?? '';
+  const activeEntry = chooseUsableImportedProvider(
+    imported.providers,
+    imported.activeProvider,
+    nextSecrets,
+  );
+  if (activeEntry === null) throwNoUsableImport('OpenCode');
+  const activeProvider = activeEntry.id;
+  const activeModel = activeModelForImport(
+    activeEntry,
+    imported.activeProvider,
+    imported.activeModel,
+  );
   const next = hydrateConfig({
     version: 3,
     activeProvider,

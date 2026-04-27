@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
@@ -24,20 +24,22 @@ export const FRAME_FILES = [
 export type FrameName = (typeof FRAME_FILES)[number];
 
 /**
- * Read every known frame file from the given directory, skipping entries
- * the user has deleted. Returns `[name, contents]` pairs in the canonical
+ * Read every known frame file from the given directory. A missing directory is
+ * an explicit empty state; a missing/unreadable declared file is a template
+ * installation error. Returns `[name, contents]` pairs in the canonical
  * order defined by `FRAME_FILES`.
  */
 export async function loadFrameTemplates(dir: string): Promise<Array<[string, string]>> {
-  const results = await Promise.all(
-    FRAME_FILES.map(async (name): Promise<[string, string] | null> => {
-      try {
-        const contents = await readFile(path.join(dir, name), 'utf8');
-        return [name, contents];
-      } catch {
-        return null;
-      }
+  try {
+    await readdir(dir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+  return Promise.all(
+    FRAME_FILES.map(async (name): Promise<[string, string]> => {
+      const contents = await readFile(path.join(dir, name), 'utf8');
+      return [name, contents];
     }),
   );
-  return results.filter((entry): entry is [string, string] => entry !== null);
 }

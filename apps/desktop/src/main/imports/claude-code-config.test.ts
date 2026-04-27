@@ -24,7 +24,7 @@ describe('parseClaudeCodeSettings', () => {
     expect(out.userType).toBe('has-api-key');
   });
 
-  it('accepts ANTHROPIC_API_KEY from settings.json as a fallback to ANTHROPIC_AUTH_TOKEN', () => {
+  it('accepts ANTHROPIC_API_KEY from settings.json as an alternate Claude key', () => {
     const json = JSON.stringify({ env: { ANTHROPIC_API_KEY: 'k' } });
     const out = parseClaudeCodeSettings(json, { env: {} });
     expect(out.apiKey).toBe('k');
@@ -32,7 +32,7 @@ describe('parseClaudeCodeSettings', () => {
     expect(out.userType).toBe('has-api-key');
   });
 
-  it('falls back to shell env ANTHROPIC_AUTH_TOKEN when settings.json has no key', () => {
+  it('uses shell env ANTHROPIC_AUTH_TOKEN when settings.json has no key', () => {
     const json = JSON.stringify({ env: {} });
     const out = parseClaudeCodeSettings(json, { env: { ANTHROPIC_AUTH_TOKEN: 'shell-key' } });
     expect(out.apiKey).toBe('shell-key');
@@ -40,7 +40,7 @@ describe('parseClaudeCodeSettings', () => {
     expect(out.userType).toBe('has-api-key');
   });
 
-  it('attaches envKey: ANTHROPIC_AUTH_TOKEN on the provider for runtime fallback', () => {
+  it('attaches envKey: ANTHROPIC_AUTH_TOKEN as import metadata', () => {
     const json = JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 'k' } });
     const out = parseClaudeCodeSettings(json, { env: {} });
     expect(out.provider?.envKey).toBe('ANTHROPIC_AUTH_TOKEN');
@@ -86,11 +86,47 @@ describe('parseClaudeCodeSettings', () => {
     expect(out.apiKey).toBeNull();
   });
 
-  it('ignores an empty ANTHROPIC_AUTH_TOKEN string and falls through to env', () => {
+  it('ignores an empty ANTHROPIC_AUTH_TOKEN string and uses shell env', () => {
     const json = JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: '   ' } });
     const out = parseClaudeCodeSettings(json, { env: { ANTHROPIC_API_KEY: 'real' } });
     expect(out.apiKey).toBe('real');
     expect(out.apiKeySource).toBe('shell-env');
+  });
+
+  it('marks non-object env as parse-error instead of reading defaults', () => {
+    const out = parseClaudeCodeSettings(JSON.stringify({ env: [] }), { env: {} });
+    expect(out.provider).toBeNull();
+    expect(out.userType).toBe('parse-error');
+    expect(out.warnings[0]).toMatch(/settings\.env/);
+  });
+
+  it('marks non-string env values as parse-error', () => {
+    const out = parseClaudeCodeSettings(JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 123 } }), {
+      env: {},
+    });
+    expect(out.provider).toBeNull();
+    expect(out.userType).toBe('parse-error');
+    expect(out.warnings[0]).toMatch(/ANTHROPIC_AUTH_TOKEN/);
+  });
+
+  it('marks malformed ANTHROPIC_BASE_URL as parse-error before provider import', () => {
+    const out = parseClaudeCodeSettings(
+      JSON.stringify({
+        env: { ANTHROPIC_BASE_URL: 'not a url', ANTHROPIC_AUTH_TOKEN: 'sk-ant-test' },
+      }),
+      { env: {} },
+    );
+    expect(out.provider).toBeNull();
+    expect(out.userType).toBe('parse-error');
+    expect(out.warnings[0]).toMatch(/ANTHROPIC_BASE_URL/);
+  });
+
+  it('treats empty ANTHROPIC_MODEL as absent and keeps the default model', () => {
+    const out = parseClaudeCodeSettings(
+      JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 'sk-ant-test', ANTHROPIC_MODEL: '   ' } }),
+      { env: {} },
+    );
+    expect(out.provider?.defaultModel).toBe('claude-sonnet-4-6');
   });
 
   it('returns a raw parser error message on non-JSON input', () => {

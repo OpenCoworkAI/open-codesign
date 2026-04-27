@@ -67,6 +67,93 @@ describe('config v3 schema', () => {
     expect(() => ConfigV3Schema.parse(bad)).toThrow();
   });
 
+  it('rejects unknown v3 top-level fields instead of stripping them', () => {
+    expect(() =>
+      ConfigV3Schema.parse({
+        version: 3,
+        activeProvider: 'anthropic',
+        activeModel: 'claude-sonnet-4-6',
+        secrets: {},
+        providers: {
+          anthropic: BUILTIN_PROVIDERS.anthropic,
+        },
+        provider: 'anthropic',
+      }),
+    ).toThrow();
+  });
+
+  it('rejects unknown provider entry fields instead of stripping them', () => {
+    expect(() =>
+      ConfigV3Schema.parse({
+        version: 3,
+        activeProvider: 'custom',
+        activeModel: 'gpt-4o',
+        secrets: {},
+        providers: {
+          custom: {
+            id: 'custom',
+            name: 'Custom',
+            builtin: false,
+            wire: 'openai-chat',
+            baseUrl: 'https://proxy.example.com/v1',
+            defaultModel: 'gpt-4o',
+            apiKey: 'sk-should-not-live-here',
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it('accepts the explicit no-active-provider empty state', () => {
+    const parsed = ConfigV3Schema.parse({
+      version: 3,
+      activeProvider: '',
+      activeModel: '',
+      secrets: {},
+      providers: {},
+    });
+    expect(parsed.activeProvider).toBe('');
+    expect(parsed.activeModel).toBe('');
+  });
+
+  it('rejects one-sided active provider/model state', () => {
+    expect(() =>
+      ConfigV3Schema.parse({
+        version: 3,
+        activeProvider: 'openai',
+        activeModel: '',
+        secrets: {},
+        providers: {
+          openai: BUILTIN_PROVIDERS.openai,
+        },
+      }),
+    ).toThrow(/activeModel/);
+
+    expect(() =>
+      ConfigV3Schema.parse({
+        version: 3,
+        activeProvider: '',
+        activeModel: 'gpt-4o',
+        secrets: {},
+        providers: {},
+      }),
+    ).toThrow(/activeModel/);
+  });
+
+  it('rejects active providers that have no provider entry', () => {
+    expect(() =>
+      ConfigV3Schema.parse({
+        version: 3,
+        activeProvider: 'custom-missing',
+        activeModel: 'gpt-test',
+        secrets: {
+          'custom-missing': { ciphertext: 'plain:sk-test' },
+        },
+        providers: {},
+      }),
+    ).toThrow(/activeProvider/);
+  });
+
   it('parses schema-versioned image generation settings', () => {
     const parsed = ConfigV3Schema.parse({
       version: 3,
@@ -88,6 +175,31 @@ describe('config v3 schema', () => {
     expect(parsed.imageGeneration?.enabled).toBe(true);
     expect(parsed.imageGeneration?.quality).toBe('high');
     expect(parsed.imageGeneration?.size).toBe('1536x1024');
+  });
+
+  it('rejects unknown image generation settings fields instead of stripping them', () => {
+    expect(() =>
+      ConfigV3Schema.parse({
+        version: 3,
+        activeProvider: 'openai',
+        activeModel: 'gpt-4o',
+        secrets: {},
+        providers: {
+          openai: BUILTIN_PROVIDERS.openai,
+        },
+        imageGeneration: {
+          schemaVersion: 1,
+          enabled: true,
+          provider: 'openai',
+          credentialMode: 'inherit',
+          model: 'gpt-image-2',
+          quality: 'high',
+          size: '1536x1024',
+          outputFormat: 'png',
+          typoedField: true,
+        },
+      }),
+    ).toThrow();
   });
 });
 
@@ -190,6 +302,17 @@ describe('parseConfigFlexible', () => {
 
   it('throws on schema mismatch', () => {
     expect(() => parseConfigFlexible({ provider: 'nope', modelPrimary: 'x' })).toThrow();
+  });
+
+  it('validates legacy migration output against v3 invariants', () => {
+    expect(() =>
+      parseConfigFlexible({
+        version: 2,
+        provider: 'openai',
+        modelPrimary: '',
+        secrets: {},
+      }),
+    ).toThrow(/activeModel/);
   });
 });
 

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 export const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 export const AUTH_BASE = 'https://auth.openai.com';
@@ -45,11 +46,65 @@ export interface TokenSet {
   accountId: string | null;
 }
 
-interface TokenResponse {
-  access_token?: string;
-  refresh_token?: string;
-  id_token?: string;
-  expires_in?: number;
+type TokenResponse = Record<string, unknown>;
+
+function tokenParseError(
+  kind: 'exchange' | 'refresh',
+  detail: string,
+  cause?: unknown,
+): CodesignError {
+  return new CodesignError(
+    `Codex OAuth ${kind} returned an invalid token response: ${detail}`,
+    ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    { cause },
+  );
+}
+
+function asTokenResponse(value: unknown, kind: 'exchange' | 'refresh'): TokenResponse {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw tokenParseError(kind, 'response body must be a JSON object');
+  }
+  return value as TokenResponse;
+}
+
+function readRequiredTokenString(
+  response: TokenResponse,
+  field: 'access_token' | 'refresh_token' | 'id_token',
+  kind: 'exchange' | 'refresh',
+): string {
+  const value = response[field];
+  if (typeof value !== 'string') {
+    throw tokenParseError(kind, `${field} must be a non-empty string`);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    throw tokenParseError(kind, `${field} must be a non-empty string`);
+  }
+  return trimmed;
+}
+
+function readOptionalRefreshToken(
+  response: TokenResponse,
+  kind: 'exchange' | 'refresh',
+): string | null {
+  const value = response['refresh_token'];
+  if (value === undefined) return null;
+  if (typeof value !== 'string') {
+    throw tokenParseError(kind, 'refresh_token must be a non-empty string when present');
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    throw tokenParseError(kind, 'refresh_token must be a non-empty string when present');
+  }
+  return trimmed;
+}
+
+function readExpiresIn(response: TokenResponse, kind: 'exchange' | 'refresh'): number {
+  const value = response['expires_in'];
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw tokenParseError(kind, 'expires_in must be a positive number');
+  }
+  return value;
 }
 
 async function postToken(
@@ -62,10 +117,29 @@ async function postToken(
     body,
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Codex OAuth ${kind} failed: ${res.status} ${text}`);
+    const text = await safeResponseText(res);
+    throw new CodesignError(
+      `Codex OAuth ${kind} failed: ${res.status}${text.length > 0 ? ` ${text}` : ''}`,
+      ERROR_CODES.PROVIDER_ERROR,
+    );
   }
-  return (await res.json()) as TokenResponse;
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch (cause) {
+    throw tokenParseError(kind, 'response body must be valid JSON', cause);
+  }
+  return asTokenResponse(json, kind);
+}
+
+async function safeResponseText(res: Response): Promise<string> {
+  try {
+    return (await res.text()).slice(0, 500);
+  } catch (err) {
+    void err;
+    // The HTTP status is the failure; the response body only improves diagnostics.
+    return '';
+  }
 }
 
 export async function exchangeCode(
@@ -80,13 +154,14 @@ export async function exchangeCode(
     client_id: CLIENT_ID,
     code_verifier: verifier,
   });
-  const json = await postToken(body, 'exchange');
-  const idToken = json.id_token ?? '';
+  const response = await postToken(body, 'exchange');
+  const idToken = readRequiredTokenString(response, 'id_token', 'exchange');
+  const expiresIn = readExpiresIn(response, 'exchange');
   return {
-    accessToken: json.access_token ?? '',
-    refreshToken: json.refresh_token ?? '',
+    accessToken: readRequiredTokenString(response, 'access_token', 'exchange'),
+    refreshToken: readRequiredTokenString(response, 'refresh_token', 'exchange'),
     idToken,
-    expiresAt: Date.now() + (json.expires_in ?? 0) * 1000,
+    expiresAt: Date.now() + expiresIn * 1000,
     accountId: extractAccountId(idToken),
   };
 }
@@ -97,13 +172,15 @@ export async function refreshTokens(refreshToken: string): Promise<TokenSet> {
     client_id: CLIENT_ID,
     refresh_token: refreshToken,
   });
-  const json = await postToken(body, 'refresh');
-  const idToken = json.id_token ?? '';
+  const response = await postToken(body, 'refresh');
+  const idToken = readRequiredTokenString(response, 'id_token', 'refresh');
+  const expiresIn = readExpiresIn(response, 'refresh');
+  const nextRefreshToken = readOptionalRefreshToken(response, 'refresh');
   return {
-    accessToken: json.access_token ?? '',
-    refreshToken: json.refresh_token ?? refreshToken,
+    accessToken: readRequiredTokenString(response, 'access_token', 'refresh'),
+    refreshToken: nextRefreshToken ?? refreshToken,
     idToken,
-    expiresAt: Date.now() + (json.expires_in ?? 0) * 1000,
+    expiresAt: Date.now() + expiresIn * 1000,
     accountId: extractAccountId(idToken),
   };
 }
@@ -132,21 +209,30 @@ export function extractAccountId(jwt: string): string | null {
   const claims = decodeJwtClaims(jwt);
   if (claims === null) return null;
 
-  if (typeof claims['chatgpt_account_id'] === 'string') {
-    return claims['chatgpt_account_id'];
+  const topLevelAccountId = readNonEmptyClaim(claims['chatgpt_account_id']);
+  if (topLevelAccountId !== null) {
+    return topLevelAccountId;
   }
 
   const nested = claims['https://api.openai.com/auth'];
   if (nested && typeof nested === 'object') {
     const accountId = (nested as { chatgpt_account_id?: unknown }).chatgpt_account_id;
-    if (typeof accountId === 'string') return accountId;
+    const nestedAccountId = readNonEmptyClaim(accountId);
+    if (nestedAccountId !== null) return nestedAccountId;
   }
 
   const orgs = claims['organizations'];
   if (Array.isArray(orgs) && orgs.length > 0) {
     const first = orgs[0] as { id?: unknown };
-    if (first && typeof first.id === 'string') return first.id;
+    const orgId = readNonEmptyClaim(first?.id);
+    if (orgId !== null) return orgId;
   }
 
   return null;
+}
+
+function readNonEmptyClaim(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }

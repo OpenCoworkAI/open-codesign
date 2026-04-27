@@ -106,7 +106,7 @@ export function getLogPath(): string {
  * file-lock (EBUSY) or a TOCTOU race between existsSync and the rename
  * must not bubble into electron-log and silently disable rotation going
  * forward. Failures are reported via `onError` (defaults to a console
- * fallback since we cannot recurse through `getLogger` from inside the
+ * recovery writer since we cannot recurse through `getLogger` from inside the
  * archive callback).
  */
 export function rotateLogFile(

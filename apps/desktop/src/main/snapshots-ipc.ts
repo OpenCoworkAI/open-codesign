@@ -10,7 +10,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ChatAppendInput,
@@ -48,7 +48,9 @@ import {
   softDeleteDesign,
   upsertDesignFile,
 } from './snapshots-db';
+import { prepareWorkspaceWriteContent } from './workspace-file-content';
 import {
+  classifyWorkspaceFileKind,
   listWorkspaceFilesAt,
   readWorkspaceFileAt,
   type WorkspaceFileEntry,
@@ -283,7 +285,7 @@ function chatStoreOptions(db: Database): SessionChatStoreOptions {
   return {
     db,
     sessionDir: path.join(app.getPath('userData'), 'sessions'),
-    fallbackCwd: app.getPath('documents'),
+    defaultCwd: app.getPath('documents'),
   };
 }
 
@@ -768,16 +770,38 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       }
 
       const destinationPath = path.join(design.workspacePath, normalizedPath);
+      const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
       try {
         await mkdir(path.dirname(destinationPath), { recursive: true });
-        await writeFile(destinationPath, content, 'utf8');
+        if (typeof writeContent.diskContent === 'string') {
+          await writeFile(destinationPath, writeContent.diskContent, 'utf8');
+        } else {
+          await writeFile(destinationPath, writeContent.diskContent);
+        }
       } catch (cause) {
         throw new CodesignError('Failed to write workspace file', 'IPC_DB_ERROR', { cause });
       }
 
       runDb('files:write.upsert-design-file', () =>
-        upsertDesignFile(db, designId, normalizedPath, content),
+        upsertDesignFile(db, designId, normalizedPath, writeContent.storedContent),
       );
+
+      if (writeContent.isBinaryAsset) {
+        try {
+          const s = await stat(destinationPath);
+          return {
+            path: normalizedPath,
+            kind: classifyWorkspaceFileKind(normalizedPath),
+            size: s.size,
+            updatedAt: s.mtime.toISOString(),
+            content: writeContent.storedContent,
+          };
+        } catch (cause) {
+          throw new CodesignError('Failed to stat written workspace file', 'IPC_DB_ERROR', {
+            cause,
+          });
+        }
+      }
 
       try {
         return await readWorkspaceFileAt(design.workspacePath, normalizedPath);

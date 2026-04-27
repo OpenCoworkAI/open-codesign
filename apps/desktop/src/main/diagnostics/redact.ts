@@ -85,7 +85,7 @@ export async function readConfigRedacted(opts: {
     const raw = await readFile(configPath(), 'utf8');
     // Strip prompt / history fields first (multi-line values between quotes).
     const noPrompts = raw.replace(/^(prompt|history)\s*=\s*"""[\s\S]*?"""/gm, '');
-    // Field-based redaction is the primary defense; format-based is a fallback
+    // Field-based redaction is the primary defense; format-based redaction is a secondary guard
     // for keys that leak into non-sensitive-looking fields.
     const fieldMasked = redactSensitiveTomlFields(noPrompts);
     const keyMasked = fieldMasked.replace(API_KEY_RE, '***REDACTED***');

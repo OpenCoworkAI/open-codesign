@@ -8,7 +8,6 @@ import {
   type StoredDesignSystem as StoredDesignSystemValue,
 } from '@open-codesign/shared';
 import { readConfig, writeConfig } from '../config';
-import { ALLOWED_IMPORT_ENV_KEYS } from '../imports/codex-config';
 import { decryptSecret, migrateSecrets } from '../keychain';
 import { getLogger } from '../logger';
 import { isKeylessProviderAllowed } from '../provider-settings';
@@ -75,38 +74,21 @@ export function getApiKeyForProvider(provider: string): string {
   const ref = cfg.secrets[provider as keyof typeof cfg.secrets];
   if (ref !== undefined) return decryptSecret(ref.ciphertext);
 
-  // Fallback: if the provider entry declares an envKey (e.g. imported
-  // Claude Code providers always declare ANTHROPIC_AUTH_TOKEN), resolve
-  // the key from the process environment. This rescues two cases that
-  // would otherwise be dead ends:
-  //   1. User exported ANTHROPIC_API_KEY in their shell and launched
-  //      from a terminal — the env is inherited but our onboarding never
-  //      called `encryptSecret`, so cfg.secrets[provider] is empty.
-  //   2. User deleted the persisted key from Settings but the env var is
-  //      still present. Treat it as a valid credential rather than
-  //      throwing a misleading "key missing" error.
-  const entry = cfg.providers[provider];
-  if (entry?.envKey !== undefined) {
-    // Defense in depth against legacy configs: Codex's config.toml env_key
-    // field is now allowlisted at import time, but older configs may have
-    // stored arbitrary env-var names (pre-allowlist). Re-check here so a
-    // stale `envKey: "AWS_SECRET_ACCESS_KEY"` can't still exfiltrate on
-    // every LLM call.
-    if (!ALLOWED_IMPORT_ENV_KEYS.has(entry.envKey)) {
-      logger.warn('get_api_key.envKey_blocked', {
-        provider,
-        envKey: entry.envKey,
-      });
-    } else {
-      const fromEnv = process.env[entry.envKey]?.trim();
-      if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv;
-    }
-  }
-
   throw new CodesignError(
     `No API key stored for provider "${provider}". Re-run onboarding to add one.`,
     ERROR_CODES.PROVIDER_KEY_MISSING,
   );
+}
+
+export function hasApiKeyForProvider(provider: string): boolean {
+  const cfg = getCachedConfig();
+  if (cfg === null) {
+    throw new CodesignError(
+      'No configuration found. Complete onboarding first.',
+      ERROR_CODES.CONFIG_MISSING,
+    );
+  }
+  return cfg.secrets[provider as keyof typeof cfg.secrets] !== undefined;
 }
 
 export function getBaseUrlForProvider(provider: string): string | undefined {
@@ -126,6 +108,15 @@ export function toState(cfg: Config | null): OnboardingState {
     };
   }
   const active = cfg.activeProvider;
+  if (active.length === 0) {
+    return {
+      hasKey: false,
+      provider: null,
+      modelPrimary: null,
+      baseUrl: null,
+      designSystem: cfg.designSystem ?? null,
+    };
+  }
   const ref = cfg.secrets[active];
   if (ref === undefined && !isKeylessProviderAllowed(active, cfg.providers[active])) {
     return {

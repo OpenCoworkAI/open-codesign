@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { SessionManager } from '@open-codesign/core';
+import { normalizeDesignFilePath } from '../snapshots-db';
+import { prepareWorkspaceWriteContent } from '../workspace-file-content';
 
 /**
  * v0.1 → v0.2 migration (T2.6).
@@ -88,6 +90,7 @@ export async function runMigration(opts: MigrationOptions): Promise<MigrationRes
 
     let migrated = 0;
     const failed: MigrationResult['failed'] = [];
+    const claimedWorkspaceSlugs = new Set<string>();
 
     for (const design of designs) {
       opts.onProgress?.({
@@ -96,7 +99,7 @@ export async function runMigration(opts: MigrationOptions): Promise<MigrationRes
         designName: design.name ?? design.id,
       });
       try {
-        await migrateOneDesign(db, design, opts);
+        await migrateOneDesign(db, design, opts, claimedWorkspaceSlugs);
         migrated++;
         opts.onProgress?.({
           phase: 'design-done',
@@ -123,18 +126,27 @@ async function migrateOneDesign(
   db: MigrationDatabase,
   design: DesignRow,
   opts: MigrationOptions,
+  claimedWorkspaceSlugs: Set<string>,
 ): Promise<void> {
-  const slug = design.slug ?? slugify(design.name ?? design.id);
-  const wsdir = path.join(opts.workspaceRoot, slug);
+  const slug =
+    design.slug === null ? slugify(design.name ?? design.id) : normalizeMigrationSlug(design.slug);
+  const workspaceSlug = allocateWorkspaceSlug(opts.workspaceRoot, slug, claimedWorkspaceSlugs);
+  const wsdir = path.join(opts.workspaceRoot, workspaceSlug);
   mkdirSync(wsdir, { recursive: true });
 
   const files = db
     .prepare('SELECT design_id, path, content FROM design_files WHERE design_id = ?')
     .all<DesignFileRow>(design.id);
   for (const f of files) {
-    const dest = path.join(wsdir, f.path);
+    const filePath = normalizeLegacyDesignFilePath(f.path);
+    const dest = path.join(wsdir, filePath);
+    const writeContent = prepareWorkspaceWriteContent(filePath, f.content);
     mkdirSync(path.dirname(dest), { recursive: true });
-    writeFileSync(dest, f.content, 'utf8');
+    if (typeof writeContent.diskContent === 'string') {
+      writeFileSync(dest, writeContent.diskContent, 'utf8');
+    } else {
+      writeFileSync(dest, writeContent.diskContent);
+    }
   }
 
   const sessionManager = SessionManager.create(wsdir, opts.sessionDir);
@@ -151,6 +163,51 @@ async function migrateOneDesign(
   }
 }
 
+function normalizeMigrationSlug(raw: string): string {
+  const slug = raw.trim();
+  if (
+    slug.length === 0 ||
+    slug === '.' ||
+    slug === '..' ||
+    slug.includes('/') ||
+    slug.includes('\\') ||
+    path.isAbsolute(slug) ||
+    /^[a-zA-Z]:/.test(slug)
+  ) {
+    throw new Error(`Invalid legacy design slug: ${raw}`);
+  }
+  return slug;
+}
+
+function allocateWorkspaceSlug(
+  workspaceRoot: string,
+  requestedSlug: string,
+  claimedWorkspaceSlugs: Set<string>,
+): string {
+  let workspaceSlug = requestedSlug;
+  for (let attempt = 2; attempt < 1000; attempt++) {
+    if (
+      !claimedWorkspaceSlugs.has(workspaceSlug) &&
+      !existsSync(path.join(workspaceRoot, workspaceSlug))
+    ) {
+      claimedWorkspaceSlugs.add(workspaceSlug);
+      return workspaceSlug;
+    }
+    workspaceSlug = `${requestedSlug}-${attempt}`;
+  }
+  throw new Error(
+    `Could not allocate a unique workspace directory for legacy design slug: ${requestedSlug}`,
+  );
+}
+
+function normalizeLegacyDesignFilePath(raw: string): string {
+  try {
+    return normalizeDesignFilePath(raw);
+  } catch (cause) {
+    throw new Error(`Invalid legacy design file path: ${raw}`, { cause });
+  }
+}
+
 function slugify(input: string): string {
   return (
     input
@@ -164,12 +221,15 @@ function slugify(input: string): string {
 async function defaultOpener(): Promise<(path: string) => MigrationDatabase> {
   // Dynamic import so test environments can run without the native
   // module loaded.
-  const mod = (await import('better-sqlite3').catch(() => null)) as {
+  let mod: {
     default: new (path: string, options?: { readonly?: boolean }) => MigrationDatabase;
-  } | null;
-  if (!mod) {
+  };
+  try {
+    mod = (await import('better-sqlite3')) as typeof mod;
+  } catch (cause) {
     throw new Error(
       'better-sqlite3 not available — pass options.openDatabase explicitly when migrating in environments without the native binding.',
+      { cause },
     );
   }
   return (path) => new mod.default(path, { readonly: true });

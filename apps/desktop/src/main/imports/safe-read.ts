@@ -1,4 +1,5 @@
 import { readFile, stat } from 'node:fs/promises';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { getLogger } from '../logger';
 
 /**
@@ -13,10 +14,10 @@ import { getLogger } from '../logger';
  *
  * `safeReadImportFile` stats first, rejects anything that isn't a regular
  * file or that exceeds `MAX_IMPORT_FILE_BYTES`, and falls through to
- * `readFile` only when the stat says it's safe. Returns `null` on
- * missing/too-big/not-a-file so callers keep their existing "no config
- * found" branches; logs the reason so diagnostics bundles capture a
- * rejection trail.
+ * `readFile` only when the stat says it's safe. Returns `null` only when
+ * the path is absent. Present-but-unreadable, non-regular, or oversized
+ * files are configuration errors and must surface to direct import calls
+ * rather than looking like "no config found".
  */
 const log = getLogger('import-read');
 
@@ -33,13 +34,20 @@ export async function safeReadImportFile(path: string): Promise<string | null> {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') return null;
     log.warn('safe_read.stat_failed', { path, code: code ?? 'unknown' });
-    return null;
+    throw new CodesignError(
+      `Could not inspect import config file at ${path}`,
+      ERROR_CODES.CONFIG_READ_FAILED,
+      { cause: err },
+    );
   }
   if (!stats.isFile()) {
     // Symlink to /dev/zero, symlink to a directory, named pipe, etc.
     // `isFile()` follows symlinks, so a symlink to a regular file is fine.
     log.warn('safe_read.not_regular_file', { path });
-    return null;
+    throw new CodesignError(
+      `Import config path is not a regular file: ${path}`,
+      ERROR_CODES.CONFIG_READ_FAILED,
+    );
   }
   if (stats.size > MAX_IMPORT_FILE_BYTES) {
     log.warn('safe_read.size_exceeded', {
@@ -47,7 +55,18 @@ export async function safeReadImportFile(path: string): Promise<string | null> {
       size: stats.size,
       cap: MAX_IMPORT_FILE_BYTES,
     });
-    return null;
+    throw new CodesignError(
+      `Import config file is too large: ${path}`,
+      ERROR_CODES.CONFIG_READ_FAILED,
+    );
   }
-  return readFile(path, 'utf8');
+  try {
+    return await readFile(path, 'utf8');
+  } catch (err) {
+    throw new CodesignError(
+      `Could not read import config file at ${path}`,
+      ERROR_CODES.CONFIG_READ_FAILED,
+      { cause: err },
+    );
+  }
 }

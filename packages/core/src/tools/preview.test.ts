@@ -1,3 +1,4 @@
+import { CodesignError } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
   MAX_ASSET_ERRORS,
@@ -70,17 +71,20 @@ describe('makePreviewTool', () => {
     expect(res.content[0]?.type).toBe('text');
   });
 
-  it('returns a structured failure when the executor throws', async () => {
-    const runPreview = vi.fn().mockRejectedValue(new Error('iframe crashed'));
+  it('throws a tool error when the executor throws', async () => {
+    const cause = new Error('iframe crashed');
+    const runPreview = vi.fn().mockRejectedValue(cause);
     const tool = makePreviewTool(runPreview);
 
-    const res = await tool.execute('call-1', { path: 'index.html' });
-
-    expect(res.details.ok).toBe(false);
-    expect(res.details.reason).toContain('iframe crashed');
-    expect(res.content[0]).toEqual({
-      type: 'text',
-      text: 'preview failed: iframe crashed',
+    const err = await tool
+      .execute('call-1', { path: 'index.html' })
+      .catch((value: unknown) => value);
+    expect(err).toBeInstanceOf(CodesignError);
+    expect(err).toMatchObject({
+      name: 'CodesignError',
+      code: 'TOOL_EXECUTION_FAILED',
+      message: 'Preview executor failed: iframe crashed',
     });
+    expect((err as CodesignError).cause).toBe(cause);
   });
 });

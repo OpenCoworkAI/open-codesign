@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GeneratePayload, GeneratePayloadV1 } from './index';
+import { GeneratePayloadV1 } from './index';
 
 const BASE_VALID = {
   schemaVersion: 1 as const,
@@ -34,40 +34,51 @@ describe('GeneratePayloadV1', () => {
     const { generationId: _, ...noId } = BASE_VALID;
     expect(() => GeneratePayloadV1.parse(noId)).toThrow();
   });
-});
 
-describe('GeneratePayload (legacy — no schemaVersion)', () => {
-  it('accepts a legacy payload without schemaVersion and optional generationId', () => {
-    const raw = {
-      prompt: 'Design a landing page',
-      history: [],
-      model: { provider: 'anthropic' as const, modelId: 'claude-sonnet-4-6' },
-    };
-    const result = GeneratePayload.parse(raw);
-    expect(result.generationId).toBeUndefined();
-    expect(result.attachments).toEqual([]);
+  it('rejects unknown top-level fields instead of stripping them', () => {
+    expect(() =>
+      GeneratePayloadV1.parse({
+        ...BASE_VALID,
+        accidentalField: true,
+      }),
+    ).toThrow();
   });
 
-  it('accepts a legacy payload with generationId present', () => {
-    const raw = {
-      prompt: 'Design a landing page',
-      history: [],
-      model: { provider: 'anthropic' as const, modelId: 'claude-sonnet-4-6' },
-      generationId: 'gen-old-123',
-    };
-    const result = GeneratePayload.parse(raw);
-    expect(result.generationId).toBe('gen-old-123');
+  it('rejects unknown nested model fields instead of stripping them', () => {
+    expect(() =>
+      GeneratePayloadV1.parse({
+        ...BASE_VALID,
+        model: {
+          provider: 'anthropic',
+          modelId: 'claude-sonnet-4-6',
+          typoedBaseUrl: 'https://api.example.com',
+        },
+      }),
+    ).toThrow();
   });
 
-  it('can be promoted to GeneratePayloadV1 by injecting schemaVersion and falling back generationId', () => {
-    const legacy = GeneratePayload.parse({
-      prompt: 'Design a landing page',
-      history: [],
-      model: { provider: 'anthropic' as const, modelId: 'claude-sonnet-4-6' },
-    });
-    const id = legacy.generationId ?? `gen-${Date.now()}`;
-    const v1 = GeneratePayloadV1.parse({ schemaVersion: 1, ...legacy, generationId: id });
-    expect(v1.schemaVersion).toBe(1);
-    expect(v1.generationId).toMatch(/^gen-/);
+  it('rejects unknown nested history fields instead of stripping them', () => {
+    expect(() =>
+      GeneratePayloadV1.parse({
+        ...BASE_VALID,
+        history: [{ role: 'user', content: 'hello', accidentalId: 'msg-1' }],
+      }),
+    ).toThrow();
+  });
+
+  it('rejects unknown nested attachment fields instead of stripping them', () => {
+    expect(() =>
+      GeneratePayloadV1.parse({
+        ...BASE_VALID,
+        attachments: [
+          {
+            path: '/tmp/a.png',
+            name: 'a.png',
+            size: 123,
+            mimeType: 'image/png',
+          },
+        ],
+      }),
+    ).toThrow();
   });
 });

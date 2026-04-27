@@ -1,6 +1,5 @@
 import {
   BUILTIN_PROVIDERS,
-  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   type Config,
   ERROR_CODES,
@@ -49,7 +48,11 @@ export function getAddProviderDefaults(
   activeProvider: string;
   modelPrimary: string;
 } {
-  if (cfg === null || cfg.secrets[cfg.activeProvider] === undefined) {
+  if (
+    cfg === null ||
+    cfg.activeProvider.length === 0 ||
+    !providerHasUsableCredential(cfg, cfg.activeProvider)
+  ) {
     return {
       activeProvider: input.provider,
       modelPrimary: input.modelPrimary,
@@ -59,6 +62,13 @@ export function getAddProviderDefaults(
     activeProvider: cfg.activeProvider,
     modelPrimary: cfg.activeModel,
   };
+}
+
+function providerHasUsableCredential(cfg: Config, provider: string): boolean {
+  return (
+    cfg.secrets[provider] !== undefined ||
+    isKeylessProviderAllowed(provider, resolveEntryFor(cfg, provider))
+  );
 }
 
 export function assertProviderHasStoredSecret(cfg: Config, provider: string): void {
@@ -71,12 +81,8 @@ export function assertProviderHasStoredSecret(cfg: Config, provider: string): vo
 }
 
 export function isKeylessProviderAllowed(provider: string, entry?: ProviderEntry | null): boolean {
-  if (entry !== undefined && entry !== null) {
-    const capabilities = resolveProviderCapabilities(provider, entry);
-    if (capabilities.supportsKeyless) return true;
-  }
-  const isCodexFamily = provider.startsWith('codex-') || provider === CHATGPT_CODEX_PROVIDER_ID;
-  return isCodexFamily && entry?.requiresApiKey !== true && entry?.envKey === undefined;
+  if (entry === undefined || entry === null) return false;
+  return resolveProviderCapabilities(provider, entry).supportsKeyless === true;
 }
 
 function resolveEntryFor(cfg: Config, id: string): ProviderEntry | null {
@@ -110,7 +116,7 @@ export function toProviderRows(
     if (ref !== undefined) {
       // Prefer the persisted mask — avoids triggering a keychain password
       // prompt on unsigned macOS builds just to render the Settings row.
-      // Fall back to decrypting once for legacy configs that pre-date the
+      // Decrypt once for legacy configs that pre-date the
       // mask field; `migrateSecrets` should have rewritten them, but
       // we stay resilient in case migration didn't complete.
       if (ref.mask !== undefined && ref.mask.length > 0) {
@@ -148,8 +154,8 @@ export function toProviderRows(
         (isSupportedOnboardingProvider(provider)
           ? PROVIDER_SHORTLIST[provider].defaultPrimary
           : ''),
-      // codex-* providers are treated as no-auth / IP-gated by default —
-      // absent secret is a legitimate state, not a "missing key" warning.
+      // Missing secrets count as configured only for providers that explicitly
+      // declare keyless mode in their ProviderEntry/capabilities.
       hasKey: ref !== undefined || isKeylessProviderAllowed(provider, entry),
       ...(entry?.reasoningLevel !== undefined ? { reasoningLevel: entry.reasoningLevel } : {}),
       ...(rowError !== undefined ? { error: rowError } : {}),
@@ -180,21 +186,21 @@ export function computeDeleteProviderResult(cfg: Config, toDelete: string): Dele
     return { nextActive: null, modelPrimary: '' };
   }
 
-  const keepCurrent = cfg.activeProvider !== toDelete;
+  const keepCurrent = cfg.activeProvider !== toDelete && remaining.includes(cfg.activeProvider);
   const nextActive = keepCurrent ? cfg.activeProvider : (remaining[0] as string);
 
-  if (cfg.activeProvider === toDelete) {
-    const entry = resolveEntryFor(cfg, nextActive);
-    const fallbackModel = isSupportedOnboardingProvider(nextActive)
-      ? PROVIDER_SHORTLIST[nextActive].defaultPrimary
-      : (entry?.defaultModel ?? '');
-    return {
-      nextActive,
-      modelPrimary: fallbackModel,
-    };
+  if (keepCurrent) {
+    return { nextActive, modelPrimary: cfg.activeModel };
   }
 
-  return { nextActive, modelPrimary: cfg.activeModel };
+  const entry = resolveEntryFor(cfg, nextActive);
+  const nextModel = isSupportedOnboardingProvider(nextActive)
+    ? PROVIDER_SHORTLIST[nextActive].defaultPrimary
+    : (entry?.defaultModel ?? '');
+  return {
+    nextActive,
+    modelPrimary: nextModel,
+  };
 }
 
 /**

@@ -36,7 +36,9 @@ import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
   classifyError,
   claudeCodeIdentityHeaders,
+  inferReasoning,
   looksLikeClaudeOAuthToken,
+  normalizeGeminiModelId,
   shouldForceClaudeCodeIdentity,
   withBackoff,
 } from '@open-codesign/providers';
@@ -97,7 +99,7 @@ interface PiAssistantMessage {
 // Prompt assembly and artifact collection helpers live in ./lib/context-format.ts
 // and ./lib/artifact-collect.ts (shared with index.ts).
 //
-// Note: extractFallbackArtifact / extractHtmlDocument were removed in favour of
+// Note: extractLooseArtifact / extractHtmlDocument were removed in favour of
 // the text_editor + virtual fs path. See `if (collected.artifacts.length === 0
 // && deps.fs)` below for the only supported recovery.
 
@@ -108,7 +110,7 @@ interface PiAssistantMessage {
 //   - builtin providers (anthropic/openai/openrouter) take the same path as
 //     imported ones (claude-code-imported, codex-*, custom proxies)
 //   - there is no "unknown model" error — a missing entry is a config bug
-//     the caller must surface, not a fallback to swallow
+//     the caller must surface, not an error to swallow
 //   - cost / context-window metadata comes from pi-ai's registry historically,
 //     but the user has opted to drop cost display, so we use optimistic
 //     defaults (cost 0) that do not block requests
@@ -132,7 +134,7 @@ function apiForWire(wire: WireApi | undefined): string {
   if (wire === 'anthropic') return 'anthropic-messages';
   if (wire === 'openai-responses') return 'openai-responses';
   if (wire === 'openai-codex-responses') return 'openai-codex-responses';
-  // openai-chat is the canonical fallback for everything else that uses the
+  // openai-chat is the canonical wire for everything else that uses the
   // openai chat-completions wire format (openai, openrouter, deepseek, etc.).
   return 'openai-completions';
 }
@@ -152,7 +154,7 @@ function buildPiModel(
 ): PiModel {
   // Fall through to the canonical public endpoint for the 3 first-party
   // BYOK providers when the caller omitted baseUrl. This is a fact about
-  // those endpoints (api.anthropic.com is anthropic), not a fallback to a
+  // those endpoints (api.anthropic.com is anthropic), not a registry lookup for a
   // model registry — imported / custom providers still require baseUrl and
   // will throw if absent.
   const resolvedBaseUrl =
@@ -171,13 +173,14 @@ function buildPiModel(
   // For openai-codex-responses, canonicalBaseUrl only strips trailing slashes
   // — pi-ai's codex wire appends `/codex/responses` from the bare base itself.
   const canonicalBase = wire ? canonicalBaseUrl(resolvedBaseUrl, wire) : resolvedBaseUrl;
+  const effectiveModelId = normalizeGeminiModelId(model.modelId, canonicalBase);
   const out: PiModel = {
-    id: model.modelId,
-    name: model.modelId,
+    id: effectiveModelId,
+    name: effectiveModelId,
     api: apiForWire(wire),
     provider: model.provider,
     baseUrl: canonicalBase,
-    reasoning: true,
+    reasoning: inferReasoning(wire, effectiveModelId, canonicalBase),
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
@@ -477,7 +480,7 @@ const IMAGE_ASSET_TOOL_GUIDANCE = [
   'When the brief explicitly asks for a bitmap for a given slot (e.g. "生图做 bg 和 logo", "generate a hero image and a product shot"), you MUST call `generate_image_asset` for each of those slots. One call per named asset. Do NOT collapse multiple named assets into a single call, and do NOT silently substitute SVG/CSS for one of them and bitmap for the other — that violates the brief.',
   '',
   'Default choices when the brief is ambiguous:',
-  "- Logo: if the user asked for it to be *generated* / *illustrated* / *rendered* / any language implying a painted or photographic mark → `generate_image_asset` with `purpose='logo'`, `aspectRatio='1:1'`. Only fall back to inline SVG when the user clearly wants a flat geometric wordmark or when no logo was requested at all.",
+  "- Logo: if the user asked for it to be *generated* / *illustrated* / *rendered* / any language implying a painted or photographic mark → `generate_image_asset` with `purpose='logo'`, `aspectRatio='1:1'`. Use inline SVG only when the user clearly wants a flat geometric wordmark or when no logo was requested at all.",
   '- Background / hero / poster / marketing illustration: always `generate_image_asset` unless the brief explicitly says "no images" or "CSS-only".',
   '- Decorative gradients, UI chrome, charts, simple icons (search, menu, arrow, etc.): use HTML/CSS/SVG, never `generate_image_asset`.',
   '',
@@ -530,8 +533,8 @@ export interface GenerateViaAgentDeps {
    * Optional host-injected runtime verifier for the `done` tool. When set,
    * `done` invokes this callback with the artifact source so the host can
    * mount it in a real runtime (e.g. hidden BrowserWindow) and surface
-   * console / load errors back to the agent. Without it, `done` falls back
-   * to static lint only.
+   * console / load errors back to the agent. Without it, `done` is limited to
+   * static lint checks.
    */
   runtimeVerify?: DoneRuntimeVerifier | undefined;
   /**
@@ -564,6 +567,10 @@ export async function generateViaAgent(
   if (!input.prompt.trim()) {
     throw new CodesignError('Prompt cannot be empty', ERROR_CODES.INPUT_EMPTY_PROMPT);
   }
+  const initialApiKey = input.apiKey.trim();
+  if (initialApiKey.length === 0 && input.allowKeyless !== true) {
+    throw new CodesignError('Missing API key', ERROR_CODES.PROVIDER_AUTH_MISSING);
+  }
   if (!input.systemPrompt && input.mode && input.mode !== 'create') {
     throw new CodesignError(
       'generateViaAgent() built-in prompt only supports mode "create".',
@@ -578,7 +585,7 @@ export async function generateViaAgent(
     input.wire,
     input.baseUrl,
     input.httpHeaders,
-    input.apiKey,
+    initialApiKey,
   );
   log.info('[generate] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
 
@@ -739,13 +746,19 @@ export async function generateViaAgent(
       ? async () => {
           try {
             const key = await input.getApiKey?.();
-            return key && key.length > 0 ? key : input.apiKey || 'open-codesign-keyless';
+            const trimmedKey = key?.trim() ?? '';
+            if (trimmedKey.length > 0) return trimmedKey;
+            if (input.allowKeyless === true) return initialApiKey || 'open-codesign-keyless';
+            throw new CodesignError(
+              `No API key returned for provider "${input.model.provider}".`,
+              ERROR_CODES.PROVIDER_AUTH_MISSING,
+            );
           } catch (err) {
             capturedGetApiKeyError = err;
             throw err;
           }
         }
-      : () => input.apiKey || 'open-codesign-keyless',
+      : () => initialApiKey || 'open-codesign-keyless',
   });
 
   if (deps.onEvent) {
@@ -831,12 +844,15 @@ export async function generateViaAgent(
   if (!finalAssistant) {
     throw new CodesignError('Agent produced no assistant message', ERROR_CODES.PROVIDER_ERROR);
   }
-  if (finalAssistant.stopReason === 'error' || finalAssistant.stopReason === 'aborted') {
+  if (finalAssistant.stopReason !== 'stop') {
     // Prefer the original `getApiKey` throw (e.g. PROVIDER_AUTH_MISSING after
     // mid-run logout) over pi-agent-core's flattened plain-string failure,
     // so the renderer's error-code routing stays consistent with the path
     // that would have fired if the same error had been raised at IPC entry.
-    if (capturedGetApiKeyError !== null) {
+    if (
+      capturedGetApiKeyError !== null &&
+      (finalAssistant.stopReason === 'error' || finalAssistant.stopReason === 'aborted')
+    ) {
       log.error('[generate] step=send_request.fail', {
         ...ctx,
         ms: Date.now() - sendStart,
@@ -845,17 +861,18 @@ export async function generateViaAgent(
       });
       throw capturedGetApiKeyError;
     }
-    const message = finalAssistant.errorMessage ?? 'Provider returned an error';
+    const message =
+      finalAssistant.errorMessage ?? messageForIncompleteStop(finalAssistant.stopReason);
+    const code =
+      finalAssistant.stopReason === 'aborted'
+        ? ERROR_CODES.PROVIDER_ABORTED
+        : ERROR_CODES.PROVIDER_ERROR;
     log.error('[generate] step=send_request.fail', {
       ...ctx,
       ms: Date.now() - sendStart,
       stopReason: finalAssistant.stopReason,
     });
-    throw remapProviderError(
-      new CodesignError(message, ERROR_CODES.PROVIDER_ERROR),
-      input.model.provider,
-      input.wire,
-    );
+    throw remapProviderError(new CodesignError(message, code), input.model.provider, input.wire);
   }
   log.info('[generate] step=send_request.ok', { ...ctx, ms: Date.now() - sendStart });
 
@@ -897,6 +914,17 @@ export async function generateViaAgent(
   return skillResult.warnings.length > 0
     ? { ...output, warnings: [...(output.warnings ?? []), ...skillResult.warnings] }
     : output;
+}
+
+function messageForIncompleteStop(stopReason: 'length' | 'toolUse' | 'error' | 'aborted'): string {
+  if (stopReason === 'length') {
+    return 'Agent response stopped before completion because the provider hit the token limit';
+  }
+  if (stopReason === 'toolUse') {
+    return 'Agent stopped with an unresolved tool call';
+  }
+  if (stopReason === 'aborted') return 'Generation aborted by provider';
+  return 'Provider returned an error';
 }
 
 function chatMessageToAgentMessage(

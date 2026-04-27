@@ -1114,6 +1114,8 @@
     "INPUT_EMPTY_HTML": "此操作需要已有的 HTML 内容。",
     "INPUT_UNSUPPORTED_MODE": "不支持该生成模式。",
     "GENERATION_TIMEOUT": "生成超时，请缩短 prompt 或在设置中增加超时时间。",
+    "ARTIFACT_PROTOCOL_INVALID": "生成的 artifact 未遵循所需协议。",
+    "TOOL_EXECUTION_FAILED": "设计工具运行失败，详情见日志。",
     "CONFIG_READ_FAILED": "读取配置文件失败，请检查文件权限。",
     "CONFIG_PARSE_FAILED": "配置文件解析失败，可能已损坏。",
     "CONFIG_SCHEMA_INVALID": "配置文件格式不识别，请重新配置。",

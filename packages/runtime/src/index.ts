@@ -213,11 +213,9 @@ function wrapJsxAsSrcdoc(
   jsx: string,
   opts: { kind?: 'jsx' | 'tsx'; baseHref?: string | undefined } = {},
 ): string {
-  // Auto-recover bare `const TWEAK_DEFAULTS = {...}` (no markers) into the
-  // canonical EDITMODE form before embedding, so the in-iframe bridge regex
-  // always matches and live tweaks work even on agent output that forgot the
-  // markers. Side-benefit: TweakPanel's parser sees the same canonical form.
   const kind = opts.kind ?? 'jsx';
+  // v0.2 requires canonical EDITMODE markers. `ensureEditmodeMarkers` is kept
+  // as a no-op compatibility hook for older call sites.
   const normalized = autoMountJsxIfNeeded(ensureEditmodeMarkers(jsx));
   // The boundary markers let us round-trip extract the agent's payload from
   // a fully-built srcdoc later (used by EDITMODE replace flows).

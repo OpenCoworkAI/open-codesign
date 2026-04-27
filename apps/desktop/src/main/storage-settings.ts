@@ -146,8 +146,15 @@ function readStorageLocationsSync(defaultUserDataDir: string): StorageLocations 
   if (!existsSync(file)) return {};
   try {
     return parseStorageSettingsFile(readFileSync(file, 'utf8'));
-  } catch {
-    return {};
+  } catch (err) {
+    if (err instanceof CodesignError) throw err;
+    throw new CodesignError(
+      `Failed to read storage settings at ${file}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      ERROR_CODES.STORAGE_SETTINGS_READ_FAILED,
+      { cause: err },
+    );
   }
 }
 

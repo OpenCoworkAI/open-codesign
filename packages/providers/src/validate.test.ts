@@ -89,6 +89,30 @@ describe('pingProvider', () => {
     }
   });
 
+  it('returns parse code on non-JSON response bodies', async () => {
+    mockFetch(async () => new Response('not json', { status: 200 }));
+    const result = await pingProvider('openai', 'sk-test');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('parse');
+  });
+
+  it('returns parse code on unexpected /models response shape', async () => {
+    mockFetch(async () => new Response(JSON.stringify({ unexpected: [] }), { status: 200 }));
+    const result = await pingProvider('openai', 'sk-test');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('parse');
+      expect(result.message).toMatch(/shape/);
+    }
+  });
+
+  it('returns parse code when a model item lacks id and name', async () => {
+    mockFetch(async () => new Response(JSON.stringify({ data: [{ id: 'ok' }, { label: 'bad' }] })));
+    const result = await pingProvider('openai', 'sk-test');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('parse');
+  });
+
   it('uses Bearer auth header for OpenAI', async () => {
     mockFetch(async (url, init) => {
       expect(url).toBe('https://api.openai.com/v1/models');

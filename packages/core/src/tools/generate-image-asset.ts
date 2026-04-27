@@ -163,7 +163,17 @@ export function makeGenerateImageAssetTool(
         throw err;
       }
       if (fs !== undefined) {
-        fs.create(asset.path, asset.dataUrl);
+        try {
+          await fs.create(asset.path, asset.dataUrl);
+        } catch (err) {
+          logger.error('[image_asset] step=fail', {
+            purpose: params.purpose,
+            ms: Date.now() - started,
+            stage: 'persist',
+            message: err instanceof Error ? err.message : String(err),
+          });
+          throw err;
+        }
       }
       const alt = params.alt?.trim() || `${params.purpose} image`;
       logger.info('[image_asset] step=ok', {

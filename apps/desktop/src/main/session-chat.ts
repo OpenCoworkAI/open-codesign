@@ -17,7 +17,7 @@ export const CHAT_TOOL_STATUS_CUSTOM_TYPE = 'open-codesign.chat.tool_status';
 export interface SessionChatStoreOptions {
   db: Database;
   sessionDir: string;
-  fallbackCwd: string;
+  defaultCwd: string;
 }
 
 export interface ChatToolStatusUpdate {
@@ -64,7 +64,7 @@ function resolveSessionCwd(opts: SessionChatStoreOptions, designId: string): str
   if (design === null) {
     throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
   }
-  return design.workspacePath ?? opts.fallbackCwd;
+  return design.workspacePath ?? opts.defaultCwd;
 }
 
 function openSession(opts: SessionChatStoreOptions, designId: string): SessionManager {
@@ -147,7 +147,9 @@ function replayEntries(designId: string, entries: unknown[]): ChatMessageRow[] {
     if (entry.type !== 'custom') continue;
     if (entry.customType === CHAT_MESSAGE_CUSTOM_TYPE) {
       const stored = parseStoredMessage(entry.data);
-      if (stored === null) continue;
+      if (stored === null) {
+        throw new CodesignError('Malformed stored chat message entry', 'IPC_DB_ERROR');
+      }
       rows.push({
         schemaVersion: 1,
         id: stored.id,
@@ -162,12 +164,18 @@ function replayEntries(designId: string, entries: unknown[]): ChatMessageRow[] {
     }
     if (entry.customType === CHAT_TOOL_STATUS_CUSTOM_TYPE) {
       const update = parseStatusUpdate(entry.data);
-      if (update === null) continue;
-      const idx = rows.findIndex((row) => row.seq === update.seq);
-      if (idx >= 0) {
-        const row = rows[idx];
-        if (row) rows[idx] = applyStatusUpdate(row, update);
+      if (update === null) {
+        throw new CodesignError('Malformed stored chat tool-status entry', 'IPC_DB_ERROR');
       }
+      const idx = rows.findIndex((row) => row.seq === update.seq);
+      if (idx < 0) {
+        throw new CodesignError(
+          'Stored chat tool-status entry references a missing message',
+          'IPC_DB_ERROR',
+        );
+      }
+      const row = rows[idx];
+      if (row) rows[idx] = applyStatusUpdate(row, update);
     }
   }
   return rows;

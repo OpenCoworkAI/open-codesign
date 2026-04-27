@@ -1,3 +1,4 @@
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type BrowserWindow, ipcMain } from 'electron';
 import { getLogger } from './logger';
 
@@ -28,6 +29,7 @@ export interface PermissionResolution {
 
 interface PendingRequest {
   resolve: (decision: PermissionResolution) => void;
+  reject: (reason?: unknown) => void;
   command: string;
   sessionId: string;
 }
@@ -43,14 +45,23 @@ export interface PermissionRequestPayload {
 
 export function registerPermissionIpc(): void {
   ipcMain.handle('permission:resolve', (_event, raw: unknown) => {
-    const parsed = parseResolveInput(raw);
-    if (!parsed) return;
-    const entry = pending.get(parsed.requestId);
+    const requestId = readRequestId(raw, 'permission:resolve');
+    const entry = pending.get(requestId);
     if (!entry) {
-      log.warn('permission:resolve called with unknown requestId', { requestId: parsed.requestId });
-      return;
+      throw new CodesignError(
+        `permission:resolve called with unknown requestId "${requestId}"`,
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
     }
-    pending.delete(parsed.requestId);
+    let parsed: { requestId: string; scope: PermissionScope | 'deny' };
+    try {
+      parsed = parseResolveInput(raw);
+    } catch (err) {
+      pending.delete(requestId);
+      entry.reject(err);
+      throw err;
+    }
+    pending.delete(requestId);
     entry.resolve({ scope: parsed.scope });
   });
 }
@@ -61,8 +72,8 @@ export function requestPermission(
   getMainWindow: () => BrowserWindow | null,
 ): Promise<PermissionResolution> {
   const requestId = `perm-${Date.now()}-${nextId++}`;
-  return new Promise<PermissionResolution>((resolve) => {
-    pending.set(requestId, { resolve, command, sessionId });
+  return new Promise<PermissionResolution>((resolve, reject) => {
+    pending.set(requestId, { resolve, reject, command, sessionId });
     const win = getMainWindow();
     if (!win || win.isDestroyed()) {
       pending.delete(requestId);
@@ -83,14 +94,34 @@ export function cancelPendingPermissionRequests(sessionId: string): void {
   }
 }
 
-function parseResolveInput(
-  raw: unknown,
-): { requestId: string; scope: PermissionScope | 'deny' } | null {
-  if (!raw || typeof raw !== 'object') return null;
+function parseResolveInput(raw: unknown): { requestId: string; scope: PermissionScope | 'deny' } {
+  const requestId = readRequestId(raw, 'permission:resolve');
   const obj = raw as Record<string, unknown>;
-  const requestId = typeof obj['requestId'] === 'string' ? obj['requestId'] : null;
+  const unsupported = Object.keys(obj).find((key) => key !== 'requestId' && key !== 'scope');
+  if (unsupported !== undefined) {
+    throw new CodesignError(
+      `permission:resolve contains unsupported field "${unsupported}"`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
   const scope = obj['scope'];
-  if (!requestId) return null;
-  if (scope !== 'once' && scope !== 'always' && scope !== 'deny') return null;
+  if (scope !== 'once' && scope !== 'always' && scope !== 'deny') {
+    throw new CodesignError(
+      'permission:resolve scope must be "once", "always", or "deny"',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
   return { requestId, scope };
+}
+
+function readRequestId(raw: unknown, channel: string): string {
+  if (!raw || typeof raw !== 'object') {
+    throw new CodesignError(`${channel} expects an object payload`, ERROR_CODES.IPC_BAD_INPUT);
+  }
+  const obj = raw as Record<string, unknown>;
+  const requestId = obj['requestId'];
+  if (typeof requestId !== 'string' || requestId.trim().length === 0) {
+    throw new CodesignError(`${channel} requires a non-empty requestId`, ERROR_CODES.IPC_BAD_INPUT);
+  }
+  return requestId;
 }

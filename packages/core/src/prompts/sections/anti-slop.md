@@ -9,7 +9,7 @@ These rules encode the difference between a design that looks generated and one 
 
 **Preferred alternatives** (expressive, distinct, free via Google Fonts):
 - Display / editorial: Fraunces (bundled), Syne, DM Serif Display, Instrument Serif, Space Grotesk
-- Clean sans: Geist (bundled), Outfit, Plus Jakarta Sans, Neue Montreal (system-ui fallback)
+- Clean sans: Geist (bundled), Outfit, Plus Jakarta Sans, Neue Montreal (system-ui backup)
 - Mono accents: JetBrains Mono, Fira Code (use sparingly, for data or code)
 
 **Required type ladder** — every design declares four scale steps and uses them consistently:

@@ -127,6 +127,37 @@ describe('generate_image_asset tool', () => {
     );
     expect(errors.map((e) => e.event)).toContain('[image_asset] step=fail');
   });
+
+  it('throws when generated asset persistence fails', async () => {
+    const fs = memoryFs();
+    fs.create = vi.fn(async () => {
+      throw new Error('workspace write failed');
+    });
+    const errors: Array<{ event: string; data?: Record<string, unknown> }> = [];
+    const logger: CoreLogger = {
+      info: () => {},
+      warn: () => {},
+      error: (event, data) => errors.push({ event, ...(data ? { data } : {}) }),
+    };
+    const generate = vi.fn(async () => ({
+      path: 'assets/hero.png',
+      dataUrl: 'data:image/png;base64,aW1n',
+      mimeType: 'image/png',
+      model: 'gpt-image-2',
+      provider: 'openai',
+    }));
+    const tool = makeGenerateImageAssetTool(generate, fs, logger);
+
+    await expect(tool.execute('t', { prompt: 'hero', purpose: 'hero' })).rejects.toThrow(
+      'workspace write failed',
+    );
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(fs.files.has('assets/hero.png')).toBe(false);
+    expect(errors.at(-1)).toMatchObject({
+      event: '[image_asset] step=fail',
+      data: { stage: 'persist' },
+    });
+  });
 });
 
 describe('enrichImagePromptForPurpose', () => {

@@ -1,8 +1,9 @@
 import { CodesignError } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { resolveActiveApiKey, resolveApiKeyWithKeylessFallback } from './resolve-api-key';
+import type { ResolveActiveApiKeyDeps, ResolveCredentialForProviderDeps } from './resolve-api-key';
+import { resolveActiveApiKey, resolveCredentialForProvider } from './resolve-api-key';
 
-function makeDeps(overrides: Partial<Parameters<typeof resolveActiveApiKey>[1]> = {}) {
+function makeDeps(overrides: Partial<ResolveActiveApiKeyDeps> = {}): ResolveActiveApiKeyDeps {
   return {
     getCodexAccessToken: vi.fn().mockResolvedValue('oauth-token'),
     getApiKeyForProvider: vi.fn().mockReturnValue('stored-key'),
@@ -44,7 +45,7 @@ describe('resolveActiveApiKey', () => {
     }
   });
 
-  it('codex: handles non-Error rejections with a generic fallback message', async () => {
+  it('codex: handles non-Error rejections with a generic recovery message', async () => {
     const deps = makeDeps({
       getCodexAccessToken: vi.fn().mockRejectedValue('broken string value'),
     });
@@ -70,9 +71,9 @@ describe('resolveActiveApiKey', () => {
         throw underlying;
       }),
     });
-    // Keyless support is the caller's job: the IPC handler swallows this
-    // throw only when `entry.requiresApiKey === false`. The helper itself
-    // never silently drops the error.
+    // Keyless support is the caller's job: IPC handlers use the explicit
+    // credential resolver before reading key storage. This helper never
+    // silently drops the error.
     try {
       await resolveActiveApiKey('custom-proxy', deps);
       expect.fail('should have thrown');
@@ -114,39 +115,38 @@ describe('resolveActiveApiKey', () => {
   });
 });
 
-describe('resolveApiKeyWithKeylessFallback', () => {
-  function keylessDeps(overrides: Partial<Parameters<typeof resolveActiveApiKey>[1]> = {}) {
+describe('resolveCredentialForProvider', () => {
+  function keylessDeps(
+    overrides: Partial<ResolveCredentialForProviderDeps> = {},
+  ): ResolveCredentialForProviderDeps {
     return {
       getCodexAccessToken: vi.fn().mockResolvedValue('oauth-token'),
       getApiKeyForProvider: vi.fn().mockReturnValue('stored-key'),
+      hasApiKeyForProvider: vi.fn().mockReturnValue(true),
       ...overrides,
     };
   }
 
-  it('keyless Ollama (PROVIDER_KEY_MISSING): swallows and returns empty', async () => {
-    // This is the regression the round-6 bot review caught: Ollama's
-    // `getApiKeyForProvider` throws CodesignError(PROVIDER_KEY_MISSING) (not
-    // PROVIDER_AUTH_MISSING), and the resolver passes existing CodesignErrors
-    // through untouched. The earlier keyless wrapper only swallowed
-    // PROVIDER_AUTH_MISSING, so Ollama would hard-fail despite
-    // `requiresApiKey: false`.
+  it('keyless provider without a stored secret returns an empty bearer without reading key storage', async () => {
     const deps = keylessDeps({
-      getApiKeyForProvider: vi.fn().mockImplementation(() => {
-        throw new CodesignError('no secret stored', 'PROVIDER_KEY_MISSING');
-      }),
+      hasApiKeyForProvider: vi.fn().mockReturnValue(false),
     });
-    await expect(resolveApiKeyWithKeylessFallback('ollama', true, deps)).resolves.toBe('');
+    await expect(resolveCredentialForProvider('ollama', true, deps)).resolves.toBe('');
+    expect(deps.getApiKeyForProvider).not.toHaveBeenCalled();
   });
 
-  it('keyless custom proxy (PROVIDER_AUTH_MISSING): swallows and returns empty', async () => {
+  it('keyless provider with a stored secret still surfaces secret read failures', async () => {
+    const original = new Error('keychain decrypt failed');
     const deps = keylessDeps({
+      hasApiKeyForProvider: vi.fn().mockReturnValue(true),
       getApiKeyForProvider: vi.fn().mockImplementation(() => {
-        throw new Error('keychain decrypt failed');
+        throw original;
       }),
     });
-    // Non-CodesignError failures get wrapped as PROVIDER_AUTH_MISSING by
-    // `resolveActiveApiKey`, which the keyless wrapper also swallows.
-    await expect(resolveApiKeyWithKeylessFallback('custom-proxy', true, deps)).resolves.toBe('');
+    await expect(resolveCredentialForProvider('custom-proxy', true, deps)).rejects.toMatchObject({
+      code: 'PROVIDER_AUTH_MISSING',
+      cause: original,
+    });
   });
 
   it('keyless: propagates unrelated CodesignError codes verbatim', async () => {
@@ -156,8 +156,7 @@ describe('resolveApiKeyWithKeylessFallback', () => {
         throw original;
       }),
     });
-    // Only the two missing-credential codes count as keyless-swallowable.
-    await expect(resolveApiKeyWithKeylessFallback('ollama', true, deps)).rejects.toBe(original);
+    await expect(resolveCredentialForProvider('ollama', true, deps)).rejects.toBe(original);
   });
 
   it('non-keyless: re-throws PROVIDER_KEY_MISSING so the user sees "add your key"', async () => {
@@ -166,7 +165,7 @@ describe('resolveApiKeyWithKeylessFallback', () => {
         throw new CodesignError('no secret stored', 'PROVIDER_KEY_MISSING');
       }),
     });
-    await expect(resolveApiKeyWithKeylessFallback('anthropic', false, deps)).rejects.toMatchObject({
+    await expect(resolveCredentialForProvider('anthropic', false, deps)).rejects.toMatchObject({
       code: 'PROVIDER_KEY_MISSING',
     });
   });
@@ -177,14 +176,14 @@ describe('resolveApiKeyWithKeylessFallback', () => {
     });
     // Somebody marking the codex ProviderEntry as keyless by config-toml
     // hand-edit must not suppress the auth-required affordance.
-    await expect(
-      resolveApiKeyWithKeylessFallback('chatgpt-codex', true, deps),
-    ).rejects.toMatchObject({ code: 'PROVIDER_AUTH_MISSING' });
+    await expect(resolveCredentialForProvider('chatgpt-codex', true, deps)).rejects.toMatchObject({
+      code: 'PROVIDER_AUTH_MISSING',
+    });
   });
 
   it('happy path: returns the stored key when no error is thrown', async () => {
     const deps = keylessDeps();
-    await expect(resolveApiKeyWithKeylessFallback('anthropic', false, deps)).resolves.toBe(
+    await expect(resolveCredentialForProvider('anthropic', false, deps)).resolves.toBe(
       'stored-key',
     );
   });

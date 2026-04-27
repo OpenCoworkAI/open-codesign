@@ -1,6 +1,12 @@
 import path from 'node:path';
 import { AuthStorage, type ModelRegistry } from '@open-codesign/core';
-import type { Config, ProviderEntry } from '@open-codesign/shared';
+import {
+  CodesignError,
+  type Config,
+  ERROR_CODES,
+  type ProviderEntry,
+  resolveProviderCapabilities,
+} from '@open-codesign/shared';
 import { decryptSecret } from './keychain';
 
 /**
@@ -42,7 +48,7 @@ export function populateAuthStorage(auth: AuthStorage, opts: AuthBridgeOptions):
   if (!opts.config) return;
   const decrypt = opts.decrypt ?? decryptSecret;
   for (const [providerId, entry] of providersFromConfig(opts.config)) {
-    const apiKey = readPlaintextKey(entry, decrypt);
+    const apiKey = readStoredCredential(opts.config, providerId, entry, decrypt);
     if (!apiKey) continue;
     auth.set(providerId, { type: 'api_key', key: apiKey });
   }
@@ -61,7 +67,7 @@ export function registerCustomProviders(
   const registered: string[] = [];
   for (const [providerId, entry] of providersFromConfig(opts.config)) {
     if (BUILTIN_PROVIDER_IDS.has(providerId)) continue;
-    const apiKey = readPlaintextKey(entry, decrypt);
+    const apiKey = readStoredCredential(opts.config, providerId, entry, decrypt);
     registry.registerProvider(providerId, {
       baseUrl: entry.baseUrl,
       ...(apiKey ? { apiKey } : {}),
@@ -73,22 +79,33 @@ export function registerCustomProviders(
 }
 
 function providersFromConfig(config: Config): Array<[string, ProviderEntry]> {
-  const providers = (config as Config & { providers?: Record<string, ProviderEntry> }).providers;
-  if (!providers) return [];
-  return Object.entries(providers);
+  return Object.entries(config.providers);
 }
 
-function readPlaintextKey(
+function readStoredCredential(
+  config: Config,
+  providerId: string,
   entry: ProviderEntry,
   decrypt: (stored: string) => string,
 ): string | null {
-  const raw = (entry as ProviderEntry & { apiKey?: { value?: string } | null }).apiKey;
-  if (!raw || typeof raw.value !== 'string' || raw.value.length === 0) return null;
-  try {
-    return decrypt(raw.value);
-  } catch {
-    // a corrupt secret blocks the key but should not crash boot — main can
-    // still surface a settings error elsewhere
+  const ref = config.secrets[providerId];
+  if (ref === undefined) {
+    if (resolveProviderCapabilities(providerId, entry).supportsKeyless) return null;
+    if (config.activeProvider === providerId) {
+      throw new CodesignError(
+        `No API key stored for active provider "${providerId}".`,
+        ERROR_CODES.PROVIDER_KEY_MISSING,
+      );
+    }
     return null;
+  }
+  try {
+    return decrypt(ref.ciphertext);
+  } catch (err) {
+    throw new CodesignError(
+      `Failed to decrypt API key for provider "${providerId}".`,
+      ERROR_CODES.PROVIDER_AUTH_MISSING,
+      { cause: err },
+    );
   }
 }

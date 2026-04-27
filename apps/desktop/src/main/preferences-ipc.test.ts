@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock electron and logger before importing the module under test.
@@ -75,7 +75,7 @@ describe('readPersisted()', () => {
     }
   });
 
-  it('throws CodesignError with PREFERENCES_READ_FAILED on a non-ENOENT error (e.g. EACCES)', async () => {
+  it('throws CodesignError with PREFERENCES_READ_FAIL on a non-ENOENT error (e.g. EACCES)', async () => {
     const permissionDenied = Object.assign(new Error('permission denied'), { code: 'EACCES' });
     readFileMock.mockRejectedValueOnce(permissionDenied);
 
@@ -83,7 +83,35 @@ describe('readPersisted()', () => {
 
     readFileMock.mockRejectedValueOnce(permissionDenied);
     const err = await readPersisted().catch((e: unknown) => e);
-    expect((err as CodesignError).code).toBe('PREFERENCES_READ_FAILED');
+    expect((err as CodesignError).code).toBe(ERROR_CODES.PREFERENCES_READ_FAIL);
+  });
+
+  it('throws when persisted preferences are not valid JSON', async () => {
+    readFileMock.mockResolvedValueOnce('{"generationTimeoutSec":');
+
+    await expect(readPersisted()).rejects.toMatchObject({
+      code: ERROR_CODES.PREFERENCES_READ_FAIL,
+    });
+  });
+
+  it('throws when persisted preferences contain malformed present fields', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 5, generationTimeoutSec: '1200' }),
+    );
+
+    await expect(readPersisted()).rejects.toMatchObject({
+      code: ERROR_CODES.PREFERENCES_READ_FAIL,
+      message: expect.stringContaining('generationTimeoutSec'),
+    });
+  });
+
+  it('throws when persisted preferences contain unknown fields', async () => {
+    readFileMock.mockResolvedValueOnce(JSON.stringify({ schemaVersion: 5, accidental: true }));
+
+    await expect(readPersisted()).rejects.toMatchObject({
+      code: ERROR_CODES.PREFERENCES_READ_FAIL,
+      message: expect.stringContaining('unsupported field'),
+    });
   });
 
   it('migrates schemaVersion 1 with legacy 120s timeout to the 1200s default', async () => {
@@ -211,6 +239,7 @@ describe('preferences v4 schema fields', () => {
   const handlers: Record<string, (...args: any[]) => unknown> = {};
 
   beforeEach(async () => {
+    for (const key of Object.keys(handlers)) delete handlers[key];
     const { ipcMain } = await import('electron');
     vi.mocked(ipcMain.handle).mockImplementation((channel, handler) => {
       handlers[channel] = handler;
@@ -226,6 +255,26 @@ describe('preferences v4 schema fields', () => {
     const prefs = await readPersisted();
     expect(prefs.checkForUpdatesOnStartup).toBe(true);
     expect(prefs.dismissedUpdateVersion).toBe('');
+  });
+
+  it('does not register unversioned preferences channels', () => {
+    expect(handlers['preferences:v1:get']).toBeDefined();
+    expect(handlers['preferences:v1:update']).toBeDefined();
+    expect(handlers['preferences:get']).toBeUndefined();
+    expect(handlers['preferences:update']).toBeUndefined();
+  });
+
+  it('rejects unknown update fields instead of dropping them', async () => {
+    const readCalls = readFileMock.mock.calls.length;
+    const writeCalls = writeFileMock.mock.calls.length;
+    await expect(
+      (handlers['preferences:v1:update'] as (_e: null, raw: unknown) => Promise<unknown>)(null, {
+        dismissedUpdateVersion: '0.2.1',
+        accidentalField: true,
+      }),
+    ).rejects.toThrow(/unsupported field/);
+    expect(readFileMock).toHaveBeenCalledTimes(readCalls);
+    expect(writeFileMock).toHaveBeenCalledTimes(writeCalls);
   });
 
   it('round-trips dismissedUpdateVersion through preferences:v1:update', async () => {

@@ -115,7 +115,7 @@ describe('readGeminiCliConfig', () => {
     expect(out.warnings).toEqual([]);
   });
 
-  it('falls back to ~/.env when ~/.gemini/.env has no GEMINI_API_KEY', async () => {
+  it('uses ~/.env when ~/.gemini/.env has no GEMINI_API_KEY', async () => {
     const home = await makeHome();
     await mkdir(join(home, '.gemini'), { recursive: true });
     await writeFile(join(home, '.gemini', '.env'), 'SOMETHING_ELSE=value\n', 'utf8');
@@ -136,7 +136,7 @@ describe('readGeminiCliConfig', () => {
     expect(out.apiKeySource).toBe('gemini-env');
   });
 
-  it('falls back to shell env GEMINI_API_KEY when no file has it', async () => {
+  it('uses shell env GEMINI_API_KEY when no file has it', async () => {
     const home = await makeHome();
     const out = expectFound(
       await readGeminiCliConfig(home, { env: { GEMINI_API_KEY: VALID_KEY } }),
@@ -165,16 +165,13 @@ describe('readGeminiCliConfig', () => {
     expect(out.apiKey).toBe(VALID_KEY);
   });
 
-  it('warns when the key does not match the AIzaSy pattern but still imports it', async () => {
+  it('blocks import when the key does not match the AIzaSy pattern', async () => {
     const home = await makeHome();
     await mkdir(join(home, '.gemini'), { recursive: true });
     await writeFile(join(home, '.gemini', '.env'), 'GEMINI_API_KEY=malformed-key\n', 'utf8');
-    const out = expectFound(await readGeminiCliConfig(home, { env: {} }));
-    expect(out.apiKey).toBe('malformed-key');
+    const out = expectBlocked(await readGeminiCliConfig(home, { env: {} }));
     expect(out.warnings.join('\n')).toMatch(/AIzaSy/);
-    // Provider is still populated so the user can correct the key in Settings
-    // without losing the import flow.
-    expect(out.provider).not.toBeNull();
+    expect(out.warnings.join('\n')).toMatch(/Fix the key before importing/);
   });
 
   it('refuses to import a Vertex AI setup', async () => {

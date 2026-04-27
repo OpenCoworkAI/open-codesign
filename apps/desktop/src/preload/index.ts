@@ -51,7 +51,7 @@ export interface ValidateKeyResult {
 }
 export interface ValidateKeyError {
   ok: false;
-  code: '401' | '402' | '429' | 'network';
+  code: '401' | '402' | '429' | 'network' | 'parse';
   message: string;
 }
 

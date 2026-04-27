@@ -10,10 +10,10 @@
 export function isGeminiOpenAICompat(baseUrl: string | undefined): boolean {
   if (!baseUrl) return false;
   try {
-    const { hostname } = new URL(baseUrl);
+    const url = new URL(baseUrl);
     return (
-      hostname === 'generativelanguage.googleapis.com' ||
-      hostname.endsWith('.generativelanguage.googleapis.com')
+      url.hostname === 'generativelanguage.googleapis.com' &&
+      /(^|\/)openai(\/|$)/.test(url.pathname)
     );
   } catch {
     return false;

@@ -1,115 +1,54 @@
+import { CodesignError } from './codesign-error';
+import { ERROR_CODES } from './error-codes';
+
 /**
  * EDITMODE marker block — extract & rewrite the agent-declared `TWEAK_DEFAULTS`
  * JSON object embedded inside an artifact source.
  *
- * Preferred format (matches agent.ts AGENTIC_TOOL_GUIDANCE Output format):
+ * Canonical format (matches agent.ts AGENTIC_TOOL_GUIDANCE Output format):
  *
  *   const TWEAK_DEFAULTS = /\* EDITMODE-BEGIN *\/{ "key": "value" }/\* EDITMODE-END *\/;
  *
- * Fallback format (auto-recovered when the agent forgot the markers):
- *
- *   const TWEAK_DEFAULTS = { "key": "value" };
- *
- * `ensureEditmodeMarkers` rewrites a bare-const artifact in-place so downstream
- * consumers (postMessage bridge, replace flows) only see the canonical form.
- *
  * Whitespace between the markers is preserved on round-trip; the parser
- * treats the inner span as a JSON literal (object).
- *
- * Trust model: the inner JSON comes from model output. We `JSON.parse` it
- * inside a try/catch and return null on failure rather than throwing, so a
- * malformed block degrades to "no tweak panel" instead of crashing the
- * preview pipeline. The bare-const fallback uses a brace-balanced scan, NOT
- * `eval` / `new Function`, so a hostile literal cannot execute in the host.
+ * treats the inner span as a JSON object literal. Missing markers mean "no
+ * tweak block"; present-but-malformed markers are a protocol error.
  */
 
 const EDITMODE_RE = /\/\*\s*EDITMODE-BEGIN\s*\*\/([\s\S]*?)\/\*\s*EDITMODE-END\s*\*\//;
-const BARE_TWEAK_DEFAULTS_RE = /const\s+TWEAK_DEFAULTS\s*=\s*/;
 const TWEAK_SCHEMA_RE = /\/\*\s*TWEAK-SCHEMA-BEGIN\s*\*\/([\s\S]*?)\/\*\s*TWEAK-SCHEMA-END\s*\*\//;
 
 export interface EditmodeBlock {
   tokens: Record<string, unknown>;
   /** Raw inner span (between the markers) — useful for diagnostics. */
   raw: string;
-  /** `marked` = canonical EDITMODE markers; `inferred` = bare const fallback. */
-  source: 'marked' | 'inferred';
-}
-
-interface BareLocation {
-  /** Index of the opening `{` of the object literal. */
-  objStart: number;
-  /** Index just past the closing `}` of the object literal. */
-  objEnd: number;
-  /** The object literal text including braces. */
-  literal: string;
-}
-
-function findBalancedBraceEnd(source: string, openIdx: number): number {
-  if (source[openIdx] !== '{') return -1;
-  let depth = 0;
-  let inStr: '"' | "'" | '`' | null = null;
-  let escaped = false;
-  for (let i = openIdx; i < source.length; i += 1) {
-    const ch = source[i];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (inStr) {
-      if (ch === '\\') escaped = true;
-      else if (ch === inStr) inStr = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === '`') {
-      inStr = ch;
-      continue;
-    }
-    if (ch === '{') depth += 1;
-    else if (ch === '}') {
-      depth -= 1;
-      if (depth === 0) return i + 1;
-    }
-  }
-  return -1;
-}
-
-function findBareTweakDefaults(source: string): BareLocation | null {
-  const m = BARE_TWEAK_DEFAULTS_RE.exec(source);
-  if (!m) return null;
-  const objStart = m.index + m[0].length;
-  if (source[objStart] !== '{') return null;
-  const objEnd = findBalancedBraceEnd(source, objStart);
-  if (objEnd < 0) return null;
-  return { objStart, objEnd, literal: source.slice(objStart, objEnd) };
+  /** `marked` = canonical EDITMODE markers. */
+  source: 'marked';
 }
 
 export function parseEditmodeBlock(source: string): EditmodeBlock | null {
   const match = EDITMODE_RE.exec(source);
-  if (match) {
-    const raw = (match[1] ?? '').trim();
-    if (raw.length === 0) return { tokens: {}, raw, source: 'marked' };
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return null;
-      }
-      return { tokens: parsed as Record<string, unknown>, raw, source: 'marked' };
-    } catch {
-      return null;
-    }
-  }
-
-  const bare = findBareTweakDefaults(source);
-  if (!bare) return null;
+  if (!match) return null;
+  const raw = (match[1] ?? '').trim();
+  if (raw.length === 0) return { tokens: {}, raw, source: 'marked' };
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(bare.literal) as unknown;
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return null;
-    }
-    return { tokens: parsed as Record<string, unknown>, raw: bare.literal, source: 'inferred' };
-  } catch {
-    return null;
+    parsed = JSON.parse(raw) as unknown;
+  } catch (cause) {
+    throw new CodesignError(
+      'EDITMODE block contains invalid JSON',
+      ERROR_CODES.ARTIFACT_PROTOCOL_INVALID,
+      {
+        cause,
+      },
+    );
   }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new CodesignError(
+      'EDITMODE block must contain a JSON object',
+      ERROR_CODES.ARTIFACT_PROTOCOL_INVALID,
+    );
+  }
+  return { tokens: parsed as Record<string, unknown>, raw, source: 'marked' };
 }
 
 export function replaceEditmodeBlock(source: string, newTokens: Record<string, unknown>): string {
@@ -117,24 +56,15 @@ export function replaceEditmodeBlock(source: string, newTokens: Record<string, u
   if (EDITMODE_RE.test(source)) {
     return source.replace(EDITMODE_RE, `/*EDITMODE-BEGIN*/${json}/*EDITMODE-END*/`);
   }
-  const bare = findBareTweakDefaults(source);
-  if (!bare) return source;
-  return `${source.slice(0, bare.objStart)}/*EDITMODE-BEGIN*/${json}/*EDITMODE-END*/${source.slice(bare.objEnd)}`;
+  return source;
 }
 
 /**
- * Normalize a bare `const TWEAK_DEFAULTS = {...};` declaration into the
- * canonical marker form, in-place. Returns the source unchanged when markers
- * are already present (or when no parseable bare const exists). The marker
- * form is what the in-iframe postMessage bridge looks for, so wrapping at
- * srcdoc-build time means live tweak updates work even on agent output that
- * forgot the markers.
+ * Kept for older runtime call sites. v0.2 no longer repairs missing EDITMODE
+ * markers; the agent must emit the canonical protocol itself.
  */
 export function ensureEditmodeMarkers(source: string): string {
-  if (EDITMODE_RE.test(source)) return source;
-  const bare = findBareTweakDefaults(source);
-  if (!bare) return source;
-  return `${source.slice(0, bare.objStart)}/*EDITMODE-BEGIN*/${bare.literal}/*EDITMODE-END*/${source.slice(bare.objEnd)}`;
+  return source;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,11 +78,9 @@ export function ensureEditmodeMarkers(source: string): string {
 //   }/\* TWEAK-SCHEMA-END *\/;
 //
 // TweakPanel consumes the schema to pick precise controls (real range slider
-// for numbers, segmented picker for enums, etc). Schema is *advisory*: any
-// missing entry falls back to the existing heuristic in TweakPanel.
-//
-// Trust model mirrors TWEAK_DEFAULTS: JSON-only, parsed inside try/catch,
-// invalid blocks degrade silently.
+// for numbers, segmented picker for enums, etc). Schema is advisory: entries
+// may be omitted, but a present schema marker must be valid JSON with valid
+// entry shapes.
 // ---------------------------------------------------------------------------
 
 export type TokenSchemaEntry =
@@ -168,6 +96,20 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function optionalNumber(value: Record<string, unknown>, key: string): number | null | undefined {
+  if (!hasOwn(value, key)) return undefined;
+  const raw = value[key];
+  return typeof raw === 'number' ? raw : null;
+}
+
+function isStringArray(value: unknown[]): value is string[] {
+  return value.every((option) => typeof option === 'string');
+}
+
 function validateEntry(value: unknown): TokenSchemaEntry | null {
   if (!isPlainObject(value)) return null;
   const kind = value['kind'];
@@ -175,21 +117,28 @@ function validateEntry(value: unknown): TokenSchemaEntry | null {
     return { kind };
   }
   if (kind === 'number') {
+    const min = optionalNumber(value, 'min');
+    const max = optionalNumber(value, 'max');
+    const step = optionalNumber(value, 'step');
+    if (min === null || max === null || step === null) return null;
+    if (hasOwn(value, 'unit') && typeof value['unit'] !== 'string') return null;
     const out: TokenSchemaEntry = { kind: 'number' };
-    if (typeof value['min'] === 'number') out.min = value['min'];
-    if (typeof value['max'] === 'number') out.max = value['max'];
-    if (typeof value['step'] === 'number') out.step = value['step'];
+    if (min !== undefined) out.min = min;
+    if (max !== undefined) out.max = max;
+    if (step !== undefined) out.step = step;
     if (typeof value['unit'] === 'string') out.unit = value['unit'];
     return out;
   }
   if (kind === 'enum') {
     const options = value['options'];
     if (!Array.isArray(options)) return null;
-    const opts = options.filter((o): o is string => typeof o === 'string');
-    if (opts.length === 0) return null;
-    return { kind: 'enum', options: opts };
+    if (options.length === 0 || !isStringArray(options)) {
+      return null;
+    }
+    return { kind: 'enum', options };
   }
   if (kind === 'string') {
+    if (hasOwn(value, 'placeholder') && typeof value['placeholder'] !== 'string') return null;
     const out: TokenSchemaEntry = { kind: 'string' };
     if (typeof value['placeholder'] === 'string') out.placeholder = value['placeholder'];
     return out;
@@ -205,14 +154,29 @@ export function parseTweakSchema(source: string): TweakSchema | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    return null;
+  } catch (cause) {
+    throw new CodesignError(
+      'TWEAK_SCHEMA block contains invalid JSON',
+      ERROR_CODES.ARTIFACT_PROTOCOL_INVALID,
+      { cause },
+    );
   }
-  if (!isPlainObject(parsed)) return null;
+  if (!isPlainObject(parsed)) {
+    throw new CodesignError(
+      'TWEAK_SCHEMA block must contain a JSON object',
+      ERROR_CODES.ARTIFACT_PROTOCOL_INVALID,
+    );
+  }
   const out: TweakSchema = {};
   for (const [key, entry] of Object.entries(parsed)) {
     const validated = validateEntry(entry);
-    if (validated) out[key] = validated;
+    if (!validated) {
+      throw new CodesignError(
+        `TWEAK_SCHEMA entry "${key}" is invalid`,
+        ERROR_CODES.ARTIFACT_PROTOCOL_INVALID,
+      );
+    }
+    out[key] = validated;
   }
   return out;
 }
@@ -221,7 +185,7 @@ export function parseTweakSchema(source: string): TweakSchema | null {
  * Replace (or insert) the TWEAK_SCHEMA block in `source`.
  *
  *   - If `/\* TWEAK-SCHEMA-BEGIN *\/...END` already exists → swap the inner JSON.
- *   - Else if the source has a TWEAK_DEFAULTS line (marked or bare) → insert
+ *   - Else if the source has a marked TWEAK_DEFAULTS line → insert
  *     a new `const TWEAK_SCHEMA = /\* ... *\/;` line right after it.
  *   - Else → return source unchanged. Caller is responsible for ensuring the
  *     artifact has a TWEAK_DEFAULTS block first.
@@ -237,13 +201,6 @@ export function replaceTweakSchema(source: string, schema: TweakSchema): string 
     const editEnd = marked.index + marked[0].length;
     const semi = source.indexOf(';', editEnd);
     const insertAt = semi >= 0 ? semi + 1 : editEnd;
-    const block = `\nconst TWEAK_SCHEMA = /*TWEAK-SCHEMA-BEGIN*/${json}/*TWEAK-SCHEMA-END*/;`;
-    return `${source.slice(0, insertAt)}${block}${source.slice(insertAt)}`;
-  }
-  const bare = findBareTweakDefaults(source);
-  if (bare) {
-    const semi = source.indexOf(';', bare.objEnd);
-    const insertAt = semi >= 0 ? semi + 1 : bare.objEnd;
     const block = `\nconst TWEAK_SCHEMA = /*TWEAK-SCHEMA-BEGIN*/${json}/*TWEAK-SCHEMA-END*/;`;
     return `${source.slice(0, insertAt)}${block}${source.slice(insertAt)}`;
   }

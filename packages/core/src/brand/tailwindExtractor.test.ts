@@ -96,7 +96,7 @@ describe('extractFromTailwindConfig()', () => {
     const file = join(dir, 'tailwind.css');
     await writeFile(
       file,
-      '@theme {\n  --font-family-display: "Inter, fallback }";\n  --color-brand-primary: #ff0000;\n}\n',
+      '@theme {\n  --font-family-display: "Inter, backup }";\n  --color-brand-primary: #ff0000;\n}\n',
     );
     const tokens = await extractFromTailwindConfig(file);
     const names = tokens.map((t) => t.name);

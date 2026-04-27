@@ -235,9 +235,7 @@ async function loadSingleSkill(
     };
   }
 
-  // Merge: use filename as name fallback
-  const raw_fm = { name: id, ...parsed.frontmatter };
-  const result = SkillFrontmatterV1.safeParse(raw_fm);
+  const result = SkillFrontmatterV1.safeParse(parsed.frontmatter);
   if (!result.success) {
     const issues = result.error.issues.map((i) => i.message).join('; ');
     return { ok: false, error: `Invalid frontmatter in ${filePath}: ${issues}` };

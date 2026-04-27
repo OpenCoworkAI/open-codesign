@@ -28,12 +28,16 @@ describe('loadDesignSkills', () => {
     expect(entries.map(([n]) => n)).toEqual([...DESIGN_SKILL_FILES]);
   });
 
-  it('silently skips files the user has deleted (best-effort read)', async () => {
+  it('returns an explicit empty state when the directory is missing', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    await expect(loadDesignSkills(dir)).resolves.toEqual([]);
+  });
+
+  it('throws when a declared skill file is missing from an existing directory', async () => {
     for (const name of DESIGN_SKILL_FILES.slice(0, 3)) {
       writeFileSync(path.join(dir, name), 'body', 'utf8');
     }
-    const entries = await loadDesignSkills(dir);
-    expect(entries.map(([n]) => n)).toEqual([...DESIGN_SKILL_FILES].slice(0, 3));
+    await expect(loadDesignSkills(dir)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('exposes the declared canonical file list for callers', () => {

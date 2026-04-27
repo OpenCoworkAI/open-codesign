@@ -293,7 +293,7 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain(
       'https://cdnjs.cloudflare.com/ajax/libs/<lib>/<exact-version>/<file>.min.js',
     );
-    // Open hosts must be explicitly forbidden so the model does not fall back to them.
+    // Open hosts must be explicitly forbidden so the model does not use them.
     expect(prompt).toContain('esm.sh');
     expect(prompt).toContain('jsdelivr');
     expect(prompt).toContain('unpkg');
@@ -420,7 +420,7 @@ describe('composeSystemPrompt() — progressive disclosure', () => {
     expect(p).not.toContain('Marketing typography hint');
   });
 
-  it('no-keyword prompt: falls back to FULL craft directives', () => {
+  it('no-keyword prompt: uses FULL craft directives', () => {
     const p = composeSystemPrompt({ mode: 'create', userPrompt: '随便做点东西' });
     // Full craft directives includes ALL ten subsections — verify several signal ones
     expect(p).toContain('Craft directives');
@@ -450,7 +450,7 @@ describe('composeSystemPrompt() — progressive disclosure', () => {
 
   it('does not trigger dashboard routing on substring collisions (paragraph/asymmetric/biometric)', () => {
     // Pair the colliding tokens with a mobile cue so the composer does NOT
-    // fall back to full CRAFT_DIRECTIVES — that fallback would re-introduce
+    // use full CRAFT_DIRECTIVES — that default would re-introduce
     // the dashboard subsection and defeat the substring-collision check.
     const p = composeSystemPrompt({
       mode: 'create',
@@ -462,7 +462,7 @@ describe('composeSystemPrompt() — progressive disclosure', () => {
 
   it('does not trigger logo routing on "logout" substring', () => {
     // Same reason as above — pair with an unrelated mobile cue to avoid the
-    // no-keyword fallback that would otherwise pull in full craft directives.
+    // no-keyword default that would otherwise pull in full craft directives.
     const p = composeSystemPrompt({
       mode: 'create',
       userPrompt: 'iOS app screen for a logout confirmation modal',

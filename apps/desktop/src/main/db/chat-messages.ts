@@ -1,4 +1,10 @@
-import type { ChatAppendInput, ChatMessageKind, ChatMessageRow } from '@open-codesign/shared';
+import {
+  type ChatAppendInput,
+  type ChatMessageKind,
+  type ChatMessageRow,
+  CodesignError,
+  ERROR_CODES,
+} from '@open-codesign/shared';
 import type { Database } from './native-binding';
 import type { SnapshotRow } from './snapshots';
 
@@ -13,11 +19,13 @@ interface ChatMessageRowDb {
 }
 
 function rowToChatMessage(row: ChatMessageRowDb): ChatMessageRow {
-  let payload: unknown = null;
+  let payload: unknown;
   try {
     payload = JSON.parse(row.payload);
-  } catch {
-    payload = { _raw: row.payload };
+  } catch (cause) {
+    throw new CodesignError('Corrupt chat message payload JSON', ERROR_CODES.IPC_DB_ERROR, {
+      cause,
+    });
   }
   return {
     schemaVersion: 1,

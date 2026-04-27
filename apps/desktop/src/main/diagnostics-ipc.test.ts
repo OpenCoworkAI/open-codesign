@@ -220,7 +220,7 @@ describe('diagnostics:v1:log persistence', () => {
     expect(rows[0]?.message).toBe('something exploded');
   });
 
-  it('falls back to RENDERER_ERROR when data.code is absent', () => {
+  it('uses RENDERER_ERROR when data.code is absent', () => {
     const db = initInMemoryDb();
     registerDiagnosticsIpc(db);
 

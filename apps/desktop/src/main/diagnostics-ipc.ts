@@ -93,7 +93,7 @@ function mapPlatform(p: NodeJS.Platform): '' | 'macOS' | 'Windows' | 'Linux' {
 /**
  * Map an upstream_provider string (already normalized lowercase like
  * `anthropic`, `openai`, `google`, `openrouter`, `groq`) to the exact labels
- * the yml provider dropdown accepts. Unknown providers fall back to 'Other'.
+ * the yml provider dropdown accepts. Unknown providers are labeled 'Other'.
  */
 function mapProvider(
   raw: unknown,

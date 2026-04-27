@@ -177,6 +177,28 @@ describe('CodexTokenStore', () => {
     expect(persisted.accessToken).toBe('acc-3');
   });
 
+  it('rejects an invalid refreshed token set without overwriting stored auth', async () => {
+    const newSet: TokenSet = {
+      accessToken: '',
+      refreshToken: 'ref-bad',
+      idToken: ID_TOKEN_WITH_EMAIL,
+      expiresAt: NOW + 60 * 60 * 1000,
+      accountId: 'acct-1',
+    };
+    const refreshFn = vi.fn().mockResolvedValue(newSet);
+    const { store, filePath } = makeStore({ refreshFn });
+    await store.write(baseAuth({ expiresAt: NOW - 1000 }));
+
+    await expect(store.getValidAccessToken()).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    });
+
+    const persisted = JSON.parse(await readFile(filePath, 'utf8')) as StoredCodexAuth;
+    expect(persisted.accessToken).toBe('acc-1');
+    expect(persisted.refreshToken).toBe('ref-1');
+  });
+
   it('forceRefresh ignores expiry check', async () => {
     const newSet: TokenSet = {
       accessToken: 'acc-forced',
@@ -224,6 +246,16 @@ describe('CodexTokenStore', () => {
     const { store, filePath } = makeStore();
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, JSON.stringify({ hello: 'world' }), 'utf8');
+    await expect(store.read()).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    });
+  });
+
+  it('read() raises CodesignError(CODEX_TOKEN_PARSE_FAILED) when token fields are empty', async () => {
+    const { store, filePath } = makeStore();
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify(baseAuth({ accessToken: '' })), 'utf8');
     await expect(store.read()).rejects.toMatchObject({
       name: 'CodesignError',
       code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
@@ -280,6 +312,16 @@ describe('CodexTokenStore', () => {
       n.startsWith(`${filePath.split('/').pop()}.tmp.`),
     );
     expect(leftovers).toEqual([]);
+  });
+
+  it('write() rejects invalid stored auth instead of persisting it', async () => {
+    const { store, filePath } = makeStore();
+
+    await expect(store.write(baseAuth({ refreshToken: '' }))).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: ERROR_CODES.CODEX_TOKEN_PARSE_FAILED,
+    });
+    await expect(readFile(filePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('clears stored auth and throws Chinese error when refresh hits invalid_grant', async () => {

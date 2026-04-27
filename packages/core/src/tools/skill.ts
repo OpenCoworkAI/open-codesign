@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 
 /**
@@ -28,6 +29,10 @@ export interface SkillRoots {
   brandRefsRoot?: string | null | undefined;
 }
 
+function isMissingPath(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
 export async function listSkillManifest(roots: SkillRoots): Promise<SkillManifestEntry[]> {
   const out: SkillManifestEntry[] = [];
 
@@ -43,8 +48,8 @@ export async function listSkillManifest(roots: SkillRoots): Promise<SkillManifes
           path: path.join(roots.skillsRoot, name),
         });
       }
-    } catch {
-      // directory missing — return whatever we have
+    } catch (err) {
+      if (!isMissingPath(err)) throw err;
     }
   }
 
@@ -60,8 +65,8 @@ export async function listSkillManifest(roots: SkillRoots): Promise<SkillManifes
           path: path.join(roots.brandRefsRoot, slug, 'DESIGN.md'),
         });
       }
-    } catch {
-      // brand-refs dir missing — fine, manifest just shows builtins
+    } catch (err) {
+      if (!isMissingPath(err)) throw err;
     }
   }
 
@@ -93,10 +98,12 @@ export async function invokeSkill(opts: InvokeSkillOptions): Promise<InvokeSkill
     const body = await readFile(entry.path, 'utf8');
     return { status: 'loaded', body };
   } catch (err) {
-    return {
-      status: 'not-found',
-      reason: err instanceof Error ? err.message : String(err),
-    };
+    const message = err instanceof Error ? err.message : String(err);
+    throw new CodesignError(
+      `Skill "${opts.name}" is registered but could not be read: ${message}`,
+      ERROR_CODES.SKILL_LOAD_FAILED,
+      { cause: err },
+    );
   }
 }
 

@@ -86,6 +86,48 @@ describe('scaffold tool', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('refuses destinations in sibling paths with the same prefix', async () => {
+    const wsroot = path.join(tmpdir(), `codesign-scaffold-ws-${process.pid}-${Date.now()}`);
+    const sibling = `${wsroot}-sibling`;
+    mkdirSync(wsroot, { recursive: true });
+    try {
+      const r = await runScaffold({
+        kind: 'demo-frame',
+        destPath: path.relative(wsroot, path.join(sibling, 'escape.jsx')),
+        workspaceRoot: wsroot,
+        scaffoldsRoot,
+      });
+      expect(r).toMatchObject({ ok: false, reason: 'destination outside workspace' });
+    } finally {
+      rmSync(wsroot, { recursive: true, force: true });
+      rmSync(sibling, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses manifest entries that point outside the scaffolds root', async () => {
+    writeFileSync(
+      path.join(scaffoldsRoot, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        scaffolds: {
+          escape: {
+            description: 'bad',
+            path: '../outside.jsx',
+          },
+        },
+      }),
+      'utf8',
+    );
+    const r = await runScaffold({
+      kind: 'escape',
+      destPath: 'x.jsx',
+      workspaceRoot: tmpdir(),
+      scaffoldsRoot,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/outside templates root/);
+  });
+
   it('reports missing manifest with a helpful reason', async () => {
     const r = await runScaffold({
       kind: 'demo-frame',
@@ -95,6 +137,23 @@ describe('scaffold tool', () => {
     });
     expect(r.ok).toBe(false);
     expect(r.reason).toMatch(/manifest/i);
+  });
+
+  it('reports malformed manifest shape with a helpful reason', async () => {
+    writeFileSync(
+      path.join(scaffoldsRoot, 'manifest.json'),
+      JSON.stringify({ schemaVersion: 1, scaffolds: [] }),
+      'utf8',
+    );
+
+    const r = await runScaffold({
+      kind: 'demo-frame',
+      destPath: 'x.jsx',
+      workspaceRoot: tmpdir(),
+      scaffoldsRoot,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/manifest\.scaffolds must be an object/);
   });
 
   it('makeScaffoldTool returns error details when no workspace is attached', async () => {

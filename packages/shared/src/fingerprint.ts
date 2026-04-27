@@ -29,7 +29,7 @@
 export interface FingerprintInput {
   errorCode: string;
   stack: string | undefined;
-  /** Used as a fallback signal when stack is empty, to avoid collapsing
+  /** Used as a secondary signal when stack is empty, to avoid collapsing
       all stack-less errors to the same fingerprint. */
   message?: string;
 }

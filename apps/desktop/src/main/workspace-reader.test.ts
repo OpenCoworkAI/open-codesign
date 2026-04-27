@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   classifyWorkspaceFileKind,
+  listWorkspaceFilesAt,
   readWorkspaceFileAt,
   readWorkspaceFilesAt,
 } from './workspace-reader';
@@ -82,14 +83,18 @@ describe('readWorkspaceFilesAt', () => {
     expect(bytes).toBeLessThan(2 * 1024 * 1024 + 150 * 1024);
   });
 
-  it('skips files it cannot read as UTF-8 text', async () => {
+  it('throws when a matched source file cannot be read as UTF-8 text', async () => {
     await writeFile(join(root, 'ok.html'), '<p>ok</p>');
     // A stray NUL byte is our binary sniff. Writing .html keeps it on the
-    // default pattern so we prove the binary filter (not the glob) drops it.
+    // default pattern so we prove the binary filter (not the glob) fails it.
     await writeFile(join(root, 'binary.html'), Buffer.from([0x00, 0x01, 0x02, 0x03]));
-    await writeFile(join(root, 'invalid.html'), Buffer.from([0xff, 0xfe, 0xfd]));
-    const result = await readWorkspaceFilesAt(root);
-    expect(result.map((f) => f.file)).toEqual(['ok.html']);
+    await expect(readWorkspaceFilesAt(root)).rejects.toThrow(/Failed to read workspace file/);
+  });
+
+  it('throws when the workspace root cannot be scanned', async () => {
+    await expect(readWorkspaceFilesAt(join(root, 'missing'))).rejects.toThrow(
+      /Failed to scan workspace directory/,
+    );
   });
 });
 
@@ -115,6 +120,25 @@ describe('workspace file metadata/read helpers', () => {
     expect(result.kind).toBe('jsx');
     expect(result.content).toContain('function App');
     expect(result.size).toBeGreaterThan(0);
+  });
+
+  it('lists workspace files with metadata', async () => {
+    await writeFile(join(root, 'App.jsx'), 'function App() { return <main/>; }');
+    const result = await listWorkspaceFilesAt(root);
+    expect(result).toEqual([
+      expect.objectContaining({
+        path: 'App.jsx',
+        kind: 'jsx',
+        size: expect.any(Number),
+        updatedAt: expect.any(String),
+      }),
+    ]);
+  });
+
+  it('throws when listing a missing workspace root', async () => {
+    await expect(listWorkspaceFilesAt(join(root, 'missing'))).rejects.toThrow(
+      /Failed to scan workspace directory/,
+    );
   });
 
   it('rejects path escapes in single-file reads', async () => {

@@ -4,6 +4,7 @@ export {
   getBaseUrlForProvider,
   getCachedConfig,
   getOnboardingState,
+  hasApiKeyForProvider,
   loadConfigOnBoot,
   setCachedConfig,
   setDesignSystem,

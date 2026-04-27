@@ -25,7 +25,7 @@ import { normalizeGeminiModelId } from './gemini-compat';
  * (and OpenAI/Gemini adapters translate to their respective reasoning knobs).
  *
  * Only the named effort levels pi-ai actually understands. Sending this to a
- * non-reasoning model is a silent fallback, so callers must whitelist
+ * non-reasoning model is a silent downgrade, so callers must whitelist
  * known-capable models before passing a value (see `reasoningForModel`). */
 export type ReasoningLevel = 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -33,7 +33,7 @@ export interface GenerateOptions {
   apiKey: string;
   baseUrl?: string;
   signal?: AbortSignal;
-  /** Hard cap on output tokens. When omitted, pi-ai falls back to ~1/3 of
+  /** Hard cap on output tokens. When omitted, pi-ai uses roughly 1/3 of
    *  the model's context window. */
   maxTokens?: number;
   /** When set, asks the provider to "think before answering". On Anthropic
@@ -278,10 +278,11 @@ export async function complete(
   messages: ChatMessage[],
   opts: GenerateOptions,
 ): Promise<GenerateResult> {
-  if (!opts.apiKey && opts.allowKeyless !== true) {
+  const trimmedApiKey = opts.apiKey.trim();
+  if (trimmedApiKey.length === 0 && opts.allowKeyless !== true) {
     throw new CodesignError('Missing API key', ERROR_CODES.PROVIDER_AUTH_MISSING);
   }
-  const apiKey = opts.apiKey || 'open-codesign-keyless';
+  const apiKey = trimmedApiKey.length > 0 ? trimmedApiKey : 'open-codesign-keyless';
 
   // Gemini's OpenAI-compat endpoint rejects the `models/` prefix that its own
   // /models listing returns (issue #175). Normalize on the wire only; Settings
@@ -375,12 +376,7 @@ export async function complete(
   validateCodexImageInputs(opts);
   const result = await pi.completeSimple(piModel, piContext, piOpts);
 
-  if (result.stopReason === 'error') {
-    throw new CodesignError(
-      result.errorMessage ?? 'Provider returned an error',
-      ERROR_CODES.PROVIDER_ERROR,
-    );
-  }
+  assertCompleteStop(result);
 
   const text = result.content
     .filter((c) => c.type === 'text' && typeof c.text === 'string')
@@ -393,6 +389,23 @@ export async function complete(
     outputTokens: result.usage?.output ?? 0,
     costUsd: result.usage?.cost?.total ?? 0,
   };
+}
+
+function assertCompleteStop(result: PiAssistantMessage): void {
+  if (result.stopReason === 'stop') return;
+  if (result.stopReason === 'aborted') {
+    throw new CodesignError(
+      result.errorMessage ?? 'Generation aborted by provider',
+      ERROR_CODES.PROVIDER_ABORTED,
+    );
+  }
+  const message =
+    result.stopReason === 'length'
+      ? 'Provider stopped before completion because the response hit the token limit'
+      : result.stopReason === 'toolUse'
+        ? 'Provider returned an unresolved tool call in a non-tool completion'
+        : (result.errorMessage ?? 'Provider returned an error');
+  throw new CodesignError(message, ERROR_CODES.PROVIDER_ERROR);
 }
 
 function validateCodexImageInputs(opts: GenerateOptions): void {
@@ -501,6 +514,7 @@ export {
   withClaudeCodeIdentity,
 } from './claude-code-compat';
 export { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
+export { isGeminiOpenAICompat, normalizeGeminiModelId } from './gemini-compat';
 export type {
   GenerateImageOptions,
   GenerateImageResult,
@@ -526,6 +540,6 @@ export { pingProvider } from './validate';
 // Tier 2 surface (not yet implemented):
 //   structuredComplete<T>(model, schema, messages, opts): Promise<T>
 //   streamArtifacts(model, messages, opts): AsyncIterable<ArtifactEvent>
-//   streamWithFallback(models[], messages, opts)
+//   streamWithAlternates(models[], messages, opts)
 //   completeWithRetry(model, messages, opts, { maxRetries, baseDelayMs })
 //   completeWithPdf(pdfBase64, prompt, opts)

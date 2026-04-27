@@ -59,15 +59,123 @@ const DEFAULTS: Preferences = {
   diagnosticsLastReadTs: 0,
 };
 
+const PREFERENCE_UPDATE_FIELDS = [
+  'updateChannel',
+  'generationTimeoutSec',
+  'checkForUpdatesOnStartup',
+  'dismissedUpdateVersion',
+  'diagnosticsLastReadTs',
+] as const;
+const PERSISTED_PREFERENCE_FIELDS = ['schemaVersion', ...PREFERENCE_UPDATE_FIELDS] as const;
+
+function assertKnownPreferenceFields(r: Record<string, unknown>): void {
+  for (const key of Object.keys(r)) {
+    if (!(PREFERENCE_UPDATE_FIELDS as readonly string[]).includes(key)) {
+      throw new CodesignError(
+        `preferences:v1:update contains unsupported field "${key}"`,
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+  }
+}
+
+function failInvalidPersistedPreference(message: string): never {
+  throw new CodesignError(
+    `preferences.json is invalid: ${message}`,
+    ERROR_CODES.PREFERENCES_READ_FAIL,
+  );
+}
+
+function assertKnownPersistedFields(r: Record<string, unknown>): void {
+  for (const key of Object.keys(r)) {
+    if (!(PERSISTED_PREFERENCE_FIELDS as readonly string[]).includes(key)) {
+      failInvalidPersistedPreference(`unsupported field "${key}"`);
+    }
+  }
+}
+
+function readPersistedSchema(r: Record<string, unknown>): number {
+  const value = r['schemaVersion'];
+  if (value === undefined) return 1;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    failInvalidPersistedPreference('schemaVersion must be a positive integer');
+  }
+  if (value > SCHEMA_VERSION) {
+    failInvalidPersistedPreference(
+      `schemaVersion ${value} is newer than supported ${SCHEMA_VERSION}`,
+    );
+  }
+  return value;
+}
+
+function readPersistedTimeout(r: Record<string, unknown>): number {
+  const value = r['generationTimeoutSec'];
+  if (value === undefined) return DEFAULTS.generationTimeoutSec;
+  if (typeof value !== 'number' || value <= 0) {
+    failInvalidPersistedPreference('generationTimeoutSec must be a positive number');
+  }
+  return value;
+}
+
+function readPersistedUpdateChannel(r: Record<string, unknown>): UpdateChannel {
+  const value = r['updateChannel'];
+  if (value === undefined) return DEFAULTS.updateChannel;
+  if (value !== 'stable' && value !== 'beta') {
+    failInvalidPersistedPreference('updateChannel must be "stable" or "beta"');
+  }
+  return value;
+}
+
+function readPersistedBoolean(
+  r: Record<string, unknown>,
+  key: 'checkForUpdatesOnStartup',
+  defaultValue: boolean,
+): boolean {
+  const value = r[key];
+  if (value === undefined) return defaultValue;
+  if (typeof value !== 'boolean') {
+    failInvalidPersistedPreference(`${key} must be a boolean`);
+  }
+  return value;
+}
+
+function readPersistedString(
+  r: Record<string, unknown>,
+  key: 'dismissedUpdateVersion',
+  defaultValue: string,
+): string {
+  const value = r[key];
+  if (value === undefined) return defaultValue;
+  if (typeof value !== 'string') {
+    failInvalidPersistedPreference(`${key} must be a string`);
+  }
+  return value;
+}
+
+function readPersistedNonNegativeNumber(
+  r: Record<string, unknown>,
+  key: 'diagnosticsLastReadTs',
+  defaultValue: number,
+): number {
+  const value = r[key];
+  if (value === undefined) return defaultValue;
+  if (typeof value !== 'number' || value < 0) {
+    failInvalidPersistedPreference(`${key} must be a non-negative number`);
+  }
+  return value;
+}
+
 /** Deterministic parse of the on-disk preferences file. No clock reads: the
  *  diagnosticsLastReadTs seed for migrating installs is applied by the caller
  *  in `readPersisted` so a missing field doesn't slide forward on every get. */
-function parsePersistedFile(parsed: Partial<PreferencesFile>): Preferences {
-  const persistedSchema = typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 1;
-  const rawTimeout =
-    typeof parsed.generationTimeoutSec === 'number' && parsed.generationTimeoutSec > 0
-      ? parsed.generationTimeoutSec
-      : DEFAULTS.generationTimeoutSec;
+function parsePersistedFile(rawJson: unknown): Preferences {
+  if (typeof rawJson !== 'object' || rawJson === null || Array.isArray(rawJson)) {
+    failInvalidPersistedPreference('preferences.json must contain an object');
+  }
+  const parsed = rawJson as Record<string, unknown>;
+  assertKnownPersistedFields(parsed);
+  const persistedSchema = readPersistedSchema(parsed);
+  const rawTimeout = readPersistedTimeout(parsed);
   const migratedTimeout =
     persistedSchema < 2 && rawTimeout === V1_DEFAULT_TIMEOUT_SEC
       ? DEFAULTS.generationTimeoutSec
@@ -75,23 +183,23 @@ function parsePersistedFile(parsed: Partial<PreferencesFile>): Preferences {
         ? DEFAULTS.generationTimeoutSec
         : rawTimeout;
   return {
-    updateChannel:
-      parsed.updateChannel === 'stable' || parsed.updateChannel === 'beta'
-        ? parsed.updateChannel
-        : DEFAULTS.updateChannel,
+    updateChannel: readPersistedUpdateChannel(parsed),
     generationTimeoutSec: migratedTimeout,
-    checkForUpdatesOnStartup:
-      typeof parsed.checkForUpdatesOnStartup === 'boolean'
-        ? parsed.checkForUpdatesOnStartup
-        : DEFAULTS.checkForUpdatesOnStartup,
-    dismissedUpdateVersion:
-      typeof parsed.dismissedUpdateVersion === 'string'
-        ? parsed.dismissedUpdateVersion
-        : DEFAULTS.dismissedUpdateVersion,
-    diagnosticsLastReadTs:
-      typeof parsed.diagnosticsLastReadTs === 'number' && parsed.diagnosticsLastReadTs >= 0
-        ? parsed.diagnosticsLastReadTs
-        : DEFAULTS.diagnosticsLastReadTs,
+    checkForUpdatesOnStartup: readPersistedBoolean(
+      parsed,
+      'checkForUpdatesOnStartup',
+      DEFAULTS.checkForUpdatesOnStartup,
+    ),
+    dismissedUpdateVersion: readPersistedString(
+      parsed,
+      'dismissedUpdateVersion',
+      DEFAULTS.dismissedUpdateVersion,
+    ),
+    diagnosticsLastReadTs: readPersistedNonNegativeNumber(
+      parsed,
+      'diagnosticsLastReadTs',
+      DEFAULTS.diagnosticsLastReadTs,
+    ),
   };
 }
 
@@ -105,7 +213,7 @@ async function readPrefsFile(file: string): Promise<RawPrefsRead> {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing' };
     throw new CodesignError(
       `Failed to read preferences at ${file}: ${err instanceof Error ? err.message : String(err)}`,
-      'PREFERENCES_READ_FAILED',
+      ERROR_CODES.PREFERENCES_READ_FAIL,
     );
   }
 }
@@ -143,7 +251,7 @@ export async function readPersisted(): Promise<Preferences> {
   // their diagnostics DB is empty anyway.
   if (read.kind === 'missing') return { ...DEFAULTS };
   const { rawJson } = read;
-  const parsed = parsePersistedFile((rawJson ?? {}) as Partial<PreferencesFile>);
+  const parsed = parsePersistedFile(rawJson);
   const seeded = await maybeSeedDiagnosticsTs(rawJson, parsed);
   return seeded ?? parsed;
 }
@@ -211,9 +319,10 @@ function readDiagnosticsTs(r: Record<string, unknown>): number | undefined {
 
 function parsePreferences(raw: unknown): Partial<Preferences> {
   if (typeof raw !== 'object' || raw === null) {
-    throw new CodesignError('preferences:update expects an object', ERROR_CODES.IPC_BAD_INPUT);
+    throw new CodesignError('preferences:v1:update expects an object', ERROR_CODES.IPC_BAD_INPUT);
   }
   const r = raw as Record<string, unknown>;
+  assertKnownPreferenceFields(r);
   const out: Partial<Preferences> = {};
   const updateChannel = readUpdateChannel(r);
   if (updateChannel !== undefined) out.updateChannel = updateChannel;
@@ -230,29 +339,11 @@ function parsePreferences(raw: unknown): Partial<Preferences> {
 }
 
 export function registerPreferencesIpc(): void {
-  // ── Preferences v1 channels ─────────────────────────────────────────────────
-
   ipcMain.handle('preferences:v1:get', async (): Promise<Preferences> => {
     return readPersisted();
   });
 
   ipcMain.handle('preferences:v1:update', async (_e, raw: unknown): Promise<Preferences> => {
-    const patch = parsePreferences(raw);
-    const current = await readPersisted();
-    const next: Preferences = { ...current, ...patch };
-    await writePersisted(next);
-    return next;
-  });
-
-  // ── Preferences legacy shims (schedule removal next minor) ──────────────────
-
-  ipcMain.handle('preferences:get', async (): Promise<Preferences> => {
-    logger.warn('legacy preferences:get channel used, schedule removal next minor');
-    return readPersisted();
-  });
-
-  ipcMain.handle('preferences:update', async (_e, raw: unknown): Promise<Preferences> => {
-    logger.warn('legacy preferences:update channel used, schedule removal next minor');
     const patch = parsePreferences(raw);
     const current = await readPersisted();
     const next: Preferences = { ...current, ...patch };

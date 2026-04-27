@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { CodesignErrorCode } from './error-codes';
 
 export const ProviderId = z.enum([
   'anthropic',
@@ -16,13 +15,15 @@ export const ProviderId = z.enum([
 ]);
 export type ProviderId = z.infer<typeof ProviderId>;
 
-export const ModelRef = z.object({
-  // v3: providers may be custom ids (`custom-deepseek`, etc.), not just the
-  // legacy enum. Keep ProviderId as a documented convenience but let the wire
-  // do the dispatch downstream.
-  provider: z.string().min(1),
-  modelId: z.string(),
-});
+export const ModelRef = z
+  .object({
+    // v3: providers may be custom ids (`custom-deepseek`, etc.), not just the
+    // legacy enum. Keep ProviderId as a documented convenience but let the wire
+    // do the dispatch downstream.
+    provider: z.string().min(1),
+    modelId: z.string(),
+  })
+  .strict();
 export type ModelRef = z.infer<typeof ModelRef>;
 
 export const DesignParam = z.discriminatedUnion('type', [
@@ -78,33 +79,41 @@ export type Artifact = z.infer<typeof Artifact>;
 export const ChatRole = z.enum(['system', 'user', 'assistant']);
 export type ChatRole = z.infer<typeof ChatRole>;
 
-export const ChatMessage = z.object({
-  role: ChatRole,
-  content: z.string(),
-});
+export const ChatMessage = z
+  .object({
+    role: ChatRole,
+    content: z.string(),
+  })
+  .strict();
 export type ChatMessage = z.infer<typeof ChatMessage>;
 
-export const LocalInputFile = z.object({
-  path: z.string().min(1),
-  name: z.string().min(1),
-  size: z.number().int().nonnegative(),
-});
+export const LocalInputFile = z
+  .object({
+    path: z.string().min(1),
+    name: z.string().min(1),
+    size: z.number().int().nonnegative(),
+  })
+  .strict();
 export type LocalInputFile = z.infer<typeof LocalInputFile>;
 
-export const ElementSelectionRect = z.object({
-  top: z.number(),
-  left: z.number(),
-  width: z.number(),
-  height: z.number(),
-});
+export const ElementSelectionRect = z
+  .object({
+    top: z.number(),
+    left: z.number(),
+    width: z.number(),
+    height: z.number(),
+  })
+  .strict();
 export type ElementSelectionRect = z.infer<typeof ElementSelectionRect>;
 
-export const SelectedElement = z.object({
-  selector: z.string().min(1),
-  tag: z.string().min(1),
-  outerHTML: z.string(),
-  rect: ElementSelectionRect,
-});
+export const SelectedElement = z
+  .object({
+    selector: z.string().min(1),
+    tag: z.string().min(1),
+    outerHTML: z.string(),
+    rect: ElementSelectionRect,
+  })
+  .strict();
 export type SelectedElement = z.infer<typeof SelectedElement>;
 
 // Correlates renderer/main/core log lines for a single generation. Constrained
@@ -117,56 +126,48 @@ const GenerationId = z
   .max(128)
   .regex(/^[A-Za-z0-9_-]+$/, 'generationId must be alphanumeric, _ or -');
 
-export const GeneratePayload = z.object({
-  prompt: z.string().min(1).max(32_000),
-  history: z.array(ChatMessage).max(200),
-  model: ModelRef,
-  baseUrl: z.string().url().optional(),
-  referenceUrl: z.string().url().optional(),
-  attachments: z.array(LocalInputFile).max(12).default([]),
-  generationId: GenerationId.optional(),
-});
-export type GeneratePayload = z.infer<typeof GeneratePayload>;
-
-/** @deprecated Use GeneratePayloadV1. */
-export type LegacyGeneratePayload = GeneratePayload;
-
-export const GeneratePayloadV1 = z.object({
-  schemaVersion: z.literal(1),
-  prompt: z.string().min(1).max(32_000),
-  history: z.array(ChatMessage).max(200),
-  model: ModelRef,
-  baseUrl: z.string().url().optional(),
-  referenceUrl: z.string().url().optional(),
-  attachments: z.array(LocalInputFile).max(12).default([]),
-  generationId: GenerationId,
-  /** Optional so older clients / tests that don't set it still parse.
-   *  Present in the renderer path so agent stream events can route to
-   *  the right design's chat bubble. */
-  designId: z.string().min(1).optional(),
-  /** Current HTML for this design (if any). Seeded into the agent's
-   *  virtual FS as `index.html` so the text_editor tool can view/edit
-   *  incrementally instead of always rewriting from scratch. */
-  previousHtml: z.string().optional(),
-});
+export const GeneratePayloadV1 = z
+  .object({
+    schemaVersion: z.literal(1),
+    prompt: z.string().min(1).max(32_000),
+    history: z.array(ChatMessage).max(200),
+    model: ModelRef,
+    baseUrl: z.string().url().optional(),
+    referenceUrl: z.string().url().optional(),
+    attachments: z.array(LocalInputFile).max(12).default([]),
+    generationId: GenerationId,
+    /** Optional so older clients / tests that don't set it still parse.
+     *  Present in the renderer path so agent stream events can route to
+     *  the right design's chat bubble. */
+    designId: z.string().min(1).optional(),
+    /** Current HTML for this design (if any). Seeded into the agent's
+     *  virtual FS as `index.html` so the text_editor tool can view/edit
+     *  incrementally instead of always rewriting from scratch. */
+    previousHtml: z.string().optional(),
+  })
+  .strict();
 export type GeneratePayloadV1 = z.infer<typeof GeneratePayloadV1>;
 
-export const ApplyCommentPayload = z.object({
-  designId: z.string().min(1),
-  html: z.string().min(1).max(500_000),
-  comment: z.string().min(1).max(4_000),
-  selection: SelectedElement,
-  generationId: GenerationId,
-  model: ModelRef.optional(),
-  referenceUrl: z.string().url().optional(),
-  attachments: z.array(LocalInputFile).max(12).default([]),
-});
+export const ApplyCommentPayload = z
+  .object({
+    designId: z.string().min(1),
+    html: z.string().min(1).max(500_000),
+    comment: z.string().min(1).max(4_000),
+    selection: SelectedElement,
+    generationId: GenerationId,
+    model: ModelRef.optional(),
+    referenceUrl: z.string().url().optional(),
+    attachments: z.array(LocalInputFile).max(12).default([]),
+  })
+  .strict();
 export type ApplyCommentPayload = z.infer<typeof ApplyCommentPayload>;
 
-export const CancelGenerationPayloadV1 = z.object({
-  schemaVersion: z.literal(1),
-  generationId: GenerationId,
-});
+export const CancelGenerationPayloadV1 = z
+  .object({
+    schemaVersion: z.literal(1),
+    generationId: GenerationId,
+  })
+  .strict();
 export type CancelGenerationPayloadV1 = z.infer<typeof CancelGenerationPayloadV1>;
 
 /**
@@ -222,18 +223,6 @@ export const ProjectDraft = z.object({
 });
 export type ProjectDraft = z.infer<typeof ProjectDraft>;
 
-export class CodesignError extends Error {
-  constructor(
-    message: string,
-    // Accept a known registry code (preferred) or a free-form string (backward compat).
-    public readonly code: CodesignErrorCode | string,
-    options?: { cause?: unknown },
-  ) {
-    super(message, options);
-    this.name = 'CodesignError';
-  }
-}
-
 export type { CanonicalWire } from './base-url';
 export {
   canonicalBaseUrl,
@@ -241,6 +230,7 @@ export {
   modelsEndpointUrl,
   stripInferenceEndpointSuffix,
 } from './base-url';
+export { CodesignError } from './codesign-error';
 export type {
   Config,
   ConfigV3,
