@@ -7,7 +7,7 @@ import { Type } from '@sinclair/typebox';
 /**
  * `skill` tool. Lazy-loads the markdown body of a builtin design skill (or a
  * brand reference under `brand:<slug>`). Per-session de-dup so a second call
- * returns a short "already loaded" stub instead of re-injecting the whole
+ * returns a short "already loaded" response instead of re-injecting the whole
  * text.
  *
  * Both directories live under the user-visible templates tree
@@ -145,7 +145,7 @@ export function makeSkillTool(
       'or a brand reference ("brand:<slug>" — e.g. brand:vercel, brand:linear, ' +
       'brand:stripe). Call BEFORE writing code whenever the request matches. ' +
       'Returns markdown rules; treat them as load-bearing. One call per skill ' +
-      'per session — repeat calls return a short stub.',
+      'per session — repeat calls return a short already-loaded response.',
     parameters: SkillParams,
     async execute(_toolCallId, params): Promise<AgentToolResult<SkillDetails>> {
       const name = params.name;

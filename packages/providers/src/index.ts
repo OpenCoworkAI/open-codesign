@@ -533,7 +533,7 @@ export type {
 } from './retry';
 export { classifyError, completeWithRetry, sleepWithAbort, withBackoff } from './retry';
 
-export { filterActive, formatSkillsForPrompt, injectSkillsIntoMessages } from './skill-injector';
+export { filterActive } from './skill-injector';
 export type { ValidateResult } from './validate';
 export { pingProvider } from './validate';
 

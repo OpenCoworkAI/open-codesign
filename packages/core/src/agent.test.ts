@@ -1,6 +1,13 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { AgentEvent, AgentMessage, AgentOptions } from '@mariozechner/pi-agent-core';
-import type { LoadedSkill, ModelRef } from '@open-codesign/shared';
-import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import type { LoadedSkill, ModelRef, StoredDesignSystem } from '@open-codesign/shared';
+import {
+  CodesignError,
+  ERROR_CODES,
+  STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
+} from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const loadBuiltinSkillsMock = vi.fn(async (): Promise<LoadedSkill[]> => []);
@@ -223,10 +230,23 @@ vi.mock('@mariozechner/pi-ai', () => ({
 }));
 
 import { generateViaAgent } from './agent.js';
+import { applyComment } from './index.js';
 
 const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
 
 const SAMPLE_HTML = `<!doctype html><html lang="en"><body><h1>Hi</h1></body></html>`;
+const DESIGN_SYSTEM: StoredDesignSystem = {
+  schemaVersion: STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
+  rootPath: '/repo',
+  summary: 'Warm editorial.',
+  extractedAt: '2026-04-28T00:00:00.000Z',
+  sourceFiles: ['tokens.css'],
+  colors: ['#b45f3d'],
+  fonts: [],
+  spacing: [],
+  radius: [],
+  shadows: [],
+};
 const RESPONSE_WITH_ARTIFACT = `Here is your design.
 
 <artifact identifier="design-1" type="html" title="Hello world">
@@ -236,7 +256,7 @@ ${SAMPLE_HTML}
 /**
  * Minimal in-memory `TextEditorFsCallbacks` stub. The agent's parse step
  * pulls the artifact from `index.html` via the host fs — pre-populating
- * it here simulates a model that wrote through the text_editor tool.
+ * it here simulates a model that wrote through the workspace edit tool.
  */
 function makeStubFs(initialFiles: Record<string, string> = {}) {
   const files = new Map(Object.entries(initialFiles));
@@ -267,7 +287,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('generateViaAgent() — Phase 1 pass-through', () => {
+describe('generateViaAgent()', () => {
   it('throws CodesignError on empty prompt (matches generate())', async () => {
     await expect(
       generateViaAgent({ prompt: '  ', history: [], model: MODEL, apiKey: 'sk-test' }),
@@ -305,8 +325,8 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
         model: MODEL,
         apiKey: 'sk-test',
       },
-      // Opt out of the default toolset so this test continues to pin the
-      // Phase 1 zero-tool shape of the Agent init state.
+      // Opt out of the default toolset so this test can pin the zero-tool
+      // Agent init state independently from the default v0.2 tool surface.
       { tools: [] },
     );
 
@@ -618,6 +638,13 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
   it('reports skill-loader failure via warnings without blocking the artifact', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     loadBuiltinSkillsMock.mockRejectedValue(new Error('disk read failed'));
+    const templatesRoot = mkdtempSync(path.join(tmpdir(), 'codesign-agent-templates-'));
+    mkdirSync(path.join(templatesRoot, 'scaffolds'), { recursive: true });
+    mkdirSync(path.join(templatesRoot, 'brand-refs'), { recursive: true });
+    writeFileSync(
+      path.join(templatesRoot, 'scaffolds', 'manifest.json'),
+      JSON.stringify({ schemaVersion: 1, scaffolds: {} }),
+    );
     const warnLogs: Array<{ msg: string; meta?: unknown }> = [];
     const logger = {
       info: () => {},
@@ -626,31 +653,98 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
       },
       error: () => {},
     };
-    const result = await generateViaAgent(
+    try {
+      const result = await generateViaAgent(
+        {
+          prompt: 'make a dashboard',
+          history: [],
+          model: MODEL,
+          apiKey: 'sk-test',
+          logger,
+          templatesRoot,
+        },
+        { fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+      );
+      expect(result.artifacts).toHaveLength(1);
+      expect(result.warnings).toEqual([
+        expect.stringContaining('Skill manifest unavailable: disk read failed'),
+      ]);
+      const warnEntry = warnLogs.find((entry) =>
+        entry.msg.includes('step=load_resource_manifest.skills.fail'),
+      );
+      expect(warnEntry).toBeDefined();
+      expect(warnEntry?.meta).toMatchObject({
+        errorClass: 'Error',
+        message: 'disk read failed',
+      });
+    } finally {
+      rmSync(templatesRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('adds manifest summaries without injecting full skill markdown', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    loadBuiltinSkillsMock.mockResolvedValue([
       {
-        prompt: 'make a dashboard',
-        history: [],
-        model: MODEL,
-        apiKey: 'sk-test',
-        logger,
+        id: 'chart-rendering',
+        source: 'builtin',
+        frontmatter: {
+          schemaVersion: 1,
+          name: 'chart-rendering',
+          description: 'Guidance for polished charts and data visualization.',
+          trigger: { providers: ['*'], scope: 'system' },
+          disable_model_invocation: false,
+          user_invocable: true,
+        },
+        body: 'FULL CHART SKILL BODY SHOULD ONLY LOAD THROUGH THE TOOL.',
       },
-      { fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
-    );
-    expect(result.artifacts).toHaveLength(1);
-    expect(result.warnings).toEqual([
-      expect.stringContaining('Builtin skills unavailable: disk read failed'),
     ]);
-    const warnEntry = warnLogs.find((entry) => entry.msg.includes('step=load_skills.fail'));
-    expect(warnEntry).toBeDefined();
-    expect(warnEntry?.meta).toMatchObject({
-      errorClass: 'Error',
-      message: 'disk read failed',
-    });
+    const templatesRoot = mkdtempSync(path.join(tmpdir(), 'codesign-agent-templates-'));
+    mkdirSync(path.join(templatesRoot, 'scaffolds'), { recursive: true });
+    mkdirSync(path.join(templatesRoot, 'brand-refs', 'acme'), { recursive: true });
+    writeFileSync(
+      path.join(templatesRoot, 'scaffolds', 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        scaffolds: {
+          'iphone-16-pro-frame': {
+            description: 'Phone frame starter with status bar and home indicator.',
+            path: 'iphone-16-pro-frame.html',
+            category: 'mobile',
+          },
+        },
+      }),
+    );
+    try {
+      await generateViaAgent(
+        {
+          prompt: 'make a chart dashboard for acme',
+          history: [],
+          model: MODEL,
+          apiKey: 'sk-test',
+          templatesRoot,
+        },
+        { fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+      );
+      const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
+      expect(sys).toContain('# Available Resources');
+      expect(sys).toContain(
+        '- chart-rendering: Guidance for polished charts and data visualization.',
+      );
+      expect(sys).toContain(
+        '- mobile: iphone-16-pro-frame (Phone frame starter with status bar and home indicator.)',
+      );
+      expect(sys).toContain('brand:acme');
+      expect(sys).toContain('call `skill(name)` or `scaffold({kind, destPath})`');
+      expect(sys).not.toContain('FULL CHART SKILL BODY');
+    } finally {
+      rmSync(templatesRoot, { recursive: true, force: true });
+    }
   });
 
   it('returns no artifacts when prose contains a fenced ```html block but no <artifact> wrapper and no fs is provided', async () => {
     // Locks in the post-recovery contract: prose-only HTML is no longer
-    // rescued. The host must rely on the text_editor + fs path.
+    // rescued. The host must rely on the workspace edit tool plus fs path.
     scriptedAgent = {
       assistantText: 'Here you go:\n\n```html\n<!doctype html><html><body>Hi</body></html>\n```',
     };
@@ -676,9 +770,92 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     });
     const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
     expect(sys).toContain('str_replace_based_edit_tool');
-    expect(sys).toContain('Do NOT emit `<artifact>`');
-    expect(sys).toContain('Do NOT add React / ReactDOM / @babel standalone runtime scripts');
-    expect(sys).toContain('index.html` is artifact source');
+    expect(sys).toContain('"command": "create"');
+    expect(sys).toContain('follow-up edits use `view`, `str_replace`, or `insert`');
+    expect(sys).toContain('Do not emit `<artifact>`');
+    expect(sys).toContain('workspace file `index.html`');
+    expect(sys).toContain('Local workspace assets and scaffolded files are allowed');
+    expect(sys).toContain('Call `done(path)` before finishing');
+    expect(sys).not.toContain('text_editor.create(');
+    expect(sys).not.toContain('view("index.html"');
+    expect(sys).not.toContain('IOSDevice, IOSStatusBar');
+  });
+
+  it('exposes the current v0.2 toolset when host capabilities are present', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent(
+      {
+        prompt: 'design a landing page',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        runPreview: async () => ({
+          ok: true,
+          consoleErrors: [],
+          assetErrors: [],
+          metrics: { nodes: 1, height: 720, width: 1280, loadMs: 10 },
+        }),
+        readWorkspaceFiles: async () => [],
+        askBridge: async () => ({ status: 'answered', answers: [] }),
+      },
+      {
+        fs: makeStubFs({ 'index.html': SAMPLE_HTML }),
+        generateImageAsset: async () => ({
+          path: 'assets/hero.png',
+          dataUrl: 'data:image/png;base64,aW1n',
+          mimeType: 'image/png',
+          model: 'gpt-image-2',
+          provider: 'openai',
+        }),
+      },
+    );
+    const tools = (agentCalls[0]?.options.initialState?.tools ?? []) as Array<{ name?: string }>;
+    const names = tools.map((tool) => tool.name);
+    expect(names).toEqual([
+      'set_todos',
+      'set_title',
+      'skill',
+      'scaffold',
+      'str_replace_based_edit_tool',
+      'done',
+      'preview',
+      'generate_image_asset',
+      'tweaks',
+      'ask',
+    ]);
+    expect(names).not.toContain('read_url');
+    expect(names).not.toContain('read_design_system');
+    expect(names).not.toContain('list_files');
+    expect(names).not.toContain('load_skill');
+    expect(names).not.toContain('verify_html');
+  });
+
+  it('injects apply-comment supporting context only once through the agent boundary', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await applyComment({
+      html: SAMPLE_HTML,
+      comment: 'Tighten the hero.',
+      selection: {
+        selector: '#hero',
+        tag: 'section',
+        outerHTML: '<section id="hero">Hi</section>',
+        rect: { top: 0, left: 0, width: 100, height: 100 },
+      },
+      model: MODEL,
+      apiKey: 'sk-test',
+      workspaceRoot: '/tmp/codesign-test',
+      designSystem: DESIGN_SYSTEM,
+      attachments: [{ name: 'brief.md', path: '/tmp/brief.md', excerpt: 'Use warmer copy.' }],
+      referenceUrl: { url: 'https://example.com/ref', excerpt: 'Hero tone.' },
+    });
+
+    const prompt = agentCalls[0]?.prompts[0]?.message;
+    expect(typeof prompt).toBe('string');
+    const text = prompt as string;
+    expect(text.match(/type="design_system"/g) ?? []).toHaveLength(1);
+    expect(text.match(/type="attachments"/g) ?? []).toHaveLength(1);
+    expect(text.match(/type="reference_url"/g) ?? []).toHaveLength(1);
+    expect(text.match(/type="selected_element"/g) ?? []).toHaveLength(1);
   });
 
   it('adds explicit bitmap trigger guidance when image asset tool is enabled', async () => {
@@ -792,7 +969,7 @@ describe('generateViaAgent() — first-turn retry', () => {
     // First-turn + transient 500, BUT the mock pushes a partial assistant
     // message before throwing, simulating "model already emitted tokens /
     // tool calls before the connection dropped". Replaying would re-run
-    // any text_editor / set_todos side effects, so retry must be blocked
+    // any file-edit / set_todos side effects, so retry must be blocked
     // regardless of the HTTP status. A single attempt is the only safe move.
     scriptedAgent = {
       assistantText: '',

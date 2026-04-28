@@ -1,64 +1,22 @@
 # Output rules
 
-## File constraints
+## Workspace contract
 
-- **Maximum 1000 lines** of HTML (including inline style and script). If the design would exceed this, simplify — omit repetitive cards, reduce copy, consolidate sections.
-- Self-contained: no `<link rel="stylesheet">`, no `<script src="…">` to your own files.
-- Permitted external resources (tightly scoped — same trust policy as Claude Artifacts):
-  - **CSS**:
-    - Tailwind CDN: `<script src="https://cdn.tailwindcss.com"></script>`
-    - Google Fonts: `<link rel="preconnect">` + `<link rel="stylesheet">` from `fonts.googleapis.com` / `fonts.gstatic.com`
-  - **JS libraries** — `cdnjs.cloudflare.com` whitelist only. Pin an exact version. Format: `https://cdnjs.cloudflare.com/ajax/libs/<lib>/<exact-version>/<file>.min.js`. Approved libraries:
-    - `recharts` — data viz (preferred for dashboards)
-    - `Chart.js` — alternative charting (note: cdnjs slug is capitalized)
-    - `d3` — low-level visualization
-    - `three.js` — 3D
-    - `lodash.js` — utilities (cdnjs slug includes the `.js`)
-    - `PapaParse` — CSV parsing (note: cdnjs slug is CamelCase)
-- **Forbidden**:
-  - Arbitrary `fetch()` / `XMLHttpRequest` to external APIs — all data must be inline.
-  - Scripts from any host other than `cdnjs.cloudflare.com` (no `esm.sh`, `jsdelivr`, `unpkg` — too open, no version verification).
-  - React / ReactDOM / @babel standalone runtime scripts, imports, CDN links, or `type="text/babel"` tags. The host preview/runtime injects React, ReactDOM, Babel, device-frame components, and design-canvas components for JSX artifacts.
-  - In agentic workspace mode, HTML document wrappers around JSX source (`<!doctype>`, `<html>`, `<head>`, `<body>`, `<div id="root">`, `<script>`). The `.html` workspace file is JSX source; the host builds the document shell for preview and export.
-  - Hotlinked photos from any host (`placeholder.com`, `unsplash.com`, `picsum.photos`, etc.).
-- All other assets must be inline: SVG icons, CSS gradients, data URIs for tiny images.
+- The source of truth is the workspace filesystem. Create or edit files through `str_replace_based_edit_tool` or `scaffold`.
+- In the default agent workspace, `index.html` is JSX source for the host runtime. Do not add `<!doctype>`, `<html>`, `<head>`, `<body>`, `<div id="root">`, React, ReactDOM, Babel, CDN React loaders, or `type="text/babel"` to it.
+- Assistant chat is for short progress notes only. Never emit `<artifact>` tags, fenced HTML/JSX/CSS, or full file contents.
+- Local workspace assets returned by tools are allowed, including `assets/...`, scaffolded files, and generated images.
 
-## CSS custom properties (required)
+## Resource limits
 
-Declare every load-bearing visual value as a CSS custom property on `:root`:
+- No arbitrary external scripts. The only allowed JS host is `cdnjs.cloudflare.com` with exact-version URLs.
+- No external API fetches from artifacts. Inline the data needed for the mock.
+- No hotlinked stock or placeholder images. Use local assets, generated images, inline SVG, CSS, or data URIs.
+- Keep each generated file focused. If a design becomes too large, split supporting assets into workspace files rather than bloating chat.
 
-```css
-:root {
-  --color-bg:       #f8f5f0;
-  --color-surface:  #ffffff;
-  --color-text:     #1a1a1a;
-  --color-muted:    #6b6b6b;
-  --color-accent:   oklch(62% 0.22 265);
-  --color-accent-2: oklch(72% 0.18 40);
-  --radius-base:    0.5rem;
-  --radius-lg:      1rem;
-  --font-sans:      'Syne', system-ui, sans-serif;
-  --font-mono:      'JetBrains Mono', monospace;
-  --space-unit:     1rem;
-}
-```
+## Structure and quality
 
-Reference these in Tailwind's arbitrary-value syntax: `bg-[var(--color-accent)]`, `rounded-[var(--radius-base)]`. Never hard-code hex or pixel values in Tailwind classes when a variable covers the same slot.
-
-## Structural rules
-
-1. Semantic landmarks: `<header>`, `<main>`, `<section>`, `<article>`, `<nav>`, `<footer>` — one each where appropriate.
-2. Heading hierarchy: one `<h1>`, then `<h2>` per section, `<h3>` for sub-items. Never skip levels.
-3. Interactive elements: `<button>` for actions, `<a href="#">` for navigation. Never `<div onclick>`.
-4. Images: no hotlinked photos. Use inline SVG compositions or CSS gradient placeholders.
-5. Alt text: every `<img>` has a non-empty `alt`. Decorative SVGs get `aria-hidden="true"`.
-6. No `<table>` for layout; use CSS grid or flex.
-7. Responsive: mobile-first breakpoints using Tailwind's `sm:`, `md:`, `lg:` prefixes.
-8. Motion: CSS `transition` / `animation` only — no JS animation loops (no `requestAnimationFrame`, no recursive `setTimeout` for visuals). Keep it under 300 ms unless the effect is intentional and earns its cost. The single permitted exception is the dashboard live-clock `setInterval(updateClock, 1000)` documented in the craft directives.
-
-## Content rules
-
-- No lorem ipsum. Write copy specific to the domain the user described.
-- No placeholder names like "John Doe" or "Company Name" — invent plausible, diverse names.
-- Numbers and dates must be realistic (not "100%" everywhere, not "Jan 1, 2020").
-- Icons: inline SVG only; use simple, recognizable symbols (no brand logos without explicit request).
+- Use semantic landmarks, one clear heading hierarchy, real buttons/links, non-empty alt text, and accessible focus states.
+- Use CSS custom properties or a token object for load-bearing visual values.
+- Content must be domain-specific: no lorem ipsum, "John Doe", "Acme Corp", placeholder numbers, or stale dates.
+- Responsive behavior is required for user-facing surfaces unless the artifact is an intentionally fixed-format slide or frame.

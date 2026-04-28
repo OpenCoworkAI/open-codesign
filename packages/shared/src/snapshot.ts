@@ -47,9 +47,9 @@ export type ChatMessageKind = z.infer<typeof ChatMessageKind>;
 
 /**
  * Row from the chat_messages table. `payload` is a JSON string on disk; the
- * typed variants are parsed at the IPC boundary. Schema must anticipate
- * Phase 2 tool events (tool_call with verbGroup) even though Phase 1 only
- * emits user / assistant_text / artifact_delivered.
+ * typed variants are parsed at the IPC boundary. The schema accepts streamed
+ * agent tool events (`tool_call` with `verbGroup`) alongside durable chat
+ * rows for user text, assistant text, artifacts, and errors.
  */
 export const ChatMessageRowV1 = z.object({
   schemaVersion: z.literal(1).default(1),
@@ -100,9 +100,9 @@ export interface ChatToolCallPayload {
 }
 
 // ---------------------------------------------------------------------------
-// Virtual FS (Workstream E — Phase 2 agent tools)
+// Virtual FS for workspace-backed agent tools.
 //
-// Per-design file tree stored in SQLite, written by the text_editor tool via
+// Per-design file tree stored in SQLite, written by the agent edit tool via
 // the agent runtime. Paths are POSIX-relative ("index.html",
 // "_starters/ios-frame.jsx"); never absolute, never contain "..".
 // ---------------------------------------------------------------------------

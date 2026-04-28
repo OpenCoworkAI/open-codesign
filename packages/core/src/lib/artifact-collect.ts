@@ -1,4 +1,3 @@
-import type { ArtifactEvent } from '@open-codesign/artifacts';
 import type { Artifact } from '@open-codesign/shared';
 
 export interface Collected {
@@ -15,18 +14,6 @@ export function createHtmlArtifact(content: string, index: number): Artifact {
     designParams: [],
     createdAt: new Date().toISOString(),
   };
-}
-
-export function collect(events: Iterable<ArtifactEvent>, into: Collected): void {
-  for (const ev of events) {
-    if (ev.type === 'text') {
-      into.text += ev.delta;
-    } else if (ev.type === 'artifact:end') {
-      const artifact = createHtmlArtifact(ev.fullContent, into.artifacts.length);
-      if (ev.identifier) artifact.id = ev.identifier;
-      into.artifacts.push(artifact);
-    }
-  }
 }
 
 export function stripEmptyFences(text: string): string {

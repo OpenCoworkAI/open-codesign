@@ -318,12 +318,11 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       if (!trimmed) return;
       try {
         await window.codesign.snapshots.renameDesign(id, trimmed);
-        // Optimistic in-memory update. T2.4 stubs don't persist and
-        // listDesigns() returns [] — but a freshly-created design lives as a
-        // "ghost" (currentDesignId set, designs[] empty) because the post-
-        // createDesign loadDesigns() wiped the local copy. If the target row
+        // Optimistic in-memory update. If persistence is unavailable and
+        // listDesigns() returns [], a freshly-created design can otherwise
+        // disappear from chrome after reload of this slice. If the target row
         // is missing, synthesize one so the sidebar / top bar can surface
-        // the name. Remove this block once T2.6 lands real JSONL storage.
+        // the name.
         const nowIso = new Date().toISOString();
         set((s) => {
           const existing = s.designs.find((d) => d.id === id);

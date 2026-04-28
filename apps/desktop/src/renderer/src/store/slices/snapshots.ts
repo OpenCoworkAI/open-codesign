@@ -87,7 +87,6 @@ export async function persistArtifactSnapshot(
   const prior = snapshotPersistLocks.get(designId) ?? Promise.resolve();
   const run = prior.then(async () => {
     if (!window.codesign) return null;
-    // window.codesign.snapshots.* is currently a no-op stub (see preload).
     const existing = await window.codesign.snapshots.list(designId);
     const parent = existing[0] ?? null;
     // Dedupe by content: the agent_end path and the generate-result path both
@@ -119,7 +118,7 @@ export async function persistArtifactSnapshot(
  * Rebuild the agent-facing history from chat_messages (single source of truth
  * for the sidebar chat). Only user + assistant_text rows contribute — tool_call
  * / artifact_delivered / error are dropped because the agent re-reads live file
- * state via text_editor.view(). seedFromSnapshots first so legacy designs with
+ * state via the edit tool's `view` command. seedFromSnapshots first so legacy designs with
  * only snapshot-era user prompts get backfilled. Falls back to [] when designId
  * is null or IPC is unavailable (renderer tests).
  */

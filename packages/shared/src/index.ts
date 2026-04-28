@@ -141,7 +141,7 @@ export const GeneratePayloadV1 = z
      *  the right design's chat bubble. */
     designId: z.string().min(1).optional(),
     /** Current HTML for this design (if any). Seeded into the agent's
-     *  virtual FS as `index.html` so the text_editor tool can view/edit
+     *  virtual FS as `index.html` so the edit tool can view/edit
      *  incrementally instead of always rewriting from scratch. */
     previousHtml: z.string().optional(),
   })

@@ -196,9 +196,6 @@ importers:
       '@mariozechner/pi-coding-agent':
         specifier: ^0.69.0
         version: 0.69.0(ws@8.20.0)(zod@4.3.6)
-      '@open-codesign/artifacts':
-        specifier: workspace:*
-        version: link:../artifacts
       '@open-codesign/providers':
         specifier: workspace:*
         version: link:../providers

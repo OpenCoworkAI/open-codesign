@@ -2,8 +2,8 @@
  * Agent runtime wrapper — the live generate path in v0.2.
  *
  * Routes a `generate()`-shaped request through `@mariozechner/pi-agent-core`
- * with the full v0.2 tool set (set_title, set_todos, text_editor, list_files,
- * done, read_url, read_design_system, generate_image_asset, skill, scaffold,
+ * with the v0.2 design tool set (set_title, set_todos,
+ * str_replace_based_edit_tool, done, generate_image_asset, skill, scaffold,
  * preview, tweaks, ask — see `defaultTools` below). Streams `turn_start` /
  * `message_update` / `turn_end` lifecycle events through `onEvent` so the
  * renderer can drive the chat/preview UI.
@@ -17,13 +17,9 @@
  *   - The stream delta event is `message_update` with
  *     `assistantMessageEvent.type === 'text_delta'`, not a top-level
  *     `text_delta` event.
- *
- * The legacy single-turn path at `packages/core/src/index.ts` `generate()` is
- * still reachable via `USE_AGENT_RUNTIME=0` and is the contract used by
- * `applyComment()` (inline-comment IPC). Removing it is tracked in the
- * v0.2 audit (`docs/v0.2-legacy-audit.md` §9 items #8/#9).
  */
 
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {
   Agent,
@@ -36,6 +32,7 @@ import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
   classifyError,
   claudeCodeIdentityHeaders,
+  filterActive,
   inferReasoning,
   looksLikeClaudeOAuthToken,
   normalizeGeminiModelId,
@@ -47,6 +44,7 @@ import {
   CodesignError,
   canonicalBaseUrl,
   ERROR_CODES,
+  type LoadedSkill,
   type ModelRef,
   type WireApi,
 } from '@open-codesign/shared';
@@ -65,11 +63,8 @@ import {
   type GenerateImageAssetFn,
   makeGenerateImageAssetTool,
 } from './tools/generate-image-asset.js';
-import { makeListFilesTool } from './tools/list-files.js';
 import { makePreviewTool } from './tools/preview.js';
-import { makeReadDesignSystemTool } from './tools/read-design-system.js';
-import { makeReadUrlTool } from './tools/read-url.js';
-import { makeScaffoldTool } from './tools/scaffold.js';
+import { loadScaffoldManifest, makeScaffoldTool } from './tools/scaffold.js';
 import { makeSetTitleTool } from './tools/set-title.js';
 import { makeSetTodosTool } from './tools/set-todos.js';
 import { makeSkillTool } from './tools/skill.js';
@@ -100,8 +95,9 @@ interface PiAssistantMessage {
 // and ./lib/artifact-collect.ts (shared with index.ts).
 //
 // Note: extractLooseArtifact / extractHtmlDocument were removed in favour of
-// the text_editor + virtual fs path. See `if (collected.artifacts.length === 0
-// && deps.fs)` below for the only supported recovery.
+// str_replace_based_edit_tool + virtual fs. See
+// `if (collected.artifacts.length === 0 && deps.fs)` below for the only
+// supported recovery.
 
 // ---------------------------------------------------------------------------
 // Model resolution — unified single path. We never query pi-ai's registry;
@@ -206,32 +202,149 @@ function buildPiModel(
 }
 
 // ---------------------------------------------------------------------------
-// Skill loading — best-effort, matches generate() behavior.
+// Resource-manifest loading — best-effort, never injects full skill bodies.
 // ---------------------------------------------------------------------------
 
-async function collectSkills(
+interface ResourceManifestResult {
+  sections: string[];
+  warnings: string[];
+  skillCount: number;
+  scaffoldCount: number;
+  brandCount: number;
+}
+
+function oneLine(text: string, max = 180): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  return normalized.length > max ? `${normalized.slice(0, max - 1).trimEnd()}…` : normalized;
+}
+
+function formatSkillSummary(skills: LoadedSkill[]): string[] {
+  return [...skills]
+    .sort((a, b) => a.frontmatter.name.localeCompare(b.frontmatter.name, 'en'))
+    .map((skill) => `- ${skill.frontmatter.name}: ${oneLine(skill.frontmatter.description)}`);
+}
+
+async function listBrandRefs(root: string): Promise<string[]> {
+  const entries = await readdir(root, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => `brand:${entry.name}`)
+    .sort((a, b) => a.localeCompare(b, 'en'));
+}
+
+function formatScaffoldSummary(
+  scaffolds: Record<string, { description: string; category?: string | undefined }>,
+): string[] {
+  const grouped = new Map<string, string[]>();
+  for (const [kind, entry] of Object.entries(scaffolds).sort(([a], [b]) =>
+    a.localeCompare(b, 'en'),
+  )) {
+    const category = entry.category ?? 'other';
+    const list = grouped.get(category) ?? [];
+    list.push(`${kind} (${oneLine(entry.description, 72)})`);
+    grouped.set(category, list);
+  }
+  return [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'en'))
+    .map(([category, kinds]) => `- ${category}: ${kinds.slice(0, 8).join(', ')}`);
+}
+
+function buildResourceManifestSection(input: {
+  skills: LoadedSkill[];
+  scaffolds: Record<string, { description: string; category?: string | undefined }>;
+  brandRefs: string[];
+}): string | null {
+  const skillLines = formatSkillSummary(input.skills);
+  const scaffoldLines = formatScaffoldSummary(input.scaffolds);
+  const brandLine =
+    input.brandRefs.length > 0
+      ? input.brandRefs.slice(0, 40).join(', ')
+      : 'No built-in brand references available.';
+
+  if (skillLines.length === 0 && scaffoldLines.length === 0 && input.brandRefs.length === 0) {
+    return null;
+  }
+
+  return [
+    '# Available Resources',
+    '',
+    'Progressive disclosure is manifest-first: choose from this index, then call `skill(name)` or `scaffold({kind, destPath})` before writing. Do not infer hidden prompt sections.',
+    '',
+    '## Design Skills',
+    skillLines.length > 0 ? skillLines.join('\n') : 'No design skills available.',
+    '',
+    '## Scaffolds',
+    scaffoldLines.length > 0 ? scaffoldLines.join('\n') : 'No scaffolds available.',
+    '',
+    '## Brand References',
+    brandLine,
+  ].join('\n');
+}
+
+async function collectResourceManifest(
   log: CoreLogger,
   providerId: string,
-  builtinDir: string | undefined,
-): Promise<{ blobs: string[]; warnings: string[] }> {
+  templatesRoot: string | undefined,
+): Promise<ResourceManifestResult> {
   const start = Date.now();
+  const warnings: string[] = [];
+  const skillsRoot = templatesRoot ? path.join(templatesRoot, 'skills') : undefined;
+  const scaffoldsRoot = templatesRoot ? path.join(templatesRoot, 'scaffolds') : undefined;
+  const brandRefsRoot = templatesRoot ? path.join(templatesRoot, 'brand-refs') : undefined;
+  let activeSkills: LoadedSkill[] = [];
+  let scaffolds: Record<string, { description: string; category?: string | undefined }> = {};
+  let brandRefs: string[] = [];
+
+  if (!templatesRoot) {
+    return { sections: [], warnings: [], skillCount: 0, scaffoldCount: 0, brandCount: 0 };
+  }
+
   try {
     const { loadBuiltinSkills } = await import('./skills/loader.js');
-    const { filterActive, formatSkillsForPrompt } = await import('@open-codesign/providers');
-    const skills = await loadBuiltinSkills(builtinDir ?? '');
-    const active = filterActive(skills, providerId);
-    const blobs = formatSkillsForPrompt(active);
-    log.info('[generate] step=load_skills.ok', {
-      ms: Date.now() - start,
-      skills: blobs.length,
-    });
-    return { blobs, warnings: [] };
+    activeSkills = filterActive(await loadBuiltinSkills(skillsRoot ?? ''), providerId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const errorClass = err instanceof Error ? err.constructor.name : typeof err;
-    log.warn('[generate] step=load_skills.fail', { errorClass, message });
-    return { blobs: [], warnings: [`Builtin skills unavailable: ${message}`] };
+    log.warn('[generate] step=load_resource_manifest.skills.fail', { errorClass, message });
+    warnings.push(`Skill manifest unavailable: ${message}`);
   }
+
+  try {
+    if (scaffoldsRoot) {
+      const manifest = await loadScaffoldManifest(scaffoldsRoot);
+      scaffolds = manifest.scaffolds;
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const errorClass = err instanceof Error ? err.constructor.name : typeof err;
+    log.warn('[generate] step=load_resource_manifest.scaffolds.fail', { errorClass, message });
+    warnings.push(`Scaffold manifest unavailable: ${message}`);
+  }
+
+  try {
+    if (brandRefsRoot) brandRefs = await listBrandRefs(brandRefsRoot);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const errorClass = err instanceof Error ? err.constructor.name : typeof err;
+    log.warn('[generate] step=load_resource_manifest.brand_refs.fail', { errorClass, message });
+    warnings.push(`Brand references unavailable: ${message}`);
+  }
+
+  const section = buildResourceManifestSection({ skills: activeSkills, scaffolds, brandRefs });
+  log.info('[generate] step=load_resource_manifest.ok', {
+    ms: Date.now() - start,
+    skills: activeSkills.length,
+    scaffolds: Object.keys(scaffolds).length,
+    brandRefs: brandRefs.length,
+    warnings: warnings.length,
+  });
+  return {
+    sections: section ? [section] : [],
+    warnings,
+    skillCount: activeSkills.length,
+    scaffoldCount: Object.keys(scaffolds).length,
+    brandCount: brandRefs.length,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -240,230 +353,28 @@ async function collectSkills(
 // ---------------------------------------------------------------------------
 
 const AGENTIC_TOOL_GUIDANCE = [
-  '## Output format (STRICT — no exceptions)',
+  '## Workspace output contract',
   '',
-  'Your artifact lives in `index.html` and follows this template — write it via',
-  '`text_editor.create("index.html", ...)`:',
+  '- Write the deliverable to workspace file `index.html` with `str_replace_based_edit_tool`; do not treat chat text as the artifact.',
+  '- Create files with `{ "command": "create", "path": "index.html", "file_text": "..." }`; follow-up edits use `view`, `str_replace`, or `insert`.',
+  '- Do not emit `<artifact>` tags, fenced source blocks, raw HTML/JSX/CSS, or HTML document wrappers in chat.',
+  '- Local workspace assets and scaffolded files are allowed. External scripts remain restricted by the base output rules.',
+  '- Assistant text is for brief progress notes and final rationale only.',
   '',
-  '`index.html` is a JSX source module despite the `.html` filename. Do not write',
-  '`<!doctype>`, `<html>`, `<head>`, `<body>`, `<div id="root">`, or `<script>` tags.',
-  'The host creates that document shell for preview, `done`, and export.',
+  '## Required tool loop',
   '',
-  '```jsx',
-  'const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{',
-  "  // tokens the user can tweak via the host's slider panel",
-  '  "accentColor": "#CC785C",',
-  '  "headingWeight": 500',
-  '}/*EDITMODE-END*/;',
+  '1. Call `set_title` once and `set_todos` for multi-step work.',
+  '2. Use the manifest: call `skill(name)` or `scaffold({kind, destPath})` before relying on optional guidance or starter files.',
+  '3. Write `index.html` through `str_replace_based_edit_tool`.',
+  '4. Call `preview(path)` after the first substantive pass when available.',
+  '5. Call `tweaks()` for editable controls when the artifact has meaningful EDITMODE values.',
+  '6. Call `done(path)` before finishing; fix returned errors and stop after 3 verification rounds.',
   '',
-  'const T = {',
-  '  // your design tokens (compose from TWEAK_DEFAULTS + literals)',
-  '};',
+  '## File-edit discipline',
   '',
-  'function App() {',
-  '  return <div>...</div>;',
-  '}',
-  '',
-  'ReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
-  '```',
-  '',
-  'The host wraps this in an iframe that pre-loads:',
-  '  - React 18 + ReactDOM (window.React, window.ReactDOM)',
-  '  - @babel/standalone (transpiles your script at runtime)',
-  '  - ios-frame.jsx → window.{IOSDevice, IOSStatusBar, IOSGlassPill, IOSNavBar, IOSList, IOSListRow, IOSKeyboard}',
-  '  - design-canvas.jsx → window.{DesignCanvas, DCSection, DCArtboard, DCPostIt}',
-  '  - Google Fonts: Fraunces, DM Serif Display, DM Sans, JetBrains Mono',
-  '',
-  'So you can write `<IOSDevice>...</IOSDevice>` directly without imports.',
-  '**Do NOT add React / ReactDOM / @babel standalone runtime scripts, imports, CDN links, HTML document wrappers, or `type="text/babel"` tags to `index.html` — including jsDelivr/unpkg/cdnjs copies.** `index.html` is artifact source in this workspace; the host preview, `done`, and export runtimes supply and order those dependencies. If preview reports a missing React/Babel/runtime symbol, fix your JSX or call `preview`/`done` again — do not paste runtime loaders into the artifact.',
-  '',
-  '### EDITMODE rules',
-  '- Always include the EDITMODE-BEGIN/END block, even if empty `{}`.',
-  '- Tokens are JSON-serializable: string / number / boolean / array / object of primitives.',
-  '- Reference them as `TWEAK_DEFAULTS.accentColor` in your JSX.',
-  "- Don't rewrite the marker block at runtime; the host edits it.",
-  '',
-  '### Required cadence',
-  '1. **First turn — plan.** Call `set_todos` with **7–10 checklist items** naming concrete sections AND an explicit `Interactive polish` step near the end (e.g. "Hero", "Metrics row", "CFO pull quote", "How we did it", "Logo strip", "Interactive polish: hover/press, tabs, empty states", "Final proof-read"). Each item is a single component or refinement pass — not "Build page". Mark all unchecked.',
-  '2. **Second turn — skeleton.** Use `text_editor.create("index.html", ...)` to write a minimal scaffold: the EDITMODE block, an empty `App` returning a basic layout container, and the `ReactDOM.createRoot` line. **Do not** include any section content yet. Then `set_todos` with skeleton ticked.',
-  '3. **One section per turn — fill.** For each remaining todo, in its own turn:',
-  '   1. One short prose line announcing what you\'re about to do ("Adding the metrics row now.").',
-  '   2. `view` the file (1 call).',
-  "   3. `str_replace` to add ONE section's JSX (1 call).",
-  '   4. One short prose line reflecting on what landed ("Three KPIs in place — the deltas use mono tnum so they line up.").',
-  '   5. Tick the matching todo via `set_todos`.',
-  '   That is **2 prose lines + 3 tool calls per turn**. Never batch multiple sections into a single str_replace; never run two str_replace tools in the same turn without a prose line in between.',
-  '4. **Polish passes — interactive depth (MANDATORY, ≥2 dedicated turns).** The first polish turn wires interactions; the second adds small-detail craft. These are NOT optional — if the user sees static pixels where they expected live UI, the artifact fails. Before `done` every item on this list must be TRUE:',
-  '   (a) **≥3 functional state changes** that a user can trigger and observe. Tab switch revealing a different view, accordion open/close, drawer slide-in, favorite/like toggle that persists, dropdown/menu expand, inline-edit, filter chip toggle, modal open. Pure hover effects do NOT count toward this three.',
-  '   (b) **≥1 animated view/page transition** if there is any nav (tabs, sidebar, bottom bar, breadcrumbs). 180–260ms, opacity + small translate. A hard cut between views is a failure.',
-  '   (c) **Every `<button>` and `<a>` does something.** No decorative buttons. Wire a state change, open a modal, fire a toast, or remove it. Login / Sign-up / CTA buttons on marketing pages may open a modal stub — still real, not dead.',
-  '   (d) **Uniform hover + press + focus** across ALL clickable elements. Required cadence: `transition: transform 120ms var(--ease-out), background-color 120ms, box-shadow 160ms;` hover lifts 2px; press = `scale(0.96)`; focus = 2px offset ring in accent color (never rely on browser default outline).',
-  '   (e) **≥3 small-detail "craft-surplus" touches** from the craft-directives catalog. Pick from: stateful counter/badge with pop animation, keyboard shortcut chip (`⌘K`, `/`, `esc`), inline-editable field, copy-to-clipboard with "Copied ✓" feedback, dismissible toast/banner, contextual tooltip with directional arrow, scroll-linked header shrink, relative-time tick ("3m ago"), segmented control with weighted active state, thoughtful empty-state SVG scene, expandable accordion inside a card, a deliberate visual rhythm-break section. Adding a gradient and shadow does NOT count.',
-  '   (f) **≥1 empty-state variant** visible or coded (icon + one-sentence reason + CTA) on a list/grid/table, even when current data is non-empty.',
-  '   (g) **Active nav indicator uses weight/shape, not color alone** — underline, inset background, side-accent bar, or pill — so color-blind users can tell where they are.',
-  '   (h) Data reads real: varied names, non-round numbers (87 %, $14.2k), relative dates ("3h ago", "yesterday"), not Lorem / 100 % / Jan 1 2020.',
-  '   Break this into TWO todo items: `Interactive wiring (state + transitions)` and `Craft surplus (small details)`. Tick them explicitly so the user can see both phases landed.',
-  '5. **Final turn — summary.** 2–4 sentences of natural-language prose explaining 2–3 design decisions worth noting (e.g. "Used three distinct surface tones for depth"). Do NOT re-emit the file content; the host extracts it from the virtual fs. Pasting the full file here wastes ~2M tokens on the next turn and will crash the request — this is a hard failure, not a style nit.',
-  '',
-  '### File output policy (STRICT)',
-  "- Use `str_replace_based_edit_tool` for ALL file content. Do NOT emit `<artifact>` tags or fenced ```jsx/```html blocks containing the source in your prose — the host extracts the artifact from the virtual fs and any inline source spams the user's chat.",
-  '- Your assistant text is for explanation, planning, and progress notes only.',
-  '- Prefer small, specific `old_str` values so each edit is unambiguous.',
-  '- Minimum 6 tool calls per design; 10–15 is typical.',
-  '',
-  '### Token-budget discipline (CRITICAL)',
-  '- `view("index.html")` WITHOUT `view_range` returns the ENTIRE file — each call accumulates in your context window.',
-  '- **Full-file view at most ONCE per generation run**: right before your first `str_replace`, for initial orientation. After that the file WILL grow with every edit, so a second full-file view becomes very expensive.',
-  '- **For any re-inspection after the first view, pass `view_range`** — it takes `[startLine, endLine]` (1-indexed, inclusive; either bound may be `-1` for "end of file"). Examples:',
-  '    `view("index.html", view_range: [1, 40])` — re-read the top 40 lines to check imports / EDITMODE block',
-  '    `view("index.html", view_range: [200, 260])` — re-inspect a section you just edited',
-  '    `view("index.html", view_range: [-1, -1])` — wrong; use a real line number for start',
-  '- A second full-file view (no `view_range`) within the same run auto-truncates to a 400-char head snippet — the host enforces this to protect the context window. If you need to see a region, issue a ranged view; if you just need to pick an `old_str`, work from memory of the first view.',
-  '- Never `view` "just to verify" a str_replace succeeded — the tool reports errors when it fails; silence means success. Use `done` for verification, not re-view.',
-  '- Keep `str_replace` edits tight: `old_str` should be the minimum unique anchor (often 1-3 lines), and `new_str` should be the new JSX only. Large old_str + new_str pairs also live in context.',
-  '',
-  '## Frames (optional starters)',
-  '',
-  'For mobile / tablet / watch / desktop shells, view one of these first:',
-  '',
-  '  frames/iphone.jsx       — iPhone 16 Pro shell (Dynamic Island + home indicator)',
-  '  frames/ipad.jsx         — iPad chrome',
-  '  frames/watch.jsx        — Apple Watch Ultra (digital crown + side buttons)',
-  '  frames/android.jsx      — Android Material 3 phone (gesture or 3-button nav)',
-  '  frames/macos-safari.jsx — macOS Safari window (traffic lights + tabs)',
-  '',
-  'Frame files export their device components onto window (e.g. `AppleWatchUltra`, `AndroidPhone`, `MacOSSafari`) so you can drop them straight into your `App` after copying.',
-  '',
-  '## Design skills (optional starter snippets)',
-  '',
-  'For common patterns, view the matching skill before writing:',
-  '',
-  '  skills/slide-deck.jsx',
-  '  skills/dashboard.jsx',
-  '  skills/landing-page.jsx',
-  '  skills/chart-svg.jsx',
-  '  skills/glassmorphism.jsx',
-  '  skills/editorial-typography.jsx',
-  '  skills/heroes.jsx       — 5 hero section variants',
-  '  skills/pricing.jsx      — 4 pricing variants',
-  '  skills/footers.jsx      — 4 footer variants',
-  '  skills/chat-ui.jsx      — Chat UI primitives (bubbles, thinking, tool cards)',
-  '  skills/data-table.jsx   — Data table with sortable / filterable',
-  '  skills/calendar.jsx     — Month-view calendar',
-  '',
-  'Each declares a `// when_to_use:` hint at the top — read it before adopting.',
-  '',
-  '## Multi-view designs — when the brief implies navigation',
-  '',
-  'Many briefs (landing + pricing, product + docs, app with dashboard/settings/',
-  'inbox, multi-step onboarding) need more than one surface. The preview',
-  'sandbox has NO routing and blocks `<a href="/route">` navigation — clicking',
-  'any link with a real href would blank the iframe. So:',
-  '',
-  '**Always build multi-view designs as React view-state in one App**, not with',
-  'href navigation. Pattern:',
-  '',
-  '```jsx',
-  'function App() {',
-  '  const [view, setView] = React.useState("home");',
-  '  return (',
-  '    <>',
-  '      <Nav current={view} onNavigate={setView} />',
-  '      {view === "home" && <HomeView/>}',
-  '      {view === "pricing" && <PricingView/>}',
-  '      {view === "docs" && <DocsView/>}',
-  '    </>',
-  '  );',
-  '}',
-  '```',
-  '',
-  'Nav buttons use `onClick={() => setView(...)}`, NOT `<a href>`. If you must',
-  'use `<a>` for visual reasons, make it `<a href="#" onClick={e => { e.preventDefault(); setView(...); }}>`.',
-  '',
-  'When the brief implies depth, produce **3–5 distinct views**. Each view',
-  'should:',
-  '- Have its own section mix (pricing page has a table + FAQ; dashboard has',
-  "  KPI grid + chart + activity feed) — don't repeat the same hero across",
-  '  every view.',
-  '- Reach end-to-end: real content, real data, real empty-states — not',
-  '  placeholders like "Content goes here".',
-  '- Feel weighty: 4–8 sections per view, 800–1500 px of vertical content.',
-  '',
-  'For depth inside a single view (accordions, tabs, modals, drawers, detail',
-  'slide-overs) prefer local component state over global view-state.',
-  '',
-  '## Component reference discipline (CRITICAL — preview crashes otherwise)',
-  '',
-  "The iframe's `done` verifier loads your artifact for ~3 seconds and captures",
-  'console errors for **whatever actually renders** during that window. Tabs that',
-  'are not the default active tab, modals / drawers that are closed on load,',
-  'accordion panels that start collapsed — none of their JSX executes, so a',
-  "`<UndefinedComponent />` inside them slips past `done` and crashes the user's",
-  'preview the moment they click the trigger.',
-  '',
-  '**Before every `done` call, audit your own file:**',
-  '- For every `<PascalCase/>` or `<PascalCase>...</PascalCase>` tag in the JSX,',
-  '  confirm a matching `function PascalCase` or `const PascalCase = ...` exists',
-  '  in the same file (or is provided by the runtime: React, ReactDOM, IOSDevice,',
-  '  IOSStatusBar, IOSGlassPill, IOSNavBar, IOSList, IOSListRow, IOSKeyboard,',
-  '  DesignCanvas, DCSection, DCArtboard, DCPostIt, AppleWatchUltra, AndroidPhone,',
-  '  MacOSSafari — that is the complete window-scope list).',
-  '- Strategy: do a final `str_replace` pass that alphabetises a comment header',
-  '  listing all components you define (e.g. `// Components: App, Nav, Hero,',
-  '  Inbox, InputBar, MessageList, Sidebar`) so the list is grep-findable.',
-  '- If you introduced a tab / modal / drawer in a polish turn, ensure every',
-  '  component it references is defined — NOT just the default view.',
-  '',
-  'Common failure modes to avoid:',
-  '- Copy-pasted a `<ChatInput />` from a skill file, forgot to copy the',
-  '  definition along with it.',
-  '- Renamed `InputBar` → `MessageComposer` but left one stray `<InputBar />`',
-  '  reference in a secondary tab.',
-  '- Planned to use a future component (`<FooChart />`) as a stub, left the',
-  '  call in the JSX.',
-  '',
-  '## Self-check via `done`',
-  '',
-  'After producing a complete artifact, call `done` to verify it. The host runs',
-  'two checks: (a) static syntax lint (unclosed tags, duplicate IDs, missing',
-  'alt) and (b) a real runtime load — your JSX is mounted in a hidden',
-  'BrowserWindow for ~3s, and any console errors / warnings or load failures',
-  'come back as `errors`. If `status === "has_errors"`, fix with `str_replace`',
-  'and call `done` again. Stop after 3 rounds.',
-  '',
-  '**Important limitation of `done`:** the runtime load only exercises whatever',
-  'renders on first paint. Hidden tabs, closed modals, collapsed accordions,',
-  'and drawer bodies never execute, so their `<UndefinedComponent />` bugs',
-  'survive. Before each `done` call, **manually audit component references**',
-  'per the "Component reference discipline" section above — this is your',
-  "responsibility, not `done`'s.",
-  '',
-  '## Pacing — interleave tool calls and prose',
-  '',
-  'Do not batch every tool call up-front and then dump a wall of text at the',
-  'end. The chat UI shows tool rows and assistant text bubbles in arrival',
-  'order, so a long silent run feels like a black box.',
-  '',
-  'Aim for a rhythm like:',
-  '  brief intro text  →  1-3 tool calls  →  one-line progress / reflection',
-  '  →  next 1-3 tool calls  →  one-line note  →  …  →  final summary',
-  '',
-  'Each prose line should be short (≤2 sentences) and explain *what just',
-  'happened* or *what comes next* — not summarize the file content (the user',
-  'sees that in the live preview). Avoid repeating yourself across turns.',
-  '',
-  '## Typography rules',
-  '',
-  'Use the right typeface for the right job — Fraunces is editorial display, not data display:',
-  '',
-  '- Headlines / display text → Fraunces (`var(--font-display)`), italic OK',
-  '- Numerical data (KPIs, tables, charts) → DM Sans or JetBrains Mono with',
-  "  `font-feature-settings: 'tnum'` for tabular alignment. Never italic.",
-  '- Body / UI text → DM Sans (`var(--font-sans)`)',
-  '- Code / file paths → JetBrains Mono',
-  '',
-  'For currency / large numerical KPIs ($4.81M), use sans-serif bold or mono medium —',
-  'italic serif numbers visually collide and feel low-quality.',
+  '- Keep `old_str` small and unique. Large replacements waste context and are fragile.',
+  '- Never view just to check whether an edit succeeded; the tool reports failures.',
+  '- Interleave brief prose with tool calls so the user can follow progress.',
 ].join('\n');
 
 const IMAGE_ASSET_TOOL_GUIDANCE = [
@@ -511,14 +422,11 @@ export interface GenerateViaAgentDeps {
   /** Retry callback — invoked with placeholder reasons today; present so the
    *  IPC layer can reuse the same onRetry signature as the legacy path. */
   onRetry?: ((info: RetryReason) => void) | undefined;
-  /**
-   * Phase 2 — tools the agent can call. When set, overrides the built-in
-   * default toolset (set_todos + text_editor when `fs` is provided). Pass
-   * `[]` to explicitly run with zero tools (single-turn behaviour).
-   */
+  /** Tools the agent can call. When set, overrides the built-in default toolset.
+   * Pass `[]` to explicitly run without tools in focused tests. */
   tools?: AgentTool<TSchema, unknown>[] | undefined;
   /**
-   * Virtual filesystem callbacks for the text_editor tool. When provided,
+   * Virtual filesystem callbacks for str_replace_based_edit_tool. When provided,
    * the default toolset includes `str_replace_based_edit_tool` wired to
    * these callbacks. When undefined, only `set_todos` is included.
    */
@@ -546,13 +454,9 @@ export interface GenerateViaAgentDeps {
 }
 
 /**
- * Route a generate() request through pi-agent-core's Agent with zero tools.
- *
- * Phase 1 invariant: produces the same artifact as generate() when called
- * with the same inputs. Events are emitted so Workstream C can subscribe to
- * a persistable stream, but the final GenerateOutput shape is identical.
- *
- * Not exposed through the IPC layer unless USE_AGENT_RUNTIME is truthy.
+ * Route a generate request through pi-agent-core's Agent and the v0.2 design
+ * tool surface. Events are emitted so the desktop shell can stream progress,
+ * tool calls, and file updates while preserving the GenerateOutput boundary.
  */
 export async function generateViaAgent(
   input: GenerateInput,
@@ -594,15 +498,21 @@ export async function generateViaAgent(
   const skillsBuiltinDir = input.templatesRoot
     ? path.join(input.templatesRoot, 'skills')
     : undefined;
-  const skillResult = input.systemPrompt
-    ? { blobs: [] as string[], warnings: [] as string[] }
-    : await collectSkills(log, input.model.provider, skillsBuiltinDir);
+  const resourceResult = input.systemPrompt
+    ? {
+        sections: [] as string[],
+        warnings: [] as string[],
+        skillCount: 0,
+        scaffoldCount: 0,
+        brandCount: 0,
+      }
+    : await collectResourceManifest(log, input.model.provider, input.templatesRoot);
   const systemPrompt =
     input.systemPrompt ??
     composeSystemPrompt({
       mode: 'create',
       userPrompt: input.prompt,
-      ...(skillResult.blobs.length > 0 ? { skills: skillResult.blobs } : {}),
+      ...(resourceResult.sections.length > 0 ? { resources: resourceResult.sections } : {}),
     });
 
   const userContent = buildUserPromptWithContext(
@@ -617,9 +527,11 @@ export async function generateViaAgent(
   // Assemble the toolset. Caller can pass an explicit list (including []) to
   // override the default. Defaults:
   //   - set_todos       (always — no deps)
-  //   - read_url        (always — uses global fetch)
-  //   - read_design_system (always — closes over the caller's designSystem)
-  //   - text_editor + list_files + done (when fs callbacks are provided)
+  //   - str_replace_based_edit_tool + done (when fs callbacks are provided)
+  //
+  // No generic network-fetch tool is installed here: external fetches must go
+  // through the host's permissioned tool path. DESIGN.md context is injected
+  // into the prompt instead of fetched through a side tool.
   const scaffoldsRoot = input.templatesRoot ? path.join(input.templatesRoot, 'scaffolds') : null;
   const brandRefsRoot = input.templatesRoot ? path.join(input.templatesRoot, 'brand-refs') : null;
   const defaultTools: AgentTool<TSchema, unknown>[] = [];
@@ -639,16 +551,8 @@ export async function generateViaAgent(
       () => scaffoldsRoot,
     ) as unknown as AgentTool<TSchema, unknown>,
   );
-  defaultTools.push(makeReadUrlTool() as unknown as AgentTool<TSchema, unknown>);
-  defaultTools.push(
-    makeReadDesignSystemTool(() => input.designSystem ?? null) as unknown as AgentTool<
-      TSchema,
-      unknown
-    >,
-  );
   if (deps.fs) {
     defaultTools.push(makeTextEditorTool(deps.fs) as unknown as AgentTool<TSchema, unknown>);
-    defaultTools.push(makeListFilesTool(deps.fs) as unknown as AgentTool<TSchema, unknown>);
     defaultTools.push(
       makeDoneTool(deps.fs, deps.runtimeVerify) as unknown as AgentTool<TSchema, unknown>,
     );
@@ -692,8 +596,10 @@ export async function generateViaAgent(
     ...ctx,
     ms: Date.now() - buildStart,
     messages: historyAsAgentMessages.length + 2,
-    skills: skillResult.blobs.length,
-    skillWarnings: skillResult.warnings.length,
+    skills: resourceResult.skillCount,
+    scaffolds: resourceResult.scaffoldCount,
+    brandRefs: resourceResult.brandCount,
+    resourceWarnings: resourceResult.warnings.length,
   });
 
   // Resolve reasoning/thinking level: explicit per-call override (sourced
@@ -783,8 +689,9 @@ export async function generateViaAgent(
   // accumulated in pi-agent-core's internal loop) — retrying would replay
   // partial progress and corrupt the session. Even on the first turn, retrying
   // is safe only before any assistant message has landed in `agent.state`:
-  // once the model has emitted tokens or tool calls, side effects (text_editor
-  // writes, set_todos state) have already fired and a retry would re-run them.
+  // once the model has emitted tokens or tool calls, side effects
+  // (str_replace_based_edit_tool writes, set_todos state) have already fired
+  // and a retry would re-run them.
   // The pre-attempt snapshot of `agent.state.messages.length` lets us detect
   // whether the failed attempt produced any such artefact and, if so, mark the
   // error as non-retryable.
@@ -888,9 +795,9 @@ export async function generateViaAgent(
 
   const collected: Collected = { text: fullText, artifacts: [] };
 
-  // The agent writes artifacts through the text_editor tool — final assistant
-  // text is prose, not an `<artifact>` blob. Pull index.html out of the
-  // virtual FS to populate the artifact list.
+  // The agent writes artifacts through str_replace_based_edit_tool — final
+  // assistant text is prose, not an `<artifact>` blob. Pull index.html out of
+  // the virtual FS to populate the artifact list.
   if (deps.fs) {
     const file = deps.fs.view('index.html');
     if (file !== null && file.content.trim().length > 0) {
@@ -911,8 +818,8 @@ export async function generateViaAgent(
     outputTokens: usage?.output ?? 0,
     costUsd: usage?.cost?.total ?? 0,
   };
-  return skillResult.warnings.length > 0
-    ? { ...output, warnings: [...(output.warnings ?? []), ...skillResult.warnings] }
+  return resourceResult.warnings.length > 0
+    ? { ...output, warnings: [...(output.warnings ?? []), ...resourceResult.warnings] }
     : output;
 }
 

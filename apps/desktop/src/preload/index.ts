@@ -134,11 +134,10 @@ export interface Preferences {
 }
 
 /**
- * Streaming events emitted by the (future) Agent runtime. Phase 1 emits
- * turn_start / text_delta / turn_end. Phase 2 adds tool_call_*. Kept
- * deliberately loose so Workstream B can evolve the shape without a
- * lockstep change here — useAgentStream in the renderer tolerates unknown
- * event types by ignoring them.
+ * Streaming events emitted by the live agent runtime. Kept deliberately loose
+ * so the core event shape can evolve without a lockstep preload change —
+ * useAgentStream in the renderer tolerates unknown event types by ignoring
+ * them.
  */
 export interface AgentStreamEvent {
   type:
@@ -170,7 +169,7 @@ export interface AgentStreamEvent {
   // tool_call_result
   result?: unknown;
   durationMs?: number;
-  // fs_updated — emitted whenever the agent's text_editor mutates a file in the
+  // fs_updated — emitted whenever the agent edit tool mutates a file in the
   // virtual fs. Renderer uses this to re-render the iframe live during
   // generation so the user can watch the design take shape.
   path?: string;

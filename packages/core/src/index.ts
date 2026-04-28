@@ -11,7 +11,7 @@ import type {
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type GenerateViaAgentDeps, generateViaAgent as runAgent } from './agent.js';
 import { remapProviderError } from './errors.js';
-import { buildContextSections } from './lib/context-format.js';
+import { formatUntrustedContext } from './lib/context-format.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt, type PromptComposeOptions } from './prompts/index.js';
 
@@ -65,18 +65,12 @@ export {
   type GenerateImageAssetResult,
   makeGenerateImageAssetTool,
 } from './tools/generate-image-asset.js';
-export { type ListFilesDetails, makeListFilesTool } from './tools/list-files.js';
 export {
   makePreviewTool,
   type PreviewResult,
   type RunPreviewFn,
   trimPreviewResult,
 } from './tools/preview.js';
-export {
-  makeReadDesignSystemTool,
-  type ReadDesignSystemDetails,
-} from './tools/read-design-system.js';
-export { makeReadUrlTool, type ReadUrlDetails } from './tools/read-url.js';
 export { makeScaffoldTool, type ScaffoldDetails } from './tools/scaffold.js';
 export { makeSetTitleTool, normalizeTitle, type SetTitleDetails } from './tools/set-title.js';
 export { makeSetTodosTool, type SetTodosDetails } from './tools/set-todos.js';
@@ -201,7 +195,7 @@ export interface ApplyCommentInput {
   model: ModelRef;
   apiKey: string;
   /** Absolute path to the design's workspace root. The agent edits
-   *  `<workspaceRoot>/index.html` directly via `text_editor`. */
+   *  `<workspaceRoot>/index.html` through `str_replace_based_edit_tool`. */
   workspaceRoot: string;
   /** @see GenerateInput.templatesRoot */
   templatesRoot?: string | undefined;
@@ -236,34 +230,27 @@ export interface GenerateOutput {
 export interface BuildApplyCommentPromptInput {
   comment: string;
   selection: SelectedElement;
-  designSystem?: StoredDesignSystem | null | undefined;
-  attachments?: AttachmentContext[] | undefined;
-  referenceUrl?: ReferenceUrlContext | null | undefined;
 }
 
 export function buildApplyCommentUserPrompt(input: BuildApplyCommentPromptInput): string {
-  const contextSections = buildContextSections({
-    ...(input.designSystem !== undefined ? { designSystem: input.designSystem } : {}),
-    ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
-    ...(input.referenceUrl !== undefined ? { referenceUrl: input.referenceUrl } : {}),
-  });
+  const selectedElementContext = formatUntrustedContext(
+    'selected_element',
+    'The following DOM metadata and HTML snippet identify the selected element for the requested edit.',
+    [
+      `Selected element tag: <${input.selection.tag}>`,
+      `Selected element selector: ${input.selection.selector}`,
+      `Selected element snippet:\n${input.selection.outerHTML || '(empty)'}`,
+    ].join('\n'),
+  );
   const parts = [
     'Revise the HTML that is already in the workspace at `index.html`.',
     'Keep the overall structure, copy, and layout intact unless the user request requires a broader change.',
     'Prioritize the selected element first and avoid unrelated edits.',
     `User request: ${input.comment.trim()}`,
-    `Selected element tag: <${input.selection.tag}>`,
-    `Selected element selector: ${input.selection.selector}`,
-    `Selected element snippet:\n${input.selection.outerHTML || '(empty)'}`,
+    selectedElementContext,
   ];
-  if (contextSections.length > 0) {
-    parts.push(
-      'You also have the following supporting context. Use it to preserve brand consistency while applying the requested change.',
-    );
-    parts.push(contextSections.join('\n\n'));
-  }
   parts.push(
-    'Edit the file with the `text_editor` tool — do NOT paste HTML in chat. When done, call the `done` tool. Keep the reply short; no narration beyond the required ≤15-word tool-call intros.',
+    'Edit the file with `str_replace_based_edit_tool` using `command: "view"` and `command: "str_replace"` — do NOT paste HTML in chat. When done, call the `done` tool. Keep the reply short; no narration beyond the required ≤15-word tool-call intros.',
   );
   return parts.join('\n\n');
 }
@@ -420,9 +407,6 @@ export async function applyComment(
   const userPrompt = buildApplyCommentUserPrompt({
     comment: input.comment,
     selection: input.selection,
-    ...(input.designSystem !== undefined ? { designSystem: input.designSystem } : {}),
-    ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
-    ...(input.referenceUrl !== undefined ? { referenceUrl: input.referenceUrl } : {}),
   });
   log.info('[apply_comment] step=build_request.ok', {
     ...ctx,

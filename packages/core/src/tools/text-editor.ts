@@ -1,5 +1,5 @@
 /**
- * Phase 2 — text_editor tool wired to the design_files virtual FS.
+ * str_replace_based_edit_tool wired to the workspace-backed virtual FS.
  *
  * Mirrors Anthropic's native `str_replace_based_edit_tool` shape so Claude
  * models recognize it without extra schema training. Other models that
@@ -96,8 +96,11 @@ export function makeTextEditorTool(
                 throw new Error('view_range must be [startLine, endLine] as two numbers');
               }
               const lines = file.content.split('\n');
-              const start = Math.max(1, Math.floor(rawStart));
-              const end = rawEnd === -1 ? lines.length : Math.max(start, Math.floor(rawEnd));
+              const eof = lines.length;
+              const normalizeBound = (value: number): number =>
+                value === -1 ? eof : Math.max(1, Math.floor(value));
+              const start = Math.min(normalizeBound(rawStart), eof);
+              const end = rawEnd === -1 ? eof : Math.max(start, normalizeBound(rawEnd));
               const clampedEnd = Math.min(end, lines.length);
               const slice = lines
                 .slice(start - 1, clampedEnd)

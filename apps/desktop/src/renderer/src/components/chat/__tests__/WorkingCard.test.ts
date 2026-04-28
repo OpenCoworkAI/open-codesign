@@ -114,4 +114,15 @@ describe('WorkingCard.buildRows', () => {
     const rows = buildRows(calls);
     expect(rows[0]?.status).toBe('running');
   });
+
+  it('demotes removed helper tools to a generic legacy row', () => {
+    const rows = buildRows([
+      call({ toolName: 'read_url', args: { url: 'https://example.com' } }),
+      call({ toolName: 'text_editor', command: 'str_replace', args: { path: 'index.html' } }),
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.label)).toEqual(['legacy tool', 'legacy tool']);
+    expect(rows.map((row) => row.detail)).toEqual(['https://example.com', 'index.html']);
+  });
 });

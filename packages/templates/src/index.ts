@@ -21,7 +21,6 @@ export {
   getExamples,
   type LocalizedExample,
 } from './examples/index';
-export { SYSTEM_PROMPTS, type SystemPromptId } from './system/index';
 
 export interface DemoTemplate {
   id: string;

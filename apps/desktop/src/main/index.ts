@@ -197,8 +197,8 @@ if (!IS_VITEST) {
       const templatesSource = resolveBundledTemplatesDir(process.resourcesPath);
       const seeded = await ensureUserTemplates(app.getPath('userData'), templatesSource);
       bootLog.info('templates.ensure', { ...seeded });
-      // One-shot migration for feat-branch testers whose config.toml still
-      // carries Phase 1's stale codex wire/baseUrl. No-op on fresh installs.
+      // One-shot migration for experimental-branch testers whose config.toml
+      // still carries stale codex wire/baseUrl. No-op on fresh installs.
       await migrateStaleCodexEntryIfNeeded();
       // Best-effort sweep of leftover `<file>.tmp.<pid>` siblings from previous
       // crashes. pid changes across restarts so without this the config dir
