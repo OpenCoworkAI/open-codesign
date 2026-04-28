@@ -14,6 +14,7 @@ import { TopBar } from './components/TopBar';
 import { UpdateBanner } from './components/UpdateBanner';
 import { CommentsPanel } from './components/comment/CommentsPanel';
 import { ReportEventDialog } from './components/diagnostics/ReportEventDialog';
+import { useEngineeringWiring } from './hooks/useEngineeringWiring';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useUpdateWiring } from './hooks/useUpdateWiring';
 import { createUpdateStore } from './state/update-store';
@@ -55,6 +56,7 @@ export function App() {
 
   const [updateStore] = useState(() => createUpdateStore({ dismissedVersion: '' }));
   useUpdateWiring(updateStore);
+  useEngineeringWiring();
 
   useEffect(() => {
     if (!window.codesign) {

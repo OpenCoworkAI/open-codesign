@@ -11,6 +11,7 @@ import type {
   Design,
   DiagnosticEventRow,
   DiagnosticHypothesis,
+  EngineeringRunState,
   LocalInputFile,
   ModelRef,
   OnboardingState,
@@ -174,6 +175,13 @@ interface CodesignState {
   previewHtmlByDesign: Record<string, string>;
   /** Most-recent-first list of design ids in the preview pool. */
   recentDesignIds: string[];
+  /** v0.2 engineering mode — latest run state per design id, keyed for
+   *  multi-tab support. PreviewPane reads readyUrl from here when the design
+   *  is in 'engineering' mode. Updated by useEngineeringWiring on every
+   *  engine:v1:run-state broadcast. Bumping refreshTick triggers an iframe
+   *  remount without re-spawning the dev server. */
+  engineeringRunStateByDesign: Record<string, EngineeringRunState>;
+  engineeringRefreshTickByDesign: Record<string, number>;
   isGenerating: boolean;
   activeGenerationId: string | null;
   /** Design id that owns the in-flight generation. Lets the user switch to
@@ -357,6 +365,16 @@ interface CodesignState {
    *  asks main to detect the React project, persists the EngineeringConfig,
    *  and switches to the new design. Returns null on cancel/failure. */
   createNewEngineeringDesign: (workspacePath?: string) => Promise<Design | null>;
+  /** Apply a run-state broadcast to the keyed slot. Called by the engine
+   *  wiring hook on every engine:v1:run-state event. */
+  setEngineeringRunState: (state: EngineeringRunState) => void;
+  /** Kick off install (if needed) + dev server for the design. No-op when
+   *  the design is not in engineering mode or no engineering config exists. */
+  startEngineeringSession: (designId: string) => Promise<void>;
+  stopEngineeringSession: (designId: string) => Promise<void>;
+  /** Bump the per-design refresh tick so PreviewPane remounts the iframe;
+   *  also pings the runtime so subscribers re-receive the current state. */
+  refreshEngineeringSession: (designId: string) => Promise<void>;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string) => Promise<void>;
@@ -1310,6 +1328,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   previewHtml: null,
   previewHtmlByDesign: {},
   recentDesignIds: [],
+  engineeringRunStateByDesign: {},
+  engineeringRefreshTickByDesign: {},
   isGenerating: false,
   activeGenerationId: null,
   generatingDesignId: null,
@@ -2052,6 +2072,60 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         description: msg,
       });
       return null;
+    }
+  },
+
+  setEngineeringRunState(state) {
+    set((s) => ({
+      engineeringRunStateByDesign: {
+        ...s.engineeringRunStateByDesign,
+        [state.designId]: state,
+      },
+    }));
+  },
+
+  async startEngineeringSession(designId) {
+    if (!window.codesign) return;
+    try {
+      const state = await window.codesign.engine.start(designId);
+      get().setEngineeringRunState(state);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: 'Engineering: failed to start dev server',
+        description: msg,
+      });
+    }
+  },
+
+  async stopEngineeringSession(designId) {
+    if (!window.codesign) return;
+    try {
+      const state = await window.codesign.engine.stop(designId);
+      get().setEngineeringRunState(state);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: 'Engineering: failed to stop dev server',
+        description: msg,
+      });
+    }
+  },
+
+  async refreshEngineeringSession(designId) {
+    if (!window.codesign) return;
+    set((s) => ({
+      engineeringRefreshTickByDesign: {
+        ...s.engineeringRefreshTickByDesign,
+        [designId]: (s.engineeringRefreshTickByDesign[designId] ?? 0) + 1,
+      },
+    }));
+    try {
+      await window.codesign.engine.refresh(designId);
+    } catch {
+      // best-effort; the iframe key bump above is the user-visible action.
     }
   },
 
