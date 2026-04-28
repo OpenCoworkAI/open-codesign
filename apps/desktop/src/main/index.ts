@@ -45,6 +45,7 @@ import { scanDesignSystem } from './design-system';
 import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { makeRuntimeVerifier } from './done-verify';
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from './electron-runtime';
+import { registerEngineeringIpc, shutdownEngineeringRuntime } from './engineering-ipc';
 import { registerExporterIpc } from './exporter-ipc';
 import {
   armGenerationTimeout,
@@ -1324,6 +1325,7 @@ if (!IS_VITEST) {
         registerWorkspaceIpc(dbResult.db, () => mainWindow);
         registerChatMessagesIpc(dbResult.db);
         registerCommentsIpc(dbResult.db);
+        registerEngineeringIpc(dbResult.db);
         try {
           pruneDiagnosticEvents(dbResult.db, 500);
         } catch (err) {
@@ -1386,6 +1388,7 @@ if (!IS_VITEST) {
   });
 
   app.on('window-all-closed', () => {
+    shutdownEngineeringRuntime();
     if (process.platform !== 'darwin') app.quit();
   });
 }

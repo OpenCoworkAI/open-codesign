@@ -28,8 +28,10 @@ import type {
   DiagnosticEventInput,
   DiagnosticEventRow,
   DiagnosticLevel,
+  EngineeringConfig,
   SnapshotCreateInput,
 } from '@open-codesign/shared';
+import { EngineeringConfigV1 } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import { getLogger } from './logger';
 
@@ -211,6 +213,19 @@ function applyAdditiveMigrations(db: Database): void {
   if (!designCols.includes('workspace_path')) {
     db.exec('ALTER TABLE designs ADD COLUMN workspace_path TEXT');
   }
+  if (!designCols.includes('mode')) {
+    // Engineering-mode v0.2: 'generative' (default) or 'engineering'. Stored
+    // as TEXT so future modes can land without a numeric remap. Existing
+    // rows backfill to NULL → readers treat NULL as 'generative'.
+    db.exec('ALTER TABLE designs ADD COLUMN mode TEXT');
+  }
+  if (!designCols.includes('engineering_json')) {
+    // Serialized EngineeringConfigV1 (framework + packageManager + saved
+    // launchEntry + lastReadyUrl). NULL until the user completes the
+    // detect/ack flow. Kept as a JSON blob rather than splitting columns so
+    // schema bumps stay additive inside the JSON.
+    db.exec('ALTER TABLE designs ADD COLUMN engineering_json TEXT');
+  }
 
   // Comments v2 — add scope ('element'|'global') and parent_outer_html for
   // richer prompt enrichment. Both are additive; old rows backfill to
@@ -356,6 +371,8 @@ interface DesignRow {
   thumbnail_text: string | null;
   deleted_at: string | null;
   workspace_path: string | null;
+  mode: string | null;
+  engineering_json: string | null;
 }
 
 interface SnapshotRow {
@@ -384,6 +401,20 @@ interface MessageRow {
 // ---------------------------------------------------------------------------
 
 function rowToDesign(row: DesignRow): Design {
+  // engineering_json is best-effort: if a row got corrupted (manual edit,
+  // partial migration), surface the design without engineering config rather
+  // than failing list/get. The renderer will treat missing config as
+  // "detection not yet completed" and re-run detect.
+  let engineering: Design['engineering'] = undefined;
+  if (row.engineering_json !== null) {
+    try {
+      const parsed = EngineeringConfigV1.safeParse(JSON.parse(row.engineering_json));
+      if (parsed.success) engineering = parsed.data;
+    } catch {
+      engineering = undefined;
+    }
+  }
+  const mode: Design['mode'] = row.mode === 'engineering' ? 'engineering' : undefined;
   return {
     schemaVersion: 1,
     id: row.id,
@@ -393,6 +424,8 @@ function rowToDesign(row: DesignRow): Design {
     thumbnailText: row.thumbnail_text ?? null,
     deletedAt: row.deleted_at ?? null,
     workspacePath: row.workspace_path ?? null,
+    ...(mode !== undefined ? { mode } : {}),
+    ...(engineering !== undefined ? { engineering } : {}),
   };
 }
 
@@ -492,6 +525,44 @@ export function clearDesignWorkspace(db: Database, id: string): Design | null {
   const result = db
     .prepare('UPDATE designs SET workspace_path = NULL, updated_at = ? WHERE id = ?')
     .run(now, id);
+  if (result.changes === 0) return null;
+  return getDesign(db, id);
+}
+
+/**
+ * Mark a design as engineering mode. Idempotent: passing 'generative' (or
+ * undefined) clears the column. updated_at is bumped so the sidebar reorders.
+ */
+export function setDesignMode(
+  db: Database,
+  id: string,
+  mode: 'generative' | 'engineering' | undefined,
+): Design | null {
+  const now = new Date().toISOString();
+  const value = mode === 'engineering' ? 'engineering' : null;
+  const result = db
+    .prepare('UPDATE designs SET mode = ?, updated_at = ? WHERE id = ?')
+    .run(value, now, id);
+  if (result.changes === 0) return null;
+  return getDesign(db, id);
+}
+
+/**
+ * Persist the engineering config (framework, package manager, saved launch
+ * entry, last ready URL). Pass null to clear. The DB layer accepts the
+ * already-validated EngineeringConfig from the IPC layer — no re-validation
+ * here, since we'll re-parse on read anyway.
+ */
+export function setEngineeringConfig(
+  db: Database,
+  id: string,
+  config: EngineeringConfig | null,
+): Design | null {
+  const now = new Date().toISOString();
+  const json = config === null ? null : JSON.stringify(config);
+  const result = db
+    .prepare('UPDATE designs SET engineering_json = ?, updated_at = ? WHERE id = ?')
+    .run(json, now, id);
   if (result.changes === 0) return null;
   return getDesign(db, id);
 }
