@@ -4,6 +4,7 @@ import {
   type IframeErrorMessage,
   type OverlayMessage,
   buildSrcdoc,
+  injectOverlayBridge,
   isElementRectsMessage,
   isIframeErrorMessage,
   isOverlayMessage,
@@ -209,8 +210,21 @@ function PreviewSlot({
       title={`design-preview-${designId}`}
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
       src={previewUrl}
-      onLoad={() => {
+      onLoad={(e) => {
         if (!active) return;
+        const target = e.currentTarget as HTMLIFrameElement;
+        // Inject the same overlay IIFE the srcdoc sandbox uses, so element
+        // selection / WATCH_SELECTORS / IFRAME_ERROR all work against the
+        // live dev server. Failure here means the iframe is cross-origin
+        // (rare on localhost; happens if the user navigates to an external
+        // page) — we surface as an iframe error so the user sees why
+        // selection stopped working.
+        const result = injectOverlayBridge(target);
+        if (result.ok === false) {
+          onIframeError(`Engineering preview: ${result.reason} (${result.message})`);
+          return;
+        }
+        postModeToPreviewWindow(target.contentWindow, interactionMode, onIframeError);
         onIframeLoaded(designId);
       }}
       className={

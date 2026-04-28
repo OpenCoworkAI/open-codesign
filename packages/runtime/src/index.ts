@@ -30,6 +30,8 @@ export { OVERLAY_SCRIPT, isOverlayMessage, isElementRectsMessage } from './overl
 export type { OverlayMessage, ElementRectsMessage } from './overlay';
 export { isIframeErrorMessage } from './iframe-errors';
 export type { IframeErrorMessage } from './iframe-errors';
+export { injectOverlayBridge } from './bridge-inject';
+export type { InjectionResult } from './bridge-inject';
 
 const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
 const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
