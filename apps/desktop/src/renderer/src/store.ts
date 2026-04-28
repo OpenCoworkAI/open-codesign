@@ -161,6 +161,27 @@ export interface UsageSnapshot {
   costUsd: number;
 }
 
+/**
+ * Renderer-side projection of `ComponentSelectedMessage`. Mirrors the wire
+ * shape (no `domSelector` / `legacyOuterHTML` — those are tracked separately
+ * via the existing `selectedElement`). Source-path resolution from absolute
+ * `debugSource.fileName` to a workspace-relative `filePath` is deferred to
+ * U9 / U10 since it requires per-design workspace context.
+ */
+export interface ComponentSelectionRendererPayload {
+  selector: string;
+  componentName: string;
+  ownerChain: string[];
+  debugSource: {
+    fileName: string;
+    lineNumber: number;
+    columnNumber?: number;
+  } | null;
+  /** Wall-clock receipt time so consumers can drop stale entries when a
+   *  selector is reused across designs / page reloads. */
+  receivedAt: number;
+}
+
 interface PromptRequest {
   prompt: string;
   attachments: LocalInputFile[];
@@ -182,6 +203,12 @@ interface CodesignState {
    *  remount without re-spawning the dev server. */
   engineeringRunStateByDesign: Record<string, EngineeringRunState>;
   engineeringRefreshTickByDesign: Record<string, number>;
+  /** Engineering-mode component metadata, keyed by DOM selector. Populated
+   *  by COMPONENT_SELECTED messages from the React inspector script the
+   *  renderer injects into URL-mode iframes. Consumers (comment composer,
+   *  agent context — U9 / U10) look this up for the current selection's
+   *  selector to enrich the primary context beyond raw outerHTML. */
+  componentSelectionBySelector: Record<string, ComponentSelectionRendererPayload>;
   isGenerating: boolean;
   activeGenerationId: string | null;
   /** Design id that owns the in-flight generation. Lets the user switch to
@@ -375,6 +402,9 @@ interface CodesignState {
   /** Bump the per-design refresh tick so PreviewPane remounts the iframe;
    *  also pings the runtime so subscribers re-receive the current state. */
   refreshEngineeringSession: (designId: string) => Promise<void>;
+  /** Stash component metadata received from the React inspector (U8). U9 will
+   *  read this from the comment composer; U10 from the agent context builder. */
+  attachComponentSelection: (payload: ComponentSelectionRendererPayload) => void;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string) => Promise<void>;
@@ -1330,6 +1360,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   recentDesignIds: [],
   engineeringRunStateByDesign: {},
   engineeringRefreshTickByDesign: {},
+  componentSelectionBySelector: {},
   isGenerating: false,
   activeGenerationId: null,
   generatingDesignId: null,
@@ -2080,6 +2111,15 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       engineeringRunStateByDesign: {
         ...s.engineeringRunStateByDesign,
         [state.designId]: state,
+      },
+    }));
+  },
+
+  attachComponentSelection(payload) {
+    set((s) => ({
+      componentSelectionBySelector: {
+        ...s.componentSelectionBySelector,
+        [payload.selector]: payload,
       },
     }));
   },

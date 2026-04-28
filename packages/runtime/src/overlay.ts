@@ -159,6 +159,27 @@ export const OVERLAY_SCRIPT = `(function() {
           rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
         }, '*');
       } catch (err) { console.warn('[overlay] postMessage ELEMENT_SELECTED failed:', err); }
+      // Engineering mode (U8): if the React inspector is available, follow up
+      // with a COMPONENT_SELECTED carrying fiber-derived metadata. The desktop
+      // store treats this as an enrichment of the just-posted ELEMENT_SELECTED
+      // (matched by selector). Failure / no-fiber → silently degrade to the
+      // plain ELEMENT_SELECTED already sent.
+      try {
+        var inspect = window.__codesignReactInspect;
+        if (typeof inspect === 'function') {
+          var meta = inspect(el);
+          if (meta && meta.componentName) {
+            window.parent.postMessage({
+              __codesign: true,
+              type: 'COMPONENT_SELECTED',
+              selector: selector,
+              componentName: String(meta.componentName),
+              ownerChain: Array.isArray(meta.ownerChain) ? meta.ownerChain.slice(0, 6) : [],
+              debugSource: meta.debugSource || null
+            }, '*');
+          }
+        }
+      } catch (err) { warnOnce('postMessage COMPONENT_SELECTED failed', err); }
       return;
     }
     // Default mode: block ALL navigating links — the sandbox iframe has no
@@ -374,6 +395,56 @@ export function isElementRectsMessage(data: unknown): data is ElementRectsMessag
     ) {
       return false;
     }
+  }
+  return true;
+}
+
+/**
+ * Engineering-mode enrichment for the previous `ELEMENT_SELECTED`. The
+ * overlay posts this back-to-back with `ELEMENT_SELECTED` whenever the
+ * injected React inspector resolves a fiber for the clicked node. Consumers
+ * match on `selector` to attach the metadata to the same pending selection.
+ */
+export interface ComponentSelectedMessage {
+  __codesign: true;
+  type: 'COMPONENT_SELECTED';
+  selector: string;
+  componentName: string;
+  ownerChain: string[];
+  debugSource: {
+    fileName: string;
+    lineNumber: number;
+    columnNumber?: number;
+  } | null;
+}
+
+export function isComponentSelectedMessage(data: unknown): data is ComponentSelectedMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const d = data as {
+    __codesign?: boolean;
+    type?: string;
+    selector?: unknown;
+    componentName?: unknown;
+    ownerChain?: unknown;
+    debugSource?: unknown;
+  };
+  if (d.__codesign !== true || d.type !== 'COMPONENT_SELECTED') return false;
+  if (typeof d.selector !== 'string' || d.selector.length === 0) return false;
+  if (typeof d.componentName !== 'string' || d.componentName.length === 0) return false;
+  if (!Array.isArray(d.ownerChain)) return false;
+  for (const owner of d.ownerChain) {
+    if (typeof owner !== 'string') return false;
+  }
+  if (d.debugSource !== null) {
+    if (typeof d.debugSource !== 'object' || d.debugSource === null) return false;
+    const ds = d.debugSource as {
+      fileName?: unknown;
+      lineNumber?: unknown;
+      columnNumber?: unknown;
+    };
+    if (typeof ds.fileName !== 'string' || ds.fileName.length === 0) return false;
+    if (typeof ds.lineNumber !== 'number') return false;
+    if (ds.columnNumber !== undefined && typeof ds.columnNumber !== 'number') return false;
   }
   return true;
 }

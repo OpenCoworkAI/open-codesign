@@ -1,10 +1,13 @@
 import { useT } from '@open-codesign/i18n';
 import {
+  type ComponentSelectedMessage,
   type ElementRectsMessage,
   type IframeErrorMessage,
   type OverlayMessage,
   buildSrcdoc,
   injectOverlayBridge,
+  injectReactInspector,
+  isComponentSelectedMessage,
   isElementRectsMessage,
   isIframeErrorMessage,
   isOverlayMessage,
@@ -88,12 +91,19 @@ export function stablePreviewSourceKey(source: string): string {
     );
 }
 
-export type AllowedPreviewMessageType = 'ELEMENT_SELECTED' | 'IFRAME_ERROR' | 'ELEMENT_RECTS';
+export type AllowedPreviewMessageType =
+  | 'ELEMENT_SELECTED'
+  | 'IFRAME_ERROR'
+  | 'ELEMENT_RECTS'
+  | 'COMPONENT_SELECTED';
 
 export interface PreviewMessageHandlers {
   onElementSelected: (msg: OverlayMessage) => void;
   onIframeError: (msg: IframeErrorMessage) => void;
   onElementRects: (msg: ElementRectsMessage) => void;
+  /** Engineering-mode enrichment (U8). Optional so older callers / tests
+   *  that only care about the legacy 3-message surface keep compiling. */
+  onComponentSelected?: (msg: ComponentSelectedMessage) => void;
 }
 
 export type PreviewMessageOutcome =
@@ -129,6 +139,12 @@ export function handlePreviewMessage(
       if (isElementRectsMessage(data)) {
         handlers.onElementRects(data);
         return { status: 'handled', type: 'ELEMENT_RECTS' };
+      }
+      return { status: 'rejected', reason: 'shape', type: envelope.type };
+    case 'COMPONENT_SELECTED':
+      if (isComponentSelectedMessage(data)) {
+        handlers.onComponentSelected?.(data);
+        return { status: 'handled', type: 'COMPONENT_SELECTED' };
       }
       return { status: 'rejected', reason: 'shape', type: envelope.type };
     default:
@@ -224,6 +240,10 @@ function PreviewSlot({
           onIframeError(`Engineering preview: ${result.reason} (${result.message})`);
           return;
         }
+        // Engineering mode (U8): also inject the React inspector. Failures
+        // here are non-fatal — the overlay still posts ELEMENT_SELECTED,
+        // we just lose component-name enrichment for that page load.
+        injectReactInspector(target);
         postModeToPreviewWindow(target.contentWindow, interactionMode, onIframeError);
         onIframeLoaded(designId);
       }}
@@ -385,6 +405,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const clearError = useCodesignStore((s) => s.clearError);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
+  const attachComponentSelection = useCodesignStore((s) => s.attachComponentSelection);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
@@ -502,6 +523,15 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         onElementRects: (msg) => {
           applyLiveRects(msg.entries);
         },
+        onComponentSelected: (msg) => {
+          attachComponentSelection({
+            selector: msg.selector,
+            componentName: msg.componentName,
+            ownerChain: msg.ownerChain,
+            debugSource: msg.debugSource,
+            receivedAt: Date.now(),
+          });
+        },
       });
 
       if (outcome.status === 'rejected' && outcome.reason === 'unknown-type') {
@@ -511,7 +541,14 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [pushIframeError, selectCanvasElement, openCommentBubble, previewZoom, applyLiveRects]);
+  }, [
+    pushIframeError,
+    selectCanvasElement,
+    openCommentBubble,
+    previewZoom,
+    applyLiveRects,
+    attachComponentSelection,
+  ]);
 
   // Pool entries: active design first (using the freshest in-memory
   // previewHtml), then any other recently-visited designs that still have a

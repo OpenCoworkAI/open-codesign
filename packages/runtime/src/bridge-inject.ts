@@ -21,9 +21,11 @@
  */
 
 import { OVERLAY_SCRIPT } from './overlay';
+import { REACT_INSPECTOR_SCRIPT } from './react-inspector';
 
-/** Tracks which documents we've already injected into during their lifetime. */
-const injectedDocuments = new WeakSet<object>();
+/** Tracks which documents we've already injected each script into. */
+const injectedOverlay = new WeakSet<object>();
+const injectedInspector = new WeakSet<object>();
 
 /** Minimal structural shape of a script element we need to mutate. */
 interface ScriptLike {
@@ -69,7 +71,7 @@ export function injectOverlayBridge(iframe: IframeLike): InjectionResult {
     return { ok: false, reason: 'no-document', message: 'iframe.contentDocument is null' };
   }
   const docKey = doc as unknown as object;
-  if (injectedDocuments.has(docKey)) {
+  if (injectedOverlay.has(docKey)) {
     return { ok: true };
   }
   try {
@@ -80,7 +82,54 @@ export function injectOverlayBridge(iframe: IframeLike): InjectionResult {
       return { ok: false, reason: 'no-document', message: 'document has no head/root' };
     }
     target.appendChild(script);
-    injectedDocuments.add(docKey);
+    injectedOverlay.add(docKey);
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: 'append-failed',
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Inject the React fiber inspector script. Engineering-mode only: callers
+ * should invoke this immediately after `injectOverlayBridge` for URL-mode
+ * iframes. The script publishes `window.__codesignReactInspect(node)` which
+ * the overlay's click handler calls to enrich `ELEMENT_SELECTED` with a
+ * `COMPONENT_SELECTED` companion message when a fiber is found.
+ *
+ * Idempotent per document via a separate WeakSet so a navigation re-injects
+ * automatically (the new document is a new key).
+ */
+export function injectReactInspector(iframe: IframeLike): InjectionResult {
+  let doc: DocumentLike | null;
+  try {
+    doc = iframe.contentDocument;
+  } catch (err) {
+    return {
+      ok: false,
+      reason: 'cross-origin',
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+  if (doc === null) {
+    return { ok: false, reason: 'no-document', message: 'iframe.contentDocument is null' };
+  }
+  const docKey = doc as unknown as object;
+  if (injectedInspector.has(docKey)) {
+    return { ok: true };
+  }
+  try {
+    const script = doc.createElement('script');
+    script.textContent = REACT_INSPECTOR_SCRIPT;
+    const target: AppendTarget | null = doc.head ?? doc.documentElement;
+    if (target === null) {
+      return { ok: false, reason: 'no-document', message: 'document has no head/root' };
+    }
+    target.appendChild(script);
+    injectedInspector.add(docKey);
     return { ok: true };
   } catch (err) {
     return {
