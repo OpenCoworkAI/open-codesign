@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { ComponentSelectionV1, EngineeringConfigV1 } from './engineering';
+
+export const DesignModeV1 = z.enum(['generative', 'engineering']);
+export type DesignMode = z.infer<typeof DesignModeV1>;
 
 export const DesignSnapshotV1 = z.object({
   schemaVersion: z.literal(1).default(1),
@@ -23,6 +27,11 @@ export const DesignV1 = z.object({
   thumbnailText: z.string().nullable().default(null),
   deletedAt: z.string().nullable().default(null),
   workspacePath: z.string().nullable().default(null),
+  /** v0.2 engineering-mode addition. Optional in the inferred output type so
+   *  legacy consumers constructing Design literals don't break — readers
+   *  should treat `undefined` as 'generative'. */
+  mode: DesignModeV1.optional(),
+  engineering: EngineeringConfigV1.nullable().optional(),
 });
 export type Design = z.infer<typeof DesignV1>;
 
@@ -162,6 +171,11 @@ export const CommentRowV1 = z.object({
   /** v2 enrichment — parent element's outerHTML (truncated). Optional so
    *  pre-v2 rows still parse without it. */
   parentOuterHTML: z.string().optional(),
+  /** v3 enrichment (engineering mode, U9) — populated when the React inspector
+   *  resolved the click to a component. When present, this is the primary
+   *  context surfaced to UI and agent prompts; `outerHTML` falls back to a
+   *  legacy/debug field. Optional so pre-v3 rows still parse. */
+  componentSelection: ComponentSelectionV1.nullable().optional(),
 });
 export type CommentRow = z.infer<typeof CommentRowV1>;
 
@@ -176,6 +190,7 @@ export interface CommentCreateInput {
   text: string;
   scope?: CommentScope;
   parentOuterHTML?: string;
+  componentSelection?: z.infer<typeof ComponentSelectionV1> | null;
 }
 
 export interface CommentUpdateInput {

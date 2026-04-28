@@ -9,8 +9,11 @@ import type {
   CommentStatus,
   Design,
   DesignSnapshot,
+  EngineeringConfig,
+  EngineeringRunState,
   ExternalConfigsDetection,
   GeneratePayloadV1,
+  LaunchEntry,
   ListEventsInput,
   ListEventsResult,
   LocalInputFile,
@@ -572,6 +575,68 @@ const api = {
   },
   openExternal: (url: string) =>
     ipcRenderer.invoke('codesign:v1:open-external', url) as Promise<void>,
+  /** Engineering mode (U1 contract — implementations land in U2/U3/U5). */
+  engine: {
+    detect: (workspacePath: string) =>
+      ipcRenderer.invoke('engine:v1:detect', {
+        schemaVersion: 1,
+        workspacePath,
+      }) as Promise<{
+        framework: 'react' | 'unsupported';
+        launchEntries: LaunchEntry[];
+        packageManager: EngineeringConfig['packageManager'] | null;
+        reason?: string;
+      }>,
+    createSession: (input: { workspacePath: string; launchEntry?: LaunchEntry }) =>
+      ipcRenderer.invoke('engine:v1:session:create', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<Design>,
+    start: (designId: string) =>
+      ipcRenderer.invoke('engine:v1:start', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<EngineeringRunState>,
+    stop: (designId: string) =>
+      ipcRenderer.invoke('engine:v1:stop', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<EngineeringRunState>,
+    refresh: (designId: string) =>
+      ipcRenderer.invoke('engine:v1:refresh', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ ok: true }>,
+    saveLaunchEntry: (designId: string, launchEntry: LaunchEntry) =>
+      ipcRenderer.invoke('engine:v1:save-launch-entry', {
+        schemaVersion: 1,
+        designId,
+        launchEntry,
+      }) as Promise<EngineeringConfig>,
+    getRunState: (designId: string) =>
+      ipcRenderer.invoke('engine:v1:get-run-state', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<EngineeringRunState | null>,
+    onRunState: (cb: (state: EngineeringRunState) => void) => {
+      const listener = (_e: unknown, state: EngineeringRunState) => cb(state);
+      ipcRenderer.on('engine:v1:run-state', listener);
+      return () => ipcRenderer.removeListener('engine:v1:run-state', listener);
+    },
+    onLog: (
+      cb: (entry: {
+        designId: string;
+        line: import('@open-codesign/shared').EngineeringLogLine;
+      }) => void,
+    ) => {
+      const listener = (
+        _e: unknown,
+        entry: { designId: string; line: import('@open-codesign/shared').EngineeringLogLine },
+      ) => cb(entry);
+      ipcRenderer.on('engine:v1:log', listener);
+      return () => ipcRenderer.removeListener('engine:v1:log', listener);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('codesign', api);
