@@ -122,6 +122,25 @@ function findMissingAlt(html: string): DoneError[] {
   return issues;
 }
 
+function isFullHtmlDocument(src: string): boolean {
+  return (
+    /<!doctype\s+html/i.test(src) ||
+    /<html[\s>]/i.test(src) ||
+    (/<head[\s>]/i.test(src) && /<body[\s>]/i.test(src))
+  );
+}
+
+function isJsxShaped(src: string): boolean {
+  if (isFullHtmlDocument(src)) return false;
+  return (
+    /ReactDOM\.createRoot\s*\(/.test(src) ||
+    /\/\*\s*EDITMODE-BEGIN\s*\*\//.test(src) ||
+    /(?:^|\n)\s*function\s+App\s*\(/.test(src) ||
+    /(?:^|\n)\s*const\s+App\s*=/.test(src) ||
+    /<[A-Z][A-Za-z0-9]*(?:\s|>|\/)/.test(src)
+  );
+}
+
 /**
  * Cheap structural JSX sanity check — catches the 90% of agent mistakes that
  * break Babel compile before the 3-second runtime BrowserWindow load even
@@ -137,18 +156,7 @@ function findJsxStructuralIssues(src: string): DoneError[] {
   // Skip the JSX structural checks entirely when the source looks like an
   // HTML document, otherwise the "missing ReactDOM.createRoot" error trains
   // the agent to rewrite the file as React, which is a regression.
-  const looksHtml =
-    /<!doctype\s+html/i.test(src) ||
-    /<html[\s>]/i.test(src) ||
-    (/<head[\s>]/i.test(src) && /<body[\s>]/i.test(src));
-  if (looksHtml) return [];
-
-  const looksJsx =
-    /ReactDOM\.createRoot\s*\(/.test(src) ||
-    /\/\*\s*EDITMODE-BEGIN\s*\*\//.test(src) ||
-    /(?:^|\n)\s*function\s+App\s*\(/.test(src) ||
-    /(?:^|\n)\s*const\s+App\s*=/.test(src);
-  if (!looksJsx) return [];
+  if (!isJsxShaped(src)) return [];
 
   const issues: DoneError[] = [];
 
@@ -240,8 +248,12 @@ function findJsxStructuralIssues(src: string): DoneError[] {
 
   // Required JSX anchors — without them the runtime can't mount.
   if (!/ReactDOM\.createRoot\s*\(/.test(src)) {
+    const legacyRender = /(?:^|\n)\s*render\s*\(\s*<([A-Z][A-Za-z0-9]*)\b/.exec(src);
     issues.push({
-      message: 'Missing ReactDOM.createRoot(...) call — the artifact will not mount.',
+      message:
+        legacyRender !== null
+          ? `Legacy render(<${legacyRender[1]} />) helper is not available. Define function App() and mount with ReactDOM.createRoot(document.getElementById('root')).render(<App />).`
+          : 'Missing ReactDOM.createRoot(...) call — the artifact will not mount.',
       source: 'syntax',
     });
   }
@@ -314,7 +326,7 @@ export function makeDoneTool(
       }
       const errors: DoneError[] = [
         ...findJsxStructuralIssues(file.content),
-        ...findUnclosedTags(file.content),
+        ...(isJsxShaped(file.content) ? [] : findUnclosedTags(file.content)),
         ...findDuplicateIds(file.content),
         ...findMissingAlt(file.content),
       ];

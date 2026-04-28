@@ -144,4 +144,45 @@ function App() { return <div>Hi</div>; }`,
       true,
     );
   });
+
+  it('reports legacy render helper without HTML tag noise', async () => {
+    const fs = makeFs({
+      'index.html': `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{}/*EDITMODE-END*/;
+function Page() {
+  return (
+    <main>
+      <button onClick={() => {}}>All</button>
+    </main>
+  );
+}
+render(<Page />);`,
+    });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-legacy-render', {});
+    expect(res.details.status).toBe('has_errors');
+    expect(res.details.errors.some((e) => /Legacy render\(<Page \/>/.test(e.message))).toBe(true);
+    expect(res.details.errors.some((e) => /Unclosed|Closing <\//.test(e.message))).toBe(false);
+  });
+
+  it('does not run HTML tag balancing over JSX arrow-function props', async () => {
+    const fs = makeFs({
+      'index.html': `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{}/*EDITMODE-END*/;
+function FilterPill({ onClick }) {
+  return <button onClick={onClick}>All</button>;
+}
+function App() {
+  const [active, setActive] = React.useState("all");
+  return (
+    <main>
+      <FilterPill active={active === "all"} onClick={() => setActive("all")} />
+    </main>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
+    });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-jsx-arrow-prop', {});
+    expect(res.details.status).toBe('ok');
+    expect(res.details.errors).toHaveLength(0);
+  });
 });

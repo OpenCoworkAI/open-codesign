@@ -24,6 +24,25 @@ const VERIFY_TIMEOUT_MS = 3000;
 // after the initial render). Short enough that the total is still <= 3s.
 const SETTLE_AFTER_LOAD_MS = 1200;
 
+function redactRuntimeUrl(rawUrl: string): string {
+  if (rawUrl.startsWith('data:')) {
+    const comma = rawUrl.indexOf(',');
+    const prefix = comma >= 0 ? rawUrl.slice(0, comma + 1) : 'data:';
+    return `${prefix}...truncated`;
+  }
+  return rawUrl;
+}
+
+function redactRuntimeLoadMessage(message: string): string {
+  return message.replace(/data:[^\s'")\]]+/g, (url) => redactRuntimeUrl(url));
+}
+
+export function formatRuntimeLoadError(kind: string, description: string, url?: string): string {
+  const safeDescription = redactRuntimeLoadMessage(description);
+  if (url === undefined || url.length === 0) return `${kind}: ${safeDescription}`;
+  return `${kind}: ${safeDescription} [${redactRuntimeUrl(url)}]`;
+}
+
 export function makeRuntimeVerifier(): DoneRuntimeVerifier {
   return async (artifactSource: string): Promise<DoneError[]> => {
     const srcdoc = buildSrcdoc(artifactSource);
@@ -92,7 +111,10 @@ export function makeRuntimeVerifier(): DoneRuntimeVerifier {
       errorDescription: string,
       validatedURL: string,
     ) => {
-      pushError(`did-fail-load (${errorCode}): ${errorDescription} [${validatedURL}]`, 'load');
+      pushError(
+        formatRuntimeLoadError('did-fail-load', `${errorDescription} (${errorCode})`, validatedURL),
+        'load',
+      );
     };
     const onPreloadError = (_event: unknown, _preloadPath: string, error: Error) => {
       pushError(`preload-error: ${error.message}`, 'preload');
@@ -132,7 +154,13 @@ export function makeRuntimeVerifier(): DoneRuntimeVerifier {
           finish();
         });
         void win.loadURL(dataUrl).catch((err: unknown) => {
-          pushError(`loadURL failed: ${err instanceof Error ? err.message : String(err)}`, 'load');
+          pushError(
+            formatRuntimeLoadError(
+              'loadURL failed',
+              err instanceof Error ? err.message : String(err),
+            ),
+            'load',
+          );
           clearTimeout(hardTimeout);
           finish();
         });

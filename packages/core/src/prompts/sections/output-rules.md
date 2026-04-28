@@ -3,7 +3,8 @@
 ## Workspace contract
 
 - The source of truth is the workspace filesystem. Create or edit files through `str_replace_based_edit_tool` or `scaffold`.
-- In the default agent workspace, `index.html` is JSX source for the host runtime. Do not add `<!doctype>`, `<html>`, `<head>`, `<body>`, `<div id="root">`, React, ReactDOM, Babel, CDN React loaders, or `type="text/babel"` to it.
+- In the default agent workspace, `index.html` is JSX source for the host runtime. Define the root component as `function App() { ... }` or `const App = ...`, and end the file with `ReactDOM.createRoot(document.getElementById('root')).render(<App />);`.
+- Do not use `render(<App />)` or any other global render helper. Do not add `<!doctype>`, `<html>`, `<head>`, `<body>`, `<div id="root">`, React/Babel CDN loaders, imports, or `type="text/babel"` to `index.html`; the host runtime supplies the document shell and libraries.
 - Assistant chat is for short progress notes only. Never emit `<artifact>` tags, fenced HTML/JSX/CSS, or full file contents.
 - Local workspace assets returned by tools are allowed, including `assets/...`, scaffolded files, and generated images.
 
