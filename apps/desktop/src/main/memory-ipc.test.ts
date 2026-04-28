@@ -115,7 +115,7 @@ describe('triggerMemoryUpdate', () => {
     expect(content).toBe('# Updated Memory');
   });
 
-  it('skips concurrent updates for the same design', async () => {
+  it('chains concurrent updates for the same design instead of dropping', async () => {
     const first = triggerMemoryUpdate({
       workspacePath: tempDir,
       designId: 'dup-id',
@@ -137,7 +137,7 @@ describe('triggerMemoryUpdate', () => {
     });
 
     await Promise.all([first, second]);
-    expect(updateDesignMemory).toHaveBeenCalledOnce();
+    expect(updateDesignMemory).toHaveBeenCalledTimes(2);
   });
 
   it('allows update after previous one completes', async () => {

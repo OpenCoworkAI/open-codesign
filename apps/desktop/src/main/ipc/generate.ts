@@ -526,12 +526,14 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         designSystem: cfg.designSystem ?? null,
       });
 
-      // Load memory context (best-effort, non-blocking on failures)
+      // Load memory context (best-effort — surface failures as warnings)
       const designWorkspaceRoot = resolveWorkspaceRootForDesign(payload.designId ?? null);
       let memoryContext: string[] | undefined;
+      let memoryLoadWarning: string | undefined;
       try {
         memoryContext = await loadMemoryContext(designWorkspaceRoot);
       } catch (err) {
+        memoryLoadWarning = `Project memory unavailable: ${err instanceof Error ? err.message : String(err)}`;
         logIpc.warn('memory.load.fail', {
           generationId: id,
           message: err instanceof Error ? err.message : String(err),
@@ -632,6 +634,13 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           }
         }
 
+        const memoryWarnings = memoryLoadWarning ? [memoryLoadWarning] : [];
+        if (memoryWarnings.length > 0) {
+          return {
+            ...result,
+            warnings: [...(result.warnings ?? []), ...memoryWarnings],
+          };
+        }
         return result;
       } catch (err) {
         // Attach upstream metadata so the renderer's diagnostic pipeline can

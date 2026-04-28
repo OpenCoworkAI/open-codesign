@@ -107,7 +107,7 @@ async function rebuildGlobalIndex(db: Database | null): Promise<void> {
 // Memory update orchestrator — fire-and-forget from generate
 // ---------------------------------------------------------------------------
 
-const inFlightUpdates = new Set<string>();
+const inFlightUpdates = new Map<string, Promise<void>>();
 
 export interface TriggerMemoryUpdateOpts {
   workspacePath: string;
@@ -123,46 +123,44 @@ export interface TriggerMemoryUpdateOpts {
   allowKeyless?: boolean | undefined;
 }
 
-export async function triggerMemoryUpdate(opts: TriggerMemoryUpdateOpts): Promise<void> {
-  if (inFlightUpdates.has(opts.designId)) {
-    log.info('memory.update.skipped', {
-      designId: opts.designId,
-      reason: 'already_in_flight',
-    });
-    return;
-  }
+async function doMemoryUpdate(opts: TriggerMemoryUpdateOpts): Promise<void> {
+  const existingMemory = await readDesignMemoryFile(opts.workspacePath);
 
-  inFlightUpdates.add(opts.designId);
-  try {
-    const existingMemory = await readDesignMemoryFile(opts.workspacePath);
+  const result = await updateDesignMemory({
+    existingMemory,
+    conversationMessages: opts.conversationMessages,
+    designId: opts.designId,
+    designName: opts.designName,
+    model: opts.model,
+    apiKey: opts.apiKey,
+    ...(opts.baseUrl !== undefined ? { baseUrl: opts.baseUrl } : {}),
+    ...(opts.wire !== undefined ? { wire: opts.wire } : {}),
+    ...(opts.httpHeaders !== undefined ? { httpHeaders: opts.httpHeaders } : {}),
+    ...(opts.allowKeyless === true ? { allowKeyless: true } : {}),
+    logger: {
+      info: (event, data) => log.info(event, data),
+      warn: (event, data) => log.warn(event, data),
+      error: (event, data) => log.error(event, data),
+    },
+  });
 
-    const result = await updateDesignMemory({
-      existingMemory,
-      conversationMessages: opts.conversationMessages,
-      designId: opts.designId,
-      designName: opts.designName,
-      model: opts.model,
-      apiKey: opts.apiKey,
-      ...(opts.baseUrl !== undefined ? { baseUrl: opts.baseUrl } : {}),
-      ...(opts.wire !== undefined ? { wire: opts.wire } : {}),
-      ...(opts.httpHeaders !== undefined ? { httpHeaders: opts.httpHeaders } : {}),
-      ...(opts.allowKeyless === true ? { allowKeyless: true } : {}),
-      logger: {
-        info: (event, data) => log.info(event, data),
-        warn: (event, data) => log.warn(event, data),
-        error: (event, data) => log.error(event, data),
-      },
-    });
+  await writeDesignMemoryFile(opts.workspacePath, result.content);
+  log.info('memory.update.ok', {
+    designId: opts.designId,
+    outputLen: result.content.length,
+    cost: result.costUsd,
+  });
 
-    await writeDesignMemoryFile(opts.workspacePath, result.content);
-    log.info('memory.update.ok', {
-      designId: opts.designId,
-      outputLen: result.content.length,
-      cost: result.costUsd,
-    });
+  await rebuildGlobalIndex(opts.db);
+}
 
-    await rebuildGlobalIndex(opts.db);
-  } finally {
-    inFlightUpdates.delete(opts.designId);
-  }
+export function triggerMemoryUpdate(opts: TriggerMemoryUpdateOpts): Promise<void> {
+  const previous = inFlightUpdates.get(opts.designId) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(() => doMemoryUpdate(opts));
+  inFlightUpdates.set(opts.designId, next);
+  return next.finally(() => {
+    if (inFlightUpdates.get(opts.designId) === next) {
+      inFlightUpdates.delete(opts.designId);
+    }
+  });
 }
