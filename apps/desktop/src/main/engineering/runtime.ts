@@ -1,0 +1,424 @@
+import { type ChildProcess, spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import type {
+  EngineeringError,
+  EngineeringErrorKind,
+  EngineeringLogLine,
+  EngineeringPackageManager,
+  EngineeringRunState,
+  EngineeringStatus,
+  LaunchEntry,
+} from '@open-codesign/shared';
+import { getLogger } from '../logger';
+import { LogRingBuffer } from './log-buffer';
+import { extractReadyUrl } from './ready-url';
+import { writeEngineeringSettings } from './settings';
+
+const logger = getLogger('engineering-runtime');
+
+const LOG_RING_CAPACITY = 500;
+const ERROR_EXCERPT_LINES = 30;
+const READY_URL_TIMEOUT_MS = 60_000;
+const STOP_SIGTERM_GRACE_MS = 4_000;
+
+export interface StartArgs {
+  designId: string;
+  workspacePath: string;
+  packageManager: EngineeringPackageManager;
+  launchEntry: LaunchEntry;
+}
+
+interface RunSlot {
+  designId: string;
+  workspacePath: string;
+  packageManager: EngineeringPackageManager;
+  launchEntry: LaunchEntry;
+  child: ChildProcess | null;
+  state: EngineeringRunState;
+  logs: LogRingBuffer;
+  readyUrlTimer: NodeJS.Timeout | null;
+  /** Resolves when ready URL is found OR launch fails. Used by start() to
+   *  return a stable post-startup state to the caller. */
+  readyDeferred: {
+    resolve: (state: EngineeringRunState) => void;
+    reject: (err: Error) => void;
+  } | null;
+  /** Set when stop() is called so the exit handler knows the termination was
+   *  requested rather than a crash. */
+  stopRequested: boolean;
+}
+
+interface RuntimeEvents {
+  'run-state': (state: EngineeringRunState) => void;
+  log: (entry: { designId: string; line: EngineeringLogLine }) => void;
+}
+
+export class EngineeringRuntime extends EventEmitter {
+  private readonly slots = new Map<string, RunSlot>();
+
+  override on<K extends keyof RuntimeEvents>(event: K, listener: RuntimeEvents[K]): this {
+    return super.on(event, listener);
+  }
+
+  override emit<K extends keyof RuntimeEvents>(
+    event: K,
+    ...args: Parameters<RuntimeEvents[K]>
+  ): boolean {
+    return super.emit(event, ...args);
+  }
+
+  /** Returns the latest run state for `designId`, or null when no run has
+   *  been initiated. Idempotent and side-effect-free. */
+  getRunState(designId: string): EngineeringRunState | null {
+    return this.slots.get(designId)?.state ?? null;
+  }
+
+  /** Snapshot of all currently tracked slots (used by quit hooks). */
+  listActive(): RunSlot[] {
+    return Array.from(this.slots.values()).filter((s) => s.child !== null);
+  }
+
+  /** Spawn the dev server. Returns once a ready URL is detected, the launch
+   *  fails, or READY_URL_TIMEOUT_MS elapses. The returned state always
+   *  reflects the post-startup terminal state for this start attempt. */
+  start(args: StartArgs): Promise<EngineeringRunState> {
+    return new Promise<EngineeringRunState>((resolve, reject) => {
+      // Reuse-or-create the slot. If another child is still running for this
+      // designId, refuse — callers must stop() first.
+      const existing = this.slots.get(args.designId);
+      if (existing?.child !== null && existing?.child !== undefined) {
+        reject(new Error(`engineering runtime already running for design ${args.designId}`));
+        return;
+      }
+
+      const logs = existing?.logs ?? new LogRingBuffer(LOG_RING_CAPACITY);
+      logs.reset();
+
+      const slot: RunSlot = {
+        designId: args.designId,
+        workspacePath: args.workspacePath,
+        packageManager: args.packageManager,
+        launchEntry: args.launchEntry,
+        child: null,
+        state: this.makeState(args.designId, 'starting', null, null, logs),
+        logs,
+        readyUrlTimer: null,
+        readyDeferred: { resolve, reject },
+        stopRequested: false,
+      };
+      this.slots.set(args.designId, slot);
+      this.transition(slot, 'starting');
+
+      const { command, commandArgs, displayCommand } = this.resolveCommand(
+        args.packageManager,
+        args.launchEntry,
+      );
+
+      let child: ChildProcess;
+      try {
+        child = spawn(command, commandArgs, {
+          cwd: args.workspacePath,
+          env: {
+            ...process.env,
+            FORCE_COLOR: '0',
+            NO_COLOR: '1',
+            CI: '1',
+          },
+          shell: false,
+          windowsHide: true,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.fail(slot, 'launch', message, displayCommand);
+        return;
+      }
+
+      slot.child = child;
+
+      child.stdout?.setEncoding('utf8');
+      child.stderr?.setEncoding('utf8');
+      child.stdout?.on('data', (chunk: string) => this.onStdout(slot, chunk));
+      child.stderr?.on('data', (chunk: string) => this.onStderr(slot, chunk));
+      child.on('error', (err) => {
+        // Typically EACCES or ENOENT — surfaced before exit fires.
+        this.fail(slot, 'launch', err.message, displayCommand);
+      });
+      child.on('exit', (code, signal) => this.onExit(slot, code, signal, displayCommand));
+
+      // Bound the wait for ready URL. Hot reload servers that never print a
+      // matching line will trip this timeout and surface as an error rather
+      // than hang the UI.
+      slot.readyUrlTimer = setTimeout(() => {
+        if (slot.state.status === 'starting') {
+          this.fail(
+            slot,
+            'timeout',
+            `ready URL not detected within ${READY_URL_TIMEOUT_MS / 1000}s`,
+            displayCommand,
+          );
+        }
+      }, READY_URL_TIMEOUT_MS);
+    });
+  }
+
+  /** Stop the dev server. SIGTERM with a grace window, then SIGKILL. */
+  async stop(designId: string): Promise<EngineeringRunState> {
+    const slot = this.slots.get(designId);
+    if (slot === undefined || slot.child === null) {
+      // Nothing to stop — return the last known state or a synthetic stopped one.
+      const state =
+        slot?.state ??
+        this.makeState(designId, 'stopped', null, null, new LogRingBuffer(LOG_RING_CAPACITY));
+      return state;
+    }
+    slot.stopRequested = true;
+    const child = slot.child;
+
+    return new Promise<EngineeringRunState>((resolve) => {
+      const onExit = () => {
+        // The 'exit' handler installed in start() already runs first and
+        // transitions the FSM to 'stopped'. We just resolve once that is
+        // observed.
+        resolve(slot.state);
+      };
+      child.once('exit', onExit);
+      try {
+        child.kill('SIGTERM');
+      } catch (err) {
+        logger.warn('SIGTERM failed', { designId, err: String(err) });
+      }
+      setTimeout(() => {
+        if (slot.child !== null) {
+          try {
+            slot.child.kill('SIGKILL');
+          } catch (err) {
+            logger.warn('SIGKILL failed', { designId, err: String(err) });
+          }
+        }
+      }, STOP_SIGTERM_GRACE_MS);
+    });
+  }
+
+  /** Tell subscribers that a manual reload was requested. Does not restart
+   *  the child — the renderer remounts the iframe to apply the refresh. */
+  refresh(designId: string): { ok: true } {
+    const slot = this.slots.get(designId);
+    if (slot !== undefined) {
+      // Re-broadcast the current state so the renderer can reset its iframe
+      // key. We bump updatedAt so the listener fires.
+      slot.state = { ...slot.state, updatedAt: new Date().toISOString() };
+      this.emit('run-state', slot.state);
+    }
+    return { ok: true };
+  }
+
+  /** Best-effort cleanup at app quit. */
+  shutdownAll(): void {
+    for (const slot of this.slots.values()) {
+      if (slot.child !== null) {
+        slot.stopRequested = true;
+        try {
+          slot.child.kill('SIGTERM');
+        } catch {
+          // noop — process may already be gone
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internals
+  // ---------------------------------------------------------------------------
+
+  private resolveCommand(
+    pm: EngineeringPackageManager,
+    entry: LaunchEntry,
+  ): { command: string; commandArgs: string[]; displayCommand: string } {
+    if (entry.kind === 'package-script') {
+      return {
+        command: pm,
+        commandArgs: ['run', entry.value],
+        displayCommand: `${pm} run ${entry.value}`,
+      };
+    }
+    // repo-local-command — split on whitespace. Quoted args / shell features
+    // are intentionally not supported in v1; if a project needs them, it can
+    // wrap the command in a package script.
+    const parts = entry.value.trim().split(/\s+/);
+    const head = parts[0] ?? '';
+    return {
+      command: head,
+      commandArgs: parts.slice(1),
+      displayCommand: entry.value,
+    };
+  }
+
+  private onStdout(slot: RunSlot, chunk: string): void {
+    this.recordLog(slot, 'stdout', chunk);
+    if (slot.state.status === 'starting') {
+      const url = extractReadyUrl(chunk);
+      if (url !== null) {
+        this.markReady(slot, url);
+      }
+    }
+  }
+
+  private onStderr(slot: RunSlot, chunk: string): void {
+    this.recordLog(slot, 'stderr', chunk);
+    // Some dev servers (Next.js) print their ready line on stderr.
+    if (slot.state.status === 'starting') {
+      const url = extractReadyUrl(chunk);
+      if (url !== null) {
+        this.markReady(slot, url);
+      }
+    }
+  }
+
+  private recordLog(slot: RunSlot, stream: 'stdout' | 'stderr', chunk: string): void {
+    const lines = chunk.split(/\r?\n/);
+    for (const text of lines) {
+      if (text === '') continue;
+      const line = slot.logs.push(stream, text);
+      this.emit('log', { designId: slot.designId, line });
+    }
+  }
+
+  private markReady(slot: RunSlot, url: string): void {
+    if (slot.readyUrlTimer !== null) {
+      clearTimeout(slot.readyUrlTimer);
+      slot.readyUrlTimer = null;
+    }
+    slot.state = {
+      ...this.makeState(slot.designId, 'running', url, null, slot.logs),
+    };
+    this.emit('run-state', slot.state);
+
+    // Persist the last successful ready URL so subsequent starts can warm up
+    // faster (and the UI can preview the saved URL while waiting for the new
+    // dev server to boot).
+    try {
+      writeEngineeringSettings(slot.workspacePath, {
+        schemaVersion: 1,
+        framework: 'react',
+        packageManager: slot.packageManager,
+        launchEntry: slot.launchEntry,
+        lastReadyUrl: url,
+      });
+    } catch (err) {
+      logger.warn('failed to persist lastReadyUrl', {
+        designId: slot.designId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    slot.readyDeferred?.resolve(slot.state);
+    slot.readyDeferred = null;
+  }
+
+  private onExit(
+    slot: RunSlot,
+    code: number | null,
+    signal: NodeJS.Signals | null,
+    displayCommand: string,
+  ): void {
+    if (slot.readyUrlTimer !== null) {
+      clearTimeout(slot.readyUrlTimer);
+      slot.readyUrlTimer = null;
+    }
+    const child = slot.child;
+    slot.child = null;
+
+    if (slot.stopRequested) {
+      slot.state = this.makeState(slot.designId, 'stopped', null, null, slot.logs);
+      this.emit('run-state', slot.state);
+      // If start() is still pending (user stopped before ready), resolve.
+      slot.readyDeferred?.resolve(slot.state);
+      slot.readyDeferred = null;
+      return;
+    }
+
+    // Unexpected exit. Code 0 → treat as stopped; non-zero → crash.
+    const isCrash = (code !== null && code !== 0) || signal !== null;
+    if (isCrash) {
+      const reason =
+        signal !== null ? `child terminated by signal ${signal}` : `child exited with code ${code}`;
+      this.fail(slot, 'crash', reason, displayCommand);
+    } else {
+      slot.state = this.makeState(slot.designId, 'stopped', null, null, slot.logs);
+      this.emit('run-state', slot.state);
+      slot.readyDeferred?.resolve(slot.state);
+      slot.readyDeferred = null;
+    }
+    // Drop child reference defensively (already set to null above; keep the
+    // explicit reference here so static analysis doesn't claim it leaks).
+    void child;
+  }
+
+  private fail(slot: RunSlot, kind: EngineeringErrorKind, message: string, command: string): void {
+    if (slot.readyUrlTimer !== null) {
+      clearTimeout(slot.readyUrlTimer);
+      slot.readyUrlTimer = null;
+    }
+    if (slot.child !== null) {
+      try {
+        slot.child.kill('SIGTERM');
+      } catch {
+        // noop
+      }
+      slot.child = null;
+    }
+
+    const error: EngineeringError = {
+      schemaVersion: 1,
+      kind,
+      message,
+      excerpt: slot.logs.tail(ERROR_EXCERPT_LINES),
+      command,
+    };
+    slot.state = this.makeState(slot.designId, 'error', null, error, slot.logs);
+    this.emit('run-state', slot.state);
+    slot.readyDeferred?.resolve(slot.state);
+    slot.readyDeferred = null;
+  }
+
+  private transition(slot: RunSlot, status: EngineeringStatus): void {
+    slot.state = this.makeState(
+      slot.designId,
+      status,
+      slot.state.readyUrl,
+      slot.state.lastError,
+      slot.logs,
+    );
+    this.emit('run-state', slot.state);
+  }
+
+  private makeState(
+    designId: string,
+    status: EngineeringStatus,
+    readyUrl: string | null,
+    lastError: EngineeringError | null,
+    logs: LogRingBuffer,
+  ): EngineeringRunState {
+    return {
+      schemaVersion: 1,
+      designId,
+      status,
+      readyUrl,
+      lastError,
+      logs: logs.snapshot(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+
+let singleton: EngineeringRuntime | null = null;
+
+/** Lazily-initialised process-wide engineering runtime. Lazy so the runtime
+ *  isn't constructed until the first engineering-mode session is opened —
+ *  honors the "lazy-load heavy features" project constraint. */
+export function getEngineeringRuntime(): EngineeringRuntime {
+  if (singleton === null) {
+    singleton = new EngineeringRuntime();
+  }
+  return singleton;
+}
