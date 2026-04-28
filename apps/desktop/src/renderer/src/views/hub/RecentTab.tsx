@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { Plus } from 'lucide-react';
+import { Plus, Wrench } from 'lucide-react';
 import { useCodesignStore } from '../../store';
 import { DesignGrid } from './DesignGrid';
 
@@ -9,6 +9,7 @@ export function RecentTab() {
   const t = useT();
   const designs = useCodesignStore((s) => s.designs);
   const openNewDesignDialog = useCodesignStore((s) => s.openNewDesignDialog);
+  const createNewEngineeringDesign = useCodesignStore((s) => s.createNewEngineeringDesign);
   const isGenerating = useCodesignStore(
     (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
   );
@@ -19,6 +20,10 @@ export function RecentTab() {
 
   function handleNewDesign(): void {
     openNewDesignDialog();
+  }
+
+  function handleNewEngineering(): void {
+    void createNewEngineeringDesign();
   }
 
   const newDesignTile = (
@@ -53,6 +58,36 @@ export function RecentTab() {
   );
 
   return (
-    <DesignGrid designs={recent} emptyLabel={t('hub.recent.empty')} prefixTile={newDesignTile} />
+    <DesignGrid
+      designs={recent}
+      emptyLabel={t('hub.recent.empty')}
+      prefixTile={newDesignTile}
+      secondaryPrefixTile={
+        <button
+          type="button"
+          onClick={handleNewEngineering}
+          disabled={isGenerating}
+          aria-label="New engineering session"
+          className="group relative flex w-full text-left disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <div className="relative w-full aspect-[4/3] flex flex-col items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-lg)] border-[1.5px] border-dashed border-[var(--color-border)] bg-[var(--color-background-secondary)] transition-[transform,border-color] duration-[var(--duration-base)] ease-[var(--ease-out)] group-hover:-translate-y-[2px] group-hover:border-[var(--color-accent)]">
+            <span className="relative inline-flex items-center justify-center w-[64px] h-[64px] rounded-full bg-[var(--color-surface)] border border-[var(--color-border-muted)] text-[var(--color-accent)] shadow-[var(--shadow-soft)] group-hover:scale-110 group-hover:shadow-[var(--shadow-card)] transition-[transform,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out)]">
+              <Wrench className="w-[26px] h-[26px]" strokeWidth={2} aria-hidden />
+            </span>
+            <div className="relative flex flex-col items-center gap-[var(--space-1)] px-[var(--space-4)] text-center">
+              <span
+                className="text-[var(--text-lg)] text-[var(--color-text-primary)] tracking-[var(--tracking-tight)]"
+                style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}
+              >
+                Engineering session
+              </span>
+              <span className="text-[11px] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
+                Connect a React workspace
+              </span>
+            </div>
+          </div>
+        </button>
+      }
+    />
   );
 }

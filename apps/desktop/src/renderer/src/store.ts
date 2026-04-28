@@ -353,6 +353,10 @@ interface CodesignState {
   openNewDesignDialog: () => void;
   closeNewDesignDialog: () => void;
   createNewDesign: (workspacePath?: string | null) => Promise<Design | null>;
+  /** v0.2 engineering mode entry point. Picks (or accepts) a workspace,
+   *  asks main to detect the React project, persists the EngineeringConfig,
+   *  and switches to the new design. Returns null on cancel/failure. */
+  createNewEngineeringDesign: (workspacePath?: string) => Promise<Design | null>;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string) => Promise<void>;
@@ -1979,6 +1983,66 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
           });
         }
       }
+      return design;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.createFailed'),
+        description: msg,
+      });
+      return null;
+    }
+  },
+
+  async createNewEngineeringDesign(workspacePath?: string) {
+    if (!window.codesign) return null;
+    if (get().isGenerating) {
+      get().pushToast({
+        variant: 'info',
+        title: tr('projects.notifications.createFailed'),
+        description: tr('projects.notifications.busyGenerating'),
+      });
+      return null;
+    }
+    let chosenPath = workspacePath ?? null;
+    if (chosenPath === null) {
+      try {
+        chosenPath = await window.codesign.snapshots.pickWorkspaceFolder();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : tr('errors.unknown');
+        get().pushToast({
+          variant: 'error',
+          title: tr('projects.notifications.createFailed'),
+          description: msg,
+        });
+        return null;
+      }
+    }
+    if (chosenPath === null) return null;
+    try {
+      const design = await window.codesign.engine.createSession({ workspacePath: chosenPath });
+      set({
+        currentDesignId: design.id,
+        previewHtml: null,
+        errorMessage: null,
+        iframeErrors: [],
+        selectedElement: null,
+        lastPromptInput: null,
+        designsViewOpen: false,
+        chatMessages: [],
+        chatLoaded: false,
+        pendingToolCalls: [],
+        comments: [],
+        commentsLoaded: false,
+        commentBubble: null,
+        currentSnapshotId: null,
+        canvasTabs: [FILES_TAB],
+        activeCanvasTab: 0,
+      });
+      await get().loadDesigns();
+      void get().loadChatForCurrentDesign();
+      void get().loadCommentsForCurrentDesign();
       return design;
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');

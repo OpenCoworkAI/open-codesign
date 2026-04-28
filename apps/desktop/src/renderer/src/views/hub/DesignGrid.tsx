@@ -10,6 +10,8 @@ export interface DesignGridProps {
   emptyLabel: string;
   /** Optional tile rendered as the first cell of the grid (e.g. "+ New design"). */
   prefixTile?: React.ReactNode;
+  /** Optional second prefix tile (e.g. engineering-mode entry point). */
+  secondaryPrefixTile?: React.ReactNode;
 }
 
 function formatRelativeTime(iso: string): string {
@@ -56,7 +58,12 @@ function useMenu() {
   return { pos, open: setPos, close: () => setPos(null) };
 }
 
-export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps) {
+export function DesignGrid({
+  designs,
+  emptyLabel,
+  prefixTile,
+  secondaryPrefixTile,
+}: DesignGridProps) {
   const t = useT();
   const switchDesign = useCodesignStore((s) => s.switchDesign);
   const setView = useCodesignStore((s) => s.setView);
@@ -64,7 +71,7 @@ export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps)
   const requestDeleteDesign = useCodesignStore((s) => s.requestDeleteDesign);
   const { pos, open, close } = useMenu();
 
-  if (designs.length === 0 && !prefixTile) {
+  if (designs.length === 0 && !prefixTile && !secondaryPrefixTile) {
     return (
       <div className="flex flex-col items-center justify-center py-[var(--space-12)] text-center">
         <div className="w-12 h-12 rounded-full border border-dashed border-[var(--color-border)] flex items-center justify-center mb-[var(--space-4)]">
@@ -87,6 +94,7 @@ export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps)
     <>
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-[var(--space-6)] list-none p-0 m-0">
         {prefixTile ? <li>{prefixTile}</li> : null}
+        {secondaryPrefixTile ? <li>{secondaryPrefixTile}</li> : null}
         {designs.map((d) => {
           const updated = formatRelativeTime(d.updatedAt);
           return (
