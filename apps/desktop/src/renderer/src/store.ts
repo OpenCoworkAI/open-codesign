@@ -1316,28 +1316,85 @@ export interface PendingEditEnrichment {
   text: string;
   scope?: CommentScope | undefined;
   parentOuterHTML?: string | null | undefined;
+  /** U10: when populated by U9, the prompt prefers component name + source
+   *  path over outerHTML so the agent edits the React source rather than
+   *  trying to rewrite a generated DOM string. */
+  componentSelection?: ComponentSelection | null | undefined;
 }
 
 export function buildEnrichedPrompt(
   userPrompt: string,
   pendingEdits: PendingEditEnrichment[],
+  options: { mode?: 'generative' | 'engineering'; readyUrl?: string | null } = {},
 ): string {
-  if (pendingEdits.length === 0) return userPrompt;
+  if (pendingEdits.length === 0 && options.mode !== 'engineering') return userPrompt;
+  if (pendingEdits.length === 0) {
+    // Engineering mode with no pending edits: still prepend the readyUrl
+    // header so the agent knows the live preview surface.
+    if (options.readyUrl) {
+      return [
+        '## ENGINEERING SESSION',
+        '',
+        `Live preview: ${options.readyUrl}`,
+        'Modify the React source files in the workspace; the dev server hot-reloads.',
+        '',
+        '---',
+        '',
+        userPrompt,
+      ].join('\n');
+    }
+    return userPrompt;
+  }
 
+  const isEngineering = options.mode === 'engineering';
   const MAX_HTML = 600;
   const truncate = (s: string) => (s.length > MAX_HTML ? `${s.slice(0, MAX_HTML)}…` : s);
 
-  const lines: string[] = [
-    '## REQUIRED EDITS — you MUST apply every edit below to index.html',
-    '',
-    'Each edit targets a specific element identified by its selector and outerHTML.',
-    'Use text_editor str_replace to find and modify the element. Do NOT skip any edit.',
-    '',
-  ];
+  const lines: string[] = isEngineering
+    ? [
+        '## REQUIRED EDITS — modify the React source files in the workspace',
+        '',
+        ...(options.readyUrl ? [`Live preview: ${options.readyUrl}`, ''] : []),
+        'Each edit targets a specific React component. Open the file, find the',
+        'component, and apply the change. Do NOT replace the running app with a',
+        'one-off HTML artifact — edit the existing source.',
+        '',
+      ]
+    : [
+        '## REQUIRED EDITS — you MUST apply every edit below to index.html',
+        '',
+        'Each edit targets a specific element identified by its selector and outerHTML.',
+        'Use text_editor str_replace to find and modify the element. Do NOT skip any edit.',
+        '',
+      ];
 
   pendingEdits.forEach((edit, i) => {
     const scope =
       edit.scope === 'global' ? 'global (apply design-wide)' : 'element (this element only)';
+    const cs = edit.componentSelection ?? null;
+    if (isEngineering && cs && cs.componentName.length > 0) {
+      // Engineering-mode shape: component-first, source-path-aware. outerHTML
+      // is intentionally omitted here — it would mislead the agent into a
+      // string-replace path against a generated DOM rather than a JSX edit.
+      const filePath = cs.filePath ?? cs.debugSource?.fileName ?? null;
+      lines.push(`### Edit ${i + 1}: ${edit.text}`);
+      lines.push(`- **Component**: \`<${cs.componentName}>\``);
+      if (filePath !== null && filePath.length > 0) {
+        const lineSuffix =
+          cs.debugSource?.lineNumber && cs.debugSource.lineNumber > 0
+            ? `:${cs.debugSource.lineNumber}`
+            : '';
+        lines.push(`- **Source**: \`${filePath}${lineSuffix}\``);
+      }
+      if (cs.ownerChain.length > 0) {
+        lines.push(`- **Rendered inside**: ${cs.ownerChain.map((n) => `\`<${n}>\``).join(' ← ')}`);
+      }
+      lines.push(`- **DOM selector** (for cross-reference only): \`${cs.domSelector}\``);
+      lines.push(`- **Scope**: ${scope}`);
+      lines.push(`- **Instruction**: ${edit.text}`);
+      lines.push('');
+      return;
+    }
     lines.push(`### Edit ${i + 1}: ${edit.text}`);
     lines.push(`- **Target**: \`<${edit.tag}>\` at \`${edit.selector}\``);
     lines.push(`- **Current HTML**: \`${truncate(edit.outerHTML)}\``);
@@ -1601,7 +1658,21 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     );
     if (!request) return;
 
-    const enrichedPrompt = buildEnrichedPrompt(request.prompt, pendingEdits);
+    const enrichedPrompt = buildEnrichedPrompt(
+      request.prompt,
+      pendingEdits,
+      (() => {
+        // U10: in engineering mode, surface the live dev-server URL and bias
+        // the agent toward editing source files instead of replacing the
+        // running app with a one-off HTML artifact.
+        const designId = get().currentDesignId;
+        const design = designId ? (get().designs.find((d) => d.id === designId) ?? null) : null;
+        if (!design || design.mode !== 'engineering') return {};
+        const runState = designId ? get().engineeringRunStateByDesign[designId] : undefined;
+        const readyUrl = runState?.readyUrl ?? design.engineering?.lastReadyUrl ?? null;
+        return { mode: 'engineering' as const, readyUrl };
+      })(),
+    );
     const pendingEditIds = pendingEdits.map((c) => c.id);
 
     const generationId = newId();
