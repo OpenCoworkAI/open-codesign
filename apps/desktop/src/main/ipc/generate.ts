@@ -10,6 +10,7 @@ import {
   generateViaAgent,
   loadDesignSkills,
   loadFrameTemplates,
+  type UpdateDesignMemoryInput,
 } from '@open-codesign/core';
 import { detectProviderFromKey, generateImage } from '@open-codesign/providers';
 import {
@@ -33,6 +34,7 @@ import {
 } from '../generation-ipc';
 import { resolveImageGenerationConfig, toGenerateImageOptions } from '../image-generation-settings';
 import { getLogger } from '../logger';
+import { loadMemoryContext, triggerMemoryUpdate } from '../memory-ipc';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from '../onboarding-ipc';
 import { readPersisted as readPreferences } from '../preferences-ipc';
 import { runPreview } from '../preview-runtime';
@@ -201,6 +203,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     designId: string | null,
     previousHtml: string | null,
     _workspacePath: string | null,
+    memoryCallbacks?: {
+      onAggressivePrune?: () => void;
+      onComplete?: (messages: UpdateDesignMemoryInput['conversationMessages']) => void;
+    },
   ): ReturnType<typeof generateViaAgent> => {
     const sendEvent = (event: AgentStreamEvent) => {
       getMainWindow()?.webContents.send('agent:event:v1', event);
@@ -303,6 +309,12 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         fs,
         runtimeVerify,
         ...(generateImageAsset !== undefined ? { generateImageAsset } : {}),
+        ...(memoryCallbacks?.onAggressivePrune !== undefined
+          ? { onAggressivePrune: memoryCallbacks.onAggressivePrune }
+          : {}),
+        ...(memoryCallbacks?.onComplete !== undefined
+          ? { onComplete: memoryCallbacks.onComplete }
+          : {}),
         onEvent: (event: AgentEvent) => {
           if (event.type === 'turn_start') {
             deltaCount = 0;
@@ -514,6 +526,18 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         designSystem: cfg.designSystem ?? null,
       });
 
+      // Load memory context (best-effort, non-blocking on failures)
+      const designWorkspaceRoot = resolveWorkspaceRootForDesign(payload.designId ?? null);
+      let memoryContext: string[] | undefined;
+      try {
+        memoryContext = await loadMemoryContext(designWorkspaceRoot);
+      } catch (err) {
+        logIpc.warn('memory.load.fail', {
+          generationId: id,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+
       logIpc.info('generate', {
         generationId: id,
         provider: active.model.provider,
@@ -534,6 +558,11 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       try {
         clearTimeoutGuard = await armTimeout(id, controller);
         const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
+
+        // Memory system: capture agent messages and aggressive-prune signal
+        let capturedMessages: UpdateDesignMemoryInput['conversationMessages'] | null = null;
+        let aggressivePruneDetected = false;
+
         const result = await runGenerate(
           {
             prompt: payload.prompt,
@@ -546,6 +575,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             attachments: promptContext.attachments,
             referenceUrl: promptContext.referenceUrl,
             designSystem: promptContext.designSystem ?? null,
+            ...(memoryContext !== undefined ? { memoryContext } : {}),
             ...(baseUrl !== undefined ? { baseUrl } : {}),
             wire: active.wire,
             ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
@@ -559,6 +589,14 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           // PR #173 will populate this from the design's workspace record; for
           // now the reader stays undefined and the tweaks tool is skipped.
           null,
+          {
+            onAggressivePrune: () => {
+              aggressivePruneDetected = true;
+            },
+            onComplete: (messages) => {
+              capturedMessages = messages;
+            },
+          },
         );
         logIpc.info('generate.ok', {
           generationId: id,
@@ -566,6 +604,34 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           artifacts: result.artifacts.length,
           cost: result.costUsd,
         });
+
+        // Fire memory update after successful generation
+        if (designWorkspaceRoot && payload.designId && capturedMessages) {
+          const design = db !== null ? getDesign(db, payload.designId) : null;
+          const memoryUpdatePromise = triggerMemoryUpdate({
+            workspacePath: designWorkspaceRoot,
+            designId: payload.designId,
+            designName: design?.name ?? 'Untitled',
+            conversationMessages: capturedMessages,
+            model: active.model,
+            apiKey,
+            db,
+            ...(baseUrl !== undefined ? { baseUrl } : {}),
+            wire: active.wire,
+            ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+            ...(allowKeyless ? { allowKeyless: true } : {}),
+          }).catch((err) => {
+            logIpc.warn('memory.update.fail', {
+              generationId: id,
+              message: err instanceof Error ? err.message : String(err),
+            });
+          });
+
+          if (aggressivePruneDetected) {
+            await memoryUpdatePromise;
+          }
+        }
+
         return result;
       } catch (err) {
         // Attach upstream metadata so the renderer's diagnostic pipeline can
