@@ -22,6 +22,7 @@ import type {
   CommentScope,
   CommentStatus,
   CommentUpdateInput,
+  ComponentSelection,
   Design,
   DesignFile,
   DesignSnapshot,
@@ -31,7 +32,7 @@ import type {
   EngineeringConfig,
   SnapshotCreateInput,
 } from '@open-codesign/shared';
-import { EngineeringConfigV1 } from '@open-codesign/shared';
+import { ComponentSelectionV1, EngineeringConfigV1 } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import { getLogger } from './logger';
 
@@ -238,6 +239,14 @@ function applyAdditiveMigrations(db: Database): void {
   }
   if (!commentCols.includes('parent_outer_html')) {
     db.exec('ALTER TABLE comments ADD COLUMN parent_outer_html TEXT');
+  }
+  if (!commentCols.includes('component_selection_json')) {
+    // U9: serialized ComponentSelectionV1 captured when the React inspector
+    // resolves the click in engineering mode. Nullable — falls back to
+    // outer_html (and now the dedicated `legacyOuterHTML` field on the zod
+    // payload) when missing. Single JSON blob so future field bumps stay
+    // additive without further ALTERs.
+    db.exec('ALTER TABLE comments ADD COLUMN component_selection_json TEXT');
   }
 
   // diagnostic_events v2 — add `context_json` (TEXT, nullable) so rows from
@@ -849,6 +858,7 @@ interface CommentRowDb {
   applied_in_snapshot_id: string | null;
   scope: string | null;
   parent_outer_html: string | null;
+  component_selection_json: string | null;
 }
 
 function rowToComment(row: CommentRowDb): CommentRow {
@@ -865,6 +875,20 @@ function rowToComment(row: CommentRowDb): CommentRow {
     /* keep zero rect */
   }
   const scope: CommentScope = row.scope === 'global' ? 'global' : 'element';
+  // U9: parse the component-selection blob defensively so a corrupt entry
+  // (older build wrote a partial / wrong shape) degrades to fallback rather
+  // than poisoning every list call for that design.
+  let componentSelection: ComponentSelection | null = null;
+  if (row.component_selection_json !== null && row.component_selection_json.length > 0) {
+    try {
+      const parsed = ComponentSelectionV1.safeParse(JSON.parse(row.component_selection_json));
+      if (parsed.success) {
+        componentSelection = parsed.data;
+      }
+    } catch {
+      /* keep null */
+    }
+  }
   return {
     schemaVersion: 1,
     id: row.id,
@@ -883,6 +907,7 @@ function rowToComment(row: CommentRowDb): CommentRow {
     ...(row.parent_outer_html !== null && row.parent_outer_html !== undefined
       ? { parentOuterHTML: row.parent_outer_html }
       : {}),
+    ...(componentSelection !== null ? { componentSelection } : {}),
   };
 }
 
@@ -894,10 +919,14 @@ export function createComment(db: Database, input: CommentCreateInput): CommentR
     typeof input.parentOuterHTML === 'string' && input.parentOuterHTML.length > 0
       ? input.parentOuterHTML.slice(0, 600)
       : null;
+  const componentSelectionJson =
+    input.componentSelection !== undefined && input.componentSelection !== null
+      ? JSON.stringify(input.componentSelection)
+      : null;
   db.prepare(
     `INSERT INTO comments
-       (id, schema_version, design_id, snapshot_id, kind, selector, tag, outer_html, rect, text, status, created_at, applied_in_snapshot_id, scope, parent_outer_html)
-     VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NULL, ?, ?)`,
+       (id, schema_version, design_id, snapshot_id, kind, selector, tag, outer_html, rect, text, status, created_at, applied_in_snapshot_id, scope, parent_outer_html, component_selection_json)
+     VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NULL, ?, ?, ?)`,
   ).run(
     id,
     input.designId,
@@ -911,6 +940,7 @@ export function createComment(db: Database, input: CommentCreateInput): CommentR
     now,
     scope,
     parentOuterHTML,
+    componentSelectionJson,
   );
   const row = db.prepare('SELECT * FROM comments WHERE id = ?').get(id) as CommentRowDb;
   return rowToComment(row);

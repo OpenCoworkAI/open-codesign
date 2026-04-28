@@ -1,4 +1,5 @@
 import { useT } from '@open-codesign/i18n';
+import type { ComponentSelection } from '@open-codesign/shared';
 import { Send, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -7,6 +8,10 @@ export interface CommentBubbleProps {
   selector: string;
   tag: string;
   outerHTML: string;
+  /** Engineering-mode (U9) — when present, the bubble surfaces the React
+   *  component name and source path as the primary header instead of the
+   *  raw tag preview. Optional so srcdoc / legacy callers stay unchanged. */
+  componentSelection?: ComponentSelection | null;
   rect: { top: number; left: number; width: number; height: number };
   initialText?: string;
   /** Called on every keystroke so the host (PreviewPane) can persist an
@@ -32,6 +37,7 @@ export const QUICK_ACTION_TEXT: Readonly<Record<string, string>> = {
 export function CommentBubble({
   tag,
   outerHTML,
+  componentSelection,
   rect,
   initialText,
   onDraftChange,
@@ -83,6 +89,20 @@ export function CommentBubble({
     return attrs ? `<${match[1]} ${attrs}…>` : `<${match[1]}>`;
   })();
 
+  // U9: when the React inspector resolved a fiber, prefer
+  // `<ComponentName>` (+ relative file path) over the raw HTML preview.
+  // Falls through to `tagPreview` when no metadata is available.
+  const componentHeader = componentSelection
+    ? {
+        primary: `<${componentSelection.componentName}>`,
+        secondary: componentSelection.filePath ?? componentSelection.debugSource?.fileName ?? null,
+        title:
+          componentSelection.ownerChain.length > 0
+            ? `${componentSelection.componentName} ← ${componentSelection.ownerChain.join(' ← ')}`
+            : componentSelection.componentName,
+      }
+    : null;
+
   const anchorTop = Math.max(rect.top + rect.height + 8, 12);
   const anchorLeft = Math.max(rect.left, 12);
 
@@ -97,13 +117,30 @@ export function CommentBubble({
     >
       {/* Header — selected element + close */}
       <div className="flex items-center justify-between px-[var(--space-3)] py-[var(--space-2)] border-b border-[var(--color-border-muted)]">
-        <span
-          id={titleId}
-          className="font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[11px] text-[var(--color-text-muted)] truncate"
-          title={outerHTML.slice(0, 200)}
-        >
-          {tagPreview}
-        </span>
+        {componentHeader ? (
+          <span
+            id={titleId}
+            className="flex min-w-0 flex-col text-[var(--color-text-muted)]"
+            title={componentHeader.title}
+          >
+            <span className="truncate font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[11px] text-[var(--color-text-primary)]">
+              {componentHeader.primary}
+            </span>
+            {componentHeader.secondary !== null && componentHeader.secondary.length > 0 ? (
+              <span className="truncate font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[10px]">
+                {componentHeader.secondary}
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          <span
+            id={titleId}
+            className="font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[11px] text-[var(--color-text-muted)] truncate"
+            title={outerHTML.slice(0, 200)}
+          >
+            {tagPreview}
+          </span>
+        )}
         <button
           type="button"
           onClick={onClose}

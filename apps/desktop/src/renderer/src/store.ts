@@ -8,6 +8,7 @@ import type {
   CommentRect,
   CommentRow,
   CommentScope,
+  ComponentSelection,
   Design,
   DiagnosticEventRow,
   DiagnosticHypothesis,
@@ -481,6 +482,7 @@ interface CodesignState {
     text: string;
     scope?: CommentScope;
     parentOuterHTML?: string;
+    componentSelection?: ComponentSelection | null;
   }) => Promise<CommentRow | null>;
   updateComment: (id: string, patch: { text?: string }) => Promise<CommentRow | null>;
   /** Single entry point used by CommentBubble. If `existingCommentId` is set,
@@ -2809,6 +2811,9 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         text: input.text,
         ...(input.scope ? { scope: input.scope } : {}),
         ...(input.parentOuterHTML ? { parentOuterHTML: input.parentOuterHTML } : {}),
+        ...(input.componentSelection !== undefined && input.componentSelection !== null
+          ? { componentSelection: input.componentSelection }
+          : {}),
       });
       if (get().currentDesignId === designId) {
         set((s) => ({ comments: [...s.comments, row] }));
@@ -2863,6 +2868,24 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     };
     if (input.scope) payload.scope = input.scope;
     if (input.parentOuterHTML) payload.parentOuterHTML = input.parentOuterHTML;
+    // U9: in engineering mode the React inspector publishes
+    // COMPONENT_SELECTED keyed by selector. Look it up at submit time so
+    // every newly created comment carries the freshest fiber-derived
+    // metadata. The renderer payload shape mirrors ComponentSelectionV1
+    // except for the schema-required `domSelector` / `legacyOuterHTML`
+    // fields which we fill from the same selection's selector + outerHTML.
+    const inspector = get().componentSelectionBySelector[input.selector];
+    if (inspector) {
+      payload.componentSelection = {
+        schemaVersion: 1,
+        componentName: inspector.componentName,
+        filePath: null,
+        ownerChain: inspector.ownerChain,
+        debugSource: inspector.debugSource,
+        domSelector: input.selector,
+        ...(input.outerHTML.length > 0 ? { legacyOuterHTML: input.outerHTML } : {}),
+      };
+    }
     return get().addComment(payload);
   },
 

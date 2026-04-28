@@ -11,7 +11,7 @@ import type {
   CommentRow,
   CommentStatus,
 } from '@open-codesign/shared';
-import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import { CodesignError, ComponentSelectionV1, ERROR_CODES } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
@@ -120,6 +120,21 @@ function parseAddInput(raw: unknown): CommentCreateInput {
   }
   const parentOuterHTML =
     typeof parentRaw === 'string' && parentRaw.length > 0 ? parentRaw : undefined;
+  // U9: optional component metadata captured by the React inspector. Validate
+  // strictly via zod so a corrupt payload from the renderer fails IPC
+  // immediately rather than poisoning the DB row.
+  const componentRaw = r['componentSelection'];
+  let componentSelection: CommentCreateInput['componentSelection'];
+  if (componentRaw !== undefined && componentRaw !== null) {
+    const parsed = ComponentSelectionV1.safeParse(componentRaw);
+    if (!parsed.success) {
+      throw new CodesignError(
+        `${channel}: componentSelection failed schema validation`,
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+    componentSelection = parsed.data;
+  }
   return {
     designId: parseNonEmptyString(r, 'designId', channel),
     snapshotId: parseNonEmptyString(r, 'snapshotId', channel),
@@ -131,6 +146,7 @@ function parseAddInput(raw: unknown): CommentCreateInput {
     text,
     scope,
     ...(parentOuterHTML !== undefined ? { parentOuterHTML } : {}),
+    ...(componentSelection !== undefined ? { componentSelection } : {}),
   };
 }
 

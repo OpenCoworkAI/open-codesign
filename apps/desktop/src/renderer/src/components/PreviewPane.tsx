@@ -406,6 +406,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
   const attachComponentSelection = useCodesignStore((s) => s.attachComponentSelection);
+  const componentSelectionBySelector = useCodesignStore((s) => s.componentSelectionBySelector);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
@@ -776,12 +777,34 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
               // when the user clicks another chip and comes back.
               const stashed = bubbleDraftsRef.current.get(bubbleKey);
               const initialText = stashed ?? commentBubble.initialText;
+              // U9: enrich the bubble header with the React inspector hit (if
+              // any) for the current selector. The map is populated by
+              // COMPONENT_SELECTED messages from the engineering iframe; for
+              // srcdoc / generative designs it is always empty so the bubble
+              // falls back to the legacy tag preview unchanged.
+              const inspectorHit = componentSelectionBySelector[commentBubble.selector];
+              const bubbleComponentSelection = inspectorHit
+                ? {
+                    schemaVersion: 1 as const,
+                    componentName: inspectorHit.componentName,
+                    filePath: null,
+                    ownerChain: inspectorHit.ownerChain,
+                    debugSource: inspectorHit.debugSource,
+                    domSelector: commentBubble.selector,
+                    ...(commentBubble.outerHTML.length > 0
+                      ? { legacyOuterHTML: commentBubble.outerHTML }
+                      : {}),
+                  }
+                : null;
               return (
                 <CommentBubble
                   key={bubbleKey}
                   selector={commentBubble.selector}
                   tag={commentBubble.tag}
                   outerHTML={commentBubble.outerHTML}
+                  {...(bubbleComponentSelection !== null
+                    ? { componentSelection: bubbleComponentSelection }
+                    : {})}
                   rect={scaled}
                   {...(initialText !== undefined ? { initialText } : {})}
                   onDraftChange={(text) => {
