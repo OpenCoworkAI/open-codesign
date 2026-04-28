@@ -1100,5 +1100,16 @@
     "RENDERER_ERROR": "Ocorreu um erro no renderer. Detalhes estão no log.",
     "CODEX_TOKEN_NOT_LOGGED_IN": "Você não fez login na assinatura do ChatGPT. Faça login em Configurações.",
     "CODEX_TOKEN_PARSE_FAILED": "O login local do ChatGPT está corrompido. Faça login novamente em Configurações."
+  },
+  "engineering": {
+    "unsupported": {
+      "title": "O modo engenharia exige um projeto React",
+      "subtitle": "A primeira versão do modo engenharia só suporta projetos React. A pasta escolhida não parece um projeto React.",
+      "reasonMissingPkg": "Nenhum package.json encontrado neste caminho.",
+      "reasonDetectedFramework": "Framework não-React detectado: {{framework}}.",
+      "reasonGeneric": "React não foi detectado nas dependências deste projeto.",
+      "dismiss": "Escolher outra pasta",
+      "useGenerative": "Usar o modo generativo"
+    }
   }
 }

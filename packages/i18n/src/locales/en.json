@@ -1147,5 +1147,16 @@
     "EXPORTER_ZIP_FAILED": "ZIP export failed.",
     "OPEN_PATH_FAILED": "Could not open the requested folder or file.",
     "RENDERER_ERROR": "An error occurred in the renderer. Details are in the log."
+  },
+  "engineering": {
+    "unsupported": {
+      "title": "Engineering mode requires a React project",
+      "subtitle": "The first release of engineering mode only supports React workspaces. The folder you picked doesn't look like one.",
+      "reasonMissingPkg": "No package.json found at this path.",
+      "reasonDetectedFramework": "Detected a non-React framework: {{framework}}.",
+      "reasonGeneric": "React was not detected in this workspace's dependencies.",
+      "dismiss": "Pick another folder",
+      "useGenerative": "Use generative mode instead"
+    }
   }
 }

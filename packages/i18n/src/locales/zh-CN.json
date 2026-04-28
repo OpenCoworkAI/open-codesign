@@ -1143,5 +1143,16 @@
     "EXPORTER_ZIP_FAILED": "ZIP 导出失败。",
     "OPEN_PATH_FAILED": "无法打开目标文件夹或文件。",
     "RENDERER_ERROR": "渲染进程出现错误，详情见日志。"
+  },
+  "engineering": {
+    "unsupported": {
+      "title": "工程模式仅支持 React 项目",
+      "subtitle": "工程模式首期仅支持 React 工作区。你选择的文件夹不是 React 项目。",
+      "reasonMissingPkg": "该路径下没有 package.json。",
+      "reasonDetectedFramework": "检测到非 React 框架：{{framework}}。",
+      "reasonGeneric": "未在工作区依赖中检测到 React。",
+      "dismiss": "选择其他文件夹",
+      "useGenerative": "改用生成模式"
+    }
   }
 }

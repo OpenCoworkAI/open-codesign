@@ -239,6 +239,17 @@ interface CodesignState {
   designToRename: Design | null;
   /** Workspace rebind confirmation state: { design, newPath } when user picks a different folder */
   workspaceRebindPending: { design: Design; newPath: string } | null;
+  /** U11: when an engineering-mode entry is attempted on a non-React (or
+   *  unparseable) workspace, the detector outcome lands here so the
+   *  EngineeringUnsupportedHint dialog can render. The session is NOT
+   *  created when this is non-null — the user has to either pick a
+   *  different folder or fall back to generative mode. */
+  engineeringUnsupportedHint: {
+    workspacePath: string;
+    /** Detector reason string (e.g. 'detected-vue', 'missing-package-json').
+     *  Stable values — the dialog branches on these to pick the right copy. */
+    reason: string;
+  } | null;
 
   theme: Theme;
   view: AppView;
@@ -418,6 +429,8 @@ interface CodesignState {
 
   requestWorkspaceRebind: (design: Design, newPath: string) => void;
   cancelWorkspaceRebind: () => void;
+  /** U11: dismiss the unsupported-engineering hint. */
+  dismissEngineeringUnsupportedHint: () => void;
   confirmWorkspaceRebind: (migrateFiles: boolean) => Promise<void>;
 
   pushToast: (toast: Omit<Toast, 'id'>) => string;
@@ -1486,6 +1499,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   designToDelete: null,
   designToRename: null,
   workspaceRebindPending: null,
+  engineeringUnsupportedHint: null,
 
   inputFiles: [],
   referenceUrl: '',
@@ -2144,6 +2158,31 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       }
     }
     if (chosenPath === null) return null;
+    // U11: short-circuit on non-React workspaces. Pre-detecting in the
+    // renderer means we never write a `designs` row for an unsupported
+    // project (R11), and the dialog can show a workspace-specific reason
+    // instead of a generic "createFailed" toast. Detection itself is
+    // read-only and side-effect free.
+    try {
+      const detection = await window.codesign.engine.detect(chosenPath);
+      if (detection.framework !== 'react') {
+        set({
+          engineeringUnsupportedHint: {
+            workspacePath: chosenPath,
+            reason: detection.reason ?? 'unknown',
+          },
+        });
+        return null;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.createFailed'),
+        description: msg,
+      });
+      return null;
+    }
     try {
       const design = await window.codesign.engine.createSession({ workspacePath: chosenPath });
       set({
@@ -2484,6 +2523,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   cancelWorkspaceRebind() {
     set({ workspaceRebindPending: null });
+  },
+
+  dismissEngineeringUnsupportedHint() {
+    set({ engineeringUnsupportedHint: null });
   },
 
   async confirmWorkspaceRebind(migrateFiles) {
