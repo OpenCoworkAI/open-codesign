@@ -10,6 +10,7 @@ import type {
   LaunchEntry,
 } from '@open-codesign/shared';
 import { getLogger } from '../logger';
+import { runInstall, shouldInstall } from './installer';
 import { LogRingBuffer } from './log-buffer';
 import { extractReadyUrl } from './ready-url';
 import { writeEngineeringSettings } from './settings';
@@ -76,6 +77,86 @@ export class EngineeringRuntime extends EventEmitter {
   /** Snapshot of all currently tracked slots (used by quit hooks). */
   listActive(): RunSlot[] {
     return Array.from(this.slots.values()).filter((s) => s.child !== null);
+  }
+
+  /** Run `<pm> install` if the workspace looks stale (missing node_modules
+   *  or lockfile newer than node_modules). The IPC layer should call this
+   *  *after* showing the user the install permission prompt — the runtime
+   *  itself does not gate on user consent. */
+  async initializeDependencies(args: {
+    designId: string;
+    workspacePath: string;
+    packageManager: EngineeringPackageManager;
+    launchEntry: LaunchEntry;
+  }): Promise<EngineeringRunState> {
+    const decision = shouldInstall(args.workspacePath, args.packageManager);
+    const logs = this.slots.get(args.designId)?.logs ?? new LogRingBuffer(LOG_RING_CAPACITY);
+    const slot: RunSlot = this.slots.get(args.designId) ?? {
+      designId: args.designId,
+      workspacePath: args.workspacePath,
+      packageManager: args.packageManager,
+      launchEntry: args.launchEntry,
+      child: null,
+      state: this.makeState(args.designId, 'detecting', null, null, logs),
+      logs,
+      readyUrlTimer: null,
+      readyDeferred: null,
+      stopRequested: false,
+    };
+    // Refresh the slot context — ack flow may have changed packageManager/entry.
+    slot.workspacePath = args.workspacePath;
+    slot.packageManager = args.packageManager;
+    slot.launchEntry = args.launchEntry;
+    this.slots.set(args.designId, slot);
+
+    if (!decision.needed) {
+      // Skip install and surface a "ready to start" intermediate state.
+      slot.state = this.makeState(args.designId, 'awaiting-ack', null, null, logs);
+      this.emit('run-state', slot.state);
+      return slot.state;
+    }
+
+    slot.state = this.makeState(args.designId, 'initializing-deps', null, null, logs);
+    this.emit('run-state', slot.state);
+
+    try {
+      const result = await runInstall(
+        args.workspacePath,
+        args.packageManager,
+        ({ stream, text }) => {
+          const line = logs.push(stream, text);
+          this.emit('log', { designId: args.designId, line });
+        },
+      );
+      if (result.exitCode !== 0) {
+        const error: EngineeringError = {
+          schemaVersion: 1,
+          kind: 'init',
+          message: `${args.packageManager} install exited with code ${result.exitCode}`,
+          excerpt: result.excerpt,
+          command: `${args.packageManager} install`,
+        };
+        slot.state = this.makeState(args.designId, 'error', null, error, logs);
+        this.emit('run-state', slot.state);
+        return slot.state;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const error: EngineeringError = {
+        schemaVersion: 1,
+        kind: 'init',
+        message,
+        excerpt: logs.tail(ERROR_EXCERPT_LINES),
+        command: `${args.packageManager} install`,
+      };
+      slot.state = this.makeState(args.designId, 'error', null, error, logs);
+      this.emit('run-state', slot.state);
+      return slot.state;
+    }
+
+    slot.state = this.makeState(args.designId, 'awaiting-ack', null, null, logs);
+    this.emit('run-state', slot.state);
+    return slot.state;
   }
 
   /** Spawn the dev server. Returns once a ready URL is detected, the launch
