@@ -1,4 +1,9 @@
-import type { ChatToolCallPayload } from '@open-codesign/shared';
+import {
+  type ChatToolCallPayload,
+  getToolManifestEntry,
+  TOOL_MANIFEST_V1,
+  type ToolManifestIconKeyV1,
+} from '@open-codesign/shared';
 import {
   Check,
   Eye,
@@ -108,30 +113,33 @@ function pathOf(call: ChatToolCallPayload): string | null {
 }
 
 const LEGACY_TOOL_NAMES = new Set([
-  'text_editor',
-  'load_skill',
-  'verify_html',
-  'read_url',
-  'read_design_system',
-  'list_files',
+  ...TOOL_MANIFEST_V1.tools.filter((tool) => tool.status === 'legacy').map((tool) => tool.name),
 ]);
 
+const ICONS_BY_KEY: Record<ToolManifestIconKeyV1, LucideIcon> = {
+  check: Check,
+  eye: Eye,
+  'file-edit': FileEdit,
+  'file-plus': FilePlus,
+  image: Image,
+  'list-checks': ListChecks,
+  'message-circle-question': MessageCircleQuestion,
+  'sliders-horizontal': SlidersHorizontal,
+  sparkles: Sparkles,
+  type: Type,
+  wrench: Wrench,
+};
+
 function iconAndLabel(call: ChatToolCallPayload): { Icon: LucideIcon; label: string } {
-  if (call.toolName === 'set_todos') return { Icon: ListChecks, label: 'set_todos' };
-  if (call.toolName === 'set_title') return { Icon: Type, label: 'set_title' };
-  if (call.toolName === 'skill') return { Icon: Sparkles, label: 'skill' };
-  if (call.toolName === 'scaffold') return { Icon: FilePlus, label: 'scaffold' };
-  if (call.toolName === 'preview') return { Icon: Eye, label: 'preview' };
-  if (call.toolName === 'generate_image_asset')
-    return { Icon: Image, label: 'generate_image_asset' };
-  if (call.toolName === 'tweaks') return { Icon: SlidersHorizontal, label: 'tweaks' };
-  if (call.toolName === 'ask') return { Icon: MessageCircleQuestion, label: 'ask' };
-  if (LEGACY_TOOL_NAMES.has(call.toolName)) return { Icon: Wrench, label: 'legacy tool' };
   if (call.toolName === 'str_replace_based_edit_tool') {
     if (call.command === 'view') return { Icon: Eye, label: 'view' };
     if (isCreateCommand(call)) return { Icon: FilePlus, label: 'create' };
     if (isEditCommand(call)) return { Icon: FileEdit, label: 'edit' };
     return { Icon: FileEdit, label: call.command ?? 'edit' };
+  }
+  const manifestEntry = getToolManifestEntry(call.toolName);
+  if (manifestEntry) {
+    return { Icon: ICONS_BY_KEY[manifestEntry.iconKey], label: manifestEntry.label };
   }
   return { Icon: Wrench, label: call.toolName };
 }

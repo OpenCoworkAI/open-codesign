@@ -39,6 +39,7 @@ export const ERROR_CODES = {
   INPUT_EMPTY_HTML: 'INPUT_EMPTY_HTML',
   INPUT_UNSUPPORTED_MODE: 'INPUT_UNSUPPORTED_MODE',
   GENERATION_TIMEOUT: 'GENERATION_TIMEOUT',
+  GENERATION_INCOMPLETE: 'GENERATION_INCOMPLETE',
   ARTIFACT_PROTOCOL_INVALID: 'ARTIFACT_PROTOCOL_INVALID',
   TOOL_EXECUTION_FAILED: 'TOOL_EXECUTION_FAILED',
 
@@ -224,6 +225,12 @@ export const ERROR_CODE_DESCRIPTIONS: Record<CodesignErrorCode, ErrorCodeDescrip
   GENERATION_TIMEOUT: {
     userFacing: 'Generation timed out. Try a shorter prompt or increase the timeout in Settings.',
     userFacingKey: 'err.GENERATION_TIMEOUT',
+    category: 'generation',
+  },
+  GENERATION_INCOMPLETE: {
+    userFacing:
+      'The agent stopped before completing verification. Continue the run to finish the workspace artifact.',
+    userFacingKey: 'err.GENERATION_INCOMPLETE',
     category: 'generation',
   },
   ARTIFACT_PROTOCOL_INVALID: {

@@ -4,6 +4,7 @@ import type {
   Artifact,
   ChatMessage,
   ModelRef,
+  ResourceStateV1,
   SelectedElement,
   StoredDesignSystem,
   WireApi,
@@ -41,6 +42,16 @@ export {
 } from './errors.js';
 export { FRAME_FILES, type FrameName, loadFrameTemplates } from './frames/index.js';
 export type { CoreLogger } from './logger.js';
+export type { ResourceManifestResult } from './resource-manifest.js';
+export { collectResourceManifest, formatResourceManifestForPrompt } from './resource-manifest.js';
+export {
+  assertFinalizationGate,
+  cloneResourceState,
+  recordDone,
+  recordLoadedResource,
+  recordMutation,
+  recordScaffold,
+} from './resource-state.js';
 export type { LoadAllSkillsOptions } from './skills/index.js';
 export { loadAllSkills, loadSkillsFromDir } from './skills/index.js';
 export {
@@ -107,6 +118,12 @@ export interface ReferenceUrlContext {
   excerpt?: string | undefined;
 }
 
+export interface ProjectContext {
+  agentsMd?: string | undefined;
+  designMd?: string | undefined;
+  settingsJson?: string | undefined;
+}
+
 export interface GenerateInput {
   prompt: string;
   history: ChatMessage[];
@@ -138,6 +155,10 @@ export interface GenerateInput {
   /** Absolute path to the current design's workspace on disk. When set, tools
    * that need to write files (e.g. `scaffold`) use this as the sandbox root. */
   workspaceRoot?: string | undefined;
+  /** Stable workspace context loaded by the host before generation. */
+  projectContext?: ProjectContext | undefined;
+  /** Resource state reconstructed from previous tool-call rows for this design. */
+  initialResourceState?: ResourceStateV1 | undefined;
   /**
    * Absolute path to the user-visible templates tree (typically
    * `<userData>/templates`). The agent reads scaffolds, skills, brand
@@ -219,6 +240,8 @@ export interface GenerateOutput {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  /** Resource state after this agent run, maintained by the harness. */
+  resourceState?: ResourceStateV1 | undefined;
   /**
    * Non-fatal issues surfaced during this generate call (e.g. builtin skill
    * loader failed). Callers MUST forward these to the UI — this is the

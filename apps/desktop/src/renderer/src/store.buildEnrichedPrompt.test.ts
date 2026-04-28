@@ -17,7 +17,8 @@ describe('buildEnrichedPrompt', () => {
     ]);
     expect(prompt).toContain('## REQUIRED EDITS');
     expect(prompt).toContain('button.cta');
-    expect(prompt).toContain('<button class="cta">Try free</button>');
+    expect(prompt).toContain('&lt;button class="cta"&gt;Try free&lt;/button&gt;');
+    expect(prompt).toContain('<untrusted_scanned_content type="pending_edit_target">');
     expect(prompt).toContain('Make this darker');
     expect(prompt).toContain('tweak the page');
     // ordering: edit block comes first, user prompt last
@@ -89,7 +90,7 @@ describe('buildEnrichedPrompt', () => {
       },
     ]);
     expect(withParent).toContain('Parent context');
-    expect(withParent).toContain('<nav><a/></nav>');
+    expect(withParent).toContain('&lt;nav&gt;&lt;a/&gt;&lt;/nav&gt;');
 
     const withoutParent = buildEnrichedPrompt('go', [
       { selector: 'a', tag: 'a', outerHTML: '<a/>', text: 'A' },

@@ -312,6 +312,21 @@ export {
   ProxyPreset,
   ProxyPresetIdSchema,
 } from './proxy-presets';
+export type {
+  LastDoneStateV1,
+  ResourceManifestEntryV1,
+  ResourceManifestV1,
+  ResourceStateV1,
+  ScaffoldedFileStateV1,
+} from './resource-manifest';
+export {
+  applyToolCallToResourceState,
+  createEmptyResourceState,
+  deriveResourceStateFromChatRows,
+  normalizeResourceState,
+  RESOURCE_MANIFEST_SCHEMA_VERSION,
+  RESOURCE_STATE_SCHEMA_VERSION,
+} from './resource-manifest';
 export type { LoadedSkill } from './skills';
 export { SkillFrontmatterV1 } from './skills';
 export type {
@@ -344,6 +359,20 @@ export {
   DesignSnapshotV1,
   DesignV1,
 } from './snapshot';
+export type {
+  CurrentToolNameV1,
+  ToolManifestEntryV1,
+  ToolManifestIconKeyV1,
+  ToolManifestV1,
+} from './tool-manifest';
+export {
+  CURRENT_TOOL_ORDER,
+  currentToolManifestEntries,
+  getToolManifestEntry,
+  isCurrentToolName,
+  TOOL_MANIFEST_SCHEMA_VERSION,
+  TOOL_MANIFEST_V1,
+} from './tool-manifest';
 
 // ---------------------------------------------------------------------------
 // Diagnostic events (PR3 — main-process diagnostic_events table)

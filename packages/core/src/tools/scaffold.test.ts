@@ -12,12 +12,14 @@ const MANIFEST = {
       path: 'device-frames/demo.jsx',
       category: 'device-frame',
       license: 'MIT-internal',
+      source: 'test fixture',
     },
     'demo-css': {
       description: 'Another one',
       path: 'backgrounds/demo.css',
       category: 'background',
       license: 'MIT-internal',
+      source: 'test fixture',
     },
   },
 } as const;
@@ -104,7 +106,7 @@ describe('scaffold tool', () => {
     }
   });
 
-  it('refuses manifest entries that point outside the scaffolds root', async () => {
+  it('refuses manifest entries that point outside the templates root', async () => {
     writeFileSync(
       path.join(scaffoldsRoot, 'manifest.json'),
       JSON.stringify({
@@ -112,7 +114,9 @@ describe('scaffold tool', () => {
         scaffolds: {
           escape: {
             description: 'bad',
-            path: '../outside.jsx',
+            path: '../../outside.jsx',
+            license: 'MIT-internal',
+            source: 'test fixture',
           },
         },
       }),
@@ -126,6 +130,32 @@ describe('scaffold tool', () => {
     });
     expect(r.ok).toBe(false);
     expect(r.reason).toMatch(/outside templates root/);
+  });
+
+  it('requires scaffold entries to declare license and source', async () => {
+    writeFileSync(
+      path.join(scaffoldsRoot, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        scaffolds: {
+          broken: {
+            description: 'missing source',
+            path: 'device-frames/demo.jsx',
+            license: 'MIT-internal',
+          },
+        },
+      }),
+      'utf8',
+    );
+
+    const r = await runScaffold({
+      kind: 'broken',
+      destPath: 'x.jsx',
+      workspaceRoot: tmpdir(),
+      scaffoldsRoot,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/source/);
   });
 
   it('reports missing manifest with a helpful reason', async () => {

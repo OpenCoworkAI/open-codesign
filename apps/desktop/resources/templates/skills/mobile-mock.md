@@ -6,6 +6,11 @@ description: >
   interactions. Use when building a mobile app screen, responsive mobile
   layout, or any prototype intended to be viewed on a phone (375px viewport).
   Enforces 44pt touch targets, proper status bar height, and safe area insets.
+aliases: [mobile, iphone, ios, phone, 手机, 移动端]
+dependencies: []
+validationHints:
+  - touch targets are at least 44px
+  - screen respects mobile width and safe areas without fake device chrome unless requested
 trigger:
   providers: ['*']
   scope: system

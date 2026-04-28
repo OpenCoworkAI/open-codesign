@@ -5,6 +5,11 @@ description: >
   Classifies design artifacts and sets the right density, section ladder,
   metrics treatment, and comparison structure. Use for landing pages, case
   studies, dashboards, pricing pages, reports, one-pagers, emails, or slides.
+aliases: [composition, structure, density, landing-structure, dashboard-structure, case-study]
+dependencies: []
+validationHints:
+  - final artifact has a complete section ladder for its artifact type
+  - dense operational surfaces include records, filters, tables, or states
 trigger:
   providers: ['*']
   scope: system

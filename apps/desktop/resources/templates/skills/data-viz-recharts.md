@@ -6,6 +6,11 @@ description: >
   dashboards, analytics views, or any data-driven UI with Recharts or
   comparable charting libraries. Enforces brand-consistent colors, readable
   axes, and accessible chart patterns.
+aliases: [recharts, react-charts, data-visualization]
+dependencies: [chart-rendering]
+validationHints:
+  - Recharts components receive data arrays and named data keys
+  - chart containers have responsive dimensions and accessible labels
 trigger:
   providers: ['*']
   scope: system

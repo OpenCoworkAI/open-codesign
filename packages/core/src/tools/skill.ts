@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
+import { loadSkillsFromDir } from '../skills/loader.js';
 
 /**
  * `skill` tool. Lazy-loads the markdown body of a builtin design skill (or a
@@ -22,6 +23,10 @@ export interface SkillManifestEntry {
   category: 'design' | 'brand';
   source: 'builtin' | 'brand-ref';
   path: string;
+  description: string;
+  aliases: string[];
+  dependencies: string[];
+  validationHints: string[];
 }
 
 export interface SkillRoots {
@@ -37,23 +42,60 @@ export async function listSkillManifest(roots: SkillRoots): Promise<SkillManifes
   const out: SkillManifestEntry[] = [];
 
   if (roots.skillsRoot) {
-    try {
-      const builtins = await readdir(roots.skillsRoot);
-      for (const name of builtins) {
-        if (!name.endsWith('.md')) continue;
-        out.push({
-          name: name.replace(/\.md$/, ''),
-          category: 'design',
-          source: 'builtin',
-          path: path.join(roots.skillsRoot, name),
-        });
-      }
-    } catch (err) {
-      if (!isMissingPath(err)) throw err;
+    const builtins = await loadSkillsFromDir(roots.skillsRoot, 'builtin');
+    for (const skill of builtins) {
+      out.push({
+        name: skill.frontmatter.name,
+        category: 'design',
+        source: 'builtin',
+        path: path.join(roots.skillsRoot, `${skill.id}.md`),
+        description: skill.frontmatter.description,
+        aliases: skill.frontmatter.aliases,
+        dependencies: skill.frontmatter.dependencies,
+        validationHints: skill.frontmatter.validationHints,
+      });
     }
   }
 
   if (roots.brandRefsRoot) {
+    try {
+      const manifestPath = path.join(roots.brandRefsRoot, 'manifest.json');
+      const raw = await readFile(manifestPath, 'utf8');
+      const parsed = JSON.parse(raw) as unknown;
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        Array.isArray((parsed as { brands?: unknown }).brands)
+      ) {
+        for (const brand of (parsed as { brands: unknown[] }).brands) {
+          if (typeof brand !== 'object' || brand === null) continue;
+          const record = brand as Record<string, unknown>;
+          if (
+            typeof record['slug'] !== 'string' ||
+            typeof record['path'] !== 'string' ||
+            typeof record['name'] !== 'string'
+          ) {
+            continue;
+          }
+          const category =
+            typeof record['category'] === 'string' ? record['category'] : 'Brand reference';
+          out.push({
+            name: `brand:${record['slug']}`,
+            category: 'brand',
+            source: 'brand-ref',
+            path: path.join(roots.brandRefsRoot, record['path']),
+            description: `${record['name']} brand reference (${category}).`,
+            aliases: [record['name']],
+            dependencies: [],
+            validationHints: [],
+          });
+        }
+        return out;
+      }
+    } catch (err) {
+      if (!isMissingPath(err)) throw err;
+    }
+
     try {
       const brandSlugs = await readdir(roots.brandRefsRoot);
       for (const slug of brandSlugs) {
@@ -63,6 +105,10 @@ export async function listSkillManifest(roots: SkillRoots): Promise<SkillManifes
           category: 'brand',
           source: 'brand-ref',
           path: path.join(roots.brandRefsRoot, slug, 'DESIGN.md'),
+          description: `Brand reference for ${slug}.`,
+          aliases: [],
+          dependencies: [],
+          validationHints: [],
         });
       }
     } catch (err) {
@@ -83,20 +129,21 @@ export interface InvokeSkillResult {
   status: 'loaded' | 'already-loaded' | 'not-found';
   body?: string;
   reason?: string;
+  metadata?: SkillManifestEntry;
 }
 
 export async function invokeSkill(opts: InvokeSkillOptions): Promise<InvokeSkillResult> {
-  if (opts.alreadyLoaded?.has(opts.name)) {
-    return { status: 'already-loaded' };
-  }
   const manifest = await listSkillManifest(opts.roots);
-  const entry = manifest.find((e) => e.name === opts.name);
+  const entry = manifest.find((e) => e.name === opts.name || e.aliases.includes(opts.name));
   if (!entry) {
     return { status: 'not-found', reason: `no skill registered as ${opts.name}` };
   }
+  if (opts.alreadyLoaded?.has(entry.name) || opts.alreadyLoaded?.has(opts.name)) {
+    return { status: 'already-loaded', metadata: entry };
+  }
   try {
     const body = await readFile(entry.path, 'utf8');
-    return { status: 'loaded', body };
+    return { status: 'loaded', body, metadata: entry };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new CodesignError(
@@ -121,6 +168,10 @@ const SkillParams = Type.Object({
 export interface SkillDetails {
   name: string;
   status: 'loaded' | 'already-loaded' | 'not-found';
+  description?: string;
+  aliases?: string[];
+  dependencies?: string[];
+  validationHints?: string[];
 }
 
 export interface MakeSkillToolOptions extends SkillRoots {
@@ -149,30 +200,34 @@ export function makeSkillTool(
     parameters: SkillParams,
     async execute(_toolCallId, params): Promise<AgentToolResult<SkillDetails>> {
       const name = params.name;
-      if (dedup?.has(name)) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'skill already loaded this session — refer to earlier tool result',
-            },
-          ],
-          details: { name, status: 'already-loaded' },
-        };
-      }
       const result = await invokeSkill({
         name,
         roots,
         ...(dedup ? { alreadyLoaded: dedup } : {}),
       });
       if (result.status === 'loaded') {
-        dedup?.add(name);
+        const canonicalName = result.metadata?.name ?? name;
+        dedup?.add(canonicalName);
         return {
           content: [{ type: 'text', text: result.body ?? '' }],
-          details: { name, status: 'loaded' },
+          details: {
+            name: canonicalName,
+            status: 'loaded',
+            ...(result.metadata?.description !== undefined
+              ? { description: result.metadata.description }
+              : {}),
+            ...(result.metadata?.aliases !== undefined ? { aliases: result.metadata.aliases } : {}),
+            ...(result.metadata?.dependencies !== undefined
+              ? { dependencies: result.metadata.dependencies }
+              : {}),
+            ...(result.metadata?.validationHints !== undefined
+              ? { validationHints: result.metadata.validationHints }
+              : {}),
+          },
         };
       }
       if (result.status === 'already-loaded') {
+        const canonicalName = result.metadata?.name ?? name;
         return {
           content: [
             {
@@ -180,7 +235,7 @@ export function makeSkillTool(
               text: 'skill already loaded this session — refer to earlier tool result',
             },
           ],
-          details: { name, status: 'already-loaded' },
+          details: { name: canonicalName, status: 'already-loaded' },
         };
       }
       return {

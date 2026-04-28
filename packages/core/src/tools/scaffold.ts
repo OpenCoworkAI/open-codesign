@@ -16,23 +16,38 @@ import { Type } from '@sinclair/typebox';
  * seed a tmpdir without touching the user's real templates.
  */
 
-interface ManifestEntry {
+export interface ScaffoldManifestEntry {
   description: string;
   path: string;
-  category?: string;
-  license?: string;
+  category?: string | undefined;
+  aliases?: string[] | undefined;
+  license: string;
+  source: string;
+  sizeBytes?: number | undefined;
 }
 
-interface Manifest {
+export interface ScaffoldManifest {
   schemaVersion: number;
-  scaffolds: Record<string, ManifestEntry>;
+  scaffolds: Record<string, ScaffoldManifestEntry>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function parseScaffoldManifest(value: unknown): Manifest {
+function parseStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string' || item.trim().length === 0) {
+      throw new Error(`${field} must contain only non-empty strings`);
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+function parseScaffoldManifest(value: unknown): ScaffoldManifest {
   if (!isRecord(value)) {
     throw new Error('manifest must be an object');
   }
@@ -43,7 +58,7 @@ function parseScaffoldManifest(value: unknown): Manifest {
   if (!isRecord(scaffolds)) {
     throw new Error('manifest.scaffolds must be an object');
   }
-  const parsed: Record<string, ManifestEntry> = {};
+  const parsed: Record<string, ScaffoldManifestEntry> = {};
   for (const [kind, rawEntry] of Object.entries(scaffolds)) {
     if (kind.trim().length === 0) {
       throw new Error('manifest scaffold kind must be non-empty');
@@ -57,9 +72,17 @@ function parseScaffoldManifest(value: unknown): Manifest {
     if (typeof rawEntry['path'] !== 'string' || rawEntry['path'].trim().length === 0) {
       throw new Error(`manifest.scaffolds.${kind}.path must be a non-empty string`);
     }
-    const entry: ManifestEntry = {
+    if (typeof rawEntry['license'] !== 'string' || rawEntry['license'].trim().length === 0) {
+      throw new Error(`manifest.scaffolds.${kind}.license must be a non-empty string`);
+    }
+    if (typeof rawEntry['source'] !== 'string' || rawEntry['source'].trim().length === 0) {
+      throw new Error(`manifest.scaffolds.${kind}.source must be a non-empty string`);
+    }
+    const entry: ScaffoldManifestEntry = {
       description: rawEntry['description'],
       path: rawEntry['path'],
+      license: rawEntry['license'],
+      source: rawEntry['source'],
     };
     if (rawEntry['category'] !== undefined) {
       if (typeof rawEntry['category'] !== 'string') {
@@ -67,18 +90,25 @@ function parseScaffoldManifest(value: unknown): Manifest {
       }
       entry.category = rawEntry['category'];
     }
-    if (rawEntry['license'] !== undefined) {
-      if (typeof rawEntry['license'] !== 'string') {
-        throw new Error(`manifest.scaffolds.${kind}.license must be a string`);
+    if (rawEntry['aliases'] !== undefined) {
+      entry.aliases = parseStringArray(rawEntry['aliases'], `manifest.scaffolds.${kind}.aliases`);
+    }
+    if (rawEntry['sizeBytes'] !== undefined) {
+      if (
+        typeof rawEntry['sizeBytes'] !== 'number' ||
+        !Number.isInteger(rawEntry['sizeBytes']) ||
+        rawEntry['sizeBytes'] < 0
+      ) {
+        throw new Error(`manifest.scaffolds.${kind}.sizeBytes must be a non-negative integer`);
       }
-      entry.license = rawEntry['license'];
+      entry.sizeBytes = rawEntry['sizeBytes'];
     }
     parsed[kind] = entry;
   }
   return { schemaVersion: 1, scaffolds: parsed };
 }
 
-export async function loadScaffoldManifest(scaffoldsRoot: string): Promise<Manifest> {
+export async function loadScaffoldManifest(scaffoldsRoot: string): Promise<ScaffoldManifest> {
   const manifestPath = path.join(scaffoldsRoot, 'manifest.json');
   const raw = await readFile(manifestPath, 'utf8');
   return parseScaffoldManifest(JSON.parse(raw) as unknown);
@@ -109,7 +139,7 @@ export interface ScaffoldResult {
 }
 
 export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult> {
-  let manifest: Manifest;
+  let manifest: ScaffoldManifest;
   try {
     manifest = await loadScaffoldManifest(req.scaffoldsRoot);
   } catch (err) {
@@ -119,8 +149,9 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
   const entry = manifest.scaffolds[req.kind];
   if (!entry) return { ok: false, reason: `unknown scaffold kind: ${req.kind}` };
 
+  const templatesRoot = path.dirname(path.resolve(req.scaffoldsRoot));
   const source = path.resolve(req.scaffoldsRoot, entry.path);
-  if (!isWithinRoot(req.scaffoldsRoot, source)) {
+  if (!isWithinRoot(templatesRoot, source)) {
     return { ok: false, reason: `scaffold source outside templates root: ${entry.path}` };
   }
   let contents: string;

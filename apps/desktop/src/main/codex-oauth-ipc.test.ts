@@ -391,7 +391,7 @@ describe('codex-oauth:v1:logout', () => {
 });
 
 describe('migrateStaleCodexEntryIfNeeded', () => {
-  it('rewrites Phase-1-shaped codex entry with current wire + baseUrl', async () => {
+  it('rewrites stale codex entry with current wire + baseUrl', async () => {
     fakeCachedConfig = {
       activeProvider: 'chatgpt-codex',
       activeModel: 'gpt-5.3-codex',
@@ -401,7 +401,7 @@ describe('migrateStaleCodexEntryIfNeeded', () => {
           id: 'chatgpt-codex',
           name: 'ChatGPT 订阅',
           builtin: false,
-          // Phase 1 stale shape
+          // Older stale shape from before the ChatGPT Codex wire moved.
           wire: 'openai-responses',
           baseUrl: 'https://chatgpt.com/backend-api/codex',
           defaultModel: 'gpt-5.3-codex',

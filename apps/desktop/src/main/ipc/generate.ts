@@ -16,7 +16,9 @@ import {
   ApplyCommentPayload,
   CancelGenerationPayloadV1,
   CodesignError,
+  deriveResourceStateFromChatRows,
   GeneratePayloadV1,
+  type ResourceStateV1,
 } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
 import type BetterSqlite3 from 'better-sqlite3';
@@ -41,6 +43,7 @@ import { createProviderContextStore } from '../provider-context';
 import { resolveActiveModel } from '../provider-settings';
 import { resolveActiveApiKey, resolveCredentialForProvider } from '../resolve-api-key';
 import { withRun } from '../runContext';
+import { listSessionChatMessages, type SessionChatStoreOptions } from '../session-chat';
 import { getDesign, recordDiagnosticEvent } from '../snapshots-db';
 import { readWorkspaceFilesAt } from '../workspace-reader';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
@@ -188,6 +191,22 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     if (designId === null || db === null) return undefined;
     const design = getDesign(db, designId);
     return design?.workspacePath ?? undefined;
+  };
+
+  const chatStoreOptions = (): SessionChatStoreOptions | null => {
+    if (db === null) return null;
+    return {
+      db,
+      sessionDir: path_module.join(app.getPath('userData'), 'sessions'),
+      defaultCwd: app.getPath('documents'),
+    };
+  };
+
+  const resourceStateForDesign = (designId: string | null): ResourceStateV1 | undefined => {
+    if (designId === null) return undefined;
+    const opts = chatStoreOptions();
+    if (opts === null) return undefined;
+    return deriveResourceStateFromChatRows(listSessionChatMessages(opts, designId));
   };
 
   /**
@@ -508,10 +527,12 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       }
       coreLogger.info('[generate] step=validate_provider.ok', { provider: active.model.provider });
 
+      const workspaceRoot = resolveWorkspaceRootForDesign(payload.designId ?? null);
       const promptContext = await preparePromptContext({
         attachments: payload.attachments,
         referenceUrl: payload.referenceUrl,
         designSystem: cfg.designSystem ?? null,
+        ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
       });
 
       logIpc.info('generate', {
@@ -546,6 +567,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             attachments: promptContext.attachments,
             referenceUrl: promptContext.referenceUrl,
             designSystem: promptContext.designSystem ?? null,
+            projectContext: promptContext.projectContext,
+            initialResourceState: resourceStateForDesign(payload.designId ?? null),
             ...(baseUrl !== undefined ? { baseUrl } : {}),
             wire: active.wire,
             ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
@@ -660,6 +683,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         attachments: payload.attachments,
         referenceUrl: payload.referenceUrl,
         designSystem: cfg.designSystem ?? null,
+        workspaceRoot,
       });
 
       logIpc.info('applyComment', {
@@ -681,13 +705,6 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       const userPrompt = buildApplyCommentUserPrompt({
         comment: payload.comment,
         selection: payload.selection,
-        ...(promptContext.attachments !== undefined
-          ? { attachments: promptContext.attachments }
-          : {}),
-        ...(promptContext.referenceUrl !== undefined
-          ? { referenceUrl: promptContext.referenceUrl }
-          : {}),
-        designSystem: promptContext.designSystem ?? null,
       });
 
       const t0 = Date.now();
@@ -708,6 +725,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             attachments: promptContext.attachments,
             referenceUrl: promptContext.referenceUrl,
             designSystem: promptContext.designSystem ?? null,
+            projectContext: promptContext.projectContext,
+            initialResourceState: resourceStateForDesign(payload.designId),
             ...(baseUrl !== undefined ? { baseUrl } : {}),
             wire: active.wire,
             ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),

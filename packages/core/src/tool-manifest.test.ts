@@ -1,29 +1,56 @@
+import { CURRENT_TOOL_ORDER, TOOL_MANIFEST_V1 } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
-import { deriveCapabilities, exposeTools } from './tool-manifest';
+import { availableToolNames } from './tool-manifest';
 
 describe('tool-manifest', () => {
-  it('vision flag follows model.input array', () => {
-    const visionCaps = deriveCapabilities({ input: ['text', 'image'] }, []);
-    expect(visionCaps.vision).toBe(true);
-    const textOnly = deriveCapabilities({ input: ['text'] }, []);
-    expect(textOnly.vision).toBe(false);
+  it('keeps the default current tool order in one manifest', () => {
+    expect(CURRENT_TOOL_ORDER).toEqual([
+      'set_title',
+      'set_todos',
+      'skill',
+      'scaffold',
+      'str_replace_based_edit_tool',
+      'done',
+      'preview',
+      'generate_image_asset',
+      'tweaks',
+      'ask',
+    ]);
+    const currentNames = TOOL_MANIFEST_V1.tools
+      .filter((tool) => tool.status === 'current')
+      .map((tool) => tool.name);
+    expect(currentNames).toEqual([...CURRENT_TOOL_ORDER]);
   });
 
-  it('imageGen follows openai provider presence', () => {
-    expect(deriveCapabilities({}, [{ id: 'anthropic' }]).imageGen).toBe(false);
-    expect(deriveCapabilities({}, [{ id: 'openai' }]).imageGen).toBe(true);
-  });
-
-  it('exposeTools hides gen_image without openai', () => {
-    const caps = deriveCapabilities({ input: ['text'] }, [{ id: 'anthropic' }]);
-    const tools = exposeTools(caps);
-    expect(tools).not.toContain('gen_image');
+  it('hides fs-bound tools when fs is unavailable', () => {
+    const tools = availableToolNames({
+      fs: false,
+      preview: true,
+      image: true,
+      workspaceReader: true,
+      ask: true,
+    });
+    expect(tools).not.toContain('str_replace_based_edit_tool');
+    expect(tools).not.toContain('done');
     expect(tools).toContain('preview');
-    expect(tools).toContain('ask');
+    expect(tools).toContain('generate_image_asset');
   });
 
-  it('exposeTools surfaces gen_image with openai', () => {
-    const caps = deriveCapabilities({ input: ['text', 'image'] }, [{ id: 'openai' }]);
-    expect(exposeTools(caps)).toContain('gen_image');
+  it('gates preview, image, tweaks, and ask on host capabilities', () => {
+    const tools = availableToolNames({
+      fs: true,
+      preview: false,
+      image: false,
+      workspaceReader: false,
+      ask: false,
+    });
+    expect(tools).toEqual([
+      'set_title',
+      'set_todos',
+      'skill',
+      'scaffold',
+      'str_replace_based_edit_tool',
+      'done',
+    ]);
   });
 });

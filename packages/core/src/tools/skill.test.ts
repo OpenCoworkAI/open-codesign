@@ -17,12 +17,33 @@ describe('skill tool', () => {
     mkdirSync(path.join(brandRefsRoot, 'demo'), { recursive: true });
     writeFileSync(
       path.join(skillsRoot, 'form-layout.md'),
-      '# form-layout\n\nRules for forms.\n',
+      [
+        '---',
+        'schemaVersion: 1',
+        'name: form-layout',
+        'description: Rules for forms.',
+        'aliases: [forms]',
+        'dependencies: [empty-states]',
+        'validationHints: [labels]',
+        '---',
+        '# form-layout',
+        '',
+        'Rules for forms.',
+      ].join('\n'),
       'utf8',
     );
     writeFileSync(
       path.join(skillsRoot, 'empty-states.md'),
-      '# empty-states\n\nWhat to show when there is nothing.\n',
+      [
+        '---',
+        'schemaVersion: 1',
+        'name: empty-states',
+        'description: What to show when there is nothing.',
+        '---',
+        '# empty-states',
+        '',
+        'What to show when there is nothing.',
+      ].join('\n'),
       'utf8',
     );
     writeFileSync(
@@ -40,6 +61,7 @@ describe('skill tool', () => {
     const m = await listSkillManifest({ skillsRoot, brandRefsRoot });
     expect(m.some((e) => e.name === 'form-layout' && e.category === 'design')).toBe(true);
     expect(m.some((e) => e.name === 'brand:demo' && e.category === 'brand')).toBe(true);
+    expect(m.find((e) => e.name === 'form-layout')?.dependencies).toEqual(['empty-states']);
   });
 
   it('returns "already-loaded" for repeated invocations', async () => {
@@ -59,6 +81,15 @@ describe('skill tool', () => {
       roots: { skillsRoot, brandRefsRoot },
     });
     expect(r.status).toBe('not-found');
+  });
+
+  it('resolves aliases to the canonical skill name', async () => {
+    const r = await invokeSkill({
+      name: 'forms',
+      roots: { skillsRoot, brandRefsRoot },
+    });
+    expect(r.status).toBe('loaded');
+    expect(r.metadata?.name).toBe('form-layout');
   });
 
   it('treats missing roots as explicit empty manifests', async () => {
@@ -89,7 +120,23 @@ describe('makeSkillTool', () => {
     brandRefsRoot = path.join(base, 'brand-refs');
     mkdirSync(skillsRoot, { recursive: true });
     mkdirSync(brandRefsRoot, { recursive: true });
-    writeFileSync(path.join(skillsRoot, 'form-layout.md'), '# form-layout\n\nRules.\n', 'utf8');
+    writeFileSync(
+      path.join(skillsRoot, 'form-layout.md'),
+      [
+        '---',
+        'schemaVersion: 1',
+        'name: form-layout',
+        'description: Rules.',
+        'aliases: [forms]',
+        'dependencies: [empty-states]',
+        'validationHints: [labels]',
+        '---',
+        '# form-layout',
+        '',
+        'Rules.',
+      ].join('\n'),
+      'utf8',
+    );
   });
 
   afterEach(() => {
@@ -101,6 +148,7 @@ describe('makeSkillTool', () => {
     const result = await tool.execute('call-1', { name: 'form-layout' });
     expect(result.details?.status).toBe('loaded');
     expect(result.details?.name).toBe('form-layout');
+    expect(result.details?.dependencies).toEqual(['empty-states']);
     const text = result.content.find((c) => c.type === 'text');
     expect(text).toBeDefined();
     expect(text && 'text' in text && text.text.length).toBeGreaterThan(0);
@@ -111,6 +159,16 @@ describe('makeSkillTool', () => {
     const tool = makeSkillTool({ skillsRoot, brandRefsRoot, dedup });
     const first = await tool.execute('call-1', { name: 'form-layout' });
     expect(first.details?.status).toBe('loaded');
+    const second = await tool.execute('call-2', { name: 'form-layout' });
+    expect(second.details?.status).toBe('already-loaded');
+  });
+
+  it('dedups aliases across the same session state', async () => {
+    const dedup = new Set<string>();
+    const tool = makeSkillTool({ skillsRoot, brandRefsRoot, dedup });
+    const first = await tool.execute('call-1', { name: 'forms' });
+    expect(first.details?.status).toBe('loaded');
+    expect(first.details?.name).toBe('form-layout');
     const second = await tool.execute('call-2', { name: 'form-layout' });
     expect(second.details?.status).toBe('already-loaded');
   });

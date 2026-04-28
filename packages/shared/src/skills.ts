@@ -4,6 +4,9 @@ export const SkillFrontmatterV1 = z.object({
   schemaVersion: z.literal(1).default(1),
   name: z.string().min(1),
   description: z.string().min(1).max(1536),
+  aliases: z.array(z.string().min(1)).default([]),
+  dependencies: z.array(z.string().min(1)).default([]),
+  validationHints: z.array(z.string().min(1)).default([]),
   trigger: z
     .object({
       providers: z.array(z.string()).default(['*']),

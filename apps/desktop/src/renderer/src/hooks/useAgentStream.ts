@@ -236,7 +236,7 @@ export function useAgentStream(): void {
     };
 
     const handleFsUpdated = (event: AgentStreamEvent) => {
-      // Live mirror of the agent's text_editor mutations into the iframe.
+      // Live mirror of the agent's workspace edit mutations into the iframe.
       // `index.html` is the default artifact file, but some workspaces keep a
       // small HTML placeholder that points at a sibling JSX/TSX source.
       if (typeof event.path !== 'string' || typeof event.content !== 'string') return;

@@ -19,7 +19,7 @@ export interface UseDesignFilesResult {
 
 /**
  * Read the design's bound workspace directory directly. The list reflects
- * whatever is on disk right now — every write path (text_editor, scaffold,
+ * whatever is on disk right now — every write path (workspace edit, scaffold,
  * generate_image_asset, the user dragging a file in by hand) shows up
  * because we do not depend on any tool remembering to fire an event.
  *

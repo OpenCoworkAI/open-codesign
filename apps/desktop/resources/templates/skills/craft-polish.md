@@ -5,6 +5,11 @@ description: >
   Adds the final interaction and craft surplus pass that prevents generic AI UI:
   real clickable states, view transitions, empty states, rhythm breaks, and
   component-reference self-checks. Use before final `done`.
+aliases: [polish, interaction-polish, final-pass, craft-pass]
+dependencies: []
+validationHints:
+  - final artifact includes focus and hover states for actions
+  - operational surfaces include empty loading or error states
 trigger:
   providers: ['*']
   scope: system

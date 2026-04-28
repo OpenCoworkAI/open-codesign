@@ -101,4 +101,40 @@ describe('preparePromptContext', () => {
       code: 'REFERENCE_URL_TOO_LARGE',
     });
   });
+
+  it('loads workspace AGENTS.md, DESIGN.md, and safe project settings', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-'));
+    await fs.mkdir(path.join(dir, '.codesign'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'AGENTS.md'), 'Follow project density rules.', 'utf8');
+    await fs.writeFile(path.join(dir, 'DESIGN.md'), '# Tokens\nUse Inter.', 'utf8');
+    await fs.writeFile(
+      path.join(dir, '.codesign', 'settings.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        preferredSkills: ['chart-rendering'],
+        apiKey: 'must-not-enter-prompt',
+        arbitrary: 'ignored',
+      }),
+      'utf8',
+    );
+
+    const result = await preparePromptContext({ workspaceRoot: dir });
+
+    expect(result.projectContext.agentsMd).toContain('project density');
+    expect(result.projectContext.designMd).toContain('Use Inter');
+    expect(result.projectContext.settingsJson).toContain('preferredSkills');
+    expect(result.projectContext.settingsJson).not.toContain('apiKey');
+    expect(result.projectContext.settingsJson).not.toContain('arbitrary');
+  });
+
+  it('throws when project settings are malformed JSON', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-bad-'));
+    await fs.mkdir(path.join(dir, '.codesign'), { recursive: true });
+    await fs.writeFile(path.join(dir, '.codesign', 'settings.json'), '{bad json', 'utf8');
+
+    await expect(preparePromptContext({ workspaceRoot: dir })).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'CONFIG_PARSE_FAILED',
+    });
+  });
 });

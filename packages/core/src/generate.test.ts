@@ -274,7 +274,7 @@ describe('composeSystemPrompt()', () => {
 
   it('keeps the create prompt small enough for resource lazy-loading to matter', () => {
     const p = composeSystemPrompt({ mode: 'create', userPrompt: '做个数据看板' });
-    expect(p.length).toBeLessThan(15_000);
+    expect(p.length).toBeLessThan(10_000);
   });
 
   it('mode tweak ignores userPrompt and returns the full tweak prompt', () => {

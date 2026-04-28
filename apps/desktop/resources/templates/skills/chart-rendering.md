@@ -5,6 +5,11 @@ description: >
   Renders real chart markup for dashboards, analytics, reports, case studies,
   metrics, graphs, plots, visualizations, 数据看板, or 图表. Use before writing
   any chart-shaped UI.
+aliases: [charts, data-viz, dataviz, dashboard-charts, 图表, 数据可视化]
+dependencies: [artifact-composition]
+validationHints:
+  - final artifact contains real svg canvas or chart component marks
+  - chart has data points labels units and interpretation text
 trigger:
   providers: ['*']
   scope: system

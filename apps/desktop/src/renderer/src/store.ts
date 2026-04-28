@@ -331,7 +331,7 @@ export interface CodesignState {
     durationMs?: number;
     errorMessage?: string;
   }) => Promise<void>;
-  /** Live preview update from the agent's virtual fs (text_editor tool).
+  /** Live preview update from the agent's virtual fs (workspace edit tool).
    *  Gated by designId match against the active or generating design so a
    *  background run cannot stomp the preview the user is currently viewing. */
   setPreviewHtmlFromAgent: (input: { designId: string; content: string }) => void;

@@ -1,6 +1,6 @@
-import { open } from 'node:fs/promises';
-import { extname } from 'node:path';
-import type { AttachmentContext, ReferenceUrlContext } from '@open-codesign/core';
+import { open, readFile } from 'node:fs/promises';
+import path, { extname } from 'node:path';
+import type { AttachmentContext, ProjectContext, ReferenceUrlContext } from '@open-codesign/core';
 import {
   CodesignError,
   ERROR_CODES,
@@ -43,7 +43,22 @@ const MAX_TEXT_ATTACHMENT_BYTES = 256_000;
 const MAX_BINARY_ATTACHMENT_BYTES = 10_000_000;
 const MAX_URL_EXCERPT_CHARS = 1_200;
 const MAX_URL_RESPONSE_BYTES = 256_000;
+const MAX_PROJECT_CONTEXT_CHARS = 10_000;
+const MAX_PROJECT_SETTINGS_CHARS = 4_000;
 const REFERENCE_CONTENT_TYPES = ['text/html', 'application/xhtml+xml'];
+const ALLOWED_PROJECT_SETTING_KEYS = new Set([
+  'schemaVersion',
+  'artifactType',
+  'brandRef',
+  'defaultBrandRef',
+  'density',
+  'designSystemPath',
+  'fidelity',
+  'language',
+  'preferredSkills',
+  'theme',
+  'viewport',
+]);
 
 function cleanText(raw: string, maxChars: number): string {
   return raw
@@ -66,6 +81,90 @@ function isProbablyText(buffer: Buffer, extension: string): boolean {
   if (TEXT_EXTS.has(extension)) return true;
   const probe = buffer.subarray(0, 512);
   return !probe.includes(0);
+}
+
+function isWithinRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function isMissingFile(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
+async function readWorkspaceText(
+  workspaceRoot: string,
+  relativePath: string,
+  maxChars: number,
+): Promise<string | undefined> {
+  const filePath = path.resolve(workspaceRoot, relativePath);
+  if (!isWithinRoot(workspaceRoot, filePath)) {
+    throw new CodesignError(
+      `Project context path escapes workspace: ${relativePath}`,
+      ERROR_CODES.CONFIG_SCHEMA_INVALID,
+    );
+  }
+  try {
+    const text = await readFile(filePath, 'utf8');
+    return cleanText(text, maxChars);
+  } catch (err) {
+    if (isMissingFile(err)) return undefined;
+    throw new CodesignError(
+      `Failed to read project context file "${relativePath}"`,
+      ERROR_CODES.CONFIG_READ_FAILED,
+      { cause: err },
+    );
+  }
+}
+
+function safeProjectSettings(raw: string): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch (err) {
+    throw new CodesignError(
+      '.codesign/settings.json is not valid JSON',
+      ERROR_CODES.CONFIG_PARSE_FAILED,
+      { cause: err },
+    );
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new CodesignError(
+      '.codesign/settings.json must contain an object',
+      ERROR_CODES.CONFIG_SCHEMA_INVALID,
+    );
+  }
+  const safe: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!ALLOWED_PROJECT_SETTING_KEYS.has(key)) continue;
+    if (/key|secret|token|password/i.test(key)) continue;
+    if (
+      value === null ||
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+    ) {
+      safe[key] = value;
+    }
+  }
+  const text = JSON.stringify(safe, null, 2);
+  return text === '{}' ? undefined : cleanText(text, MAX_PROJECT_SETTINGS_CHARS);
+}
+
+async function readProjectContext(workspaceRoot: string | undefined): Promise<ProjectContext> {
+  if (!workspaceRoot) return {};
+  const [agentsMd, designMd, rawSettings] = await Promise.all([
+    readWorkspaceText(workspaceRoot, 'AGENTS.md', MAX_PROJECT_CONTEXT_CHARS),
+    readWorkspaceText(workspaceRoot, 'DESIGN.md', MAX_PROJECT_CONTEXT_CHARS),
+    readWorkspaceText(workspaceRoot, '.codesign/settings.json', MAX_PROJECT_SETTINGS_CHARS),
+  ]);
+  const settingsJson = rawSettings === undefined ? undefined : safeProjectSettings(rawSettings);
+  return {
+    ...(agentsMd !== undefined ? { agentsMd } : {}),
+    ...(designMd !== undefined ? { designMd } : {}),
+    ...(settingsJson !== undefined ? { settingsJson } : {}),
+  };
 }
 
 async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> {
@@ -277,12 +376,14 @@ export interface PreparedPromptContext {
   designSystem: StoredDesignSystem | null;
   attachments: AttachmentContext[];
   referenceUrl: ReferenceUrlContext | null;
+  projectContext: ProjectContext;
 }
 
 export async function preparePromptContext(input: {
   attachments?: LocalInputFile[] | undefined;
   referenceUrl?: string | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
+  workspaceRoot?: string | undefined;
 }): Promise<PreparedPromptContext> {
   const attachments = await Promise.all(
     (input.attachments ?? []).map((file) => readAttachment(file)),
@@ -291,10 +392,12 @@ export async function preparePromptContext(input: {
     typeof input.referenceUrl === 'string' && input.referenceUrl.trim().length > 0
       ? await inspectReferenceUrl(input.referenceUrl.trim())
       : null;
+  const projectContext = await readProjectContext(input.workspaceRoot);
 
   return {
     designSystem: input.designSystem ?? null,
     attachments,
     referenceUrl,
+    projectContext,
   };
 }
