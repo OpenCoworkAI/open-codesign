@@ -192,6 +192,7 @@ function applyCaps(messages: AgentMessage[], cfg: CapConfig): AgentMessage[] {
 
 export function buildTransformContext(
   log: CoreLogger = NOOP_LOGGER,
+  onAggressivePrune?: () => void,
 ): (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]> {
   return async (messages) => {
     if (messages.length === 0) return messages;
@@ -218,6 +219,8 @@ export function buildTransformContext(
     });
 
     if (firstSize <= HARD_CAP_BYTES) return first;
+
+    onAggressivePrune?.();
 
     const aggressive = applyCaps(messages, {
       textLimit: AGGRESSIVE_BLOCK_LIMIT,

@@ -543,6 +543,10 @@ export interface GenerateViaAgentDeps {
    * poster/background asset is worth generating.
    */
   generateImageAsset?: GenerateImageAssetFn | undefined;
+  /** Called when aggressive context pruning triggers (context > 200KB). */
+  onAggressivePrune?: (() => void) | undefined;
+  /** Called after the agent finishes with the full conversation messages. */
+  onComplete?: ((messages: AgentMessage[]) => void) | undefined;
 }
 
 /**
@@ -611,6 +615,7 @@ export async function generateViaAgent(
       ...(input.designSystem !== undefined ? { designSystem: input.designSystem } : {}),
       ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
       ...(input.referenceUrl !== undefined ? { referenceUrl: input.referenceUrl } : {}),
+      ...(input.memoryContext !== undefined ? { memoryContext: input.memoryContext } : {}),
     }),
   );
 
@@ -733,7 +738,7 @@ export async function generateViaAgent(
     // Without this, assistant.toolCall.input + big view results grow O(N²)
     // in LLM-facing size across a long tool-using run and blow past 1 M
     // tokens. See context-prune.ts for the full strategy.
-    transformContext: buildTransformContext(log),
+    transformContext: buildTransformContext(log, deps.onAggressivePrune),
     // Async getter so OAuth tokens can be refreshed between agent turns. On a
     // long tool-using run, `input.apiKey` captured at start-of-request would
     // eventually expire; the caller passes `input.getApiKey` for codex so each
@@ -875,6 +880,8 @@ export async function generateViaAgent(
     throw remapProviderError(new CodesignError(message, code), input.model.provider, input.wire);
   }
   log.info('[generate] step=send_request.ok', { ...ctx, ms: Date.now() - sendStart });
+
+  deps.onComplete?.(agent.state.messages);
 
   log.info('[generate] step=parse_response', ctx);
   const parseStart = Date.now();
