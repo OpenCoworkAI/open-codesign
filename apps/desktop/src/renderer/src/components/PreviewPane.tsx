@@ -851,7 +851,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           {body}
           {previewHtml ? <TweakPanel iframeRef={iframeRef} /> : null}
         </div>
-        {commentBubble && interactionMode === 'comment'
+        {commentBubble
           ? (() => {
               const liveForBubble = liveRects[commentBubble.selector];
               const scaled = liveForBubble
