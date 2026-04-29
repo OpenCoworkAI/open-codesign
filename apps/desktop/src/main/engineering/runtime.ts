@@ -215,27 +215,26 @@ export class EngineeringRuntime extends EventEmitter {
    *  reflects the post-startup terminal state for this start attempt. */
   start(args: StartArgs): Promise<EngineeringRunState> {
     return new Promise<EngineeringRunState>((resolve, reject) => {
-      // Reuse-or-create the slot. If another child is still alive for this
-      // designId, treat the second start() as idempotent and return the
-      // current state instead of rejecting \u2014 the renderer commonly fires
-      // start again after reload, refresh, or a fast hub navigation, and
-      // the previous behavior surfaced a confusing "already running" toast.
       const existing = this.slots.get(args.designId);
-      if (existing?.child !== null && existing?.child !== undefined) {
-        resolve(existing.state);
-        return;
-      }
-      // Port-probe short-circuit: if the manual / saved ready URL is already
-      // bound (a previous app session left the dev server running, or the
-      // user is running it themselves in a terminal), skip the spawn and
-      // just mark ready. This is the path the user explicitly asked for —
-      // "if the port is already serving, just use it". We probe synchronously
-      // (asynchronously, in a microtask) before falling through to spawn.
+      // Build candidate URLs to probe. We always check the port FIRST,
+      // before any designId-keyed slot logic, because the user's mental
+      // model is "if something is already serving on that port, just
+      // attach to it". The slot map is an implementation detail; the
+      // port is the source of truth for whether a dev server is up.
       const probeTargets: Array<{ host: string; port: number; url: string }> = [];
       const manualTarget = urlToProbeTarget(args.manualReadyUrl ?? null);
       if (manualTarget !== null) probeTargets.push(manualTarget);
-      // Saved lastReadyUrl is also worth probing (covers the "previous run
-      // still alive" case for sessions without a manual URL).
+      // The slot's last known ready URL (in-memory) and the persisted
+      // lastReadyUrl (on disk) are both worth probing — covers
+      // "I already started this session" and "the dev server survived
+      // an app restart".
+      const inMemoryTarget = urlToProbeTarget(existing?.state.readyUrl ?? null);
+      if (
+        inMemoryTarget !== null &&
+        !probeTargets.some((t) => t.host === inMemoryTarget.host && t.port === inMemoryTarget.port)
+      ) {
+        probeTargets.push(inMemoryTarget);
+      }
       try {
         const saved = readEngineeringSettings(args.workspacePath);
         const savedTarget = urlToProbeTarget(saved?.lastReadyUrl ?? null);
@@ -249,20 +248,11 @@ export class EngineeringRuntime extends EventEmitter {
         // best-effort; settings.json may not exist yet
       }
 
-      const continueSpawn = () => this.spawnChildImpl(args, existing, { resolve, reject });
-
-      if (probeTargets.length === 0) {
-        continueSpawn();
-        return;
-      }
-
       void (async () => {
+        // 1) Port-first: if any candidate port is already serving, attach.
         for (const target of probeTargets) {
           const alive = await isPortListening(target.host, target.port);
           if (alive) {
-            // Reuse the existing dev server. We still register a slot so
-            // getRunState / stop work uniformly, but child stays null and
-            // state goes straight to running.
             const logs = existing?.logs ?? new LogRingBuffer(LOG_RING_CAPACITY);
             logs.reset();
             const slot: RunSlot = {
@@ -289,7 +279,16 @@ export class EngineeringRuntime extends EventEmitter {
             return;
           }
         }
-        continueSpawn();
+        // 2) No port answered. If we still have a live child for this
+        //    designId (rare: its port should normally have answered, but
+        //    possible if it bound to an unexpected URL), be idempotent
+        //    and return current state rather than spawning a duplicate.
+        if (existing?.child !== null && existing?.child !== undefined) {
+          resolve(existing.state);
+          return;
+        }
+        // 3) Spawn fresh.
+        this.spawnChildImpl(args, existing, { resolve, reject });
       })();
     });
   }
