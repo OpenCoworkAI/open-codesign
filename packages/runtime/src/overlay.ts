@@ -191,6 +191,17 @@ export const OVERLAY_SCRIPT = `(function() {
     // routing and any real navigation (including hash jumps to non-existent
     // ids) would blank the preview. Agent should use React view-state for
     // multi-page designs; see agent.ts AGENTIC_TOOL_GUIDANCE.
+    //
+    // Engineering URL mode is the exception: the iframe loads a real dev
+    // server (Next.js / Vite + React Router etc.) that owns its own
+    // navigation. Detected via location.protocol — srcdoc iframes report
+    // 'about:' (about:srcdoc), URL-mode iframes report 'http(s):'.
+    var isUrlMode = false;
+    try {
+      var proto = window.location && window.location.protocol;
+      isUrlMode = proto === 'http:' || proto === 'https:';
+    } catch (_) { /* cross-origin location read shouldn't happen here, but be safe */ }
+    if (isUrlMode) return;
     var anchor = e.target;
     while (anchor && anchor.tagName !== 'A') anchor = anchor.parentElement;
     if (anchor && (anchor.href || anchor.getAttribute('href'))) {
@@ -282,7 +293,15 @@ export const OVERLAY_SCRIPT = `(function() {
     { evt: 'mouseover', fn: onMouseOver },
     { evt: 'mouseout', fn: onMouseOut },
     { evt: 'click', fn: onClick },
-    { evt: 'submit', fn: function(e) { e.preventDefault(); } }
+    { evt: 'submit', fn: function(e) {
+        // Same gate as onClick: real dev servers (URL mode) own their
+        // own form handling. Only block submits in srcdoc preview.
+        try {
+          var p = window.location && window.location.protocol;
+          if (p === 'http:' || p === 'https:') return;
+        } catch (_) {}
+        e.preventDefault();
+      } }
   ];
   function reattach() {
     for (var i = 0; i < installs.length; i++) {
