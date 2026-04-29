@@ -515,7 +515,29 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     const selectors = new Set<string>();
-    if (currentSnapshotId) {
+    // Engineering URL-mode comments are scoped by url path, not snapshotId
+    // (snapshotId is null for them). Without this branch the sandbox never
+    // measures their selectors on second entry → liveRects stays empty →
+    // pins use the stale rect captured at creation time and end up
+    // off-element / unclickable, and bubbles opened from the comment list
+    // anchor to the same wrong rect.
+    const designForWatch =
+      currentDesignId !== null ? designs.find((d) => d.id === currentDesignId) : undefined;
+    const isEngineeringWatch = designForWatch?.mode === 'engineering';
+    const currentPathForWatch =
+      currentDesignId !== null ? iframeUrlPathByDesign[currentDesignId] : undefined;
+    if (isEngineeringWatch) {
+      for (const c of comments) {
+        if (c.snapshotId !== null) continue;
+        const stored = c.urlPath;
+        const matches =
+          typeof stored !== 'string' ||
+          stored.length === 0 ||
+          typeof currentPathForWatch !== 'string' ||
+          stored === currentPathForWatch;
+        if (matches) selectors.add(c.selector);
+      }
+    } else if (currentSnapshotId) {
       for (const c of comments) {
         if (c.snapshotId === currentSnapshotId) selectors.add(c.selector);
       }
@@ -529,7 +551,15 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     } catch {
       /* sandbox gone — retry happens next render */
     }
-  }, [comments, currentSnapshotId, commentBubble, currentDesignId, iframeLoadTick]);
+  }, [
+    comments,
+    currentSnapshotId,
+    commentBubble,
+    currentDesignId,
+    iframeLoadTick,
+    designs,
+    iframeUrlPathByDesign,
+  ]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {

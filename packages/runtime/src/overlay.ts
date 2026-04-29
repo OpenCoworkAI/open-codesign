@@ -44,6 +44,15 @@ export const OVERLAY_SCRIPT = `(function() {
 
   var watchedSelectors = [];
   var rectsFrameHandle = 0;
+  // Retry schedule (ms) for selectors that aren't in the DOM yet. Engineering
+  // URL mode loads SPAs (Next.js / React Router) where the route renders a
+  // few frames after the iframe's load event — without retries, the first
+  // measurement returns nothing and pins inherit stale rects until the user
+  // scrolls. Capped so we don't poll forever on selectors that genuinely
+  // no longer match (e.g. comment created on a deleted element).
+  var RETRY_DELAYS_MS = [80, 200, 500, 1200, 3000];
+  var retryTimer = 0;
+  var retryStep = 0;
 
   function resolveSelector(sel) {
     if (!sel || typeof sel !== 'string') return null;
@@ -62,24 +71,38 @@ export const OVERLAY_SCRIPT = `(function() {
     rectsFrameHandle = 0;
     if (!watchedSelectors.length) return;
     var entries = [];
+    var missing = 0;
     for (var i = 0; i < watchedSelectors.length; i++) {
       var sel = watchedSelectors[i];
       var el = resolveSelector(sel);
-      if (!el || !el.getBoundingClientRect) continue;
+      if (!el || !el.getBoundingClientRect) { missing++; continue; }
       var r = el.getBoundingClientRect();
       entries.push({
         selector: sel,
         rect: { top: r.top, left: r.left, width: r.width, height: r.height }
       });
     }
-    if (!entries.length) return;
-    try {
-      window.parent.postMessage({
-        __codesign: true,
-        type: 'ELEMENT_RECTS',
-        entries: entries
-      }, '*');
-    } catch (err) { warnOnce('postMessage ELEMENT_RECTS failed', err); }
+    if (entries.length) {
+      try {
+        window.parent.postMessage({
+          __codesign: true,
+          type: 'ELEMENT_RECTS',
+          entries: entries
+        }, '*');
+      } catch (err) { warnOnce('postMessage ELEMENT_RECTS failed', err); }
+    }
+    // If anything is still un-mounted, schedule another attempt. A new
+    // WATCH_SELECTORS or scroll/resize resets the retry counter.
+    if (missing > 0 && retryStep < RETRY_DELAYS_MS.length) {
+      var delay = RETRY_DELAYS_MS[retryStep++];
+      try { if (retryTimer) clearTimeout(retryTimer); } catch (_) {}
+      try {
+        retryTimer = setTimeout(function () {
+          retryTimer = 0;
+          scheduleRectsBroadcast();
+        }, delay);
+      } catch (_) { /* timers unavailable — give up gracefully */ }
+    }
   }
 
   function scheduleRectsBroadcast() {
@@ -89,6 +112,12 @@ export const OVERLAY_SCRIPT = `(function() {
     } catch (_) {
       measureAndPostRects();
     }
+  }
+
+  function resetRetryAndBroadcast() {
+    retryStep = 0;
+    try { if (retryTimer) { clearTimeout(retryTimer); retryTimer = 0; } } catch (_) {}
+    scheduleRectsBroadcast();
   }
 
   var HOVER_OUTLINE = '2px solid #c96442';
@@ -256,7 +285,7 @@ export const OVERLAY_SCRIPT = `(function() {
         dedup.push(sel);
       }
       watchedSelectors = dedup;
-      scheduleRectsBroadcast();
+      resetRetryAndBroadcast();
       return;
     }
   }
