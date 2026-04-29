@@ -123,6 +123,25 @@ export function registerEngineeringIpc(db: Database): void {
       }
       launchEntry = validateLaunchEntry(parsed.data);
     }
+    let manualReadyUrl: string | null = null;
+    if (r['manualReadyUrl'] !== undefined && r['manualReadyUrl'] !== null) {
+      if (typeof r['manualReadyUrl'] !== 'string') {
+        throw new CodesignError(
+          'engine:v1:session:create: manualReadyUrl must be a string when provided',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const trimmed = r['manualReadyUrl'].trim();
+      if (trimmed !== '') {
+        if (!/^https?:\/\//.test(trimmed)) {
+          throw new CodesignError(
+            'engine:v1:session:create: manualReadyUrl must start with http:// or https://',
+            'IPC_BAD_INPUT',
+          );
+        }
+        manualReadyUrl = trimmed;
+      }
+    }
 
     const detection = await detect(workspacePath);
     if (detection.framework !== 'react') {
@@ -157,6 +176,7 @@ export function registerEngineeringIpc(db: Database): void {
       packageManager,
       launchEntry,
       lastReadyUrl: detection.savedConfig?.lastReadyUrl ?? null,
+      manualReadyUrl,
     };
     const safe = EngineeringConfigV1.parse(config);
     setDesignMode(db, created.id, 'engineering');
@@ -212,6 +232,7 @@ export function registerEngineeringIpc(db: Database): void {
       workspacePath: design.workspacePath,
       packageManager: config.packageManager,
       launchEntry: config.launchEntry,
+      manualReadyUrl: config.manualReadyUrl,
     });
   });
 
@@ -269,6 +290,7 @@ export function registerEngineeringIpc(db: Database): void {
         packageManager: previous.packageManager,
         launchEntry,
         lastReadyUrl: previous.lastReadyUrl,
+        manualReadyUrl: previous.manualReadyUrl,
       };
       const safe = EngineeringConfigV1.parse(next);
       setEngineeringConfig(db, designId, safe);

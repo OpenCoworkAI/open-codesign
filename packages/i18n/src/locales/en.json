@@ -1157,6 +1157,24 @@
       "reasonGeneric": "React was not detected in this workspace's dependencies.",
       "dismiss": "Pick another folder",
       "useGenerative": "Use generative mode instead"
+    },
+    "launchPicker": {
+      "title": "Pick how to start the dev server",
+      "subtitle": "Choose one of the scripts we found, or paste a custom command. Optionally override the ready URL.",
+      "scriptsLabel": "Detected scripts",
+      "noScripts": "No scripts found in package.json.",
+      "customLabel": "Custom command",
+      "customPlaceholder": "e.g. pnpm --filter web dev",
+      "readyUrlLabel": "Preview URL (optional)",
+      "readyUrlPlaceholder": "http://localhost:3000",
+      "readyUrlHint": "Used after a short grace window if no URL is detected on stdout.",
+      "confirm": "Start engineering session",
+      "confirming": "Starting…",
+      "errors": {
+        "emptyCommand": "Custom command cannot be empty.",
+        "noSelection": "Pick a script or write a custom command.",
+        "invalidUrl": "URL must start with http:// or https://."
+      }
     }
   }
 }

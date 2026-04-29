@@ -1153,6 +1153,24 @@
       "reasonGeneric": "未在工作区依赖中检测到 React。",
       "dismiss": "选择其他文件夹",
       "useGenerative": "改用生成模式"
+    },
+    "launchPicker": {
+      "title": "选择启动开发服务器的方式",
+      "subtitle": "从扫描到的脚本中选一个，或者贴一条自定义命令。可选填预览网址。",
+      "scriptsLabel": "检测到的脚本",
+      "noScripts": "未在 package.json 中发现脚本。",
+      "customLabel": "自定义命令",
+      "customPlaceholder": "例如：pnpm --filter web dev",
+      "readyUrlLabel": "预览网址（可选）",
+      "readyUrlPlaceholder": "http://localhost:3000",
+      "readyUrlHint": "如果一定时间内未从 stdout 检测到网址，将使用该地址。",
+      "confirm": "启动工程会话",
+      "confirming": "启动中…",
+      "errors": {
+        "emptyCommand": "自定义命令不能为空。",
+        "noSelection": "请选择一个脚本或填入自定义命令。",
+        "invalidUrl": "网址必须以 http:// 或 https:// 开头。"
+      }
     }
   }
 }

@@ -586,8 +586,13 @@ const api = {
         launchEntries: LaunchEntry[];
         packageManager: EngineeringConfig['packageManager'] | null;
         reason?: string;
+        savedConfig: EngineeringConfig | null;
       }>,
-    createSession: (input: { workspacePath: string; launchEntry?: LaunchEntry }) =>
+    createSession: (input: {
+      workspacePath: string;
+      launchEntry?: LaunchEntry;
+      manualReadyUrl?: string | null;
+    }) =>
       ipcRenderer.invoke('engine:v1:session:create', {
         schemaVersion: 1,
         ...input,

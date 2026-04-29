@@ -12,7 +12,9 @@ import type {
   Design,
   DiagnosticEventRow,
   DiagnosticHypothesis,
+  EngineeringPackageManager,
   EngineeringRunState,
+  LaunchEntry,
   LocalInputFile,
   ModelRef,
   OnboardingState,
@@ -250,6 +252,20 @@ interface CodesignState {
      *  Stable values — the dialog branches on these to pick the right copy. */
     reason: string;
   } | null;
+  /** U12: between detect() and createSession() the user picks which launch
+   *  command to run (or types a custom one) and may override the ready URL.
+   *  Non-null means the picker dialog is open. */
+  engineeringLaunchPicker: {
+    workspacePath: string;
+    launchEntries: LaunchEntry[];
+    packageManager: EngineeringPackageManager | null;
+    /** Pre-fill for the manual ready-URL field, sourced from any saved
+     *  engineering settings on the workspace. */
+    suggestedReadyUrl: string | null;
+  } | null;
+  /** True while engine.session.create + post-create wiring is in flight,
+   *  so the picker dialog can disable its buttons. */
+  engineeringLaunchSubmitting: boolean;
 
   theme: Theme;
   view: AppView;
@@ -431,6 +447,14 @@ interface CodesignState {
   cancelWorkspaceRebind: () => void;
   /** U11: dismiss the unsupported-engineering hint. */
   dismissEngineeringUnsupportedHint: () => void;
+  /** U12: confirm the launch picker selection — actually creates the
+   *  engineering session via IPC and switches the view. */
+  confirmEngineeringLaunch: (input: {
+    launchEntry: LaunchEntry;
+    manualReadyUrl: string | null;
+  }) => Promise<Design | null>;
+  /** U12: dismiss the picker without creating a session. */
+  cancelEngineeringLaunch: () => void;
   confirmWorkspaceRebind: (migrateFiles: boolean) => Promise<void>;
 
   pushToast: (toast: Omit<Toast, 'id'>) => string;
@@ -1500,6 +1524,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   designToRename: null,
   workspaceRebindPending: null,
   engineeringUnsupportedHint: null,
+  engineeringLaunchPicker: null,
+  engineeringLaunchSubmitting: false,
 
   inputFiles: [],
   referenceUrl: '',
@@ -2158,11 +2184,11 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       }
     }
     if (chosenPath === null) return null;
-    // U11: short-circuit on non-React workspaces. Pre-detecting in the
-    // renderer means we never write a `designs` row for an unsupported
-    // project (R11), and the dialog can show a workspace-specific reason
-    // instead of a generic "createFailed" toast. Detection itself is
-    // read-only and side-effect free.
+    // U11: short-circuit on non-React workspaces.
+    // U12: instead of auto-picking the top-confidence launch entry and
+    // calling createSession() right away, we hand the detection result to
+    // the launch picker dialog so the user can pick / customize the command
+    // and (optionally) override the ready URL before any persistence.
     try {
       const detection = await window.codesign.engine.detect(chosenPath);
       if (detection.framework !== 'react') {
@@ -2174,6 +2200,15 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         });
         return null;
       }
+      set({
+        engineeringLaunchPicker: {
+          workspacePath: chosenPath,
+          launchEntries: detection.launchEntries,
+          packageManager: detection.packageManager,
+          suggestedReadyUrl: detection.savedConfig?.lastReadyUrl ?? null,
+        },
+      });
+      return null;
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
       get().pushToast({
@@ -2183,8 +2218,20 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       });
       return null;
     }
+  },
+
+  async confirmEngineeringLaunch({ launchEntry, manualReadyUrl }) {
+    if (!window.codesign) return null;
+    const picker = get().engineeringLaunchPicker;
+    if (picker === null) return null;
+    if (get().engineeringLaunchSubmitting) return null;
+    set({ engineeringLaunchSubmitting: true });
     try {
-      const design = await window.codesign.engine.createSession({ workspacePath: chosenPath });
+      const design = await window.codesign.engine.createSession({
+        workspacePath: picker.workspacePath,
+        launchEntry,
+        manualReadyUrl,
+      });
       set({
         currentDesignId: design.id,
         previewHtml: null,
@@ -2202,6 +2249,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         currentSnapshotId: null,
         canvasTabs: [FILES_TAB],
         activeCanvasTab: 0,
+        engineeringLaunchPicker: null,
+        engineeringLaunchSubmitting: false,
       });
       await get().loadDesigns();
       void get().loadChatForCurrentDesign();
@@ -2209,6 +2258,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       return design;
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      set({ engineeringLaunchSubmitting: false });
       get().pushToast({
         variant: 'error',
         title: tr('projects.notifications.createFailed'),
@@ -2216,6 +2266,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       });
       return null;
     }
+  },
+
+  cancelEngineeringLaunch() {
+    set({ engineeringLaunchPicker: null, engineeringLaunchSubmitting: false });
   },
 
   setEngineeringRunState(state) {

@@ -3,6 +3,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
+import { EngineeringLaunchPickerDialog } from './components/EngineeringLaunchPickerDialog';
 import { EngineeringUnsupportedHint } from './components/EngineeringUnsupportedHint';
 import { NewDesignDialog } from './components/NewDesignDialog';
 import { PreviewPane } from './components/PreviewPane';
@@ -264,6 +265,7 @@ export function App() {
       <RebindWorkspaceDialog />
       <NewDesignDialog />
       <EngineeringUnsupportedHint />
+      <EngineeringLaunchPickerDialog />
       <ToastViewport />
       <CommentsPanel />
       <ReportEventDialog localId={activeReportLocalId} onClose={closeReportDialog} />

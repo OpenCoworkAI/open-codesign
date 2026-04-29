@@ -20,6 +20,11 @@ const logger = getLogger('engineering-runtime');
 const LOG_RING_CAPACITY = 500;
 const ERROR_EXCERPT_LINES = 30;
 const READY_URL_TIMEOUT_MS = 60_000;
+/** When the user supplied a manual ready URL we still wait briefly so the
+ *  dev server has a chance to bind its port — just much shorter than the
+ *  hard timeout. After this elapses we trust the manual URL even if no
+ *  matching line ever shows up on stdout. */
+const MANUAL_READY_URL_GRACE_MS = 3_000;
 const STOP_SIGTERM_GRACE_MS = 4_000;
 
 export interface StartArgs {
@@ -27,6 +32,8 @@ export interface StartArgs {
   workspacePath: string;
   packageManager: EngineeringPackageManager;
   launchEntry: LaunchEntry;
+  /** Optional override propagated from EngineeringConfig.manualReadyUrl. */
+  manualReadyUrl?: string | null;
 }
 
 interface RunSlot {
@@ -34,6 +41,9 @@ interface RunSlot {
   workspacePath: string;
   packageManager: EngineeringPackageManager;
   launchEntry: LaunchEntry;
+  /** Mirrors EngineeringConfig.manualReadyUrl so we can preserve it across
+   *  restarts when persisting settings on markReady. */
+  manualReadyUrl: string | null;
   child: ChildProcess | null;
   state: EngineeringRunState;
   logs: LogRingBuffer;
@@ -96,6 +106,7 @@ export class EngineeringRuntime extends EventEmitter {
       workspacePath: args.workspacePath,
       packageManager: args.packageManager,
       launchEntry: args.launchEntry,
+      manualReadyUrl: null,
       child: null,
       state: this.makeState(args.designId, 'detecting', null, null, logs),
       logs,
@@ -180,6 +191,7 @@ export class EngineeringRuntime extends EventEmitter {
         workspacePath: args.workspacePath,
         packageManager: args.packageManager,
         launchEntry: args.launchEntry,
+        manualReadyUrl: args.manualReadyUrl ?? null,
         child: null,
         state: this.makeState(args.designId, 'starting', null, null, logs),
         logs,
@@ -239,6 +251,20 @@ export class EngineeringRuntime extends EventEmitter {
           );
         }
       }, READY_URL_TIMEOUT_MS);
+
+      // Manual override: fall back to the user-supplied URL after a short
+      // grace window if stdout never produced a parseable one. We do not
+      // race this against detection \u2014 detection takes the slot first via
+      // markReady() and clears both timers, so this only fires when we still
+      // don't have a real URL.
+      const manual = args.manualReadyUrl;
+      if (manual !== undefined && manual !== null && manual !== '') {
+        setTimeout(() => {
+          if (slot.state.status === 'starting') {
+            this.markReady(slot, manual);
+          }
+        }, MANUAL_READY_URL_GRACE_MS);
+      }
     });
   }
 
@@ -384,6 +410,7 @@ export class EngineeringRuntime extends EventEmitter {
         packageManager: slot.packageManager,
         launchEntry: slot.launchEntry,
         lastReadyUrl: url,
+        manualReadyUrl: slot.manualReadyUrl,
       });
     } catch (err) {
       logger.warn('failed to persist lastReadyUrl', {

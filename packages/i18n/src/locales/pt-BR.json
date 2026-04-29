@@ -1110,6 +1110,24 @@
       "reasonGeneric": "React não foi detectado nas dependências deste projeto.",
       "dismiss": "Escolher outra pasta",
       "useGenerative": "Usar o modo generativo"
+    },
+    "launchPicker": {
+      "title": "Escolha como iniciar o servidor de desenvolvimento",
+      "subtitle": "Selecione um dos scripts detectados ou cole um comando personalizado. Opcionalmente, sobrescreva a URL de preview.",
+      "scriptsLabel": "Scripts detectados",
+      "noScripts": "Nenhum script encontrado em package.json.",
+      "customLabel": "Comando personalizado",
+      "customPlaceholder": "ex.: pnpm --filter web dev",
+      "readyUrlLabel": "URL de preview (opcional)",
+      "readyUrlPlaceholder": "http://localhost:3000",
+      "readyUrlHint": "Usada após uma breve espera se nenhuma URL for detectada no stdout.",
+      "confirm": "Iniciar sessão de engenharia",
+      "confirming": "Iniciando…",
+      "errors": {
+        "emptyCommand": "O comando personalizado não pode estar vazio.",
+        "noSelection": "Escolha um script ou escreva um comando personalizado.",
+        "invalidUrl": "A URL deve começar com http:// ou https://."
+      }
     }
   }
 }

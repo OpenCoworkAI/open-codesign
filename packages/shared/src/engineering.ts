@@ -52,6 +52,10 @@ export const EngineeringConfigV1 = z.object({
   /** Last successfully detected ready URL — used for warm restart and as the
    *  initial preview src when reopening the design. */
   lastReadyUrl: z.string().nullable().default(null),
+  /** Optional user-supplied ready URL (e.g. when the dev server prints no
+   *  parseable URL or runs behind a proxy). When present, the runtime falls
+   *  back to this URL after a short wait if no URL was detected on stdout. */
+  manualReadyUrl: z.string().nullable().default(null),
 });
 export type EngineeringConfig = z.infer<typeof EngineeringConfigV1>;
 
