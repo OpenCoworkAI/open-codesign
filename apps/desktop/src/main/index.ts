@@ -677,7 +677,45 @@ function registerIpcHandlers(db: Database | null): void {
     let deltaCount = 0;
     let toolCount = 0;
 
-    return generateViaAgent(input, {
+    // Engineering-mode awareness — without this, the model reads the default
+    // generative system prompt ("you produce self-contained HTML artifacts
+    // inside a virtual filesystem") and refuses to touch real files even
+    // though we wired text_editor through to the workspace on disk. Inject
+    // a context prefix into the user message so it gets seen verbatim and
+    // doesn't compete with the prompt-composition keyword routing.
+    const designForCtx = designId !== null && db !== null ? getDesign(db, designId) : null;
+    const isEngineering =
+      designForCtx?.mode === 'engineering' &&
+      typeof designForCtx?.workspacePath === 'string' &&
+      designForCtx.workspacePath.length > 0;
+    const augmentedInput: Parameters<typeof generateViaAgent>[0] = isEngineering
+      ? {
+          ...input,
+          prompt: `# Engineering mode (real codebase)
+
+This design is bound to a real local codebase rooted at:
+
+  ${designForCtx?.workspacePath}
+
+The dev server is already running and serving the UI inside the preview iframe. The user's request below is about that codebase, not about generating an HTML mockup.
+
+Your file tools (text_editor / list_files) are wired to the real filesystem under that workspace root. They accept BOTH:
+- workspace-relative paths (e.g. "packages/avalon/src/components/forecast/ForecastToolbar.tsx"), and
+- absolute paths inside the workspace (e.g. "${designForCtx?.workspacePath}/packages/avalon/...").
+
+Inspector-derived file paths (componentSelection.filePath / debugSource) are absolute and inside the workspace — pass them straight to view / str_replace. Do not say "I can only access a virtual filesystem" or "I can't read your local files" — that is not true here. If a path is outside the workspace root the tool will reject it explicitly; trust the tool's error message rather than guessing.
+
+Make the smallest sensible code edit that satisfies the request. Save changes through the file tools so the dev server hot-reloads. Do not produce an HTML \`<artifact>\` tag in this mode; reply with a short summary of what you changed and which files.
+
+---
+
+User request:
+
+${input.prompt}`,
+        }
+      : input;
+
+    return generateViaAgent(augmentedInput, {
       fs,
       runtimeVerify,
       ...(generateImageAsset !== undefined ? { generateImageAsset } : {}),
