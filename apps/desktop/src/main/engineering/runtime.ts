@@ -279,15 +279,10 @@ export class EngineeringRuntime extends EventEmitter {
             return;
           }
         }
-        // 2) No port answered. If we still have a live child for this
-        //    designId (rare: its port should normally have answered, but
-        //    possible if it bound to an unexpected URL), be idempotent
-        //    and return current state rather than spawning a duplicate.
-        if (existing?.child !== null && existing?.child !== undefined) {
-          resolve(existing.state);
-          return;
-        }
-        // 3) Spawn fresh.
+        // 2) No port answered: spawn fresh. We don't gate on the in-memory
+        //    slot here — the dev server (with its HMR loop) is the
+        //    authoritative state. If a slot exists but its port is dead,
+        //    the previous child has died and we should restart anyway.
         this.spawnChildImpl(args, existing, { resolve, reject });
       })();
     });
