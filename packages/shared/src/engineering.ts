@@ -118,6 +118,11 @@ export const EngineeringRunStateV1 = z.object({
   logs: z.array(EngineeringLogLineV1).default([]),
   /** Updated every time the FSM transitions. */
   updatedAt: z.string(),
+  /** True when the runtime attached to a dev server it did not spawn (port
+   *  probe found something already listening). The Stop button surfaces
+   *  this so users understand they can't kill an externally-managed server
+   *  through Open CoDesign. Defaults to false for backward compatibility. */
+  attachedExternally: z.boolean().default(false),
 });
 export type EngineeringRunState = z.infer<typeof EngineeringRunStateV1>;
 

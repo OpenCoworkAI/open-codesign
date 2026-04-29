@@ -97,6 +97,10 @@ interface RunSlot {
   /** Set when stop() is called so the exit handler knows the termination was
    *  requested rather than a crash. */
   stopRequested: boolean;
+  /** True when the slot was created by the port-probe short-circuit instead
+   *  of a real spawn — surfaced in EngineeringRunState so the UI can disable
+   *  the Stop button (we don't own the externally-managed process). */
+  attachedExternally: boolean;
 }
 
 interface RuntimeEvents {
@@ -153,6 +157,7 @@ export class EngineeringRuntime extends EventEmitter {
       readyUrlTimer: null,
       readyDeferred: null,
       stopRequested: false,
+      attachedExternally: false,
     };
     // Refresh the slot context — ack flow may have changed packageManager/entry.
     slot.workspacePath = args.workspacePath;
@@ -267,6 +272,7 @@ export class EngineeringRuntime extends EventEmitter {
               readyUrlTimer: null,
               readyDeferred: { resolve, reject },
               stopRequested: false,
+              attachedExternally: true,
             };
             this.slots.set(args.designId, slot);
             this.transition(slot, 'starting');
@@ -313,6 +319,7 @@ export class EngineeringRuntime extends EventEmitter {
       readyUrlTimer: null,
       readyDeferred: deferred,
       stopRequested: false,
+      attachedExternally: false,
     };
     this.slots.set(args.designId, slot);
     this.transition(slot, 'starting');
@@ -510,7 +517,7 @@ export class EngineeringRuntime extends EventEmitter {
       slot.readyUrlTimer = null;
     }
     slot.state = {
-      ...this.makeState(slot.designId, 'running', url, null, slot.logs),
+      ...this.makeState(slot.designId, 'running', url, null, slot.logs, slot.attachedExternally),
     };
     this.emit('run-state', slot.state);
 
@@ -551,7 +558,14 @@ export class EngineeringRuntime extends EventEmitter {
     slot.child = null;
 
     if (slot.stopRequested) {
-      slot.state = this.makeState(slot.designId, 'stopped', null, null, slot.logs);
+      slot.state = this.makeState(
+        slot.designId,
+        'stopped',
+        null,
+        null,
+        slot.logs,
+        slot.attachedExternally,
+      );
       this.emit('run-state', slot.state);
       // If start() is still pending (user stopped before ready), resolve.
       slot.readyDeferred?.resolve(slot.state);
@@ -566,7 +580,14 @@ export class EngineeringRuntime extends EventEmitter {
         signal !== null ? `child terminated by signal ${signal}` : `child exited with code ${code}`;
       this.fail(slot, 'crash', reason, displayCommand);
     } else {
-      slot.state = this.makeState(slot.designId, 'stopped', null, null, slot.logs);
+      slot.state = this.makeState(
+        slot.designId,
+        'stopped',
+        null,
+        null,
+        slot.logs,
+        slot.attachedExternally,
+      );
       this.emit('run-state', slot.state);
       slot.readyDeferred?.resolve(slot.state);
       slot.readyDeferred = null;
@@ -597,7 +618,14 @@ export class EngineeringRuntime extends EventEmitter {
       excerpt: slot.logs.tail(ERROR_EXCERPT_LINES),
       command,
     };
-    slot.state = this.makeState(slot.designId, 'error', null, error, slot.logs);
+    slot.state = this.makeState(
+      slot.designId,
+      'error',
+      null,
+      error,
+      slot.logs,
+      slot.attachedExternally,
+    );
     this.emit('run-state', slot.state);
     slot.readyDeferred?.resolve(slot.state);
     slot.readyDeferred = null;
@@ -610,6 +638,7 @@ export class EngineeringRuntime extends EventEmitter {
       slot.state.readyUrl,
       slot.state.lastError,
       slot.logs,
+      slot.attachedExternally,
     );
     this.emit('run-state', slot.state);
   }
@@ -620,6 +649,7 @@ export class EngineeringRuntime extends EventEmitter {
     readyUrl: string | null,
     lastError: EngineeringError | null,
     logs: LogRingBuffer,
+    attachedExternally = false,
   ): EngineeringRunState {
     return {
       schemaVersion: 1,
@@ -629,6 +659,7 @@ export class EngineeringRuntime extends EventEmitter {
       lastError,
       logs: logs.snapshot(),
       updatedAt: new Date().toISOString(),
+      attachedExternally,
     };
   }
 }

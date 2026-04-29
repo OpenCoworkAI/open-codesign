@@ -1171,6 +1171,12 @@
         "noSelection": "请选择一个脚本或填入自定义命令。",
         "invalidUrl": "网址必须以 http:// 或 https:// 开头。"
       }
+    },
+    "session": {
+      "stop": "停止开发服务器",
+      "stopping": "正在停止…",
+      "stopped": "开发服务器已停止",
+      "externalHint": "该开发服务器不是由 Open CoDesign 启动的，无法在这里停止。"
     }
   }
 }

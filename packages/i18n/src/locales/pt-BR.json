@@ -1128,6 +1128,12 @@
         "noSelection": "Escolha um script ou escreva um comando personalizado.",
         "invalidUrl": "A URL deve começar com http:// ou https://."
       }
+    },
+    "session": {
+      "stop": "Parar servidor de desenvolvimento",
+      "stopping": "Parando…",
+      "stopped": "Servidor de desenvolvimento parado",
+      "externalHint": "Este servidor de desenvolvimento está sendo executado fora do Open CoDesign e não pode ser parado daqui."
     }
   }
 }
