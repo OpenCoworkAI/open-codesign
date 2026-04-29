@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path_module from 'node:path';
 import { basename, dirname, join } from 'node:path';
@@ -338,14 +338,46 @@ export function createRuntimeTextEditorFs({
   }
 
   /** Resolve any path the agent passes (relative-to-workspace, absolute under
-   *  workspace root, or virtual-FS bare name) into a path relative to the
-   *  design's workspace root. Returns null when no workspace is attached or
-   *  when the path escapes the workspace. The agent surfaces real-disk file
-   *  paths from the React inspector (e.g.
-   *  `/Users/.../packages/avalon/src/components/forecast/ForecastToolbar.tsx`),
-   *  and we want `view` / `str_replace` to just work in that case instead of
-   *  reporting "file not found". */
-  function workspaceRelative(filePath: string): { abs: string; rel: string } | null {
+   *  workspace root, or virtual-FS bare name) into a path on disk plus a key
+   *  for the in-memory map. Returns null when no workspace is attached or
+   *  when the path escapes both the design's workspace root and the monorepo
+   *  root that contains it.
+   *
+   *  `inDesignWorkspace` is true when the resolved path lives under the
+   *  design's own `workspacePath` — only those paths participate in the
+   *  SQLite design_files mirror + fs_updated event. Paths inside the
+   *  surrounding monorepo (e.g. sibling packages in a pnpm workspace) are
+   *  still readable / editable through the file tools, but writes go
+   *  straight to disk without the design-files round-trip. The agent
+   *  surfaces real-disk file paths from the React inspector
+   *  (e.g. `/Users/.../packages/avalon/src/components/foo.tsx`) and the
+   *  user picks `packages/wfm` as the design workspace; without monorepo
+   *  widening the tool would refuse the sibling-package path. */
+  function findMonorepoRoot(start: string): string {
+    let dir = path_module.resolve(start);
+    while (true) {
+      // Cheap, common monorepo signals — checked in order so a pnpm
+      // workspace doesn't get widened to a parent .git that isn't actually
+      // a monorepo. `package.json#workspaces` would also qualify but we
+      // skip the JSON parse to keep this hot path sync.
+      if (
+        existsSync(path_module.join(dir, 'pnpm-workspace.yaml')) ||
+        existsSync(path_module.join(dir, 'lerna.json')) ||
+        existsSync(path_module.join(dir, 'nx.json')) ||
+        existsSync(path_module.join(dir, 'turbo.json')) ||
+        existsSync(path_module.join(dir, 'rush.json'))
+      ) {
+        return dir;
+      }
+      const parent = path_module.dirname(dir);
+      if (parent === dir) return path_module.resolve(start); // hit fs root, no monorepo
+      dir = parent;
+    }
+  }
+
+  function workspaceRelative(
+    filePath: string,
+  ): { abs: string; rel: string; inDesignWorkspace: boolean } | null {
     if (designId === null || db === null) return null;
     const design = getDesign(db, designId);
     const root = design?.workspacePath;
@@ -354,9 +386,27 @@ export function createRuntimeTextEditorFs({
     const candidate = path_module.isAbsolute(filePath)
       ? path_module.resolve(filePath)
       : path_module.resolve(resolvedRoot, filePath);
-    const rel = path_module.relative(resolvedRoot, candidate);
-    if (rel.startsWith('..') || path_module.isAbsolute(rel)) return null;
-    return { abs: candidate, rel: rel.split(path_module.sep).join('/') };
+    const relToDesign = path_module.relative(resolvedRoot, candidate);
+    if (!relToDesign.startsWith('..') && !path_module.isAbsolute(relToDesign)) {
+      return {
+        abs: candidate,
+        rel: relToDesign.split(path_module.sep).join('/'),
+        inDesignWorkspace: true,
+      };
+    }
+    // Outside the design workspace — try the surrounding monorepo root.
+    const monorepoRoot = findMonorepoRoot(resolvedRoot);
+    if (monorepoRoot !== resolvedRoot) {
+      const relToMono = path_module.relative(monorepoRoot, candidate);
+      if (!relToMono.startsWith('..') && !path_module.isAbsolute(relToMono)) {
+        return {
+          abs: candidate,
+          rel: relToMono.split(path_module.sep).join('/'),
+          inDesignWorkspace: false,
+        };
+      }
+    }
+    return null;
   }
 
   // Cap file size returned to the agent. Bigger than this and we surface a
@@ -406,6 +456,16 @@ export function createRuntimeTextEditorFs({
     async create(path: string, content: string) {
       const resolved = workspaceRelative(path);
       const targetPath = resolved !== null ? resolved.rel : path;
+      if (resolved !== null && !resolved.inDesignWorkspace) {
+        // Sibling-package edit (engineering monorepo). Skip the design_files
+        // mirror + fs_updated event — those only make sense for files that
+        // actually belong to the design itself. Write straight to disk so
+        // the dev server hot-reloads.
+        await mkdir(path_module.dirname(resolved.abs), { recursive: true });
+        await writeFile(resolved.abs, content, 'utf8');
+        fsMap.set(targetPath, content);
+        return { path: targetPath };
+      }
       await persistMutation(targetPath, content);
       fsMap.set(targetPath, content);
       emitFsUpdated(targetPath, content);
@@ -435,6 +495,11 @@ export function createRuntimeTextEditorFs({
         throw new Error(`old_str is ambiguous in ${path}; provide more context`);
       }
       const next = current.slice(0, idx) + newStr + current.slice(idx + oldStr.length);
+      if (resolved !== null && !resolved.inDesignWorkspace) {
+        await writeFile(resolved.abs, next, 'utf8');
+        fsMap.set(targetPath, next);
+        return { path: targetPath };
+      }
       await persistMutation(targetPath, next);
       fsMap.set(targetPath, next);
       emitFsUpdated(targetPath, next);
@@ -457,6 +522,12 @@ export function createRuntimeTextEditorFs({
       const clamped = Math.max(0, Math.min(line, lines.length));
       lines.splice(clamped, 0, text);
       const next = lines.join('\n');
+      if (resolved !== null && !resolved.inDesignWorkspace) {
+        await mkdir(path_module.dirname(resolved.abs), { recursive: true });
+        await writeFile(resolved.abs, next, 'utf8');
+        fsMap.set(targetPath, next);
+        return { path: targetPath };
+      }
       await persistMutation(targetPath, next);
       fsMap.set(targetPath, next);
       emitFsUpdated(targetPath, next);
@@ -688,22 +759,52 @@ function registerIpcHandlers(db: Database | null): void {
       designForCtx?.mode === 'engineering' &&
       typeof designForCtx?.workspacePath === 'string' &&
       designForCtx.workspacePath.length > 0;
+    // Detect the surrounding monorepo root so the prompt can tell the model
+    // explicitly that sibling packages are reachable. Mirrors the widening
+    // `workspaceRelative` does so the model's mental model matches the tool.
+    let monorepoRootForPrompt: string | null = null;
+    if (isEngineering && designForCtx) {
+      const designRoot = path_module.resolve(designForCtx.workspacePath as string);
+      let dir = designRoot;
+      while (true) {
+        if (
+          existsSync(path_module.join(dir, 'pnpm-workspace.yaml')) ||
+          existsSync(path_module.join(dir, 'lerna.json')) ||
+          existsSync(path_module.join(dir, 'nx.json')) ||
+          existsSync(path_module.join(dir, 'turbo.json')) ||
+          existsSync(path_module.join(dir, 'rush.json'))
+        ) {
+          if (dir !== designRoot) monorepoRootForPrompt = dir;
+          break;
+        }
+        const parent = path_module.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+      }
+    }
+    const reachableRoot = monorepoRootForPrompt ?? designForCtx?.workspacePath ?? '';
+    const monorepoNote =
+      monorepoRootForPrompt !== null
+        ? `\n\nThe design's workspacePath is a sub-package inside a monorepo. The file tools are widened to the monorepo root above, so sibling packages (e.g. \`packages/avalon/...\` next to \`packages/wfm/...\`) are reachable. Pass paths relative to the monorepo root, or pass the absolute path verbatim.`
+        : '';
     const augmentedInput: Parameters<typeof generateViaAgent>[0] = isEngineering
       ? {
           ...input,
           prompt: `# Engineering mode (real codebase)
 
-This design is bound to a real local codebase rooted at:
+This design is bound to a real local codebase. The reachable filesystem root for your file tools is:
 
-  ${designForCtx?.workspacePath}
+  ${reachableRoot}
+
+(design workspacePath: ${designForCtx?.workspacePath})${monorepoNote}
 
 The dev server is already running and serving the UI inside the preview iframe. The user's request below is about that codebase, not about generating an HTML mockup.
 
-Your file tools (text_editor / list_files) are wired to the real filesystem under that workspace root. They accept BOTH:
-- workspace-relative paths (e.g. "packages/avalon/src/components/forecast/ForecastToolbar.tsx"), and
-- absolute paths inside the workspace (e.g. "${designForCtx?.workspacePath}/packages/avalon/...").
+Your file tools (text_editor / list_files) are wired to the real filesystem under the reachable root. They accept BOTH:
+- paths relative to the reachable root above, and
+- absolute paths inside that root.
 
-Inspector-derived file paths (componentSelection.filePath / debugSource) are absolute and inside the workspace — pass them straight to view / str_replace. Do not say "I can only access a virtual filesystem" or "I can't read your local files" — that is not true here. If a path is outside the workspace root the tool will reject it explicitly; trust the tool's error message rather than guessing.
+Inspector-derived file paths (componentSelection.filePath / debugSource) are absolute — pass them straight to view / str_replace. Do not say "I can only access a virtual filesystem" or "I can't read your local files" or "I can't access sibling packages" — none of that is true here. If a path is genuinely out of reach the tool will reject it with an explicit error; trust the tool, do not guess and refuse pre-emptively.
 
 Make the smallest sensible code edit that satisfies the request. Save changes through the file tools so the dev server hot-reloads. Do not produce an HTML \`<artifact>\` tag in this mode; reply with a short summary of what you changed and which files.
 
