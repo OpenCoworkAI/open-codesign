@@ -8,9 +8,13 @@ import { useCodesignStore } from '../store';
  * the subscription means we keep the IPC channel warm and can render logs
  * later without re-plumbing.
  *
- * Also auto-starts the dev server when the active design switches to an
- * engineering-mode design that has no existing run state. The auto-start
- * is fire-and-forget — failures surface via the toast in startEngineeringSession.
+ * Auto-starts the dev server only when the user is actually on the
+ * workspace view for an engineering design that has no run state yet.
+ * Sitting on the hub / settings view (or simply having a design selected
+ * in the background) must NOT spawn dev servers — booting the app would
+ * otherwise silently start whatever engineering project happened to be
+ * the previously-selected one. The auto-start is fire-and-forget;
+ * failures surface via the toast in startEngineeringSession.
  */
 export function useEngineeringWiring(): void {
   useEffect(() => {
@@ -33,13 +37,17 @@ export function useEngineeringWiring(): void {
   const designs = useCodesignStore((s) => s.designs);
   const runStates = useCodesignStore((s) => s.engineeringRunStateByDesign);
   const startEngineeringSession = useCodesignStore((s) => s.startEngineeringSession);
+  const view = useCodesignStore((s) => s.view);
+  const designsViewOpen = useCodesignStore((s) => s.designsViewOpen);
 
   useEffect(() => {
+    if (view !== 'workspace') return;
+    if (designsViewOpen) return;
     if (currentDesignId === null) return;
     const design = designs.find((d) => d.id === currentDesignId);
     if (design === undefined || design.mode !== 'engineering') return;
     const existing = runStates[currentDesignId];
     if (existing !== undefined) return;
     void startEngineeringSession(currentDesignId);
-  }, [currentDesignId, designs, runStates, startEngineeringSession]);
+  }, [view, designsViewOpen, currentDesignId, designs, runStates, startEngineeringSession]);
 }

@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { Download, MessageSquare, Square } from 'lucide-react';
+import { Download, MessageSquare, RotateCw, Square } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
 import type { PreviewViewport } from '../store';
@@ -32,6 +32,7 @@ export function PreviewToolbar(): ReactElement {
   const designs = useCodesignStore((s) => s.designs);
   const engineeringRunStateByDesign = useCodesignStore((s) => s.engineeringRunStateByDesign);
   const stopEngineeringSession = useCodesignStore((s) => s.stopEngineeringSession);
+  const refreshEngineeringSession = useCodesignStore((s) => s.refreshEngineeringSession);
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const engineeringState =
     currentDesignId !== null ? engineeringRunStateByDesign[currentDesignId] : undefined;
@@ -116,6 +117,22 @@ export function PreviewToolbar(): ReactElement {
           {toastMessage}
         </output>
       )}
+
+      {engineeringRunning ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (!currentDesignId) return;
+            void refreshEngineeringSession(currentDesignId);
+          }}
+          title={t('engineering.session.refresh')}
+          aria-label={t('engineering.session.refresh')}
+          className="inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
+        >
+          <RotateCw className="w-3.5 h-3.5" aria-hidden="true" />
+          {t('engineering.session.refresh')}
+        </button>
+      ) : null}
 
       {engineeringRunning ? (
         <button

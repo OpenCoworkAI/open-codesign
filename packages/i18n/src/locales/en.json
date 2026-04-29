@@ -271,7 +271,7 @@
         "apiKeyEditPlaceholder": "Leave empty to keep {{mask}}",
         "defaultModel": "Default model",
         "compatibilityHintTitle": "Compatibility note",
-        "compatibilityHintBody": "Some coding plans, relay services, or OpenAI-compatible gateways only allow specific clients such as Claude Code, openclaw, or Hermes. Even if the API looks compatible, Open CoDesign may still be blocked by an app allowlist.",
+        "compatibilityHintBody": "Some coding plans, relay services, or OpenAI-compatible gateways only allow specific clients such as Claude Code, openclaw, or Hermes. Even if the API looks compatible, Synapse Studio may still be blocked by an app allowlist.",
         "switchToManual": "Enter manually",
         "switchToDropdown": "Pick from list",
         "discoveringModels": "Discovering models...",
@@ -881,7 +881,7 @@
     "showLog": "Show full log",
     "showLogFailed": "Failed to open logs folder",
     "gatewayAllowlistHintTitle": "This endpoint may restrict which apps can connect",
-    "gatewayAllowlistHintBody": "Some coding plans and protocol-conversion gateways keep an app allowlist. Even when they advertise an OpenAI-compatible API, they may still reject Open CoDesign unless this app is explicitly allowed.",
+    "gatewayAllowlistHintBody": "Some coding plans and protocol-conversion gateways keep an app allowlist. Even when they advertise an OpenAI-compatible API, they may still reject Synapse Studio unless this app is explicitly allowed.",
     "dismiss": "Dismiss",
     "report": {
       "title": "Report a bug",
@@ -1180,7 +1180,8 @@
       "stop": "Stop dev server",
       "stopping": "Stopping…",
       "stopped": "Dev server stopped",
-      "externalHint": "This dev server is running outside Open CoDesign and cannot be stopped from here."
+      "refresh": "Refresh preview",
+      "externalHint": "This dev server is running outside Synapse Studio and cannot be stopped from here."
     }
   }
 }

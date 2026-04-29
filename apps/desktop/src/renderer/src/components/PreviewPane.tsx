@@ -401,8 +401,19 @@ function EngineeringStatusOverlay({
                   ? `Engineering error: ${state?.lastError?.message ?? 'unknown'}`
                   : 'Loading…';
   const showRefresh = status === 'error' || status === 'stopped';
+  const isLoading =
+    status === 'detecting' ||
+    status === 'initializing-deps' ||
+    status === 'starting' ||
+    status === 'running';
   return (
     <div className="flex flex-col items-center gap-3 px-6 text-center max-w-[640px]">
+      {isLoading ? (
+        <div
+          className="h-6 w-6 rounded-full border-2 border-(--color-border-muted) border-t-(--color-accent) animate-spin"
+          aria-hidden="true"
+        />
+      ) : null}
       <div className="text-sm text-[var(--color-text-primary)]">{label}</div>
       {state?.lastError?.excerpt && state.lastError.excerpt.length > 0 ? (
         <pre className="max-h-[200px] w-full overflow-auto whitespace-pre-wrap rounded-md border border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] p-3 text-left text-[11px] text-[var(--color-text-muted)]">
@@ -817,18 +828,6 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           ) : (
             <EmptyState onPickStarter={onPickStarter} />
           )
-        ) : null}
-        {isEngineeringActive && activeHasHtml ? (
-          <button
-            type="button"
-            onClick={() =>
-              currentDesignId !== null && void refreshEngineeringSession(currentDesignId)
-            }
-            className="absolute top-2 right-2 z-10 rounded-md border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-2 py-1 text-xs text-[var(--color-text-muted)] shadow-[var(--shadow-soft)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
-            title="Refresh dev preview"
-          >
-            ↻ Refresh
-          </button>
         ) : null}
       </div>
     );
