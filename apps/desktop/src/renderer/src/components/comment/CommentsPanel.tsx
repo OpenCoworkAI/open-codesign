@@ -15,6 +15,8 @@ export function CommentsPanel() {
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
   const openCommentBubble = useCodesignStore((s) => s.openCommentBubble);
   const removeComment = useCodesignStore((s) => s.removeComment);
+  const designs = useCodesignStore((s) => s.designs);
+  const iframeUrlPathByDesign = useCodesignStore((s) => s.iframeUrlPathByDesign);
 
   const active = interactionMode === 'comment' && currentDesignId !== null;
   const [mounted, setMounted] = useState(active);
@@ -34,12 +36,32 @@ export function CommentsPanel() {
   if (!mounted) return null;
   if (typeof document === 'undefined') return null;
 
-  const visibleComments = comments.filter((c) => {
-    if (c.kind === 'edit' && c.status === 'pending') {
-      return c.snapshotId === currentSnapshotId;
+  const visibleComments = (() => {
+    const currentDesign =
+      currentDesignId !== null ? designs.find((d) => d.id === currentDesignId) : undefined;
+    const isEngineering = currentDesign?.mode === 'engineering';
+    const currentIframePath =
+      currentDesignId !== null ? iframeUrlPathByDesign[currentDesignId] : undefined;
+    if (isEngineering) {
+      // Engineering URL-mode comments have snapshotId === null and are
+      // scoped by urlPath (matches PinOverlay). Without this branch the
+      // panel rendered "0 comments" even when pins were visible because
+      // the legacy filter required snapshot match.
+      return comments.filter((c) => {
+        if (c.snapshotId !== null) return false;
+        const stored = c.urlPath;
+        if (typeof stored !== 'string' || stored.length === 0) return true;
+        if (typeof currentIframePath !== 'string') return true;
+        return stored === currentIframePath;
+      });
     }
-    return true;
-  });
+    return comments.filter((c) => {
+      if (c.kind === 'edit' && c.status === 'pending') {
+        return c.snapshotId === currentSnapshotId;
+      }
+      return true;
+    });
+  })();
 
   function handleOpen(c: CommentRow): void {
     const scale = previewZoom / 100;
