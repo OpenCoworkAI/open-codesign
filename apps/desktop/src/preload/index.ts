@@ -623,6 +623,15 @@ const api = {
         schemaVersion: 1,
         designId,
       }) as Promise<EngineeringRunState | null>,
+    /** U12.1: ask main to inject overlay + react-inspector into any subframe
+     *  whose URL matches `targetUrl` (origin match). Used by PreviewPane in
+     *  URL mode where the iframe is cross-origin and cannot be touched from
+     *  the renderer. Returns the number of frames that received the script. */
+    injectBridge: (targetUrl: string) =>
+      ipcRenderer.invoke('engine:v1:inject-bridge', {
+        schemaVersion: 1,
+        targetUrl,
+      }) as Promise<{ injected: number }>,
     onRunState: (cb: (state: EngineeringRunState) => void) => {
       const listener = (_e: unknown, state: EngineeringRunState) => cb(state);
       ipcRenderer.on('engine:v1:run-state', listener);

@@ -17,6 +17,7 @@
  * the preload bridge without opaque IPC channel names.
  */
 
+import { OVERLAY_SCRIPT, REACT_INSPECTOR_SCRIPT } from '@open-codesign/runtime';
 import type {
   Design,
   EngineeringConfig,
@@ -315,6 +316,75 @@ export function registerEngineeringIpc(db: Database): void {
     const designId = requireString(r, 'designId', 'engine:v1:get-run-state');
     return runtime.getRunState(designId);
   });
+
+  // U12.1: bridge injection for cross-origin preview iframes.
+  //
+  // When the iframe points at the user's dev server (e.g. http://localhost:5173)
+  // and the renderer is loaded from a different origin (file://, app://, or
+  // even another localhost port), `iframe.contentDocument` is null because of
+  // the Same-Origin Policy. The renderer-side injectOverlayBridge() therefore
+  // fails with `no-document`. We work around it from main, where Electron's
+  // webFrameMain API can executeJavaScript across origins.
+  //
+  // The renderer hands us a target URL prefix (its iframe `src`); we walk
+  // every subframe of the calling webContents, match by URL prefix, and
+  // inject overlay + react-inspector. Both scripts are idempotent IIFEs that
+  // bail if they've already mounted, so re-firing on every load is safe.
+  ipcMain.handle(
+    'engine:v1:inject-bridge',
+    async (e, raw: unknown): Promise<{ injected: number }> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError(
+          'engine:v1:inject-bridge expects an object payload',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'engine:v1:inject-bridge');
+      const targetUrl = requireString(r, 'targetUrl', 'engine:v1:inject-bridge');
+
+      const sender = e.sender;
+      if (sender.isDestroyed()) return { injected: 0 };
+
+      // mainFrame.framesInSubtree includes the main frame itself; skip it.
+      const candidates = sender.mainFrame.framesInSubtree.filter((f) => {
+        if (f === sender.mainFrame) return false;
+        const url = f.url;
+        if (typeof url !== 'string' || url === '') return false;
+        // Match by origin: strip query/hash/path so http://localhost:5173/foo
+        // still matches a target of http://localhost:5173. Also accept exact
+        // prefix match for callers that want to be specific.
+        try {
+          const a = new URL(url);
+          const b = new URL(targetUrl);
+          return a.origin === b.origin;
+        } catch {
+          return url.startsWith(targetUrl);
+        }
+      });
+
+      let injected = 0;
+      for (const frame of candidates) {
+        try {
+          // Combine both scripts into one round-trip. Each IIFE guards itself
+          // against double-mount via window-level flags, so navigations that
+          // re-fire the load event still re-mount cleanly because the global
+          // gets reset with the new document.
+          await frame.executeJavaScript(
+            `${OVERLAY_SCRIPT};\n${REACT_INSPECTOR_SCRIPT};`,
+            true /* userGesture — required for some sandboxed contexts */,
+          );
+          injected += 1;
+        } catch (err) {
+          logger.warn('inject-bridge: executeJavaScript failed', {
+            url: frame.url,
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      return { injected };
+    },
+  );
 }
 
 /** App-quit hook — terminate any running dev servers. */

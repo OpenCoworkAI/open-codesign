@@ -27,6 +27,9 @@
 
 export const REACT_INSPECTOR_SCRIPT = `(function() {
   'use strict';
+  // Idempotency guard — see overlay.ts.
+  if (window.__cs_react_inspector_mounted) return;
+  window.__cs_react_inspector_mounted = true;
   var OWNER_CHAIN_MAX = 6;
 
   function findFiberOnNode(node) {

@@ -229,21 +229,43 @@ function PreviewSlot({
       onLoad={(e) => {
         if (!active) return;
         const target = e.currentTarget as HTMLIFrameElement;
-        // Inject the same overlay IIFE the srcdoc sandbox uses, so element
-        // selection / WATCH_SELECTORS / IFRAME_ERROR all work against the
-        // live dev server. Failure here means the iframe is cross-origin
-        // (rare on localhost; happens if the user navigates to an external
-        // page) — we surface as an iframe error so the user sees why
-        // selection stopped working.
+        // Try the renderer-side same-origin path first. This works when the
+        // dev server happens to be on the same origin as the renderer (e.g.
+        // a Vite dev server proxied behind app://). When it fails because of
+        // the Same-Origin Policy (the common case: file:// renderer + http
+        // localhost dev server), we fall back to main-process injection via
+        // Electron's webFrameMain API, which is privileged and bypasses SOP.
         const result = injectOverlayBridge(target);
-        if (result.ok === false) {
+        let bridgeMounted = result.ok === true;
+        if (result.ok) {
+          injectReactInspector(target);
+        } else if (result.reason === 'no-document' || result.reason === 'cross-origin') {
+          // Cross-origin path: ask main to inject. This is silent on success;
+          // on failure we surface a single iframe error so selection issues
+          // are debuggable.
+          if (typeof previewUrl === 'string' && previewUrl.length > 0) {
+            void window.codesign?.engine
+              ?.injectBridge(previewUrl)
+              .then((res) => {
+                bridgeMounted = res.injected > 0;
+                if (!bridgeMounted) {
+                  onIframeError(
+                    `Engineering preview: bridge injection found no matching subframe for ${previewUrl}`,
+                  );
+                }
+              })
+              .catch((err: unknown) => {
+                onIframeError(
+                  `Engineering preview: bridge injection failed (${err instanceof Error ? err.message : String(err)})`,
+                );
+              });
+          }
+        } else {
           onIframeError(`Engineering preview: ${result.reason} (${result.message})`);
           return;
         }
-        // Engineering mode (U8): also inject the React inspector. Failures
-        // here are non-fatal — the overlay still posts ELEMENT_SELECTED,
-        // we just lose component-name enrichment for that page load.
-        injectReactInspector(target);
+        // postMessage to the iframe works cross-origin as long as we use a
+        // wildcard target, so this is safe regardless of the injection path.
         postModeToPreviewWindow(target.contentWindow, interactionMode, onIframeError);
         onIframeLoaded(designId);
       }}

@@ -18,6 +18,11 @@
 
 export const OVERLAY_SCRIPT = `(function() {
   'use strict';
+  // Idempotency guard — the host (renderer or main-process webFrameMain)
+  // may inject this script repeatedly across iframe reloads. Each new
+  // document gets a fresh window, so the flag naturally resets per page.
+  if (window.__cs_overlay_mounted) return;
+  window.__cs_overlay_mounted = true;
   var hovered = null;
   var pinned = null;
   var warned = Object.create(null);

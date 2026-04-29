@@ -35,6 +35,7 @@ export {
 export type { OverlayMessage, ElementRectsMessage, ComponentSelectedMessage } from './overlay';
 export { isIframeErrorMessage } from './iframe-errors';
 export type { IframeErrorMessage } from './iframe-errors';
+export { REACT_INSPECTOR_SCRIPT } from './react-inspector';
 export { injectOverlayBridge, injectReactInspector } from './bridge-inject';
 export type { InjectionResult } from './bridge-inject';
 
