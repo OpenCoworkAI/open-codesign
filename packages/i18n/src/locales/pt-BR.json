@@ -240,7 +240,7 @@
         "apiKeyEditPlaceholder": "Deixe vazio para manter {{mask}}",
         "defaultModel": "Modelo padrão",
         "compatibilityHintTitle": "Aviso de compatibilidade",
-        "compatibilityHintBody": "Alguns coding plans, relays e gateways compatíveis com OpenAI só permitem clientes específicos, como Claude Code, openclaw ou Hermes. Mesmo que a API pareça compatível, o Open CoDesign ainda pode ser bloqueado por uma lista de apps permitidos.",
+        "compatibilityHintBody": "Alguns coding plans, relays e gateways compatíveis com OpenAI só permitem clientes específicos, como Claude Code, openclaw ou Hermes. Mesmo que a API pareça compatível, o Synapse Studio ainda pode ser bloqueado por uma lista de apps permitidos.",
         "test": "Testar conexão",
         "testOk": "OK — {{count}} modelos disponíveis",
         "save": "Salvar e continuar",
@@ -835,7 +835,7 @@
     "showLog": "Mostrar log completo",
     "showLogFailed": "Falha ao abrir a pasta de logs",
     "gatewayAllowlistHintTitle": "Este endpoint pode restringir quais apps podem se conectar",
-    "gatewayAllowlistHintBody": "Alguns coding plans e gateways de conversão de protocolo mantêm uma lista de apps permitidos. Mesmo anunciando uma API compatível com OpenAI, eles ainda podem recusar o Open CoDesign se este app não estiver explicitamente liberado.",
+    "gatewayAllowlistHintBody": "Alguns coding plans e gateways de conversão de protocolo mantêm uma lista de apps permitidos. Mesmo anunciando uma API compatível com OpenAI, eles ainda podem recusar o Synapse Studio se este app não estiver explicitamente liberado.",
     "dismiss": "Dispensar",
     "report": {
       "title": "Reportar um bug",
@@ -1100,5 +1100,41 @@
     "RENDERER_ERROR": "Ocorreu um erro no renderer. Detalhes estão no log.",
     "CODEX_TOKEN_NOT_LOGGED_IN": "Você não fez login na assinatura do ChatGPT. Faça login em Configurações.",
     "CODEX_TOKEN_PARSE_FAILED": "O login local do ChatGPT está corrompido. Faça login novamente em Configurações."
+  },
+  "engineering": {
+    "unsupported": {
+      "title": "O modo engenharia exige um projeto React",
+      "subtitle": "A primeira versão do modo engenharia só suporta projetos React. A pasta escolhida não parece um projeto React.",
+      "reasonMissingPkg": "Nenhum package.json encontrado neste caminho.",
+      "reasonDetectedFramework": "Framework não-React detectado: {{framework}}.",
+      "reasonGeneric": "React não foi detectado nas dependências deste projeto.",
+      "dismiss": "Escolher outra pasta",
+      "useGenerative": "Usar o modo generativo"
+    },
+    "launchPicker": {
+      "title": "Escolha como iniciar o servidor de desenvolvimento",
+      "subtitle": "Selecione um dos scripts detectados ou cole um comando personalizado. Opcionalmente, sobrescreva a URL de preview.",
+      "scriptsLabel": "Scripts detectados",
+      "noScripts": "Nenhum script encontrado em package.json.",
+      "customLabel": "Comando personalizado",
+      "customPlaceholder": "ex.: pnpm --filter web dev",
+      "readyUrlLabel": "URL de preview (opcional)",
+      "readyUrlPlaceholder": "http://localhost:3000",
+      "readyUrlHint": "Usada após uma breve espera se nenhuma URL for detectada no stdout.",
+      "confirm": "Iniciar sessão de engenharia",
+      "confirming": "Iniciando…",
+      "errors": {
+        "emptyCommand": "O comando personalizado não pode estar vazio.",
+        "noSelection": "Escolha um script ou escreva um comando personalizado.",
+        "invalidUrl": "A URL deve começar com http:// ou https://."
+      }
+    },
+    "session": {
+      "stop": "Parar servidor de desenvolvimento",
+      "stopping": "Parando…",
+      "stopped": "Servidor de desenvolvimento parado",
+      "refresh": "Atualizar pré-visualização",
+      "externalHint": "Este servidor de desenvolvimento está sendo executado fora do Synapse Studio e não pode ser parado daqui."
+    }
   }
 }

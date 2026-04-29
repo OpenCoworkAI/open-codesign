@@ -271,7 +271,7 @@
         "apiKeyEditPlaceholder": "Leave empty to keep {{mask}}",
         "defaultModel": "Default model",
         "compatibilityHintTitle": "Compatibility note",
-        "compatibilityHintBody": "Some coding plans, relay services, or OpenAI-compatible gateways only allow specific clients such as Claude Code, openclaw, or Hermes. Even if the API looks compatible, Open CoDesign may still be blocked by an app allowlist.",
+        "compatibilityHintBody": "Some coding plans, relay services, or OpenAI-compatible gateways only allow specific clients such as Claude Code, openclaw, or Hermes. Even if the API looks compatible, Synapse Studio may still be blocked by an app allowlist.",
         "switchToManual": "Enter manually",
         "switchToDropdown": "Pick from list",
         "discoveringModels": "Discovering models...",
@@ -881,7 +881,7 @@
     "showLog": "Show full log",
     "showLogFailed": "Failed to open logs folder",
     "gatewayAllowlistHintTitle": "This endpoint may restrict which apps can connect",
-    "gatewayAllowlistHintBody": "Some coding plans and protocol-conversion gateways keep an app allowlist. Even when they advertise an OpenAI-compatible API, they may still reject Open CoDesign unless this app is explicitly allowed.",
+    "gatewayAllowlistHintBody": "Some coding plans and protocol-conversion gateways keep an app allowlist. Even when they advertise an OpenAI-compatible API, they may still reject Synapse Studio unless this app is explicitly allowed.",
     "dismiss": "Dismiss",
     "report": {
       "title": "Report a bug",
@@ -1147,5 +1147,41 @@
     "EXPORTER_ZIP_FAILED": "ZIP export failed.",
     "OPEN_PATH_FAILED": "Could not open the requested folder or file.",
     "RENDERER_ERROR": "An error occurred in the renderer. Details are in the log."
+  },
+  "engineering": {
+    "unsupported": {
+      "title": "Engineering mode requires a React project",
+      "subtitle": "The first release of engineering mode only supports React workspaces. The folder you picked doesn't look like one.",
+      "reasonMissingPkg": "No package.json found at this path.",
+      "reasonDetectedFramework": "Detected a non-React framework: {{framework}}.",
+      "reasonGeneric": "React was not detected in this workspace's dependencies.",
+      "dismiss": "Pick another folder",
+      "useGenerative": "Use generative mode instead"
+    },
+    "launchPicker": {
+      "title": "Pick how to start the dev server",
+      "subtitle": "Choose one of the scripts we found, or paste a custom command. Optionally override the ready URL.",
+      "scriptsLabel": "Detected scripts",
+      "noScripts": "No scripts found in package.json.",
+      "customLabel": "Custom command",
+      "customPlaceholder": "e.g. pnpm --filter web dev",
+      "readyUrlLabel": "Preview URL (optional)",
+      "readyUrlPlaceholder": "http://localhost:3000",
+      "readyUrlHint": "Used after a short grace window if no URL is detected on stdout.",
+      "confirm": "Start engineering session",
+      "confirming": "Starting…",
+      "errors": {
+        "emptyCommand": "Custom command cannot be empty.",
+        "noSelection": "Pick a script or write a custom command.",
+        "invalidUrl": "URL must start with http:// or https://."
+      }
+    },
+    "session": {
+      "stop": "Stop dev server",
+      "stopping": "Stopping…",
+      "stopped": "Dev server stopped",
+      "refresh": "Refresh preview",
+      "externalHint": "This dev server is running outside Synapse Studio and cannot be stopped from here."
+    }
   }
 }

@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { Download, MessageSquare } from 'lucide-react';
+import { Download, MessageSquare, RotateCw, Square } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
 import type { PreviewViewport } from '../store';
@@ -25,6 +25,27 @@ export function PreviewToolbar(): ReactElement {
   const setPreviewZoom = useCodesignStore((s) => s.setPreviewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
+  // Engineering URL-mode designs have no previewHtml (the iframe loads a
+  // live dev server), but the preview is still active and the toolbar
+  // should be enabled. Treat "running engineering session" as preview-ready.
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const designs = useCodesignStore((s) => s.designs);
+  const engineeringRunStateByDesign = useCodesignStore((s) => s.engineeringRunStateByDesign);
+  const stopEngineeringSession = useCodesignStore((s) => s.stopEngineeringSession);
+  const refreshEngineeringSession = useCodesignStore((s) => s.refreshEngineeringSession);
+  const currentDesign = designs.find((d) => d.id === currentDesignId);
+  const engineeringState =
+    currentDesignId !== null ? engineeringRunStateByDesign[currentDesignId] : undefined;
+  const engineeringRunning =
+    currentDesign?.mode === 'engineering' && engineeringState?.status === 'running';
+  // Don't offer a Stop button for sessions that attached to an externally
+  // managed dev server — runtime.stop() is a no-op there and clicking would
+  // mislead the user.
+  const canStopEngineering =
+    engineeringRunning &&
+    engineeringState !== undefined &&
+    engineeringState.attachedExternally !== true;
+  const [stopping, setStopping] = useState(false);
   const [open, setOpen] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -54,7 +75,7 @@ export function PreviewToolbar(): ReactElement {
     return () => clearTimeout(timeout);
   }, [toastMessage, dismissToast]);
 
-  const disabled = !previewHtml;
+  const disabled = !previewHtml && !engineeringRunning;
   const commentActive = interactionMode === 'comment';
   const exportItems: ExportItem[] = [
     {
@@ -96,6 +117,49 @@ export function PreviewToolbar(): ReactElement {
           {toastMessage}
         </output>
       )}
+
+      {engineeringRunning ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (!currentDesignId) return;
+            void refreshEngineeringSession(currentDesignId);
+          }}
+          title={t('engineering.session.refresh')}
+          aria-label={t('engineering.session.refresh')}
+          className="inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
+        >
+          <RotateCw className="w-3.5 h-3.5" aria-hidden="true" />
+          {t('engineering.session.refresh')}
+        </button>
+      ) : null}
+
+      {engineeringRunning ? (
+        <button
+          type="button"
+          disabled={!canStopEngineering || stopping}
+          title={
+            canStopEngineering
+              ? undefined
+              : engineeringState?.attachedExternally === true
+                ? t('engineering.session.externalHint')
+                : undefined
+          }
+          onClick={async () => {
+            if (!currentDesignId || !canStopEngineering) return;
+            setStopping(true);
+            try {
+              await stopEngineeringSession(currentDesignId);
+            } finally {
+              setStopping(false);
+            }
+          }}
+          className="inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-danger,var(--color-text-primary))] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
+        >
+          <Square className="w-3.5 h-3.5" aria-hidden="true" />
+          {stopping ? t('engineering.session.stopping') : t('engineering.session.stop')}
+        </button>
+      ) : null}
 
       <button
         type="button"
@@ -154,7 +218,7 @@ export function PreviewToolbar(): ReactElement {
       <div className="relative" ref={ref}>
         <button
           type="button"
-          disabled={disabled}
+          disabled={!previewHtml}
           onClick={() => setOpen((v) => !v)}
           className="inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
           aria-haspopup="menu"

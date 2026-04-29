@@ -22,14 +22,17 @@ import type {
   CommentScope,
   CommentStatus,
   CommentUpdateInput,
+  ComponentSelection,
   Design,
   DesignFile,
   DesignSnapshot,
   DiagnosticEventInput,
   DiagnosticEventRow,
   DiagnosticLevel,
+  EngineeringConfig,
   SnapshotCreateInput,
 } from '@open-codesign/shared';
+import { ComponentSelectionV1, EngineeringConfigV1 } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import { getLogger } from './logger';
 
@@ -142,7 +145,7 @@ function applySchema(db: Database): void {
       id                     TEXT PRIMARY KEY,
       schema_version         INTEGER NOT NULL DEFAULT 1,
       design_id              TEXT NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
-      snapshot_id            TEXT NOT NULL REFERENCES design_snapshots(id) ON DELETE CASCADE,
+      snapshot_id            TEXT REFERENCES design_snapshots(id) ON DELETE CASCADE,
       kind                   TEXT NOT NULL CHECK (kind IN ('note','edit')),
       selector               TEXT NOT NULL,
       tag                    TEXT NOT NULL,
@@ -151,10 +154,17 @@ function applySchema(db: Database): void {
       text                   TEXT NOT NULL,
       status                 TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','applied','dismissed')),
       created_at             TEXT NOT NULL,
-      applied_in_snapshot_id TEXT REFERENCES design_snapshots(id) ON DELETE SET NULL
+      applied_in_snapshot_id TEXT REFERENCES design_snapshots(id) ON DELETE SET NULL,
+      scope                  TEXT NOT NULL DEFAULT 'element',
+      parent_outer_html      TEXT,
+      component_selection_json TEXT,
+      url_path               TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_comments_design_snapshot ON comments(design_id, snapshot_id);
     CREATE INDEX IF NOT EXISTS idx_comments_design_status   ON comments(design_id, status);
+    -- idx_comments_design_url is created after the additive url_path ALTER
+    -- below so existing v2 databases (which have no url_path column yet)
+    -- can still finish initializing.
 
     CREATE TABLE IF NOT EXISTS design_files (
       id          TEXT PRIMARY KEY,
@@ -211,6 +221,19 @@ function applyAdditiveMigrations(db: Database): void {
   if (!designCols.includes('workspace_path')) {
     db.exec('ALTER TABLE designs ADD COLUMN workspace_path TEXT');
   }
+  if (!designCols.includes('mode')) {
+    // Engineering-mode v0.2: 'generative' (default) or 'engineering'. Stored
+    // as TEXT so future modes can land without a numeric remap. Existing
+    // rows backfill to NULL → readers treat NULL as 'generative'.
+    db.exec('ALTER TABLE designs ADD COLUMN mode TEXT');
+  }
+  if (!designCols.includes('engineering_json')) {
+    // Serialized EngineeringConfigV1 (framework + packageManager + saved
+    // launchEntry + lastReadyUrl). NULL until the user completes the
+    // detect/ack flow. Kept as a JSON blob rather than splitting columns so
+    // schema bumps stay additive inside the JSON.
+    db.exec('ALTER TABLE designs ADD COLUMN engineering_json TEXT');
+  }
 
   // Comments v2 — add scope ('element'|'global') and parent_outer_html for
   // richer prompt enrichment. Both are additive; old rows backfill to
@@ -224,6 +247,26 @@ function applyAdditiveMigrations(db: Database): void {
   if (!commentCols.includes('parent_outer_html')) {
     db.exec('ALTER TABLE comments ADD COLUMN parent_outer_html TEXT');
   }
+  if (!commentCols.includes('component_selection_json')) {
+    // U9: serialized ComponentSelectionV1 captured when the React inspector
+    // resolves the click in engineering mode. Nullable — falls back to
+    // outer_html (and now the dedicated `legacyOuterHTML` field on the zod
+    // payload) when missing. Single JSON blob so future field bumps stay
+    // additive without further ALTERs.
+    db.exec('ALTER TABLE comments ADD COLUMN component_selection_json TEXT');
+  }
+  if (!commentCols.includes('url_path')) {
+    // Engineering URL-mode comments aren't bound to a snapshot — the dev
+    // server owns the page. Persist the URL path the user was viewing when
+    // the click happened so the renderer can scope visible comments to the
+    // current route. NULL for generative-mode rows; required (but renderer
+    // tolerates missing/empty) for engineering rows.
+    db.exec('ALTER TABLE comments ADD COLUMN url_path TEXT');
+  }
+  // Index is created here (after the ALTER above) so both fresh installs
+  // and v2-upgraded databases land with the same per-route index without
+  // needing the v3 table-rebuild path to run.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_comments_design_url ON comments(design_id, url_path)');
 
   // diagnostic_events v2 — add `context_json` (TEXT, nullable) so rows from
   // provider errors can persist the full NormalizedProviderError payload
@@ -296,6 +339,59 @@ function applyAdditiveMigrations(db: Database): void {
       new Date().toISOString(),
     );
   }
+
+  // Comments v3 — relax snapshot_id from NOT NULL to nullable so engineering
+  // URL-mode comments (no snapshot, dev server owns the page) can persist.
+  // SQLite cannot drop a NOT NULL constraint via ALTER, so we use the
+  // standard "create new + copy + drop + rename" dance, gated by db_meta so
+  // it runs at most once per database file.
+  const commentsV3 = db
+    .prepare('SELECT value FROM db_meta WHERE key = ?')
+    .get('comments_schema_v3') as { value?: string } | undefined;
+  if (commentsV3 === undefined) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE comments_v3 (
+        id                       TEXT PRIMARY KEY,
+        schema_version           INTEGER NOT NULL DEFAULT 1,
+        design_id                TEXT NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
+        snapshot_id              TEXT REFERENCES design_snapshots(id) ON DELETE CASCADE,
+        kind                     TEXT NOT NULL CHECK (kind IN ('note','edit')),
+        selector                 TEXT NOT NULL,
+        tag                      TEXT NOT NULL,
+        outer_html               TEXT NOT NULL,
+        rect                     TEXT NOT NULL,
+        text                     TEXT NOT NULL,
+        status                   TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','applied','dismissed')),
+        created_at               TEXT NOT NULL,
+        applied_in_snapshot_id   TEXT REFERENCES design_snapshots(id) ON DELETE SET NULL,
+        scope                    TEXT NOT NULL DEFAULT 'element',
+        parent_outer_html        TEXT,
+        component_selection_json TEXT,
+        url_path                 TEXT
+      );
+      INSERT INTO comments_v3 (
+        id, schema_version, design_id, snapshot_id, kind, selector, tag,
+        outer_html, rect, text, status, created_at, applied_in_snapshot_id,
+        scope, parent_outer_html, component_selection_json, url_path
+      )
+      SELECT
+        id, schema_version, design_id, snapshot_id, kind, selector, tag,
+        outer_html, rect, text, status, created_at, applied_in_snapshot_id,
+        scope, parent_outer_html, component_selection_json, url_path
+      FROM comments;
+      DROP TABLE comments;
+      ALTER TABLE comments_v3 RENAME TO comments;
+      CREATE INDEX IF NOT EXISTS idx_comments_design_snapshot ON comments(design_id, snapshot_id);
+      CREATE INDEX IF NOT EXISTS idx_comments_design_status   ON comments(design_id, status);
+      CREATE INDEX IF NOT EXISTS idx_comments_design_url      ON comments(design_id, url_path);
+      COMMIT;
+    `);
+    db.prepare('INSERT INTO db_meta (key, value) VALUES (?, ?)').run(
+      'comments_schema_v3',
+      new Date().toISOString(),
+    );
+  }
 }
 
 /** Initialize and return the singleton DB instance for production use. */
@@ -356,6 +452,8 @@ interface DesignRow {
   thumbnail_text: string | null;
   deleted_at: string | null;
   workspace_path: string | null;
+  mode: string | null;
+  engineering_json: string | null;
 }
 
 interface SnapshotRow {
@@ -384,6 +482,20 @@ interface MessageRow {
 // ---------------------------------------------------------------------------
 
 function rowToDesign(row: DesignRow): Design {
+  // engineering_json is best-effort: if a row got corrupted (manual edit,
+  // partial migration), surface the design without engineering config rather
+  // than failing list/get. The renderer will treat missing config as
+  // "detection not yet completed" and re-run detect.
+  let engineering: Design['engineering'] = undefined;
+  if (row.engineering_json !== null) {
+    try {
+      const parsed = EngineeringConfigV1.safeParse(JSON.parse(row.engineering_json));
+      if (parsed.success) engineering = parsed.data;
+    } catch {
+      engineering = undefined;
+    }
+  }
+  const mode: Design['mode'] = row.mode === 'engineering' ? 'engineering' : undefined;
   return {
     schemaVersion: 1,
     id: row.id,
@@ -393,6 +505,8 @@ function rowToDesign(row: DesignRow): Design {
     thumbnailText: row.thumbnail_text ?? null,
     deletedAt: row.deleted_at ?? null,
     workspacePath: row.workspace_path ?? null,
+    ...(mode !== undefined ? { mode } : {}),
+    ...(engineering !== undefined ? { engineering } : {}),
   };
 }
 
@@ -492,6 +606,44 @@ export function clearDesignWorkspace(db: Database, id: string): Design | null {
   const result = db
     .prepare('UPDATE designs SET workspace_path = NULL, updated_at = ? WHERE id = ?')
     .run(now, id);
+  if (result.changes === 0) return null;
+  return getDesign(db, id);
+}
+
+/**
+ * Mark a design as engineering mode. Idempotent: passing 'generative' (or
+ * undefined) clears the column. updated_at is bumped so the sidebar reorders.
+ */
+export function setDesignMode(
+  db: Database,
+  id: string,
+  mode: 'generative' | 'engineering' | undefined,
+): Design | null {
+  const now = new Date().toISOString();
+  const value = mode === 'engineering' ? 'engineering' : null;
+  const result = db
+    .prepare('UPDATE designs SET mode = ?, updated_at = ? WHERE id = ?')
+    .run(value, now, id);
+  if (result.changes === 0) return null;
+  return getDesign(db, id);
+}
+
+/**
+ * Persist the engineering config (framework, package manager, saved launch
+ * entry, last ready URL). Pass null to clear. The DB layer accepts the
+ * already-validated EngineeringConfig from the IPC layer — no re-validation
+ * here, since we'll re-parse on read anyway.
+ */
+export function setEngineeringConfig(
+  db: Database,
+  id: string,
+  config: EngineeringConfig | null,
+): Design | null {
+  const now = new Date().toISOString();
+  const json = config === null ? null : JSON.stringify(config);
+  const result = db
+    .prepare('UPDATE designs SET engineering_json = ?, updated_at = ? WHERE id = ?')
+    .run(json, now, id);
   if (result.changes === 0) return null;
   return getDesign(db, id);
 }
@@ -766,7 +918,7 @@ interface CommentRowDb {
   id: string;
   schema_version: number;
   design_id: string;
-  snapshot_id: string;
+  snapshot_id: string | null;
   kind: string;
   selector: string;
   tag: string;
@@ -778,6 +930,8 @@ interface CommentRowDb {
   applied_in_snapshot_id: string | null;
   scope: string | null;
   parent_outer_html: string | null;
+  component_selection_json: string | null;
+  url_path: string | null;
 }
 
 function rowToComment(row: CommentRowDb): CommentRow {
@@ -794,6 +948,20 @@ function rowToComment(row: CommentRowDb): CommentRow {
     /* keep zero rect */
   }
   const scope: CommentScope = row.scope === 'global' ? 'global' : 'element';
+  // U9: parse the component-selection blob defensively so a corrupt entry
+  // (older build wrote a partial / wrong shape) degrades to fallback rather
+  // than poisoning every list call for that design.
+  let componentSelection: ComponentSelection | null = null;
+  if (row.component_selection_json !== null && row.component_selection_json.length > 0) {
+    try {
+      const parsed = ComponentSelectionV1.safeParse(JSON.parse(row.component_selection_json));
+      if (parsed.success) {
+        componentSelection = parsed.data;
+      }
+    } catch {
+      /* keep null */
+    }
+  }
   return {
     schemaVersion: 1,
     id: row.id,
@@ -812,6 +980,8 @@ function rowToComment(row: CommentRowDb): CommentRow {
     ...(row.parent_outer_html !== null && row.parent_outer_html !== undefined
       ? { parentOuterHTML: row.parent_outer_html }
       : {}),
+    ...(componentSelection !== null ? { componentSelection } : {}),
+    ...(row.url_path !== null && row.url_path !== undefined ? { urlPath: row.url_path } : {}),
   };
 }
 
@@ -823,14 +993,20 @@ export function createComment(db: Database, input: CommentCreateInput): CommentR
     typeof input.parentOuterHTML === 'string' && input.parentOuterHTML.length > 0
       ? input.parentOuterHTML.slice(0, 600)
       : null;
+  const componentSelectionJson =
+    input.componentSelection !== undefined && input.componentSelection !== null
+      ? JSON.stringify(input.componentSelection)
+      : null;
+  const urlPath =
+    typeof input.urlPath === 'string' && input.urlPath.length > 0 ? input.urlPath : null;
   db.prepare(
     `INSERT INTO comments
-       (id, schema_version, design_id, snapshot_id, kind, selector, tag, outer_html, rect, text, status, created_at, applied_in_snapshot_id, scope, parent_outer_html)
-     VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NULL, ?, ?)`,
+       (id, schema_version, design_id, snapshot_id, kind, selector, tag, outer_html, rect, text, status, created_at, applied_in_snapshot_id, scope, parent_outer_html, component_selection_json, url_path)
+     VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NULL, ?, ?, ?, ?)`,
   ).run(
     id,
     input.designId,
-    input.snapshotId,
+    input.snapshotId ?? null,
     input.kind,
     input.selector,
     input.tag,
@@ -840,6 +1016,8 @@ export function createComment(db: Database, input: CommentCreateInput): CommentR
     now,
     scope,
     parentOuterHTML,
+    componentSelectionJson,
+    urlPath,
   );
   const row = db.prepare('SELECT * FROM comments WHERE id = ?').get(id) as CommentRowDb;
   return rowToComment(row);

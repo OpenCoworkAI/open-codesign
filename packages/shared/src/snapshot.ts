@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { ComponentSelectionV1, EngineeringConfigV1 } from './engineering';
+
+export const DesignModeV1 = z.enum(['generative', 'engineering']);
+export type DesignMode = z.infer<typeof DesignModeV1>;
 
 export const DesignSnapshotV1 = z.object({
   schemaVersion: z.literal(1).default(1),
@@ -23,6 +27,11 @@ export const DesignV1 = z.object({
   thumbnailText: z.string().nullable().default(null),
   deletedAt: z.string().nullable().default(null),
   workspacePath: z.string().nullable().default(null),
+  /** v0.2 engineering-mode addition. Optional in the inferred output type so
+   *  legacy consumers constructing Design literals don't break — readers
+   *  should treat `undefined` as 'generative'. */
+  mode: DesignModeV1.optional(),
+  engineering: EngineeringConfigV1.nullable().optional(),
 });
 export type Design = z.infer<typeof DesignV1>;
 
@@ -147,7 +156,10 @@ export const CommentRowV1 = z.object({
   schemaVersion: z.literal(1).default(1),
   id: z.string().min(1),
   designId: z.string().min(1),
-  snapshotId: z.string().min(1),
+  /** Nullable since v3 (engineering URL-mode comments aren't bound to a
+   *  snapshot — the dev server owns the page). Generative-mode rows still
+   *  always carry a snapshotId. */
+  snapshotId: z.string().min(1).nullable(),
   kind: CommentKind,
   selector: z.string(),
   tag: z.string(),
@@ -162,12 +174,23 @@ export const CommentRowV1 = z.object({
   /** v2 enrichment — parent element's outerHTML (truncated). Optional so
    *  pre-v2 rows still parse without it. */
   parentOuterHTML: z.string().optional(),
+  /** v3 enrichment (engineering mode, U9) — populated when the React inspector
+   *  resolved the click to a component. When present, this is the primary
+   *  context surfaced to UI and agent prompts; `outerHTML` falls back to a
+   *  legacy/debug field. Optional so pre-v3 rows still parse. */
+  componentSelection: ComponentSelectionV1.nullable().optional(),
+  /** v3 enrichment (engineering URL mode) — the iframe pathname the user
+   *  was viewing when the comment was created. Used by the renderer to
+   *  scope visible comments to the current route. Optional / nullable for
+   *  generative-mode and pre-v3 rows. */
+  urlPath: z.string().optional(),
 });
 export type CommentRow = z.infer<typeof CommentRowV1>;
 
 export interface CommentCreateInput {
   designId: string;
-  snapshotId: string;
+  /** Null for engineering URL-mode comments (no snapshot exists). */
+  snapshotId: string | null;
   kind: CommentKind;
   selector: string;
   tag: string;
@@ -176,6 +199,10 @@ export interface CommentCreateInput {
   text: string;
   scope?: CommentScope;
   parentOuterHTML?: string;
+  componentSelection?: z.infer<typeof ComponentSelectionV1> | null;
+  /** Iframe pathname captured at click time — used to scope visible
+   *  comments to the current route in engineering URL mode. */
+  urlPath?: string;
 }
 
 export interface CommentUpdateInput {

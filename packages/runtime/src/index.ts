@@ -26,10 +26,24 @@ import REACT_UMD from '../vendor/react.umd.js?raw';
 import { OVERLAY_SCRIPT } from './overlay';
 import { TWEAKS_BRIDGE_LISTENER, TWEAKS_BRIDGE_SETUP } from './tweaks-bridge';
 
-export { OVERLAY_SCRIPT, isOverlayMessage, isElementRectsMessage } from './overlay';
-export type { OverlayMessage, ElementRectsMessage } from './overlay';
+export {
+  OVERLAY_SCRIPT,
+  isOverlayMessage,
+  isElementRectsMessage,
+  isComponentSelectedMessage,
+  isUrlChangedMessage,
+} from './overlay';
+export type {
+  OverlayMessage,
+  ElementRectsMessage,
+  ComponentSelectedMessage,
+  UrlChangedMessage,
+} from './overlay';
 export { isIframeErrorMessage } from './iframe-errors';
 export type { IframeErrorMessage } from './iframe-errors';
+export { REACT_INSPECTOR_SCRIPT } from './react-inspector';
+export { injectOverlayBridge, injectReactInspector } from './bridge-inject';
+export type { InjectionResult } from './bridge-inject';
 
 const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
 const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';

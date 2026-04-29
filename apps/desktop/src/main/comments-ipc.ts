@@ -11,7 +11,7 @@ import type {
   CommentRow,
   CommentStatus,
 } from '@open-codesign/shared';
-import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import { CodesignError, ComponentSelectionV1, ERROR_CODES } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
@@ -120,9 +120,52 @@ function parseAddInput(raw: unknown): CommentCreateInput {
   }
   const parentOuterHTML =
     typeof parentRaw === 'string' && parentRaw.length > 0 ? parentRaw : undefined;
+  // U9: optional component metadata captured by the React inspector. Validate
+  // strictly via zod so a corrupt payload from the renderer fails IPC
+  // immediately rather than poisoning the DB row.
+  const componentRaw = r['componentSelection'];
+  let componentSelection: CommentCreateInput['componentSelection'];
+  if (componentRaw !== undefined && componentRaw !== null) {
+    const parsed = ComponentSelectionV1.safeParse(componentRaw);
+    if (!parsed.success) {
+      throw new CodesignError(
+        `${channel}: componentSelection failed schema validation`,
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+    componentSelection = parsed.data;
+  }
+  // Engineering URL-mode rows pass snapshotId: null (no snapshot exists for
+  // a live dev server). Generative-mode rows must still pass a non-empty
+  // snapshotId. The DB column is nullable since v3.
+  const snapshotIdRaw = r['snapshotId'];
+  let snapshotId: string | null;
+  if (snapshotIdRaw === null) {
+    snapshotId = null;
+  } else if (typeof snapshotIdRaw === 'string' && snapshotIdRaw.trim().length > 0) {
+    snapshotId = snapshotIdRaw;
+  } else {
+    throw new CodesignError(
+      `${channel}: snapshotId must be a non-empty string or null`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  // Optional urlPath — the iframe pathname at click time. Only meaningful
+  // for engineering URL-mode rows; ignored when missing or empty.
+  const urlPathRaw = r['urlPath'];
+  let urlPath: string | undefined;
+  if (urlPathRaw !== undefined && urlPathRaw !== null) {
+    if (typeof urlPathRaw !== 'string') {
+      throw new CodesignError(
+        `${channel}: urlPath must be a string when present`,
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+    if (urlPathRaw.length > 0) urlPath = urlPathRaw;
+  }
   return {
     designId: parseNonEmptyString(r, 'designId', channel),
-    snapshotId: parseNonEmptyString(r, 'snapshotId', channel),
+    snapshotId,
     kind: kind as CommentKind,
     selector: parseNonEmptyString(r, 'selector', channel),
     tag: parseNonEmptyString(r, 'tag', channel),
@@ -131,6 +174,8 @@ function parseAddInput(raw: unknown): CommentCreateInput {
     text,
     scope,
     ...(parentOuterHTML !== undefined ? { parentOuterHTML } : {}),
+    ...(componentSelection !== undefined ? { componentSelection } : {}),
+    ...(urlPath !== undefined ? { urlPath } : {}),
   };
 }
 

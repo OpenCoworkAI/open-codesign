@@ -271,7 +271,7 @@
         "apiKeyEditPlaceholder": "留空则保留 {{mask}}",
         "defaultModel": "默认模型",
         "compatibilityHintTitle": "\u517c\u5bb9\u6027\u63d0\u793a",
-        "compatibilityHintBody": "\u90e8\u5206 coding plan\uff0c\u534f\u8bae\u8f6c\u6362\u670d\u52a1\u6216 OpenAI \u517c\u5bb9\u7f51\u5173\u53ea\u5141\u8bb8\u7279\u5b9a\u5ba2\u6237\u7aef\uff08\u5982 Claude Code\uff0copenclaw\uff0cHermes\uff09\u8bbf\u95ee\u3002\u5373\u4f7f API \u770b\u8d77\u6765\u517c\u5bb9\uff0cOpen CoDesign \u4e5f\u53ef\u80fd\u56e0\u4e3a\u5e94\u7528\u767d\u540d\u5355\u800c\u65e0\u6cd5\u4f7f\u7528\u3002",
+        "compatibilityHintBody": "\u90e8\u5206 coding plan\uff0c\u534f\u8bae\u8f6c\u6362\u670d\u52a1\u6216 OpenAI \u517c\u5bb9\u7f51\u5173\u53ea\u5141\u8bb8\u7279\u5b9a\u5ba2\u6237\u7aef\uff08\u5982 Claude Code\uff0copenclaw\uff0cHermes\uff09\u8bbf\u95ee\u3002\u5373\u4f7f API \u770b\u8d77\u6765\u517c\u5bb9\uff0cSynapse Studio \u4e5f\u53ef\u80fd\u56e0\u4e3a\u5e94\u7528\u767d\u540d\u5355\u800c\u65e0\u6cd5\u4f7f\u7528\u3002",
         "switchToManual": "手动输入",
         "switchToDropdown": "从列表选择",
         "discoveringModels": "正在发现模型…",
@@ -877,7 +877,7 @@
     "showLog": "查看完整日志",
     "showLogFailed": "无法打开日志文件夹",
     "gatewayAllowlistHintTitle": "\u8fd9\u4e2a\u7aef\u70b9\u53ef\u80fd\u9650\u5236\u53ef\u63a5\u5165\u7684\u5e94\u7528",
-    "gatewayAllowlistHintBody": "\u90e8\u5206 coding plan \u548c\u534f\u8bae\u8f6c\u6362\u7f51\u5173\u4f1a\u914d\u7f6e\u5e94\u7528\u767d\u540d\u5355\u3002\u5b83\u4eec\u5373\u4f7f\u58f0\u79f0\u63d0\u4f9b OpenAI \u517c\u5bb9 API\uff0c\u4e5f\u53ef\u80fd\u5728\u6ca1\u6709\u663e\u5f0f\u5141\u8bb8 Open CoDesign \u7684\u60c5\u51b5\u4e0b\u62d2\u7edd\u8bf7\u6c42\u3002",
+    "gatewayAllowlistHintBody": "\u90e8\u5206 coding plan \u548c\u534f\u8bae\u8f6c\u6362\u7f51\u5173\u4f1a\u914d\u7f6e\u5e94\u7528\u767d\u540d\u5355\u3002\u5b83\u4eec\u5373\u4f7f\u58f0\u79f0\u63d0\u4f9b OpenAI \u517c\u5bb9 API\uff0c\u4e5f\u53ef\u80fd\u5728\u6ca1\u6709\u663e\u5f0f\u5141\u8bb8 Synapse Studio \u7684\u60c5\u51b5\u4e0b\u62d2\u7edd\u8bf7\u6c42\u3002",
     "dismiss": "关闭",
     "report": {
       "title": "上报问题",
@@ -1143,5 +1143,41 @@
     "EXPORTER_ZIP_FAILED": "ZIP 导出失败。",
     "OPEN_PATH_FAILED": "无法打开目标文件夹或文件。",
     "RENDERER_ERROR": "渲染进程出现错误，详情见日志。"
+  },
+  "engineering": {
+    "unsupported": {
+      "title": "工程模式仅支持 React 项目",
+      "subtitle": "工程模式首期仅支持 React 工作区。你选择的文件夹不是 React 项目。",
+      "reasonMissingPkg": "该路径下没有 package.json。",
+      "reasonDetectedFramework": "检测到非 React 框架：{{framework}}。",
+      "reasonGeneric": "未在工作区依赖中检测到 React。",
+      "dismiss": "选择其他文件夹",
+      "useGenerative": "改用生成模式"
+    },
+    "launchPicker": {
+      "title": "选择启动开发服务器的方式",
+      "subtitle": "从扫描到的脚本中选一个，或者贴一条自定义命令。可选填预览网址。",
+      "scriptsLabel": "检测到的脚本",
+      "noScripts": "未在 package.json 中发现脚本。",
+      "customLabel": "自定义命令",
+      "customPlaceholder": "例如：pnpm --filter web dev",
+      "readyUrlLabel": "预览网址（可选）",
+      "readyUrlPlaceholder": "http://localhost:3000",
+      "readyUrlHint": "如果一定时间内未从 stdout 检测到网址，将使用该地址。",
+      "confirm": "启动工程会话",
+      "confirming": "启动中…",
+      "errors": {
+        "emptyCommand": "自定义命令不能为空。",
+        "noSelection": "请选择一个脚本或填入自定义命令。",
+        "invalidUrl": "网址必须以 http:// 或 https:// 开头。"
+      }
+    },
+    "session": {
+      "stop": "停止开发服务器",
+      "stopping": "正在停止…",
+      "stopped": "开发服务器已停止",
+      "refresh": "刷新预览",
+      "externalHint": "该开发服务器不是由 Synapse Studio 启动的，无法在这里停止。"
+    }
   }
 }

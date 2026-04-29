@@ -321,6 +321,7 @@ export {
   CommentStatus,
   DesignFileV1,
   DesignMessageV1,
+  DesignModeV1,
   DesignSnapshotV1,
   DesignV1,
 } from './snapshot';
@@ -339,9 +340,43 @@ export type {
   Design,
   DesignFile,
   DesignMessage,
+  DesignMode,
   DesignSnapshot,
   SnapshotCreateInput,
 } from './snapshot';
+
+export {
+  ComponentDebugSourceV1,
+  ComponentSelectionV1,
+  EngineeringConfigV1,
+  EngineeringErrorKindV1,
+  EngineeringErrorV1,
+  EngineeringFrameworkV1,
+  EngineeringLogLineV1,
+  EngineeringPackageManagerV1,
+  EngineeringRunStateV1,
+  EngineeringStatusV1,
+  LaunchEntryConfidenceV1,
+  LaunchEntryKindV1,
+  LaunchEntrySourceV1,
+  LaunchEntryV1,
+} from './engineering';
+export type {
+  ComponentDebugSource,
+  ComponentSelection,
+  EngineeringConfig,
+  EngineeringError,
+  EngineeringErrorKind,
+  EngineeringFramework,
+  EngineeringLogLine,
+  EngineeringPackageManager,
+  EngineeringRunState,
+  EngineeringStatus,
+  LaunchEntry,
+  LaunchEntryConfidence,
+  LaunchEntryKind,
+  LaunchEntrySource,
+} from './engineering';
 
 export { SkillFrontmatterV1 } from './skills';
 export type { LoadedSkill } from './skills';

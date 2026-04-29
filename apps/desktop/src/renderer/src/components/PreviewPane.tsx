@@ -1,12 +1,18 @@
 import { useT } from '@open-codesign/i18n';
 import {
+  type ComponentSelectedMessage,
   type ElementRectsMessage,
   type IframeErrorMessage,
   type OverlayMessage,
+  type UrlChangedMessage,
   buildSrcdoc,
+  injectOverlayBridge,
+  injectReactInspector,
+  isComponentSelectedMessage,
   isElementRectsMessage,
   isIframeErrorMessage,
   isOverlayMessage,
+  isUrlChangedMessage,
 } from '@open-codesign/runtime';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../preview/EmptyState';
@@ -87,12 +93,25 @@ export function stablePreviewSourceKey(source: string): string {
     );
 }
 
-export type AllowedPreviewMessageType = 'ELEMENT_SELECTED' | 'IFRAME_ERROR' | 'ELEMENT_RECTS';
+export type AllowedPreviewMessageType =
+  | 'ELEMENT_SELECTED'
+  | 'IFRAME_ERROR'
+  | 'ELEMENT_RECTS'
+  | 'COMPONENT_SELECTED'
+  | 'URL_CHANGED';
 
 export interface PreviewMessageHandlers {
   onElementSelected: (msg: OverlayMessage) => void;
   onIframeError: (msg: IframeErrorMessage) => void;
   onElementRects: (msg: ElementRectsMessage) => void;
+  /** Engineering-mode enrichment (U8). Optional so older callers / tests
+   *  that only care about the legacy 3-message surface keep compiling. */
+  onComponentSelected?: (msg: ComponentSelectedMessage) => void;
+  /** Engineering URL-mode — broadcast on mount and after every SPA
+   *  navigation. Lets the renderer scope visible comments and stamp
+   *  `urlPath` on new comments. Optional for the same backwards-compat
+   *  reason. */
+  onUrlChanged?: (msg: UrlChangedMessage) => void;
 }
 
 export type PreviewMessageOutcome =
@@ -130,6 +149,18 @@ export function handlePreviewMessage(
         return { status: 'handled', type: 'ELEMENT_RECTS' };
       }
       return { status: 'rejected', reason: 'shape', type: envelope.type };
+    case 'COMPONENT_SELECTED':
+      if (isComponentSelectedMessage(data)) {
+        handlers.onComponentSelected?.(data);
+        return { status: 'handled', type: 'COMPONENT_SELECTED' };
+      }
+      return { status: 'rejected', reason: 'shape', type: envelope.type };
+    case 'URL_CHANGED':
+      if (isUrlChangedMessage(data)) {
+        handlers.onUrlChanged?.(data);
+        return { status: 'handled', type: 'URL_CHANGED' };
+      }
+      return { status: 'rejected', reason: 'shape', type: envelope.type };
     default:
       return { status: 'rejected', reason: 'unknown-type', type: envelope.type };
   }
@@ -141,6 +172,14 @@ const COMMENT_HINT_CLASS =
 interface PreviewSlotProps {
   designId: string;
   html: string;
+  /** When set, the slot renders the iframe with `src={previewUrl}` instead
+   *  of `srcDoc={buildSrcdoc(html)}`. Used by engineering-mode designs that
+   *  point at a local dev server. The `html` prop is ignored in URL mode but
+   *  remains required so the pool record stays consistent. */
+  previewUrl?: string;
+  /** Bumps to remount the iframe (engineering refresh). Only consulted in
+   *  URL mode — srcDoc mode already keys off the html stable hash. */
+  refreshTick?: number;
   active: boolean;
   viewport: 'mobile' | 'tablet' | 'desktop';
   zoom: number;
@@ -161,6 +200,8 @@ interface PreviewSlotProps {
 function PreviewSlot({
   designId,
   html,
+  previewUrl,
+  refreshTick,
   active,
   viewport,
   zoom,
@@ -186,7 +227,69 @@ function PreviewSlot({
   const scale = zoom / 100;
   const inversePct = `${10000 / zoom}%`;
 
-  const rawIframe = (
+  // URL mode: render the live dev server. We intentionally allow
+  // `allow-same-origin` only because the dev server is on localhost and
+  // needs HMR / module fetches to work; the bridge runtime (U7) will
+  // re-establish the postMessage protocol over a same-origin window.
+  // Non-engineering pages keep the strict srcdoc sandbox.
+  const useUrlMode = typeof previewUrl === 'string' && previewUrl.length > 0;
+  const rawIframe = useUrlMode ? (
+    <iframe
+      key={`url:${previewUrl}:${refreshTick ?? 0}`}
+      ref={setRef}
+      title={`design-preview-${designId}`}
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+      src={previewUrl}
+      onLoad={(e) => {
+        if (!active) return;
+        const target = e.currentTarget as HTMLIFrameElement;
+        // Try the renderer-side same-origin path first. This works when the
+        // dev server happens to be on the same origin as the renderer (e.g.
+        // a Vite dev server proxied behind app://). When it fails because of
+        // the Same-Origin Policy (the common case: file:// renderer + http
+        // localhost dev server), we fall back to main-process injection via
+        // Electron's webFrameMain API, which is privileged and bypasses SOP.
+        const result = injectOverlayBridge(target);
+        let bridgeMounted = result.ok === true;
+        if (result.ok) {
+          injectReactInspector(target);
+        } else if (result.reason === 'no-document' || result.reason === 'cross-origin') {
+          // Cross-origin path: ask main to inject. This is silent on success;
+          // on failure we surface a single iframe error so selection issues
+          // are debuggable.
+          if (typeof previewUrl === 'string' && previewUrl.length > 0) {
+            void window.codesign?.engine
+              ?.injectBridge(previewUrl)
+              .then((res) => {
+                bridgeMounted = res.injected > 0;
+                if (!bridgeMounted) {
+                  onIframeError(
+                    `Engineering preview: bridge injection found no matching subframe for ${previewUrl}`,
+                  );
+                }
+              })
+              .catch((err: unknown) => {
+                onIframeError(
+                  `Engineering preview: bridge injection failed (${err instanceof Error ? err.message : String(err)})`,
+                );
+              });
+          }
+        } else {
+          onIframeError(`Engineering preview: ${result.reason} (${result.message})`);
+          return;
+        }
+        // postMessage to the iframe works cross-origin as long as we use a
+        // wildcard target, so this is safe regardless of the injection path.
+        postModeToPreviewWindow(target.contentWindow, interactionMode, onIframeError);
+        onIframeLoaded(designId);
+      }}
+      className={
+        isMobile
+          ? 'block w-full h-full bg-transparent border-0'
+          : 'w-full h-full bg-transparent border-0'
+      }
+    />
+  ) : (
     <iframe
       ref={setRef}
       title={`design-preview-${designId}`}
@@ -273,6 +376,63 @@ function PreviewSlot({
   );
 }
 
+function EngineeringStatusOverlay({
+  state,
+  onRetry,
+}: {
+  state: import('@open-codesign/shared').EngineeringRunState | undefined;
+  onRetry: () => void;
+}) {
+  const status = state?.status ?? 'detecting';
+  const label =
+    status === 'detecting'
+      ? 'Detecting React project…'
+      : status === 'initializing-deps'
+        ? 'Installing dependencies…'
+        : status === 'starting'
+          ? 'Starting dev server…'
+          : status === 'awaiting-ack'
+            ? 'Ready to start'
+            : status === 'stopped'
+              ? 'Dev server stopped'
+              : status === 'unsupported'
+                ? 'This workspace is not a React project'
+                : status === 'error'
+                  ? `Engineering error: ${state?.lastError?.message ?? 'unknown'}`
+                  : 'Loading…';
+  const showRefresh = status === 'error' || status === 'stopped';
+  const isLoading =
+    status === 'detecting' ||
+    status === 'initializing-deps' ||
+    status === 'starting' ||
+    status === 'running';
+  return (
+    <div className="flex flex-col items-center gap-3 px-6 text-center max-w-[640px]">
+      {isLoading ? (
+        <div
+          className="h-6 w-6 rounded-full border-2 border-(--color-border-muted) border-t-(--color-accent) animate-spin"
+          aria-hidden="true"
+        />
+      ) : null}
+      <div className="text-sm text-[var(--color-text-primary)]">{label}</div>
+      {state?.lastError?.excerpt && state.lastError.excerpt.length > 0 ? (
+        <pre className="max-h-[200px] w-full overflow-auto whitespace-pre-wrap rounded-md border border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] p-3 text-left text-[11px] text-[var(--color-text-muted)]">
+          {state.lastError.excerpt.join('\n')}
+        </pre>
+      ) : null}
+      {showRefresh ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-md border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-3 py-1 text-xs hover:border-[var(--color-accent)]"
+        >
+          Retry
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
@@ -280,6 +440,10 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const recentDesignIds = useCodesignStore((s) => s.recentDesignIds);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
+  const engineeringRunStateByDesign = useCodesignStore((s) => s.engineeringRunStateByDesign);
+  const engineeringRefreshTickByDesign = useCodesignStore((s) => s.engineeringRefreshTickByDesign);
+  const refreshEngineeringSession = useCodesignStore((s) => s.refreshEngineeringSession);
+  const startEngineeringSession = useCodesignStore((s) => s.startEngineeringSession);
   const chatMessages = useCodesignStore((s) => s.chatMessages);
   const canvasTabs = useCodesignStore((s) => s.canvasTabs);
   const activeCanvasTab = useCodesignStore((s) => s.activeCanvasTab);
@@ -288,6 +452,10 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const clearError = useCodesignStore((s) => s.clearError);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
+  const attachComponentSelection = useCodesignStore((s) => s.attachComponentSelection);
+  const setIframeUrlPath = useCodesignStore((s) => s.setIframeUrlPath);
+  const iframeUrlPathByDesign = useCodesignStore((s) => s.iframeUrlPathByDesign);
+  const componentSelectionBySelector = useCodesignStore((s) => s.componentSelectionBySelector);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
@@ -358,7 +526,29 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     const selectors = new Set<string>();
-    if (currentSnapshotId) {
+    // Engineering URL-mode comments are scoped by url path, not snapshotId
+    // (snapshotId is null for them). Without this branch the sandbox never
+    // measures their selectors on second entry → liveRects stays empty →
+    // pins use the stale rect captured at creation time and end up
+    // off-element / unclickable, and bubbles opened from the comment list
+    // anchor to the same wrong rect.
+    const designForWatch =
+      currentDesignId !== null ? designs.find((d) => d.id === currentDesignId) : undefined;
+    const isEngineeringWatch = designForWatch?.mode === 'engineering';
+    const currentPathForWatch =
+      currentDesignId !== null ? iframeUrlPathByDesign[currentDesignId] : undefined;
+    if (isEngineeringWatch) {
+      for (const c of comments) {
+        if (c.snapshotId !== null) continue;
+        const stored = c.urlPath;
+        const matches =
+          typeof stored !== 'string' ||
+          stored.length === 0 ||
+          typeof currentPathForWatch !== 'string' ||
+          stored === currentPathForWatch;
+        if (matches) selectors.add(c.selector);
+      }
+    } else if (currentSnapshotId) {
       for (const c of comments) {
         if (c.snapshotId === currentSnapshotId) selectors.add(c.selector);
       }
@@ -372,7 +562,15 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     } catch {
       /* sandbox gone — retry happens next render */
     }
-  }, [comments, currentSnapshotId, commentBubble, currentDesignId, iframeLoadTick]);
+  }, [
+    comments,
+    currentSnapshotId,
+    commentBubble,
+    currentDesignId,
+    iframeLoadTick,
+    designs,
+    iframeUrlPathByDesign,
+  ]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
@@ -405,6 +603,18 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         onElementRects: (msg) => {
           applyLiveRects(msg.entries);
         },
+        onComponentSelected: (msg) => {
+          attachComponentSelection({
+            selector: msg.selector,
+            componentName: msg.componentName,
+            ownerChain: msg.ownerChain,
+            debugSource: msg.debugSource,
+            receivedAt: Date.now(),
+          });
+        },
+        onUrlChanged: (msg) => {
+          if (currentDesignId) setIframeUrlPath(currentDesignId, msg.path);
+        },
       });
 
       if (outcome.status === 'rejected' && outcome.reason === 'unknown-type') {
@@ -414,38 +624,112 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [pushIframeError, selectCanvasElement, openCommentBubble, previewZoom, applyLiveRects]);
+  }, [
+    pushIframeError,
+    selectCanvasElement,
+    openCommentBubble,
+    previewZoom,
+    applyLiveRects,
+    attachComponentSelection,
+    setIframeUrlPath,
+    currentDesignId,
+  ]);
 
   // Pool entries: active design first (using the freshest in-memory
   // previewHtml), then any other recently-visited designs that still have a
   // cached preview. Store-side LRU bounds the size; we just render what's
-  // handed to us.
+  // handed to us. Engineering-mode designs synthesize an entry from the
+  // dev-server URL once the runtime is in 'running' state.
   const poolEntries = useMemo(() => {
     const seen = new Set<string>();
-    const out: Array<{ id: string; html: string }> = [];
+    const out: Array<{
+      id: string;
+      html: string;
+      previewUrl?: string;
+      refreshTick?: number;
+    }> = [];
+
+    function entryFor(
+      id: string,
+      html: string | undefined,
+    ): {
+      id: string;
+      html: string;
+      previewUrl?: string;
+      refreshTick?: number;
+    } | null {
+      const design = designs.find((d) => d.id === id);
+      const isEngineering = design?.mode === 'engineering';
+      const runState = engineeringRunStateByDesign[id];
+      const url =
+        isEngineering && runState?.status === 'running' && runState.readyUrl !== null
+          ? runState.readyUrl
+          : undefined;
+      // For engineering designs we always provide an entry once we have a
+      // URL, even when there is no html — html is unused in URL mode.
+      if (typeof url === 'string') {
+        return {
+          id,
+          html: html ?? '',
+          previewUrl: url,
+          refreshTick: engineeringRefreshTickByDesign[id] ?? 0,
+        };
+      }
+      if (typeof html === 'string' && html.length > 0) {
+        return { id, html };
+      }
+      return null;
+    }
+
     if (currentDesignId !== null) {
       const html = previewHtml ?? previewHtmlByDesign[currentDesignId];
-      if (typeof html === 'string' && html.length > 0) {
-        out.push({ id: currentDesignId, html });
+      const entry = entryFor(currentDesignId, html);
+      if (entry !== null) {
+        out.push(entry);
         seen.add(currentDesignId);
       }
     }
     for (const id of recentDesignIds) {
       if (seen.has(id)) continue;
-      const html = previewHtmlByDesign[id];
-      if (typeof html === 'string' && html.length > 0) {
-        out.push({ id, html });
+      const entry = entryFor(id, previewHtmlByDesign[id]);
+      if (entry !== null) {
+        out.push(entry);
         seen.add(id);
       }
     }
     return out;
-  }, [currentDesignId, previewHtml, previewHtmlByDesign, recentDesignIds]);
+  }, [
+    currentDesignId,
+    previewHtml,
+    previewHtmlByDesign,
+    recentDesignIds,
+    designs,
+    engineeringRunStateByDesign,
+    engineeringRefreshTickByDesign,
+  ]);
 
   const activeTab = canvasTabs[activeCanvasTab];
   const showCommentUi = interactionMode === 'comment';
-  const snapshotComments = currentSnapshotId
-    ? comments.filter((c) => c.snapshotId === currentSnapshotId)
-    : [];
+  const previewCurrentDesign =
+    currentDesignId !== null ? designs.find((d) => d.id === currentDesignId) : undefined;
+  const isEngineeringMode = previewCurrentDesign?.mode === 'engineering';
+  const currentIframePath =
+    currentDesignId !== null ? iframeUrlPathByDesign[currentDesignId] : undefined;
+  const snapshotComments = isEngineeringMode
+    ? // Engineering URL-mode rows have snapshotId === null and are scoped by
+      // urlPath. Show comments whose stored urlPath matches the iframe's
+      // current path. Rows without urlPath (legacy or imported) are shown
+      // everywhere as a safe fallback so they don't get orphaned.
+      comments.filter((c) => {
+        if (c.snapshotId !== null) return false;
+        const stored = c.urlPath;
+        if (typeof stored !== 'string' || stored.length === 0) return true;
+        if (typeof currentIframePath !== 'string') return true;
+        return stored === currentIframePath;
+      })
+    : currentSnapshotId
+      ? comments.filter((c) => c.snapshotId === currentSnapshotId)
+      : [];
   const pinOverlay = (
     <PinOverlay
       comments={snapshotComments}
@@ -473,9 +757,14 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // round-trip for the snapshot. Show a skeleton instead of the new-design
   // welcome screen so users don't read the transient state as "load failed".
   const currentDesign = currentDesignId ? designs.find((d) => d.id === currentDesignId) : undefined;
+  const isEngineeringActive = currentDesign?.mode === 'engineering';
+  const engineeringRunState = currentDesignId
+    ? engineeringRunStateByDesign[currentDesignId]
+    : undefined;
   const designHasContent =
     currentDesign !== undefined &&
-    ((currentDesign.thumbnailText !== null && currentDesign.thumbnailText.length > 0) ||
+    (isEngineeringActive ||
+      (currentDesign.thumbnailText !== null && currentDesign.thumbnailText.length > 0) ||
       chatMessages.length > 0);
 
   let body: React.ReactNode;
@@ -508,6 +797,8 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             key={entry.id}
             designId={entry.id}
             html={entry.html}
+            {...(entry.previewUrl !== undefined ? { previewUrl: entry.previewUrl } : {})}
+            {...(entry.refreshTick !== undefined ? { refreshTick: entry.refreshTick } : {})}
             active={entry.id === currentDesignId}
             viewport={previewViewport}
             zoom={previewZoom}
@@ -523,7 +814,16 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         {!activeHasHtml ? (
           designHasContent ? (
             <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-background)]">
-              <div className="w-[60%] max-w-[720px] aspect-[4/3] rounded-[var(--radius-lg)] bg-[linear-gradient(110deg,var(--color-background-secondary)_0%,rgba(0,0,0,0.03)_40%,var(--color-background-secondary)_80%)] animate-pulse" />
+              {isEngineeringActive ? (
+                <EngineeringStatusOverlay
+                  state={engineeringRunState}
+                  onRetry={() =>
+                    currentDesignId !== null && void startEngineeringSession(currentDesignId)
+                  }
+                />
+              ) : (
+                <div className="w-[60%] max-w-[720px] aspect-[4/3] rounded-[var(--radius-lg)] bg-[linear-gradient(110deg,var(--color-background-secondary)_0%,rgba(0,0,0,0.03)_40%,var(--color-background-secondary)_80%)] animate-pulse" />
+              )}
             </div>
           ) : (
             <EmptyState onPickStarter={onPickStarter} />
@@ -550,7 +850,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           {body}
           {previewHtml ? <TweakPanel iframeRef={iframeRef} /> : null}
         </div>
-        {commentBubble && interactionMode === 'comment'
+        {commentBubble
           ? (() => {
               const liveForBubble = liveRects[commentBubble.selector];
               const scaled = liveForBubble
@@ -566,13 +866,36 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
               // when the user clicks another chip and comes back.
               const stashed = bubbleDraftsRef.current.get(bubbleKey);
               const initialText = stashed ?? commentBubble.initialText;
+              // U9: enrich the bubble header with the React inspector hit (if
+              // any) for the current selector. The map is populated by
+              // COMPONENT_SELECTED messages from the engineering iframe; for
+              // srcdoc / generative designs it is always empty so the bubble
+              // falls back to the legacy tag preview unchanged.
+              const inspectorHit = componentSelectionBySelector[commentBubble.selector];
+              const bubbleComponentSelection = inspectorHit
+                ? {
+                    schemaVersion: 1 as const,
+                    componentName: inspectorHit.componentName,
+                    filePath: null,
+                    ownerChain: inspectorHit.ownerChain,
+                    debugSource: inspectorHit.debugSource,
+                    domSelector: commentBubble.selector,
+                    ...(commentBubble.outerHTML.length > 0
+                      ? { legacyOuterHTML: commentBubble.outerHTML }
+                      : {}),
+                  }
+                : null;
               return (
                 <CommentBubble
                   key={bubbleKey}
                   selector={commentBubble.selector}
                   tag={commentBubble.tag}
                   outerHTML={commentBubble.outerHTML}
+                  {...(bubbleComponentSelection !== null
+                    ? { componentSelection: bubbleComponentSelection }
+                    : {})}
                   rect={scaled}
+                  iframeRef={iframeRef}
                   {...(initialText !== undefined ? { initialText } : {})}
                   onDraftChange={(text) => {
                     if (text.length === 0) bubbleDraftsRef.current.delete(bubbleKey);

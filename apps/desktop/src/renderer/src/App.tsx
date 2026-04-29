@@ -3,6 +3,8 @@ import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
+import { EngineeringLaunchPickerDialog } from './components/EngineeringLaunchPickerDialog';
+import { EngineeringUnsupportedHint } from './components/EngineeringUnsupportedHint';
 import { NewDesignDialog } from './components/NewDesignDialog';
 import { PreviewPane } from './components/PreviewPane';
 import { RebindWorkspaceDialog } from './components/RebindWorkspaceDialog';
@@ -14,6 +16,7 @@ import { TopBar } from './components/TopBar';
 import { UpdateBanner } from './components/UpdateBanner';
 import { CommentsPanel } from './components/comment/CommentsPanel';
 import { ReportEventDialog } from './components/diagnostics/ReportEventDialog';
+import { useEngineeringWiring } from './hooks/useEngineeringWiring';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useUpdateWiring } from './hooks/useUpdateWiring';
 import { createUpdateStore } from './state/update-store';
@@ -55,6 +58,7 @@ export function App() {
 
   const [updateStore] = useState(() => createUpdateStore({ dismissedVersion: '' }));
   useUpdateWiring(updateStore);
+  useEngineeringWiring();
 
   useEffect(() => {
     if (!window.codesign) {
@@ -260,6 +264,8 @@ export function App() {
       <DeleteDesignDialog />
       <RebindWorkspaceDialog />
       <NewDesignDialog />
+      <EngineeringUnsupportedHint />
+      <EngineeringLaunchPickerDialog />
       <ToastViewport />
       <CommentsPanel />
       <ReportEventDialog localId={activeReportLocalId} onClose={closeReportDialog} />

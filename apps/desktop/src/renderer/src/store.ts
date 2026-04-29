@@ -8,9 +8,13 @@ import type {
   CommentRect,
   CommentRow,
   CommentScope,
+  ComponentSelection,
   Design,
   DiagnosticEventRow,
   DiagnosticHypothesis,
+  EngineeringPackageManager,
+  EngineeringRunState,
+  LaunchEntry,
   LocalInputFile,
   ModelRef,
   OnboardingState,
@@ -160,6 +164,27 @@ export interface UsageSnapshot {
   costUsd: number;
 }
 
+/**
+ * Renderer-side projection of `ComponentSelectedMessage`. Mirrors the wire
+ * shape (no `domSelector` / `legacyOuterHTML` — those are tracked separately
+ * via the existing `selectedElement`). Source-path resolution from absolute
+ * `debugSource.fileName` to a workspace-relative `filePath` is deferred to
+ * U9 / U10 since it requires per-design workspace context.
+ */
+export interface ComponentSelectionRendererPayload {
+  selector: string;
+  componentName: string;
+  ownerChain: string[];
+  debugSource: {
+    fileName: string;
+    lineNumber: number;
+    columnNumber?: number;
+  } | null;
+  /** Wall-clock receipt time so consumers can drop stale entries when a
+   *  selector is reused across designs / page reloads. */
+  receivedAt: number;
+}
+
 interface PromptRequest {
   prompt: string;
   attachments: LocalInputFile[];
@@ -174,6 +199,26 @@ interface CodesignState {
   previewHtmlByDesign: Record<string, string>;
   /** Most-recent-first list of design ids in the preview pool. */
   recentDesignIds: string[];
+  /** v0.2 engineering mode — latest run state per design id, keyed for
+   *  multi-tab support. PreviewPane reads readyUrl from here when the design
+   *  is in 'engineering' mode. Updated by useEngineeringWiring on every
+   *  engine:v1:run-state broadcast. Bumping refreshTick triggers an iframe
+   *  remount without re-spawning the dev server. */
+  engineeringRunStateByDesign: Record<string, EngineeringRunState>;
+  engineeringRefreshTickByDesign: Record<string, number>;
+  /** Engineering-mode component metadata, keyed by DOM selector. Populated
+   *  by COMPONENT_SELECTED messages from the React inspector script the
+   *  renderer injects into URL-mode iframes. Consumers (comment composer,
+   *  agent context — U9 / U10) look this up for the current selection's
+   *  selector to enrich the primary context beyond raw outerHTML. */
+  componentSelectionBySelector: Record<string, ComponentSelectionRendererPayload>;
+  /** Engineering URL-mode — latest pathname (incl. search/hash) reported by
+   *  the in-iframe overlay's URL_CHANGED broadcast, keyed by design id.
+   *  Used to (a) stamp `urlPath` on new comments so engineering threads are
+   *  scoped to a route, and (b) filter visible comments to the current
+   *  page. Cross-origin iframes block direct location reads, so this is the
+   *  only signal source. */
+  iframeUrlPathByDesign: Record<string, string>;
   isGenerating: boolean;
   activeGenerationId: string | null;
   /** Design id that owns the in-flight generation. Lets the user switch to
@@ -203,6 +248,31 @@ interface CodesignState {
   designToRename: Design | null;
   /** Workspace rebind confirmation state: { design, newPath } when user picks a different folder */
   workspaceRebindPending: { design: Design; newPath: string } | null;
+  /** U11: when an engineering-mode entry is attempted on a non-React (or
+   *  unparseable) workspace, the detector outcome lands here so the
+   *  EngineeringUnsupportedHint dialog can render. The session is NOT
+   *  created when this is non-null — the user has to either pick a
+   *  different folder or fall back to generative mode. */
+  engineeringUnsupportedHint: {
+    workspacePath: string;
+    /** Detector reason string (e.g. 'detected-vue', 'missing-package-json').
+     *  Stable values — the dialog branches on these to pick the right copy. */
+    reason: string;
+  } | null;
+  /** U12: between detect() and createSession() the user picks which launch
+   *  command to run (or types a custom one) and may override the ready URL.
+   *  Non-null means the picker dialog is open. */
+  engineeringLaunchPicker: {
+    workspacePath: string;
+    launchEntries: LaunchEntry[];
+    packageManager: EngineeringPackageManager | null;
+    /** Pre-fill for the manual ready-URL field, sourced from any saved
+     *  engineering settings on the workspace. */
+    suggestedReadyUrl: string | null;
+  } | null;
+  /** True while engine.session.create + post-create wiring is in flight,
+   *  so the picker dialog can disable its buttons. */
+  engineeringLaunchSubmitting: boolean;
 
   theme: Theme;
   view: AppView;
@@ -353,6 +423,26 @@ interface CodesignState {
   openNewDesignDialog: () => void;
   closeNewDesignDialog: () => void;
   createNewDesign: (workspacePath?: string | null) => Promise<Design | null>;
+  /** v0.2 engineering mode entry point. Picks (or accepts) a workspace,
+   *  asks main to detect the React project, persists the EngineeringConfig,
+   *  and switches to the new design. Returns null on cancel/failure. */
+  createNewEngineeringDesign: (workspacePath?: string) => Promise<Design | null>;
+  /** Apply a run-state broadcast to the keyed slot. Called by the engine
+   *  wiring hook on every engine:v1:run-state event. */
+  setEngineeringRunState: (state: EngineeringRunState) => void;
+  /** Kick off install (if needed) + dev server for the design. No-op when
+   *  the design is not in engineering mode or no engineering config exists. */
+  startEngineeringSession: (designId: string) => Promise<void>;
+  stopEngineeringSession: (designId: string) => Promise<void>;
+  /** Bump the per-design refresh tick so PreviewPane remounts the iframe;
+   *  also pings the runtime so subscribers re-receive the current state. */
+  refreshEngineeringSession: (designId: string) => Promise<void>;
+  /** Stash component metadata received from the React inspector (U8). U9 will
+   *  read this from the comment composer; U10 from the agent context builder. */
+  attachComponentSelection: (payload: ComponentSelectionRendererPayload) => void;
+  /** Record the current iframe pathname for an engineering URL-mode design,
+   *  reported by the in-iframe overlay's URL_CHANGED broadcast. */
+  setIframeUrlPath: (designId: string, path: string) => void;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string) => Promise<void>;
@@ -365,6 +455,16 @@ interface CodesignState {
 
   requestWorkspaceRebind: (design: Design, newPath: string) => void;
   cancelWorkspaceRebind: () => void;
+  /** U11: dismiss the unsupported-engineering hint. */
+  dismissEngineeringUnsupportedHint: () => void;
+  /** U12: confirm the launch picker selection — actually creates the
+   *  engineering session via IPC and switches the view. */
+  confirmEngineeringLaunch: (input: {
+    launchEntry: LaunchEntry;
+    manualReadyUrl: string | null;
+  }) => Promise<Design | null>;
+  /** U12: dismiss the picker without creating a session. */
+  cancelEngineeringLaunch: () => void;
   confirmWorkspaceRebind: (migrateFiles: boolean) => Promise<void>;
 
   pushToast: (toast: Omit<Toast, 'id'>) => string;
@@ -429,6 +529,7 @@ interface CodesignState {
     text: string;
     scope?: CommentScope;
     parentOuterHTML?: string;
+    componentSelection?: ComponentSelection | null;
   }) => Promise<CommentRow | null>;
   updateComment: (id: string, patch: { text?: string }) => Promise<CommentRow | null>;
   /** Single entry point used by CommentBubble. If `existingCommentId` is set,
@@ -1262,28 +1363,85 @@ export interface PendingEditEnrichment {
   text: string;
   scope?: CommentScope | undefined;
   parentOuterHTML?: string | null | undefined;
+  /** U10: when populated by U9, the prompt prefers component name + source
+   *  path over outerHTML so the agent edits the React source rather than
+   *  trying to rewrite a generated DOM string. */
+  componentSelection?: ComponentSelection | null | undefined;
 }
 
 export function buildEnrichedPrompt(
   userPrompt: string,
   pendingEdits: PendingEditEnrichment[],
+  options: { mode?: 'generative' | 'engineering'; readyUrl?: string | null } = {},
 ): string {
-  if (pendingEdits.length === 0) return userPrompt;
+  if (pendingEdits.length === 0 && options.mode !== 'engineering') return userPrompt;
+  if (pendingEdits.length === 0) {
+    // Engineering mode with no pending edits: still prepend the readyUrl
+    // header so the agent knows the live preview surface.
+    if (options.readyUrl) {
+      return [
+        '## ENGINEERING SESSION',
+        '',
+        `Live preview: ${options.readyUrl}`,
+        'Modify the React source files in the workspace; the dev server hot-reloads.',
+        '',
+        '---',
+        '',
+        userPrompt,
+      ].join('\n');
+    }
+    return userPrompt;
+  }
 
+  const isEngineering = options.mode === 'engineering';
   const MAX_HTML = 600;
   const truncate = (s: string) => (s.length > MAX_HTML ? `${s.slice(0, MAX_HTML)}…` : s);
 
-  const lines: string[] = [
-    '## REQUIRED EDITS — you MUST apply every edit below to index.html',
-    '',
-    'Each edit targets a specific element identified by its selector and outerHTML.',
-    'Use text_editor str_replace to find and modify the element. Do NOT skip any edit.',
-    '',
-  ];
+  const lines: string[] = isEngineering
+    ? [
+        '## REQUIRED EDITS — modify the React source files in the workspace',
+        '',
+        ...(options.readyUrl ? [`Live preview: ${options.readyUrl}`, ''] : []),
+        'Each edit targets a specific React component. Open the file, find the',
+        'component, and apply the change. Do NOT replace the running app with a',
+        'one-off HTML artifact — edit the existing source.',
+        '',
+      ]
+    : [
+        '## REQUIRED EDITS — you MUST apply every edit below to index.html',
+        '',
+        'Each edit targets a specific element identified by its selector and outerHTML.',
+        'Use text_editor str_replace to find and modify the element. Do NOT skip any edit.',
+        '',
+      ];
 
   pendingEdits.forEach((edit, i) => {
     const scope =
       edit.scope === 'global' ? 'global (apply design-wide)' : 'element (this element only)';
+    const cs = edit.componentSelection ?? null;
+    if (isEngineering && cs && cs.componentName.length > 0) {
+      // Engineering-mode shape: component-first, source-path-aware. outerHTML
+      // is intentionally omitted here — it would mislead the agent into a
+      // string-replace path against a generated DOM rather than a JSX edit.
+      const filePath = cs.filePath ?? cs.debugSource?.fileName ?? null;
+      lines.push(`### Edit ${i + 1}: ${edit.text}`);
+      lines.push(`- **Component**: \`<${cs.componentName}>\``);
+      if (filePath !== null && filePath.length > 0) {
+        const lineSuffix =
+          cs.debugSource?.lineNumber && cs.debugSource.lineNumber > 0
+            ? `:${cs.debugSource.lineNumber}`
+            : '';
+        lines.push(`- **Source**: \`${filePath}${lineSuffix}\``);
+      }
+      if (cs.ownerChain.length > 0) {
+        lines.push(`- **Rendered inside**: ${cs.ownerChain.map((n) => `\`<${n}>\``).join(' ← ')}`);
+      }
+      lines.push(`- **DOM selector** (for cross-reference only): \`${cs.domSelector}\``);
+      lines.push(`- **Scope**: ${scope}`);
+      lines.push(`- **Instruction**: ${edit.text}`);
+      lines.push('');
+      return;
+    }
     lines.push(`### Edit ${i + 1}: ${edit.text}`);
     lines.push(`- **Target**: \`<${edit.tag}>\` at \`${edit.selector}\``);
     lines.push(`- **Current HTML**: \`${truncate(edit.outerHTML)}\``);
@@ -1306,6 +1464,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   previewHtml: null,
   previewHtmlByDesign: {},
   recentDesignIds: [],
+  engineeringRunStateByDesign: {},
+  engineeringRefreshTickByDesign: {},
+  componentSelectionBySelector: {},
+  iframeUrlPathByDesign: {},
   isGenerating: false,
   activeGenerationId: null,
   generatingDesignId: null,
@@ -1372,6 +1534,9 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   designToDelete: null,
   designToRename: null,
   workspaceRebindPending: null,
+  engineeringUnsupportedHint: null,
+  engineeringLaunchPicker: null,
+  engineeringLaunchSubmitting: false,
 
   inputFiles: [],
   referenceUrl: '',
@@ -1544,7 +1709,21 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     );
     if (!request) return;
 
-    const enrichedPrompt = buildEnrichedPrompt(request.prompt, pendingEdits);
+    const enrichedPrompt = buildEnrichedPrompt(
+      request.prompt,
+      pendingEdits,
+      (() => {
+        // U10: in engineering mode, surface the live dev-server URL and bias
+        // the agent toward editing source files instead of replacing the
+        // running app with a one-off HTML artifact.
+        const designId = get().currentDesignId;
+        const design = designId ? (get().designs.find((d) => d.id === designId) ?? null) : null;
+        if (!design || design.mode !== 'engineering') return {};
+        const runState = designId ? get().engineeringRunStateByDesign[designId] : undefined;
+        const readyUrl = runState?.readyUrl ?? design.engineering?.lastReadyUrl ?? null;
+        return { mode: 'engineering' as const, readyUrl };
+      })(),
+    );
     const pendingEditIds = pendingEdits.map((c) => c.id);
 
     const generationId = newId();
@@ -1991,6 +2170,194 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     }
   },
 
+  async createNewEngineeringDesign(workspacePath?: string) {
+    if (!window.codesign) return null;
+    if (get().isGenerating) {
+      get().pushToast({
+        variant: 'info',
+        title: tr('projects.notifications.createFailed'),
+        description: tr('projects.notifications.busyGenerating'),
+      });
+      return null;
+    }
+    let chosenPath = workspacePath ?? null;
+    if (chosenPath === null) {
+      try {
+        chosenPath = await window.codesign.snapshots.pickWorkspaceFolder();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : tr('errors.unknown');
+        get().pushToast({
+          variant: 'error',
+          title: tr('projects.notifications.createFailed'),
+          description: msg,
+        });
+        return null;
+      }
+    }
+    if (chosenPath === null) return null;
+    // U11: short-circuit on non-React workspaces.
+    // U12: instead of auto-picking the top-confidence launch entry and
+    // calling createSession() right away, we hand the detection result to
+    // the launch picker dialog so the user can pick / customize the command
+    // and (optionally) override the ready URL before any persistence.
+    try {
+      const detection = await window.codesign.engine.detect(chosenPath);
+      if (detection.framework !== 'react') {
+        set({
+          engineeringUnsupportedHint: {
+            workspacePath: chosenPath,
+            reason: detection.reason ?? 'unknown',
+          },
+        });
+        return null;
+      }
+      set({
+        engineeringLaunchPicker: {
+          workspacePath: chosenPath,
+          launchEntries: detection.launchEntries,
+          packageManager: detection.packageManager,
+          suggestedReadyUrl: detection.savedConfig?.lastReadyUrl ?? null,
+        },
+      });
+      return null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.createFailed'),
+        description: msg,
+      });
+      return null;
+    }
+  },
+
+  async confirmEngineeringLaunch({ launchEntry, manualReadyUrl }) {
+    if (!window.codesign) return null;
+    const picker = get().engineeringLaunchPicker;
+    if (picker === null) return null;
+    if (get().engineeringLaunchSubmitting) return null;
+    set({ engineeringLaunchSubmitting: true });
+    try {
+      const design = await window.codesign.engine.createSession({
+        workspacePath: picker.workspacePath,
+        launchEntry,
+        manualReadyUrl,
+      });
+      set({
+        currentDesignId: design.id,
+        previewHtml: null,
+        errorMessage: null,
+        iframeErrors: [],
+        selectedElement: null,
+        lastPromptInput: null,
+        designsViewOpen: false,
+        chatMessages: [],
+        chatLoaded: false,
+        pendingToolCalls: [],
+        comments: [],
+        commentsLoaded: false,
+        commentBubble: null,
+        currentSnapshotId: null,
+        canvasTabs: [FILES_TAB],
+        activeCanvasTab: 0,
+        engineeringLaunchPicker: null,
+        engineeringLaunchSubmitting: false,
+      });
+      await get().loadDesigns();
+      void get().loadChatForCurrentDesign();
+      void get().loadCommentsForCurrentDesign();
+      return design;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      set({ engineeringLaunchSubmitting: false });
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.createFailed'),
+        description: msg,
+      });
+      return null;
+    }
+  },
+
+  cancelEngineeringLaunch() {
+    set({ engineeringLaunchPicker: null, engineeringLaunchSubmitting: false });
+  },
+
+  setEngineeringRunState(state) {
+    set((s) => ({
+      engineeringRunStateByDesign: {
+        ...s.engineeringRunStateByDesign,
+        [state.designId]: state,
+      },
+    }));
+  },
+
+  attachComponentSelection(payload) {
+    set((s) => ({
+      componentSelectionBySelector: {
+        ...s.componentSelectionBySelector,
+        [payload.selector]: payload,
+      },
+    }));
+  },
+
+  setIframeUrlPath(designId, path) {
+    set((s) => {
+      if (s.iframeUrlPathByDesign[designId] === path) return {};
+      return {
+        iframeUrlPathByDesign: {
+          ...s.iframeUrlPathByDesign,
+          [designId]: path,
+        },
+      };
+    });
+  },
+
+  async startEngineeringSession(designId) {
+    if (!window.codesign) return;
+    try {
+      const state = await window.codesign.engine.start(designId);
+      get().setEngineeringRunState(state);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: 'Engineering: failed to start dev server',
+        description: msg,
+      });
+    }
+  },
+
+  async stopEngineeringSession(designId) {
+    if (!window.codesign) return;
+    try {
+      const state = await window.codesign.engine.stop(designId);
+      get().setEngineeringRunState(state);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: 'Engineering: failed to stop dev server',
+        description: msg,
+      });
+    }
+  },
+
+  async refreshEngineeringSession(designId) {
+    if (!window.codesign) return;
+    set((s) => ({
+      engineeringRefreshTickByDesign: {
+        ...s.engineeringRefreshTickByDesign,
+        [designId]: (s.engineeringRefreshTickByDesign[designId] ?? 0) + 1,
+      },
+    }));
+    try {
+      await window.codesign.engine.refresh(designId);
+    } catch {
+      // best-effort; the iframe key bump above is the user-visible action.
+    }
+  },
+
   async switchDesign(id: string) {
     if (!window.codesign) return;
     const state = get();
@@ -2233,6 +2600,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   cancelWorkspaceRebind() {
     set({ workspaceRebindPending: null });
+  },
+
+  dismissEngineeringUnsupportedHint() {
+    set({ engineeringUnsupportedHint: null });
   },
 
   async confirmWorkspaceRebind(migrateFiles) {
@@ -2600,24 +2971,38 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     if (!window.codesign) return null;
     const designId = get().currentDesignId;
     if (!designId) return null;
-    // Pin comments to the current snapshot so pin overlays only surface for
-    // the snapshot the user was viewing when the click happened.
-    let snapshotId: string | null = get().currentSnapshotId;
-    if (!snapshotId) {
-      try {
-        const snaps = await window.codesign.snapshots.list(designId);
-        snapshotId = snaps[0]?.id ?? null;
-        if (snapshotId) set({ currentSnapshotId: snapshotId });
-      } catch (err) {
-        console.warn('[open-codesign] addComment: failed to look up latest snapshot', err);
+    // Engineering URL-mode designs aren't backed by a snapshot — the dev
+    // server owns the page. Skip snapshot lookup entirely; persist with
+    // snapshotId=null + the iframe's current path so the renderer can scope
+    // the comment to a route. (Snapshot-less rows are supported by the
+    // comments table since v3.)
+    const design = get().designs.find((d) => d.id === designId);
+    const isEngineeringUrlMode = design?.mode === 'engineering';
+    let snapshotId: string | null = null;
+    let urlPath: string | undefined;
+    if (isEngineeringUrlMode) {
+      const tracked = get().iframeUrlPathByDesign[designId];
+      if (typeof tracked === 'string' && tracked.length > 0) urlPath = tracked;
+    } else {
+      // Pin comments to the current snapshot so pin overlays only surface for
+      // the snapshot the user was viewing when the click happened.
+      snapshotId = get().currentSnapshotId;
+      if (!snapshotId) {
+        try {
+          const snaps = await window.codesign.snapshots.list(designId);
+          snapshotId = snaps[0]?.id ?? null;
+          if (snapshotId) set({ currentSnapshotId: snapshotId });
+        } catch (err) {
+          console.warn('[open-codesign] addComment: failed to look up latest snapshot', err);
+        }
       }
-    }
-    if (!snapshotId) {
-      get().pushToast({
-        variant: 'error',
-        title: tr('notifications.commentNeedsSnapshot'),
-      });
-      return null;
+      if (!snapshotId) {
+        get().pushToast({
+          variant: 'error',
+          title: tr('notifications.commentNeedsSnapshot'),
+        });
+        return null;
+      }
     }
     try {
       const row = await window.codesign.comments.add({
@@ -2631,6 +3016,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         text: input.text,
         ...(input.scope ? { scope: input.scope } : {}),
         ...(input.parentOuterHTML ? { parentOuterHTML: input.parentOuterHTML } : {}),
+        ...(input.componentSelection !== undefined && input.componentSelection !== null
+          ? { componentSelection: input.componentSelection }
+          : {}),
+        ...(urlPath !== undefined ? { urlPath } : {}),
       });
       if (get().currentDesignId === designId) {
         set((s) => ({ comments: [...s.comments, row] }));
@@ -2685,6 +3074,24 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     };
     if (input.scope) payload.scope = input.scope;
     if (input.parentOuterHTML) payload.parentOuterHTML = input.parentOuterHTML;
+    // U9: in engineering mode the React inspector publishes
+    // COMPONENT_SELECTED keyed by selector. Look it up at submit time so
+    // every newly created comment carries the freshest fiber-derived
+    // metadata. The renderer payload shape mirrors ComponentSelectionV1
+    // except for the schema-required `domSelector` / `legacyOuterHTML`
+    // fields which we fill from the same selection's selector + outerHTML.
+    const inspector = get().componentSelectionBySelector[input.selector];
+    if (inspector) {
+      payload.componentSelection = {
+        schemaVersion: 1,
+        componentName: inspector.componentName,
+        filePath: null,
+        ownerChain: inspector.ownerChain,
+        debugSource: inspector.debugSource,
+        domSelector: input.selector,
+        ...(input.outerHTML.length > 0 ? { legacyOuterHTML: input.outerHTML } : {}),
+      };
+    }
     return get().addComment(payload);
   },
 
