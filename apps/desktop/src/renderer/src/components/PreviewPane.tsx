@@ -896,6 +896,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
                     ? { componentSelection: bubbleComponentSelection }
                     : {})}
                   rect={scaled}
+                  iframeRef={iframeRef}
                   {...(initialText !== undefined ? { initialText } : {})}
                   onDraftChange={(text) => {
                     if (text.length === 0) bubbleDraftsRef.current.delete(bubbleKey);
