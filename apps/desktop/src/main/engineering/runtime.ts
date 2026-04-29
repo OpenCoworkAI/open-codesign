@@ -175,11 +175,14 @@ export class EngineeringRuntime extends EventEmitter {
    *  reflects the post-startup terminal state for this start attempt. */
   start(args: StartArgs): Promise<EngineeringRunState> {
     return new Promise<EngineeringRunState>((resolve, reject) => {
-      // Reuse-or-create the slot. If another child is still running for this
-      // designId, refuse — callers must stop() first.
+      // Reuse-or-create the slot. If another child is still alive for this
+      // designId, treat the second start() as idempotent and return the
+      // current state instead of rejecting \u2014 the renderer commonly fires
+      // start again after reload, refresh, or a fast hub navigation, and
+      // the previous behavior surfaced a confusing "already running" toast.
       const existing = this.slots.get(args.designId);
       if (existing?.child !== null && existing?.child !== undefined) {
-        reject(new Error(`engineering runtime already running for design ${args.designId}`));
+        resolve(existing.state);
         return;
       }
 
