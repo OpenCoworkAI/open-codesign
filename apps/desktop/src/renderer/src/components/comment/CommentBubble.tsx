@@ -1,7 +1,7 @@
 import { useT } from '@open-codesign/i18n';
 import type { ComponentSelection } from '@open-codesign/shared';
 import { Send, X } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface CommentBubbleProps {
@@ -105,6 +105,57 @@ export function CommentBubble({
 
   const anchorTop = Math.max(rect.top + rect.height + 8, 12);
   const anchorLeft = Math.max(rect.left, 12);
+  // Initial placement above is the naive "below the element". After mount we
+  // measure the bubble and clamp/flip to keep it inside the viewport — see
+  // the useLayoutEffect below. State drives the final position so the clamp
+  // re-runs whenever the anchor rect, viewport size, or bubble height
+  // changes (e.g. textarea grows as the user types).
+  const [pos, setPos] = useState<{ top: number; left: number }>({
+    top: anchorTop,
+    left: anchorLeft,
+  });
+
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const margin = 12;
+    function clamp() {
+      const node = rootRef.current;
+      if (!node) return;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const w = node.offsetWidth;
+      const h = node.offsetHeight;
+      // Vertical: prefer below the element; flip above if it would overflow
+      // the bottom AND there's more room above. Then hard-clamp to the
+      // viewport so it's always visible even when the element is taller
+      // than the viewport.
+      let top = rect.top + rect.height + 8;
+      const overflowsBottom = top + h > vh - margin;
+      const roomAbove = rect.top - 8 - margin;
+      if (overflowsBottom && roomAbove >= h) {
+        top = rect.top - h - 8;
+      }
+      top = Math.min(Math.max(top, margin), Math.max(margin, vh - h - margin));
+      // Horizontal: prefer left-aligned with the element; clamp into the
+      // viewport. The bubble itself is `w-[min(320px,88vw)]` so width is
+      // already viewport-aware.
+      let left = rect.left;
+      left = Math.min(Math.max(left, margin), Math.max(margin, vw - w - margin));
+      setPos({ top, left });
+    }
+    clamp();
+    window.addEventListener('resize', clamp);
+    // Re-clamp whenever the bubble itself grows or shrinks (textarea
+    // auto-resize on user input). Without this, typing past one line could
+    // push the bubble off the bottom of the viewport.
+    const ro = new ResizeObserver(clamp);
+    ro.observe(el);
+    return () => {
+      window.removeEventListener('resize', clamp);
+      ro.disconnect();
+    };
+  }, [rect.top, rect.left, rect.height]);
 
   return createPortal(
     <div
@@ -113,7 +164,7 @@ export function CommentBubble({
       aria-labelledby={titleId}
       aria-modal="false"
       className="fixed z-[60] w-[min(320px,88vw)] overflow-hidden rounded-2xl border border-[var(--color-border-muted)] bg-[var(--color-surface-elevated)] shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)]"
-      style={{ top: `${anchorTop}px`, left: `${anchorLeft}px` }}
+      style={{ top: `${pos.top}px`, left: `${pos.left}px` }}
     >
       {/* Header — selected element + close */}
       <div className="flex items-center justify-between px-[var(--space-3)] py-[var(--space-2)] border-b border-[var(--color-border-muted)]">
