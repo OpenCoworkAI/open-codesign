@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { createConnection } from 'node:net';
 import type {
   EngineeringError,
   EngineeringErrorKind,
@@ -13,7 +14,7 @@ import { getLogger } from '../logger';
 import { runInstall, shouldInstall } from './installer';
 import { LogRingBuffer } from './log-buffer';
 import { extractReadyUrl } from './ready-url';
-import { writeEngineeringSettings } from './settings';
+import { readEngineeringSettings, writeEngineeringSettings } from './settings';
 
 const logger = getLogger('engineering-runtime');
 
@@ -26,6 +27,45 @@ const READY_URL_TIMEOUT_MS = 60_000;
  *  matching line ever shows up on stdout. */
 const MANUAL_READY_URL_GRACE_MS = 3_000;
 const STOP_SIGTERM_GRACE_MS = 4_000;
+
+/** Probe a TCP host:port to see if something is already listening. Used by
+ *  start() to short-circuit the spawn when the user's dev server is still
+ *  alive from a previous app session (or running independently in a
+ *  terminal). 250ms is generous for localhost \u2014 anything slower is treated
+ *  as "not listening" and we fall through to spawning. */
+function isPortListening(host: string, port: number, timeoutMs = 250): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host, port });
+    let settled = false;
+    const done = (alive: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(alive);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => done(true));
+    socket.once('timeout', () => done(false));
+    socket.once('error', () => done(false));
+  });
+}
+
+/** Parse an http(s) URL into a probe target. Returns null when the URL is
+ *  malformed or the port is missing and the protocol's default would be
+ *  outside what dev servers normally use (we only probe for explicit ports
+ *  to avoid false positives against the OS-wide :80 / :443 listeners). */
+function urlToProbeTarget(url: string | null): { host: string; port: number; url: string } | null {
+  if (url === null || url === '') return null;
+  try {
+    const u = new URL(url);
+    const host = u.hostname === '' ? 'localhost' : u.hostname;
+    const port = u.port === '' ? null : Number(u.port);
+    if (port === null || !Number.isFinite(port)) return null;
+    return { host, port, url };
+  } catch {
+    return null;
+  }
+}
 
 export interface StartArgs {
   designId: string;
@@ -185,90 +225,167 @@ export class EngineeringRuntime extends EventEmitter {
         resolve(existing.state);
         return;
       }
-
-      const logs = existing?.logs ?? new LogRingBuffer(LOG_RING_CAPACITY);
-      logs.reset();
-
-      const slot: RunSlot = {
-        designId: args.designId,
-        workspacePath: args.workspacePath,
-        packageManager: args.packageManager,
-        launchEntry: args.launchEntry,
-        manualReadyUrl: args.manualReadyUrl ?? null,
-        child: null,
-        state: this.makeState(args.designId, 'starting', null, null, logs),
-        logs,
-        readyUrlTimer: null,
-        readyDeferred: { resolve, reject },
-        stopRequested: false,
-      };
-      this.slots.set(args.designId, slot);
-      this.transition(slot, 'starting');
-
-      const { command, commandArgs, displayCommand } = this.resolveCommand(
-        args.packageManager,
-        args.launchEntry,
-      );
-
-      let child: ChildProcess;
+      // Port-probe short-circuit: if the manual / saved ready URL is already
+      // bound (a previous app session left the dev server running, or the
+      // user is running it themselves in a terminal), skip the spawn and
+      // just mark ready. This is the path the user explicitly asked for —
+      // "if the port is already serving, just use it". We probe synchronously
+      // (asynchronously, in a microtask) before falling through to spawn.
+      const probeTargets: Array<{ host: string; port: number; url: string }> = [];
+      const manualTarget = urlToProbeTarget(args.manualReadyUrl ?? null);
+      if (manualTarget !== null) probeTargets.push(manualTarget);
+      // Saved lastReadyUrl is also worth probing (covers the "previous run
+      // still alive" case for sessions without a manual URL).
       try {
-        child = spawn(command, commandArgs, {
-          cwd: args.workspacePath,
-          env: {
-            ...process.env,
-            FORCE_COLOR: '0',
-            NO_COLOR: '1',
-            CI: '1',
-          },
-          shell: false,
-          windowsHide: true,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        this.fail(slot, 'launch', message, displayCommand);
+        const saved = readEngineeringSettings(args.workspacePath);
+        const savedTarget = urlToProbeTarget(saved?.lastReadyUrl ?? null);
+        if (
+          savedTarget !== null &&
+          !probeTargets.some((t) => t.host === savedTarget.host && t.port === savedTarget.port)
+        ) {
+          probeTargets.push(savedTarget);
+        }
+      } catch {
+        // best-effort; settings.json may not exist yet
+      }
+
+      const continueSpawn = () => this.spawnChildImpl(args, existing, { resolve, reject });
+
+      if (probeTargets.length === 0) {
+        continueSpawn();
         return;
       }
 
-      slot.child = child;
-
-      child.stdout?.setEncoding('utf8');
-      child.stderr?.setEncoding('utf8');
-      child.stdout?.on('data', (chunk: string) => this.onStdout(slot, chunk));
-      child.stderr?.on('data', (chunk: string) => this.onStderr(slot, chunk));
-      child.on('error', (err) => {
-        // Typically EACCES or ENOENT — surfaced before exit fires.
-        this.fail(slot, 'launch', err.message, displayCommand);
-      });
-      child.on('exit', (code, signal) => this.onExit(slot, code, signal, displayCommand));
-
-      // Bound the wait for ready URL. Hot reload servers that never print a
-      // matching line will trip this timeout and surface as an error rather
-      // than hang the UI.
-      slot.readyUrlTimer = setTimeout(() => {
-        if (slot.state.status === 'starting') {
-          this.fail(
-            slot,
-            'timeout',
-            `ready URL not detected within ${READY_URL_TIMEOUT_MS / 1000}s`,
-            displayCommand,
-          );
-        }
-      }, READY_URL_TIMEOUT_MS);
-
-      // Manual override: fall back to the user-supplied URL after a short
-      // grace window if stdout never produced a parseable one. We do not
-      // race this against detection \u2014 detection takes the slot first via
-      // markReady() and clears both timers, so this only fires when we still
-      // don't have a real URL.
-      const manual = args.manualReadyUrl;
-      if (manual !== undefined && manual !== null && manual !== '') {
-        setTimeout(() => {
-          if (slot.state.status === 'starting') {
-            this.markReady(slot, manual);
+      void (async () => {
+        for (const target of probeTargets) {
+          const alive = await isPortListening(target.host, target.port);
+          if (alive) {
+            // Reuse the existing dev server. We still register a slot so
+            // getRunState / stop work uniformly, but child stays null and
+            // state goes straight to running.
+            const logs = existing?.logs ?? new LogRingBuffer(LOG_RING_CAPACITY);
+            logs.reset();
+            const slot: RunSlot = {
+              designId: args.designId,
+              workspacePath: args.workspacePath,
+              packageManager: args.packageManager,
+              launchEntry: args.launchEntry,
+              manualReadyUrl: args.manualReadyUrl ?? null,
+              child: null,
+              state: this.makeState(args.designId, 'starting', null, null, logs),
+              logs,
+              readyUrlTimer: null,
+              readyDeferred: { resolve, reject },
+              stopRequested: false,
+            };
+            this.slots.set(args.designId, slot);
+            this.transition(slot, 'starting');
+            this.recordLog(
+              slot,
+              'stdout',
+              `[codesign] reusing existing dev server at ${target.url}`,
+            );
+            this.markReady(slot, target.url);
+            return;
           }
-        }, MANUAL_READY_URL_GRACE_MS);
-      }
+        }
+        continueSpawn();
+      })();
     });
+  }
+
+  /** Inner spawn helper extracted from start() so the port-probe path can
+   *  defer to it after async probing. */
+  private spawnChildImpl(
+    args: StartArgs,
+    existing: RunSlot | undefined,
+    deferred: {
+      resolve: (state: EngineeringRunState) => void;
+      reject: (err: Error) => void;
+    },
+  ): void {
+    const logs = existing?.logs ?? new LogRingBuffer(LOG_RING_CAPACITY);
+    logs.reset();
+
+    const slot: RunSlot = {
+      designId: args.designId,
+      workspacePath: args.workspacePath,
+      packageManager: args.packageManager,
+      launchEntry: args.launchEntry,
+      manualReadyUrl: args.manualReadyUrl ?? null,
+      child: null,
+      state: this.makeState(args.designId, 'starting', null, null, logs),
+      logs,
+      readyUrlTimer: null,
+      readyDeferred: deferred,
+      stopRequested: false,
+    };
+    this.slots.set(args.designId, slot);
+    this.transition(slot, 'starting');
+
+    const { command, commandArgs, displayCommand } = this.resolveCommand(
+      args.packageManager,
+      args.launchEntry,
+    );
+
+    let child: ChildProcess;
+    try {
+      child = spawn(command, commandArgs, {
+        cwd: args.workspacePath,
+        env: {
+          ...process.env,
+          FORCE_COLOR: '0',
+          NO_COLOR: '1',
+          CI: '1',
+        },
+        shell: false,
+        windowsHide: true,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.fail(slot, 'launch', message, displayCommand);
+      return;
+    }
+
+    slot.child = child;
+
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => this.onStdout(slot, chunk));
+    child.stderr?.on('data', (chunk: string) => this.onStderr(slot, chunk));
+    child.on('error', (err) => {
+      // Typically EACCES or ENOENT — surfaced before exit fires.
+      this.fail(slot, 'launch', err.message, displayCommand);
+    });
+    child.on('exit', (code, signal) => this.onExit(slot, code, signal, displayCommand));
+
+    // Bound the wait for ready URL. Hot reload servers that never print a
+    // matching line will trip this timeout and surface as an error rather
+    // than hang the UI.
+    slot.readyUrlTimer = setTimeout(() => {
+      if (slot.state.status === 'starting') {
+        this.fail(
+          slot,
+          'timeout',
+          `ready URL not detected within ${READY_URL_TIMEOUT_MS / 1000}s`,
+          displayCommand,
+        );
+      }
+    }, READY_URL_TIMEOUT_MS);
+
+    // Manual override: fall back to the user-supplied URL after a short
+    // grace window if stdout never produced a parseable one. We do not
+    // race this against detection \u2014 detection takes the slot first via
+    // markReady() and clears both timers, so this only fires when we still
+    // don't have a real URL.
+    const manual = args.manualReadyUrl;
+    if (manual !== undefined && manual !== null && manual !== '') {
+      setTimeout(() => {
+        if (slot.state.status === 'starting') {
+          this.markReady(slot, manual);
+        }
+      }, MANUAL_READY_URL_GRACE_MS);
+    }
   }
 
   /** Stop the dev server. SIGTERM with a grace window, then SIGKILL. */
