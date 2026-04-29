@@ -212,6 +212,13 @@ interface CodesignState {
    *  agent context — U9 / U10) look this up for the current selection's
    *  selector to enrich the primary context beyond raw outerHTML. */
   componentSelectionBySelector: Record<string, ComponentSelectionRendererPayload>;
+  /** Engineering URL-mode — latest pathname (incl. search/hash) reported by
+   *  the in-iframe overlay's URL_CHANGED broadcast, keyed by design id.
+   *  Used to (a) stamp `urlPath` on new comments so engineering threads are
+   *  scoped to a route, and (b) filter visible comments to the current
+   *  page. Cross-origin iframes block direct location reads, so this is the
+   *  only signal source. */
+  iframeUrlPathByDesign: Record<string, string>;
   isGenerating: boolean;
   activeGenerationId: string | null;
   /** Design id that owns the in-flight generation. Lets the user switch to
@@ -433,6 +440,9 @@ interface CodesignState {
   /** Stash component metadata received from the React inspector (U8). U9 will
    *  read this from the comment composer; U10 from the agent context builder. */
   attachComponentSelection: (payload: ComponentSelectionRendererPayload) => void;
+  /** Record the current iframe pathname for an engineering URL-mode design,
+   *  reported by the in-iframe overlay's URL_CHANGED broadcast. */
+  setIframeUrlPath: (designId: string, path: string) => void;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string) => Promise<void>;
@@ -1457,6 +1467,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   engineeringRunStateByDesign: {},
   engineeringRefreshTickByDesign: {},
   componentSelectionBySelector: {},
+  iframeUrlPathByDesign: {},
   isGenerating: false,
   activeGenerationId: null,
   generatingDesignId: null,
@@ -2290,6 +2301,18 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     }));
   },
 
+  setIframeUrlPath(designId, path) {
+    set((s) => {
+      if (s.iframeUrlPathByDesign[designId] === path) return {};
+      return {
+        iframeUrlPathByDesign: {
+          ...s.iframeUrlPathByDesign,
+          [designId]: path,
+        },
+      };
+    });
+  },
+
   async startEngineeringSession(designId) {
     if (!window.codesign) return;
     try {
@@ -2948,24 +2971,38 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     if (!window.codesign) return null;
     const designId = get().currentDesignId;
     if (!designId) return null;
-    // Pin comments to the current snapshot so pin overlays only surface for
-    // the snapshot the user was viewing when the click happened.
-    let snapshotId: string | null = get().currentSnapshotId;
-    if (!snapshotId) {
-      try {
-        const snaps = await window.codesign.snapshots.list(designId);
-        snapshotId = snaps[0]?.id ?? null;
-        if (snapshotId) set({ currentSnapshotId: snapshotId });
-      } catch (err) {
-        console.warn('[open-codesign] addComment: failed to look up latest snapshot', err);
+    // Engineering URL-mode designs aren't backed by a snapshot — the dev
+    // server owns the page. Skip snapshot lookup entirely; persist with
+    // snapshotId=null + the iframe's current path so the renderer can scope
+    // the comment to a route. (Snapshot-less rows are supported by the
+    // comments table since v3.)
+    const design = get().designs.find((d) => d.id === designId);
+    const isEngineeringUrlMode = design?.mode === 'engineering';
+    let snapshotId: string | null = null;
+    let urlPath: string | undefined;
+    if (isEngineeringUrlMode) {
+      const tracked = get().iframeUrlPathByDesign[designId];
+      if (typeof tracked === 'string' && tracked.length > 0) urlPath = tracked;
+    } else {
+      // Pin comments to the current snapshot so pin overlays only surface for
+      // the snapshot the user was viewing when the click happened.
+      snapshotId = get().currentSnapshotId;
+      if (!snapshotId) {
+        try {
+          const snaps = await window.codesign.snapshots.list(designId);
+          snapshotId = snaps[0]?.id ?? null;
+          if (snapshotId) set({ currentSnapshotId: snapshotId });
+        } catch (err) {
+          console.warn('[open-codesign] addComment: failed to look up latest snapshot', err);
+        }
       }
-    }
-    if (!snapshotId) {
-      get().pushToast({
-        variant: 'error',
-        title: tr('notifications.commentNeedsSnapshot'),
-      });
-      return null;
+      if (!snapshotId) {
+        get().pushToast({
+          variant: 'error',
+          title: tr('notifications.commentNeedsSnapshot'),
+        });
+        return null;
+      }
     }
     try {
       const row = await window.codesign.comments.add({
@@ -2982,6 +3019,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         ...(input.componentSelection !== undefined && input.componentSelection !== null
           ? { componentSelection: input.componentSelection }
           : {}),
+        ...(urlPath !== undefined ? { urlPath } : {}),
       });
       if (get().currentDesignId === designId) {
         set((s) => ({ comments: [...s.comments, row] }));

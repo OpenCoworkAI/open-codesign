@@ -145,7 +145,7 @@ function applySchema(db: Database): void {
       id                     TEXT PRIMARY KEY,
       schema_version         INTEGER NOT NULL DEFAULT 1,
       design_id              TEXT NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
-      snapshot_id            TEXT NOT NULL REFERENCES design_snapshots(id) ON DELETE CASCADE,
+      snapshot_id            TEXT REFERENCES design_snapshots(id) ON DELETE CASCADE,
       kind                   TEXT NOT NULL CHECK (kind IN ('note','edit')),
       selector               TEXT NOT NULL,
       tag                    TEXT NOT NULL,
@@ -154,10 +154,15 @@ function applySchema(db: Database): void {
       text                   TEXT NOT NULL,
       status                 TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','applied','dismissed')),
       created_at             TEXT NOT NULL,
-      applied_in_snapshot_id TEXT REFERENCES design_snapshots(id) ON DELETE SET NULL
+      applied_in_snapshot_id TEXT REFERENCES design_snapshots(id) ON DELETE SET NULL,
+      scope                  TEXT NOT NULL DEFAULT 'element',
+      parent_outer_html      TEXT,
+      component_selection_json TEXT,
+      url_path               TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_comments_design_snapshot ON comments(design_id, snapshot_id);
     CREATE INDEX IF NOT EXISTS idx_comments_design_status   ON comments(design_id, status);
+    CREATE INDEX IF NOT EXISTS idx_comments_design_url      ON comments(design_id, url_path);
 
     CREATE TABLE IF NOT EXISTS design_files (
       id          TEXT PRIMARY KEY,
@@ -248,6 +253,14 @@ function applyAdditiveMigrations(db: Database): void {
     // additive without further ALTERs.
     db.exec('ALTER TABLE comments ADD COLUMN component_selection_json TEXT');
   }
+  if (!commentCols.includes('url_path')) {
+    // Engineering URL-mode comments aren't bound to a snapshot — the dev
+    // server owns the page. Persist the URL path the user was viewing when
+    // the click happened so the renderer can scope visible comments to the
+    // current route. NULL for generative-mode rows; required (but renderer
+    // tolerates missing/empty) for engineering rows.
+    db.exec('ALTER TABLE comments ADD COLUMN url_path TEXT');
+  }
 
   // diagnostic_events v2 — add `context_json` (TEXT, nullable) so rows from
   // provider errors can persist the full NormalizedProviderError payload
@@ -317,6 +330,59 @@ function applyAdditiveMigrations(db: Database): void {
     db.exec("UPDATE comments SET scope = 'element' WHERE scope IS NULL OR scope = ''");
     db.prepare('INSERT INTO db_meta (key, value) VALUES (?, ?)').run(
       'comments_schema_v2',
+      new Date().toISOString(),
+    );
+  }
+
+  // Comments v3 — relax snapshot_id from NOT NULL to nullable so engineering
+  // URL-mode comments (no snapshot, dev server owns the page) can persist.
+  // SQLite cannot drop a NOT NULL constraint via ALTER, so we use the
+  // standard "create new + copy + drop + rename" dance, gated by db_meta so
+  // it runs at most once per database file.
+  const commentsV3 = db
+    .prepare('SELECT value FROM db_meta WHERE key = ?')
+    .get('comments_schema_v3') as { value?: string } | undefined;
+  if (commentsV3 === undefined) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE comments_v3 (
+        id                       TEXT PRIMARY KEY,
+        schema_version           INTEGER NOT NULL DEFAULT 1,
+        design_id                TEXT NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
+        snapshot_id              TEXT REFERENCES design_snapshots(id) ON DELETE CASCADE,
+        kind                     TEXT NOT NULL CHECK (kind IN ('note','edit')),
+        selector                 TEXT NOT NULL,
+        tag                      TEXT NOT NULL,
+        outer_html               TEXT NOT NULL,
+        rect                     TEXT NOT NULL,
+        text                     TEXT NOT NULL,
+        status                   TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','applied','dismissed')),
+        created_at               TEXT NOT NULL,
+        applied_in_snapshot_id   TEXT REFERENCES design_snapshots(id) ON DELETE SET NULL,
+        scope                    TEXT NOT NULL DEFAULT 'element',
+        parent_outer_html        TEXT,
+        component_selection_json TEXT,
+        url_path                 TEXT
+      );
+      INSERT INTO comments_v3 (
+        id, schema_version, design_id, snapshot_id, kind, selector, tag,
+        outer_html, rect, text, status, created_at, applied_in_snapshot_id,
+        scope, parent_outer_html, component_selection_json, url_path
+      )
+      SELECT
+        id, schema_version, design_id, snapshot_id, kind, selector, tag,
+        outer_html, rect, text, status, created_at, applied_in_snapshot_id,
+        scope, parent_outer_html, component_selection_json, url_path
+      FROM comments;
+      DROP TABLE comments;
+      ALTER TABLE comments_v3 RENAME TO comments;
+      CREATE INDEX IF NOT EXISTS idx_comments_design_snapshot ON comments(design_id, snapshot_id);
+      CREATE INDEX IF NOT EXISTS idx_comments_design_status   ON comments(design_id, status);
+      CREATE INDEX IF NOT EXISTS idx_comments_design_url      ON comments(design_id, url_path);
+      COMMIT;
+    `);
+    db.prepare('INSERT INTO db_meta (key, value) VALUES (?, ?)').run(
+      'comments_schema_v3',
       new Date().toISOString(),
     );
   }
@@ -846,7 +912,7 @@ interface CommentRowDb {
   id: string;
   schema_version: number;
   design_id: string;
-  snapshot_id: string;
+  snapshot_id: string | null;
   kind: string;
   selector: string;
   tag: string;
@@ -859,6 +925,7 @@ interface CommentRowDb {
   scope: string | null;
   parent_outer_html: string | null;
   component_selection_json: string | null;
+  url_path: string | null;
 }
 
 function rowToComment(row: CommentRowDb): CommentRow {
@@ -908,6 +975,7 @@ function rowToComment(row: CommentRowDb): CommentRow {
       ? { parentOuterHTML: row.parent_outer_html }
       : {}),
     ...(componentSelection !== null ? { componentSelection } : {}),
+    ...(row.url_path !== null && row.url_path !== undefined ? { urlPath: row.url_path } : {}),
   };
 }
 
@@ -923,14 +991,16 @@ export function createComment(db: Database, input: CommentCreateInput): CommentR
     input.componentSelection !== undefined && input.componentSelection !== null
       ? JSON.stringify(input.componentSelection)
       : null;
+  const urlPath =
+    typeof input.urlPath === 'string' && input.urlPath.length > 0 ? input.urlPath : null;
   db.prepare(
     `INSERT INTO comments
-       (id, schema_version, design_id, snapshot_id, kind, selector, tag, outer_html, rect, text, status, created_at, applied_in_snapshot_id, scope, parent_outer_html, component_selection_json)
-     VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NULL, ?, ?, ?)`,
+       (id, schema_version, design_id, snapshot_id, kind, selector, tag, outer_html, rect, text, status, created_at, applied_in_snapshot_id, scope, parent_outer_html, component_selection_json, url_path)
+     VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NULL, ?, ?, ?, ?)`,
   ).run(
     id,
     input.designId,
-    input.snapshotId,
+    input.snapshotId ?? null,
     input.kind,
     input.selector,
     input.tag,
@@ -941,6 +1011,7 @@ export function createComment(db: Database, input: CommentCreateInput): CommentR
     scope,
     parentOuterHTML,
     componentSelectionJson,
+    urlPath,
   );
   const row = db.prepare('SELECT * FROM comments WHERE id = ?').get(id) as CommentRowDb;
   return rowToComment(row);

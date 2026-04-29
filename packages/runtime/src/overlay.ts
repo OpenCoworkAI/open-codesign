@@ -23,6 +23,15 @@ export const OVERLAY_SCRIPT = `(function() {
   // document gets a fresh window, so the flag naturally resets per page.
   if (window.__cs_overlay_mounted) return;
   window.__cs_overlay_mounted = true;
+  // URL-mode detection — hoisted so click guard, navguard, form guard, and
+  // URL broadcaster all share the same check. Srcdoc iframes report
+  // 'about:srcdoc' (protocol 'about:'); real dev servers report 'http(s):'.
+  function isUrlMode() {
+    try {
+      var p = window.location && window.location.protocol;
+      return p === 'http:' || p === 'https:';
+    } catch (_) { return false; }
+  }
   var hovered = null;
   var pinned = null;
   var warned = Object.create(null);
@@ -196,12 +205,7 @@ export const OVERLAY_SCRIPT = `(function() {
     // server (Next.js / Vite + React Router etc.) that owns its own
     // navigation. Detected via location.protocol — srcdoc iframes report
     // 'about:' (about:srcdoc), URL-mode iframes report 'http(s):'.
-    var isUrlMode = false;
-    try {
-      var proto = window.location && window.location.protocol;
-      isUrlMode = proto === 'http:' || proto === 'https:';
-    } catch (_) { /* cross-origin location read shouldn't happen here, but be safe */ }
-    if (isUrlMode) return;
+    if (isUrlMode()) return;
     var anchor = e.target;
     while (anchor && anchor.tagName !== 'A') anchor = anchor.parentElement;
     if (anchor && (anchor.href || anchor.getAttribute('href'))) {
@@ -296,10 +300,7 @@ export const OVERLAY_SCRIPT = `(function() {
     { evt: 'submit', fn: function(e) {
         // Same gate as onClick: real dev servers (URL mode) own their
         // own form handling. Only block submits in srcdoc preview.
-        try {
-          var p = window.location && window.location.protocol;
-          if (p === 'http:' || p === 'https:') return;
-        } catch (_) {}
+        if (isUrlMode()) return;
         e.preventDefault();
       } }
   ];
@@ -346,8 +347,9 @@ export const OVERLAY_SCRIPT = `(function() {
   // window.location = '/foo', location.assign('/x'), or window.open(...)
   // in button onclick handlers. None of those routes exist in the sandbox and
   // they'd all blank the preview. We no-op them once, idempotently.
+  // Skipped in URL mode — a real dev server / SPA router needs these.
   try {
-    if (!window.__cs_navguard) {
+    if (!window.__cs_navguard && !isUrlMode()) {
       window.__cs_navguard = true;
       var nopNav = function() { /* navigation suppressed in preview sandbox */ };
       try { window.open = function() { return null; }; } catch (_) {}
@@ -359,6 +361,47 @@ export const OVERLAY_SCRIPT = `(function() {
       } catch (_) {}
     }
   } catch (err) { try { console.warn('[overlay] navguard install failed:', err); } catch (_) {} }
+
+  // URL broadcaster — engineering URL-mode iframes are cross-origin from the
+  // app shell, so the renderer can't read iframe.contentWindow.location.
+  // Post the current path on mount and after any SPA navigation so the
+  // renderer can scope visible comments / new-comment urlPath to the
+  // current route. No-op in srcdoc mode.
+  try {
+    if (!window.__cs_urlbcast && isUrlMode()) {
+      window.__cs_urlbcast = true;
+      var postUrl = function() {
+        try {
+          window.parent.postMessage({
+            __codesign: true,
+            type: 'URL_CHANGED',
+            path: location.pathname + location.search + location.hash,
+            pathname: location.pathname,
+            href: location.href
+          }, '*');
+        } catch (_) {}
+      };
+      // Initial broadcast — covers full page loads (incl. cross-document
+      // SPA navigation that re-runs the overlay script).
+      try { postUrl(); } catch (_) {}
+      try { window.addEventListener('popstate', postUrl, false); } catch (_) {}
+      try { window.addEventListener('hashchange', postUrl, false); } catch (_) {}
+      try {
+        var rawPush = history.pushState;
+        var rawReplace = history.replaceState;
+        history.pushState = function() {
+          var r = rawPush.apply(this, arguments);
+          try { postUrl(); } catch (_) {}
+          return r;
+        };
+        history.replaceState = function() {
+          var r = rawReplace.apply(this, arguments);
+          try { postUrl(); } catch (_) {}
+          return r;
+        };
+      } catch (_) {}
+    }
+  } catch (err) { try { console.warn('[overlay] url broadcaster install failed:', err); } catch (_) {} }
 })();`;
 
 export interface OverlayMessage {
@@ -380,6 +423,28 @@ export function isOverlayMessage(data: unknown): data is OverlayMessage {
     (data as { __codesign?: boolean }).__codesign === true &&
     (data as { type?: string }).type === 'ELEMENT_SELECTED'
   );
+}
+
+/** URL_CHANGED — engineering URL-mode iframes broadcast their pathname on
+ *  mount and after every SPA navigation (popstate / hashchange / patched
+ *  history.{push,replace}State). The renderer uses this to scope visible
+ *  comments and stamp `urlPath` on newly created comments. Cross-origin
+ *  iframes block direct location reads, so the in-iframe overlay is the
+ *  only signal source. */
+export interface UrlChangedMessage {
+  __codesign: true;
+  type: 'URL_CHANGED';
+  /** Full path including search + hash — preferred for stable identity. */
+  path: string;
+  /** Bare pathname — convenient for prefix matching. */
+  pathname: string;
+  href: string;
+}
+
+export function isUrlChangedMessage(data: unknown): data is UrlChangedMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const d = data as { __codesign?: boolean; type?: string; pathname?: unknown };
+  return d.__codesign === true && d.type === 'URL_CHANGED' && typeof d.pathname === 'string';
 }
 
 export interface ElementRectsMessage {

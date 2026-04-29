@@ -4,6 +4,7 @@ import {
   type ElementRectsMessage,
   type IframeErrorMessage,
   type OverlayMessage,
+  type UrlChangedMessage,
   buildSrcdoc,
   injectOverlayBridge,
   injectReactInspector,
@@ -11,6 +12,7 @@ import {
   isElementRectsMessage,
   isIframeErrorMessage,
   isOverlayMessage,
+  isUrlChangedMessage,
 } from '@open-codesign/runtime';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../preview/EmptyState';
@@ -95,7 +97,8 @@ export type AllowedPreviewMessageType =
   | 'ELEMENT_SELECTED'
   | 'IFRAME_ERROR'
   | 'ELEMENT_RECTS'
-  | 'COMPONENT_SELECTED';
+  | 'COMPONENT_SELECTED'
+  | 'URL_CHANGED';
 
 export interface PreviewMessageHandlers {
   onElementSelected: (msg: OverlayMessage) => void;
@@ -104,6 +107,11 @@ export interface PreviewMessageHandlers {
   /** Engineering-mode enrichment (U8). Optional so older callers / tests
    *  that only care about the legacy 3-message surface keep compiling. */
   onComponentSelected?: (msg: ComponentSelectedMessage) => void;
+  /** Engineering URL-mode — broadcast on mount and after every SPA
+   *  navigation. Lets the renderer scope visible comments and stamp
+   *  `urlPath` on new comments. Optional for the same backwards-compat
+   *  reason. */
+  onUrlChanged?: (msg: UrlChangedMessage) => void;
 }
 
 export type PreviewMessageOutcome =
@@ -145,6 +153,12 @@ export function handlePreviewMessage(
       if (isComponentSelectedMessage(data)) {
         handlers.onComponentSelected?.(data);
         return { status: 'handled', type: 'COMPONENT_SELECTED' };
+      }
+      return { status: 'rejected', reason: 'shape', type: envelope.type };
+    case 'URL_CHANGED':
+      if (isUrlChangedMessage(data)) {
+        handlers.onUrlChanged?.(data);
+        return { status: 'handled', type: 'URL_CHANGED' };
       }
       return { status: 'rejected', reason: 'shape', type: envelope.type };
     default:
@@ -428,6 +442,8 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
   const attachComponentSelection = useCodesignStore((s) => s.attachComponentSelection);
+  const setIframeUrlPath = useCodesignStore((s) => s.setIframeUrlPath);
+  const iframeUrlPathByDesign = useCodesignStore((s) => s.iframeUrlPathByDesign);
   const componentSelectionBySelector = useCodesignStore((s) => s.componentSelectionBySelector);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
@@ -555,6 +571,9 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             receivedAt: Date.now(),
           });
         },
+        onUrlChanged: (msg) => {
+          if (currentDesignId) setIframeUrlPath(currentDesignId, msg.path);
+        },
       });
 
       if (outcome.status === 'rejected' && outcome.reason === 'unknown-type') {
@@ -571,6 +590,8 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     previewZoom,
     applyLiveRects,
     attachComponentSelection,
+    setIframeUrlPath,
+    currentDesignId,
   ]);
 
   // Pool entries: active design first (using the freshest in-memory
@@ -648,9 +669,26 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
   const activeTab = canvasTabs[activeCanvasTab];
   const showCommentUi = interactionMode === 'comment';
-  const snapshotComments = currentSnapshotId
-    ? comments.filter((c) => c.snapshotId === currentSnapshotId)
-    : [];
+  const previewCurrentDesign =
+    currentDesignId !== null ? designs.find((d) => d.id === currentDesignId) : undefined;
+  const isEngineeringMode = previewCurrentDesign?.mode === 'engineering';
+  const currentIframePath =
+    currentDesignId !== null ? iframeUrlPathByDesign[currentDesignId] : undefined;
+  const snapshotComments = isEngineeringMode
+    ? // Engineering URL-mode rows have snapshotId === null and are scoped by
+      // urlPath. Show comments whose stored urlPath matches the iframe's
+      // current path. Rows without urlPath (legacy or imported) are shown
+      // everywhere as a safe fallback so they don't get orphaned.
+      comments.filter((c) => {
+        if (c.snapshotId !== null) return false;
+        const stored = c.urlPath;
+        if (typeof stored !== 'string' || stored.length === 0) return true;
+        if (typeof currentIframePath !== 'string') return true;
+        return stored === currentIframePath;
+      })
+    : currentSnapshotId
+      ? comments.filter((c) => c.snapshotId === currentSnapshotId)
+      : [];
   const pinOverlay = (
     <PinOverlay
       comments={snapshotComments}

@@ -156,7 +156,10 @@ export const CommentRowV1 = z.object({
   schemaVersion: z.literal(1).default(1),
   id: z.string().min(1),
   designId: z.string().min(1),
-  snapshotId: z.string().min(1),
+  /** Nullable since v3 (engineering URL-mode comments aren't bound to a
+   *  snapshot — the dev server owns the page). Generative-mode rows still
+   *  always carry a snapshotId. */
+  snapshotId: z.string().min(1).nullable(),
   kind: CommentKind,
   selector: z.string(),
   tag: z.string(),
@@ -176,12 +179,18 @@ export const CommentRowV1 = z.object({
    *  context surfaced to UI and agent prompts; `outerHTML` falls back to a
    *  legacy/debug field. Optional so pre-v3 rows still parse. */
   componentSelection: ComponentSelectionV1.nullable().optional(),
+  /** v3 enrichment (engineering URL mode) — the iframe pathname the user
+   *  was viewing when the comment was created. Used by the renderer to
+   *  scope visible comments to the current route. Optional / nullable for
+   *  generative-mode and pre-v3 rows. */
+  urlPath: z.string().optional(),
 });
 export type CommentRow = z.infer<typeof CommentRowV1>;
 
 export interface CommentCreateInput {
   designId: string;
-  snapshotId: string;
+  /** Null for engineering URL-mode comments (no snapshot exists). */
+  snapshotId: string | null;
   kind: CommentKind;
   selector: string;
   tag: string;
@@ -191,6 +200,9 @@ export interface CommentCreateInput {
   scope?: CommentScope;
   parentOuterHTML?: string;
   componentSelection?: z.infer<typeof ComponentSelectionV1> | null;
+  /** Iframe pathname captured at click time — used to scope visible
+   *  comments to the current route in engineering URL mode. */
+  urlPath?: string;
 }
 
 export interface CommentUpdateInput {
