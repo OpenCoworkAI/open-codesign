@@ -25,6 +25,17 @@ export function PreviewToolbar(): ReactElement {
   const setPreviewZoom = useCodesignStore((s) => s.setPreviewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
+  // Engineering URL-mode designs have no previewHtml (the iframe loads a
+  // live dev server), but the preview is still active and the toolbar
+  // should be enabled. Treat "running engineering session" as preview-ready.
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const designs = useCodesignStore((s) => s.designs);
+  const engineeringRunStateByDesign = useCodesignStore((s) => s.engineeringRunStateByDesign);
+  const currentDesign = designs.find((d) => d.id === currentDesignId);
+  const engineeringRunning =
+    currentDesign?.mode === 'engineering' &&
+    currentDesignId !== null &&
+    engineeringRunStateByDesign[currentDesignId]?.status === 'running';
   const [open, setOpen] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -54,7 +65,7 @@ export function PreviewToolbar(): ReactElement {
     return () => clearTimeout(timeout);
   }, [toastMessage, dismissToast]);
 
-  const disabled = !previewHtml;
+  const disabled = !previewHtml && !engineeringRunning;
   const commentActive = interactionMode === 'comment';
   const exportItems: ExportItem[] = [
     {
@@ -154,7 +165,7 @@ export function PreviewToolbar(): ReactElement {
       <div className="relative" ref={ref}>
         <button
           type="button"
-          disabled={disabled}
+          disabled={!previewHtml}
           onClick={() => setOpen((v) => !v)}
           className="inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
           aria-haspopup="menu"
