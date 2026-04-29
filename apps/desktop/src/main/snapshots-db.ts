@@ -162,7 +162,9 @@ function applySchema(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_comments_design_snapshot ON comments(design_id, snapshot_id);
     CREATE INDEX IF NOT EXISTS idx_comments_design_status   ON comments(design_id, status);
-    CREATE INDEX IF NOT EXISTS idx_comments_design_url      ON comments(design_id, url_path);
+    -- idx_comments_design_url is created after the additive url_path ALTER
+    -- below so existing v2 databases (which have no url_path column yet)
+    -- can still finish initializing.
 
     CREATE TABLE IF NOT EXISTS design_files (
       id          TEXT PRIMARY KEY,
@@ -261,6 +263,10 @@ function applyAdditiveMigrations(db: Database): void {
     // tolerates missing/empty) for engineering rows.
     db.exec('ALTER TABLE comments ADD COLUMN url_path TEXT');
   }
+  // Index is created here (after the ALTER above) so both fresh installs
+  // and v2-upgraded databases land with the same per-route index without
+  // needing the v3 table-rebuild path to run.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_comments_design_url ON comments(design_id, url_path)');
 
   // diagnostic_events v2 — add `context_json` (TEXT, nullable) so rows from
   // provider errors can persist the full NormalizedProviderError payload
