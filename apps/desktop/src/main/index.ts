@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path_module from 'node:path';
 import { basename, dirname, join } from 'node:path';
@@ -337,21 +337,97 @@ export function createRuntimeTextEditorFs({
     upsertDesignFile(db, designId, normalizedPath, content);
   }
 
+  /** Resolve any path the agent passes (relative-to-workspace, absolute under
+   *  workspace root, or virtual-FS bare name) into a path relative to the
+   *  design's workspace root. Returns null when no workspace is attached or
+   *  when the path escapes the workspace. The agent surfaces real-disk file
+   *  paths from the React inspector (e.g.
+   *  `/Users/.../packages/avalon/src/components/forecast/ForecastToolbar.tsx`),
+   *  and we want `view` / `str_replace` to just work in that case instead of
+   *  reporting "file not found". */
+  function workspaceRelative(filePath: string): { abs: string; rel: string } | null {
+    if (designId === null || db === null) return null;
+    const design = getDesign(db, designId);
+    const root = design?.workspacePath;
+    if (typeof root !== 'string' || root.length === 0) return null;
+    const resolvedRoot = path_module.resolve(root);
+    const candidate = path_module.isAbsolute(filePath)
+      ? path_module.resolve(filePath)
+      : path_module.resolve(resolvedRoot, filePath);
+    const rel = path_module.relative(resolvedRoot, candidate);
+    if (rel.startsWith('..') || path_module.isAbsolute(rel)) return null;
+    return { abs: candidate, rel: rel.split(path_module.sep).join('/') };
+  }
+
+  // Cap file size returned to the agent. Bigger than this and we surface a
+  // truncation note + force the agent to use view_range. Keeps a single view
+  // from blowing past the model's context window on large repo files.
+  const MAX_VIEW_BYTES = 256 * 1024;
+
   const fs = {
     view(path: string) {
-      const content = fsMap.get(path);
-      if (content === undefined) return null;
-      return { content, numLines: content.split('\n').length };
+      // Pre-existing virtual-FS hit (generative-mode design_files seed,
+      // recently-edited buffers, etc.) wins so the agent always sees the
+      // freshest in-memory copy.
+      const memoryHit = fsMap.get(path);
+      if (memoryHit !== undefined) {
+        return { content: memoryHit, numLines: memoryHit.split('\n').length };
+      }
+      // Fall through to the real workspace on disk. This is what makes
+      // engineering mode actually editable — the agent receives absolute
+      // file paths from the React inspector, and the user expects view /
+      // str_replace to just work on them.
+      const resolved = workspaceRelative(path);
+      if (resolved === null) return null;
+      let stats: ReturnType<typeof statSync>;
+      try {
+        stats = statSync(resolved.abs);
+      } catch {
+        return null;
+      }
+      if (!stats.isFile()) return null;
+      let content: string;
+      try {
+        content = readFileSync(resolved.abs, 'utf8');
+      } catch {
+        return null;
+      }
+      const numLines = content.split('\n').length;
+      // Hydrate fsMap so subsequent str_replace can compute the diff in
+      // memory without re-reading disk every call.
+      fsMap.set(resolved.rel, content);
+      if (content.length > MAX_VIEW_BYTES) {
+        const head = content.slice(0, MAX_VIEW_BYTES);
+        const truncated = `${head}\n\n[...truncated: file is ${content.length} bytes / ${numLines} lines. Use view_range to read specific regions.]`;
+        return { content: truncated, numLines };
+      }
+      return { content, numLines };
     },
     async create(path: string, content: string) {
-      await persistMutation(path, content);
-      fsMap.set(path, content);
-      emitFsUpdated(path, content);
-      emitIndexIfAssetChanged(path);
-      return { path };
+      const resolved = workspaceRelative(path);
+      const targetPath = resolved !== null ? resolved.rel : path;
+      await persistMutation(targetPath, content);
+      fsMap.set(targetPath, content);
+      emitFsUpdated(targetPath, content);
+      emitIndexIfAssetChanged(targetPath);
+      return { path: targetPath };
     },
     async strReplace(path: string, oldStr: string, newStr: string) {
-      const current = fsMap.get(path);
+      const resolved = workspaceRelative(path);
+      const targetPath = resolved !== null ? resolved.rel : path;
+      // Resolve the current content in priority order: in-memory buffer →
+      // real disk (engineering / mirrored workspace files). Without the
+      // disk fallback the agent gets "File not found" the first time it
+      // edits a file it just read off disk via view().
+      let current = fsMap.get(targetPath);
+      if (current === undefined && resolved !== null) {
+        try {
+          current = readFileSync(resolved.abs, 'utf8');
+          fsMap.set(targetPath, current);
+        } catch {
+          /* fall through to the not-found error below */
+        }
+      }
       if (current === undefined) throw new Error(`File not found: ${path}`);
       const idx = current.indexOf(oldStr);
       if (idx === -1) throw new Error(`old_str not found in ${path}`);
@@ -359,23 +435,33 @@ export function createRuntimeTextEditorFs({
         throw new Error(`old_str is ambiguous in ${path}; provide more context`);
       }
       const next = current.slice(0, idx) + newStr + current.slice(idx + oldStr.length);
-      await persistMutation(path, next);
-      fsMap.set(path, next);
-      emitFsUpdated(path, next);
-      emitIndexIfAssetChanged(path);
-      return { path };
+      await persistMutation(targetPath, next);
+      fsMap.set(targetPath, next);
+      emitFsUpdated(targetPath, next);
+      emitIndexIfAssetChanged(targetPath);
+      return { path: targetPath };
     },
     async insert(path: string, line: number, text: string) {
-      const current = fsMap.get(path) ?? '';
-      const lines = current.split('\n');
+      const resolved = workspaceRelative(path);
+      const targetPath = resolved !== null ? resolved.rel : path;
+      let current = fsMap.get(targetPath);
+      if (current === undefined && resolved !== null) {
+        try {
+          current = readFileSync(resolved.abs, 'utf8');
+          fsMap.set(targetPath, current);
+        } catch {
+          /* treat as new file — same behaviour as before */
+        }
+      }
+      const lines = (current ?? '').split('\n');
       const clamped = Math.max(0, Math.min(line, lines.length));
       lines.splice(clamped, 0, text);
       const next = lines.join('\n');
-      await persistMutation(path, next);
-      fsMap.set(path, next);
-      emitFsUpdated(path, next);
-      emitIndexIfAssetChanged(path);
-      return { path };
+      await persistMutation(targetPath, next);
+      fsMap.set(targetPath, next);
+      emitFsUpdated(targetPath, next);
+      emitIndexIfAssetChanged(targetPath);
+      return { path: targetPath };
     },
     listDir(dir: string) {
       const prefix = dir.length === 0 || dir === '.' ? '' : `${dir.replace(/\/+$/, '')}/`;
@@ -385,6 +471,24 @@ export function createRuntimeTextEditorFs({
         const rest = p.slice(prefix.length);
         const firstSegment = rest.split('/')[0];
         if (firstSegment) entries.add(firstSegment);
+      }
+      // Real-workspace fallback so the agent can explore engineering
+      // projects (apps/, packages/, src/...) the same way it explores the
+      // virtual FS. node_modules is excluded — it would dwarf everything
+      // else and the agent never needs to read it directly.
+      const resolved = workspaceRelative(dir.length === 0 || dir === '.' ? '.' : dir);
+      if (resolved !== null) {
+        try {
+          const stats = statSync(resolved.abs);
+          if (stats.isDirectory()) {
+            for (const name of readdirSync(resolved.abs)) {
+              if (name === 'node_modules' || name === '.git') continue;
+              entries.add(name);
+            }
+          }
+        } catch {
+          /* directory missing — fall through to in-memory only */
+        }
       }
       return [...entries].sort();
     },
