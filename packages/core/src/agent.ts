@@ -505,20 +505,27 @@ const IMAGE_ASSET_TOOL_GUIDANCE = [
 const MAX_TRANSPORT_RETRIES = 2;
 
 /**
- * Remove the failed final turn (assistant + preceding user message) from the
- * agent message history so a fresh agent can retry the turn with a clean slate.
+ * Remove the failed final turn from the agent message history so a fresh agent
+ * can retry with a clean slate. Walks backwards from the terminal error
+ * assistant message to find the user message that started the turn, removing
+ * all intermediate tool-call / toolResult entries in between.
  */
-function stripFailedTurn(messages: readonly AgentMessage[]): AgentMessage[] {
+export function stripFailedTurn(messages: readonly AgentMessage[]): AgentMessage[] {
+  let errorIndex = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (!msg) continue;
-    if (msg.role === 'assistant' && (msg as PiAssistantMessage).stopReason === 'error') {
-      const end = i;
-      const start = i > 0 && messages[i - 1]?.role === 'user' ? i - 1 : i;
-      return [...messages.slice(0, start), ...messages.slice(end + 1)];
+    if (errorIndex === -1) {
+      if (msg.role === 'assistant' && (msg as PiAssistantMessage).stopReason === 'error') {
+        errorIndex = i;
+      }
+      continue;
+    }
+    if (msg.role === 'user') {
+      return [...messages.slice(0, i), ...messages.slice(errorIndex + 1)];
     }
   }
-  return [...messages];
+  return errorIndex === -1 ? [...messages] : messages.slice(0, errorIndex);
 }
 
 // ---------------------------------------------------------------------------
@@ -897,8 +904,19 @@ export async function generateViaAgent(
       }
     }
 
-    await agent.prompt(userContent);
-    await agent.waitForIdle();
+    const retryStart = Date.now();
+    try {
+      await agent.prompt(userContent);
+      await agent.waitForIdle();
+    } catch (err) {
+      log.error('[generate] step=transport_retry.fail', {
+        ...ctx,
+        attempt: transportRetryCount,
+        ms: Date.now() - retryStart,
+        errorClass: err instanceof Error ? err.constructor.name : typeof err,
+      });
+      throw remapProviderError(err, input.model.provider, input.wire);
+    }
   }
 
   const finalAssistant = findFinalAssistantMessage(agent.state.messages);

@@ -967,6 +967,76 @@ describe('generateViaAgent() — transport-level retry', () => {
     const retryAgentMessages = agentCalls[1]?.options.initialState?.messages;
     expect(retryAgentMessages?.length).toBe(2);
   });
+
+  it('strips tool-call and toolResult messages from the failed turn', async () => {
+    // Simulate a failed turn that includes tool activity:
+    // [user, assistant(success), user, assistant(tool-call), toolResult, assistant(error)]
+    // After strip, only [user, assistant(success)] should remain.
+    const { stripFailedTurn } = await import('./agent.js');
+    const messages = [
+      { role: 'user', content: 'first request', timestamp: 1 },
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'first reply' }],
+        api: 'openai-completions',
+        provider: 'openrouter',
+        model: 'test',
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: 2,
+      },
+      { role: 'user', content: 'design a dashboard', timestamp: 3 },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'call_1', name: 'text_editor', input: {} }],
+        api: 'openai-completions',
+        provider: 'openrouter',
+        model: 'test',
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'toolUse',
+        timestamp: 4,
+      },
+      { role: 'toolResult', toolUseId: 'call_1', content: 'ok', timestamp: 5 },
+      {
+        role: 'assistant',
+        content: [],
+        api: 'openai-completions',
+        provider: 'openrouter',
+        model: 'test',
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'error',
+        errorMessage: 'fetch failed: terminated',
+        timestamp: 6,
+      },
+    ] as unknown as Parameters<typeof stripFailedTurn>[0];
+    const result = stripFailedTurn(messages);
+    // Should keep only the first 2 messages (user + successful assistant)
+    expect(result.length).toBe(2);
+    expect(result[0]?.role).toBe('user');
+    expect(result[1]?.role).toBe('assistant');
+    expect((result[1] as Record<string, unknown>).stopReason).toBe('stop');
+  });
 });
 
 describe('loadFrameTemplates — device frame starter assets', () => {
