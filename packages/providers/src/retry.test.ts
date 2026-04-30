@@ -70,6 +70,30 @@ describe('classifyError', () => {
   it('marks TypeError (fetch failure) as retryable', () => {
     expect(classifyError(new TypeError('fetch failed'))).toMatchObject({ retry: true });
   });
+  it('marks fetch failed: terminated as retryable', () => {
+    const d = classifyError(new Error('fetch failed: terminated'));
+    expect(d.retry).toBe(true);
+    expect(d.reason).toMatch(/transport-level error/);
+  });
+  it('marks premature close as retryable', () => {
+    const d = classifyError(new Error('premature close'));
+    expect(d.retry).toBe(true);
+    expect(d.reason).toMatch(/transport-level error/);
+  });
+  it('marks stream ended as retryable', () => {
+    const d = classifyError(new Error('stream ended'));
+    expect(d.retry).toBe(true);
+    expect(d.reason).toMatch(/transport-level error/);
+  });
+  it('marks ECONNRESET as retryable via network code', () => {
+    const err = Object.assign(new Error('connection reset'), { code: 'ECONNRESET' });
+    const d = classifyError(err);
+    expect(d.retry).toBe(true);
+  });
+  it('does not retry regular errors without transport indicators', () => {
+    const d = classifyError(new Error('something went wrong'));
+    expect(d.retry).toBe(false);
+  });
 });
 
 describe('completeWithRetry', () => {

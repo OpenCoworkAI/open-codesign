@@ -58,6 +58,14 @@ interface AgentScript {
    * behavior that flattens getApiKey throws into `errorMessage: string`).
    */
   invokeGetApiKey?: boolean;
+  /**
+   * When set, the mock switches to `overrideScript` starting from this
+   * agent-call index (0-based). Lets transport-retry tests script
+   * "first agent fails, second agent succeeds" without mutating
+   * `scriptedAgent` mid-test.
+   */
+  overrideScriptForCallIndex?: number;
+  overrideScript?: Partial<AgentScript>;
 }
 
 let scriptedAgent: AgentScript = { assistantText: '' };
@@ -78,10 +86,17 @@ vi.mock('@mariozechner/pi-agent-core', () => {
     }
     async prompt(message: unknown): Promise<void> {
       this.call.prompts.push({ message });
-      if (scriptedAgent.promptThrows) {
-        const limit = scriptedAgent.promptThrowsTimes ?? Number.POSITIVE_INFINITY;
+      const callIndex = agentCalls.indexOf(this.call);
+      const script =
+        scriptedAgent.overrideScriptForCallIndex !== undefined &&
+        callIndex >= scriptedAgent.overrideScriptForCallIndex &&
+        scriptedAgent.overrideScript
+          ? { ...scriptedAgent, ...scriptedAgent.overrideScript }
+          : scriptedAgent;
+      if (script.promptThrows) {
+        const limit = script.promptThrowsTimes ?? Number.POSITIVE_INFINITY;
         if (this.call.prompts.length <= limit) {
-          if (scriptedAgent.promptPushesAssistantBeforeThrow) {
+          if (script.promptPushesAssistantBeforeThrow) {
             const partial: AgentMessage = {
               role: 'assistant',
               // biome-ignore lint/suspicious/noExplicitAny: same.
@@ -103,7 +118,7 @@ vi.mock('@mariozechner/pi-agent-core', () => {
             };
             this.state.messages.push(partial);
           }
-          throw scriptedAgent.promptThrows;
+          throw script.promptThrows;
         }
       }
 
@@ -112,7 +127,7 @@ vi.mock('@mariozechner/pi-agent-core', () => {
       // agent-loop.js); if that rejects, `runWithLifecycle` catches it and
       // emits a failure AgentMessage with just `errorMessage: string` —
       // which is why our code captures the original throw in a closure.
-      if (scriptedAgent.invokeGetApiKey && this.call.options.getApiKey) {
+      if (script.invokeGetApiKey && this.call.options.getApiKey) {
         try {
           await this.call.options.getApiKey('test-provider');
         } catch (err) {
@@ -160,8 +175,8 @@ vi.mock('@mariozechner/pi-agent-core', () => {
         // biome-ignore lint/suspicious/noExplicitAny: same.
         provider: 'anthropic' as any,
         model: 'mock-model',
-        content: [{ type: 'text', text: scriptedAgent.assistantText }],
-        usage: scriptedAgent.usage ?? {
+        content: [{ type: 'text', text: script.assistantText }],
+        usage: script.usage ?? {
           input: 0,
           output: 0,
           cacheRead: 0,
@@ -169,18 +184,18 @@ vi.mock('@mariozechner/pi-agent-core', () => {
           totalTokens: 0,
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
         },
-        stopReason: scriptedAgent.stopReason ?? 'stop',
-        ...(scriptedAgent.errorMessage ? { errorMessage: scriptedAgent.errorMessage } : {}),
+        stopReason: script.stopReason ?? 'stop',
+        ...(script.errorMessage ? { errorMessage: script.errorMessage } : {}),
         timestamp: Date.now(),
       };
       this.state.messages.push(assistantMsg);
 
-      for (const e of scriptedAgent.events ?? []) this.emit(e);
+      for (const e of script.events ?? []) this.emit(e);
       this.emit({
         type: 'message_update',
         message: assistantMsg,
         // biome-ignore lint/suspicious/noExplicitAny: AssistantMessageEvent shape not re-exported.
-        assistantMessageEvent: { type: 'text_delta', delta: scriptedAgent.assistantText } as any,
+        assistantMessageEvent: { type: 'text_delta', delta: script.assistantText } as any,
       });
       this.emit({ type: 'message_end', message: assistantMsg });
       this.emit({ type: 'turn_end', message: assistantMsg, toolResults: [] });
@@ -829,6 +844,198 @@ describe('generateViaAgent() — first-turn retry', () => {
     // Single attempt: replaying a partial multi-turn session would corrupt
     // tool state, so the second+ turn must surface transient errors directly.
     expect(agentCalls[0]?.prompts.length).toBe(1);
+  });
+});
+
+describe('generateViaAgent() — transport-level retry', () => {
+  it('retries a terminated error by creating a fresh agent with conversation replay', async () => {
+    scriptedAgent = {
+      assistantText: RESPONSE_WITH_ARTIFACT,
+      stopReason: 'error',
+      errorMessage: 'fetch failed: terminated',
+      overrideScriptForCallIndex: 1,
+      overrideScript: {
+        assistantText: RESPONSE_WITH_ARTIFACT,
+        stopReason: 'stop',
+      },
+    };
+    const onRetry = vi.fn();
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [
+          { role: 'user', content: 'first request' },
+          { role: 'assistant', content: 'first reply' },
+        ],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { onRetry, fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+    );
+    expect(result.artifacts).toHaveLength(1);
+    expect(agentCalls.length).toBe(2);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry.mock.calls[0]?.[0].reason).toMatch(/transport retry/);
+  });
+
+  it('does not retry non-transport errors like 400', async () => {
+    scriptedAgent = {
+      assistantText: '',
+      stopReason: 'error',
+      errorMessage: 'bad request',
+    };
+    await expect(
+      generateViaAgent({
+        prompt: 'design a dashboard',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      }),
+    ).rejects.toBeTruthy();
+    expect(agentCalls.length).toBe(1);
+  });
+
+  it('exhausts transport retries and throws after MAX_TRANSPORT_RETRIES', async () => {
+    scriptedAgent = {
+      assistantText: '',
+      stopReason: 'error',
+      errorMessage: 'fetch failed: terminated',
+    };
+    const onRetry = vi.fn();
+    await expect(
+      generateViaAgent(
+        {
+          prompt: 'design a dashboard',
+          history: [],
+          model: MODEL,
+          apiKey: 'sk-test',
+        },
+        { onRetry },
+      ),
+    ).rejects.toBeTruthy();
+    // 1 original + 2 retries = 3 agent calls
+    expect(agentCalls.length).toBe(3);
+    expect(onRetry).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips transport retry when signal is aborted', async () => {
+    scriptedAgent = {
+      assistantText: '',
+      stopReason: 'error',
+      errorMessage: 'fetch failed: terminated',
+    };
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(
+      generateViaAgent({
+        prompt: 'design a dashboard',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        signal: ctrl.signal,
+      }),
+    ).rejects.toBeTruthy();
+    expect(agentCalls.length).toBe(1);
+  });
+
+  it('strips the failed turn from message history on retry', async () => {
+    scriptedAgent = {
+      assistantText: RESPONSE_WITH_ARTIFACT,
+      stopReason: 'error',
+      errorMessage: 'premature close',
+      overrideScriptForCallIndex: 1,
+      overrideScript: {
+        assistantText: RESPONSE_WITH_ARTIFACT,
+        stopReason: 'stop',
+      },
+    };
+    await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [
+          { role: 'user', content: 'first request' },
+          { role: 'assistant', content: 'first reply' },
+        ],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+    );
+    // Second agent should be seeded with only the successful history
+    // (original 2 messages), not the failed turn (which would be 4 messages:
+    // user, assistant, user, failed-assistant)
+    const retryAgentMessages = agentCalls[1]?.options.initialState?.messages;
+    expect(retryAgentMessages?.length).toBe(2);
+  });
+
+  it('strips tool-call and toolResult messages from the failed turn', async () => {
+    // Simulate a failed turn that includes tool activity:
+    // [user, assistant(success), user, assistant(tool-call), toolResult, assistant(error)]
+    // After strip, only [user, assistant(success)] should remain.
+    const { stripFailedTurn } = await import('./agent.js');
+    const messages = [
+      { role: 'user', content: 'first request', timestamp: 1 },
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'first reply' }],
+        api: 'openai-completions',
+        provider: 'openrouter',
+        model: 'test',
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: 2,
+      },
+      { role: 'user', content: 'design a dashboard', timestamp: 3 },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'call_1', name: 'text_editor', input: {} }],
+        api: 'openai-completions',
+        provider: 'openrouter',
+        model: 'test',
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'toolUse',
+        timestamp: 4,
+      },
+      { role: 'toolResult', toolUseId: 'call_1', content: 'ok', timestamp: 5 },
+      {
+        role: 'assistant',
+        content: [],
+        api: 'openai-completions',
+        provider: 'openrouter',
+        model: 'test',
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'error',
+        errorMessage: 'fetch failed: terminated',
+        timestamp: 6,
+      },
+    ] as unknown as Parameters<typeof stripFailedTurn>[0];
+    const result = stripFailedTurn(messages);
+    // Should keep only the first 2 messages (user + successful assistant)
+    expect(result.length).toBe(2);
+    expect(result[0]?.role).toBe('user');
+    expect(result[1]?.role).toBe('assistant');
+    expect((result[1] as Record<string, unknown>).stopReason).toBe('stop');
   });
 });
 

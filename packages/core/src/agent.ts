@@ -37,6 +37,7 @@ import {
   classifyError,
   claudeCodeIdentityHeaders,
   inferReasoning,
+  isTransportLevelError,
   looksLikeClaudeOAuthToken,
   normalizeGeminiModelId,
   shouldForceClaudeCodeIdentity,
@@ -498,6 +499,34 @@ const IMAGE_ASSET_TOOL_GUIDANCE = [
 ].join('\n');
 
 // ---------------------------------------------------------------------------
+// Transport-level retry helpers.
+// ---------------------------------------------------------------------------
+
+const MAX_TRANSPORT_RETRIES = 2;
+
+/**
+ * Remove the failed final turn from the agent message history so a fresh agent
+ * can retry with a clean slate. Walks backwards from the terminal error
+ * assistant message to find the user message that started the turn, removing
+ * all intermediate tool-call / toolResult entries in between.
+ */
+export function stripFailedTurn(messages: readonly AgentMessage[]): AgentMessage[] {
+  let errorIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg) continue;
+    if (errorIndex === -1) {
+      if (msg.role === 'assistant' && (msg as PiAssistantMessage).stopReason === 'error') {
+        errorIndex = i;
+      }
+      continue;
+    }
+    if (msg.role === 'user') {
+      return [...messages.slice(0, i), ...messages.slice(errorIndex + 1)];
+    }
+  }
+  return errorIndex === -1 ? [...messages] : messages.slice(0, errorIndex);
+}
 
 // ---------------------------------------------------------------------------
 // Public API.
@@ -720,58 +749,49 @@ export async function generateViaAgent(
   // original lets the post-agent branch rethrow it as-is, so the renderer
   // sees the same code the initial IPC-level resolution would emit.
   let capturedGetApiKeyError: unknown = null;
-  const agent = new Agent({
-    initialState: {
-      systemPrompt: augmentedSystemPrompt,
-      model: piModel as unknown as PiAiModel<'openai-completions'>,
-      messages: historyAsAgentMessages,
-      tools,
-      thinkingLevel,
-    },
-    convertToLlm: (messages) =>
-      messages.filter(
-        (m): m is PiAiMessage =>
-          m.role === 'user' || m.role === 'assistant' || m.role === 'toolResult',
-      ),
-    // Sliding-window compaction — stubs toolResult.content for rounds older
-    // than the last 8 (or 4 if total size still exceeds the safety cap).
-    // Without this, assistant.toolCall.input + big view results grow O(N²)
-    // in LLM-facing size across a long tool-using run and blow past 1 M
-    // tokens. See context-prune.ts for the full strategy.
-    transformContext: buildTransformContext(log, deps.onAggressivePrune),
-    // Async getter so OAuth tokens can be refreshed between agent turns. On a
-    // long tool-using run, `input.apiKey` captured at start-of-request would
-    // eventually expire; the caller passes `input.getApiKey` for codex so each
-    // LLM round-trip calls into the token store (which auto-refreshes inside
-    // its 5-min buffer). We stash any throw in `capturedGetApiKeyError` so
-    // the post-agent branch below can rethrow the original structured error
-    // — otherwise pi-agent-core's plain-string failure shape would cause us
-    // to downgrade to PROVIDER_ERROR, hiding the sign-in-again affordance.
-    getApiKey: input.getApiKey
-      ? async () => {
-          try {
-            const key = await input.getApiKey?.();
-            const trimmedKey = key?.trim() ?? '';
-            if (trimmedKey.length > 0) return trimmedKey;
-            if (input.allowKeyless === true) return initialApiKey || 'open-codesign-keyless';
-            throw new CodesignError(
-              `No API key returned for provider "${input.model.provider}".`,
-              ERROR_CODES.PROVIDER_AUTH_MISSING,
-            );
-          } catch (err) {
-            capturedGetApiKeyError = err;
-            throw err;
-          }
-        }
-      : () => initialApiKey || 'open-codesign-keyless',
-  });
 
-  if (deps.onEvent) {
-    const listener = deps.onEvent;
-    agent.subscribe((event) => {
-      listener(event);
+  // Factory for creating agents with a given message history. Used for both
+  // the initial agent and transport-level retry agents (conversation replay).
+  const createRetryAgent = (messages: AgentMessage[]): Agent => {
+    const retryAgent = new Agent({
+      initialState: {
+        systemPrompt: augmentedSystemPrompt,
+        model: piModel as unknown as PiAiModel<'openai-completions'>,
+        messages,
+        tools,
+        thinkingLevel,
+      },
+      convertToLlm: (msgs) =>
+        msgs.filter(
+          (m): m is PiAiMessage =>
+            m.role === 'user' || m.role === 'assistant' || m.role === 'toolResult',
+        ),
+      transformContext: buildTransformContext(log, deps.onAggressivePrune),
+      getApiKey: input.getApiKey
+        ? async () => {
+            try {
+              const key = await input.getApiKey?.();
+              const trimmedKey = key?.trim() ?? '';
+              if (trimmedKey.length > 0) return trimmedKey;
+              if (input.allowKeyless === true) return initialApiKey || 'open-codesign-keyless';
+              throw new CodesignError(
+                `No API key returned for provider "${input.model.provider}".`,
+                ERROR_CODES.PROVIDER_AUTH_MISSING,
+              );
+            } catch (err) {
+              capturedGetApiKeyError = err;
+              throw err;
+            }
+          }
+        : () => initialApiKey || 'open-codesign-keyless',
     });
-  }
+    if (deps.onEvent) {
+      retryAgent.subscribe((event) => deps.onEvent?.(event));
+    }
+    return retryAgent;
+  };
+
+  let agent = createRetryAgent(historyAsAgentMessages);
 
   if (input.signal) {
     if (input.signal.aborted) {
@@ -843,6 +863,60 @@ export async function generateViaAgent(
       errorClass: err instanceof Error ? err.constructor.name : typeof err,
     });
     throw remapProviderError(err, input.model.provider, input.wire);
+  }
+
+  // Post-agent transport-level retry: if the agent loop exited with a
+  // transport-level error (terminated, premature close, ECONNRESET), create a
+  // fresh agent with the successful conversation history and retry the turn.
+  // This handles proxy servers that drop long-lived SSE connections after N
+  // minutes. Tool side effects (file writes) are idempotent, so replaying
+  // prior turns is safe.
+  let transportRetryCount = 0;
+  while (transportRetryCount < MAX_TRANSPORT_RETRIES) {
+    const checkMsg = findFinalAssistantMessage(agent.state.messages);
+    if (!checkMsg || checkMsg.stopReason === 'stop') break;
+    if (checkMsg.stopReason !== 'error') break;
+    if (!isTransportLevelError(checkMsg.errorMessage)) break;
+    if (input.signal?.aborted) break;
+
+    transportRetryCount++;
+    log.warn('[generate] step=transport_retry', {
+      ...ctx,
+      attempt: transportRetryCount,
+      maxAttempts: MAX_TRANSPORT_RETRIES,
+      reason: checkMsg.errorMessage,
+    });
+    deps.onRetry?.({
+      attempt: transportRetryCount,
+      totalAttempts: MAX_TRANSPORT_RETRIES,
+      delayMs: 0,
+      reason: `transport retry: ${checkMsg.errorMessage}`,
+    });
+
+    const cleanMessages = stripFailedTurn(agent.state.messages);
+    capturedGetApiKeyError = null;
+    agent = createRetryAgent(cleanMessages);
+    if (input.signal) {
+      if (input.signal.aborted) {
+        agent.abort();
+      } else {
+        input.signal.addEventListener('abort', () => agent.abort(), { once: true });
+      }
+    }
+
+    const retryStart = Date.now();
+    try {
+      await agent.prompt(userContent);
+      await agent.waitForIdle();
+    } catch (err) {
+      log.error('[generate] step=transport_retry.fail', {
+        ...ctx,
+        attempt: transportRetryCount,
+        ms: Date.now() - retryStart,
+        errorClass: err instanceof Error ? err.constructor.name : typeof err,
+      });
+      throw remapProviderError(err, input.model.provider, input.wire);
+    }
   }
 
   const finalAssistant = findFinalAssistantMessage(agent.state.messages);
