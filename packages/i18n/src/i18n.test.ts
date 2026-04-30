@@ -12,6 +12,7 @@ describe('normalizeLocale', () => {
   it('returns the value unchanged when it is supported', () => {
     expect(normalizeLocale('en')).toBe('en');
     expect(normalizeLocale('zh-CN')).toBe('zh-CN');
+    expect(normalizeLocale('ko')).toBe('ko');
   });
 
   it('coalesces common Chinese variants to zh-CN', () => {
@@ -24,6 +25,11 @@ describe('normalizeLocale', () => {
   it('maps en-US / en-GB to en', () => {
     expect(normalizeLocale('en-US')).toBe('en');
     expect(normalizeLocale('en-GB')).toBe('en');
+  });
+
+  it('maps Korean variants to ko', () => {
+    expect(normalizeLocale('ko-KR')).toBe('ko');
+    expect(normalizeLocale('ko_kr')).toBe('ko');
   });
 
   it('falls back to en for unsupported locales and warns', () => {
@@ -62,6 +68,10 @@ describe('initI18n + setLocale (live switching)', () => {
     expect(i18n.t('chat.placeholder')).toBe('想设计什么？');
     expect(i18n.t('common.preAlpha')).toBe('预览版');
 
+    await setLocale('ko');
+    expect(i18n.t('chat.placeholder')).toBe('무엇을 디자인할지 설명하세요…');
+    expect(i18n.t('common.preAlpha')).toBe('프리 알파');
+
     await setLocale('en');
     expect(i18n.t('common.send')).toBe('Send');
   });
@@ -86,6 +96,10 @@ describe('initI18n + setLocale (live switching)', () => {
     await setLocale('zh-CN');
     expect(getCurrentLocale()).toBe('zh-CN');
     expect(i18n.t('common.send')).toBe('发送');
+
+    await setLocale('ko');
+    expect(getCurrentLocale()).toBe('ko');
+    expect(i18n.t('common.send')).toBe('보내기');
 
     await setLocale('en');
     expect(getCurrentLocale()).toBe('en');
@@ -115,6 +129,29 @@ describe('onboarding i18n keys (Welcome / PasteKey / ChooseModel)', () => {
     expect(i18n.t('onboarding.choose.title')).toBe('Pick default models');
     expect(i18n.t('onboarding.choose.finish')).toBe('Finish');
     expect(i18n.t('onboarding.choose.back')).toBe('Back');
+  });
+
+  it('switches all onboarding strings to Korean when locale is ko', async () => {
+    const { i18n } = await import('./index');
+    await initI18n('en');
+    await setLocale('ko');
+
+    expect(i18n.t('onboarding.welcome.title')).toBe('어떤 모델로든 디자인하세요.');
+    expect(i18n.t('onboarding.welcome.tryFree')).toBe('무료로 시작하기');
+    expect(i18n.t('onboarding.welcome.useKey')).toBe('내 API 키 사용');
+    expect(i18n.t('onboarding.welcome.whereToGetKey')).toBe('키를 받는 방법');
+
+    expect(i18n.t('onboarding.paste.title')).toBe('API 키 붙여넣기');
+    expect(i18n.t('onboarding.paste.back')).toBe('뒤로');
+    expect(i18n.t('onboarding.paste.continue')).toBe('계속');
+    expect(i18n.t('onboarding.paste.connectionTest.button')).toBe('테스트');
+    expect(i18n.t('onboarding.paste.connectionTest.ok')).toBe('연결됨');
+
+    expect(i18n.t('onboarding.choose.title')).toBe('기본 모델 선택');
+    expect(i18n.t('onboarding.choose.finish')).toBe('완료');
+    expect(i18n.t('onboarding.choose.back')).toBe('뒤로');
+
+    await setLocale('en');
   });
 
   it('switches all onboarding strings to Chinese when locale is zh-CN', async () => {
