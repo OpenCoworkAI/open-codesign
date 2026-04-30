@@ -531,7 +531,13 @@ export type {
   RetryDecision,
   RetryReason,
 } from './retry';
-export { classifyError, completeWithRetry, sleepWithAbort, withBackoff } from './retry';
+export {
+  classifyError,
+  completeWithRetry,
+  isTransportLevelError,
+  sleepWithAbort,
+  withBackoff,
+} from './retry';
 
 export { filterActive, formatSkillsForPrompt, injectSkillsIntoMessages } from './skill-injector';
 export type { ValidateResult } from './validate';

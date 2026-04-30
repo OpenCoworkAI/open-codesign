@@ -84,12 +84,23 @@ function classifyByStatus(status: number, err: unknown, wire?: WireApi): RetryDe
   return undefined;
 }
 
+const TRANSPORT_ERROR_RE =
+  /(?:fetch\s+failed.*terminated|premature\s+close|stream\s+(?:ended|closed)|ECONNRESET)\b/i;
+
+export function isTransportLevelError(errorMessage: string | undefined): boolean {
+  if (!errorMessage) return false;
+  return TRANSPORT_ERROR_RE.test(errorMessage);
+}
+
 function classifyByNetwork(err: unknown): RetryDecision | undefined {
   if (err instanceof TypeError) return { retry: true, reason: 'network error' };
   if (!(err instanceof Error)) return undefined;
   const code = (err as Error & { code?: unknown }).code;
   if (typeof code === 'string' && RETRYABLE_NET_CODES.has(code)) {
     return { retry: true, reason: `network error (${code})` };
+  }
+  if (isTransportLevelError(err.message)) {
+    return { retry: true, reason: 'transport-level error (stream terminated)' };
   }
   return undefined;
 }
