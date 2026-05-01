@@ -658,7 +658,17 @@ function registerIpcHandlers(db: Database | null): void {
     };
     const baseCtx = { designId: designId ?? '', generationId: id } as const;
     const toolStartedAt = new Map<string, number>();
-    const runtimeVerify = makeRuntimeVerifier();
+    // The runtime verifier wraps the artifact in buildSrcdoc(), which expects
+    // a JSX module (TWEAK_DEFAULTS + ReactDOM.createRoot). Real workspace
+    // files are plain HTML / framework code that doesn't fit that mold, so
+    // the verifier flags them as broken and the agent self-heals by flatten-
+    // ing the user's actual project into a self-contained doc -- silently
+    // destroying real source files. Skip verification when a workspace is
+    // bound; the user's tooling (their dev server, linters, browser) is the
+    // source of truth in that mode.
+    const designHasWorkspace =
+      designId !== null && db !== null ? (getDesign(db, designId)?.workspacePath ?? null) : null;
+    const runtimeVerify = designHasWorkspace !== null ? undefined : makeRuntimeVerifier();
     const { fs, fsMap } = createRuntimeTextEditorFs({
       db,
       designId,
