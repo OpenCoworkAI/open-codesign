@@ -1,0 +1,69 @@
+{
+  "source_pages": [
+    "https://opencoworkai.github.io/open-codesign/faq",
+    "https://opencoworkai.github.io/open-codesign/zh/faq"
+  ],
+  "updated": "2026-05-01",
+  "items": [
+    {
+      "id": "what-is-open-codesign",
+      "language": "en-US",
+      "question": "What is Open CoDesign?",
+      "answer": "Open CoDesign is an open-source desktop AI design tool. It turns natural-language prompts into HTML prototypes, React components, slide decks, PDFs, and marketing assets while running on the user's laptop with user-controlled model access."
+    },
+    {
+      "id": "is-open-codesign-free",
+      "language": "en-US",
+      "question": "Is Open CoDesign free?",
+      "answer": "Yes. Open CoDesign is MIT licensed and free to download, use, modify, and redistribute. Users pay only the model provider they choose, when that provider is paid."
+    },
+    {
+      "id": "supported-models",
+      "language": "en-US",
+      "question": "Which AI models does Open CoDesign support?",
+      "answer": "Open CoDesign supports Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, OpenAI-compatible endpoints, keyless IP-allowlisted proxies, and ChatGPT Plus / Codex subscription login."
+    },
+    {
+      "id": "data-cloud",
+      "language": "en-US",
+      "question": "Does Open CoDesign send my prompts or designs to the cloud?",
+      "answer": "No. Designs, prompts, settings, and generated files stay on the user's machine by default. The only outbound network traffic is to the model provider the user configures."
+    },
+    {
+      "id": "platforms",
+      "language": "en-US",
+      "question": "Which platforms are supported?",
+      "answer": "Open CoDesign supports macOS Apple Silicon, macOS Intel, Windows x64, Windows ARM64, and Linux packages including AppImage, deb, and rpm."
+    },
+    {
+      "id": "what-is-open-codesign-zh",
+      "language": "zh-CN",
+      "question": "Open CoDesign 是什么？",
+      "answer": "Open CoDesign 是一款开源桌面 AI 设计工具，可以把自然语言提示词转换成 HTML 原型、React 组件、幻灯片、PDF 和营销素材，并在用户本机运行。"
+    },
+    {
+      "id": "is-open-codesign-free-zh",
+      "language": "zh-CN",
+      "question": "Open CoDesign 免费吗？",
+      "answer": "免费。Open CoDesign 使用 MIT 协议，用户可以免费下载、使用、修改和分发。若使用付费模型，只需要向自己选择的模型提供商付费。"
+    },
+    {
+      "id": "supported-models-zh",
+      "language": "zh-CN",
+      "question": "Open CoDesign 支持哪些模型？",
+      "answer": "Open CoDesign 支持 Anthropic Claude、OpenAI GPT、Google Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama、OpenAI 兼容端点、keyless IP 白名单代理，以及 ChatGPT Plus / Codex 订阅登录。"
+    },
+    {
+      "id": "data-cloud-zh",
+      "language": "zh-CN",
+      "question": "Open CoDesign 会把我的提示词或设计发到云端吗？",
+      "answer": "不会。设计、提示词、设置和生成文件默认保存在用户本机。唯一对外网络流量是用户自己配置的模型提供商请求。"
+    },
+    {
+      "id": "platforms-zh",
+      "language": "zh-CN",
+      "question": "Open CoDesign 支持哪些平台？",
+      "answer": "Open CoDesign 支持 macOS Apple Silicon、macOS Intel、Windows x64、Windows ARM64，以及 Linux AppImage、deb、rpm 安装包。"
+    }
+  ]
+}

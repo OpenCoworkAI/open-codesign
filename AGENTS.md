@@ -28,6 +28,18 @@ These are project commitments, not preferences:
 8. Brand values are data, not model memory. Use `DESIGN.md`, user files, official CSS/SVG/screenshots, or brand URLs. Do not invent brand hex values from memory.
 9. PRs must satisfy Principles 5b: compatible, upgradeable, no bloat, elegant.
 
+## AI Visibility For Web Work
+
+When building or updating any website, project homepage, product page, personal site, documentation site, blog, or public project page, include AI visibility in the default delivery scope unless the user explicitly opts out.
+
+- Add `/llms.txt` with a concise Markdown overview of the site, author or organization, key pages, canonical project or product descriptions, and links to machine-readable resources.
+- Add `/llms-full.txt` when the site has enough substantive public content to justify a fuller AI-readable context file.
+- Configure `robots.txt` deliberately: allow search and retrieval crawlers that help AI systems cite or retrieve public content, and treat training crawlers as a separate policy decision.
+- Maintain `sitemap.xml` and make sure it covers important public pages. Mention Google Search Console and Bing Webmaster Tools submission when relevant.
+- Add appropriate JSON-LD structured data where useful, such as `Person`, `Organization`, `WebSite`, `BlogPosting`, `SoftwareApplication`, `FAQPage`, or `CreativeWork`.
+- Prefer clean Markdown or JSON machine-readable endpoints for important entities such as profiles, projects, posts, docs, releases, FAQs, and product facts.
+- Keep the content truthful, source-backed, and non-spammy. The goal is to help AI systems understand and cite existing real content accurately, not to generate low-quality SEO filler.
+
 ## Current Architecture Direction
 
 ### Agent Runtime

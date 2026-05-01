@@ -5,6 +5,7 @@ import type { BrowserWindow } from 'electron';
 import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
 import { getDesign } from './snapshots-db';
+import { normalizeWorkspacePath } from './workspace-path';
 import { WORKSPACE_IGNORED_DIRS } from './workspace-reader';
 
 /**
@@ -114,12 +115,26 @@ export function registerFilesWatcherIpc(
   db: BetterSqlite3.Database,
   getWin: () => BrowserWindow | null,
 ): void {
-  ipcMain.handle(
-    'codesign:files:v1:subscribe',
-    (_e: unknown, raw: unknown): { ok: true } | { ok: false; reason: string } => {
-      const designId = parseDesignId(raw, 'subscribe');
-      const existing = watchers.get(designId);
-      if (existing) {
+  ipcMain.handle('codesign:files:v1:subscribe', (_e: unknown, raw: unknown): { ok: true } => {
+    const designId = parseDesignId(raw, 'subscribe');
+    const design = getDesign(db, designId);
+    if (design === null) {
+      throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+    }
+    if (design.workspacePath === null) {
+      throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+    }
+    let workspacePath: string;
+    try {
+      workspacePath = normalizeWorkspacePath(design.workspacePath);
+    } catch (cause) {
+      throw new CodesignError('Stored workspace path is invalid', 'IPC_BAD_INPUT', { cause });
+    }
+    const existing = watchers.get(designId);
+    if (existing) {
+      if (existing.workspacePath !== workspacePath) {
+        stopWatcher(designId);
+      } else {
         if (existing.idleTimer) {
           clearTimeout(existing.idleTimer);
           existing.idleTimer = null;
@@ -127,15 +142,14 @@ export function registerFilesWatcherIpc(
         existing.refCount += 1;
         return { ok: true };
       }
-      const design = getDesign(db, designId);
-      if (design === null) return { ok: false, reason: 'design-not-found' };
-      if (design.workspacePath === null) return { ok: false, reason: 'no-workspace' };
-      const entry = startWatcher(designId, design.workspacePath, getWin);
-      if (!entry) return { ok: false, reason: 'watch-failed' };
-      entry.refCount = 1;
-      return { ok: true };
-    },
-  );
+    }
+    const entry = startWatcher(designId, workspacePath, getWin);
+    if (!entry) {
+      throw new CodesignError('Failed to watch workspace files', 'IPC_DB_ERROR');
+    }
+    entry.refCount = 1;
+    return { ok: true };
+  });
 
   ipcMain.handle('codesign:files:v1:unsubscribe', (_e: unknown, raw: unknown): { ok: true } => {
     const designId = parseDesignId(raw, 'unsubscribe');

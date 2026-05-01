@@ -10,6 +10,7 @@ import {
   clearDesignWorkspace,
   createComment,
   createDesign,
+  createDesignFile,
   createSnapshot,
   deleteSnapshot,
   duplicateDesign,
@@ -18,6 +19,7 @@ import {
   initInMemoryDb,
   listChatMessages,
   listComments,
+  listDesignFiles,
   listDesigns,
   listSnapshots,
   renameDesign,
@@ -437,6 +439,26 @@ describe('duplicateDesign', () => {
     // different design row.
     expect(listSnapshots(db, cloned?.id ?? '')).toHaveLength(1);
   });
+
+  it('clones tracked design_files rows for the new design mirror', () => {
+    const db = makeDb();
+    const source = createDesign(db, 'Source with files');
+    createDesignFile(db, source.id, 'index.html', '<html>source</html>');
+    createDesignFile(db, source.id, 'assets/logo.svg', '<svg />');
+
+    const cloned = duplicateDesign(db, source.id, 'Source copy');
+
+    const clonedFiles = listDesignFiles(db, cloned?.id ?? '');
+    expect(clonedFiles.map((file) => [file.path, file.content])).toEqual([
+      ['assets/logo.svg', '<svg />'],
+      ['index.html', '<html>source</html>'],
+    ]);
+    expect(clonedFiles.every((file) => file.designId === cloned?.id)).toBe(true);
+    expect(listDesignFiles(db, source.id).map((file) => file.path)).toEqual([
+      'assets/logo.svg',
+      'index.html',
+    ]);
+  });
 });
 
 describe('updateDesignWorkspace', () => {
@@ -457,6 +479,22 @@ describe('updateDesignWorkspace', () => {
   it('returns null when the design is missing', () => {
     const db = makeDb();
     expect(updateDesignWorkspace(db, 'missing', '/path')).toBeNull();
+  });
+
+  it('rejects empty and relative workspace_path values', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+
+    expect(() => updateDesignWorkspace(db, d.id, '')).toThrow('Workspace path must not be empty');
+    expect(() => updateDesignWorkspace(db, d.id, 'relative/workspace')).toThrow(
+      'Workspace path must be absolute for the current platform',
+    );
+    if (process.platform !== 'win32') {
+      expect(() => updateDesignWorkspace(db, d.id, 'C:/Users/Roy/Workspace')).toThrow(
+        'Workspace path must be absolute for the current platform',
+      );
+    }
+    expect(getDesign(db, d.id)?.workspacePath).toBeNull();
   });
 
   it('overwrites an existing workspace_path', () => {
@@ -501,7 +539,7 @@ describe('clearDesignWorkspace', () => {
 });
 
 describe('duplicateDesign workspace_path semantics', () => {
-  it('copies a design with workspace_path set, but cloned design has workspace_path = NULL', () => {
+  it('leaves workspace_path NULL at the low-level DB helper; product IPC binds it', () => {
     const db = makeDb();
     const source = createDesign(db, 'Source with workspace');
     updateDesignWorkspace(db, source.id, '/path/to/workspace');
@@ -517,7 +555,7 @@ describe('duplicateDesign workspace_path semantics', () => {
     expect(getDesign(db, source.id)?.workspacePath).toBe('/path/to/workspace');
   });
 
-  it('clones a design with workspace_path = NULL, result also has NULL', () => {
+  it('keeps legacy NULL workspace_path rows NULL at the low-level DB helper', () => {
     const db = makeDb();
     const source = createDesign(db, 'Source without workspace');
     expect(source.workspacePath).toBeNull();

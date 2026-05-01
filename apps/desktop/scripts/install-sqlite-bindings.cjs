@@ -208,7 +208,7 @@ function main() {
     arch,
     platform,
     dest: nodeBinary,
-    optional: true,
+    optional: false,
   });
 
   const hasElectronBinaries = {};
@@ -233,18 +233,11 @@ function main() {
     throw new Error('Failed to stage any better-sqlite3 native bindings');
   }
 
-  // Leave a default copy in place so any consumer that doesn't pass nativeBinding
-  // (e.g. ad-hoc node REPL inside this monorepo) still gets a working module.
-  // Prefer the Node binary when available; otherwise fall back to the Electron
-  // binary so the desktop app still boots on machines where upstream has not
-  // published a Node prebuild for the active version yet.
+  // Leave a default Node-ABI copy in place so any consumer that doesn't pass
+  // nativeBinding (for example an ad-hoc Node REPL inside this monorepo) still
+  // gets a working module. Electron always uses an explicit Electron ABI path.
   const defaultBinary = path.join(releaseDir, 'better_sqlite3.node');
-  if (hasNodeBinary) {
-    fs.copyFileSync(nodeBinary, defaultBinary);
-  } else {
-    const firstElectronArch = electronArches.find((targetArch) => hasElectronBinaries[targetArch]);
-    if (firstElectronArch) fs.copyFileSync(electronBinaries[firstElectronArch], defaultBinary);
-  }
+  fs.copyFileSync(nodeBinary, defaultBinary);
 
   const hostElectronBinary = electronBinaries[arch];
   if (hostElectronBinary && fs.existsSync(hostElectronBinary)) {

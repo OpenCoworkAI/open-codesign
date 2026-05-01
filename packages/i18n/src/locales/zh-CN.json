@@ -59,7 +59,7 @@
     "workspace": {
       "sectionTitle": "工作区",
       "label": "文件夹",
-      "default": "默认内部存储",
+      "default": "未绑定工作区",
       "choose": "选择文件夹",
       "change": "更改",
       "open": "打开文件夹",
@@ -1114,6 +1114,8 @@
     "INPUT_EMPTY_HTML": "此操作需要已有的 HTML 内容。",
     "INPUT_UNSUPPORTED_MODE": "不支持该生成模式。",
     "GENERATION_TIMEOUT": "生成超时，请缩短 prompt 或在设置中增加超时时间。",
+    "GENERATION_INCOMPLETE": "Agent 在完成校验前停止了。请继续运行，以完成工作区 artifact。",
+    "WORKSPACE_MISSING": "此设计未绑定工作区，请重新打开或重新创建设计。",
     "ARTIFACT_PROTOCOL_INVALID": "生成的 artifact 未遵循所需协议。",
     "TOOL_EXECUTION_FAILED": "设计工具运行失败，详情见日志。",
     "CONFIG_READ_FAILED": "读取配置文件失败，请检查文件权限。",

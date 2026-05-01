@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { FileCode2, Folder, FolderOpen, X } from 'lucide-react';
+import { FileCode2, Folder, FolderOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatAbsoluteTime, formatRelativeTime, useDesignFiles } from '../hooks/useDesignFiles';
 import { workspacePathComparisonKey } from '../lib/workspace-path';
@@ -112,31 +112,6 @@ export function FilesPanel() {
     }
   }
 
-  async function handleClearWorkspace() {
-    if (!currentDesignId || !window.codesign?.snapshots.updateWorkspace) return;
-    if (isCurrentDesignGenerating) {
-      useCodesignStore.getState().pushToast({
-        variant: 'info',
-        title: t('canvas.workspace.busyGenerating'),
-      });
-      return;
-    }
-    try {
-      setWorkspaceLoading(true);
-      await window.codesign.snapshots.updateWorkspace(currentDesignId, null, false);
-      const updated = await window.codesign.snapshots.listDesigns();
-      useCodesignStore.setState({ designs: updated });
-    } catch (err) {
-      useCodesignStore.getState().pushToast({
-        variant: 'error',
-        title: t('canvas.workspace.updateFailed'),
-        description: err instanceof Error ? err.message : t('errors.unknown'),
-      });
-    } finally {
-      setWorkspaceLoading(false);
-    }
-  }
-
   if (!currentDesignId) {
     return (
       <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
@@ -203,25 +178,14 @@ export function FilesPanel() {
               </button>
 
               {workspacePath && (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleOpenWorkspace}
-                    disabled={workspaceLoading || isCurrentDesignGenerating}
-                    className="h-8 px-3 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <FolderOpen className="w-3 h-3" aria-hidden />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleClearWorkspace}
-                    disabled={workspaceLoading || isCurrentDesignGenerating}
-                    className="h-8 px-3 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <X className="w-3 h-3" aria-hidden />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={handleOpenWorkspace}
+                  disabled={workspaceLoading || isCurrentDesignGenerating}
+                  className="h-8 px-3 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <FolderOpen className="w-3 h-3" aria-hidden />
+                </button>
               )}
             </div>
           </div>

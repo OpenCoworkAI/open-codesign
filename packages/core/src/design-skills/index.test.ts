@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -38,6 +38,28 @@ describe('loadDesignSkills', () => {
       writeFileSync(path.join(dir, name), 'body', 'utf8');
     }
     await expect(loadDesignSkills(dir)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects symlinked design-skill files', async () => {
+    writeAll('placeholder');
+    const first = DESIGN_SKILL_FILES[0];
+    if (first === undefined) throw new Error('expected at least one design skill file');
+    const outside = path.join(tmpdir(), `codesign-design-skills-out-${process.pid}-${Date.now()}`);
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(path.join(outside, 'secret.jsx'), 'secret', 'utf8');
+    rmSync(path.join(dir, first));
+    try {
+      try {
+        symlinkSync(path.join(outside, 'secret.jsx'), path.join(dir, first));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+        throw err;
+      }
+
+      await expect(loadDesignSkills(dir)).rejects.toThrow(/symbolic link/);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it('exposes the declared canonical file list for callers', () => {

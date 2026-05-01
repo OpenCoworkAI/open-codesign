@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -106,6 +106,35 @@ describe('scaffold tool', () => {
     }
   });
 
+  it('refuses destinations that traverse symlinked workspace segments', async () => {
+    const wsroot = path.join(tmpdir(), `codesign-scaffold-ws-${process.pid}-${Date.now()}`);
+    const outside = path.join(tmpdir(), `codesign-scaffold-out-${process.pid}-${Date.now()}`);
+    mkdirSync(wsroot, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    try {
+      try {
+        symlinkSync(outside, path.join(wsroot, 'linked'), 'dir');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+        throw err;
+      }
+
+      const r = await runScaffold({
+        kind: 'demo-frame',
+        destPath: 'linked/escape.jsx',
+        workspaceRoot: wsroot,
+        scaffoldsRoot,
+      });
+
+      expect(r.ok).toBe(false);
+      expect(r.reason).toMatch(/symbolic link/);
+      expect(existsSync(path.join(outside, 'escape.jsx'))).toBe(false);
+    } finally {
+      rmSync(wsroot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it('refuses manifest entries that point outside the templates root', async () => {
     writeFileSync(
       path.join(scaffoldsRoot, 'manifest.json'),
@@ -130,6 +159,50 @@ describe('scaffold tool', () => {
     });
     expect(r.ok).toBe(false);
     expect(r.reason).toMatch(/outside templates root/);
+  });
+
+  it('refuses scaffold sources that traverse symlinked template segments', async () => {
+    const outside = path.join(
+      tmpdir(),
+      `codesign-scaffold-source-out-${process.pid}-${Date.now()}`,
+    );
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(path.join(outside, 'leak.jsx'), 'export const Leak = true;\n', 'utf8');
+    try {
+      try {
+        symlinkSync(outside, path.join(scaffoldsRoot, 'linked'), 'dir');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+        throw err;
+      }
+      writeFileSync(
+        path.join(scaffoldsRoot, 'manifest.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          scaffolds: {
+            leak: {
+              description: 'bad',
+              path: 'linked/leak.jsx',
+              license: 'MIT-internal',
+              source: 'test fixture',
+            },
+          },
+        }),
+        'utf8',
+      );
+
+      const r = await runScaffold({
+        kind: 'leak',
+        destPath: 'x.jsx',
+        workspaceRoot: tmpdir(),
+        scaffoldsRoot,
+      });
+
+      expect(r.ok).toBe(false);
+      expect(r.reason).toMatch(/symbolic link/);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it('requires scaffold entries to declare license and source', async () => {

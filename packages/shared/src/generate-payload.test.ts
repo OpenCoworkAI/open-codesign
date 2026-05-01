@@ -7,6 +7,7 @@ const BASE_VALID = {
   history: [],
   model: { provider: 'anthropic' as const, modelId: 'claude-sonnet-4-6' },
   generationId: 'gen-abc123',
+  designId: 'design-abc123',
 };
 
 describe('GeneratePayloadV1', () => {
@@ -33,6 +34,11 @@ describe('GeneratePayloadV1', () => {
   it('rejects a payload missing generationId', () => {
     const { generationId: _, ...noId } = BASE_VALID;
     expect(() => GeneratePayloadV1.parse(noId)).toThrow();
+  });
+
+  it('rejects a payload missing designId', () => {
+    const { designId: _, ...noDesignId } = BASE_VALID;
+    expect(() => GeneratePayloadV1.parse(noDesignId)).toThrow();
   });
 
   it('rejects unknown top-level fields instead of stripping them', () => {

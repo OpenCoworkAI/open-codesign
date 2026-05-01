@@ -10,6 +10,7 @@ import type {
 import { CodesignError } from '@open-codesign/shared';
 import type { Database } from './db/native-binding';
 import { getDesign, listSnapshots } from './snapshots-db';
+import { normalizeWorkspacePath } from './workspace-path';
 
 export const CHAT_MESSAGE_CUSTOM_TYPE = 'open-codesign.chat.message';
 export const CHAT_TOOL_STATUS_CUSTOM_TYPE = 'open-codesign.chat.tool_status';
@@ -17,7 +18,6 @@ export const CHAT_TOOL_STATUS_CUSTOM_TYPE = 'open-codesign.chat.tool_status';
 export interface SessionChatStoreOptions {
   db: Database;
   sessionDir: string;
-  defaultCwd: string;
 }
 
 export interface ChatToolStatusUpdate {
@@ -64,7 +64,14 @@ function resolveSessionCwd(opts: SessionChatStoreOptions, designId: string): str
   if (design === null) {
     throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
   }
-  return design.workspacePath ?? opts.defaultCwd;
+  if (design.workspacePath === null) {
+    throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+  }
+  try {
+    return normalizeWorkspacePath(design.workspacePath);
+  } catch (cause) {
+    throw new CodesignError('Stored workspace path is invalid', 'IPC_BAD_INPUT', { cause });
+  }
 }
 
 function openSession(opts: SessionChatStoreOptions, designId: string): SessionManager {

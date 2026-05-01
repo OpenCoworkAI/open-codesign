@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import type { Message, Usage } from '@mariozechner/pi-ai';
 import { SessionManager } from '@open-codesign/core';
+import { openDatabase as openBetterSqliteDatabase } from '../db/native-binding';
 import { normalizeDesignFilePath } from '../snapshots-db';
 import { prepareWorkspaceWriteContent } from '../workspace-file-content';
 
@@ -76,6 +78,31 @@ interface ChatMessageRow {
   created_at: number;
 }
 
+interface LegacyCommentRow {
+  design_id: string;
+  kind: string;
+  selector: string;
+  tag: string;
+  text: string;
+  status: string;
+  created_at: number | string | null;
+}
+
+const LEGACY_ZERO_USAGE: Usage = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    total: 0,
+  },
+};
+
 export async function runMigration(opts: MigrationOptions): Promise<MigrationResult> {
   if (!existsSync(opts.sourceDbPath)) {
     return { attempted: 0, migrated: 0, failed: [] };
@@ -83,6 +110,12 @@ export async function runMigration(opts: MigrationOptions): Promise<MigrationRes
 
   const open = opts.openDatabase ?? (await defaultOpener());
   const db = open(opts.sourceDbPath);
+  let dbClosed = false;
+  const closeDb = (): void => {
+    if (dbClosed) return;
+    db.close();
+    dbClosed = true;
+  };
 
   try {
     const designs = db.prepare('SELECT id, name, slug, created_at FROM designs').all<DesignRow>();
@@ -113,13 +146,24 @@ export async function runMigration(opts: MigrationOptions): Promise<MigrationRes
       }
     }
 
-    const backupPath = `${opts.sourceDbPath}.v0.1.backup`;
+    closeDb();
+    const backupPath = allocateBackupPath(opts.sourceDbPath);
     renameSync(opts.sourceDbPath, backupPath);
     opts.onProgress?.({ phase: 'complete', migratedDesigns: migrated });
     return { attempted: designs.length, migrated, failed, backupPath };
   } finally {
-    db.close();
+    closeDb();
   }
+}
+
+function allocateBackupPath(sourceDbPath: string): string {
+  const base = `${sourceDbPath}.v0.1.backup`;
+  if (!existsSync(base)) return base;
+  for (let attempt = 2; attempt < 1000; attempt++) {
+    const candidate = `${base}.${attempt}`;
+    if (!existsSync(candidate)) return candidate;
+  }
+  throw new Error(`Could not allocate a backup path for ${sourceDbPath}`);
 }
 
 async function migrateOneDesign(
@@ -132,15 +176,23 @@ async function migrateOneDesign(
     design.slug === null ? slugify(design.name ?? design.id) : normalizeMigrationSlug(design.slug);
   const workspaceSlug = allocateWorkspaceSlug(opts.workspaceRoot, slug, claimedWorkspaceSlugs);
   const wsdir = path.join(opts.workspaceRoot, workspaceSlug);
-  mkdirSync(wsdir, { recursive: true });
 
   const files = db
     .prepare('SELECT design_id, path, content FROM design_files WHERE design_id = ?')
     .all<DesignFileRow>(design.id);
-  for (const f of files) {
+  const fileWrites = files.map((f) => {
     const filePath = normalizeLegacyDesignFilePath(f.path);
+    return {
+      filePath,
+      writeContent: prepareWorkspaceWriteContent(filePath, f.content),
+    };
+  });
+
+  const timeline = buildLegacyTimeline(db, design.id);
+
+  mkdirSync(wsdir, { recursive: true });
+  for (const { filePath, writeContent } of fileWrites) {
     const dest = path.join(wsdir, filePath);
-    const writeContent = prepareWorkspaceWriteContent(filePath, f.content);
     mkdirSync(path.dirname(dest), { recursive: true });
     if (typeof writeContent.diskContent === 'string') {
       writeFileSync(dest, writeContent.diskContent, 'utf8');
@@ -150,17 +202,103 @@ async function migrateOneDesign(
   }
 
   const sessionManager = SessionManager.create(wsdir, opts.sessionDir);
+  for (const item of timeline) {
+    sessionManager.appendMessage(item.message);
+  }
+}
+
+function buildLegacyTimeline(
+  db: MigrationDatabase,
+  designId: string,
+): Array<{ timestamp: number; message: Message }> {
   const messages = db
     .prepare(
       'SELECT design_id, role, content, created_at FROM chat_messages WHERE design_id = ? ORDER BY created_at ASC',
     )
-    .all<ChatMessageRow>(design.id);
-  for (const msg of messages) {
-    sessionManager.appendMessage({
-      role: msg.role,
-      content: msg.content,
-    } as never);
+    .all<ChatMessageRow>(designId);
+  const comments = readLegacyComments(db, designId);
+  return [
+    ...messages.map((msg) => ({
+      timestamp: msg.created_at,
+      order: 0,
+      message: toLegacySessionMessage(msg),
+    })),
+    ...comments.map((comment) => {
+      const timestamp = normalizeLegacyTimestamp(comment.created_at);
+      return {
+        timestamp,
+        order: 1,
+        message: toLegacyCommentMessage(comment, timestamp),
+      };
+    }),
+  ]
+    .sort((a, b) => a.timestamp - b.timestamp || a.order - b.order)
+    .map(({ timestamp, message }) => ({ timestamp, message }));
+}
+
+function readLegacyComments(db: MigrationDatabase, designId: string): LegacyCommentRow[] {
+  try {
+    return db
+      .prepare(
+        'SELECT design_id, kind, selector, tag, text, status, created_at FROM comments WHERE design_id = ? ORDER BY created_at ASC',
+      )
+      .all<LegacyCommentRow>(designId);
+  } catch (cause) {
+    if (isMissingLegacyTable(cause, 'comments')) return [];
+    throw new Error('Failed to read legacy comments table', { cause });
   }
+}
+
+function isMissingLegacyTable(cause: unknown, tableName: string): boolean {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return new RegExp(`no such table:\\s*${tableName}\\b`, 'i').test(message);
+}
+
+function toLegacySessionMessage(msg: ChatMessageRow): Message {
+  if (msg.role === 'user') {
+    return {
+      role: 'user',
+      content: msg.content,
+      timestamp: msg.created_at,
+    };
+  }
+
+  return {
+    role: 'assistant',
+    content: [{ type: 'text', text: msg.content }],
+    api: 'legacy-v0.1',
+    provider: 'legacy-v0.1',
+    model: 'legacy-v0.1',
+    usage: LEGACY_ZERO_USAGE,
+    stopReason: 'stop',
+    timestamp: msg.created_at,
+  };
+}
+
+function toLegacyCommentMessage(comment: LegacyCommentRow, timestamp: number): Message {
+  const lines = [
+    'Legacy inline comment migrated from Open CoDesign v0.1.',
+    `Kind: ${comment.kind}`,
+    `Status: ${comment.status}`,
+    `Selector: ${comment.selector}`,
+    `Element: <${comment.tag}>`,
+    '',
+    `Comment: ${comment.text}`,
+  ];
+  return {
+    role: 'user',
+    content: [{ type: 'text', text: lines.join('\n').trim() }],
+    timestamp,
+  };
+}
+
+function normalizeLegacyTimestamp(value: number | string | null): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
 }
 
 function normalizeMigrationSlug(raw: string): string {
@@ -219,18 +357,6 @@ function slugify(input: string): string {
 }
 
 async function defaultOpener(): Promise<(path: string) => MigrationDatabase> {
-  // Dynamic import so test environments can run without the native
-  // module loaded.
-  let mod: {
-    default: new (path: string, options?: { readonly?: boolean }) => MigrationDatabase;
-  };
-  try {
-    mod = (await import('better-sqlite3')) as typeof mod;
-  } catch (cause) {
-    throw new Error(
-      'better-sqlite3 not available — pass options.openDatabase explicitly when migrating in environments without the native binding.',
-      { cause },
-    );
-  }
-  return (path) => new mod.default(path, { readonly: true });
+  return (path) =>
+    openBetterSqliteDatabase(path, { readonly: true }) as unknown as MigrationDatabase;
 }

@@ -23,14 +23,15 @@ export function resolveNativeBindingPath(
   if (isElectron) {
     const archSpecific = path.join(releaseDir, `better_sqlite3.node-electron-${arch}.node`);
     if (fs.existsSync(archSpecific)) return archSpecific;
+    const legacyElectron = path.join(releaseDir, 'better_sqlite3.node-electron.node');
+    if (fs.existsSync(legacyElectron)) return legacyElectron;
+    throw new Error(
+      `better-sqlite3 Electron native binding missing for ${arch}: expected ${archSpecific}`,
+    );
   }
-  const runtimeSpecific = path.join(
-    releaseDir,
-    isElectron ? 'better_sqlite3.node-electron.node' : 'better_sqlite3.node-node.node',
-  );
+  const runtimeSpecific = path.join(releaseDir, 'better_sqlite3.node-node.node');
   if (fs.existsSync(runtimeSpecific)) return runtimeSpecific;
-  if (isElectron) return path.join(releaseDir, 'better_sqlite3.node');
-  return runtimeSpecific;
+  throw new Error(`better-sqlite3 Node native binding missing: expected ${runtimeSpecific}`);
 }
 
 export function resolveNativeBinding(): string {

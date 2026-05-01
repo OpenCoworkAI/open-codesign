@@ -87,6 +87,7 @@ export {
 export {
   clearDesignWorkspace,
   createDesign,
+  deleteDesignForRollback,
   duplicateDesign,
   getDesign,
   listDesigns,

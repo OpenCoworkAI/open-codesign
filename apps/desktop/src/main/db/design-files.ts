@@ -65,7 +65,7 @@ export function listDesignFiles(db: Database, designId: string): DesignFile[] {
 
 /**
  * List files whose path matches `${dir}/*` (one segment deeper only). Used by
- * the workspace edit tool's `view` command when the caller points at a directory.
+ * str_replace_based_edit_tool's `view` command when the caller points at a directory.
  */
 export function listDesignFilesInDir(db: Database, designId: string, dir: string): string[] {
   const clean = dir === '' || dir === '.' ? '' : normalizeDesignFilePath(dir);

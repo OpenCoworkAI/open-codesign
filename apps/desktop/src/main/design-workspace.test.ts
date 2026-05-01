@@ -1,10 +1,11 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createDesign,
   createDesignFile,
+  getDesign,
   initInMemoryDb,
   updateDesignWorkspace,
 } from './snapshots-db';
@@ -21,6 +22,7 @@ vi.mock('electron', () => ({
 import { dialog, shell } from 'electron';
 import {
   bindWorkspace,
+  copyTrackedWorkspaceFiles,
   normalizeWorkspacePath,
   openWorkspaceFolder,
   pickWorkspaceFolder,
@@ -69,13 +71,41 @@ afterEach(async () => {
 });
 
 describe('normalizeWorkspacePath', () => {
-  it('strips trailing slash, resolves absolute path, and normalizes separators', () => {
-    const relative = path.join('tmp', 'designs', '..', 'designs', 'workspace') + path.sep;
-    const normalized = normalizeWorkspacePath(relative);
+  it('strips trailing slash and normalizes absolute paths', () => {
+    const absolute = path.join(os.tmpdir(), 'designs', '..', 'designs', 'workspace') + path.sep;
+    const normalized = normalizeWorkspacePath(absolute);
 
     expect(path.isAbsolute(normalized)).toBe(true);
-    expect(normalized).toBe(path.resolve('tmp/designs/workspace').replaceAll('\\', '/'));
+    expect(normalized).toBe(path.normalize(absolute).replaceAll('\\', '/').replace(/\/+$/, ''));
     expect(normalized.endsWith('/')).toBe(false);
+  });
+
+  it('rejects empty and relative workspace paths instead of resolving them against cwd', () => {
+    expect(() => normalizeWorkspacePath('')).toThrow('Workspace path must not be empty');
+    expect(() => normalizeWorkspacePath('   ')).toThrow('Workspace path must not be empty');
+    expect(() => normalizeWorkspacePath(path.join('relative', 'workspace'))).toThrow(
+      'Workspace path must be absolute for the current platform',
+    );
+  });
+
+  it('rejects Windows drive paths on non-Windows platforms instead of treating them as cwd-relative', () => {
+    if (process.platform === 'win32') return;
+
+    expect(() => normalizeWorkspacePath('C:/Users/Roy/Workspace')).toThrow(
+      'Workspace path must be absolute for the current platform',
+    );
+  });
+
+  it('normalizes fully-qualified Windows paths on Windows', async () => {
+    await withMockedPlatform('win32', async () => {
+      expect(normalizeWorkspacePath('C:\\Users\\Roy\\Workspace\\')).toBe('C:/Users/Roy/Workspace');
+      expect(normalizeWorkspacePath('C:/Users/Roy/Workspace/../Workspace')).toBe(
+        'C:/Users/Roy/Workspace',
+      );
+      expect(() => normalizeWorkspacePath('/Users/Roy/Workspace')).toThrow(
+        'Workspace path must be absolute for the current platform',
+      );
+    });
   });
 });
 
@@ -148,14 +178,58 @@ describe('bindWorkspace', () => {
     });
   });
 
+  it('rejects empty and relative workspace bindings before touching the db', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db);
+
+    await expect(bindWorkspace(db, design.id, '   ', false)).rejects.toThrow(
+      'Workspace path must not be empty',
+    );
+    await expect(bindWorkspace(db, design.id, 'relative-workspace', false)).rejects.toThrow(
+      'Workspace path must be absolute for the current platform',
+    );
+    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
+      workspace_path: null,
+    });
+  });
+
+  it('rejects missing workspace directories before binding', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db);
+    const root = await makeTempDir('ocd-ws-missing-root-');
+    const missing = path.join(root, 'missing-workspace');
+
+    await expect(bindWorkspace(db, design.id, missing, false)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
+      workspace_path: null,
+    });
+  });
+
+  it('rejects file paths before binding them as workspaces', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db);
+    const root = await makeTempDir('ocd-ws-file-root-');
+    const filePath = path.join(root, 'not-a-directory');
+    await writeFile(filePath, 'not a directory', 'utf8');
+
+    await expect(bindWorkspace(db, design.id, filePath, false)).rejects.toThrow(
+      'Workspace path is not a directory',
+    );
+    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
+      workspace_path: null,
+    });
+  });
+
   it('treats case-only workspace differences as the same path on Windows for the same design', async () => {
     await withMockedPlatform('win32', async () => {
       const db = initInMemoryDb();
       const design = createDesign(db);
-      const storedPath = normalizeWorkspacePath('/Users/Roy/Workspace');
+      const storedPath = normalizeWorkspacePath('C:/Users/Roy/Workspace');
       updateDesignWorkspace(db, design.id, storedPath);
 
-      const rebound = await bindWorkspace(db, design.id, '/users/roy/workspace/', false);
+      const rebound = await bindWorkspace(db, design.id, 'C:/users/roy/workspace/', false);
 
       expect(rebound.workspacePath).toBe(storedPath);
       expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
@@ -169,9 +243,9 @@ describe('bindWorkspace', () => {
       const db = initInMemoryDb();
       const design = createDesign(db);
       const otherDesign = createDesign(db);
-      updateDesignWorkspace(db, otherDesign.id, normalizeWorkspacePath('/Users/Roy/Workspace'));
+      updateDesignWorkspace(db, otherDesign.id, normalizeWorkspacePath('C:/Users/Roy/Workspace'));
 
-      await expect(bindWorkspace(db, design.id, '/users/roy/workspace', false)).rejects.toThrow(
+      await expect(bindWorkspace(db, design.id, 'C:/users/roy/workspace', false)).rejects.toThrow(
         'Workspace path is already bound to another design',
       );
     });
@@ -201,6 +275,59 @@ describe('bindWorkspace', () => {
     });
     expect(await readFile(path.join(source, 'tracked.txt'), 'utf8')).toBe('tracked root');
     expect(await readFile(path.join(source, 'ignored.txt'), 'utf8')).toBe('untracked');
+  });
+
+  it('copies tracked files between workspaces without changing the binding', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db);
+    const source = await makeTempDir('ocd-ws-copy-source-');
+    const destination = await makeTempDir('ocd-ws-copy-dest-');
+    const sourcePath = normalizeWorkspacePath(source);
+    updateDesignWorkspace(db, design.id, sourcePath);
+    createDesignFile(db, design.id, 'index.html', '<html>copy me</html>');
+    createDesignFile(db, design.id, 'assets/logo.txt', 'asset');
+    await writeWorkspaceFile(source, 'index.html', '<html>copy me</html>');
+    await writeWorkspaceFile(source, 'assets/logo.txt', 'asset');
+    await writeWorkspaceFile(source, 'ignored.txt', 'ignored');
+
+    await copyTrackedWorkspaceFiles(db, design.id, sourcePath, destination);
+
+    expect(getDesign(db, design.id)?.workspacePath).toBe(sourcePath);
+    expect(await readFile(path.join(destination, 'index.html'), 'utf8')).toBe(
+      '<html>copy me</html>',
+    );
+    expect(await readFile(path.join(destination, 'assets/logo.txt'), 'utf8')).toBe('asset');
+    await expect(readFile(path.join(destination, 'ignored.txt'), 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('rejects tracked file copies through symlinked workspace path segments', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db);
+    const source = await makeTempDir('ocd-ws-symlink-source-');
+    const outside = await makeTempDir('ocd-ws-symlink-outside-');
+    const destination = await makeTempDir('ocd-ws-symlink-dest-');
+    const sourcePath = normalizeWorkspacePath(source);
+    updateDesignWorkspace(db, design.id, sourcePath);
+    createDesignFile(db, design.id, 'assets/secret.txt', 'secret');
+    await writeWorkspaceFile(outside, 'secret.txt', 'secret');
+    try {
+      await symlink(outside, path.join(source, 'assets'), 'dir');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+      throw err;
+    }
+
+    await expect(copyTrackedWorkspaceFiles(db, design.id, sourcePath, destination)).rejects.toThrow(
+      /symbolic link/,
+    );
+    await expect(
+      readFile(path.join(destination, 'assets', 'secret.txt'), 'utf8'),
+    ).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    expect(getDesign(db, design.id)?.workspacePath).toBe(sourcePath);
   });
 
   it('rejects corrupt tracked file paths before workspace migration copies', async () => {

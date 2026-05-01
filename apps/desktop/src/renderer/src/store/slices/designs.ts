@@ -108,7 +108,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       while (existingNames.has(`Untitled design ${n}`)) n += 1;
       const name = `Untitled design ${n}`;
       try {
-        const design = await window.codesign.snapshots.createDesign(name);
+        const design = await window.codesign.snapshots.createDesign(name, workspacePath);
         set({
           currentDesignId: design.id,
           previewHtml: null,
@@ -130,19 +130,6 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
         await get().loadDesigns();
         void get().loadChatForCurrentDesign();
         void get().loadCommentsForCurrentDesign();
-        if (workspacePath) {
-          try {
-            await window.codesign.snapshots.updateWorkspace(design.id, workspacePath, false);
-            await get().loadDesigns();
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : tr('errors.unknown');
-            get().pushToast({
-              variant: 'error',
-              title: tr('canvas.workspace.updateFailed'),
-              description: msg,
-            });
-          }
-        }
         return design;
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
@@ -317,35 +304,19 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       const trimmed = name.trim();
       if (!trimmed) return;
       try {
-        await window.codesign.snapshots.renameDesign(id, trimmed);
-        // Optimistic in-memory update. If persistence is unavailable and
-        // listDesigns() returns [], a freshly-created design can otherwise
-        // disappear from chrome after reload of this slice. If the target row
-        // is missing, synthesize one so the sidebar / top bar can surface
-        // the name.
-        const nowIso = new Date().toISOString();
+        const updated = await window.codesign.snapshots.renameDesign(id, trimmed);
+        // Use the persisted row instead of synthesizing a partial design; v0.2
+        // designs must carry a real workspace binding.
         set((s) => {
           const existing = s.designs.find((d) => d.id === id);
           if (existing) {
             return {
-              designs: s.designs.map((d) => (d.id === id ? { ...d, name: trimmed } : d)),
+              designs: s.designs.map((d) => (d.id === id ? updated : d)),
               designToRename: null,
             };
           }
           return {
-            designs: [
-              ...s.designs,
-              {
-                schemaVersion: 1 as const,
-                id,
-                name: trimmed,
-                createdAt: nowIso,
-                updatedAt: nowIso,
-                thumbnailText: null,
-                deletedAt: null,
-                workspacePath: null,
-              },
-            ],
+            designs: [...s.designs, updated],
             designToRename: null,
           };
         });

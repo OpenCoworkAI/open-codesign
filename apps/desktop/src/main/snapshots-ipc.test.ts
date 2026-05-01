@@ -5,7 +5,16 @@
  * calls the registered handlers directly with an in-memory DB.
  */
 
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
@@ -45,17 +54,25 @@ vi.mock('./logger', () => ({
 
 vi.mock('./design-workspace', () => ({
   bindWorkspace: vi.fn(),
+  copyTrackedWorkspaceFiles: vi.fn(),
   openWorkspaceFolder: vi.fn(),
   checkWorkspaceFolderExists: vi.fn(),
 }));
 
-import { bindWorkspace, checkWorkspaceFolderExists, openWorkspaceFolder } from './design-workspace';
+import {
+  bindWorkspace,
+  checkWorkspaceFolderExists,
+  copyTrackedWorkspaceFiles,
+  openWorkspaceFolder,
+} from './design-workspace';
 import { dialog } from './electron-runtime';
 import {
   clearDesignWorkspace,
   createDesign,
+  createDesignFile,
   createSnapshot,
   initInMemoryDb,
+  listDesigns,
   updateDesignWorkspace,
   viewDesignFile,
 } from './snapshots-db';
@@ -101,6 +118,8 @@ beforeEach(() => {
     if (updated === null) throw new Error('Design not found');
     return updated;
   });
+  vi.mocked(copyTrackedWorkspaceFiles).mockReset();
+  vi.mocked(copyTrackedWorkspaceFiles).mockResolvedValue(undefined);
   registerSnapshotsIpc(db);
   // biome-ignore lint/suspicious/noExplicitAny: test mock
   registerWorkspaceIpc(db, () => ({}) as any);
@@ -305,6 +324,41 @@ describe('chat:v1 session persistence', () => {
 
     expect(() => call('chat:v1:list', v1({ designId: design.id }))).toThrow(CodesignError);
   });
+
+  it('rejects chat writes when a legacy design has no workspace binding', () => {
+    const design = createDesign(db, 'Unbound chat design');
+
+    expect(() =>
+      call(
+        'chat:v1:append',
+        v1({
+          designId: design.id,
+          kind: 'user',
+          payload: { text: 'hello' },
+        }),
+      ),
+    ).toThrow(CodesignError);
+    expect(() => call('chat:v1:list', v1({ designId: design.id }))).toThrow(CodesignError);
+  });
+
+  it('rejects chat session access when the stored workspace path is corrupt', () => {
+    const design = createDesign(db, 'Corrupt chat design');
+    db.prepare('UPDATE designs SET workspace_path = ? WHERE id = ?').run('', design.id);
+
+    expect(() =>
+      call(
+        'chat:v1:append',
+        v1({
+          designId: design.id,
+          kind: 'user',
+          payload: { text: 'hello' },
+        }),
+      ),
+    ).toThrow('Stored workspace path is invalid');
+    expect(() => call('chat:v1:list', v1({ designId: design.id }))).toThrow(
+      'Stored workspace path is invalid',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -476,13 +530,71 @@ describe('snapshots:v1:create', () => {
 // ---------------------------------------------------------------------------
 
 describe('snapshots:v1:create-design', () => {
-  it('creates a design with the trimmed name', async () => {
+  it('creates a design with the trimmed name and a default workspace', async () => {
     const result = (await callAsync(
       'snapshots:v1:create-design',
       v1({ name: '  My design  ' }),
     )) as Record<string, unknown>;
     expect(result['name']).toBe('My design');
     expect(typeof result['id']).toBe('string');
+    expect(result['workspacePath']).toBe(path.join(mockPaths.documents, 'CoDesign', 'My-design'));
+    expect(existsSync(result['workspacePath'] as string)).toBe(true);
+  });
+
+  it('binds a caller-provided workspace during design creation without making a default folder', async () => {
+    const workspacePath = path.join(tempRoot, 'chosen-workspace');
+    const result = (await callAsync(
+      'snapshots:v1:create-design',
+      v1({ name: 'Chosen design', workspacePath }),
+    )) as Record<string, unknown>;
+
+    expect(result['workspacePath']).toBe(workspacePath);
+    expect(vi.mocked(bindWorkspace)).toHaveBeenCalledWith(db, result['id'], workspacePath, false);
+    expect(existsSync(path.join(mockPaths.documents, 'CoDesign'))).toBe(false);
+  });
+
+  it('rejects default workspace allocation failures instead of returning a workspace-less design', async () => {
+    writeFileSync(mockPaths.documents, 'not a directory', 'utf8');
+
+    await expect(
+      callAsync('snapshots:v1:create-design', v1({ name: 'Cannot allocate' })),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_DB_ERROR',
+    });
+    expect(listDesigns(db)).toEqual([]);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM designs').get()).toEqual({ n: 0 });
+  });
+
+  it('hides the design row when workspace binding fails during creation', async () => {
+    vi.mocked(bindWorkspace).mockRejectedValueOnce(new Error('bind denied'));
+    const workspacePath = path.join(tempRoot, 'workspace');
+    mkdirSync(workspacePath);
+
+    await expect(
+      callAsync('snapshots:v1:create-design', v1({ name: 'Cannot bind', workspacePath })),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_DB_ERROR',
+    });
+    expect(listDesigns(db)).toEqual([]);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM designs').get()).toEqual({ n: 0 });
+    expect(existsSync(workspacePath)).toBe(true);
+  });
+
+  it('removes the auto-created default workspace when binding fails during creation', async () => {
+    vi.mocked(bindWorkspace).mockRejectedValueOnce(new Error('bind denied'));
+    const workspacePath = path.join(mockPaths.documents, 'CoDesign', 'Cannot-bind-default');
+
+    await expect(
+      callAsync('snapshots:v1:create-design', v1({ name: 'Cannot bind default' })),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_DB_ERROR',
+    });
+    expect(listDesigns(db)).toEqual([]);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM designs').get()).toEqual({ n: 0 });
+    expect(existsSync(workspacePath)).toBe(false);
   });
 
   it('rejects undefined with IPC_BAD_INPUT (no silent default)', async () => {
@@ -876,6 +988,24 @@ describe('snapshots:v1:workspace:update', () => {
     }
   });
 
+  it('throws IPC_BAD_INPUT when the selected workspace path does not exist', async () => {
+    const design = createDesign(db, 'Test');
+    vi.mocked(bindWorkspace).mockRejectedValueOnce(
+      Object.assign(new Error('missing directory'), { code: 'ENOENT' }),
+    );
+
+    await expect(
+      callAsync(
+        'snapshots:v1:workspace:update',
+        v1({ designId: design.id, workspacePath: '/missing/path', migrateFiles: false }),
+      ),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_BAD_INPUT',
+      message: 'Workspace path does not exist',
+    });
+  });
+
   it('rejects non-object payload with IPC_BAD_INPUT', async () => {
     try {
       await callAsync('snapshots:v1:workspace:update', null);
@@ -897,15 +1027,20 @@ describe('snapshots:v1:workspace:update', () => {
     }
   });
 
-  it('accepts null workspacePath to clear binding', async () => {
+  it('rejects null workspacePath so product IPC cannot create workspace-less designs', async () => {
     const design = createDesign(db, 'Test');
-    const cleared = { ...design, workspacePath: null };
-    vi.mocked(bindWorkspace).mockResolvedValueOnce(cleared);
-    const result = await callAsync(
-      'snapshots:v1:workspace:update',
-      v1({ designId: design.id, workspacePath: null, migrateFiles: false }),
-    );
-    expect(result).toEqual(cleared);
+    const callsBefore = vi.mocked(bindWorkspace).mock.calls.length;
+
+    await expect(
+      callAsync(
+        'snapshots:v1:workspace:update',
+        v1({ designId: design.id, workspacePath: null, migrateFiles: false }),
+      ),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_BAD_INPUT',
+    });
+    expect(vi.mocked(bindWorkspace).mock.calls).toHaveLength(callsBefore);
   });
 });
 
@@ -1013,6 +1148,62 @@ describe('snapshots:v1:workspace:open', () => {
 });
 
 // ---------------------------------------------------------------------------
+// codesign:files:v1:list
+// ---------------------------------------------------------------------------
+
+describe('codesign:files:v1:list', () => {
+  it('lists files from the bound workspace', async () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), 'codesign-files-list-'));
+    try {
+      const design = createDesign(db, 'Listable');
+      updateDesignWorkspace(db, design.id, workspace);
+      writeFileSync(path.join(workspace, 'index.html'), '<main/>', 'utf8');
+
+      const result = (await callAsync(
+        'codesign:files:v1:list',
+        v1({ designId: design.id }),
+      )) as Array<{ path: string }>;
+
+      expect(result.map((entry) => entry.path)).toContain('index.html');
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('throws IPC_NOT_FOUND instead of returning [] for a missing design', async () => {
+    await expect(
+      callAsync('codesign:files:v1:list', v1({ designId: 'missing-design' })),
+    ).rejects.toMatchObject({
+      code: 'IPC_NOT_FOUND',
+      message: 'Design not found',
+    });
+  });
+
+  it('throws IPC_BAD_INPUT instead of returning [] when no workspace is bound', async () => {
+    const design = createDesign(db, 'Unbound');
+
+    await expect(
+      callAsync('codesign:files:v1:list', v1({ designId: design.id })),
+    ).rejects.toMatchObject({
+      code: 'IPC_BAD_INPUT',
+      message: 'Design is not bound to a workspace',
+    });
+  });
+
+  it('rejects corrupt workspace paths before listing files', async () => {
+    const design = createDesign(db, 'Corrupt Listable');
+    db.prepare('UPDATE designs SET workspace_path = ? WHERE id = ?').run('', design.id);
+
+    await expect(
+      callAsync('codesign:files:v1:list', v1({ designId: design.id })),
+    ).rejects.toMatchObject({
+      code: 'IPC_BAD_INPUT',
+      message: 'Stored workspace path is invalid',
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // codesign:files:v1:write
 // ---------------------------------------------------------------------------
 
@@ -1061,6 +1252,61 @@ describe('codesign:files:v1:write', () => {
       expect(viewDesignFile(db, design.id, 'assets/hero.png')?.content).toBe(content);
     } finally {
       rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects corrupt empty workspace paths instead of writing relative to cwd', async () => {
+    const design = createDesign(db, 'Corrupt Writable');
+    db.prepare('UPDATE designs SET workspace_path = ? WHERE id = ?').run('', design.id);
+    const probePath = `cwd-write-probe-${crypto.randomUUID()}.html`;
+    const cwdProbe = path.join(process.cwd(), probePath);
+
+    try {
+      await expect(
+        callAsync(
+          'codesign:files:v1:write',
+          v1({ designId: design.id, path: probePath, content: '<main>bad</main>' }),
+        ),
+      ).rejects.toMatchObject({
+        code: 'IPC_BAD_INPUT',
+        message: 'Stored workspace path is invalid',
+      });
+
+      expect(existsSync(cwdProbe)).toBe(false);
+      expect(viewDesignFile(db, design.id, probePath)).toBeNull();
+    } finally {
+      rmSync(cwdProbe, { force: true });
+    }
+  });
+
+  it('rejects writes through symlinked workspace path segments', async () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), 'codesign-files-symlink-'));
+    const outside = mkdtempSync(path.join(tmpdir(), 'codesign-files-outside-'));
+    try {
+      try {
+        symlinkSync(outside, path.join(workspace, 'assets'), 'dir');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+        throw err;
+      }
+      const design = createDesign(db, 'Symlink Writable');
+      updateDesignWorkspace(db, design.id, workspace);
+
+      await expect(
+        callAsync(
+          'codesign:files:v1:write',
+          v1({ designId: design.id, path: 'assets/leak.html', content: '<main>bad</main>' }),
+        ),
+      ).rejects.toMatchObject({
+        code: 'IPC_BAD_INPUT',
+        message: 'Invalid workspace file path',
+      });
+
+      expect(existsSync(path.join(outside, 'leak.html'))).toBe(false);
+      expect(viewDesignFile(db, design.id, 'assets/leak.html')).toBeNull();
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 });
@@ -1167,14 +1413,92 @@ describe('snapshots:v1:soft-delete-design', () => {
 });
 
 describe('snapshots:v1:duplicate-design', () => {
-  it('clones the design and reports a different id', () => {
+  it('clones the design and binds a new default workspace', async () => {
     const source = createDesign(db, 'Source');
-    const cloned = call(
+    const sourceWorkspace = path.join(tempRoot, 'source-workspace');
+    updateDesignWorkspace(db, source.id, sourceWorkspace);
+    const cloned = (await callAsync(
       'snapshots:v1:duplicate-design',
       v1({ id: source.id, name: 'Source copy' }),
-    ) as { id: string; name: string };
+    )) as { id: string; name: string; workspacePath: string | null };
     expect(cloned.id).not.toBe(source.id);
     expect(cloned.name).toBe('Source copy');
+    expect(cloned.workspacePath).toBe(path.join(mockPaths.documents, 'CoDesign', 'Source-copy'));
+    expect(existsSync(cloned.workspacePath ?? '')).toBe(true);
+    expect(vi.mocked(bindWorkspace)).toHaveBeenCalledWith(
+      db,
+      cloned.id,
+      cloned.workspacePath,
+      false,
+    );
+    expect(vi.mocked(copyTrackedWorkspaceFiles)).toHaveBeenCalledWith(
+      db,
+      source.id,
+      sourceWorkspace,
+      cloned.workspacePath,
+    );
+  });
+
+  it('hides the cloned row when workspace binding fails', async () => {
+    const source = createDesign(db, 'Source');
+    updateDesignWorkspace(db, source.id, path.join(tempRoot, 'source-workspace'));
+    createSnapshot(db, {
+      designId: source.id,
+      parentId: null,
+      type: 'initial',
+      prompt: null,
+      artifactType: 'html',
+      artifactSource: '<div>source</div>',
+    });
+    createDesignFile(db, source.id, 'index.html', '<div>source</div>');
+    vi.mocked(bindWorkspace).mockRejectedValueOnce(new Error('bind denied'));
+    const cloneWorkspacePath = path.join(mockPaths.documents, 'CoDesign', 'Source-copy');
+
+    await expect(
+      callAsync('snapshots:v1:duplicate-design', v1({ id: source.id, name: 'Source copy' })),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_DB_ERROR',
+    });
+    expect(listDesigns(db).map((design) => design.id)).toEqual([source.id]);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM designs').get()).toEqual({ n: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM design_snapshots').get()).toEqual({ n: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM design_files').get()).toEqual({ n: 1 });
+    expect(existsSync(cloneWorkspacePath)).toBe(false);
+  });
+
+  it('removes the auto-created clone workspace when file copy fails', async () => {
+    const source = createDesign(db, 'Source');
+    updateDesignWorkspace(db, source.id, path.join(tempRoot, 'source-workspace'));
+    createDesignFile(db, source.id, 'index.html', '<div>source</div>');
+    vi.mocked(copyTrackedWorkspaceFiles).mockRejectedValueOnce(new Error('copy denied'));
+    const cloneWorkspacePath = path.join(mockPaths.documents, 'CoDesign', 'Source-copy');
+    const bindCallsBefore = vi.mocked(bindWorkspace).mock.calls.length;
+
+    await expect(
+      callAsync('snapshots:v1:duplicate-design', v1({ id: source.id, name: 'Source copy' })),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_DB_ERROR',
+    });
+    expect(listDesigns(db).map((design) => design.id)).toEqual([source.id]);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM designs').get()).toEqual({ n: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM design_files').get()).toEqual({ n: 1 });
+    expect(existsSync(cloneWorkspacePath)).toBe(false);
+    expect(vi.mocked(bindWorkspace).mock.calls).toHaveLength(bindCallsBefore);
+  });
+
+  it('rejects workspace-less legacy sources before creating a clone', async () => {
+    const source = createDesign(db, 'Legacy source');
+
+    await expect(
+      callAsync('snapshots:v1:duplicate-design', v1({ id: source.id, name: 'Source copy' })),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_BAD_INPUT',
+    });
+    expect(listDesigns(db).map((design) => design.id)).toEqual([source.id]);
+    expect(vi.mocked(copyTrackedWorkspaceFiles)).not.toHaveBeenCalled();
   });
 });
 

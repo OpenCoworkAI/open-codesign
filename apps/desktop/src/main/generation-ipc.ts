@@ -24,6 +24,22 @@ export function cancelGenerationRequest(
   logIpc.info('generate.cancelled', { id: raw });
 }
 
+export async function withInFlightGeneration<T>(
+  id: string,
+  inFlight: Map<string, AbortController>,
+  controller: AbortController,
+  run: () => Promise<T>,
+): Promise<T> {
+  inFlight.set(id, controller);
+  try {
+    return await run();
+  } finally {
+    if (inFlight.get(id) === controller) {
+      inFlight.delete(id);
+    }
+  }
+}
+
 export interface GenerationTimeoutLogger {
   warn: (event: string, payload: Record<string, unknown>) => void;
 }

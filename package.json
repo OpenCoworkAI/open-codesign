@@ -38,9 +38,9 @@
       "better-sqlite3"
     ],
     "overrides": {
-      "@xmldom/xmldom@<0.8.13": ">=0.8.13",
+      "@xmldom/xmldom@<0.8.13": "0.8.13",
       "fast-xml-parser@<5.7.0": ">=5.7.0",
-      "vite@<6.4.2": ">=6.4.2",
+      "vitepress>vite": "6.4.2",
       "esbuild@<0.25.0": ">=0.25.0"
     }
   },

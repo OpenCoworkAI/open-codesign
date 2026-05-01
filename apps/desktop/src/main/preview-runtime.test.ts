@@ -1,8 +1,14 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { isRuntimeConsoleNoise, isRuntimeOptionalFontUrl, runPreview } from './preview-runtime';
+import {
+  isPreviewFileUrlAllowed,
+  isRuntimeConsoleNoise,
+  isRuntimeOptionalFontUrl,
+  runPreview,
+} from './preview-runtime';
 
 // Puppeteer-core is a thin Chrome DevTools client — when no system Chrome is
 // discoverable (typical CI sandbox), the module itself still imports fine but
@@ -51,6 +57,82 @@ describe('runPreview path guards', () => {
     });
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/read failed/);
+  });
+
+  it('refuses preview sources through symlinked workspace segments', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'codesign-preview-outside-'));
+    try {
+      mkdirSync(join(tempDir, 'linked-parent'), { recursive: true });
+      try {
+        symlinkSync(outside, join(tempDir, 'linked-parent', 'linked'), 'dir');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+        throw err;
+      }
+      writeFileSync(join(outside, 'index.html'), '<main>outside</main>', 'utf8');
+
+      const result = await runPreview({
+        path: 'linked-parent/linked/index.html',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.reason).toMatch(/symbolic link/);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('allows only preview temp file and safe workspace file URLs', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'codesign-preview-url-outside-'));
+    const previewFile = join(outside, 'preview.html');
+    const safeFile = join(tempDir, 'asset.txt');
+    writeFileSync(previewFile, '<main/>', 'utf8');
+    writeFileSync(safeFile, 'asset', 'utf8');
+    try {
+      expect(
+        await isPreviewFileUrlAllowed(pathToFileURL(previewFile).href, tempDir, previewFile),
+      ).toBe(true);
+      expect(
+        await isPreviewFileUrlAllowed(pathToFileURL(safeFile).href, tempDir, previewFile),
+      ).toBe(true);
+      expect(
+        await isPreviewFileUrlAllowed(
+          pathToFileURL(join(outside, 'secret.txt')).href,
+          tempDir,
+          previewFile,
+        ),
+      ).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('blocks file URLs that traverse symlinked workspace segments', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'codesign-preview-url-link-outside-'));
+    const previewFile = join(outside, 'preview.html');
+    writeFileSync(previewFile, '<main/>', 'utf8');
+    writeFileSync(join(outside, 'secret.txt'), 'secret', 'utf8');
+    try {
+      try {
+        symlinkSync(outside, join(tempDir, 'asset-link'), 'dir');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+        throw err;
+      }
+
+      expect(
+        await isPreviewFileUrlAllowed(
+          pathToFileURL(join(tempDir, 'asset-link', 'secret.txt')).href,
+          tempDir,
+          previewFile,
+        ),
+      ).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+      rmSync(join(tempDir, 'asset-link'), { recursive: true, force: true });
+    }
   });
 
   it('reports unsupported file types before launching Chrome', async () => {

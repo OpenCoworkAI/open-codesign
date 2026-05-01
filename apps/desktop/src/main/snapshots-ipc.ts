@@ -9,8 +9,7 @@
  * initSnapshotsDb().
  */
 
-import { existsSync } from 'node:fs';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ChatAppendInput,
@@ -22,7 +21,12 @@ import type {
 import { ChatMessageKind, CodesignError } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import type { BrowserWindow } from 'electron';
-import { bindWorkspace, checkWorkspaceFolderExists, openWorkspaceFolder } from './design-workspace';
+import {
+  bindWorkspace,
+  checkWorkspaceFolderExists,
+  copyTrackedWorkspaceFiles,
+  openWorkspaceFolder,
+} from './design-workspace';
 import { app, dialog, ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
 import {
@@ -36,6 +40,7 @@ import {
 import {
   createDesign,
   createSnapshot,
+  deleteDesignForRollback,
   deleteSnapshot,
   duplicateDesign,
   getDesign,
@@ -49,10 +54,12 @@ import {
   upsertDesignFile,
 } from './snapshots-db';
 import { prepareWorkspaceWriteContent } from './workspace-file-content';
+import { normalizeWorkspacePath } from './workspace-path';
 import {
   classifyWorkspaceFileKind,
   listWorkspaceFilesAt,
   readWorkspaceFileAt,
+  resolveSafeWorkspaceChildPath,
   type WorkspaceFileEntry,
   type WorkspaceFileReadResult,
 } from './workspace-reader';
@@ -76,6 +83,90 @@ function defaultDesignSlug(name: string): string {
     .replace(/-+/g, '-')
     .slice(0, 48);
   return cleaned.length > 0 ? cleaned : 'untitled-design';
+}
+
+function isAlreadyExists(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException).code === 'EEXIST';
+}
+
+async function allocateDefaultWorkspacePath(name: string): Promise<string> {
+  const defaultRoot = path.join(app.getPath('documents'), 'CoDesign');
+  await mkdir(defaultRoot, { recursive: true });
+  const slug = defaultDesignSlug(name);
+
+  for (let attempt = 0; attempt <= 100; attempt += 1) {
+    const workspacePath = path.join(defaultRoot, attempt === 0 ? slug : `${slug}-${attempt}`);
+    try {
+      await mkdir(workspacePath);
+      return workspacePath;
+    } catch (err) {
+      if (isAlreadyExists(err)) continue;
+      throw err;
+    }
+  }
+
+  throw new Error(`Could not find a unique workspace path under ${defaultRoot}`);
+}
+
+async function cleanupAutoAllocatedWorkspace(
+  workspacePath: string,
+  context: string,
+): Promise<void> {
+  try {
+    await rm(workspacePath, { recursive: true, force: true });
+  } catch (err) {
+    logger.warn('workspace.auto_cleanup.failed', {
+      context,
+      workspacePath,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+function parseCreateDesignWorkspacePath(r: Record<string, unknown>): string | undefined {
+  const raw = r['workspacePath'];
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    throw new CodesignError(
+      'workspacePath must be a non-empty string when provided',
+      'IPC_BAD_INPUT',
+    );
+  }
+  try {
+    return normalizeWorkspacePath(raw);
+  } catch (cause) {
+    throw new CodesignError('workspacePath is invalid', 'IPC_BAD_INPUT', { cause });
+  }
+}
+
+function translateWorkspaceBindError(err: unknown, fallbackMessage: string): CodesignError {
+  if (err instanceof CodesignError) return err;
+  if (err instanceof Error && err.message.includes('already bound')) {
+    return new CodesignError(err.message, 'IPC_CONFLICT', { cause: err });
+  }
+  if (
+    err instanceof Error &&
+    (err.message.includes('Workspace migration collision') ||
+      err.message.includes('Tracked workspace file missing') ||
+      err.message.includes('Workspace path is not a directory'))
+  ) {
+    return new CodesignError(err.message, 'IPC_BAD_INPUT', { cause: err });
+  }
+  if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+    return new CodesignError('Workspace path does not exist', 'IPC_BAD_INPUT', { cause: err });
+  }
+  return new CodesignError(fallbackMessage, 'IPC_DB_ERROR', { cause: err });
+}
+
+function requireBoundWorkspacePath(design: Design, message: string): string {
+  if (design.workspacePath === null) {
+    throw new CodesignError(message, 'IPC_BAD_INPUT');
+  }
+  try {
+    return normalizeWorkspacePath(design.workspacePath);
+  } catch (cause) {
+    throw new CodesignError('Stored workspace path is invalid', 'IPC_BAD_INPUT', { cause });
+  }
 }
 
 /**
@@ -285,7 +376,6 @@ function chatStoreOptions(db: Database): SessionChatStoreOptions {
   return {
     db,
     sessionDir: path.join(app.getPath('userData'), 'sessions'),
-    defaultCwd: app.getPath('documents'),
   };
 }
 
@@ -379,34 +469,37 @@ export function registerSnapshotsIpc(db: Database): void {
         throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
       }
       const name = (r['name'] as string).trim();
+      const requestedWorkspacePath = parseCreateDesignWorkspacePath(r);
       const design = runDb('create-design', () => createDesign(db, name));
       // v0.2: every design MUST have a workspace — per docs/v0.2-plan.md §2.3.
       // When the user hasn't picked one explicitly, seed
       //   <Documents>/CoDesign/<slug(name)>[-N]/
       // and bind it. Collision suffix handles duplicate names.
+      let autoWorkspacePath: string | null = null;
       try {
-        const defaultRoot = path.join(app.getPath('documents'), 'CoDesign');
-        const slug = defaultDesignSlug(name);
-        let attempt = 0;
-        let workspacePath = path.join(defaultRoot, slug);
-        while (existsSync(workspacePath)) {
-          attempt += 1;
-          workspacePath = path.join(defaultRoot, `${slug}-${attempt}`);
-          if (attempt > 100) {
-            throw new Error(`Could not find a unique workspace path under ${defaultRoot}`);
-          }
+        const workspacePath = requestedWorkspacePath ?? (await allocateDefaultWorkspacePath(name));
+        if (requestedWorkspacePath === undefined) {
+          autoWorkspacePath = workspacePath;
         }
-        await mkdir(workspacePath, { recursive: true });
         return await bindWorkspace(db, design.id, workspacePath, false);
       } catch (err) {
-        // Non-fatal: design row is committed; user can pick a workspace
-        // manually from the FilesTab WorkspaceSection. Log and return the
-        // workspace-less design instead of surfacing a boot-time error.
-        logger.warn('create-design.default-workspace.failed', {
+        if (autoWorkspacePath !== null) {
+          await cleanupAutoAllocatedWorkspace(autoWorkspacePath, 'create-design');
+        }
+        try {
+          runDb('create-design.rollback', () => deleteDesignForRollback(db, design.id));
+        } catch (rollbackErr) {
+          logger.error('create-design.rollback.failed', {
+            designId: design.id,
+            error: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr),
+          });
+        }
+        logger.warn('create-design.workspace.failed', {
           designId: design.id,
+          requested: requestedWorkspacePath !== undefined,
           error: err instanceof Error ? err.message : String(err),
         });
-        return design;
+        throw translateWorkspaceBindError(err, 'Workspace creation failed');
       }
     },
   );
@@ -473,30 +566,66 @@ export function registerSnapshotsIpc(db: Database): void {
     return updated;
   });
 
-  ipcMain.handle('snapshots:v1:duplicate-design', (_e: unknown, raw: unknown): Design => {
-    if (typeof raw !== 'object' || raw === null) {
-      throw new CodesignError(
-        'snapshots:v1:duplicate-design expects { id, name }',
-        'IPC_BAD_INPUT',
+  ipcMain.handle(
+    'snapshots:v1:duplicate-design',
+    async (_e: unknown, raw: unknown): Promise<Design> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError(
+          'snapshots:v1:duplicate-design expects { id, name }',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'snapshots:v1:duplicate-design');
+      if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
+        throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      if (typeof r['name'] !== 'string' || r['name'].trim().length === 0) {
+        throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      const sourceId = r['id'] as string;
+      const name = (r['name'] as string).trim();
+      const source = runDb('duplicate-design.lookup-source', () => getDesign(db, sourceId));
+      if (source === null) {
+        throw new CodesignError('Source design not found', 'IPC_NOT_FOUND');
+      }
+      const sourceWorkspacePath = requireBoundWorkspacePath(
+        source,
+        'Source design is not bound to a workspace',
       );
-    }
-    const r = raw as Record<string, unknown>;
-    requireSchemaV1(r, 'snapshots:v1:duplicate-design');
-    if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
-      throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
-    }
-    if (typeof r['name'] !== 'string' || r['name'].trim().length === 0) {
-      throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
-    }
-    const cloned = runDb('duplicate-design', () =>
-      duplicateDesign(db, r['id'] as string, r['name'] as string),
-    );
-    if (cloned === null) {
-      throw new CodesignError('Source design not found', 'IPC_NOT_FOUND');
-    }
-    logger.info('design.duplicated', { sourceId: r['id'], newId: cloned.id });
-    return cloned;
-  });
+      const cloned = runDb('duplicate-design', () => duplicateDesign(db, sourceId, name));
+      if (cloned === null) {
+        throw new CodesignError('Source design not found', 'IPC_NOT_FOUND');
+      }
+      let autoWorkspacePath: string | null = null;
+      try {
+        const workspacePath = await allocateDefaultWorkspacePath(name);
+        autoWorkspacePath = workspacePath;
+        await copyTrackedWorkspaceFiles(db, sourceId, sourceWorkspacePath, workspacePath);
+        const bound = await bindWorkspace(db, cloned.id, workspacePath, false);
+        logger.info('design.duplicated', { sourceId, newId: bound.id });
+        return bound;
+      } catch (err) {
+        if (autoWorkspacePath !== null) {
+          await cleanupAutoAllocatedWorkspace(autoWorkspacePath, 'duplicate-design');
+        }
+        try {
+          runDb('duplicate-design.rollback', () => deleteDesignForRollback(db, cloned.id));
+        } catch (rollbackErr) {
+          logger.error('duplicate-design.rollback.failed', {
+            designId: cloned.id,
+            error: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr),
+          });
+        }
+        logger.warn('duplicate-design.workspace.failed', {
+          sourceId,
+          newId: cloned.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw translateWorkspaceBindError(err, 'Workspace creation failed');
+      }
+    },
+  );
 
   ipcMain.handle('chat:v1:list', (_e: unknown, raw: unknown): ChatMessageRow[] => {
     const designId = parseDesignIdPayload(raw, 'chat:v1:list');
@@ -569,8 +698,11 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
       }
       const workspacePath = r['workspacePath'];
-      if (workspacePath !== null && typeof workspacePath !== 'string') {
-        throw new CodesignError('workspacePath must be a string or null', 'IPC_BAD_INPUT');
+      if (workspacePath === null) {
+        throw new CodesignError('workspacePath cannot be null in v0.2', 'IPC_BAD_INPUT');
+      }
+      if (typeof workspacePath !== 'string') {
+        throw new CodesignError('workspacePath must be a string', 'IPC_BAD_INPUT');
       }
       if (typeof r['migrateFiles'] !== 'boolean') {
         throw new CodesignError('migrateFiles must be a boolean', 'IPC_BAD_INPUT');
@@ -580,7 +712,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         const design = await bindWorkspace(
           db,
           r['designId'] as string,
-          workspacePath as string | null,
+          workspacePath,
           r['migrateFiles'] as boolean,
         );
         if (design === null) {
@@ -592,18 +724,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         });
         return design;
       } catch (err) {
-        if (err instanceof CodesignError) throw err;
-        if (err instanceof Error && err.message.includes('already bound')) {
-          throw new CodesignError(err.message, 'IPC_CONFLICT', { cause: err });
-        }
-        if (
-          err instanceof Error &&
-          (err.message.includes('Workspace migration collision') ||
-            err.message.includes('Tracked workspace file missing'))
-        ) {
-          throw new CodesignError(err.message, 'IPC_BAD_INPUT', { cause: err });
-        }
-        throw new CodesignError('Workspace update failed', 'IPC_DB_ERROR', { cause: err });
+        throw translateWorkspaceBindError(err, 'Workspace update failed');
       }
     },
   );
@@ -628,12 +749,10 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
-      if (design.workspacePath === null) {
-        throw new CodesignError('No workspace bound to this design', 'IPC_BAD_INPUT');
-      }
+      const workspacePath = requireBoundWorkspacePath(design, 'No workspace bound to this design');
 
       try {
-        await openWorkspaceFolder(design.workspacePath);
+        await openWorkspaceFolder(workspacePath);
       } catch (err) {
         throw new CodesignError(
           err instanceof Error ? err.message : 'Failed to open workspace folder',
@@ -665,13 +784,11 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
 
-      if (design.workspacePath === null) {
-        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
-      }
+      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
 
       let exists: boolean;
       try {
-        exists = await checkWorkspaceFolderExists(design.workspacePath);
+        exists = await checkWorkspaceFolderExists(workspacePath);
       } catch (cause) {
         throw new CodesignError('Failed to check workspace folder existence', 'IPC_DB_ERROR', {
           cause,
@@ -693,9 +810,12 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
       }
       const design = runDb('files:list', () => getDesign(db, r['designId'] as string));
-      if (design === null || design.workspacePath === null) return [];
+      if (design === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
       try {
-        return await listWorkspaceFilesAt(design.workspacePath);
+        return await listWorkspaceFilesAt(workspacePath);
       } catch (cause) {
         throw new CodesignError('Failed to list workspace files', 'IPC_DB_ERROR', { cause });
       }
@@ -720,11 +840,12 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
       }
       const design = runDb('files:read', () => getDesign(db, r['designId'] as string));
-      if (design === null || design.workspacePath === null) {
-        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+      if (design === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
+      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
       try {
-        return await readWorkspaceFileAt(design.workspacePath, r['path'] as string);
+        return await readWorkspaceFileAt(workspacePath, r['path'] as string);
       } catch (cause) {
         throw new CodesignError('Failed to read workspace file', 'IPC_BAD_INPUT', { cause });
       }
@@ -765,11 +886,14 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
-      if (design.workspacePath === null) {
-        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
-      }
+      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
 
-      const destinationPath = path.join(design.workspacePath, normalizedPath);
+      let destinationPath: string;
+      try {
+        destinationPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
+      } catch (cause) {
+        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+      }
       const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
       try {
         await mkdir(path.dirname(destinationPath), { recursive: true });
@@ -804,7 +928,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       }
 
       try {
-        return await readWorkspaceFileAt(design.workspacePath, normalizedPath);
+        return await readWorkspaceFileAt(workspacePath, normalizedPath);
       } catch (cause) {
         throw new CodesignError('Failed to read written workspace file', 'IPC_DB_ERROR', {
           cause,

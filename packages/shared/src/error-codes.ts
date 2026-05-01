@@ -40,6 +40,7 @@ export const ERROR_CODES = {
   INPUT_UNSUPPORTED_MODE: 'INPUT_UNSUPPORTED_MODE',
   GENERATION_TIMEOUT: 'GENERATION_TIMEOUT',
   GENERATION_INCOMPLETE: 'GENERATION_INCOMPLETE',
+  WORKSPACE_MISSING: 'WORKSPACE_MISSING',
   ARTIFACT_PROTOCOL_INVALID: 'ARTIFACT_PROTOCOL_INVALID',
   TOOL_EXECUTION_FAILED: 'TOOL_EXECUTION_FAILED',
 
@@ -231,6 +232,11 @@ export const ERROR_CODE_DESCRIPTIONS: Record<CodesignErrorCode, ErrorCodeDescrip
     userFacing:
       'The agent stopped before completing verification. Continue the run to finish the workspace artifact.',
     userFacingKey: 'err.GENERATION_INCOMPLETE',
+    category: 'generation',
+  },
+  WORKSPACE_MISSING: {
+    userFacing: 'This design has no workspace bound. Reopen or recreate the design.',
+    userFacingKey: 'err.WORKSPACE_MISSING',
     category: 'generation',
   },
   ARTIFACT_PROTOCOL_INVALID: {

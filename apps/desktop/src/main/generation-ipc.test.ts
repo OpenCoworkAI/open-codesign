@@ -4,6 +4,7 @@ import {
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
+  withInFlightGeneration,
 } from './generation-ipc';
 
 function makeController() {
@@ -70,6 +71,50 @@ describe('cancelGenerationRequest', () => {
     expect(() =>
       CancelGenerationPayloadV1.parse({ schemaVersion: 2, generationId: 'gen-1' }),
     ).toThrow();
+  });
+});
+
+describe('withInFlightGeneration', () => {
+  it('registers a generation while it runs and clears it after success', async () => {
+    const controller = new AbortController();
+    const inFlight = new Map<string, AbortController>();
+
+    const result = await withInFlightGeneration('gen-1', inFlight, controller, async () => {
+      expect(inFlight.get('gen-1')).toBe(controller);
+      return 'ok';
+    });
+
+    expect(result).toBe('ok');
+    expect(inFlight.has('gen-1')).toBe(false);
+  });
+
+  it('clears a generation when preflight work throws before timeout arming', async () => {
+    const controller = new AbortController();
+    const inFlight = new Map<string, AbortController>();
+    const error = new CodesignError('unsupported reference URL', 'REFERENCE_URL_UNSUPPORTED');
+
+    await expect(
+      withInFlightGeneration('gen-1', inFlight, controller, async () => {
+        expect(inFlight.get('gen-1')).toBe(controller);
+        throw error;
+      }),
+    ).rejects.toBe(error);
+
+    expect(inFlight.has('gen-1')).toBe(false);
+  });
+
+  it('does not clear a newer controller registered under the same id', async () => {
+    const oldController = new AbortController();
+    const newController = new AbortController();
+    const inFlight = new Map<string, AbortController>();
+
+    const result = await withInFlightGeneration('gen-1', inFlight, oldController, async () => {
+      inFlight.set('gen-1', newController);
+      return 'old-done';
+    });
+
+    expect(result).toBe('old-done');
+    expect(inFlight.get('gen-1')).toBe(newController);
   });
 });
 

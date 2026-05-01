@@ -6,9 +6,26 @@ import { preparePromptContext } from './prompt-context';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('preparePromptContext', () => {
+  const resolvePublicReferenceHost = async () => ['93.184.216.34'];
+  const makeReferenceFetcher = (...responses: Response[]) => {
+    const pending = [...responses];
+    return vi.fn(
+      async (
+        _safeUrl: string,
+        _signal: AbortSignal,
+        _resolveReferenceHost: (hostname: string) => Promise<string[]>,
+      ) => {
+        const next = pending.shift();
+        if (!next) throw new Error('unexpected reference fetch');
+        return next;
+      },
+    );
+  };
+
   it('throws a CodesignError when an attachment cannot be read', async () => {
     await expect(
       preparePromptContext({
@@ -79,27 +96,253 @@ describe('preparePromptContext', () => {
   });
 
   it('throws a CodesignError for oversized reference responses', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response('<!doctype html><html><body>too big</body></html>', {
-          status: 200,
-          headers: {
-            'content-type': 'text/html; charset=utf-8',
-            'content-length': '300000',
-          },
-        }),
-      ),
+    const fetchReference = makeReferenceFetcher(
+      new Response('<!doctype html><html><body>too big</body></html>', {
+        status: 200,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'content-length': '300000',
+        },
+      }),
     );
 
     await expect(
       preparePromptContext({
         referenceUrl: 'https://example.com/reference',
+        resolveReferenceHost: resolvePublicReferenceHost,
+        fetchReference,
       }),
     ).rejects.toMatchObject({
       name: 'CodesignError',
       code: 'REFERENCE_URL_TOO_LARGE',
     });
+  });
+
+  it('rejects non-http reference URLs before fetch', async () => {
+    const fetchReference = vi.fn();
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'file:///Users/me/secret.html',
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    expect(fetchReference).not.toHaveBeenCalled();
+  });
+
+  it('rejects reference URLs with embedded credentials before fetch', async () => {
+    const fetchReference = vi.fn();
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'https://user:pass@example.com/reference',
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    expect(fetchReference).not.toHaveBeenCalled();
+  });
+
+  it('rejects localhost and private-address reference URLs before fetch', async () => {
+    const fetchReference = vi.fn();
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'http://localhost.:3000/private',
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'http://192.168.1.20/private',
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'http://198.51.100.10/reference',
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'http://[::ffff:127.0.0.1]/private',
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    expect(fetchReference).not.toHaveBeenCalled();
+  });
+
+  it('follows validated http reference URL redirects manually', async () => {
+    const fetchReference = makeReferenceFetcher(
+      new Response(null, {
+        status: 302,
+        headers: { location: '/final' },
+      }),
+      new Response('<!doctype html><title>Final</title><p>Reference body</p>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+
+    const result = await preparePromptContext({
+      referenceUrl: 'https://example.com/start',
+      resolveReferenceHost: resolvePublicReferenceHost,
+      fetchReference,
+    });
+
+    expect(fetchReference).toHaveBeenCalledTimes(2);
+    expect(fetchReference.mock.calls[0]?.[0]).toBe('https://example.com/start');
+    expect(fetchReference.mock.calls[1]?.[0]).toBe('https://example.com/final');
+    expect(result.referenceUrl).toMatchObject({
+      url: 'https://example.com/final',
+      title: 'Final',
+      excerpt: 'Final Reference body',
+    });
+  });
+
+  it('rejects reference URL redirects to unsupported schemes before following them', async () => {
+    const fetchReference = makeReferenceFetcher(
+      new Response(null, {
+        status: 302,
+        headers: { location: 'file:///Users/me/secret.html' },
+      }),
+    );
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'https://example.com/start',
+        resolveReferenceHost: resolvePublicReferenceHost,
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    expect(fetchReference).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects reference URL redirects with embedded credentials before following them', async () => {
+    const fetchReference = makeReferenceFetcher(
+      new Response(null, {
+        status: 302,
+        headers: { location: 'https://user:pass@example.com/secret' },
+      }),
+    );
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'https://example.com/start',
+        resolveReferenceHost: resolvePublicReferenceHost,
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    expect(fetchReference).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects reference URLs whose host resolves to a private address before fetch', async () => {
+    const fetchReference = vi.fn();
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'https://example.com/reference',
+        resolveReferenceHost: async () => ['127.0.0.1'],
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    expect(fetchReference).not.toHaveBeenCalled();
+  });
+
+  it('rejects connection-time DNS rebinding in the default reference fetcher', async () => {
+    const resolveReferenceHost = vi
+      .fn<() => Promise<string[]>>()
+      .mockResolvedValueOnce(['93.184.216.34'])
+      .mockResolvedValueOnce(['127.0.0.1']);
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'http://example.com/reference',
+        resolveReferenceHost,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    expect(resolveReferenceHost).toHaveBeenCalledTimes(2);
+  });
+
+  it('times out while resolving reference URL hosts before fetch', async () => {
+    vi.useFakeTimers();
+    const fetchReference = vi.fn();
+
+    const pending = preparePromptContext({
+      referenceUrl: 'https://example.com/reference',
+      resolveReferenceHost: async () => new Promise<string[]>(() => {}),
+      fetchReference,
+    });
+    const assertion = expect(pending).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_FETCH_TIMEOUT',
+    });
+    await vi.advanceTimersByTimeAsync(4_001);
+
+    await assertion;
+    expect(fetchReference).not.toHaveBeenCalled();
+  });
+
+  it('rejects reference URL redirects to private addresses before following them', async () => {
+    const fetchReference = makeReferenceFetcher(
+      new Response(null, {
+        status: 302,
+        headers: { location: 'http://127.0.0.1:11434/secret' },
+      }),
+    );
+
+    await expect(
+      preparePromptContext({
+        referenceUrl: 'https://example.com/start',
+        resolveReferenceHost: resolvePublicReferenceHost,
+        fetchReference,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'REFERENCE_URL_UNSUPPORTED',
+    });
+
+    expect(fetchReference).toHaveBeenCalledTimes(1);
   });
 
   it('loads workspace AGENTS.md, DESIGN.md, and safe project settings', async () => {
@@ -125,6 +368,24 @@ describe('preparePromptContext', () => {
     expect(result.projectContext.settingsJson).toContain('preferredSkills');
     expect(result.projectContext.settingsJson).not.toContain('apiKey');
     expect(result.projectContext.settingsJson).not.toContain('arbitrary');
+  });
+
+  it('rejects project context files that traverse workspace symlinks', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-link-'));
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-out-'));
+    await fs.writeFile(path.join(outside, 'AGENTS.md'), 'leaked instruction', 'utf8');
+    try {
+      await fs.symlink(outside, path.join(dir, 'linked'), 'dir');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+      throw err;
+    }
+    await fs.symlink(path.join(outside, 'AGENTS.md'), path.join(dir, 'AGENTS.md'));
+
+    await expect(preparePromptContext({ workspaceRoot: dir })).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'CONFIG_SCHEMA_INVALID',
+    });
   });
 
   it('throws when project settings are malformed JSON', async () => {

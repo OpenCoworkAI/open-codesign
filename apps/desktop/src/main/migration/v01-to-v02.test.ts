@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -19,6 +19,16 @@ function makeFakeDb(
     { design_id: 'd-a', path: 'index.html', content: '<h1>A</h1>' },
     { design_id: 'd-a', path: 'assets/hero.png', content: PNG_HEADER_DATA_URL },
   ],
+  onClose: () => void = () => {},
+  comments: Array<{
+    design_id: string;
+    kind: string;
+    selector: string;
+    tag: string;
+    text: string;
+    status: string;
+    created_at: number | string | null;
+  }> = [],
 ) {
   const chatMessages: Array<{
     design_id: string;
@@ -45,11 +55,32 @@ function makeFakeDb(
         if (sql.startsWith('SELECT design_id, role, content, created_at FROM chat_messages')) {
           return chatMessages.filter((m) => m.design_id === params[0]) as unknown as T[];
         }
+        if (
+          sql.startsWith(
+            'SELECT design_id, kind, selector, tag, text, status, created_at FROM comments',
+          )
+        ) {
+          return comments.filter((m) => m.design_id === params[0]) as unknown as T[];
+        }
         return [] as unknown as T[];
       },
     }),
-    close: () => {},
+    close: onClose,
   };
+}
+
+function listFilesRecursive(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...listFilesRecursive(fullPath));
+    } else {
+      out.push(fullPath);
+    }
+  }
+  return out;
 }
 
 describe('runMigration', () => {
@@ -82,6 +113,23 @@ describe('runMigration', () => {
       expect(r.failed).toEqual([]);
       expect(existsSync(path.join(wsroot, 'my-design', 'index.html'))).toBe(true);
       expect(readFileSync(path.join(wsroot, 'my-design', 'assets/hero.png'))).toEqual(PNG_HEADER);
+      const sessionEntries = listFilesRecursive(sessionDir).flatMap((file) =>
+        readFileSync(file, 'utf8')
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as { type?: string; message?: unknown }),
+      );
+      const messageEntries = sessionEntries.filter(
+        (entry): entry is { type: 'message'; message: { role: string; content: unknown } } =>
+          entry.type === 'message' &&
+          typeof entry.message === 'object' &&
+          entry.message !== null &&
+          'role' in entry.message,
+      );
+      expect(messageEntries.map((entry) => entry.message.role)).toEqual(['user', 'assistant']);
+      expect(messageEntries[0]?.message.content).toBe('hi');
+      expect(messageEntries[1]?.message.content).toEqual([{ type: 'text', text: 'hello' }]);
       expect(r.backupPath?.endsWith('.v0.1.backup')).toBe(true);
     } finally {
       rmSync(tmpRoot, { recursive: true, force: true });
@@ -110,6 +158,7 @@ describe('runMigration', () => {
       expect(r.migrated).toBe(0);
       expect(r.failed).toHaveLength(1);
       expect(r.failed[0]?.reason).toMatch(/invalid path segment|Invalid legacy design file path/);
+      expect(existsSync(path.join(wsroot, 'unsafe-path'))).toBe(false);
       expect(existsSync(path.join(wsroot, 'escaped.txt'))).toBe(false);
       expect(existsSync(path.join(tmpRoot, 'escaped.txt'))).toBe(false);
     } finally {
@@ -172,6 +221,155 @@ describe('runMigration', () => {
       expect(readFileSync(path.join(wsroot, 'same-name-2', 'index.html'), 'utf8')).toBe(
         '<h1>B</h1>',
       );
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('closes the legacy database before renaming it to a backup', async () => {
+    const tmpRoot = mkdtempSync(path.join(tmpdir(), 'codesign-migration-close-'));
+    const wsroot = path.join(tmpRoot, 'workspaces');
+    const sessionDir = path.join(tmpRoot, 'sessions');
+    const fakeDbPath = path.join(tmpRoot, 'designs.db');
+    writeFileSync(fakeDbPath, '');
+    let closed = false;
+
+    try {
+      await runMigration({
+        sourceDbPath: fakeDbPath,
+        workspaceRoot: wsroot,
+        sessionDir,
+        openDatabase: () =>
+          makeFakeDb([{ id: 'd-a', name: 'Close Order' }], undefined, () => {
+            closed = true;
+          }),
+        onProgress: (event) => {
+          if (event.phase === 'complete') expect(closed).toBe(true);
+        },
+      });
+
+      expect(closed).toBe(true);
+      expect(existsSync(`${fakeDbPath}.v0.1.backup`)).toBe(true);
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('allocates a unique backup name when the default migration backup exists', async () => {
+    const tmpRoot = mkdtempSync(path.join(tmpdir(), 'codesign-migration-backup-'));
+    const wsroot = path.join(tmpRoot, 'workspaces');
+    const sessionDir = path.join(tmpRoot, 'sessions');
+    const fakeDbPath = path.join(tmpRoot, 'designs.db');
+    writeFileSync(fakeDbPath, '');
+    writeFileSync(`${fakeDbPath}.v0.1.backup`, 'old backup');
+
+    try {
+      const result = await runMigration({
+        sourceDbPath: fakeDbPath,
+        workspaceRoot: wsroot,
+        sessionDir,
+        openDatabase: () => makeFakeDb([{ id: 'd-a', name: 'Backup Exists' }]),
+      });
+
+      expect(result.backupPath).toBe(`${fakeDbPath}.v0.1.backup.2`);
+      const backupPath = result.backupPath;
+      if (backupPath === undefined) throw new Error('expected migration backup path');
+      expect(existsSync(backupPath)).toBe(true);
+      expect(readFileSync(`${fakeDbPath}.v0.1.backup`, 'utf8')).toBe('old backup');
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('migrates files and chat when an earlier v0.1 database has no comments table', async () => {
+    const tmpRoot = mkdtempSync(path.join(tmpdir(), 'codesign-migration-no-comments-'));
+    const wsroot = path.join(tmpRoot, 'workspaces');
+    const sessionDir = path.join(tmpRoot, 'sessions');
+    const fakeDbPath = path.join(tmpRoot, 'designs.db');
+    writeFileSync(fakeDbPath, '');
+
+    try {
+      const db = makeFakeDb([{ id: 'd-a', name: 'No Comments Table' }]);
+      const result = await runMigration({
+        sourceDbPath: fakeDbPath,
+        workspaceRoot: wsroot,
+        sessionDir,
+        openDatabase: () => ({
+          ...db,
+          prepare: (sql: string) => {
+            if (sql.includes('FROM comments')) {
+              throw new Error('SQLITE_ERROR: no such table: comments');
+            }
+            return db.prepare(sql);
+          },
+        }),
+      });
+
+      expect(result.migrated).toBe(1);
+      expect(result.failed).toEqual([]);
+      expect(existsSync(path.join(wsroot, 'no-comments-table', 'index.html'))).toBe(true);
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('migrates legacy inline comments into the session timeline', async () => {
+    const tmpRoot = mkdtempSync(path.join(tmpdir(), 'codesign-migration-comments-'));
+    const wsroot = path.join(tmpRoot, 'workspaces');
+    const sessionDir = path.join(tmpRoot, 'sessions');
+    const fakeDbPath = path.join(tmpRoot, 'designs.db');
+    writeFileSync(fakeDbPath, '');
+
+    try {
+      await runMigration({
+        sourceDbPath: fakeDbPath,
+        workspaceRoot: wsroot,
+        sessionDir,
+        openDatabase: () =>
+          makeFakeDb([{ id: 'd-a', name: 'Commented' }], undefined, undefined, [
+            {
+              design_id: 'd-a',
+              kind: 'edit',
+              selector: '.hero-title',
+              tag: 'h1',
+              text: 'Make this calmer.',
+              status: 'pending',
+              created_at: 1.5,
+            },
+          ]),
+      });
+
+      const sessionEntries = listFilesRecursive(sessionDir).flatMap((file) =>
+        readFileSync(file, 'utf8')
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as { type?: string; message?: unknown }),
+      );
+      const userMessages = sessionEntries.filter(
+        (entry): entry is { type: 'message'; message: { role: string; content: unknown } } =>
+          entry.type === 'message' &&
+          typeof entry.message === 'object' &&
+          entry.message !== null &&
+          'role' in entry.message &&
+          entry.message.role === 'user',
+      );
+
+      expect(userMessages).toHaveLength(2);
+      expect(userMessages[1]?.message.content).toEqual([
+        {
+          type: 'text',
+          text: [
+            'Legacy inline comment migrated from Open CoDesign v0.1.',
+            'Kind: edit',
+            'Status: pending',
+            'Selector: .hero-title',
+            'Element: <h1>',
+            '',
+            'Comment: Make this calmer.',
+          ].join('\n'),
+        },
+      ]);
     } finally {
       rmSync(tmpRoot, { recursive: true, force: true });
     }

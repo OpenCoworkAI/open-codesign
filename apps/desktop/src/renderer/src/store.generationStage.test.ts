@@ -12,6 +12,55 @@ const READY_CONFIG: OnboardingState = {
 };
 
 const initialState = useCodesignStore.getState();
+const DEFAULT_DESIGN = {
+  schemaVersion: 1 as const,
+  id: 'design-1',
+  name: 'Test design',
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-01T00:00:00.000Z',
+  thumbnailText: null,
+  deletedAt: null,
+  workspacePath: '/tmp/open-codesign-stage-test',
+};
+
+function mockChatApi() {
+  return {
+    seedFromSnapshots: vi.fn(async () => {}),
+    list: vi.fn(async () => []),
+    append: vi.fn(async (input: { designId: string; kind: string; payload: unknown }) => ({
+      id: `${input.kind}-1`,
+      designId: input.designId,
+      kind: input.kind,
+      payload: input.payload,
+      createdAt: new Date().toISOString(),
+      seq: 1,
+    })),
+  };
+}
+
+function mockSnapshotsApi() {
+  return {
+    list: vi.fn(async () => []),
+    listDesigns: vi.fn(async () => useCodesignStore.getState().designs),
+    setThumbnail: vi.fn(async (id: string, thumbnailText: string | null) => ({
+      ...DEFAULT_DESIGN,
+      id,
+      thumbnailText,
+    })),
+    create: vi.fn(async (input: { designId: string; artifactSource: string }) => ({
+      schemaVersion: 1 as const,
+      id: `snapshot-${input.designId}`,
+      designId: input.designId,
+      parentId: null,
+      type: 'initial' as const,
+      prompt: null,
+      artifactType: 'html' as const,
+      artifactSource: input.artifactSource,
+      createdAt: new Date().toISOString(),
+      message: null,
+    })),
+  };
+}
 
 function resetStore() {
   useCodesignStore.setState({
@@ -27,6 +76,9 @@ function resetStore() {
     toastMessage: null,
     iframeErrors: [],
     toasts: [],
+    designs: [DEFAULT_DESIGN],
+    designsLoaded: true,
+    currentDesignId: DEFAULT_DESIGN.id,
   });
 }
 
@@ -57,7 +109,7 @@ describe('generationStage transitions', () => {
     );
 
     vi.stubGlobal('window', {
-      codesign: { generate },
+      codesign: { generate, chat: mockChatApi(), snapshots: mockSnapshotsApi() },
       setTimeout,
     });
 
@@ -87,7 +139,7 @@ describe('generationStage transitions', () => {
     const generate = vi.fn(() => Promise.reject(new Error('network fail')));
 
     vi.stubGlobal('window', {
-      codesign: { generate },
+      codesign: { generate, chat: mockChatApi() },
       setTimeout,
     });
 
@@ -110,7 +162,7 @@ describe('generationStage transitions', () => {
     });
 
     vi.stubGlobal('window', {
-      codesign: { generate },
+      codesign: { generate, chat: mockChatApi(), snapshots: mockSnapshotsApi() },
       setTimeout,
     });
 

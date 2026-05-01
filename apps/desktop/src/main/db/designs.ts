@@ -1,4 +1,6 @@
 import type { Design } from '@open-codesign/shared';
+import { assertWorkspacePath } from '../workspace-path';
+import { normalizeDesignFilePath } from './design-files';
 import type { Database } from './native-binding';
 import type { SnapshotRow } from './snapshots';
 
@@ -19,6 +21,11 @@ interface MessageRow {
   role: string;
   content: string;
   created_at: string;
+}
+
+interface DesignFileCloneRow {
+  path: string;
+  content: string;
 }
 
 function rowToDesign(row: DesignRow): Design {
@@ -93,15 +100,21 @@ export function softDeleteDesign(db: Database, id: string): Design | null {
   return getDesign(db, id);
 }
 
+export function deleteDesignForRollback(db: Database, id: string): boolean {
+  const result = db.prepare('DELETE FROM designs WHERE id = ?').run(id);
+  return result.changes > 0;
+}
+
 export function updateDesignWorkspace(
   db: Database,
   id: string,
   workspacePath: string,
 ): Design | null {
   const now = new Date().toISOString();
+  const checkedWorkspacePath = assertWorkspacePath(workspacePath);
   const result = db
     .prepare('UPDATE designs SET workspace_path = ?, updated_at = ? WHERE id = ?')
-    .run(workspacePath, now, id);
+    .run(checkedWorkspacePath, now, id);
   if (result.changes === 0) return null;
   return getDesign(db, id);
 }
@@ -171,6 +184,23 @@ export function duplicateDesign(db: Database, sourceId: string, newName: string)
         s.artifact_source,
         s.created_at,
         s.message,
+      );
+    }
+
+    const files = db
+      .prepare('SELECT path, content FROM design_files WHERE design_id = ? ORDER BY path ASC')
+      .all(sourceId) as DesignFileCloneRow[];
+    const insertFile = db.prepare(
+      'INSERT INTO design_files (id, design_id, path, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    for (const file of files) {
+      insertFile.run(
+        crypto.randomUUID(),
+        newId,
+        normalizeDesignFilePath(file.path),
+        file.content,
+        now,
+        now,
       );
     }
   });

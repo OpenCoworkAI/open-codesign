@@ -1237,6 +1237,37 @@ describe('loadFrameTemplates — device frame starter assets', () => {
     }
   });
 
+  it('rejects symlinked frame template files', async () => {
+    const { mkdirSync, rmSync, symlinkSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    const { FRAME_FILES, loadFrameTemplates } = await import('./frames/index.js');
+    const dir = path.join(tmpdir(), `codesign-frames-symlink-${process.pid}-${Date.now()}`);
+    const outside = path.join(tmpdir(), `codesign-frames-symlink-out-${process.pid}-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    try {
+      for (const name of FRAME_FILES) {
+        writeFileSync(path.join(dir, name), `// ${name}\nplaceholder\n`, 'utf8');
+      }
+      const first = FRAME_FILES[0];
+      if (first === undefined) throw new Error('expected at least one frame file');
+      writeFileSync(path.join(outside, 'secret.jsx'), 'secret', 'utf8');
+      rmSync(path.join(dir, first));
+      try {
+        symlinkSync(path.join(outside, 'secret.jsx'), path.join(dir, first));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+        throw err;
+      }
+
+      await expect(loadFrameTemplates(dir)).rejects.toThrow(/symbolic link/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it('seeds an agent-host fsMap so the agent can `view` frames/<name>', async () => {
     const { mkdirSync, rmSync, writeFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');

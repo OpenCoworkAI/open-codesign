@@ -2,6 +2,8 @@
   "name": "@open-codesign/desktop",
   "version": "0.1.4",
   "private": true,
+  "description": "Prompt-to-design desktop app for HTML prototypes, decks, and marketing assets.",
+  "author": "Open CoDesign Maintainers <maintainers@opencowork.ai>",
   "type": "module",
   "main": "./out/main/index.js",
   "repository": {
@@ -11,13 +13,18 @@
   "scripts": {
     "postinstall": "node scripts/install-sqlite-bindings.cjs",
     "dev": "node scripts/dev.cjs",
-    "build": "electron-vite build && electron-builder",
+    "build": "electron-vite build",
+    "package": "electron-vite build && electron-builder",
     "build:dir": "electron-vite build && electron-builder --dir",
     "release": "electron-vite build && electron-builder --publish never",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "puppeteer-core": "^24.42.0"
+  },
+  "devDependencies": {
     "@mariozechner/pi-agent-core": "^0.69.0",
     "@mariozechner/pi-ai": "^0.69.0",
     "@mariozechner/pi-coding-agent": "^0.69.0",
@@ -30,34 +37,31 @@
     "@open-codesign/shared": "workspace:*",
     "@open-codesign/templates": "workspace:*",
     "@open-codesign/ui": "workspace:*",
-    "better-sqlite3": "^12.9.0",
-    "electron-log": "^5",
-    "electron-updater": "^6.3.9",
-    "lucide-react": "^1.9.0",
-    "puppeteer-core": "^24.42.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "smol-toml": "^1.6.1",
-    "zip-lib": "^1.0.4",
-    "zustand": "^5.0.2"
-  },
-  "devDependencies": {
     "@tailwindcss/postcss": "^4.2.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^6.0.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.20",
     "electron": "^39.8.8",
     "electron-builder": "^26.8.1",
     "electron-builder-squirrel-windows": "26.8.1",
     "electron-vite": "^5.0.0",
+    "electron-log": "^5",
+    "electron-updater": "^6.3.9",
+    "lucide-react": "^1.9.0",
+    "pptxgenjs": "^4.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "smol-toml": "^1.6.1",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
-    "vite": "^8.0.10",
-    "vitest": "^4.1.5"
+    "vite": "^7.3.2",
+    "vitest": "^4.1.5",
+    "zip-lib": "^1.0.4",
+    "zustand": "^5.0.2"
   }
 }

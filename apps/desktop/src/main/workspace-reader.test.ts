@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -143,6 +143,19 @@ describe('workspace file metadata/read helpers', () => {
 
   it('rejects path escapes in single-file reads', async () => {
     await expect(readWorkspaceFileAt(root, '../outside.jsx')).rejects.toThrow(/escapes/);
+  });
+
+  it('rejects single-file reads through symlinked workspace path segments', async () => {
+    const outside = await makeTmp();
+    await writeFile(join(outside, 'secret.jsx'), 'export const secret = true;');
+    try {
+      await symlink(outside, join(root, 'linked'), 'dir');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+      throw err;
+    }
+
+    await expect(readWorkspaceFileAt(root, 'linked/secret.jsx')).rejects.toThrow(/symbolic link/);
   });
 
   it('rejects binary single-file reads', async () => {

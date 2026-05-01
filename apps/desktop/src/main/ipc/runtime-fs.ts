@@ -5,6 +5,8 @@ import type BetterSqlite3 from 'better-sqlite3';
 import type { AgentStreamEvent } from '../../preload/index';
 import { getDesign, normalizeDesignFilePath, upsertDesignFile } from '../snapshots-db';
 import { prepareWorkspaceWriteContent } from '../workspace-file-content';
+import { normalizeWorkspacePath } from '../workspace-path';
+import { resolveSafeWorkspaceChildPath } from '../workspace-reader';
 
 function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -99,25 +101,30 @@ export function createRuntimeTextEditorFs({
     const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
     if (designId === null || db === null) return writeContent.storedContent;
     const design = getDesign(db, designId);
-    if (design?.workspacePath !== null && design !== null) {
-      const destinationPath = path_module.join(design.workspacePath, normalizedPath);
-      try {
-        await mkdir(path_module.dirname(destinationPath), { recursive: true });
-        if (typeof writeContent.diskContent === 'string') {
-          await writeFile(destinationPath, writeContent.diskContent, 'utf8');
-        } else {
-          await writeFile(destinationPath, writeContent.diskContent);
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error('runtime.fs.writeThrough.fail', {
-          designId,
-          filePath,
-          workspacePath: design.workspacePath,
-          message,
-        });
-        throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
+    if (design === null) {
+      throw new Error(`Design not found: ${designId}`);
+    }
+    if (design.workspacePath === null) {
+      throw new Error(`Design is not bound to a workspace: ${designId}`);
+    }
+    const workspacePath = normalizeWorkspacePath(design.workspacePath);
+    try {
+      const destinationPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
+      await mkdir(path_module.dirname(destinationPath), { recursive: true });
+      if (typeof writeContent.diskContent === 'string') {
+        await writeFile(destinationPath, writeContent.diskContent, 'utf8');
+      } else {
+        await writeFile(destinationPath, writeContent.diskContent);
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('runtime.fs.writeThrough.fail', {
+        designId,
+        filePath,
+        workspacePath,
+        message,
+      });
+      throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
     }
 
     upsertDesignFile(db, designId, normalizedPath, writeContent.storedContent);
@@ -153,7 +160,8 @@ export function createRuntimeTextEditorFs({
       return { path };
     },
     async insert(path: string, line: number, text: string) {
-      const current = fsMap.get(path) ?? '';
+      const current = fsMap.get(path);
+      if (current === undefined) throw new Error(`File not found: ${path}`);
       const lines = current.split('\n');
       const clamped = Math.max(0, Math.min(line, lines.length));
       lines.splice(clamped, 0, text);

@@ -32,7 +32,9 @@ import {
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
+  withInFlightGeneration,
 } from '../generation-ipc';
+import { resolveGenerationWorkspaceRoot } from '../generation-workspace';
 import { resolveImageGenerationConfig, toGenerateImageOptions } from '../image-generation-settings';
 import { getLogger } from '../logger';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from '../onboarding-ipc';
@@ -44,7 +46,7 @@ import { resolveActiveModel } from '../provider-settings';
 import { resolveActiveApiKey, resolveCredentialForProvider } from '../resolve-api-key';
 import { withRun } from '../runContext';
 import { listSessionChatMessages, type SessionChatStoreOptions } from '../session-chat';
-import { getDesign, recordDiagnosticEvent } from '../snapshots-db';
+import { recordDiagnosticEvent } from '../snapshots-db';
 import { readWorkspaceFilesAt } from '../workspace-reader';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
 
@@ -182,23 +184,15 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     error: (event, data) => logIpc.error(event, { generationId: id, ...(data ?? {}) }),
   });
 
-  /**
-   * Lookup the filesystem workspace bound to a design. Reads the
-   * `workspace_path` column added by PR #173; returns undefined when the
-   * design has no workspace attached or the DB is unavailable.
-   */
-  const resolveWorkspaceRootForDesign = (designId: string | null): string | undefined => {
-    if (designId === null || db === null) return undefined;
-    const design = getDesign(db, designId);
-    return design?.workspacePath ?? undefined;
-  };
+  const requireWorkspaceRootForDesign = (
+    designId: string | undefined,
+  ): { designId: string; workspaceRoot: string } => resolveGenerationWorkspaceRoot(db, designId);
 
   const chatStoreOptions = (): SessionChatStoreOptions | null => {
     if (db === null) return null;
     return {
       db,
       sessionDir: path_module.join(app.getPath('userData'), 'sessions'),
-      defaultCwd: app.getPath('documents'),
     };
   };
 
@@ -217,14 +211,14 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   const runGenerate = async (
     input: Parameters<typeof generateViaAgent>[0],
     id: string,
-    designId: string | null,
+    designId: string,
     previousHtml: string | null,
-    _workspacePath: string | null,
+    workspaceRoot: string,
   ): ReturnType<typeof generateViaAgent> => {
     const sendEvent = (event: AgentStreamEvent) => {
       getMainWindow()?.webContents.send('agent:event:v1', event);
     };
-    const baseCtx = { designId: designId ?? '', generationId: id } as const;
+    const baseCtx = { designId, generationId: id } as const;
     const toolStartedAt = new Map<string, number>();
     const runtimeVerify = makeRuntimeVerifier();
     const templatesRoot = path_module.join(app.getPath('userData'), 'templates');
@@ -303,20 +297,14 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     let deltaCount = 0;
     let toolCount = 0;
 
-    const workspaceRoot = resolveWorkspaceRootForDesign(designId);
-
     return generateViaAgent(
       {
         ...input,
         templatesRoot,
         askBridge: (askInput) => requestAsk(id, askInput, () => getMainWindow()),
-        ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
-        ...(workspaceRoot
-          ? {
-              readWorkspaceFiles: (patterns) => readWorkspaceFilesAt(workspaceRoot, patterns),
-              runPreview: ({ path, vision }) => runPreview({ path, vision, workspaceRoot }),
-            }
-          : {}),
+        workspaceRoot,
+        readWorkspaceFiles: (patterns) => readWorkspaceFilesAt(workspaceRoot, patterns),
+        runPreview: ({ path, vision }) => runPreview({ path, vision, workspaceRoot }),
       },
       {
         fs,
@@ -464,173 +452,165 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const id = payload.generationId;
     return withRun(id, async () => {
       const controller = new AbortController();
-      inFlight.set(id, controller);
-      const coreLogger = coreLoggerFor(id);
+      return withInFlightGeneration(id, inFlight, controller, async () => {
+        const coreLogger = coreLoggerFor(id);
 
-      coreLogger.info('[generate] step=load_config');
-      const loadStart = Date.now();
-      const cfg = getCachedConfig();
-      if (cfg === null) {
-        inFlight.delete(id);
-        throw new CodesignError(
-          'No configuration found. Complete onboarding first.',
-          'CONFIG_MISSING',
-        );
-      }
-      const active = resolveActiveModel(cfg, payload.model);
-      const allowKeyless = active.allowKeyless;
-      let apiKey: string;
-      try {
-        apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
-      } catch (err) {
-        inFlight.delete(id);
-        throw err;
-      }
-      // Once we've snapped to the canonical active provider, the renderer-supplied
-      // baseUrl can no longer be trusted — it may belong to a different (stale)
-      // provider. Always use the per-provider baseUrl from cached config.
-      const baseUrl = active.baseUrl ?? undefined;
-      if (active.overridden) {
-        payload.baseUrl = baseUrl;
-      }
-      coreLogger.info('[generate] step=load_config.ok', {
-        ms: Date.now() - loadStart,
-        hasApiKey: apiKey.length > 0,
-        baseUrl: baseUrl ?? '<default>',
-      });
-
-      if (active.overridden) {
-        coreLogger.info('[generate] step=resolve_active.override', {
-          requested: payload.model.provider,
-          requestedModelId: payload.model.modelId,
-          active: active.model.provider,
-          activeModelId: active.model.modelId,
-        });
-      }
-
-      const stepCtx = {
-        generationId: id,
-        provider: active.model.provider,
-        modelId: active.model.modelId,
-      };
-      coreLogger.info('[generate] step=validate_provider', stepCtx);
-      if (apiKey.length === 0 && !allowKeyless) {
-        coreLogger.error('[generate] step=validate_provider.fail', {
-          provider: active.model.provider,
-          reason: 'missing_api_key',
-        });
-        inFlight.delete(id);
-        throw new CodesignError(
-          `No API key configured for provider "${active.model.provider}". Open Settings to add one.`,
-          'PROVIDER_AUTH_MISSING',
-        );
-      }
-      coreLogger.info('[generate] step=validate_provider.ok', { provider: active.model.provider });
-
-      const workspaceRoot = resolveWorkspaceRootForDesign(payload.designId ?? null);
-      const promptContext = await preparePromptContext({
-        attachments: payload.attachments,
-        referenceUrl: payload.referenceUrl,
-        designSystem: cfg.designSystem ?? null,
-        ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
-      });
-
-      logIpc.info('generate', {
-        generationId: id,
-        provider: active.model.provider,
-        modelId: active.model.modelId,
-        ...(active.overridden
-          ? { requestedProvider: payload.model.provider, requestedModelId: payload.model.modelId }
-          : {}),
-        promptLen: payload.prompt.length,
-        historyLen: payload.history.length,
-        attachmentCount: payload.attachments.length,
-        hasReferenceUrl: payload.referenceUrl !== undefined,
-        hasDesignSystem: promptContext.designSystem !== null,
-        baseUrl: baseUrl ?? '<default>',
-      });
-
-      const t0 = Date.now();
-      let clearTimeoutGuard: () => void = () => {};
-      try {
-        clearTimeoutGuard = await armTimeout(id, controller);
-        const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
-        const result = await runGenerate(
-          {
-            prompt: payload.prompt,
-            history: payload.history,
-            model: active.model,
-            apiKey,
-            ...(isCodex
-              ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
-              : {}),
-            attachments: promptContext.attachments,
-            referenceUrl: promptContext.referenceUrl,
-            designSystem: promptContext.designSystem ?? null,
-            projectContext: promptContext.projectContext,
-            initialResourceState: resourceStateForDesign(payload.designId ?? null),
-            ...(baseUrl !== undefined ? { baseUrl } : {}),
-            wire: active.wire,
-            ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-            ...(allowKeyless ? { allowKeyless: true } : {}),
-            signal: controller.signal,
-            logger: coreLogger,
-          },
-          id,
-          payload.designId ?? null,
-          payload.previousHtml ?? null,
-          // PR #173 will populate this from the design's workspace record; for
-          // now the reader stays undefined and the tweaks tool is skipped.
-          null,
-        );
-        logIpc.info('generate.ok', {
-          generationId: id,
-          ms: Date.now() - t0,
-          artifacts: result.artifacts.length,
-          cost: result.costUsd,
-        });
-        return result;
-      } catch (err) {
-        // Attach upstream metadata so the renderer's diagnostic pipeline can
-        // map this failure to a hypothesis (status, baseUrl, wire, provider).
-        const upstreamStatus = extractUpstreamHttpStatus(err);
-        if (err !== null && typeof err === 'object') {
-          const errAsRec = err as Record<string, unknown>;
-          if (upstreamStatus !== undefined && errAsRec['upstream_status'] === undefined) {
-            errAsRec['upstream_status'] = upstreamStatus;
-          }
-          if (errAsRec['upstream_provider'] === undefined) {
-            errAsRec['upstream_provider'] = active.model.provider;
-          }
-          if (errAsRec['upstream_baseurl'] === undefined && baseUrl !== undefined) {
-            errAsRec['upstream_baseurl'] = baseUrl;
-          }
-          if (errAsRec['upstream_wire'] === undefined && active.wire !== undefined) {
-            errAsRec['upstream_wire'] = active.wire;
-          }
+        coreLogger.info('[generate] step=load_config');
+        const loadStart = Date.now();
+        const cfg = getCachedConfig();
+        if (cfg === null) {
+          throw new CodesignError(
+            'No configuration found. Complete onboarding first.',
+            'CONFIG_MISSING',
+          );
         }
-        // The SDK catches our AbortController and rethrows a generic
-        // `'Request was aborted.'` that drops signal.reason. Prefer the
-        // CodesignError we stashed on the signal so the user sees the
-        // configured timeout + Settings path instead of an opaque message.
-        const timeoutErr = extractGenerationTimeoutError(controller.signal);
-        const rethrow = timeoutErr ?? err;
-        logIpc.error('generate.fail', {
+        const active = resolveActiveModel(cfg, payload.model);
+        const allowKeyless = active.allowKeyless;
+        const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
+        // Once we've snapped to the canonical active provider, the renderer-supplied
+        // baseUrl can no longer be trusted — it may belong to a different (stale)
+        // provider. Always use the per-provider baseUrl from cached config.
+        const baseUrl = active.baseUrl ?? undefined;
+        if (active.overridden) {
+          payload.baseUrl = baseUrl;
+        }
+        coreLogger.info('[generate] step=load_config.ok', {
+          ms: Date.now() - loadStart,
+          hasApiKey: apiKey.length > 0,
+          baseUrl: baseUrl ?? '<default>',
+        });
+
+        if (active.overridden) {
+          coreLogger.info('[generate] step=resolve_active.override', {
+            requested: payload.model.provider,
+            requestedModelId: payload.model.modelId,
+            active: active.model.provider,
+            activeModelId: active.model.modelId,
+          });
+        }
+
+        const stepCtx = {
           generationId: id,
-          ms: Date.now() - t0,
           provider: active.model.provider,
           modelId: active.model.modelId,
-          baseUrl: baseUrl ?? '<default>',
-          status: upstreamStatus,
-          message: rethrow instanceof Error ? rethrow.message : String(rethrow),
-          code: rethrow instanceof CodesignError ? rethrow.code : undefined,
+        };
+        coreLogger.info('[generate] step=validate_provider', stepCtx);
+        if (apiKey.length === 0 && !allowKeyless) {
+          coreLogger.error('[generate] step=validate_provider.fail', {
+            provider: active.model.provider,
+            reason: 'missing_api_key',
+          });
+          throw new CodesignError(
+            `No API key configured for provider "${active.model.provider}". Open Settings to add one.`,
+            'PROVIDER_AUTH_MISSING',
+          );
+        }
+        coreLogger.info('[generate] step=validate_provider.ok', {
+          provider: active.model.provider,
         });
-        recordFinalError('generate', id, rethrow);
-        throw rethrow;
-      } finally {
-        clearTimeoutGuard();
-        inFlight.delete(id);
-      }
+
+        const { designId, workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
+        const promptContext = await preparePromptContext({
+          attachments: payload.attachments,
+          referenceUrl: payload.referenceUrl,
+          designSystem: cfg.designSystem ?? null,
+          workspaceRoot,
+        });
+
+        logIpc.info('generate', {
+          generationId: id,
+          provider: active.model.provider,
+          modelId: active.model.modelId,
+          ...(active.overridden
+            ? { requestedProvider: payload.model.provider, requestedModelId: payload.model.modelId }
+            : {}),
+          promptLen: payload.prompt.length,
+          historyLen: payload.history.length,
+          attachmentCount: payload.attachments.length,
+          hasReferenceUrl: payload.referenceUrl !== undefined,
+          hasDesignSystem: promptContext.designSystem !== null,
+          baseUrl: baseUrl ?? '<default>',
+        });
+
+        const t0 = Date.now();
+        let clearTimeoutGuard: () => void = () => {};
+        try {
+          clearTimeoutGuard = await armTimeout(id, controller);
+          const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
+          const result = await runGenerate(
+            {
+              prompt: payload.prompt,
+              history: payload.history,
+              model: active.model,
+              apiKey,
+              ...(isCodex
+                ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
+                : {}),
+              attachments: promptContext.attachments,
+              referenceUrl: promptContext.referenceUrl,
+              designSystem: promptContext.designSystem ?? null,
+              projectContext: promptContext.projectContext,
+              initialResourceState: resourceStateForDesign(designId),
+              ...(baseUrl !== undefined ? { baseUrl } : {}),
+              wire: active.wire,
+              ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+              ...(allowKeyless ? { allowKeyless: true } : {}),
+              signal: controller.signal,
+              logger: coreLogger,
+            },
+            id,
+            designId,
+            payload.previousHtml ?? null,
+            workspaceRoot,
+          );
+          logIpc.info('generate.ok', {
+            generationId: id,
+            ms: Date.now() - t0,
+            artifacts: result.artifacts.length,
+            cost: result.costUsd,
+          });
+          return result;
+        } catch (err) {
+          // Attach upstream metadata so the renderer's diagnostic pipeline can
+          // map this failure to a hypothesis (status, baseUrl, wire, provider).
+          const upstreamStatus = extractUpstreamHttpStatus(err);
+          if (err !== null && typeof err === 'object') {
+            const errAsRec = err as Record<string, unknown>;
+            if (upstreamStatus !== undefined && errAsRec['upstream_status'] === undefined) {
+              errAsRec['upstream_status'] = upstreamStatus;
+            }
+            if (errAsRec['upstream_provider'] === undefined) {
+              errAsRec['upstream_provider'] = active.model.provider;
+            }
+            if (errAsRec['upstream_baseurl'] === undefined && baseUrl !== undefined) {
+              errAsRec['upstream_baseurl'] = baseUrl;
+            }
+            if (errAsRec['upstream_wire'] === undefined && active.wire !== undefined) {
+              errAsRec['upstream_wire'] = active.wire;
+            }
+          }
+          // The SDK catches our AbortController and rethrows a generic
+          // `'Request was aborted.'` that drops signal.reason. Prefer the
+          // CodesignError we stashed on the signal so the user sees the
+          // configured timeout + Settings path instead of an opaque message.
+          const timeoutErr = extractGenerationTimeoutError(controller.signal);
+          const rethrow = timeoutErr ?? err;
+          logIpc.error('generate.fail', {
+            generationId: id,
+            ms: Date.now() - t0,
+            provider: active.model.provider,
+            modelId: active.model.modelId,
+            baseUrl: baseUrl ?? '<default>',
+            status: upstreamStatus,
+            message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+            code: rethrow instanceof CodesignError ? rethrow.code : undefined,
+          });
+          recordFinalError('generate', id, rethrow);
+          throw rethrow;
+        } finally {
+          clearTimeoutGuard();
+        }
+      });
     });
   });
 
@@ -644,126 +624,112 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const id = payload.generationId;
     return withRun(id, async () => {
       const controller = new AbortController();
-      inFlight.set(id, controller);
-      const coreLogger = coreLoggerFor(id);
+      return withInFlightGeneration(id, inFlight, controller, async () => {
+        const coreLogger = coreLoggerFor(id);
 
-      const cfg = getCachedConfig();
-      if (cfg === null) {
-        inFlight.delete(id);
-        throw new CodesignError(
-          'No configuration found. Complete onboarding first.',
-          'CONFIG_MISSING',
-        );
-      }
-      // Inline-comment edits don't need to be tied to whatever provider was
-      // pinned in the original generate; resolve fresh against the canonical
-      // active provider so a switch in Settings takes effect immediately.
-      const hint = payload.model ?? { provider: cfg.provider, modelId: cfg.modelPrimary };
-      const active = resolveActiveModel(cfg, hint);
-      const allowKeyless = active.allowKeyless;
-      let apiKey: string;
-      try {
-        apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
-      } catch (err) {
-        inFlight.delete(id);
-        throw err;
-      }
-      const baseUrl = active.baseUrl ?? undefined;
+        const cfg = getCachedConfig();
+        if (cfg === null) {
+          throw new CodesignError(
+            'No configuration found. Complete onboarding first.',
+            'CONFIG_MISSING',
+          );
+        }
+        // Inline-comment edits don't need to be tied to whatever provider was
+        // pinned in the original generate; resolve fresh against the canonical
+        // active provider so a switch in Settings takes effect immediately.
+        const hint = payload.model ?? { provider: cfg.provider, modelId: cfg.modelPrimary };
+        const active = resolveActiveModel(cfg, hint);
+        const allowKeyless = active.allowKeyless;
+        const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
+        const baseUrl = active.baseUrl ?? undefined;
 
-      const workspaceRoot = resolveWorkspaceRootForDesign(payload.designId);
-      if (workspaceRoot === undefined) {
-        inFlight.delete(id);
-        throw new CodesignError(
-          'This design has no workspace bound. Reopen the design from the dashboard.',
-          'WORKSPACE_MISSING',
-        );
-      }
+        const { workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
 
-      const promptContext = await preparePromptContext({
-        attachments: payload.attachments,
-        referenceUrl: payload.referenceUrl,
-        designSystem: cfg.designSystem ?? null,
-        workspaceRoot,
-      });
-
-      logIpc.info('applyComment', {
-        generationId: id,
-        designId: payload.designId,
-        provider: active.model.provider,
-        modelId: active.model.modelId,
-        ...(active.overridden
-          ? { requestedProvider: hint.provider, requestedModelId: hint.modelId }
-          : {}),
-        selector: payload.selection.selector,
-        attachmentCount: payload.attachments.length,
-        hasReferenceUrl: payload.referenceUrl !== undefined,
-        hasDesignSystem: promptContext.designSystem !== null,
-        baseUrl: baseUrl ?? '<default>',
-      });
-
-      const systemPrompt = composeSystemPrompt({ mode: 'revise' });
-      const userPrompt = buildApplyCommentUserPrompt({
-        comment: payload.comment,
-        selection: payload.selection,
-      });
-
-      const t0 = Date.now();
-      let clearTimeoutGuard: () => void = () => {};
-      try {
-        clearTimeoutGuard = await armTimeout(id, controller);
-        const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
-        const result = await runGenerate(
-          {
-            prompt: userPrompt,
-            systemPrompt,
-            history: [],
-            model: active.model,
-            apiKey,
-            ...(isCodex
-              ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
-              : {}),
-            attachments: promptContext.attachments,
-            referenceUrl: promptContext.referenceUrl,
-            designSystem: promptContext.designSystem ?? null,
-            projectContext: promptContext.projectContext,
-            initialResourceState: resourceStateForDesign(payload.designId),
-            ...(baseUrl !== undefined ? { baseUrl } : {}),
-            wire: active.wire,
-            ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-            ...(allowKeyless ? { allowKeyless: true } : {}),
-            signal: controller.signal,
-            logger: coreLogger,
-          },
-          id,
-          payload.designId,
-          payload.html,
+        const promptContext = await preparePromptContext({
+          attachments: payload.attachments,
+          referenceUrl: payload.referenceUrl,
+          designSystem: cfg.designSystem ?? null,
           workspaceRoot,
-        );
-        logIpc.info('applyComment.ok', {
-          generationId: id,
-          ms: Date.now() - t0,
-          artifacts: result.artifacts.length,
-          cost: result.costUsd,
         });
-        return result;
-      } catch (err) {
-        const timeoutErr = extractGenerationTimeoutError(controller.signal);
-        const rethrow = timeoutErr ?? err;
-        logIpc.error('applyComment.fail', {
+
+        logIpc.info('applyComment', {
           generationId: id,
-          ms: Date.now() - t0,
+          designId: payload.designId,
           provider: active.model.provider,
           modelId: active.model.modelId,
+          ...(active.overridden
+            ? { requestedProvider: hint.provider, requestedModelId: hint.modelId }
+            : {}),
           selector: payload.selection.selector,
-          message: rethrow instanceof Error ? rethrow.message : String(rethrow),
-          code: rethrow instanceof CodesignError ? rethrow.code : undefined,
+          attachmentCount: payload.attachments.length,
+          hasReferenceUrl: payload.referenceUrl !== undefined,
+          hasDesignSystem: promptContext.designSystem !== null,
+          baseUrl: baseUrl ?? '<default>',
         });
-        recordFinalError('apply-comment', id, rethrow);
-        throw rethrow;
-      } finally {
-        clearTimeoutGuard();
-        inFlight.delete(id);
-      }
+
+        const systemPrompt = composeSystemPrompt({ mode: 'revise' });
+        const userPrompt = buildApplyCommentUserPrompt({
+          comment: payload.comment,
+          selection: payload.selection,
+        });
+
+        const t0 = Date.now();
+        let clearTimeoutGuard: () => void = () => {};
+        try {
+          clearTimeoutGuard = await armTimeout(id, controller);
+          const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
+          const result = await runGenerate(
+            {
+              prompt: userPrompt,
+              systemPrompt,
+              history: [],
+              model: active.model,
+              apiKey,
+              ...(isCodex
+                ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
+                : {}),
+              attachments: promptContext.attachments,
+              referenceUrl: promptContext.referenceUrl,
+              designSystem: promptContext.designSystem ?? null,
+              projectContext: promptContext.projectContext,
+              initialResourceState: resourceStateForDesign(payload.designId),
+              ...(baseUrl !== undefined ? { baseUrl } : {}),
+              wire: active.wire,
+              ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+              ...(allowKeyless ? { allowKeyless: true } : {}),
+              signal: controller.signal,
+              logger: coreLogger,
+            },
+            id,
+            payload.designId,
+            payload.html,
+            workspaceRoot,
+          );
+          logIpc.info('applyComment.ok', {
+            generationId: id,
+            ms: Date.now() - t0,
+            artifacts: result.artifacts.length,
+            cost: result.costUsd,
+          });
+          return result;
+        } catch (err) {
+          const timeoutErr = extractGenerationTimeoutError(controller.signal);
+          const rethrow = timeoutErr ?? err;
+          logIpc.error('applyComment.fail', {
+            generationId: id,
+            ms: Date.now() - t0,
+            provider: active.model.provider,
+            modelId: active.model.modelId,
+            selector: payload.selection.selector,
+            message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+            code: rethrow instanceof CodesignError ? rethrow.code : undefined,
+          });
+          recordFinalError('apply-comment', id, rethrow);
+          throw rethrow;
+        } finally {
+          clearTimeoutGuard();
+        }
+      });
     });
   });
 

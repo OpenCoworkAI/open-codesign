@@ -4,7 +4,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "dist-electron/**", ".next/**", "out/**"]
+      "outputs": ["dist/**", "dist-electron/**", ".next/**", ".vitepress/dist/**", "out/**"]
     },
     "dev": {
       "cache": false,
@@ -12,11 +12,11 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": []
     },
     "typecheck": {
       "dependsOn": ["^build"],
-      "outputs": ["*.tsbuildinfo"]
+      "outputs": []
     },
     "lint": {
       "outputs": []

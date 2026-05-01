@@ -34,10 +34,11 @@ describe('ensureUserTemplates', () => {
     expect(readFileSync(path.join(userData, 'templates', 'skills', 'x.md'), 'utf8')).toBe('body');
   });
 
-  it('second invocation is a no-op (user-owned after seed)', async () => {
+  it('second invocation preserves user edits and copies newly bundled files', async () => {
     const source = path.join(root, 'bundle', 'templates');
-    mkdirSync(source, { recursive: true });
+    mkdirSync(path.join(source, 'skills'), { recursive: true });
     writeFileSync(path.join(source, 'a.txt'), 'bundled');
+    writeFileSync(path.join(source, 'skills', 'old.md'), 'old bundled');
 
     const userData = path.join(root, 'user');
     mkdirSync(userData, { recursive: true });
@@ -45,11 +46,37 @@ describe('ensureUserTemplates', () => {
     const first = await ensureUserTemplates(userData, source);
     expect(first.action).toBe('seeded');
 
-    // User edits the seeded copy. A second invocation must leave their edit alone.
+    // User edits the seeded copy. A second invocation must leave their edit
+    // alone while still adding files introduced by a newer app bundle.
     writeFileSync(path.join(userData, 'templates', 'a.txt'), 'user-edited');
+    writeFileSync(path.join(source, 'skills', 'new.md'), 'new bundled');
     const second = await ensureUserTemplates(userData, source);
-    expect(second.action).toBe('skipped');
+    expect(second.action).toBe('merged');
+    expect(second.copiedFiles).toBe(1);
     expect(readFileSync(path.join(userData, 'templates', 'a.txt'), 'utf8')).toBe('user-edited');
+    expect(readFileSync(path.join(userData, 'templates', 'skills', 'old.md'), 'utf8')).toBe(
+      'old bundled',
+    );
+    expect(readFileSync(path.join(userData, 'templates', 'skills', 'new.md'), 'utf8')).toBe(
+      'new bundled',
+    );
+  });
+
+  it('reports skipped when an existing template tree is already complete', async () => {
+    const source = path.join(root, 'bundle', 'templates');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(path.join(source, 'a.txt'), 'bundled');
+
+    const userData = path.join(root, 'user');
+    mkdirSync(userData, { recursive: true });
+
+    await expect(ensureUserTemplates(userData, source)).resolves.toMatchObject({
+      action: 'seeded',
+    });
+    await expect(ensureUserTemplates(userData, source)).resolves.toMatchObject({
+      action: 'skipped',
+      copiedFiles: 0,
+    });
   });
 
   it('reports missing-source when the bundle dir does not exist', async () => {

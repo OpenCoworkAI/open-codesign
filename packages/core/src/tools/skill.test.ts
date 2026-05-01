@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
@@ -108,6 +108,50 @@ describe('skill tool', () => {
       (err: unknown) => err instanceof CodesignError && err.code === 'SKILL_LOAD_FAILED',
     );
   });
+
+  it('rejects brand refs that traverse symlinked template segments', async () => {
+    const outside = path.join(tmpdir(), `codesign-skill-outside-${process.pid}-${Date.now()}`);
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(path.join(outside, 'DESIGN.md'), '# Outside Brand\n', 'utf8');
+    try {
+      try {
+        symlinkSync(outside, path.join(brandRefsRoot, 'linked'), 'dir');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+        throw err;
+      }
+
+      await expect(
+        invokeSkill({ name: 'brand:linked', roots: { skillsRoot, brandRefsRoot } }),
+      ).rejects.toSatisfy(
+        (err: unknown) =>
+          err instanceof CodesignError &&
+          err.code === 'SKILL_LOAD_FAILED' &&
+          err.message.includes('symbolic link'),
+      );
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects brand manifest paths that escape the brand refs root', async () => {
+    writeFileSync(
+      path.join(brandRefsRoot, 'manifest.json'),
+      JSON.stringify({
+        brands: [{ slug: 'escape', name: 'Escape', path: '../skills/form-layout.md' }],
+      }),
+      'utf8',
+    );
+
+    await expect(
+      invokeSkill({ name: 'brand:escape', roots: { skillsRoot, brandRefsRoot } }),
+    ).rejects.toSatisfy(
+      (err: unknown) =>
+        err instanceof CodesignError &&
+        err.code === 'SKILL_LOAD_FAILED' &&
+        err.message.includes('escapes template root'),
+    );
+  });
 });
 
 describe('makeSkillTool', () => {
@@ -177,5 +221,8 @@ describe('makeSkillTool', () => {
     const tool = makeSkillTool({ skillsRoot, brandRefsRoot });
     const result = await tool.execute('call-1', { name: 'no-such-skill' });
     expect(result.details?.status).toBe('not-found');
+    const text = result.content.find((c) => c.type === 'text');
+    expect(text && 'text' in text ? text.text : '').toContain('resource manifest');
+    expect(text && 'text' in text ? text.text : '').not.toContain('__list__');
   });
 });

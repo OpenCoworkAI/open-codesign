@@ -65,24 +65,71 @@ function reset(): void {
   getDesignMock.mockReset();
 }
 
+function getHandler(channel: string): (e: unknown, raw: unknown) => unknown {
+  const handler = handlers.get(channel);
+  if (!handler) throw new Error(`Missing IPC handler: ${channel}`);
+  return handler;
+}
+
+function captureError(fn: () => unknown): unknown {
+  try {
+    fn();
+    return undefined;
+  } catch (err) {
+    return err;
+  }
+}
+
 describe('files-watcher subscribe / unsubscribe', () => {
-  it('rejects when no design row found', async () => {
+  it('rejects when no design row found', () => {
     reset();
     getDesignMock.mockReturnValue(null);
     registerFilesWatcherIpc({} as never, () => null);
-    const sub = handlers.get('codesign:files:v1:subscribe');
-    expect(sub).toBeDefined();
-    const result = await sub?.(null, { schemaVersion: 1, designId: 'd1' });
-    expect(result).toEqual({ ok: false, reason: 'design-not-found' });
+    const sub = getHandler('codesign:files:v1:subscribe');
+
+    const err = captureError(() => sub(null, { schemaVersion: 1, designId: 'd1' }));
+
+    expect(err).toMatchObject({ name: 'CodesignError', code: 'IPC_NOT_FOUND' });
+    expect(watchMock).not.toHaveBeenCalled();
   });
 
-  it('rejects when design has no workspace', async () => {
+  it('rejects when design has no workspace', () => {
     reset();
     getDesignMock.mockReturnValue({ id: 'd1', workspacePath: null });
     registerFilesWatcherIpc({} as never, () => null);
-    const sub = handlers.get('codesign:files:v1:subscribe');
-    const result = await sub?.(null, { schemaVersion: 1, designId: 'd1' });
-    expect(result).toEqual({ ok: false, reason: 'no-workspace' });
+    const sub = getHandler('codesign:files:v1:subscribe');
+
+    const err = captureError(() => sub(null, { schemaVersion: 1, designId: 'd1' }));
+
+    expect(err).toMatchObject({ name: 'CodesignError', code: 'IPC_BAD_INPUT' });
+    expect(watchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects corrupt stored workspace paths before watching', () => {
+    reset();
+    getDesignMock.mockReturnValue({ id: 'd1', workspacePath: '' });
+    registerFilesWatcherIpc({} as never, () => null);
+    const sub = getHandler('codesign:files:v1:subscribe');
+
+    const err = captureError(() => sub(null, { schemaVersion: 1, designId: 'd1' }));
+
+    expect(err).toMatchObject({ name: 'CodesignError', code: 'IPC_BAD_INPUT' });
+    expect(watchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the watcher cannot start', () => {
+    reset();
+    watchMock.mockImplementation(() => {
+      throw new Error('watch denied');
+    });
+    getDesignMock.mockReturnValue({ id: 'd1', workspacePath: '/tmp/ws' });
+    registerFilesWatcherIpc({} as never, () => null);
+    const sub = getHandler('codesign:files:v1:subscribe');
+
+    const err = captureError(() => sub(null, { schemaVersion: 1, designId: 'd1' }));
+
+    expect(err).toMatchObject({ name: 'CodesignError', code: 'IPC_DB_ERROR' });
+    expect(watchMock).toHaveBeenCalledTimes(1);
   });
 
   it('ref-counts subscribers and tears down only after idle window', async () => {
@@ -92,9 +139,8 @@ describe('files-watcher subscribe / unsubscribe', () => {
     watchMock.mockImplementation(() => ({ on: vi.fn(), close: closeSpy }) as never);
     getDesignMock.mockReturnValue({ id: 'd1', workspacePath: '/tmp/ws' });
     registerFilesWatcherIpc({} as never, () => null);
-    const sub = handlers.get('codesign:files:v1:subscribe');
-    const unsub = handlers.get('codesign:files:v1:unsubscribe');
-    expect(sub && unsub).toBeTruthy();
+    const sub = getHandler('codesign:files:v1:subscribe');
+    const unsub = getHandler('codesign:files:v1:unsubscribe');
 
     await sub?.(null, { schemaVersion: 1, designId: 'd1' });
     await sub?.(null, { schemaVersion: 1, designId: 'd1' });
@@ -112,10 +158,42 @@ describe('files-watcher subscribe / unsubscribe', () => {
     vi.useRealTimers();
   });
 
+  it('restarts a design watcher when the bound workspace path changes', () => {
+    reset();
+    const closeFirst = vi.fn();
+    const closeSecond = vi.fn();
+    watchMock
+      .mockImplementationOnce(() => ({ on: vi.fn(), close: closeFirst }) as never)
+      .mockImplementationOnce(() => ({ on: vi.fn(), close: closeSecond }) as never);
+    getDesignMock
+      .mockReturnValueOnce({ id: 'd1', workspacePath: '/tmp/ws-one/' })
+      .mockReturnValueOnce({ id: 'd1', workspacePath: '/tmp/ws-two' });
+    registerFilesWatcherIpc({} as never, () => null);
+    const sub = getHandler('codesign:files:v1:subscribe');
+
+    expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
+    expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
+
+    expect(closeFirst).toHaveBeenCalledTimes(1);
+    expect(closeSecond).not.toHaveBeenCalled();
+    expect(watchMock).toHaveBeenNthCalledWith(
+      1,
+      '/tmp/ws-one',
+      { recursive: true },
+      expect.any(Function),
+    );
+    expect(watchMock).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/ws-two',
+      { recursive: true },
+      expect.any(Function),
+    );
+  });
+
   it('rejects bad payloads', () => {
     reset();
     registerFilesWatcherIpc({} as never, () => null);
-    const sub = handlers.get('codesign:files:v1:subscribe');
+    const sub = getHandler('codesign:files:v1:subscribe');
     expect(() => sub?.(null, null)).toThrow();
     expect(() => sub?.(null, { designId: 'x' })).toThrow();
     expect(() => sub?.(null, { schemaVersion: 1 })).toThrow();

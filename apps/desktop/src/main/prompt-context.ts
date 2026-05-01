@@ -1,5 +1,9 @@
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { open, readFile } from 'node:fs/promises';
-import path, { extname } from 'node:path';
+import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
+import { extname } from 'node:path';
 import type { AttachmentContext, ProjectContext, ReferenceUrlContext } from '@open-codesign/core';
 import {
   CodesignError,
@@ -7,6 +11,7 @@ import {
   type LocalInputFile,
   type StoredDesignSystem,
 } from '@open-codesign/shared';
+import { resolveSafeWorkspaceChildPath } from './workspace-reader';
 
 const TEXT_EXTS = new Set([
   '.css',
@@ -43,6 +48,7 @@ const MAX_TEXT_ATTACHMENT_BYTES = 256_000;
 const MAX_BINARY_ATTACHMENT_BYTES = 10_000_000;
 const MAX_URL_EXCERPT_CHARS = 1_200;
 const MAX_URL_RESPONSE_BYTES = 256_000;
+const MAX_REFERENCE_URL_REDIRECTS = 3;
 const MAX_PROJECT_CONTEXT_CHARS = 10_000;
 const MAX_PROJECT_SETTINGS_CHARS = 4_000;
 const REFERENCE_CONTENT_TYPES = ['text/html', 'application/xhtml+xml'];
@@ -59,6 +65,184 @@ const ALLOWED_PROJECT_SETTING_KEYS = new Set([
   'theme',
   'viewport',
 ]);
+
+type ReferenceHostResolver = (hostname: string) => Promise<string[]>;
+type ReferenceFetcher = (
+  safeUrl: string,
+  signal: AbortSignal,
+  resolveReferenceHost: ReferenceHostResolver,
+) => Promise<Response>;
+
+async function defaultResolveReferenceHost(hostname: string): Promise<string[]> {
+  const addresses = await dnsLookup(hostname, { all: true, verbatim: true });
+  return addresses.map((entry) => entry.address);
+}
+
+function parseReferenceHttpUrl(rawUrl: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch (error) {
+    throw new CodesignError(
+      'Reference URL is not a valid HTTP(S) URL',
+      ERROR_CODES.REFERENCE_URL_UNSUPPORTED,
+      { cause: error },
+    );
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new CodesignError(
+      `Unsupported reference URL protocol "${parsed.protocol || 'unknown'}"`,
+      ERROR_CODES.REFERENCE_URL_UNSUPPORTED,
+    );
+  }
+  if (parsed.username || parsed.password) {
+    throw new CodesignError(
+      'Reference URL must not include embedded credentials',
+      ERROR_CODES.REFERENCE_URL_UNSUPPORTED,
+    );
+  }
+  if (isPrivateReferenceHostname(parsed.hostname)) {
+    throw new CodesignError(
+      `Reference URL host "${parsed.hostname}" is not allowed`,
+      ERROR_CODES.REFERENCE_URL_UNSUPPORTED,
+    );
+  }
+  return parsed;
+}
+
+function isPrivateReferenceHostname(rawHostname: string): boolean {
+  const hostname = rawHostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.+$/g, '');
+  if (hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')) {
+    return true;
+  }
+
+  const ipVersion = net.isIP(hostname);
+  if (ipVersion === 4) return isPrivateIpv4(hostname);
+  if (ipVersion === 6) return isPrivateIpv6(hostname);
+  return false;
+}
+
+async function validateResolvedReferenceHost(
+  parsedUrl: URL,
+  resolveReferenceHost: ReferenceHostResolver,
+  signal: AbortSignal,
+): Promise<void> {
+  const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, '').replace(/\.+$/g, '');
+  if (net.isIP(hostname)) return;
+
+  try {
+    await resolvePublicReferenceAddresses(hostname, resolveReferenceHost, signal);
+  } catch (cause) {
+    if (cause instanceof CodesignError) throw cause;
+    throw new CodesignError(
+      `Reference URL host "${parsedUrl.hostname}" could not be resolved`,
+      ERROR_CODES.REFERENCE_URL_FETCH_FAILED,
+      { cause },
+    );
+  }
+}
+
+async function resolvePublicReferenceAddresses(
+  hostname: string,
+  resolveReferenceHost: ReferenceHostResolver,
+  signal: AbortSignal,
+): Promise<string[]> {
+  if (signal.aborted) {
+    throw new CodesignError(
+      `Reference URL request timed out while resolving ${hostname}`,
+      ERROR_CODES.REFERENCE_URL_FETCH_TIMEOUT,
+    );
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      reject(
+        new CodesignError(
+          `Reference URL request timed out while resolving ${hostname}`,
+          ERROR_CODES.REFERENCE_URL_FETCH_TIMEOUT,
+        ),
+      );
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    resolveReferenceHost(hostname)
+      .then((addresses) => {
+        if (addresses.length === 0) {
+          reject(
+            new CodesignError(
+              `Reference URL host "${hostname}" resolved to no addresses`,
+              ERROR_CODES.REFERENCE_URL_FETCH_FAILED,
+            ),
+          );
+          return;
+        }
+        const blocked = addresses.find((address) => isPrivateReferenceHostname(address));
+        if (blocked !== undefined) {
+          reject(
+            new CodesignError(
+              `Reference URL host "${hostname}" resolved to a blocked address`,
+              ERROR_CODES.REFERENCE_URL_UNSUPPORTED,
+            ),
+          );
+          return;
+        }
+        resolve(addresses);
+      }, reject)
+      .finally(() => {
+        signal.removeEventListener('abort', onAbort);
+      });
+  });
+}
+
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = hostname.split('.').map((part) => Number(part));
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
+    return true;
+  }
+  const [a, b, c] = parts;
+  if (a === undefined || b === undefined || c === undefined) return true;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 192 && b === 88 && c === 99) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113) ||
+    a >= 224
+  );
+}
+
+function isPrivateIpv6(hostname: string): boolean {
+  if (hostname === '::' || hostname === '::1') return true;
+  if (hostname.startsWith('fc') || hostname.startsWith('fd')) return true;
+  if (/^fe[89ab]/.test(hostname)) return true;
+  if (hostname.startsWith('ff')) return true;
+  if (hostname.startsWith('2001:db8')) return true;
+  if (!hostname.startsWith('::ffff:')) return false;
+
+  const suffix = hostname.slice('::ffff:'.length);
+  if (suffix.includes('.')) return isPrivateIpv4(suffix);
+  const hextets = suffix.split(':');
+  if (hextets.length !== 2) return true;
+  if (!hextets.every((part) => /^[0-9a-f]{1,4}$/i.test(part))) return true;
+  const high = Number.parseInt(hextets[0] ?? '', 16);
+  const low = Number.parseInt(hextets[1] ?? '', 16);
+  if (!Number.isInteger(high) || !Number.isInteger(low)) return true;
+  if (high < 0 || high > 0xffff || low < 0 || low > 0xffff) return true;
+  return isPrivateIpv4(
+    [high >> 8, high & 0xff, low >> 8, low & 0xff].map((part) => String(part)).join('.'),
+  );
+}
 
 function cleanText(raw: string, maxChars: number): string {
   return raw
@@ -83,11 +267,6 @@ function isProbablyText(buffer: Buffer, extension: string): boolean {
   return !probe.includes(0);
 }
 
-function isWithinRoot(root: string, candidate: string): boolean {
-  const relative = path.relative(path.resolve(root), path.resolve(candidate));
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
 function isMissingFile(err: unknown): boolean {
   return (err as NodeJS.ErrnoException).code === 'ENOENT';
 }
@@ -97,11 +276,14 @@ async function readWorkspaceText(
   relativePath: string,
   maxChars: number,
 ): Promise<string | undefined> {
-  const filePath = path.resolve(workspaceRoot, relativePath);
-  if (!isWithinRoot(workspaceRoot, filePath)) {
+  let filePath: string;
+  try {
+    filePath = await resolveSafeWorkspaceChildPath(workspaceRoot, relativePath);
+  } catch (cause) {
     throw new CodesignError(
-      `Project context path escapes workspace: ${relativePath}`,
+      `Project context path is invalid: ${relativePath}`,
       ERROR_CODES.CONFIG_SCHEMA_INVALID,
+      { cause },
     );
   }
   try {
@@ -321,17 +503,158 @@ async function readResponseText(response: Response, url: string): Promise<string
   }
 }
 
-async function inspectReferenceUrl(url: string): Promise<ReferenceUrlContext> {
+async function defaultFetchReference(
+  safeUrl: string,
+  signal: AbortSignal,
+  resolveReferenceHost: ReferenceHostResolver,
+): Promise<Response> {
+  const parsedUrl = new URL(safeUrl);
+  const client = parsedUrl.protocol === 'https:' ? https : http;
+  const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, '').replace(/\.+$/g, '');
+  const lookup: http.RequestOptions['lookup'] | undefined = net.isIP(hostname)
+    ? undefined
+    : (lookupHostname, _options, callback) => {
+        resolvePublicReferenceAddresses(lookupHostname, resolveReferenceHost, signal).then(
+          (addresses) => {
+            const address = addresses[0];
+            const family = address ? net.isIP(address) : 0;
+            if (!address || family === 0) {
+              callback(
+                new Error(`Reference URL host "${lookupHostname}" resolved to no IP address`),
+                '',
+                0,
+              );
+              return;
+            }
+            callback(null, address, family);
+          },
+          (error: unknown) => {
+            callback(error instanceof Error ? error : new Error(String(error)), '', 0);
+          },
+        );
+      };
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settleReject = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    const settleResolve = (response: Response) => {
+      if (settled) return;
+      settled = true;
+      resolve(response);
+    };
+
+    const req = client.request(
+      parsedUrl,
+      {
+        method: 'GET',
+        headers: { 'user-agent': 'open-codesign/0.0.0 (+local desktop app)' },
+        lookup,
+        signal,
+      },
+      (res) => {
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(res.headers)) {
+          if (Array.isArray(value)) {
+            for (const item of value) headers.append(key, item);
+          } else if (value !== undefined) {
+            headers.set(key, String(value));
+          }
+        }
+
+        const status = res.statusCode ?? 0;
+        if (status >= 300 && status < 400) {
+          res.resume();
+          settleResolve(new Response(null, { status, headers }));
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        let totalBytes = 0;
+        res.on('data', (chunk: Buffer) => {
+          totalBytes += chunk.byteLength;
+          if (totalBytes > MAX_URL_RESPONSE_BYTES) {
+            res.destroy(
+              new CodesignError(
+                `Reference URL response is too large for ${safeUrl}`,
+                ERROR_CODES.REFERENCE_URL_TOO_LARGE,
+              ),
+            );
+            return;
+          }
+          chunks.push(chunk);
+        });
+        res.on('end', () => {
+          settleResolve(new Response(new Uint8Array(Buffer.concat(chunks)), { status, headers }));
+        });
+        res.on('error', settleReject);
+      },
+    );
+    req.on('error', settleReject);
+    req.end();
+  });
+}
+
+async function fetchReferenceUrl(
+  rawUrl: string,
+  signal: AbortSignal,
+  resolveReferenceHost: ReferenceHostResolver,
+  fetchReference: ReferenceFetcher,
+  redirectCount = 0,
+): Promise<{ response: Response; url: string }> {
+  const parsedUrl = parseReferenceHttpUrl(rawUrl);
+  await validateResolvedReferenceHost(parsedUrl, resolveReferenceHost, signal);
+  const safeUrl = parsedUrl.toString();
+  const response = await fetchReference(safeUrl, signal, resolveReferenceHost);
+
+  if (response.status >= 300 && response.status < 400) {
+    if (redirectCount >= MAX_REFERENCE_URL_REDIRECTS) {
+      throw new CodesignError(
+        `Reference URL redirected too many times for ${safeUrl}`,
+        ERROR_CODES.REFERENCE_URL_FETCH_FAILED,
+      );
+    }
+    const location = response.headers.get('location');
+    if (!location) {
+      throw new CodesignError(
+        `Reference URL redirect missing Location header for ${safeUrl}`,
+        ERROR_CODES.REFERENCE_URL_FETCH_FAILED,
+      );
+    }
+    const nextUrl = new URL(location, safeUrl).toString();
+    return fetchReferenceUrl(
+      nextUrl,
+      signal,
+      resolveReferenceHost,
+      fetchReference,
+      redirectCount + 1,
+    );
+  }
+
+  return { response, url: safeUrl };
+}
+
+async function inspectReferenceUrl(
+  url: string,
+  resolveReferenceHost: ReferenceHostResolver,
+  fetchReference: ReferenceFetcher,
+): Promise<ReferenceUrlContext> {
+  const initialSafeUrl = parseReferenceHttpUrl(url).toString();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 4_000);
   try {
-    const response = await fetch(url, {
-      headers: { 'user-agent': 'open-codesign/0.0.0 (+local desktop app)' },
-      signal: controller.signal,
-    });
+    const { response, url: fetchedUrl } = await fetchReferenceUrl(
+      initialSafeUrl,
+      controller.signal,
+      resolveReferenceHost,
+      fetchReference,
+    );
     if (!response.ok) {
       throw new CodesignError(
-        `Reference URL fetch failed (${response.status}) for ${url}`,
+        `Reference URL fetch failed (${response.status}) for ${fetchedUrl}`,
         ERROR_CODES.REFERENCE_URL_FETCH_FAILED,
       );
     }
@@ -339,19 +662,19 @@ async function inspectReferenceUrl(url: string): Promise<ReferenceUrlContext> {
     const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
     if (!REFERENCE_CONTENT_TYPES.some((type) => contentType.includes(type))) {
       throw new CodesignError(
-        `Unsupported reference URL content type "${contentType || 'unknown'}" for ${url}`,
+        `Unsupported reference URL content type "${contentType || 'unknown'}" for ${fetchedUrl}`,
         ERROR_CODES.REFERENCE_URL_UNSUPPORTED,
       );
     }
 
-    const html = await readResponseText(response, url);
+    const html = await readResponseText(response, fetchedUrl);
     const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim();
     const description =
       html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1] ??
       html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1];
 
     return {
-      url,
+      url: fetchedUrl,
       ...(title ? { title } : {}),
       ...(description ? { description } : {}),
       excerpt: cleanText(stripHtml(html), MAX_URL_EXCERPT_CHARS),
@@ -364,8 +687,8 @@ async function inspectReferenceUrl(url: string): Promise<ReferenceUrlContext> {
         : 'REFERENCE_URL_FETCH_FAILED';
     const message =
       code === 'REFERENCE_URL_FETCH_TIMEOUT'
-        ? `Reference URL request timed out for ${url}`
-        : `Failed to fetch reference URL ${url}`;
+        ? `Reference URL request timed out for ${initialSafeUrl}`
+        : `Failed to fetch reference URL ${initialSafeUrl}`;
     throw new CodesignError(message, code, { cause: error });
   } finally {
     clearTimeout(timer);
@@ -383,6 +706,8 @@ export async function preparePromptContext(input: {
   attachments?: LocalInputFile[] | undefined;
   referenceUrl?: string | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
+  resolveReferenceHost?: ReferenceHostResolver | undefined;
+  fetchReference?: ReferenceFetcher | undefined;
   workspaceRoot?: string | undefined;
 }): Promise<PreparedPromptContext> {
   const attachments = await Promise.all(
@@ -390,7 +715,11 @@ export async function preparePromptContext(input: {
   );
   const referenceUrl =
     typeof input.referenceUrl === 'string' && input.referenceUrl.trim().length > 0
-      ? await inspectReferenceUrl(input.referenceUrl.trim())
+      ? await inspectReferenceUrl(
+          input.referenceUrl.trim(),
+          input.resolveReferenceHost ?? defaultResolveReferenceHost,
+          input.fetchReference ?? defaultFetchReference,
+        )
       : null;
   const projectContext = await readProjectContext(input.workspaceRoot);
 

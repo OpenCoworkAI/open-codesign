@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { lstat, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
@@ -31,6 +31,13 @@ export const DESIGN_SKILL_FILES = [
 
 export type DesignSkillName = (typeof DESIGN_SKILL_FILES)[number];
 
+async function assertTemplatePathIsNotSymlink(filePath: string): Promise<void> {
+  const entry = await lstat(filePath);
+  if (entry.isSymbolicLink()) {
+    throw new Error(`template path must not be a symbolic link: ${filePath}`);
+  }
+}
+
 /**
  * Read every known design-skill file from the given directory. A missing
  * directory is an explicit empty state; a missing/unreadable declared file is a
@@ -40,13 +47,16 @@ export type DesignSkillName = (typeof DESIGN_SKILL_FILES)[number];
 export async function loadDesignSkills(dir: string): Promise<Array<[string, string]>> {
   try {
     await readdir(dir);
+    await assertTemplatePathIsNotSymlink(dir);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw err;
   }
   return Promise.all(
     DESIGN_SKILL_FILES.map(async (name): Promise<[string, string]> => {
-      const contents = await readFile(path.join(dir, name), 'utf8');
+      const filePath = path.join(dir, name);
+      await assertTemplatePathIsNotSymlink(filePath);
+      const contents = await readFile(filePath, 'utf8');
       return [name, contents];
     }),
   );

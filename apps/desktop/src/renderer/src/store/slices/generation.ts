@@ -472,8 +472,19 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       const enrichedPrompt = buildEnrichedPrompt(request.prompt, pendingEdits);
       const pendingEditIds = pendingEdits.map((c) => c.id);
 
-      const generationId = newId();
       const designIdAtStart = get().currentDesignId;
+      const activeDesign = get().designs.find((design) => design.id === designIdAtStart);
+      if (designIdAtStart === null || activeDesign?.workspacePath === null) {
+        const msg = tr('err.WORKSPACE_MISSING');
+        set({ errorMessage: msg, lastError: msg });
+        get().pushToast({
+          variant: 'error',
+          title: msg,
+        });
+        return;
+      }
+
+      const generationId = newId();
       set(() => ({
         isGenerating: true,
         activeGenerationId: generationId,
@@ -526,7 +537,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
             ...(request.referenceUrl ? { referenceUrl: request.referenceUrl } : {}),
             attachments: request.attachments,
             generationId,
-            ...(designIdAtStart ? { designId: designIdAtStart } : {}),
+            designId: designIdAtStart,
             ...(get().previewHtml ? { previousHtml: get().previewHtml as string } : {}),
           },
           designIdAtStart,

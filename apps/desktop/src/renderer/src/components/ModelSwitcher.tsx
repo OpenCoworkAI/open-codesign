@@ -200,7 +200,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
                 aria-label={t('topbar.modelSwitcher.searchAriaLabel', {
                   defaultValue: 'Filter models by name',
                 })}
-                className="w-full h-[var(--size-control-xs)] pl-[calc(var(--space-2)+var(--size-icon-xs)+var(--space-1_5))] pr-[calc(var(--space-2)+var(--size-icon-sm))] rounded-[var(--radius-sm)] bg-transparent border-0 text-[var(--text-xs)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-focus-ring)]"
+                className="w-full h-[var(--size-control-xs)] pl-[calc(var(--space-2)+var(--size-icon-xs)+var(--space-1-5))] pr-[calc(var(--space-2)+var(--size-icon-sm))] rounded-[var(--radius-sm)] bg-transparent border-0 text-[var(--text-xs)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-focus-ring)]"
                 style={{ fontFamily: 'var(--font-mono)' }}
               />
               {query.length > 0 && (

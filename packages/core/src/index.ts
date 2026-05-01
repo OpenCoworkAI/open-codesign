@@ -52,8 +52,6 @@ export {
   recordMutation,
   recordScaffold,
 } from './resource-state.js';
-export type { LoadAllSkillsOptions } from './skills/index.js';
-export { loadAllSkills, loadSkillsFromDir } from './skills/index.js';
 export {
   type AskAnswer,
   type AskBridge,

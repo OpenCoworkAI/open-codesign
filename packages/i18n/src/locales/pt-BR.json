@@ -59,7 +59,7 @@
     "workspace": {
       "sectionTitle": "Espaço de trabalho",
       "label": "Pasta",
-      "default": "Armazenamento interno padrão",
+      "default": "Nenhum espaço de trabalho vinculado",
       "choose": "Escolher pasta",
       "change": "Alterar",
       "open": "Abrir pasta",
@@ -1069,6 +1069,8 @@
     "INPUT_EMPTY_HTML": "Um HTML existente é obrigatório para esta operação.",
     "INPUT_UNSUPPORTED_MODE": "Este modo de geração não é suportado.",
     "GENERATION_TIMEOUT": "A geração excedeu o tempo limite. Tente um prompt mais curto ou aumente o tempo em Configurações.",
+    "GENERATION_INCOMPLETE": "O agente parou antes de concluir a verificação. Continue a execução para finalizar o artefato do espaço de trabalho.",
+    "WORKSPACE_MISSING": "Este design não tem um espaço de trabalho vinculado. Reabra ou recrie o design.",
     "ARTIFACT_PROTOCOL_INVALID": "O artefato gerado não seguiu o protocolo obrigatório.",
     "TOOL_EXECUTION_FAILED": "Uma ferramenta de design falhou durante a execução. Detalhes estão no log.",
     "CONFIG_READ_FAILED": "Falha ao ler o arquivo de configuração. Verifique as permissões.",

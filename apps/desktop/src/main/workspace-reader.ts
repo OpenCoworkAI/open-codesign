@@ -1,5 +1,5 @@
 import type { Dirent } from 'node:fs';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { lstat, readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import { TextDecoder } from 'node:util';
 
@@ -154,6 +154,34 @@ function resolveWorkspaceChild(root: string, relPath: string): string {
   return absPath;
 }
 
+export async function resolveSafeWorkspaceChildPath(
+  root: string,
+  relPath: string,
+): Promise<string> {
+  const absRoot = resolve(root);
+  const absPath = resolveWorkspaceChild(absRoot, relPath);
+  const rel = relative(absRoot, absPath);
+  if (rel.length === 0) return absPath;
+
+  const parts = rel.split(sep).filter((part) => part.length > 0);
+  let cursor = absRoot;
+  for (const part of parts) {
+    cursor = join(cursor, part);
+    try {
+      const entry = await lstat(cursor);
+      if (entry.isSymbolicLink()) {
+        const linkPath = normalizeSlashes(relative(absRoot, cursor));
+        throw new Error(`path "${relPath}" traverses symbolic link "${linkPath}"`);
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') break;
+      throw err;
+    }
+  }
+
+  return absPath;
+}
+
 async function readUtf8TextFile(abs: string): Promise<string> {
   const bytes = await readFile(abs);
   const content = UTF8_DECODER.decode(bytes);
@@ -284,7 +312,7 @@ export async function readWorkspaceFileAt(
   root: string,
   relPath: string,
 ): Promise<WorkspaceFileReadResult> {
-  const abs = resolveWorkspaceChild(root, relPath);
+  const abs = await resolveSafeWorkspaceChildPath(root, relPath);
   const rel = normalizeSlashes(relative(resolve(root), abs));
   let size = 0;
   let mtime = new Date();

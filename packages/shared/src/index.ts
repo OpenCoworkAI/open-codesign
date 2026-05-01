@@ -136,10 +136,8 @@ export const GeneratePayloadV1 = z
     referenceUrl: z.string().url().optional(),
     attachments: z.array(LocalInputFile).max(12).default([]),
     generationId: GenerationId,
-    /** Optional so older clients / tests that don't set it still parse.
-     *  Present in the renderer path so agent stream events can route to
-     *  the right design's chat bubble. */
-    designId: z.string().min(1).optional(),
+    /** Required in v0.2: every generation belongs to a workspace-backed design. */
+    designId: z.string().min(1),
     /** Current HTML for this design (if any). Seeded into the agent's
      *  virtual FS as `index.html` so the edit tool can view/edit
      *  incrementally instead of always rewriting from scratch. */

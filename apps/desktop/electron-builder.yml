@@ -15,10 +15,22 @@ directories:
 files:
   - out/**
   - package.json
+  - "!**/*.map"
+  - "!**/*.d.ts"
+  - "!**/*.d.cts"
+  - "!**/*.d.mts"
+  - "!**/*.tsbuildinfo"
+  - "!**/{test,tests,__tests__,coverage,docs,doc,example,examples}/**"
+  - "!**/*.{test,spec}.*"
 extraResources:
   - from: resources/templates
     to: templates
 asar: true
+afterPack: scripts/after-pack-prune.cjs
+electronLanguages:
+  - en-US
+  - zh-CN
+  - pt-BR
 mac:
   category: public.app-category.developer-tools
   icon: resources/icon.icns

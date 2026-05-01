@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Design } from '@open-codesign/shared';
 import type Database from 'better-sqlite3';
@@ -11,19 +11,12 @@ import {
   listDesignFiles,
   updateDesignWorkspace,
 } from './snapshots-db';
+import { normalizeWorkspacePath } from './workspace-path';
+import { resolveSafeWorkspaceChildPath } from './workspace-reader';
+
+export { normalizeWorkspacePath } from './workspace-path';
 
 const logger = getLogger('design-workspace');
-
-function stripTrailingSlash(value: string): string {
-  if (value === '/' || /^[A-Za-z]:\/$/.test(value)) {
-    return value;
-  }
-  return value.replace(/\/+$/, '');
-}
-
-export function normalizeWorkspacePath(p: string): string {
-  return stripTrailingSlash(path.resolve(p).replaceAll('\\', '/'));
-}
 
 function workspacePathComparisonKey(p: string): string {
   const normalized = normalizeWorkspacePath(p);
@@ -75,13 +68,28 @@ export async function migrateWorkspaceFiles(
   if (design.workspacePath === null) {
     throw new Error('Cannot migrate workspace files without an existing workspace path');
   }
+  const sourceRoot = normalizeWorkspacePath(design.workspacePath);
+  const destinationRoot = normalizeWorkspacePath(destPath);
 
+  await copyTrackedWorkspaceFiles(db, designId, sourceRoot, destinationRoot);
+}
+
+export async function copyTrackedWorkspaceFiles(
+  db: Database.Database,
+  designId: string,
+  sourceRoot: string,
+  destPath: string,
+): Promise<void> {
+  const source = normalizeWorkspacePath(sourceRoot);
+  const destinationRoot = normalizeWorkspacePath(destPath);
   const trackedFiles = listDesignFiles(db, designId);
-  const pendingCopies = trackedFiles.map((file) => ({
-    source: path.join(design.workspacePath as string, file.path),
-    destination: path.join(destPath, file.path),
-    relativePath: file.path,
-  }));
+  const pendingCopies = await Promise.all(
+    trackedFiles.map(async (file) => ({
+      source: await resolveSafeWorkspaceChildPath(source, file.path),
+      destination: await resolveSafeWorkspaceChildPath(destinationRoot, file.path),
+      relativePath: file.path,
+    })),
+  );
 
   for (const copyOp of pendingCopies) {
     if (existsSync(copyOp.destination)) {
@@ -104,6 +112,13 @@ function requireDesign(db: Database.Database, designId: string): Design {
     throw new Error(`Design not found: ${designId}`);
   }
   return design;
+}
+
+async function assertExistingWorkspaceDirectory(workspacePath: string): Promise<void> {
+  const entry = await stat(workspacePath);
+  if (!entry.isDirectory()) {
+    throw new Error('Workspace path is not a directory');
+  }
 }
 
 export function checkWorkspaceFolderExists(p: string): boolean {
@@ -140,6 +155,7 @@ export async function bindWorkspace(
   if (checkWorkspaceConflict(db, designId, normalizedPath)) {
     throw new Error('Workspace path is already bound to another design');
   }
+  await assertExistingWorkspaceDirectory(normalizedPath);
 
   logger.info('workspace.bind.start', {
     designId,

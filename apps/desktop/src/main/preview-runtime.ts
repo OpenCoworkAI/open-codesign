@@ -15,8 +15,8 @@
 
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
-import { pathToFileURL, URL } from 'node:url';
+import { join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath, pathToFileURL, URL } from 'node:url';
 import type { PreviewResult } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
 import {
@@ -25,6 +25,7 @@ import {
   resolveArtifactSourceReferencePath,
 } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
+import { resolveSafeWorkspaceChildPath } from './workspace-reader';
 
 export interface RunPreviewOptions {
   path: string;
@@ -162,6 +163,10 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
 
     const previewFilePath = join(userDataDir, 'preview.html');
     await writeFile(previewFilePath, html, 'utf8');
+    await page.setRequestInterception(true);
+    page.on('request', (req: HTTPRequest) => {
+      void handlePreviewRequest(req, absWorkspace, previewFilePath);
+    });
     await page.goto(pathToFileURL(previewFilePath).href, {
       waitUntil: 'domcontentloaded',
       timeout: LOAD_TIMEOUT_MS,
@@ -257,21 +262,10 @@ function isHtmlPreviewPath(path: string): boolean {
   return lower.endsWith('.html') || lower.endsWith('.htm');
 }
 
-function resolveWorkspaceChild(absWorkspace: string, relPath: string): string {
-  const absPath = resolve(absWorkspace, relPath);
-  // Path-escape guard: the agent passes workspace-relative paths, but a crafted
-  // `../../etc/passwd` would otherwise resolve outside the sandbox and serve
-  // whatever the main-process user can read.
-  if (absPath !== absWorkspace && !absPath.startsWith(absWorkspace + sep)) {
-    throw new Error(`path "${relPath}" escapes workspace root`);
-  }
-  return absPath;
-}
-
 async function readPreviewSource(absWorkspace: string, relPath: string): Promise<string> {
   let source: string;
   try {
-    source = await readFile(resolveWorkspaceChild(absWorkspace, relPath), 'utf8');
+    source = await readFile(await resolveSafeWorkspaceChildPath(absWorkspace, relPath), 'utf8');
   } catch (err) {
     throw new Error(`read failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -279,6 +273,58 @@ async function readPreviewSource(absWorkspace: string, relPath: string): Promise
     throw new Error(`binary file cannot be previewed: ${relPath}`);
   }
   return source;
+}
+
+export async function isPreviewFileUrlAllowed(
+  rawUrl: string,
+  absWorkspace: string,
+  previewFilePath: string,
+): Promise<boolean> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'file:') return true;
+  let filePath: string;
+  try {
+    filePath = fileURLToPath(url);
+  } catch {
+    return false;
+  }
+  if (filePath === previewFilePath) return true;
+
+  const relPath = relative(absWorkspace, filePath);
+  if (relPath.length === 0 || relPath.startsWith('..') || resolve(relPath) === relPath) {
+    return false;
+  }
+  try {
+    await resolveSafeWorkspaceChildPath(absWorkspace, relPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function handlePreviewRequest(
+  req: HTTPRequest,
+  absWorkspace: string,
+  previewFilePath: string,
+): Promise<void> {
+  try {
+    if (!(await isPreviewFileUrlAllowed(req.url(), absWorkspace, previewFilePath))) {
+      await req.abort('blockedbyclient');
+      return;
+    }
+    await req.continue();
+  } catch {
+    try {
+      await req.abort('failed');
+    } catch {
+      /* noop */
+    }
+  }
 }
 
 function mapConsoleLevel(raw: string): PreviewResult['consoleErrors'][number]['level'] | null {

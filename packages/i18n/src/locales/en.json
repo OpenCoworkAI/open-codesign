@@ -59,7 +59,7 @@
     "workspace": {
       "sectionTitle": "Workspace",
       "label": "Folder",
-      "default": "Default internal storage",
+      "default": "No workspace bound",
       "choose": "Choose folder",
       "change": "Change",
       "open": "Open folder",
@@ -1118,6 +1118,8 @@
     "INPUT_EMPTY_HTML": "Existing HTML is required for this operation.",
     "INPUT_UNSUPPORTED_MODE": "This generation mode is not supported.",
     "GENERATION_TIMEOUT": "Generation timed out. Try a shorter prompt or increase the timeout in Settings.",
+    "GENERATION_INCOMPLETE": "The agent stopped before completing verification. Continue the run to finish the workspace artifact.",
+    "WORKSPACE_MISSING": "This design has no workspace bound. Reopen or recreate the design.",
     "ARTIFACT_PROTOCOL_INVALID": "The generated artifact did not follow the required protocol.",
     "TOOL_EXECUTION_FAILED": "A design tool failed while running. Details are in the log.",
     "CONFIG_READ_FAILED": "Failed to read configuration file. Check file permissions.",

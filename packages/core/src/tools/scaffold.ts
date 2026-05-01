@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
 import { Type } from '@sinclair/typebox';
@@ -6,9 +6,9 @@ import { Type } from '@sinclair/typebox';
 /**
  * `scaffold` tool. Copies a prebuilt starter file from the user-visible
  * templates tree (`<userData>/templates/scaffolds/`) into the current
- * workspace. The templates directory is seeded from the app bundle on first
- * boot and owned by the user afterwards, so edits to the manifest or file
- * contents persist across launches.
+ * workspace. The templates directory is seeded from the app bundle and upgraded
+ * by adding missing files only, so user edits to existing files persist across
+ * launches.
  *
  * All filesystem paths come from `getScaffoldsRoot()` — no package-relative
  * resolution, no `import.meta.url`. That keeps the tool working after
@@ -124,6 +124,38 @@ function isWithinRoot(root: string, candidate: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+function resolveChildPath(root: string, relPath: string): string {
+  const absRoot = path.resolve(root);
+  const absPath = path.resolve(absRoot, relPath);
+  if (!isWithinRoot(absRoot, absPath)) {
+    throw new Error('path outside root');
+  }
+  return absPath;
+}
+
+async function resolveSafeChildPath(root: string, relPath: string): Promise<string> {
+  const absRoot = path.resolve(root);
+  const absPath = resolveChildPath(absRoot, relPath);
+  const rel = path.relative(absRoot, absPath);
+  if (rel.length === 0) return absPath;
+
+  const parts = rel.split(path.sep).filter((part) => part.length > 0);
+  let cursor = absRoot;
+  for (const part of parts) {
+    cursor = path.join(cursor, part);
+    try {
+      const entry = await lstat(cursor);
+      if (entry.isSymbolicLink()) {
+        throw new Error(`path traverses symbolic link: ${path.relative(absRoot, cursor)}`);
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') break;
+      throw err;
+    }
+  }
+  return absPath;
+}
+
 export interface ScaffoldRequest {
   kind: string;
   destPath: string;
@@ -150,7 +182,17 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
   if (!entry) return { ok: false, reason: `unknown scaffold kind: ${req.kind}` };
 
   const templatesRoot = path.dirname(path.resolve(req.scaffoldsRoot));
-  const source = path.resolve(req.scaffoldsRoot, entry.path);
+  let source: string;
+  try {
+    const sourceRel = path.relative(templatesRoot, path.resolve(req.scaffoldsRoot, entry.path));
+    source = await resolveSafeChildPath(templatesRoot, sourceRel);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      reason: `scaffold source outside templates root: ${entry.path}: ${reason}`,
+    };
+  }
   if (!isWithinRoot(templatesRoot, source)) {
     return { ok: false, reason: `scaffold source outside templates root: ${entry.path}` };
   }
@@ -165,9 +207,15 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
     };
   }
 
-  const dest = path.resolve(req.workspaceRoot, req.destPath);
-  if (!isWithinRoot(req.workspaceRoot, dest)) {
-    return { ok: false, reason: 'destination outside workspace' };
+  let dest: string;
+  try {
+    dest = await resolveSafeChildPath(req.workspaceRoot, req.destPath);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      reason: reason.includes('outside root') ? 'destination outside workspace' : reason,
+    };
   }
   await mkdir(path.dirname(dest), { recursive: true });
   await writeFile(dest, contents, 'utf8');

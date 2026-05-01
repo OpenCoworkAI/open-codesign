@@ -1,0 +1,127 @@
+{
+  "site": {
+    "name": "Open CoDesign",
+    "url": "https://opencoworkai.github.io/open-codesign/",
+    "language_default": "en-US",
+    "languages": ["en-US", "zh-CN"],
+    "sitemap": "https://opencoworkai.github.io/open-codesign/sitemap.xml",
+    "llms": "https://opencoworkai.github.io/open-codesign/llms.txt",
+    "llms_full": "https://opencoworkai.github.io/open-codesign/llms-full.txt",
+    "project_facts": "https://opencoworkai.github.io/open-codesign/project.json",
+    "faq_data": "https://opencoworkai.github.io/open-codesign/faq.json"
+  },
+  "pages": [
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/",
+      "source_path": "website/index.md",
+      "language": "en-US",
+      "type": "home",
+      "title": "Open CoDesign",
+      "description": "Open-source desktop AI design tool with BYOK model support and local-first storage."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/quickstart",
+      "source_path": "website/quickstart.md",
+      "language": "en-US",
+      "type": "documentation",
+      "title": "Quickstart",
+      "description": "Install Open CoDesign and render a first AI-generated prototype."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/architecture",
+      "source_path": "website/architecture.md",
+      "language": "en-US",
+      "type": "documentation",
+      "title": "Architecture",
+      "description": "Technical overview of the Open CoDesign monorepo and package boundaries."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/roadmap",
+      "source_path": "website/roadmap.md",
+      "language": "en-US",
+      "type": "roadmap",
+      "title": "Roadmap",
+      "description": "Planned releases from v0.1 through v1.0."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/faq",
+      "source_path": "website/faq.md",
+      "language": "en-US",
+      "type": "faq",
+      "title": "FAQ",
+      "description": "Common questions about Open CoDesign."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/claude-design-alternative",
+      "source_path": "website/claude-design-alternative.md",
+      "language": "en-US",
+      "type": "comparison",
+      "title": "Open CoDesign vs Claude Design",
+      "description": "Comparison of Open CoDesign and Anthropic Claude Design."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/v0-alternative",
+      "source_path": "website/v0-alternative.md",
+      "language": "en-US",
+      "type": "comparison",
+      "title": "Open CoDesign vs v0 by Vercel",
+      "description": "Comparison of Open CoDesign and v0 by Vercel."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/lovable-alternative",
+      "source_path": "website/lovable-alternative.md",
+      "language": "en-US",
+      "type": "comparison",
+      "title": "Open CoDesign vs Lovable",
+      "description": "Comparison of Open CoDesign and Lovable."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/bolt-alternative",
+      "source_path": "website/bolt-alternative.md",
+      "language": "en-US",
+      "type": "comparison",
+      "title": "Open CoDesign vs Bolt.new",
+      "description": "Comparison of Open CoDesign and Bolt.new."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/figma-ai-alternative",
+      "source_path": "website/figma-ai-alternative.md",
+      "language": "en-US",
+      "type": "comparison",
+      "title": "Open CoDesign vs Figma AI",
+      "description": "Comparison of Open CoDesign and Figma AI."
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/zh/",
+      "source_path": "website/zh/index.md",
+      "language": "zh-CN",
+      "type": "home",
+      "title": "Open CoDesign",
+      "description": "开源桌面 AI 设计工具，支持自带模型密钥、本地优先存储和 MIT 协议。"
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/zh/quickstart",
+      "source_path": "website/zh/quickstart.md",
+      "language": "zh-CN",
+      "type": "documentation",
+      "title": "快速开始",
+      "description": "安装 Open CoDesign 并生成第一个 AI 设计原型。"
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/zh/faq",
+      "source_path": "website/zh/faq.md",
+      "language": "zh-CN",
+      "type": "faq",
+      "title": "常见问题",
+      "description": "Open CoDesign 常见问题。"
+    },
+    {
+      "url": "https://opencoworkai.github.io/open-codesign/zh/claude-design-alternative",
+      "source_path": "website/zh/claude-design-alternative.md",
+      "language": "zh-CN",
+      "type": "comparison",
+      "title": "Open CoDesign vs Claude Design",
+      "description": "Open CoDesign 与 Anthropic Claude Design 的对比。"
+    }
+  ]
+}

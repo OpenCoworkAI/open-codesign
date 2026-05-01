@@ -1,0 +1,129 @@
+{
+  "name": "Open CoDesign",
+  "slug": "open-codesign",
+  "alternate_names": ["open-codesign"],
+  "description": "Open CoDesign is an open-source desktop AI design tool. It turns natural-language prompts into HTML prototypes, React components, slide decks, PDFs, and marketing assets while keeping user data local and using bring-your-own-key model access.",
+  "canonical_url": "https://opencoworkai.github.io/open-codesign/",
+  "repository": "https://github.com/OpenCoworkAI/open-codesign",
+  "organization": {
+    "name": "OpenCoworkAI",
+    "url": "https://github.com/OpenCoworkAI"
+  },
+  "license": {
+    "spdx_id": "MIT",
+    "url": "https://github.com/OpenCoworkAI/open-codesign/blob/main/LICENSE"
+  },
+  "latest_release": {
+    "version": "v0.1.4",
+    "published_at": "2026-04-23T10:23:51Z",
+    "source": "https://github.com/OpenCoworkAI/open-codesign/releases/tag/v0.1.4"
+  },
+  "repository_snapshot": {
+    "as_of": "2026-05-01",
+    "source": "GitHub API",
+    "stars": 3833,
+    "forks": 383,
+    "open_issues": 45,
+    "release_asset_downloads": 8594
+  },
+  "product_positioning": [
+    "Open-source alternative to Claude Design",
+    "Desktop AI design tool",
+    "BYOK and multi-model",
+    "Local-first design history and files",
+    "MIT-licensed"
+  ],
+  "supported_model_routes": [
+    "Anthropic Claude",
+    "OpenAI GPT",
+    "Google Gemini",
+    "DeepSeek",
+    "OpenRouter",
+    "SiliconFlow",
+    "local Ollama",
+    "OpenAI-compatible endpoints",
+    "keyless IP-allowlisted proxies",
+    "ChatGPT Plus / Codex subscription login"
+  ],
+  "supported_platforms": [
+    "macOS Apple Silicon",
+    "macOS Intel",
+    "Windows x64",
+    "Windows ARM64",
+    "Linux AppImage",
+    "Linux deb",
+    "Linux rpm"
+  ],
+  "outputs": [
+    "HTML prototypes",
+    "React / JSX components",
+    "PDF one-pagers",
+    "PPTX slide decks",
+    "ZIP bundles",
+    "Markdown exports",
+    "AI-generated bitmap assets"
+  ],
+  "important_pages": [
+    {
+      "name": "Home",
+      "url": "https://opencoworkai.github.io/open-codesign/"
+    },
+    {
+      "name": "Quickstart",
+      "url": "https://opencoworkai.github.io/open-codesign/quickstart"
+    },
+    {
+      "name": "Architecture",
+      "url": "https://opencoworkai.github.io/open-codesign/architecture"
+    },
+    {
+      "name": "Roadmap",
+      "url": "https://opencoworkai.github.io/open-codesign/roadmap"
+    },
+    {
+      "name": "FAQ",
+      "url": "https://opencoworkai.github.io/open-codesign/faq"
+    },
+    {
+      "name": "Open CoDesign vs Claude Design",
+      "url": "https://opencoworkai.github.io/open-codesign/claude-design-alternative"
+    }
+  ],
+  "machine_readable_resources": [
+    {
+      "name": "llms.txt",
+      "url": "https://opencoworkai.github.io/open-codesign/llms.txt",
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "llms-full.txt",
+      "url": "https://opencoworkai.github.io/open-codesign/llms-full.txt",
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "project.json",
+      "url": "https://opencoworkai.github.io/open-codesign/project.json",
+      "media_type": "application/json"
+    },
+    {
+      "name": "site-index.json",
+      "url": "https://opencoworkai.github.io/open-codesign/site-index.json",
+      "media_type": "application/json"
+    },
+    {
+      "name": "faq.json",
+      "url": "https://opencoworkai.github.io/open-codesign/faq.json",
+      "media_type": "application/json"
+    },
+    {
+      "name": "sitemap.xml",
+      "url": "https://opencoworkai.github.io/open-codesign/sitemap.xml",
+      "media_type": "application/xml"
+    }
+  ],
+  "non_affiliation_notes": [
+    "Open CoDesign is not affiliated with Anthropic, Vercel, StackBlitz, Lovable, or Figma.",
+    "Claude, Claude Design, v0, Bolt.new, Lovable, and Figma are names or trademarks of their respective owners."
+  ],
+  "content_policy": "This file summarizes public project facts for search and AI retrieval. It is intended to make real public content easier to understand and cite, not to create synthetic SEO filler."
+}

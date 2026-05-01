@@ -1,9 +1,8 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { lstat, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
-import { loadSkillsFromDir } from '../skills/loader.js';
 
 /**
  * `skill` tool. Lazy-loads the markdown body of a builtin design skill (or a
@@ -13,7 +12,7 @@ import { loadSkillsFromDir } from '../skills/loader.js';
  *
  * Both directories live under the user-visible templates tree
  * (`<userData>/templates/skills/` and `<userData>/templates/brand-refs/`),
- * seeded from the app bundle on first boot and user-editable thereafter.
+ * seeded from the app bundle and upgraded by adding missing files only.
  * Paths are injected at factory time so tests can point at a tmpdir and the
  * production wiring stays out of `import.meta.url`.
  */
@@ -38,10 +37,49 @@ function isMissingPath(err: unknown): boolean {
   return (err as NodeJS.ErrnoException).code === 'ENOENT';
 }
 
+function isWithinRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+async function resolveSafeManifestPath(root: string, candidate: string): Promise<string> {
+  const absRoot = path.resolve(root);
+  const absPath = path.resolve(candidate);
+  if (!isWithinRoot(absRoot, absPath)) {
+    throw new Error('registered path escapes template root');
+  }
+
+  const relative = path.relative(absRoot, absPath);
+  if (relative.length === 0) return absPath;
+  const parts = relative.split(path.sep).filter((part) => part.length > 0);
+  let cursor = absRoot;
+  for (const part of parts) {
+    cursor = path.join(cursor, part);
+    try {
+      const entry = await lstat(cursor);
+      if (entry.isSymbolicLink()) {
+        throw new Error(
+          `registered path traverses symbolic link: ${path.relative(absRoot, cursor)}`,
+        );
+      }
+    } catch (err) {
+      if (isMissingPath(err)) break;
+      throw err;
+    }
+  }
+  return absPath;
+}
+
+function rootForEntry(entry: SkillManifestEntry, roots: SkillRoots): string | null {
+  if (entry.source === 'builtin') return roots.skillsRoot ?? null;
+  return roots.brandRefsRoot ?? null;
+}
+
 export async function listSkillManifest(roots: SkillRoots): Promise<SkillManifestEntry[]> {
   const out: SkillManifestEntry[] = [];
 
   if (roots.skillsRoot) {
+    const { loadSkillsFromDir } = await import('../skills/loader.js');
     const builtins = await loadSkillsFromDir(roots.skillsRoot, 'builtin');
     for (const skill of builtins) {
       out.push({
@@ -142,7 +180,11 @@ export async function invokeSkill(opts: InvokeSkillOptions): Promise<InvokeSkill
     return { status: 'already-loaded', metadata: entry };
   }
   try {
-    const body = await readFile(entry.path, 'utf8');
+    const root = rootForEntry(entry, opts.roots);
+    if (root === null) {
+      throw new Error(`template root unavailable for ${entry.name}`);
+    }
+    const body = await readFile(await resolveSafeManifestPath(root, entry.path), 'utf8');
     return { status: 'loaded', body, metadata: entry };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -242,7 +284,7 @@ export function makeSkillTool(
         content: [
           {
             type: 'text',
-            text: `skill not found: ${name}. Available skills: run skill('__list__') or check the manifest`,
+            text: `skill not found: ${name}. Available skills are listed in the resource manifest.`,
           },
         ],
         details: { name, status: 'not-found' },

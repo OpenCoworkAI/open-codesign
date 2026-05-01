@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WorkspaceFileKind } from '../../../preload/index';
 import { useCodesignStore } from '../store';
+import { tr } from '../store/lib/locale';
 
 export type DesignFileKind = WorkspaceFileKind;
 
@@ -19,7 +20,7 @@ export interface UseDesignFilesResult {
 
 /**
  * Read the design's bound workspace directory directly. The list reflects
- * whatever is on disk right now — every write path (workspace edit, scaffold,
+ * whatever is on disk right now — every write path (edit tool, scaffold,
  * generate_image_asset, the user dragging a file in by hand) shows up
  * because we do not depend on any tool remembering to fire an event.
  *
@@ -32,8 +33,13 @@ export interface UseDesignFilesResult {
  */
 export function useDesignFiles(designId: string | null): UseDesignFilesResult {
   const previewHtml = useCodesignStore((s) => s.previewHtml);
+  const workspacePath = useCodesignStore((s) =>
+    designId === null ? null : (s.designs.find((d) => d.id === designId)?.workspacePath ?? null),
+  );
+  const pushToast = useCodesignStore((s) => s.pushToast);
   const [files, setFiles] = useState<DesignFileEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const lastListErrorRef = useRef<string | null>(null);
   const backend: 'workspace' | 'snapshots' =
     typeof window !== 'undefined' && (window.codesign as unknown as { files?: unknown })?.files
       ? 'workspace'
@@ -45,6 +51,11 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
       return;
     }
     if (backend === 'workspace') {
+      if (workspacePath === null) {
+        lastListErrorRef.current = null;
+        setFiles([]);
+        return;
+      }
       try {
         setLoading(true);
         const rows = await (
@@ -66,8 +77,19 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
             updatedAt: r.updatedAt,
           })),
         );
-      } catch {
+        lastListErrorRef.current = null;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : tr('errors.unknown');
         setFiles([]);
+        const errorKey = `${designId}:${workspacePath}:${message}`;
+        if (lastListErrorRef.current !== errorKey) {
+          lastListErrorRef.current = errorKey;
+          pushToast({
+            variant: 'error',
+            title: tr('canvas.workspace.updateFailed'),
+            description: message,
+          });
+        }
       } finally {
         setLoading(false);
       }
@@ -88,7 +110,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
     } else {
       setFiles([]);
     }
-  }, [designId, backend, previewHtml]);
+  }, [designId, backend, previewHtml, pushToast, workspacePath]);
 
   // Initial fetch + refetch when the design changes.
   useEffect(() => {
@@ -141,7 +163,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
   // 250ms so this won't fire-hose readdir.
   useEffect(() => {
     if (backend !== 'workspace') return;
-    if (!designId) return;
+    if (!designId || workspacePath === null) return;
     const filesApi = window.codesign?.files as
       | {
           subscribe?: (id: string) => Promise<unknown>;
@@ -150,7 +172,13 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
         }
       | undefined;
     if (!filesApi?.subscribe || !filesApi.unsubscribe || !filesApi.onChanged) return;
-    void filesApi.subscribe(designId);
+    void filesApi.subscribe(designId).catch((err: unknown) => {
+      pushToast({
+        variant: 'error',
+        title: tr('canvas.workspace.updateFailed'),
+        description: err instanceof Error ? err.message : tr('errors.unknown'),
+      });
+    });
     const off = filesApi.onChanged((event) => {
       if (event.designId !== designId) return;
       void refetch();
@@ -159,7 +187,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
       off();
       void filesApi.unsubscribe?.(designId);
     };
-  }, [backend, designId, refetch]);
+  }, [backend, designId, pushToast, refetch, workspacePath]);
 
   return { files, loading, backend };
 }

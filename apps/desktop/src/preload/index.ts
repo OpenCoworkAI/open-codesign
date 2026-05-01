@@ -261,7 +261,7 @@ const api = {
     referenceUrl?: string;
     attachments: LocalInputFile[];
     generationId: string;
-    designId?: string;
+    designId: string;
     previousHtml?: string;
   }) =>
     ipcRenderer.invoke('codesign:v1:generate', {
@@ -490,7 +490,7 @@ const api = {
       ipcRenderer.invoke('codesign:files:v1:subscribe', {
         schemaVersion: 1,
         designId,
-      }) as Promise<{ ok: true } | { ok: false; reason: string }>,
+      }) as Promise<{ ok: true }>,
     unsubscribe: (designId: string) =>
       ipcRenderer.invoke('codesign:files:v1:unsubscribe', {
         schemaVersion: 1,
@@ -505,10 +505,11 @@ const api = {
   snapshots: {
     listDesigns: () =>
       ipcRenderer.invoke('snapshots:v1:list-designs', { schemaVersion: 1 }) as Promise<Design[]>,
-    createDesign: (name: string) =>
+    createDesign: (name: string, workspacePath?: string | null) =>
       ipcRenderer.invoke('snapshots:v1:create-design', {
         schemaVersion: 1,
         name,
+        ...(workspacePath !== undefined ? { workspacePath } : {}),
       }) as Promise<Design>,
     getDesign: (id: string) =>
       ipcRenderer.invoke('snapshots:v1:get-design', {
@@ -558,7 +559,7 @@ const api = {
       ipcRenderer.invoke('snapshots:v1:workspace:pick', {
         schemaVersion: 1,
       }) as Promise<string | null>,
-    updateWorkspace: (designId: string, workspacePath: string | null, migrateFiles: boolean) =>
+    updateWorkspace: (designId: string, workspacePath: string, migrateFiles: boolean) =>
       ipcRenderer.invoke('snapshots:v1:workspace:update', {
         schemaVersion: 1,
         designId,

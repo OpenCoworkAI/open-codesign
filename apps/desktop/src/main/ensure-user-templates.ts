@@ -1,12 +1,13 @@
 import { existsSync } from 'node:fs';
-import { cp } from 'node:fs/promises';
+import { cp, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export interface EnsureUserTemplatesResult {
-  action: 'seeded' | 'skipped' | 'missing-source';
+  action: 'seeded' | 'merged' | 'skipped' | 'missing-source';
   source: string;
   dest: string;
+  copiedFiles?: number;
 }
 
 /**
@@ -36,20 +37,43 @@ export function resolveBundledTemplatesDir(
 }
 
 /**
- * Copy the bundled templates into `<userData>/templates` on first boot so the
- * user owns the tree afterwards. No-op if the destination already exists —
- * this means edits survive upgrades and deleting the folder re-seeds on next
- * launch.
+ * Copy bundled templates into `<userData>/templates` so the user owns the tree
+ * afterwards. Existing files are never overwritten; upgrades only add new
+ * bundled files that the user does not already have.
  */
 export async function ensureUserTemplates(
   userDataDir: string,
   sourceDir: string | null,
 ): Promise<EnsureUserTemplatesResult> {
   const dest = path.join(userDataDir, 'templates');
-  if (existsSync(dest)) return { action: 'skipped', source: sourceDir ?? '', dest };
   if (sourceDir === null || !existsSync(sourceDir)) {
     return { action: 'missing-source', source: sourceDir ?? '', dest };
   }
-  await cp(sourceDir, dest, { recursive: true });
-  return { action: 'seeded', source: sourceDir, dest };
+  if (!existsSync(dest)) {
+    await cp(sourceDir, dest, { recursive: true });
+    return { action: 'seeded', source: sourceDir, dest };
+  }
+
+  const copiedFiles = await copyMissingFiles(sourceDir, dest);
+  return copiedFiles > 0
+    ? { action: 'merged', source: sourceDir, dest, copiedFiles }
+    : { action: 'skipped', source: sourceDir, dest, copiedFiles: 0 };
+}
+
+async function copyMissingFiles(sourceDir: string, destDir: string): Promise<number> {
+  await mkdir(destDir, { recursive: true });
+  let copied = 0;
+  for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copied += await copyMissingFiles(sourcePath, destPath);
+      continue;
+    }
+    if (!entry.isFile() || existsSync(destPath)) continue;
+    await mkdir(path.dirname(destPath), { recursive: true });
+    await cp(sourcePath, destPath, { recursive: false });
+    copied++;
+  }
+  return copied;
 }
