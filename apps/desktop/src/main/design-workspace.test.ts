@@ -133,19 +133,22 @@ describe('bindWorkspace', () => {
     expect(await stat(path.join(workspace, 'tracked.txt'))).toEqual(destinationBefore);
   });
 
-  it('throws when another active design already owns the workspace path', async () => {
+  it('allows another design to share an already-bound workspace path', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db);
     const otherDesign = createDesign(db);
-    const conflictPath = normalizeWorkspacePath(await makeTempDir('ocd-ws-conflict-'));
-    updateDesignWorkspace(db, otherDesign.id, conflictPath);
+    const sharedPath = normalizeWorkspacePath(await makeTempDir('ocd-ws-shared-'));
+    updateDesignWorkspace(db, otherDesign.id, sharedPath);
 
-    await expect(bindWorkspace(db, design.id, conflictPath, false)).rejects.toThrow(
-      'Workspace path is already bound to another design',
-    );
+    const bound = await bindWorkspace(db, design.id, sharedPath, false);
+
+    expect(bound.workspacePath).toBe(sharedPath);
     expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
-      workspace_path: null,
+      workspace_path: sharedPath,
     });
+    expect(
+      db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(otherDesign.id),
+    ).toEqual({ workspace_path: sharedPath });
   });
 
   it('treats case-only workspace differences as the same path on Windows for the same design', async () => {
@@ -164,16 +167,16 @@ describe('bindWorkspace', () => {
     });
   });
 
-  it('treats case-only workspace differences as conflicts on Windows across designs', async () => {
+  it('case-only differences on Windows still resolve to a shared bind across designs', async () => {
     await withMockedPlatform('win32', async () => {
       const db = initInMemoryDb();
       const design = createDesign(db);
       const otherDesign = createDesign(db);
-      updateDesignWorkspace(db, otherDesign.id, normalizeWorkspacePath('/Users/Roy/Workspace'));
+      const stored = normalizeWorkspacePath('/Users/Roy/Workspace');
+      updateDesignWorkspace(db, otherDesign.id, stored);
 
-      await expect(bindWorkspace(db, design.id, '/users/roy/workspace', false)).rejects.toThrow(
-        'Workspace path is already bound to another design',
-      );
+      const bound = await bindWorkspace(db, design.id, '/users/roy/workspace', false);
+      expect(bound.workspacePath).toBe(normalizeWorkspacePath('/users/roy/workspace'));
     });
   });
 

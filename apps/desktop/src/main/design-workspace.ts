@@ -137,8 +137,14 @@ export async function bindWorkspace(
     logger.info('workspace.bind.noop', { designId, workspacePath: normalizedPath });
     return current;
   }
+  // Upstream rejected binding the same folder to two designs. Their own v0.2
+  // doc explicitly says multiple sessions can share a workspace, so the
+  // conflict guard is over-zealous: it forces the user to either duplicate
+  // the folder or shuffle bindings just to spin up a second design view of
+  // the same project. We log the overlap (so the issue is auditable) but
+  // let the bind proceed.
   if (checkWorkspaceConflict(db, designId, normalizedPath)) {
-    throw new Error('Workspace path is already bound to another design');
+    logger.info('workspace.bind.shared', { designId, workspacePath: normalizedPath });
   }
 
   logger.info('workspace.bind.start', {
