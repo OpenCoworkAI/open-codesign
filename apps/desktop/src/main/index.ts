@@ -280,6 +280,15 @@ interface CreateRuntimeTextEditorFsOptions {
   previousHtml: string | null;
   sendEvent: (event: AgentStreamEvent) => void;
   logger: Pick<CoreLogger, 'error'>;
+  /**
+   * Image attachments from `preparePromptContext`. The first image (if any) is
+   * persisted into the agent's virtual FS as `source.png` so that
+   * `verify_ui_kit_visual_parity({slug})` can read it via its default
+   * `sourceImagePath`. Without this, the visual judge silently degrades to
+   * `status: 'unavailable'` even when the host has wired up the judge
+   * callback (review finding #2 on PR #241).
+   */
+  sourceAttachments?: ReadonlyArray<{ imageDataUrl?: string }>;
 }
 
 export function createRuntimeTextEditorFs({
@@ -289,6 +298,7 @@ export function createRuntimeTextEditorFs({
   previousHtml,
   sendEvent,
   logger,
+  sourceAttachments,
 }: CreateRuntimeTextEditorFsOptions) {
   const baseCtx = { designId: designId ?? '', generationId } as const;
   const fsMap = new Map<string, string>();
@@ -300,6 +310,13 @@ export function createRuntimeTextEditorFs({
   }
   for (const [name, content] of DESIGN_SKILLS) {
     fsMap.set(`skills/${name}`, content);
+  }
+  // Seed source.png from the first image attachment so the visual verifier
+  // can read it via its default `sourceImagePath: 'source.png'`. Stored as a
+  // data URL to match `verify_ui_kit_visual_parity`'s expected format.
+  const firstSourceImage = sourceAttachments?.find((a) => Boolean(a.imageDataUrl));
+  if (firstSourceImage?.imageDataUrl) {
+    fsMap.set('source.png', firstSourceImage.imageDataUrl);
   }
 
   function emitFsUpdated(filePath: string, content: string): void {
@@ -510,6 +527,9 @@ function registerIpcHandlers(db: Database | null): void {
       logger: logIpc,
       previousHtml,
       sendEvent,
+      // Pipe image attachments through so `source.png` is seeded for
+      // verify_ui_kit_visual_parity (PR #241 review fix #2).
+      sourceAttachments: input.attachments,
     });
     const cfg = getCachedConfig();
     const imageConfig = cfg ? resolveImageGenerationConfig(cfg) : null;
