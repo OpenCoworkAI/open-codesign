@@ -229,6 +229,11 @@ interface CodesignState {
    *  only persisted to SQLite when the result arrives (done/error). */
   pendingToolCalls: ChatToolCallPayload[];
   sidebarCollapsed: boolean;
+  /** Collapses the central file-list area inside the Files tab so the
+   *  preview can use the full canvas width. The CanvasTabBar at the top
+   *  stays visible, so the user can keep navigating between already-open
+   *  file tabs. */
+  filesPanelCollapsed: boolean;
 
   // Workstream D — comments
   comments: CommentRow[];
@@ -415,6 +420,7 @@ interface CodesignState {
    *  panel to write a re-serialized EDITMODE block back into the artifact. */
   setPreviewHtml: (content: string) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  setFilesPanelCollapsed: (collapsed: boolean) => void;
 
   // Workstream D — comments
   loadCommentsForCurrentDesign: () => Promise<void>;
@@ -1383,6 +1389,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   chatMessages: [],
   chatLoaded: false,
   sidebarCollapsed: false,
+  filesPanelCollapsed: false,
 
   comments: [],
   commentsLoaded: false,
@@ -2546,6 +2553,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   setSidebarCollapsed(collapsed: boolean) {
     set({ sidebarCollapsed: collapsed });
+  },
+
+  setFilesPanelCollapsed(collapsed: boolean) {
+    set({ filesPanelCollapsed: collapsed });
   },
 
   async loadCommentsForCurrentDesign() {

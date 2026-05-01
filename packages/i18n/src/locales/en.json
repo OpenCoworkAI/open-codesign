@@ -47,7 +47,9 @@
     "files": {
       "sectionTitle": "Design files",
       "sectionSubtitle": "{{count}} files",
-      "empty": "No files yet. Send a prompt to have the agent generate a design — files will show up here."
+      "empty": "No files yet. Send a prompt to have the agent generate a design — files will show up here.",
+      "collapse": "Hide file list",
+      "expand": "Show file list"
     },
     "newDesignDialog": {
       "title": "New design",

@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { buildSrcdoc } from '@open-codesign/runtime';
-import { FileCode2, Folder, FolderOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileCode2, Folder, FolderOpen } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDesignFiles } from '../hooks/useDesignFiles';
 import { workspacePathComparisonKey } from '../lib/workspace-path';
@@ -168,6 +168,8 @@ export function FilesTabView() {
   const openFileTab = useCodesignStore((s) => s.openCanvasFileTab);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
+  const collapsed = useCodesignStore((s) => s.filesPanelCollapsed);
+  const setCollapsed = useCodesignStore((s) => s.setFilesPanelCollapsed);
   const { files } = useDesignFiles(currentDesignId);
 
   const defaultPath = useMemo(() => {
@@ -191,15 +193,52 @@ export function FilesTabView() {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Thin column shown in place of the full aside when the user collapses
+  // the file list. Carries only the expand button so the canvas tab bar
+  // (rendered by PreviewPane above us) stays the way to switch between
+  // already-opened tabs.
+  const collapsedRail = (
+    <aside className="w-[36px] shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] flex flex-col items-center pt-[var(--space-3)]">
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        title={t('canvas.files.expand')}
+        aria-label={t('canvas.files.expand')}
+        className="w-6 h-6 inline-flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+      >
+        <ChevronRight className="w-3.5 h-3.5" aria-hidden />
+      </button>
+    </aside>
+  );
+
+  const collapseButton = (
+    <button
+      type="button"
+      onClick={() => setCollapsed(true)}
+      title={t('canvas.files.collapse')}
+      aria-label={t('canvas.files.collapse')}
+      className="ml-auto w-6 h-6 inline-flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+    >
+      <ChevronLeft className="w-3.5 h-3.5" aria-hidden />
+    </button>
+  );
+
   if (files.length === 0) {
     return (
       <div className="flex h-full min-h-0">
-        <aside className="w-[35%] shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] overflow-y-auto flex flex-col">
-          <WorkspaceSection />
-          <div className="flex-1 flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)] px-[var(--space-6)]">
-            {t('canvas.filesTabEmpty')}
-          </div>
-        </aside>
+        {collapsed ? (
+          collapsedRail
+        ) : (
+          <aside className="w-[35%] shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] overflow-y-auto flex flex-col">
+            <WorkspaceSection />
+            <div className="flex items-center px-[var(--space-4)] py-[var(--space-2)] border-b border-[var(--color-border-muted)]">
+              {collapseButton}
+            </div>
+            <div className="flex-1 flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)] px-[var(--space-6)]">
+              {t('canvas.filesTabEmpty')}
+            </div>
+          </aside>
+        )}
         <div className="flex-1 min-w-0 h-full bg-[var(--color-background-secondary)] flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
           {t('canvas.filesTabEmpty')}
         </div>
@@ -208,6 +247,59 @@ export function FilesTabView() {
   }
 
   const selectedFile = selectedPath ? (files.find((f) => f.path === selectedPath) ?? null) : null;
+
+  if (collapsed) {
+    return (
+      <div className="flex h-full min-h-0">
+        {collapsedRail}
+        <div className="flex-1 min-w-0 h-full bg-[var(--color-background-secondary)] flex flex-col min-h-0">
+          <div className="shrink-0 h-[36px] px-[var(--space-4)] flex items-center justify-between gap-[var(--space-3)] border-b border-[var(--color-border-muted)] bg-[var(--color-background)]">
+            <span
+              className="truncate text-[12px] text-[var(--color-text-secondary)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              {selectedFile?.path ?? selectedPath ?? ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => selectedPath && openFileTab(selectedPath)}
+              className="text-[11px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors"
+            >
+              {t('canvas.openInTab')}
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 bg-[var(--color-background-secondary)]">
+            {srcDoc ? (
+              <iframe
+                ref={iframeRef}
+                title={`design-preview-${selectedPath ?? ''}`}
+                sandbox="allow-scripts"
+                srcDoc={srcDoc}
+                onLoad={() => {
+                  const win = iframeRef.current?.contentWindow;
+                  if (!win) return;
+                  try {
+                    win.postMessage(
+                      { __codesign: true, type: 'SET_MODE', mode: interactionMode },
+                      '*',
+                    );
+                  } catch (err) {
+                    const reason = err instanceof Error ? err.message : String(err);
+                    pushIframeError(`SET_MODE postMessage failed: ${reason}`);
+                  }
+                }}
+                className="w-full h-full bg-white border-0 block"
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
+                {t('canvas.filesTabEmpty')}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0">
@@ -224,6 +316,7 @@ export function FilesTabView() {
             >
               {files.length}
             </span>
+            {collapseButton}
           </div>
 
           <ul className="list-none p-0 m-0 flex flex-col gap-[var(--space-1)]">
