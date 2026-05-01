@@ -27,7 +27,6 @@ import {
   type ReportEventResult,
 } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
-import type BetterSqlite3 from 'better-sqlite3';
 import { configDir } from './config';
 import {
   composeSummaryMarkdown,
@@ -44,6 +43,7 @@ import { app, ipcMain, shell } from './electron-runtime';
 import { getLogger, getLogPath, logsDir } from './logger';
 import { findRecent, recordReported } from './reported-fingerprints';
 import {
+  type Database,
   getDiagnosticEventById,
   listDiagnosticEvents,
   recordDiagnosticEvent,
@@ -58,8 +58,6 @@ export {
   redactSensitiveTomlFields,
 } from './diagnostics/redact';
 
-type Database = BetterSqlite3.Database;
-
 const logger = getLogger('diagnostics-ipc');
 
 const GITHUB_REPO_URL = 'https://github.com/OpenCoworkAI/open-codesign';
@@ -72,7 +70,7 @@ const DIAGNOSTICS_MAX = 500;
 const REPORTED_FINGERPRINTS_FILENAME = 'reported-fingerprints.json';
 
 // Defense-in-depth caps on IPC payload strings. A compromised renderer or
-// buggy caller could otherwise flood the main process / SQLite / bundle with
+// buggy caller could otherwise flood the main process / local store / bundle with
 // multi-MB fields. Keep these generous enough for real stack traces.
 const MESSAGE_MAX = 8_000;
 const STACK_MAX = 16_000;
@@ -491,7 +489,7 @@ async function handleReportEvent(
 ): Promise<ReportEventResult> {
   const error = input.error;
 
-  // If the ReportableError was persisted into diagnostic_events earlier,
+  // If the ReportableError was persisted into the diagnostic event store earlier,
   // surface the DB row's `count` + `context_json` so the bundle carries
   // the richer repeat-count and any context the renderer didn't ship. All
   // of this is nice-to-have; Report works end-to-end without the DB.
@@ -760,7 +758,7 @@ function persistRendererErrorEntry(db: Database, entry: RendererLogEntry): void 
 function handleRendererLog(db: Database | null, raw: unknown): void {
   const entry = parseLogEntry(raw);
   dispatchRendererLog(entry);
-  // Persist only error-level renderer entries into diagnostic_events.
+  // Persist only error-level renderer entries into the local diagnostic store.
   if (entry.level === 'error' && db !== null) {
     persistRendererErrorEntry(db, entry);
   }

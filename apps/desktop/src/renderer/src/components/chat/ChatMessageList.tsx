@@ -25,7 +25,7 @@ interface RenderItem {
  * `tool_call` rows — regardless of verbGroup — into a single WorkingCard.
  * The bucket flushes on any non-tool_call row (assistant_text, user, error,
  * artifact_delivered) which gives us a clean per-turn "Working" card followed
- * by a plain assistant prose bubble. SQLite-replayed history obeys the same
+ * by a plain assistant prose bubble. Session-replayed history obeys the same
  * grouping because rows are read back in `seq` order.
  */
 export function ChatMessageList({

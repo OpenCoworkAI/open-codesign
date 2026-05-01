@@ -64,7 +64,7 @@ export default defineConfig({
           moduleSideEffects: (id) =>
             !id.includes('/node_modules/@mariozechner/pi-coding-agent/dist/'),
         },
-        external: ['electron', 'puppeteer-core', 'better-sqlite3'],
+        external: ['electron', 'puppeteer-core'],
         plugins: [copyPromptSections()],
       },
     },

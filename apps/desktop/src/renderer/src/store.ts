@@ -159,7 +159,7 @@ export interface CodesignState {
   chatMessages: ChatMessageRow[];
   chatLoaded: boolean;
   /** In-flight tool calls that haven't completed yet. Purely in-memory —
-   *  only persisted to SQLite when the result arrives (done/error). */
+   *  only persisted to session JSONL when the result arrives (done/error). */
   pendingToolCalls: ChatToolCallPayload[];
   sidebarCollapsed: boolean;
 
@@ -202,12 +202,12 @@ export interface CodesignState {
    * Canonical in-memory registry of every error the renderer has surfaced to
    * the user. Capped at MAX_REPORTABLE; oldest entries drop first. The Report
    * dialog reads from here directly so it opens instantly, without an IPC
-   * round-trip to the diagnostic_events DB.
+   * round-trip to the diagnostic event store.
    */
   reportableErrors: ReportableError[];
   /**
    * Register a ReportableError in-memory (synchronous) and kick off a fire-
-   * and-forget `recordRendererError` IPC to persist it into diagnostic_events.
+   * and-forget `recordRendererError` IPC to persist it into the diagnostic event store.
    * Returns the newly minted `localId` so callers can stamp it on the toast
    * or dialog invocation.
    */
@@ -336,7 +336,7 @@ export interface CodesignState {
    *  background run cannot stomp the preview the user is currently viewing. */
   setPreviewHtmlFromAgent: (input: { designId: string; content: string }) => void;
   /** Persist the current in-memory `previewHtml` for a finished agentic run as
-   *  a SQLite snapshot row. Without this, agentic runs never write to disk
+   *  a snapshot row. Without this, agentic runs never write to disk
    *  and reload boots back into the empty welcome state even when the agent
    *  produced a valid index.html. Fires-and-forgets — failures are toasted. */
   persistAgentRunSnapshot: (input: { designId: string; finalText?: string }) => Promise<void>;

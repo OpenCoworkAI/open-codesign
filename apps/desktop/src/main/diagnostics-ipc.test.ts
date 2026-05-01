@@ -2,7 +2,7 @@
  * Wiring test for diagnostics:v1:log → recordDiagnosticEvent.
  *
  * Proves that renderer `error`-level entries are persisted into the
- * diagnostic_events table, while `info` and `warn` are log-only.
+ * diagnostic event store, while `info` and `warn` are log-only.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -198,7 +198,7 @@ describe('diagnostics:v1:recordRendererError', () => {
 });
 
 describe('diagnostics:v1:log persistence', () => {
-  it('persists error-level entries into diagnostic_events', () => {
+  it('persists error-level entries into the diagnostic event store', () => {
     const db = initInMemoryDb();
     registerDiagnosticsIpc(db);
 
@@ -353,7 +353,7 @@ describe('diagnostics:v1:reportEvent', () => {
   }
 
   it('returns issueUrl + bundlePath + summaryMarkdown without any DB row', async () => {
-    // The Report flow no longer requires a diagnostic_events row — the
+    // The Report flow no longer requires a persisted diagnostic event row — the
     // ReportableError payload alone is enough to build the bundle.
     const db = initInMemoryDb();
     registerDiagnosticsIpc(db);

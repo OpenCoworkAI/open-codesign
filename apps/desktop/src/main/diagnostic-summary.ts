@@ -10,7 +10,7 @@ import { normalizeFrame } from '@open-codesign/shared/fingerprint';
 
 export interface SummaryInput {
   /** The canonical in-memory error record. Since the Report flow no longer
-   *  requires a diagnostic_events row to exist, the composer works off the
+   *  requires a persisted diagnostic event row to exist, the composer works off the
    *  ReportableError payload the renderer sent. */
   error: ReportableError;
   /** Optional DB row count for this fingerprint. Falls back to 1 when the row

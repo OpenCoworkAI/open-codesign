@@ -1,0 +1,90 @@
+name: Release macOS x64 native check
+
+on:
+  push:
+    branches:
+      - dev/v0.2
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag, branch, or SHA to validate (for example v0.2.0)'
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  macos-x64-native:
+    name: Native Intel packaging check
+    runs-on: macos-13
+    timeout-minutes: 60
+    env:
+      CHECK_REF: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECK_REF }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm --filter '!@open-codesign/desktop' -r build
+
+      - name: Package x64 desktop on Intel macOS
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm --filter @open-codesign/desktop exec electron-vite build
+          pnpm --filter @open-codesign/desktop exec bash scripts/package-macos-dmg.sh --mac dmg:x64 --publish never
+
+      - name: Verify x64 app architecture
+        run: bash apps/desktop/scripts/verify-macos-app.sh apps/desktop/release x64
+
+      - name: Smoke x64 app natively
+        env:
+          CODESIGN_SMOKE_TEST: '1'
+          CODESIGN_SMOKE_USER_DATA_DIR: ${{ runner.temp }}/codesign-smoke-x64-native
+        run: |
+          rm -rf "$CODESIGN_SMOKE_USER_DATA_DIR"
+          mkdir -p "$CODESIGN_SMOKE_USER_DATA_DIR"
+          x64_binary="$(CODESIGN_VERIFY_PRINT_BINARY=1 bash apps/desktop/scripts/verify-macos-app.sh apps/desktop/release x64)"
+          "$x64_binary" --smoke-test &
+          smoke_pid=$!
+          for _ in {1..60}; do
+            if ! kill -0 "$smoke_pid" 2>/dev/null; then
+              wait "$smoke_pid"
+              exit $?
+            fi
+            sleep 1
+          done
+          echo "::error::native x64 smoke test did not exit within 60 seconds"
+          kill "$smoke_pid" 2>/dev/null || true
+          wait "$smoke_pid" 2>/dev/null || true
+          exit 1
+
+      - name: Upload native x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-check-macos-x64
+          path: apps/desktop/release/*.dmg
+          if-no-files-found: error
+          retention-days: 7

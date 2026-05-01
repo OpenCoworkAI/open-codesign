@@ -757,7 +757,7 @@ describe('useCodesignStore artifact persistence', () => {
     await initI18n('en');
   });
 
-  it('writes a design_snapshots row after generate.ok and rehydrates the preview on switchDesign', async () => {
+  it('writes a snapshot after generate.ok and rehydrates the preview on switchDesign', async () => {
     const designId = 'design-persist';
     const designRow = {
       schemaVersion: 1 as const,
@@ -770,7 +770,7 @@ describe('useCodesignStore artifact persistence', () => {
       workspacePath: '/tmp/design-persist',
     };
 
-    // Stand-in for the SQLite-backed snapshots table.
+    // Stand-in for the persisted snapshots store.
     type SnapshotRow = {
       schemaVersion: 1;
       id: string;

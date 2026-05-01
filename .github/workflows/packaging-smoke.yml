@@ -14,7 +14,7 @@ name: Packaging smoke
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev/v0.2]
     paths:
       - 'apps/desktop/electron-builder.yml'
       - 'apps/desktop/package.json'
@@ -22,10 +22,11 @@ on:
       - 'apps/desktop/scripts/**'
       - '.github/workflows/packaging-smoke.yml'
       - '.github/workflows/release.yml'
+      - '.github/workflows/release-macos-x64-native-check.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
   pull_request:
-    branches: [main]
+    branches: [main, dev/v0.2]
     paths:
       - 'apps/desktop/electron-builder.yml'
       - 'apps/desktop/package.json'
@@ -33,6 +34,7 @@ on:
       - 'apps/desktop/scripts/**'
       - '.github/workflows/packaging-smoke.yml'
       - '.github/workflows/release.yml'
+      - '.github/workflows/release-macos-x64-native-check.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
 

@@ -3,7 +3,12 @@ import path from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import { resolveGenerationWorkspaceRoot } from './generation-workspace';
-import { createDesign, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
+import {
+  __unsafeSetDesignWorkspaceForTest,
+  createDesign,
+  initInMemoryDb,
+  updateDesignWorkspace,
+} from './snapshots-db';
 import { normalizeWorkspacePath } from './workspace-path';
 
 describe('resolveGenerationWorkspaceRoot', () => {
@@ -23,7 +28,7 @@ describe('resolveGenerationWorkspaceRoot', () => {
     const db = initInMemoryDb();
     const unbound = createDesign(db, 'Unbound design');
     const corrupt = createDesign(db, 'Corrupt design');
-    db.prepare('UPDATE designs SET workspace_path = ? WHERE id = ?').run('', corrupt.id);
+    __unsafeSetDesignWorkspaceForTest(db, corrupt.id, '');
 
     expect(() => resolveGenerationWorkspaceRoot(null, unbound.id)).toThrow(CodesignError);
     expect(() => resolveGenerationWorkspaceRoot(db, undefined)).toThrow(CodesignError);

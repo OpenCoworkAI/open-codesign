@@ -58,31 +58,6 @@ function koffiTriplet(platform, arch) {
   return null;
 }
 
-function pruneBetterSqlite3(nodeModulesDir, arch) {
-  const pkgDir = path.join(nodeModulesDir, 'better-sqlite3');
-  if (!fs.existsSync(pkgDir)) return;
-  const releaseDir = path.join(pkgDir, 'build', 'Release');
-  if (!fs.existsSync(releaseDir)) {
-    throw new Error(`better-sqlite3 release directory missing: ${releaseDir}`);
-  }
-
-  rm(path.join(pkgDir, 'deps'));
-  rm(path.join(pkgDir, 'src'));
-  const currentBinary = `better_sqlite3.node-electron-${arch}.node`;
-  if (!fs.existsSync(path.join(releaseDir, currentBinary))) {
-    throw new Error(
-      `better-sqlite3 Electron binary missing: ${path.join(releaseDir, currentBinary)}`,
-    );
-  }
-
-  for (const name of fs.readdirSync(releaseDir)) {
-    if (name.endsWith('.node') && name !== currentBinary) {
-      rm(path.join(releaseDir, name));
-    }
-  }
-  rm(path.join(releaseDir, 'install-sqlite-bindings.lock.json'));
-}
-
 function pruneKoffi(nodeModulesDir, platform, arch) {
   const pkgDir = path.join(nodeModulesDir, 'koffi');
   const buildRoot = path.join(pkgDir, 'build', 'koffi');
@@ -115,7 +90,6 @@ module.exports = async function afterPackPrune(context) {
   const platform = context.electronPlatformName ?? process.platform;
   const arch = archName(context.arch);
   for (const nodeModulesDir of unpackedNodeModulesDirs(context)) {
-    pruneBetterSqlite3(nodeModulesDir, arch);
     pruneKoffi(nodeModulesDir, platform, arch);
     pruneUnpackedRuntimeNoise(nodeModulesDir);
   }

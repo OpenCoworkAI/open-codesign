@@ -373,7 +373,7 @@ export {
 } from './tool-manifest';
 
 // ---------------------------------------------------------------------------
-// Diagnostic events (PR3 — main-process diagnostic_events table)
+// Diagnostic events (main-process local design store)
 // ---------------------------------------------------------------------------
 
 export type DiagnosticLevel = 'info' | 'warn' | 'error';
@@ -459,7 +459,7 @@ export interface ListEventsResult {
  * dialog opens purely from in-memory state so Report works even when the
  * DB is unavailable or the event was never persisted.
  *
- * Persistence into `diagnostic_events` is a nice-to-have enhancement that
+ * Persistence into the local diagnostic event store is a nice-to-have enhancement that
  * runs fire-and-forget from `createReportableError`. If it succeeds, the
  * caller patches `persistedEventId` / `persistedFingerprint` onto the
  * in-memory record. Nothing downstream depends on that.

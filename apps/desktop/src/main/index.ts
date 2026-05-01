@@ -2,7 +2,6 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BRAND } from '@open-codesign/shared';
-import type BetterSqlite3 from 'better-sqlite3';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { registerAppMenu } from './app-menu';
@@ -25,7 +24,7 @@ import { loadConfigOnBoot, registerOnboardingIpc } from './onboarding-ipc';
 import { isAllowedExternalUrl } from './open-external';
 import { readPersisted as readPreferences, registerPreferencesIpc } from './preferences-ipc';
 import { cleanupStaleTmps } from './reported-fingerprints';
-import { pruneDiagnosticEvents, safeInitSnapshotsDb } from './snapshots-db';
+import { type Database, pruneDiagnosticEvents, safeInitSnapshotsDb } from './snapshots-db';
 import {
   registerSnapshotsIpc,
   registerSnapshotsUnavailableIpc,
@@ -45,16 +44,21 @@ const __dirname = dirname(__filename);
 let mainWindow: ElectronBrowserWindow | null = null;
 const getMainWindow = (): ElectronBrowserWindow | null => mainWindow;
 
+const IS_VITEST = process.env['VITEST'] === 'true';
+const IS_SMOKE_TEST =
+  process.argv.includes('--smoke-test') || process.env['CODESIGN_SMOKE_TEST'] === '1';
+const smokeUserDataDir = process.env['CODESIGN_SMOKE_USER_DATA_DIR'];
+if (IS_SMOKE_TEST && smokeUserDataDir !== undefined && smokeUserDataDir.trim().length > 0) {
+  mkdirSync(smokeUserDataDir, { recursive: true });
+  app.setPath('userData', smokeUserDataDir);
+}
+
 const defaultUserDataDir = app.getPath('userData');
 const storageLocations = initStorageSettings(defaultUserDataDir);
 if (storageLocations.dataDir !== undefined) {
   mkdirSync(storageLocations.dataDir, { recursive: true });
   app.setPath('userData', storageLocations.dataDir);
 }
-
-const IS_VITEST = process.env['VITEST'] === 'true';
-
-type Database = BetterSqlite3.Database;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -169,7 +173,7 @@ if (!IS_VITEST) {
       initLogger();
       // Single-instance lock. Two simultaneous Electron instances would race
       // `cleanupStaleTmps` vs `writeAtomic` (B's cleanup unlinks A's in-flight
-      // tmp → ENOENT rename) and collide on the SQLite WAL. macOS usually
+      // tmp → ENOENT rename) and collide on local JSON writes. macOS usually
       // enforces this at the OS level, but `open -n` defeats that — so we
       // acquire the lock explicitly before touching any shared files.
       const gotLock = app.requestSingleInstanceLock();
@@ -204,11 +208,11 @@ if (!IS_VITEST) {
       // crashes. pid changes across restarts so without this the config dir
       // accumulates 0o600 litter forever.
       cleanupStaleTmps(join(configDir(), 'reported-fingerprints.json'));
-      // Snapshot persistence is best-effort at boot — a failure here (corrupt DB,
-      // permission denied, missing native binding) must NOT block the BrowserWindow
+      // Design metadata persistence is best-effort at boot — a failure here
+      // (corrupt JSON, permission denied) must NOT block the BrowserWindow
       // from opening. Surface it via an error dialog and skip registering the
       // snapshots IPC channels; the rest of the app stays usable.
-      const dbResult = safeInitSnapshotsDb(join(app.getPath('userData'), 'designs.db'));
+      const dbResult = safeInitSnapshotsDb(join(app.getPath('userData'), 'design-store.json'));
       const diagnosticsDb: Database | null = dbResult.ok ? dbResult.db : null;
       if (dbResult.ok) {
         registerSnapshotsIpc(dbResult.db);
@@ -225,13 +229,14 @@ if (!IS_VITEST) {
           message: dbResult.error.message,
           stack: dbResult.error.stack,
         });
+        if (IS_SMOKE_TEST) throw dbResult.error;
         // Install stub handlers so renderer-side calls reject with a typed
         // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
         // "No handler registered" rejection — see snapshots-ipc.ts.
         registerSnapshotsUnavailableIpc(dbResult.error.message);
         dialog.showErrorBox(
           'Design history unavailable',
-          `Could not open the local snapshots database. Version history will be disabled for this session.\n\n${dbResult.error.message}`,
+          `Could not open the local design store. Version history will be disabled for this session.\n\n${dbResult.error.message}`,
         );
       }
       const teardownIpc = registerIpcHandlers(diagnosticsDb, getMainWindow);
@@ -245,6 +250,14 @@ if (!IS_VITEST) {
       registerExporterIpc(getMainWindow);
       registerDiagnosticsIpc(diagnosticsDb);
       registerAskIpc();
+      if (IS_SMOKE_TEST) {
+        bootLog.info('smoke.ok', { arch: process.arch, platform: process.platform });
+        process.stdout.write(
+          `codesign smoke.ok arch=${process.arch} platform=${process.platform}\n`,
+        );
+        app.quit();
+        return;
+      }
       setupAutoUpdater(getMainWindow);
       registerAppMenu();
       createWindow();
@@ -260,6 +273,13 @@ if (!IS_VITEST) {
         }
       });
     } catch (err) {
+      if (IS_SMOKE_TEST) {
+        process.stderr.write(
+          `codesign smoke.fail ${err instanceof Error ? err.stack || err.message : String(err)}\n`,
+        );
+        app.exit(1);
+        return;
+      }
       // Last-resort boot-phase handler. Reached when something before
       // `initLogger()` finishes (or during the first few setup calls)
       // throws — our electron-log sink might not exist yet, so write a

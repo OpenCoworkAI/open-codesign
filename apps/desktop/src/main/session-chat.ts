@@ -8,8 +8,7 @@ import type {
   ChatToolCallPayload,
 } from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
-import type { Database } from './db/native-binding';
-import { getDesign, listSnapshots } from './snapshots-db';
+import { type Database, getDesign, listSnapshots } from './snapshots-db';
 import { normalizeWorkspacePath } from './workspace-path';
 
 export const CHAT_MESSAGE_CUSTOM_TYPE = 'open-codesign.chat.message';

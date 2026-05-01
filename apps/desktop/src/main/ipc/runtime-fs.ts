@@ -1,9 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path_module from 'node:path';
 import type { CoreLogger, GenerateImageAssetRequest } from '@open-codesign/core';
-import type BetterSqlite3 from 'better-sqlite3';
 import type { AgentStreamEvent } from '../../preload/index';
-import { getDesign, normalizeDesignFilePath, upsertDesignFile } from '../snapshots-db';
+import {
+  type Database,
+  getDesign,
+  normalizeDesignFilePath,
+  upsertDesignFile,
+} from '../snapshots-db';
 import { prepareWorkspaceWriteContent } from '../workspace-file-content';
 import { normalizeWorkspacePath } from '../workspace-path';
 import { resolveSafeWorkspaceChildPath } from '../workspace-reader';
@@ -52,7 +56,7 @@ export function allocateAssetPath(
 }
 
 interface CreateRuntimeTextEditorFsOptions {
-  db: BetterSqlite3.Database | null;
+  db: Database | null;
   generationId: string;
   designId: string | null;
   previousHtml: string | null;

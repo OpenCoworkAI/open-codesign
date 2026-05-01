@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Message, Usage } from '@mariozechner/pi-ai';
 import { SessionManager } from '@open-codesign/core';
-import { openDatabase as openBetterSqliteDatabase } from '../db/native-binding';
 import { normalizeDesignFilePath } from '../snapshots-db';
 import { prepareWorkspaceWriteContent } from '../workspace-file-content';
 
@@ -31,7 +30,7 @@ export interface MigrationOptions {
   workspaceRoot: string;
   /** Absolute directory the SessionManager writes JSONL into. */
   sessionDir: string;
-  /** Optional sqlite opener for testing — defaults to better-sqlite3 dynamic import. */
+  /** Optional legacy SQLite opener. v0.2 runtime does not bundle a SQLite driver. */
   openDatabase?: (path: string) => MigrationDatabase;
   /** Hook for per-design progress. */
   onProgress?: (event: MigrationProgress) => void;
@@ -108,7 +107,10 @@ export async function runMigration(opts: MigrationOptions): Promise<MigrationRes
     return { attempted: 0, migrated: 0, failed: [] };
   }
 
-  const open = opts.openDatabase ?? (await defaultOpener());
+  if (opts.openDatabase === undefined) {
+    throw new Error('Legacy v0.1 migration requires an explicit SQLite opener');
+  }
+  const open = opts.openDatabase;
   const db = open(opts.sourceDbPath);
   let dbClosed = false;
   const closeDb = (): void => {
@@ -354,9 +356,4 @@ function slugify(input: string): string {
       .replace(/^-+|-+$/g, '')
       .slice(0, 60) || 'untitled'
   );
-}
-
-async function defaultOpener(): Promise<(path: string) => MigrationDatabase> {
-  return (path) =>
-    openBetterSqliteDatabase(path, { readonly: true }) as unknown as MigrationDatabase;
 }

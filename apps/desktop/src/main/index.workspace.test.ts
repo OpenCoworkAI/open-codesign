@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentStreamEvent } from '../preload/index';
 import { normalizeWorkspacePath } from './design-workspace';
 import {
+  __unsafeSetDesignWorkspaceForTest,
   createDesign,
   initInMemoryDb,
   updateDesignWorkspace,
@@ -306,7 +307,7 @@ describe('createRuntimeTextEditorFs', () => {
   it('rejects corrupt empty workspace paths instead of writing relative to cwd', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db, 'Corrupt Workspace');
-    db.prepare('UPDATE designs SET workspace_path = ? WHERE id = ?').run('', design.id);
+    __unsafeSetDesignWorkspaceForTest(db, design.id, '');
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
     const { fs } = createRuntimeTextEditorFs({
@@ -408,7 +409,7 @@ describe('createRuntimeTextEditorFs', () => {
     }
   });
 
-  it('does not advance db content when bound workspace strReplace write-through fails', async () => {
+  it('does not advance in-memory content when bound workspace strReplace write-through fails', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db, 'Workspace');
     const workspaceDir = makeTempDir('ocd-runtime-replace-fail-');
@@ -434,7 +435,7 @@ describe('createRuntimeTextEditorFs', () => {
         'Workspace write-through failed for index.html',
       );
 
-      expect(viewDesignFile(db, design.id, 'index.html')?.content).toBe('<main>before</main>');
+      expect(viewDesignFile(db, design.id, 'index.html')).toBeNull();
       expect(fs.view('index.html')?.content).toBe('<main>before</main>');
       expect(listFsUpdatedEvents(sendEvent)).toHaveLength(1);
       expect(logger.error).toHaveBeenCalled();
@@ -443,7 +444,7 @@ describe('createRuntimeTextEditorFs', () => {
     }
   });
 
-  it('does not advance db content when bound workspace insert write-through fails', async () => {
+  it('does not advance in-memory content when bound workspace insert write-through fails', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db, 'Workspace');
     const workspaceDir = makeTempDir('ocd-runtime-insert-fail-');
@@ -469,7 +470,7 @@ describe('createRuntimeTextEditorFs', () => {
         'Workspace write-through failed for index.html',
       );
 
-      expect(viewDesignFile(db, design.id, 'index.html')?.content).toBe('<main>before</main>');
+      expect(viewDesignFile(db, design.id, 'index.html')).toBeNull();
       expect(fs.view('index.html')?.content).toBe('<main>before</main>');
       expect(listFsUpdatedEvents(sendEvent)).toHaveLength(1);
       expect(logger.error).toHaveBeenCalled();

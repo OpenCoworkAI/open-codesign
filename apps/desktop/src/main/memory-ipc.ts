@@ -14,12 +14,9 @@ import {
   updateDesignMemory,
 } from '@open-codesign/core';
 import type { ModelRef, WireApi } from '@open-codesign/shared';
-import type BetterSqlite3 from 'better-sqlite3';
-import { listDesigns } from './db/designs';
 import { app } from './electron-runtime';
 import { getLogger } from './logger';
-
-type Database = BetterSqlite3.Database;
+import { type Database, listDesigns } from './snapshots-db';
 
 const log = getLogger('main:memory');
 

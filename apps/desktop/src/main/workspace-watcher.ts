@@ -1,10 +1,9 @@
 import { type FSWatcher, watch as nodeWatch } from 'node:fs';
 import { CodesignError } from '@open-codesign/shared';
-import type BetterSqlite3 from 'better-sqlite3';
 import type { BrowserWindow } from 'electron';
 import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
-import { getDesign } from './snapshots-db';
+import { type Database, getDesign } from './snapshots-db';
 import { normalizeWorkspacePath } from './workspace-path';
 import { WORKSPACE_IGNORED_DIRS } from './workspace-reader';
 
@@ -111,10 +110,7 @@ function stopWatcher(designId: string): void {
   }
 }
 
-export function registerFilesWatcherIpc(
-  db: BetterSqlite3.Database,
-  getWin: () => BrowserWindow | null,
-): void {
+export function registerFilesWatcherIpc(db: Database, getWin: () => BrowserWindow | null): void {
   ipcMain.handle('codesign:files:v1:subscribe', (_e: unknown, raw: unknown): { ok: true } => {
     const designId = parseDesignId(raw, 'subscribe');
     const design = getDesign(db, designId);

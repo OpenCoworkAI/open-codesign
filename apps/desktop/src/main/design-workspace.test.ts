@@ -173,9 +173,7 @@ describe('bindWorkspace', () => {
     await expect(bindWorkspace(db, design.id, conflictPath, false)).rejects.toThrow(
       'Workspace path is already bound to another design',
     );
-    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
-      workspace_path: null,
-    });
+    expect(getDesign(db, design.id)?.workspacePath).toBeNull();
   });
 
   it('rejects empty and relative workspace bindings before touching the db', async () => {
@@ -188,9 +186,7 @@ describe('bindWorkspace', () => {
     await expect(bindWorkspace(db, design.id, 'relative-workspace', false)).rejects.toThrow(
       'Workspace path must be absolute for the current platform',
     );
-    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
-      workspace_path: null,
-    });
+    expect(getDesign(db, design.id)?.workspacePath).toBeNull();
   });
 
   it('rejects missing workspace directories before binding', async () => {
@@ -202,9 +198,7 @@ describe('bindWorkspace', () => {
     await expect(bindWorkspace(db, design.id, missing, false)).rejects.toMatchObject({
       code: 'ENOENT',
     });
-    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
-      workspace_path: null,
-    });
+    expect(getDesign(db, design.id)?.workspacePath).toBeNull();
   });
 
   it('rejects file paths before binding them as workspaces', async () => {
@@ -217,9 +211,7 @@ describe('bindWorkspace', () => {
     await expect(bindWorkspace(db, design.id, filePath, false)).rejects.toThrow(
       'Workspace path is not a directory',
     );
-    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
-      workspace_path: null,
-    });
+    expect(getDesign(db, design.id)?.workspacePath).toBeNull();
   });
 
   it('treats case-only workspace differences as the same path on Windows for the same design', async () => {
@@ -232,9 +224,7 @@ describe('bindWorkspace', () => {
       const rebound = await bindWorkspace(db, design.id, 'C:/users/roy/workspace/', false);
 
       expect(rebound.workspacePath).toBe(storedPath);
-      expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
-        workspace_path: storedPath,
-      });
+      expect(getDesign(db, design.id)?.workspacePath).toBe(storedPath);
     });
   });
 
@@ -251,7 +241,7 @@ describe('bindWorkspace', () => {
     });
   });
 
-  it('copies tracked files only during migration', async () => {
+  it('copies workspace files during migration', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db);
     const source = await makeTempDir('ocd-ws-source-');
@@ -270,14 +260,12 @@ describe('bindWorkspace', () => {
     expect(await readFile(path.join(destination, 'nested/child.txt'), 'utf8')).toBe(
       'tracked nested',
     );
-    await expect(readFile(path.join(destination, 'ignored.txt'), 'utf8')).rejects.toMatchObject({
-      code: 'ENOENT',
-    });
+    expect(await readFile(path.join(destination, 'ignored.txt'), 'utf8')).toBe('untracked');
     expect(await readFile(path.join(source, 'tracked.txt'), 'utf8')).toBe('tracked root');
     expect(await readFile(path.join(source, 'ignored.txt'), 'utf8')).toBe('untracked');
   });
 
-  it('copies tracked files between workspaces without changing the binding', async () => {
+  it('copies workspace files between workspaces without changing the binding', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db);
     const source = await makeTempDir('ocd-ws-copy-source-');
@@ -297,12 +285,10 @@ describe('bindWorkspace', () => {
       '<html>copy me</html>',
     );
     expect(await readFile(path.join(destination, 'assets/logo.txt'), 'utf8')).toBe('asset');
-    await expect(readFile(path.join(destination, 'ignored.txt'), 'utf8')).rejects.toMatchObject({
-      code: 'ENOENT',
-    });
+    expect(await readFile(path.join(destination, 'ignored.txt'), 'utf8')).toBe('ignored');
   });
 
-  it('rejects tracked file copies through symlinked workspace path segments', async () => {
+  it('skips symlinked workspace path segments while copying', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db);
     const source = await makeTempDir('ocd-ws-symlink-source-');
@@ -319,35 +305,13 @@ describe('bindWorkspace', () => {
       throw err;
     }
 
-    await expect(copyTrackedWorkspaceFiles(db, design.id, sourcePath, destination)).rejects.toThrow(
-      /symbolic link/,
-    );
+    await copyTrackedWorkspaceFiles(db, design.id, sourcePath, destination);
     await expect(
       readFile(path.join(destination, 'assets', 'secret.txt'), 'utf8'),
     ).rejects.toMatchObject({
       code: 'ENOENT',
     });
     expect(getDesign(db, design.id)?.workspacePath).toBe(sourcePath);
-  });
-
-  it('rejects corrupt tracked file paths before workspace migration copies', async () => {
-    const db = initInMemoryDb();
-    const design = createDesign(db);
-    const source = await makeTempDir('ocd-ws-source-');
-    const destination = await makeTempDir('ocd-ws-dest-');
-    const sourcePath = normalizeWorkspacePath(source);
-    updateDesignWorkspace(db, design.id, sourcePath);
-    const now = new Date().toISOString();
-    db.prepare(
-      'INSERT INTO design_files (id, design_id, path, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-    ).run('corrupt-path', design.id, '../escaped.txt', 'escaped', now, now);
-
-    await expect(bindWorkspace(db, design.id, destination, true)).rejects.toThrow(
-      'invalid path segment',
-    );
-    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
-      workspace_path: sourcePath,
-    });
   });
 
   it('aborts migration on destination collision and leaves the binding unchanged', async () => {
@@ -364,9 +328,7 @@ describe('bindWorkspace', () => {
     await expect(bindWorkspace(db, design.id, destination, true)).rejects.toThrow(
       'Workspace migration collision: tracked.txt',
     );
-    expect(db.prepare('SELECT workspace_path FROM designs WHERE id = ?').get(design.id)).toEqual({
-      workspace_path: sourcePath,
-    });
+    expect(getDesign(db, design.id)?.workspacePath).toBe(sourcePath);
     expect(await readFile(path.join(destination, 'tracked.txt'), 'utf8')).toBe(
       'existing destination',
     );

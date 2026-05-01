@@ -19,7 +19,6 @@ import type {
   SnapshotCreateInput,
 } from '@open-codesign/shared';
 import { ChatMessageKind, CodesignError } from '@open-codesign/shared';
-import type BetterSqlite3 from 'better-sqlite3';
 import type { BrowserWindow } from 'electron';
 import {
   bindWorkspace,
@@ -40,6 +39,7 @@ import {
 import {
   createDesign,
   createSnapshot,
+  type Database,
   deleteDesignForRollback,
   deleteSnapshot,
   duplicateDesign,
@@ -64,8 +64,6 @@ import {
   type WorkspaceFileReadResult,
 } from './workspace-reader';
 import { registerFilesWatcherIpc } from './workspace-watcher';
-
-type Database = BetterSqlite3.Database;
 
 const logger = getLogger('snapshots-ipc');
 
@@ -170,64 +168,16 @@ function requireBoundWorkspacePath(design: Design, message: string): string {
 }
 
 /**
- * Translate a raw better-sqlite3 SqliteError into a typed CodesignError so the
- * renderer never sees provider-specific error strings. Constraint subcodes are
- * matched individually because the bare `SQLITE_CONSTRAINT` parent code covers
- * unrelated failures (UNIQUE, NOT NULL, CHECK, FK), and surfacing all of them
- * as a single message would mislead the UI. The FK message is keyed by call-site
- * context because the same SQLITE_CONSTRAINT_FOREIGNKEY code fires for both a
- * missing `design_id` and a missing `parent_id` in design_snapshots — naming
- * only the parent led contributors to chase the wrong cause. Unrecognised
- * errors fall through as IPC_DB_ERROR with the original cause attached for
- * server-side logs.
+ * Translate store errors into typed CodesignErrors so the renderer never sees
+ * low-level persistence details.
  */
-const FK_MESSAGES: Record<string, string> = {
-  create: 'Referenced design or parent snapshot does not exist',
-  'create.lookup-parent': 'Referenced design or parent snapshot does not exist',
-};
-
-type Translation = {
-  code: 'IPC_BAD_INPUT' | 'IPC_CONFLICT' | 'IPC_DB_BUSY' | 'IPC_DB_FULL';
-  message: string;
-};
-
-function staticTranslation(sqliteCode: string): Translation | null {
-  switch (sqliteCode) {
-    case 'SQLITE_CONSTRAINT_UNIQUE':
-    case 'SQLITE_CONSTRAINT_PRIMARYKEY':
-      return { code: 'IPC_CONFLICT', message: 'Snapshot already exists' };
-    case 'SQLITE_CONSTRAINT_NOTNULL':
-    case 'SQLITE_CONSTRAINT_CHECK':
-      return { code: 'IPC_BAD_INPUT', message: 'Snapshot input violates database constraints' };
-    case 'SQLITE_BUSY':
-    case 'SQLITE_LOCKED':
-      return { code: 'IPC_DB_BUSY', message: 'Database is locked, retry shortly' };
-    case 'SQLITE_FULL':
-      return { code: 'IPC_DB_FULL', message: 'Disk is full' };
-    default:
-      return null;
-  }
-}
-
-function translateSqliteError(err: unknown, context: string): CodesignError {
-  const code = (err as { code?: unknown })?.code;
-  if (typeof code === 'string') {
-    if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
-      const message = FK_MESSAGES[context] ?? 'Referenced item does not exist';
-      return new CodesignError(message, 'IPC_BAD_INPUT', { cause: err });
-    }
-    const t = staticTranslation(code);
-    if (t !== null) {
-      return new CodesignError(t.message, t.code, { cause: err });
-    }
-  }
-  logger.error('snapshot.db_error', {
+function translateStoreError(err: unknown, context: string): CodesignError {
+  logger.error('snapshot.store_error', {
     context,
-    code: typeof code === 'string' ? code : 'unknown',
     message: err instanceof Error ? err.message : String(err),
     stack: err instanceof Error ? err.stack : undefined,
   });
-  return new CodesignError(`Snapshot database error (${context})`, 'IPC_DB_ERROR', { cause: err });
+  return new CodesignError(`Design store error (${context})`, 'IPC_DB_ERROR', { cause: err });
 }
 
 function runDb<T>(context: string, fn: () => T): T {
@@ -235,7 +185,7 @@ function runDb<T>(context: string, fn: () => T): T {
     return fn();
   } catch (err) {
     if (err instanceof CodesignError) throw err;
-    throw translateSqliteError(err, context);
+    throw translateStoreError(err, context);
   }
 }
 
@@ -375,7 +325,7 @@ function parseToolStatusInput(raw: unknown): ChatToolStatusUpdate {
 function chatStoreOptions(db: Database): SessionChatStoreOptions {
   return {
     db,
-    sessionDir: path.join(app.getPath('userData'), 'sessions'),
+    sessionDir: db.sessionDir,
   };
 }
 
@@ -989,7 +939,7 @@ export const SNAPSHOTS_CHANNELS_V1 = [
 ] as const;
 
 export function registerSnapshotsUnavailableIpc(reason: string): void {
-  const message = `Snapshots database failed to initialize. Check Settings → Storage for diagnostics. (${reason})`;
+  const message = `Design store failed to initialize. Check Settings → Storage for diagnostics. (${reason})`;
   const fail = (): never => {
     throw new CodesignError(message, 'SNAPSHOTS_UNAVAILABLE');
   };

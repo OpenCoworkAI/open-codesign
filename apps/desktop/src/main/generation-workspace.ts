@@ -1,9 +1,6 @@
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
-import type BetterSqlite3 from 'better-sqlite3';
-import { getDesign } from './snapshots-db';
+import { type Database, getDesign } from './snapshots-db';
 import { normalizeWorkspacePath } from './workspace-path';
-
-type Database = BetterSqlite3.Database;
 
 export function resolveGenerationWorkspaceRoot(
   db: Database | null,
@@ -17,7 +14,7 @@ export function resolveGenerationWorkspaceRoot(
   }
   if (db === null) {
     throw new CodesignError(
-      'Snapshots database is unavailable; cannot resolve the design workspace',
+      'Design store is unavailable; cannot resolve the design workspace',
       ERROR_CODES.SNAPSHOTS_UNAVAILABLE,
     );
   }

@@ -115,7 +115,7 @@ export async function persistArtifactSnapshot(
 }
 
 /**
- * Rebuild the agent-facing history from chat_messages (single source of truth
+ * Rebuild the agent-facing history from session chat rows (single source of truth
  * for the sidebar chat). Only user + assistant_text rows contribute — tool_call
  * / artifact_delivered / error are dropped because the agent re-reads live file
  * state via the edit tool's `view` command. seedFromSnapshots first so legacy designs with
@@ -158,7 +158,7 @@ export async function persistDesignState(
     }
     if (previewHtml !== null) {
       // Thumbnail text = first user prompt ever on this design, sourced from
-      // chat_messages (canonical) instead of the removed store.messages mirror.
+      // session chat rows (canonical) instead of the removed store.messages mirror.
       let thumbText: string | null = null;
       try {
         const rows = await window.codesign.chat.list(designId);

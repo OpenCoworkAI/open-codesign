@@ -41,7 +41,7 @@ describe('WorkingCard.buildRows', () => {
   });
 
   it('merges legacy text-editor calls without command field', () => {
-    // Old chat_messages rows persisted before `command` was plumbed.
+    // Old session chat rows persisted before `command` was plumbed.
     const calls = [
       call({ toolName: 'str_replace_based_edit_tool', args: { path: 'index.html' } }),
       call({ toolName: 'str_replace_based_edit_tool', args: { path: 'index.html' } }),

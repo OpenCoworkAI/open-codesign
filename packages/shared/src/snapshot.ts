@@ -46,10 +46,9 @@ export const ChatMessageKind = z.enum([
 export type ChatMessageKind = z.infer<typeof ChatMessageKind>;
 
 /**
- * Row from the chat_messages table. `payload` is a JSON string on disk; the
- * typed variants are parsed at the IPC boundary. The schema accepts streamed
- * agent tool events (`tool_call` with `verbGroup`) alongside durable chat
- * rows for user text, assistant text, artifacts, and errors.
+ * Row replayed from the per-design session JSONL. The schema accepts streamed
+ * agent tool events (`tool_call` with `verbGroup`) alongside durable chat rows
+ * for user text, assistant text, artifacts, and errors.
  */
 export const ChatMessageRowV1 = z.object({
   schemaVersion: z.literal(1).default(1),
@@ -102,8 +101,7 @@ export interface ChatToolCallPayload {
 // ---------------------------------------------------------------------------
 // Virtual FS for workspace-backed agent tools.
 //
-// Per-design file tree stored in SQLite, written by the agent edit tool via
-// the agent runtime. Paths are POSIX-relative ("index.html",
+// Per-design workspace file view. Paths are POSIX-relative ("index.html",
 // "_starters/ios-frame.jsx"); never absolute, never contain "..".
 // ---------------------------------------------------------------------------
 

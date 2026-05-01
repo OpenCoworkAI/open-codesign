@@ -92,7 +92,7 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
         next.splice(idx, 1);
         set({ pendingToolCalls: next });
       }
-      // Persist the completed tool call to SQLite
+      // Persist the completed tool call to session JSONL.
       if (resolved) {
         void get().appendChatMessage({
           designId,

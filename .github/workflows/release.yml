@@ -126,24 +126,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS is split into two native-arch runners. Cross-building both
-        # DMGs on a single arm64 host (what we used to do) shipped the host
-        # arch's native module inside the x64 DMG because electron-builder
-        # does not re-stage our per-arch better-sqlite3 prebuilds per target
-        # arch — see #176 (dlopen fails on Intel Macs). Using a native-arch
-        # runner per DMG guarantees `pnpm install` stages the right
-        # better_sqlite3.node* files for each target and keeps the legacy
-        # alias (better_sqlite3.node-electron.node) matching the DMG arch.
+        # macOS artifacts are both produced on the Apple Silicon runner. The
+        # supplemental macos-13 Intel workflow validates native packaging, but
+        # its queue no longer blocks publishing a release.
         include:
           - os: macos-latest # arm64 Apple Silicon runner
-            label: macos-arm64
-            mac_arch: arm64
-            artifact_name: installer-macos-arm64
-            artifact_glob: 'apps/desktop/release/*.dmg'
-          - os: macos-13 # Intel x64 runner (macos-latest is arm64)
-            label: macos-x64
-            mac_arch: x64
-            artifact_name: installer-macos-x64
+            label: macos
+            artifact_name: installer-macos
             artifact_glob: 'apps/desktop/release/*.dmg'
           - os: windows-latest
             label: windows-latest
@@ -190,9 +179,9 @@ jobs:
       # Package the Electron app.
       # CSC_IDENTITY_AUTO_DISCOVERY=false: skip ad-hoc Mac signing prompt.
       # WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD: intentionally unset (no cert in v0.1).
-      # On macOS we force-pin the target arch to the runner's host arch
-      # (--arm64 on macos-latest, --x64 on macos-13) so each DMG is packaged
-      # natively instead of cross-built (see matrix comment + #176).
+      # On macOS we build both arm64 and x64 DMGs on macos-latest, then verify
+      # the packaged Mach-O architecture before upload. This keeps Intel Mac
+      # support automated without depending on the scarce macos-13 queue.
       - name: Package desktop (non-mac)
         if: runner.os != 'macOS'
         env:
@@ -207,7 +196,38 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm --filter @open-codesign/desktop exec electron-vite build
-          pnpm --filter @open-codesign/desktop exec electron-builder --mac --${{ matrix.mac_arch }} --publish never
+          pnpm --filter @open-codesign/desktop exec bash scripts/package-macos-dmg.sh --mac dmg:arm64 --publish never
+          pnpm --filter @open-codesign/desktop exec bash scripts/package-macos-dmg.sh --mac dmg:x64 --publish never
+
+      - name: Verify macOS app architectures
+        if: runner.os == 'macOS'
+        run: |
+          bash apps/desktop/scripts/verify-macos-app.sh apps/desktop/release arm64
+          bash apps/desktop/scripts/verify-macos-app.sh apps/desktop/release x64
+
+      - name: Smoke x64 app under Rosetta
+        if: runner.os == 'macOS'
+        env:
+          CODESIGN_SMOKE_TEST: '1'
+          CODESIGN_SMOKE_USER_DATA_DIR: ${{ runner.temp }}/codesign-smoke-x64
+        run: |
+          softwareupdate --install-rosetta --agree-to-license || true
+          rm -rf "$CODESIGN_SMOKE_USER_DATA_DIR"
+          mkdir -p "$CODESIGN_SMOKE_USER_DATA_DIR"
+          x64_binary="$(CODESIGN_VERIFY_PRINT_BINARY=1 bash apps/desktop/scripts/verify-macos-app.sh apps/desktop/release x64)"
+          arch -x86_64 "$x64_binary" --smoke-test &
+          smoke_pid=$!
+          for _ in {1..60}; do
+            if ! kill -0 "$smoke_pid" 2>/dev/null; then
+              wait "$smoke_pid"
+              exit $?
+            fi
+            sleep 1
+          done
+          echo "::error::x64 smoke test did not exit within 60 seconds"
+          kill "$smoke_pid" 2>/dev/null || true
+          wait "$smoke_pid" 2>/dev/null || true
+          exit 1
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

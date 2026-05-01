@@ -69,7 +69,7 @@ function ContextIcon({ icon }: { icon: ComposerContextItem['icon'] }) {
  * Sidebar v2 — chat-style conversation pane.
  *
  * Replaces the single-shot prompt box with a chat history backed by the
- * chat_messages SQLite table. See docs/plans/2026-04-20-agentic-sidebar-
+ * session JSONL chat store. See docs/plans/2026-04-20-agentic-sidebar-
  * custom-endpoint-design.md §5 for the full spec. Multi-design switcher
  * stays deferred; the design name + "+" header shows the single current
  * design only.

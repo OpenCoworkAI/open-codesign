@@ -1,11 +1,9 @@
-import type BetterSqlite3 from 'better-sqlite3';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { shutdownAllProcesses } from '../process-registry';
+import type { Database } from '../snapshots-db';
 import { registerGenerateIpc } from './generate';
 import { registerPickerIpc } from './picker';
 import { registerShellIpc } from './shell';
-
-type Database = BetterSqlite3.Database;
 
 /**
  * Aggregates per-domain IPC registrations and returns a teardown closure.

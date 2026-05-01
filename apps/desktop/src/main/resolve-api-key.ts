@@ -3,7 +3,7 @@ import { CHATGPT_CODEX_PROVIDER_ID, CodesignError, ERROR_CODES } from '@open-cod
 /**
  * Abstract dependencies of `resolveActiveApiKey` so unit tests can stub the
  * codex token store and the onboarding API-key reader without pulling in the
- * full main-process singleton graph (electron, logger, SQLite, …).
+ * full main-process singleton graph (electron, logger, local storage, ...).
  */
 export interface ResolveActiveApiKeyDeps {
   /** Returns a fresh ChatGPT OAuth bearer token. Throws when not signed in. */

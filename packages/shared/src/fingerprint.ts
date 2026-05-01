@@ -1,7 +1,7 @@
 /**
  * Fingerprint — a short stable hash identifying "the same bug" across runs.
  *
- * Used by PR3's diagnostic_events store (and PR4's "You reported this
+ * Used by the diagnostic event store (and PR4's "You reported this
  * yesterday" dedup prompt) to group recurring errors without over-merging
  * superficially similar but genuinely distinct failures.
  *

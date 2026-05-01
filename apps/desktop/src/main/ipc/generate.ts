@@ -22,7 +22,6 @@ import {
   type ResourceStateV1,
 } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
-import type BetterSqlite3 from 'better-sqlite3';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import type { AgentStreamEvent } from '../../preload/index';
 import { requestAsk } from '../ask-ipc';
@@ -48,11 +47,9 @@ import { resolveActiveModel } from '../provider-settings';
 import { resolveActiveApiKey, resolveCredentialForProvider } from '../resolve-api-key';
 import { withRun } from '../runContext';
 import { listSessionChatMessages, type SessionChatStoreOptions } from '../session-chat';
-import { getDesign, recordDiagnosticEvent } from '../snapshots-db';
+import { type Database, getDesign, recordDiagnosticEvent } from '../snapshots-db';
 import { readWorkspaceFilesAt } from '../workspace-reader';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
-
-type Database = BetterSqlite3.Database;
 
 /**
  * Pull an HTTP status code out of a caught provider error. Mirrors
@@ -194,7 +191,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     if (db === null) return null;
     return {
       db,
-      sessionDir: path_module.join(app.getPath('userData'), 'sessions'),
+      sessionDir: db.sessionDir,
     };
   };
 

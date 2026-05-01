@@ -60,4 +60,4 @@ body:
     attributes:
       label: Blocked by (optional)
       description: Linked issue, PR, or upstream bug that this depends on.
-      placeholder: "#106, better-sqlite3 ABI"
+      placeholder: "#106, packaging ABI"
