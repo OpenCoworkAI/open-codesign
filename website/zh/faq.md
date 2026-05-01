@@ -63,7 +63,7 @@ Bolt.new 是基于浏览器的全栈应用构建器，跑在 StackBlitz 的 WebC
 
 ## Open CoDesign 会把我的提示词或设计发给第三方吗？
 
-不会。所有设计、提示词、快照、代码库扫描结果都存在你本机——SQLite 存设计历史，TOML 配置文件存在 `~/.config/open-codesign/config.toml`，文件权限 0600（和 Claude Code / Codex / gh CLI 同等级）。唯一的对外网络流量就是直接发给你配置的模型提供商，用的是你自己的 API Key。默认零遥测。
+不会。设计、提示词和扫描结果都存在你本机。v0.1 用 SQLite 存设计历史，TOML 配置文件在 `~/.config/open-codesign/config.toml`，文件权限 0600；v0.2 会把设计迁到 JSONL session 和工作区文件。唯一的对外网络流量就是直接发给你配置的模型提供商，用的是你自己的 API Key。默认零遥测。
 
 ## Open CoDesign 支持哪些 AI 模型？
 
@@ -123,17 +123,17 @@ scoop install open-codesign
 
 ## v0.2 会带来什么？
 
-v0.2 是架构升级——"Agentic Design Loop"。从一次性的提示词转产物生成器，升级为：
+v0.2 是 Agentic Design 大更新，预计一周左右发布。它会把 Open CoDesign 从一次性的提示词转产物生成器，升级成一个本地设计 agent：
 
-- **每个项目一个工作区**——绑定磁盘上任意目录，所有生成的文件都在那里，可直接配合 git 使用
-- **Agent 读取你的工作区**——`read_file`、`list_files`、`grep`、`find` 等工具，让 agent 在生成前理解上下文
-- **Agent 编辑真实文件**——str-replace 风格的精准编辑加全文件写入，带可选权限确认 UX
-- **指点修改**——点击预览中的任意区域，描述改动，agent 只改那块
-- **视觉验证**——agent 可以截图自己的预览，验证它写出来的东西
-- **渐进式技能加载**——设计技能从一直注入提示词改为按需被 agent 工具调用
-- **每轮快照回滚**——再不会丢失某次满意的迭代结果
+- **带真实工作区的 design**——每个 design 都是一个 pi session，历史写入 JSONL，产物落在磁盘文件里
+- **带权限的本地工具**——read、write、edit、bash、grep、find、ls 都会经过 Open CoDesign 的权限 UI
+- **设计专用工具**——`ask`、`scaffold`、`skill`、`preview`、`gen_image`、`tweaks`、`todos`、`done`
+- **预览自检**——agent 可以渲染产物，检查 console / asset 错误；模型支持视觉时还能看截图
+- **渐进式技能加载**——skill、scaffold、brand reference 按需加载，而不是全部塞进基础提示词
+- **`DESIGN.md` 作为设计系统记忆**——品牌值和 token 写进可编辑文件，而不是靠模型记忆
+- **v0.1 迁移路径**——旧 SQLite 设计会迁移到真实工作区和 session history
 
-完整设计文档已公开，社区评审中。里程碑计划见 [roadmap](/roadmap)。
+里程碑计划见 [roadmap](/roadmap)。
 
 ## Open CoDesign 安全吗？
 
@@ -152,7 +152,7 @@ v0.1.x 阶段安装包未签名。Apple Developer ID 公证和 Windows Authentic
 
 - **报 bug**——开 issue 并附复现步骤。
 - **提建议**——用 [GitHub Discussions → Ideas](https://github.com/OpenCoworkAI/open-codesign/discussions/categories/ideas)。
-- **提 PR**——读 [CONTRIBUTING.md](https://github.com/OpenCoworkAI/open-codesign/blob/main/CONTRIBUTING.md)。提交带 DCO 签名，跑 `pnpm lint && pnpm typecheck && pnpm test`，加 changeset。
+- **提 PR**——读 [CONTRIBUTING.md](https://github.com/OpenCoworkAI/open-codesign/blob/main/CONTRIBUTING.md)，跑 `pnpm lint && pnpm typecheck && pnpm test`，用户可见改动加 changeset。
 - **晒成果**——发到 [Show & Tell](https://github.com/OpenCoworkAI/open-codesign/discussions/categories/show-and-tell)。优秀作品会被收录到 release notes。
 
 ## 在哪里求助？

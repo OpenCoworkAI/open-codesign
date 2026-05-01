@@ -40,11 +40,11 @@ export { CHATGPT_CODEX_PROVIDER_ID };
 
 const CHATGPT_CODEX_PROVIDER: ProviderEntry = {
   id: CHATGPT_CODEX_PROVIDER_ID,
-  name: 'ChatGPT 璁㈤槄',
+  name: 'ChatGPT 订阅',
   builtin: false,
   wire: 'openai-codex-responses',
   // pi-ai's openai-codex-responses wire appends `/codex/responses` itself, so
-  // we store the bare base. Do not add `/codex` here 鈥?it'd produce
+  // we store the bare base. Do not add `/codex` here — it'd produce
   // `/codex/codex/responses`.
   baseUrl: 'https://chatgpt.com/backend-api',
   defaultModel: 'gpt-5.3-codex',
@@ -90,7 +90,7 @@ export function getCodexTokenStore(): CodexTokenStore {
   return tokenStoreSingleton;
 }
 
-/** Test-only reset hook 鈥?vitest resets module state between test cases. */
+/** Test-only reset hook — vitest resets module state between test cases. */
 export function __resetCodexTokenStoreForTests(): void {
   tokenStoreSingleton = null;
   activeLoginAbortController = null;
@@ -178,7 +178,7 @@ async function runLoginFlow(abortController: AbortController): Promise<CodexOAut
     const tokenSet: TokenSet = await exchangeCode(code, pkce.verifier, server.redirectUri);
     if (tokenSet.accountId === null) {
       throw new CodesignError(
-        'Codex 鐧诲綍鎴愬姛浣嗘棤娉曡鍙?ChatGPT 璐︽埛 ID锛岃閲嶈瘯鐧诲綍銆?',
+        'Codex 登录成功但无法读取 ChatGPT 账户 ID，请重试登录。',
         ERROR_CODES.PROVIDER_ERROR,
         { cause: null },
       );
@@ -275,7 +275,7 @@ async function runLogout(): Promise<CodexOAuthStatus> {
  * `chatgpt-codex` with Phase 1's stale `wire`/`baseUrl`, overwrite with the
  * Phase 2 canonical values so the first generate after upgrade works without
  * requiring a manual re-login. No-op when the entry is absent or already
- * canonical. Safe to call on every boot 鈥?writes only when state diverges.
+ * canonical. Safe to call on every boot — writes only when state diverges.
  *
  * Phase 1 released the card in "coming soon" disabled mode, so this migration
  * only fires for users who ran this feat branch directly; zero writes on

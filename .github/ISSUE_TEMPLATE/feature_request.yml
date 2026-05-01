@@ -6,10 +6,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Before filing:** search [existing issues](https://github.com/OpenCoworkAI/open-codesign/issues) and read
-        [`docs/VISION.md`](../blob/main/docs/VISION.md) and [`docs/ROADMAP.md`](../blob/main/docs/ROADMAP.md).
-        If your idea contradicts a locked decision or anti-goal, open a
-        [Discussion](https://github.com/OpenCoworkAI/open-codesign/discussions) instead.
+        **Before filing:** search [existing issues](https://github.com/OpenCoworkAI/open-codesign/issues) and skim
+        [`AGENTS.md`](../blob/main/AGENTS.md) or [`CLAUDE.md`](../blob/main/CLAUDE.md) for the current hard constraints.
+        If your idea may contradict a product direction or anti-goal, open a
+        [Discussion](https://github.com/OpenCoworkAI/open-codesign/discussions) first.
 
   - type: textarea
     id: problem
@@ -60,6 +60,6 @@ body:
         Please confirm you have reviewed them.
       options:
         - label: >
-            I have read the [hard constraints in CLAUDE.md](../blob/main/CLAUDE.md) and this proposal
+            I have read the [hard constraints in AGENTS.md](../blob/main/AGENTS.md) or [CLAUDE.md](../blob/main/CLAUDE.md), and this proposal
             does not conflict with any of them.
           required: true

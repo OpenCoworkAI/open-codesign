@@ -22,8 +22,6 @@ on:
       - 'apps/desktop/scripts/**'
       - '.github/workflows/packaging-smoke.yml'
       - '.github/workflows/release.yml'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
   pull_request:
     branches: [main]
     paths:
@@ -33,8 +31,6 @@ on:
       - 'apps/desktop/scripts/**'
       - '.github/workflows/packaging-smoke.yml'
       - '.github/workflows/release.yml'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
 
 # Per-SHA group, no cancellation. Each commit gets an independent smoke
 # that always runs to completion (or fails loudly). Skipping the

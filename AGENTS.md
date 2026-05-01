@@ -1,8 +1,8 @@
-# CLAUDE.md - Open CoDesign
+# AGENTS.md - Open CoDesign
 
-Instructions for Claude Code and other AI coding agents working in this repository. Read this before making changes.
+Instructions for Codex and other AI coding agents working in this repository. Read this before making changes.
 
-`AGENTS.md` is the canonical public agent guide. This file mirrors it for Claude Code. Maintainer-local `docs/VISION.md`, `docs/PRINCIPLES.md`, and `docs/v0.2-plan.md` may contain fresher planning details when present, but public contributors and bots must not assume those files exist.
+This file is the canonical public agent guide. `CLAUDE.md` mirrors it for Claude Code. Maintainer-local `docs/VISION.md`, `docs/PRINCIPLES.md`, and `docs/v0.2-plan.md` may contain fresher planning details when present, but public contributors and bots must not assume those files exist.
 
 ## What This Project Is
 
@@ -116,7 +116,7 @@ examples/            # Public demo reproductions
 
 - Read `AGENTS.md` or `CLAUDE.md` first, depending on your agent runtime.
 - For non-trivial architecture or product work, also read `docs/VISION.md`, `docs/PRINCIPLES.md`, and `docs/v0.2-plan.md` when they exist locally.
-- Use planning files in `.claude/workspace/` or your agent's local workspace for tasks spanning more than five tool calls or more than three files.
+- Use planning files in `.Codex/workspace/` or your agent's local workspace for tasks spanning more than five tool calls or more than three files.
 - Use git worktrees for parallel or unrelated feature work. Do not mix two unrelated branches in one checkout.
 - Check `docs/RESEARCH_QUEUE.md` when it exists before touching sandbox, inline comments, tweaks, PPTX, pi capabilities, scaffolds, skills, or brand refs.
 - Keep edits scoped. Avoid drive-by refactors.

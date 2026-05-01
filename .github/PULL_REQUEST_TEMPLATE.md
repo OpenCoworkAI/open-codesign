@@ -13,12 +13,11 @@
 
 ## Linked issue
 
-<!-- "Closes #123" or "Refs #123" -->
+<!-- Use "Closes #123" only when this PR fully resolves the issue. Use "Refs #123" for partial work or follow-up slices. -->
 
 ## Checklist
 
-- [ ] I read [`docs/VISION.md`](../docs/VISION.md), [`docs/PRINCIPLES.md`](../docs/PRINCIPLES.md), and [`CLAUDE.md`](../CLAUDE.md) before starting
-- [ ] Commits are signed with DCO (`git commit -s`)
+- [ ] I checked the linked issue / relevant context before starting
 - [ ] `pnpm lint && pnpm typecheck && pnpm test` passes locally
 - [ ] Added/updated tests for the change
 - [ ] Added a changeset (`pnpm changeset`) if user-visible

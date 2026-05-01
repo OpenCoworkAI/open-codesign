@@ -37,8 +37,8 @@
 
 ## What's new
 
-- **`feat/decompose-to-ui-kit`** *(branch)* — Image → componentized `ui_kits/<slug>/` bundle for coding-agent handoff · Boolean-per-dimension visual parity judge (12 standard checks) · Verify-and-iterate loop · Per-decompose cost row · See [BENCHMARKS.md](./BENCHMARKS.md). Closes [#225](https://github.com/OpenCoworkAI/open-codesign/issues/225).
-- **v0.1.4** *(coming)* — 🎨 AI image generation · ChatGPT Plus/Codex subscription support · CLIProxyAPI one-click import · API config hardening
+- **v0.2.0** *(in preparation, expected in about a week)* — Agentic Design: workspace-backed design sessions · permissioned file/tool loop · lazy skills and scaffolds · `DESIGN.md` design systems · **Decompose to UI Kit** (image → componentized `ui_kits/<slug>/` bundle for coding-agent handoff · 12-check boolean visual parity judge · verify-and-iterate loop · per-decompose cost row · [BENCHMARKS.md](./BENCHMARKS.md) · Phase 1 of [#225](https://github.com/OpenCoworkAI/open-codesign/issues/225))
+- **v0.1.4** *(2026-04-23)* — AI image generation · ChatGPT Plus/Codex subscription support · CLIProxyAPI one-click import · API config hardening
 - **v0.1.3** *(2026-04-21)* — Gemini `models/` prefix fix · OpenAI-compatible relay "instructions required" fix · third-party relay SSE-truncation hint
 - **v0.1.2** *(2026-04-21)* — Release pipeline · Homebrew / winget / Scoop packaging manifests
 
@@ -227,6 +227,7 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 - **Prompt → HTML or JSX/React component** prototype, rendered in a sandboxed iframe (vendored React 18 + Babel on-device)
 - **Fifteen built-in demos + twelve design skill modules** — ready-to-edit starting points for common design briefs
 - **Live agent panel** — watch tool calls stream in real time as the model edits files
+- **AI image generation** — opt-in bitmap assets for heroes, product shots, backgrounds, and illustrations
 - **AI-generated sliders** — the model emits the parameters worth tweaking (color, spacing, font)
 - **Comment mode** — click any element in the preview to drop a pin, leave a note, and let the model rewrite only that region
 - **Decompose to UI Kit** — one click in the chat sidebar emits a `ui_kits/<slug>/` folder (`index.html` + `components/*.tsx` + `tokens.css` + `manifest.json` + `README.md`) shaped for coding-agent handoff. Built-in deterministic + vision verifiers self-check parity using a 12-question boolean rubric (no floating-point arbitrary scores) and re-iterate on gaps. Per-decompose cost surfaces inline as a toast. See [BENCHMARKS.md](./BENCHMARKS.md).
@@ -255,20 +256,28 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 
 ## Roadmap
 
-We're on v0.1.3 — shipping fast, priorities can shift. This is what's on the bench right now.
+Current release: v0.1.4. The next release theme is locked: **Agentic Design**.
 
-### Now — v0.1.x polish
+### Now — v0.1.4 shipped
 
-- **Provider & API config polish** — smoother one-click import, model picker reaching the last gaps (custom providers, timeouts), clearer connection diagnostics
-- **Structured logging + issue-report bundle** — better logs in the main/renderer processes and a one-click diagnostics export that makes bug reports actionable
+- **AI image generation** — opt-in bitmap assets through OpenAI image models or OpenRouter image models
+- **ChatGPT Plus / Codex subscription login** — one-click OAuth for users who do not want to paste an API key
+- **CLIProxyAPI one-click import** — auto-detect a running local proxy and bring it into Settings
+- **API config hardening** — clearer relay diagnostics for timeouts, SSE truncation, missing `/models`, and incompatible Messages APIs
 
-### Next — v0.2 (headline theme: filesystem & import)
+### Next — v0.2.0 (Agentic Design)
 
-- **Filesystem support** — read/write real project directories, not just in-app scratch space
-- **Broader import paths** — bring existing assets, prompts, and project context into a design session
+Expected in about a week. v0.2 turns Open CoDesign from a one-shot generator into a local design agent with a real workspace:
 
-### Later — v0.3 and beyond
+- **Design as session** — every design is a pi session with JSONL history and a workspace folder on disk
+- **Permissioned agent loop** — pi built-ins for read, write, edit, bash, grep, find, and ls, gated by Open CoDesign's permission UI
+- **Design tools on demand** — `ask`, `scaffold`, `skill`, `preview`, `gen_image`, `tweaks`, `todos`, and `done`
+- **`DESIGN.md` as shared memory** — brand tokens and design-system decisions become editable files, not model memory
+- **v0.1 migration path** — existing SQLite designs migrate into workspaces and session history
 
+### Later — v0.2.x and beyond
+
+- Renderer polish for the new `ask`, `preview`, tweaks, and process-management surfaces
 - Cost transparency — pre-generation estimate + weekly budget (per-generation token count already shipped)
 - Version snapshots + side-by-side diff
 - Three-style parallel exploration
@@ -297,7 +306,7 @@ Have a different priority in mind? [Open an issue](https://github.com/OpenCowork
 ## Built on
 
 - Electron + React 19 + Vite 6 + Tailwind v4
-- `@mariozechner/pi-ai` (multi-provider model abstraction)
+- `@mariozechner/pi-ai` and `pi-coding-agent` (model/provider and agent-loop primitives)
 - `better-sqlite3`, `electron-builder`
 
 ## Reporting issues
@@ -333,14 +342,14 @@ For Chinese-speaking users, we also keep a WeChat group for product updates, usa
   />
 </p>
 
-> ⚠️ The WeChat QR code rotates every 7 days and is currently valid until **April 28**.  
+> ⚠️ The WeChat QR code rotates every 7 days and is currently valid until **May 4**.
 > If the code has expired, please leave a message in [GitHub Issues](https://github.com/OpenCoworkAI/open-codesign/issues) and we will refresh the image in-repo.
 
 See also the Chinese README: [README.zh-CN.md#社群](./README.zh-CN.md#%E7%A4%BE%E7%BE%A4).
 
 ## Contributing
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before writing code, sign commits with DCO, run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
+Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before larger changes and run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
 
 ## License
 

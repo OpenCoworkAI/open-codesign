@@ -14,14 +14,14 @@
 - Repository: https://github.com/OpenCoworkAI/open-codesign
 - Website: https://opencoworkai.github.io/open-codesign/
 - License: MIT
-- Latest release: v0.1.3 (2026-04-21); v0.1.4 in preparation (AI image generation, ChatGPT Plus / Codex subscription support, CLIProxyAPI one-click import, API reliability polish)
+- Latest release: v0.1.4 (2026-04-23): AI image generation, ChatGPT Plus / Codex subscription support, CLIProxyAPI one-click import, and API reliability polish
 - GitHub stars: 1,500+ as of 2026-04-23
 - Downloads to date: 1,700+ installers across macOS / Windows / Linux
 - Contributors: 8+
 - Community: GitHub Discussions, LINUX DO (Chinese-speaking primary community), WeChat group
 - Stack: Electron, React 19, Vite 6, TypeScript, Tailwind v4, better-sqlite3, Zustand
-- Agent runtime: `@mariozechner/pi-agent-core` with a virtual-filesystem tool surface
-- Local-first: SQLite (design history) + TOML config (via `~/.config/open-codesign/config.toml`, mode 0600 — matching Claude Code / Codex / gh CLI conventions). Nothing leaves the machine.
+- Agent runtime: v0.1 uses `@mariozechner/pi-agent-core`; v0.2 moves the main loop to `pi-coding-agent` and `pi-ai` primitives.
+- Local-first: v0.1 uses SQLite for design history and TOML config via `~/.config/open-codesign/config.toml` (mode 0600). v0.2 migrates designs into JSONL sessions plus real workspace files. Nothing leaves the machine.
 - BYOK: no API proxying, no per-token surcharges, no cloud account required, no telemetry by default.
 - Supported providers: Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek, OpenRouter, SiliconFlow, Kimi, GLM, Qwen, Ollama, any OpenAI-compatible endpoint. Keyless (IP-allowlisted) proxies and ChatGPT Plus / Codex subscriptions both supported.
 - Platforms: macOS (Apple Silicon + Intel), Windows (x64 + arm64), Linux (AppImage, .deb, .rpm).
@@ -64,26 +64,25 @@
 - Four-tab Settings: Models, Appearance, Storage, Diagnostics, Advanced
 - Release pipeline with unsigned DMG / EXE / AppImage (code-signing lands in v0.5)
 
-## Coming in v0.2 — the Agentic Design Loop
+## Coming in v0.2 — Agentic Design
 
-v0.2 is an architectural upgrade, not a feature list. It turns Open CoDesign from a one-shot generator into a persistent agentic design workspace.
+v0.2 is in preparation and expected in about one week. It turns Open CoDesign from a one-shot generator into a local design agent with a real workspace.
 
-- Per-project workspace — bind any folder on disk; all generated files live there, usable with git, shareable
-- Agent reads your workspace — new `read_file`, `list_files`, `grep`, `find` tools so the agent understands context before generating
-- Agent edits real files — str-replace style targeted edits plus full-file writes, with opt-in permission UX
-- Path sandbox + permission model — opencode-style `allow / deny / ask / always` ruleset; `.env` and credentials blocked by default
-- Point-and-prompt revision — click any region in the live preview, describe the change, the agent edits just that region (no full-page regeneration)
-- Visual verification — the agent can screenshot its own preview to verify what it built
-- Progressive skill disclosure — skills become tool-invoked resources instead of always-injected prompt text (≥30% token reduction expected per turn)
-- Streaming tag-dispatch parser — files start writing to disk before the LLM finishes streaming, for immediate user feedback
-- Snapshot-per-turn with rollback — never lose a good iteration
+- Design as session — every design is a pi session with JSONL history and a workspace folder on disk
+- Permissioned local tools — pi built-ins for read, write, edit, bash, grep, find, and ls, gated by Open CoDesign's permission UI
+- Design tools on demand — `ask`, `scaffold`, `skill`, `preview`, `gen_image`, `tweaks`, `todos`, and `done`
+- Preview self-checks — console errors, asset errors, DOM outline, metrics, and screenshots when the model supports vision
+- Progressive skill disclosure — skills, scaffolds, and brand references lazy-load from manifests with source and license metadata
+- DESIGN.md as design-system memory — brand values and tokens live in editable files, not model memory
+- v0.1 migration path — existing SQLite designs migrate into workspaces and session history
 
-Design doc: `docs/plans/2026-04-23-v0.2-agentic-design-loop-design.md` in the repo.
+Plan source: `docs/v0.2-plan.md` in the repo.
 
-## Coming later (v0.3 — v0.5)
+## Coming later (v0.2.x — v0.5)
 
+- v0.2.x renderer polish for `ask`, `preview`, tweaks, and process-management surfaces
 - Cost transparency — pre-generation token estimate + weekly spend budget
-- Version snapshots + side-by-side diff + rollback across turns
+- Version history improvements + side-by-side diff
 - Three-style parallel exploration
 - Codebase → design system (extract Tailwind tokens, CSS variables, W3C design tokens from a local repo)
 - Web capture via Playwright (on-demand)
@@ -120,7 +119,7 @@ Q: Can I log in with my ChatGPT Plus subscription instead of an API key?
 A: Yes. Open CoDesign supports ChatGPT Plus / Codex OAuth subscription login — a one-click flow, no API key required.
 
 Q: Does Open CoDesign send my prompts or designs to any third party?
-A: No. All designs, prompts, and codebase scans live on your machine (SQLite for history + TOML config at `~/.config/open-codesign/config.toml`, file mode 0600). The only outbound network traffic is directly to the model provider you configure with your own API key.
+A: No. Designs, prompts, and scans live on your machine. v0.1 uses SQLite for history plus TOML config at `~/.config/open-codesign/config.toml` (file mode 0600); v0.2 migrates designs into JSONL sessions and workspace files. The only outbound network traffic is directly to the model provider you configure with your own API key.
 
 Q: Which AI models does Open CoDesign support?
 A: Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek, OpenRouter, SiliconFlow, Kimi, GLM, Qwen, local Ollama, and any OpenAI-compatible endpoint. Keyless (IP-allowlisted) corporate proxies and ChatGPT Plus / Codex subscriptions are also supported.
@@ -146,7 +145,7 @@ Open CoDesign differs from Claude Design in the following ways:
 - Open CoDesign runs entirely on the user's machine; Claude Design processes data in the cloud.
 - Open CoDesign costs only the token usage of the user's own API key; Claude Design requires a paid subscription.
 - Open CoDesign is a desktop application (Electron); Claude Design is a web application.
-- Open CoDesign stores all designs locally in SQLite with full version history; Claude Design has limited export and no import.
+- Open CoDesign stores designs locally. v0.1 uses SQLite snapshots; v0.2 migrates designs into JSONL sessions plus real workspace files. Claude Design has limited export and no import.
 - Open CoDesign ships twelve built-in design skill modules and fifteen ready-to-edit demo prompts; Claude Design is a blank canvas.
 - Open CoDesign reuses your existing Claude Code or Codex config in one click; Claude Design has no config-import path.
 

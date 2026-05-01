@@ -26,7 +26,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const marker = "*open-codesign Bot*";
+            const marker = "*Open-CoDesign Bot*";
             const allowedLogins = (process.env.BOT_LOGINS || "github-actions[bot]")
               .split(",").map((v) => v.trim()).filter(Boolean);
             const comments = await github.paginate(
@@ -54,17 +54,66 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Codex for Issue Auto Response
+      - name: Resolve issue provider config
         if: steps.check_bot.outputs.has_bot != 'true'
+        id: issue_config
+        shell: bash
+        env:
+          DEFAULT_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEFAULT_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          DEFAULT_MODEL: ${{ vars.OPENAI_MODEL }}
+          DEFAULT_EFFORT: ${{ vars.OPENAI_EFFORT }}
+        run: |
+          api_key="$DEFAULT_API_KEY"
+          base_url="$DEFAULT_BASE_URL"
+          model="$DEFAULT_MODEL"
+          effort="$DEFAULT_EFFORT"
+          [ -n "$model" ] || model='gpt-5.4'
+          [ -n "$effort" ] || effort='high'
+
+          is_deepseek='false'
+          case "$base_url" in
+            *api.deepseek.com*)
+              is_deepseek='true'
+              ;;
+          esac
+
+          {
+            echo "api_key=$api_key"
+            echo "base_url=$base_url"
+            echo "model=$model"
+            echo "effort=$effort"
+            echo "is_deepseek=$is_deepseek"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js for DeepSeek issue response
+        if: steps.check_bot.outputs.has_bot != 'true' && steps.issue_config.outputs.is_deepseek == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+
+      - name: Run DeepSeek for Issue Auto Response
+        if: steps.check_bot.outputs.has_bot != 'true' && steps.issue_config.outputs.is_deepseek == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DEEPSEEK_API_KEY: ${{ steps.issue_config.outputs.api_key }}
+          DEEPSEEK_BASE_URL: ${{ steps.issue_config.outputs.base_url }}
+          DEEPSEEK_MODEL: ${{ steps.issue_config.outputs.model }}
+          DEEPSEEK_EFFORT: ${{ steps.issue_config.outputs.effort }}
+        run: node .github/scripts/deepseek-issue-response.mjs
+
+      - name: Run Codex for Issue Auto Response
+        if: steps.check_bot.outputs.has_bot != 'true' && steps.issue_config.outputs.is_deepseek != 'true'
         uses: openai/codex-action@v1
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          responses-api-endpoint: ${{ secrets.OPENAI_BASE_URL }}
-          model: ${{ vars.OPENAI_MODEL || 'gpt-5.3-codex' }}
-          effort: ${{ vars.OPENAI_EFFORT || 'high' }}
+          openai-api-key: ${{ steps.issue_config.outputs.api_key }}
+          responses-api-endpoint: ${{ steps.issue_config.outputs.base_url }}
+          model: ${{ steps.issue_config.outputs.model }}
+          effort: ${{ steps.issue_config.outputs.effort }}
           sandbox: danger-full-access
           safety-strategy: drop-sudo
           prompt-file: .github/prompts/issue-auto-response.md

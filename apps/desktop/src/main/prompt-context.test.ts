@@ -32,6 +32,7 @@ describe('preparePromptContext', () => {
   });
 
   it('allows binary attachments (png) up to 10MB - 500KB png passes', async () => {
+    // Binary attachments (images) can be up to 10MB - allowed larger than text
     await expect(
       preparePromptContext({
         attachments: [{ path: 'C:/repo/image.png', name: 'image.png', size: 543_034 }],
@@ -39,6 +40,7 @@ describe('preparePromptContext', () => {
     ).rejects.toMatchObject({
       code: 'ATTACHMENT_READ_FAILED',
     });
+    // It fails because the file doesn't exist, but importantly - NOT ATTACHMENT_TOO_LARGE
   });
 
   it('encodes supported image attachments as data URLs', async () => {

@@ -37,7 +37,7 @@ The generation pipeline: prompt → `@mariozechner/pi-ai` (provider abstraction)
 | Keyless proxy support | Yes (IP allowlist) | No | No | No | No |
 | Local / offline | Fully local | Cloud | Cloud | Cloud | Cloud |
 | Models | Any (Claude, GPT, Gemini, DeepSeek, Ollama, OpenRouter, SiliconFlow, …) | Claude Opus only | GPT-4o | Multi-LLM | Multi-LLM |
-| Version history | Local SQLite snapshots | None | None | None | None |
+| Version history | Local first: v0.1 SQLite snapshots; v0.2 JSONL sessions + workspace files | None | None | None | None |
 | Data privacy | 100% on-device | Cloud-processed | Cloud | Cloud | Cloud |
 | Built-in design skills | 12 skill modules + 15 demo prompts | No | No | No | No |
 | Config import | Claude Code + Codex in one click | No | No | No | No |
@@ -60,7 +60,7 @@ open-codesign uses a monorepo managed with pnpm workspaces and Turborepo:
 - `packages/i18n` — i18next locales (English + 简体中文)
 - `website` — VitePress marketing + docs site
 
-Storage: better-sqlite3 for design history and snapshots; TOML files (encrypted via Electron safeStorage) for configuration. No electron-store blob. All paths respect XDG base dirs and Electron `app.getPath()`.
+Storage: v0.1 uses better-sqlite3 for design history and snapshots plus TOML files for configuration. v0.2 migrates design history into pi JSONL sessions and stores generated artifacts, assets, exports, AGENTS.md, and DESIGN.md in real workspace folders. No electron-store blob. All paths respect XDG base dirs and Electron `app.getPath()`.
 
 ## Built-in design skill library
 
@@ -100,7 +100,7 @@ Four tabs in the desktop Settings:
 
 - No bundled model runtimes (no Ollama binary, no Python, no browser binary shipped)
 - BYOK only — no proxied API calls, no cloud account, no telemetry by default
-- Local-first storage — all user data stays on disk
+- Local-first storage — all user data stays on disk; v0.2 uses JSONL sessions plus workspace files instead of new SQLite-backed design state
 - MIT-compatible permissive dependencies only (no GPL/AGPL/SSPL/proprietary)
 - Lazy-load heavy features (PPTX export, PDF export, web capture, codebase scan) on first use
 - Schema-version everything that lives on disk (config files, SQLite tables, IPC payloads, exported bundles)
@@ -112,12 +112,14 @@ Claude Design exposes three structural problems:
 2. Single-model ceiling (Anthropic Opus only; no competition, no cost control, no way to try a cheaper model for rough drafts)
 3. Cloud data processing with no meaningful export/import (no version history, no Figma round-trip, no codebase awareness)
 
-open-codesign addresses all three: BYOK eliminates lock-in, multi-model support enables cost optimization, and local SQLite storage gives the user complete control of their design history.
+open-codesign addresses all three: BYOK eliminates lock-in, multi-model support enables cost optimization, and local-first storage gives the user control of their design history. v0.1 uses SQLite snapshots; v0.2 moves sessions to JSONL and design files to user workspaces.
 
 ## Roadmap
 
 - **v0.1 (shipped, April 2026)** — unsigned installers, multi-provider BYOK, 15 demos, 12 skills, HTML/JSX/PDF/PPTX/ZIP/Markdown export, inline comment, sliders, preview pool, per-generation token counter.
-- **v0.2** — pre-generation token estimate + weekly spend budget, version snapshots with diff + rollback, three-style parallel exploration.
+- **v0.1.4 (shipped, April 2026)** — AI image generation, ChatGPT Plus / Codex subscription login, CLIProxyAPI import, and third-party relay reliability.
+- **v0.2 (Agentic Design, expected in about one week)** — pi sessions with JSONL history, real workspace files, permissioned pi tools, design-specific tools (`ask`, `scaffold`, `skill`, `preview`, `gen_image`, `tweaks`, `todos`, `done`), DESIGN.md design-system artifacts, and v0.1 migration.
+- **v0.2.x** — renderer polish for `ask`, `preview`, tweaks, process-management surfaces, E2E coverage, and broader migration fixtures.
 - **v0.3** — codebase → design system token extraction (Tailwind / CSS vars / W3C DTCG extractors are implemented library-side; v0.3 wires them to the desktop UI).
 - **v0.4** — on-demand Playwright web capture, handoff bundle to open-cowork, external skill packs.
 - **v0.5** — Apple Developer ID + Windows Authenticode code-signing, opt-in auto-update, Homebrew Cask + winget + Scoop manifests verified.
