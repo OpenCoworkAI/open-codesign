@@ -308,11 +308,27 @@ export function makeVerifyUiKitVisualParityTool(
         mediaType: parseMediaType(sourceFile.content),
       };
 
-      logger.info('[verify_ui_kit_visual_parity] step=render', { slug: params.slug });
-      const candidateImg = await renderUiKit(decomposed.content, signal);
-
-      logger.info('[verify_ui_kit_visual_parity] step=judge', { slug: params.slug });
-      const judgeResult = await judgeVisualParity(sourceImg, candidateImg, signal);
+      // Render + judge are external best-effort calls (Playwright headless +
+      // vision-LLM). If either throws (text-only model, malformed JSON,
+      // headless render crash, abort), we degrade to `unavailable` instead
+      // of bubbling the error and breaking the agent loop. This matches the
+      // tool's documented contract — review fix #3 on PR #241.
+      let candidateImg: VisualParityImageRef;
+      let judgeResult: Awaited<ReturnType<typeof judgeVisualParity>>;
+      try {
+        logger.info('[verify_ui_kit_visual_parity] step=render', { slug: params.slug });
+        candidateImg = await renderUiKit(decomposed.content, signal);
+        logger.info('[verify_ui_kit_visual_parity] step=judge', { slug: params.slug });
+        judgeResult = await judgeVisualParity(sourceImg, candidateImg, signal);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.info('[verify_ui_kit_visual_parity] step=unavailable', {
+          slug: params.slug,
+          reason: message,
+        });
+        const report = unavailableReport(`render or judge failed: ${message}`);
+        return { content: [{ type: 'text', text: report.summary }], details: report };
+      }
 
       const checks = normalizeChecks(judgeResult.checks ?? []);
       const passCount = checks.filter((c) => c.passed).length;

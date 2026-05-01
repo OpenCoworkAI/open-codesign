@@ -43,9 +43,9 @@ export const DECOMPOSE_PROMPT_ZH = `把刚才那个设计拆成一个 ui_kits/<s
 5. 调 verify_ui_kit_visual_parity({slug}) 拿视觉判定 (vision LLM judge, 12 个 boolean check)
    - 如果返回 status="unavailable", host 没接 judge callback, 跳过这一步用 step 4 的结果做决定
    - 如果返回了, 看 checks[].passed + reason, 失败的 check 就是要修的点
-6. 综合两份 report:
-   - 两个都 status ∈ {verified, needs_review} (12/12 或 11/12 个 check 过): 直接调 done
-   - 任一为 needs_iteration / failed: 把两边的 gaps 合并去重 + 失败 check 的 reason 一起作为反馈, 重新调一次 decompose_to_ui_kit
+6. 综合两份 report (注意: 两个 verifier 的 status 词汇不同):
+   - 成功条件: deterministic.status === 'ok' 且 visual.status ∈ {verified, needs_review, unavailable} → 直接调 done
+   - 任一失败: deterministic.status === 'needs_iteration' 或 visual.status ∈ {needs_iteration, failed} → 把两边的 gaps 合并去重 + 失败 check 的 reason 一起作为反馈, 重新调一次 decompose_to_ui_kit
 7. 最多迭代两轮. 第二轮验证完不管 score 多少都调 done.
 8. done 的 summary 必须诚实写出:
    - 结构化 verifier 的 passCount/totalChecks + status
@@ -68,9 +68,9 @@ export const DECOMPOSE_PROMPT_EN = `Decompose the design you just produced into 
 5. Call verify_ui_kit_visual_parity({slug}) — vision-LLM judge with the 12 standard boolean checks (layout / color / typography / content / components dimensions). Each check is yes/no with a reason. parityScore = passCount/12 (derived deterministically).
    - If it returns status="unavailable", the host hasn't injected the judge callback. Proceed with step 4's deterministic report alone.
    - If it returns successfully, read each checks[].passed + reason. Failed checks are the things to fix.
-6. Reconcile both reports:
-   - Both status ∈ {verified, needs_review} (12/12 or 11/12 checks passed): call done
-   - Either status === 'needs_iteration' or 'failed': merge + dedup gaps from both reports + the failed checks' reasons, re-call decompose_to_ui_kit addressing them
+6. Reconcile both reports (NOTE: the two verifiers use DIFFERENT status vocabularies):
+   - Success: deterministic.status === 'ok' AND visual.status ∈ {verified, needs_review, unavailable} → call done
+   - Iterate: deterministic.status === 'needs_iteration' OR visual.status ∈ {needs_iteration, failed} → merge + dedup gaps from both reports + the failed checks' reasons, re-call decompose_to_ui_kit addressing them
 7. Iterate at most TWICE. After the second verify, call done regardless of score.
 8. The done summary MUST honestly report:
    - deterministic verifier passCount/totalChecks + status
