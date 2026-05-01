@@ -42,6 +42,17 @@ export {
 } from './errors.js';
 export { FRAME_FILES, type FrameName, loadFrameTemplates } from './frames/index.js';
 export type { CoreLogger } from './logger.js';
+export {
+  extractSummaryFromMemory,
+  formatGlobalMemoryIndex,
+  formatMemoryForContext,
+  type GlobalMemoryEntry,
+  parseGlobalMemoryIndex,
+  serializeMessagesForMemory,
+  type UpdateDesignMemoryInput,
+  type UpdateDesignMemoryResult,
+  updateDesignMemory,
+} from './memory.js';
 export type { ResourceManifestResult } from './resource-manifest.js';
 export { collectResourceManifest, formatResourceManifestForPrompt } from './resource-manifest.js';
 export {
@@ -150,6 +161,8 @@ export interface GenerateInput {
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
+  /** Pre-formatted memory context sections loaded by the host before generation. */
+  memoryContext?: string[] | undefined;
   /** Absolute path to the current design's workspace on disk. When set, tools
    * that need to write files (e.g. `scaffold`) use this as the sandbox root. */
   workspaceRoot?: string | undefined;

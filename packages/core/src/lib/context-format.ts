@@ -77,8 +77,14 @@ export function buildContextSections(input: {
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
+  memoryContext?: string[] | undefined;
 }): string[] {
   const sections: string[] = [];
+  if (input.memoryContext) {
+    for (const section of input.memoryContext) {
+      if (section.length > 0) sections.push(section);
+    }
+  }
   if (input.designSystem) sections.push(formatDesignSystem(input.designSystem));
   const attachmentSection = formatAttachments(input.attachments ?? []);
   if (attachmentSection) sections.push(attachmentSection);
