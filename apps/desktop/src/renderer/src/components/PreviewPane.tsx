@@ -141,6 +141,14 @@ const COMMENT_HINT_CLASS =
 interface PreviewSlotProps {
   designId: string;
   html: string;
+  /**
+   * When non-null, the design has a bound workspace folder and the iframe
+   * loads `workspace://designId/index.html` instead of injecting `srcdoc`.
+   * That gives the page a real URL so relative imports (./styles.css,
+   * /assets/logo.png, fonts, JS modules) resolve against the workspace
+   * root via the registered Electron protocol handler.
+   */
+  workspacePath: string | null;
   active: boolean;
   viewport: 'mobile' | 'tablet' | 'desktop';
   zoom: number;
@@ -153,6 +161,20 @@ interface PreviewSlotProps {
   onIframeLoaded: (designId: string) => void;
 }
 
+// FNV-1a 32-bit. Cheap, no deps, deterministic. Used to build a cache-buster
+// query string so the iframe re-fetches workspace://...index.html every time
+// the agent rewrites the file (Cache-Control: no-store on the protocol side
+// already kills disk cache, but a stable URL lets Chromium short-circuit the
+// load entirely).
+export function fnv1a32Hex(s: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
 // One iframe per pool entry. Hidden (display:none) when not active, but kept
 // in the DOM so its document -- already parsed HTML, executed scripts, laid
 // out -- survives design switches. That's the whole point of the pool. The
@@ -161,6 +183,7 @@ interface PreviewSlotProps {
 function PreviewSlot({
   designId,
   html,
+  workspacePath,
   active,
   viewport,
   zoom,
@@ -177,6 +200,15 @@ function PreviewSlot({
   // biome-ignore lint/correctness/useExhaustiveDependencies: srcDocStableKey is the intentional dependency. html flows through naturally because the factory closes over it and re-runs whenever the stable key flips, which is exactly when structural changes (anything outside EDITMODE / TWEAK_SCHEMA markers) are present.
   const srcDoc = useMemo(() => buildSrcdoc(html), [srcDocStableKey]);
 
+  // Workspace mode: load the actual file from disk via workspace:// so
+  // relative imports resolve. The cache-buster is derived from a content
+  // hash so the iframe reloads exactly when the agent has rewritten the
+  // file (and not on every unrelated re-render).
+  const workspaceUrl = useMemo(() => {
+    if (workspacePath === null) return null;
+    return `workspace://${designId}/index.html?v=${fnv1a32Hex(srcDocStableKey)}`;
+  }, [workspacePath, designId, srcDocStableKey]);
+
   const setRef = useCallback(
     (el: HTMLIFrameElement | null) => registerIframe(designId, el),
     [designId, registerIframe],
@@ -186,7 +218,25 @@ function PreviewSlot({
   const scale = zoom / 100;
   const inversePct = `${10000 / zoom}%`;
 
-  const rawIframe = (
+  const rawIframe = workspaceUrl ? (
+    <iframe
+      ref={setRef}
+      title={`design-preview-${designId}`}
+      sandbox="allow-scripts"
+      src={workspaceUrl}
+      onLoad={(e) => {
+        if (!active) return;
+        const target = e.currentTarget as HTMLIFrameElement;
+        postModeToPreviewWindow(target.contentWindow, interactionMode, onIframeError);
+        onIframeLoaded(designId);
+      }}
+      className={
+        isMobile
+          ? 'block w-full h-full bg-transparent border-0'
+          : 'w-full h-full bg-transparent border-0'
+      }
+    />
+  ) : (
     <iframe
       ref={setRef}
       title={`design-preview-${designId}`}
@@ -422,11 +472,13 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // handed to us.
   const poolEntries = useMemo(() => {
     const seen = new Set<string>();
-    const out: Array<{ id: string; html: string }> = [];
+    const out: Array<{ id: string; html: string; workspacePath: string | null }> = [];
+    const workspaceFor = (id: string): string | null =>
+      designs.find((d) => d.id === id)?.workspacePath ?? null;
     if (currentDesignId !== null) {
       const html = previewHtml ?? previewHtmlByDesign[currentDesignId];
       if (typeof html === 'string' && html.length > 0) {
-        out.push({ id: currentDesignId, html });
+        out.push({ id: currentDesignId, html, workspacePath: workspaceFor(currentDesignId) });
         seen.add(currentDesignId);
       }
     }
@@ -434,12 +486,12 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       if (seen.has(id)) continue;
       const html = previewHtmlByDesign[id];
       if (typeof html === 'string' && html.length > 0) {
-        out.push({ id, html });
+        out.push({ id, html, workspacePath: workspaceFor(id) });
         seen.add(id);
       }
     }
     return out;
-  }, [currentDesignId, previewHtml, previewHtmlByDesign, recentDesignIds]);
+  }, [currentDesignId, previewHtml, previewHtmlByDesign, recentDesignIds, designs]);
 
   const activeTab = canvasTabs[activeCanvasTab];
   const showCommentUi = interactionMode === 'comment';
@@ -508,6 +560,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             key={entry.id}
             designId={entry.id}
             html={entry.html}
+            workspacePath={entry.workspacePath}
             active={entry.id === currentDesignId}
             viewport={previewViewport}
             zoom={previewZoom}

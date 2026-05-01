@@ -89,6 +89,7 @@ import {
   registerWorkspaceIpc,
 } from './snapshots-ipc';
 import { initStorageSettings } from './storage-settings';
+import { registerWorkspaceProtocolHandler, registerWorkspaceScheme } from './workspace-protocol';
 
 // ESM shim: package.json "type": "module" means the built bundle is ESM and
 // __dirname/__filename don't exist. Derive them from import.meta.url so the
@@ -1409,6 +1410,11 @@ async function scheduleStartupUpdateCheck(): Promise<void> {
 }
 
 if (!IS_VITEST) {
+  // Privileged scheme registration must happen synchronously before
+  // app.whenReady so Chromium picks it up during process init. Calling it
+  // later raises "Schemes can only be registered while the app is initializing".
+  registerWorkspaceScheme();
+
   void app.whenReady().then(async () => {
     // Extracted so the outer try/catch AND post-init listeners (whose callbacks
     // fire outside this block) can route failures through the same boot-fallback
@@ -1481,6 +1487,10 @@ if (!IS_VITEST) {
         registerWorkspaceIpc(dbResult.db, () => mainWindow);
         registerChatMessagesIpc(dbResult.db);
         registerCommentsIpc(dbResult.db);
+        registerWorkspaceProtocolHandler({
+          db: dbResult.db,
+          logger: getLogger('workspace-protocol'),
+        });
         try {
           pruneDiagnosticEvents(dbResult.db, 500);
         } catch (err) {
