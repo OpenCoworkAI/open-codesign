@@ -151,9 +151,14 @@ function extractFirstJsonObject(text: string): string {
 }
 
 function dataUrlToBase64(dataUrl: string): string {
-  const idx = dataUrl.indexOf('base64,');
-  if (idx === -1) throw new Error('Image must be a base64 data URL');
-  return dataUrl.slice(idx + 'base64,'.length);
+  // RFC 2397 says the `;base64` token is case-insensitive in practice (browsers
+  // accept both casings), so match either. Picks up the matched segment to
+  // compute the slice offset correctly.
+  const match = dataUrl.match(/;base64,/i);
+  if (!match || match.index === undefined) {
+    throw new Error('Image must be a base64 data URL');
+  }
+  return dataUrl.slice(match.index + match[0].length);
 }
 
 export interface VisionPromptInput {
