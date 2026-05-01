@@ -14,6 +14,12 @@ const ALLOWED_MIME_BY_EXT = new Map<string, string>([
   ['.js', 'application/javascript; charset=utf-8'],
   ['.mjs', 'application/javascript; charset=utf-8'],
   ['.cjs', 'application/javascript; charset=utf-8'],
+  // Source files often referenced by `<script type="text/babel">` for in-browser
+  // transpilation. We hand them out as application/javascript regardless of
+  // extension; Babel inspects the script type, not the response Content-Type.
+  ['.jsx', 'application/javascript; charset=utf-8'],
+  ['.ts', 'application/javascript; charset=utf-8'],
+  ['.tsx', 'application/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
   ['.svg', 'image/svg+xml'],
   ['.png', 'image/png'],

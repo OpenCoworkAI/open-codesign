@@ -143,12 +143,18 @@ interface PreviewSlotProps {
   html: string;
   /**
    * When non-null, the design has a bound workspace folder and the iframe
-   * loads `workspace://designId/index.html` instead of injecting `srcdoc`.
-   * That gives the page a real URL so relative imports (./styles.css,
-   * /assets/logo.png, fonts, JS modules) resolve against the workspace
-   * root via the registered Electron protocol handler.
+   * loads `workspace://designId/<previewFilePath>` instead of injecting
+   * `srcdoc`. That gives the page a real URL so relative imports resolve
+   * against the workspace root via the registered Electron protocol handler.
    */
   workspacePath: string | null;
+  /**
+   * Workspace-relative path to load in the iframe when in workspace mode.
+   * Defaults to `index.html`. The active design uses the path from the
+   * currently-active file tab so clicking a file in the Files panel
+   * actually previews that file.
+   */
+  previewFilePath: string;
   active: boolean;
   viewport: 'mobile' | 'tablet' | 'desktop';
   zoom: number;
@@ -184,6 +190,7 @@ function PreviewSlot({
   designId,
   html,
   workspacePath,
+  previewFilePath,
   active,
   viewport,
   zoom,
@@ -201,13 +208,16 @@ function PreviewSlot({
   const srcDoc = useMemo(() => buildSrcdoc(html), [srcDocStableKey]);
 
   // Workspace mode: load the actual file from disk via workspace:// so
-  // relative imports resolve. The cache-buster is derived from a content
-  // hash so the iframe reloads exactly when the agent has rewritten the
-  // file (and not on every unrelated re-render).
+  // relative imports resolve. The cache-buster keys off both the file path
+  // (so switching tabs reloads) and the html stable key (so an agent edit
+  // to the same file reloads). Path segments are encoded individually so
+  // names like "Dashboard V1 Hi-Fi.html" survive without breaking slashes.
   const workspaceUrl = useMemo(() => {
     if (workspacePath === null) return null;
-    return `workspace://${designId}/index.html?v=${fnv1a32Hex(srcDocStableKey)}`;
-  }, [workspacePath, designId, srcDocStableKey]);
+    const encodedPath = previewFilePath.split('/').map(encodeURIComponent).join('/');
+    const v = fnv1a32Hex(`${previewFilePath}|${srcDocStableKey}`);
+    return `workspace://${designId}/${encodedPath}?v=${v}`;
+  }, [workspacePath, designId, previewFilePath, srcDocStableKey]);
 
   const setRef = useCallback(
     (el: HTMLIFrameElement | null) => registerIframe(designId, el),
@@ -475,18 +485,26 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     const out: Array<{ id: string; html: string; workspacePath: string | null }> = [];
     const workspaceFor = (id: string): string | null =>
       designs.find((d) => d.id === id)?.workspacePath ?? null;
+    // A design is renderable in the preview pool if EITHER:
+    //   - it has in-memory html (legacy single-doc generation flow), OR
+    //   - it has a bound workspace (workspace:// loads files straight off
+    //     disk; previewHtml may be null because the agent hasn't run yet).
+    // The second branch is what makes "click a workspace file in the Files
+    // tab and see it" work without first having to prompt the agent.
     if (currentDesignId !== null) {
-      const html = previewHtml ?? previewHtmlByDesign[currentDesignId];
-      if (typeof html === 'string' && html.length > 0) {
-        out.push({ id: currentDesignId, html, workspacePath: workspaceFor(currentDesignId) });
+      const html = previewHtml ?? previewHtmlByDesign[currentDesignId] ?? '';
+      const wsp = workspaceFor(currentDesignId);
+      if (html.length > 0 || wsp !== null) {
+        out.push({ id: currentDesignId, html, workspacePath: wsp });
         seen.add(currentDesignId);
       }
     }
     for (const id of recentDesignIds) {
       if (seen.has(id)) continue;
-      const html = previewHtmlByDesign[id];
-      if (typeof html === 'string' && html.length > 0) {
-        out.push({ id, html, workspacePath: workspaceFor(id) });
+      const html = previewHtmlByDesign[id] ?? '';
+      const wsp = workspaceFor(id);
+      if (html.length > 0 || wsp !== null) {
+        out.push({ id, html, workspacePath: wsp });
         seen.add(id);
       }
     }
@@ -561,6 +579,11 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             designId={entry.id}
             html={entry.html}
             workspacePath={entry.workspacePath}
+            previewFilePath={
+              entry.id === currentDesignId && activeTab?.kind === 'file'
+                ? activeTab.path
+                : 'index.html'
+            }
             active={entry.id === currentDesignId}
             viewport={previewViewport}
             zoom={previewZoom}
@@ -587,7 +610,12 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   }
 
   const hasTabs = canvasTabs.length > 0;
-  const isWelcome = !errorMessage && !previewHtml && !designHasContent;
+  // A design with a bound workspace is never "welcome" -- it already has
+  // content the user can browse via the Files panel even before any agent
+  // turn. Hiding the toolbar/tab bar in that case makes the preview look
+  // dead and stops the user from clicking back to the Files tab.
+  const hasWorkspace = currentDesign?.workspacePath != null;
+  const isWelcome = !errorMessage && !previewHtml && !designHasContent && !hasWorkspace;
 
   return (
     <div className="flex min-h-0 flex-1">

@@ -33,11 +33,13 @@ import type {
   ModelsListResponse,
   TestEndpointResponse,
 } from '../main/connection-ipc';
+import type { FilesIpcEntry, FilesIpcEntryKind } from '../main/files-ipc';
 import type { ImageGenerationSettingsView } from '../main/image-generation-settings';
 
 export type { ConnectionTestError, ConnectionTestResult, ModelsListResponse, TestEndpointResponse };
 export type { ClaudeCodeUserType, ExternalConfigsDetection };
 export type { CodexOAuthStatus };
+export type { FilesIpcEntry, FilesIpcEntryKind };
 export type { ImageGenerationSettingsView };
 
 export interface ValidateKeyResult {
@@ -63,7 +65,7 @@ export interface ProviderRow {
   baseUrl: string | null;
   isActive: boolean;
   label: string;
-  /** Stored entry name — differs from `label` for codex-imported rows
+  /** Stored entry name -- differs from `label` for codex-imported rows
    *  where `label` is the localized alias "Codex (imported)". */
   name: string;
   builtin: boolean;
@@ -75,7 +77,7 @@ export interface ProviderRow {
 }
 
 // `ClaudeCodeUserType` and `ExternalConfigsDetection` now live in
-// `packages/shared/src/detection.ts` so main and preload stay in lockstep —
+// `packages/shared/src/detection.ts` so main and preload stay in lockstep --
 // see that file for the drift-risk background. The inline definitions that
 // used to live here are gone; re-exports above keep downstream imports
 // from breaking.
@@ -121,7 +123,7 @@ export interface Preferences {
  * Streaming events emitted by the (future) Agent runtime. Phase 1 emits
  * turn_start / text_delta / turn_end. Phase 2 adds tool_call_*. Kept
  * deliberately loose so Workstream B can evolve the shape without a
- * lockstep change here — useAgentStream in the renderer tolerates unknown
+ * lockstep change here -- useAgentStream in the renderer tolerates unknown
  * event types by ignoring them.
  */
 export interface AgentStreamEvent {
@@ -136,7 +138,7 @@ export interface AgentStreamEvent {
     | 'error';
   designId: string;
   /** Trace ID linking this event to the main-process generation log entry.
-   *  Matches the generationId from the codesign:v1:generate payload — always
+   *  Matches the generationId from the codesign:v1:generate payload -- always
    *  present because the main process supplies it from baseCtx. */
   generationId: string;
   // turn_start
@@ -154,7 +156,7 @@ export interface AgentStreamEvent {
   // tool_call_result
   result?: unknown;
   durationMs?: number;
-  // fs_updated — emitted whenever the agent's text_editor mutates a file in the
+  // fs_updated -- emitted whenever the agent's text_editor mutates a file in the
   // virtual fs. Renderer uses this to re-render the iframe live during
   // generation so the user can watch the design take shape.
   path?: string;
@@ -461,6 +463,13 @@ const api = {
         schemaVersion: 1,
         designId,
       }) as Promise<{ exists: boolean }>,
+  },
+  files: {
+    list: (designId: string) =>
+      ipcRenderer.invoke('files:list:v1', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<{ files: FilesIpcEntry[] }>,
   },
   chat: {
     list: (designId: string) =>

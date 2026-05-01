@@ -46,6 +46,7 @@ import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { makeRuntimeVerifier } from './done-verify';
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
+import { registerFilesIpc } from './files-ipc';
 import {
   armGenerationTimeout,
   cancelGenerationRequest,
@@ -1500,6 +1501,10 @@ if (!IS_VITEST) {
         registerWorkspaceProtocolHandler({
           db: dbResult.db,
           logger: getLogger('workspace-protocol'),
+        });
+        registerFilesIpc({
+          db: dbResult.db,
+          logger: getLogger('files-ipc'),
         });
         try {
           pruneDiagnosticEvents(dbResult.db, 500);
