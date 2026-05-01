@@ -288,7 +288,7 @@ interface CreateRuntimeTextEditorFsOptions {
    * `status: 'unavailable'` even when the host has wired up the judge
    * callback (review finding #2 on PR #241).
    */
-  sourceAttachments?: ReadonlyArray<{ imageDataUrl?: string }>;
+  sourceAttachments?: ReadonlyArray<{ imageDataUrl?: string | undefined }> | undefined;
 }
 
 export function createRuntimeTextEditorFs({
