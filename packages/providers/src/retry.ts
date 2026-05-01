@@ -85,7 +85,7 @@ function classifyByStatus(status: number, err: unknown, wire?: WireApi): RetryDe
 }
 
 const TRANSPORT_ERROR_RE =
-  /(?:fetch\s+failed.*terminated|premature\s+close|stream\s+(?:ended|closed)|ECONNRESET)\b/i;
+  /(?:fetch\s+failed.*\bterminated\b|\bterminated\b|premature\s+close|stream\s+(?:ended|closed)|ECONNRESET)\b/i;
 
 export function isTransportLevelError(errorMessage: string | undefined): boolean {
   if (!errorMessage) return false;

@@ -1238,6 +1238,32 @@ describe('generateViaAgent() — transport-level retry', () => {
     expect(onRetry.mock.calls[0]?.[0].reason).toMatch(/transport retry/);
   });
 
+  it('retries a standalone terminated error (without fetch failed prefix)', async () => {
+    scriptedAgent = {
+      assistantText: RESPONSE_WITH_ARTIFACT,
+      stopReason: 'error',
+      errorMessage: 'terminated',
+      overrideScriptForCallIndex: 1,
+      overrideScript: {
+        assistantText: RESPONSE_WITH_ARTIFACT,
+        stopReason: 'stop',
+      },
+    };
+    const onRetry = vi.fn();
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { onRetry, fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+    );
+    expect(result.artifacts).toHaveLength(1);
+    expect(agentCalls.length).toBe(2);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry non-transport errors like 400', async () => {
     scriptedAgent = {
       assistantText: '',

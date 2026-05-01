@@ -75,6 +75,15 @@ describe('classifyError', () => {
     expect(d.retry).toBe(true);
     expect(d.reason).toMatch(/transport-level error/);
   });
+  it('marks standalone terminated as retryable', () => {
+    const d = classifyError(new Error('terminated'));
+    expect(d.retry).toBe(true);
+    expect(d.reason).toMatch(/transport-level error/);
+  });
+  it('does not treat unterminated as a terminated transport error', () => {
+    const d = classifyError(new Error('unterminated JSON response'));
+    expect(d.retry).toBe(false);
+  });
   it('marks premature close as retryable', () => {
     const d = classifyError(new Error('premature close'));
     expect(d.retry).toBe(true);
