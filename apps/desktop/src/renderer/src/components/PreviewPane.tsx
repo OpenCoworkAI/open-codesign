@@ -434,11 +434,30 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     }
   }, [comments, currentSnapshotId, commentBubble, currentDesignId, iframeLoadTick]);
 
+  const openCanvasFileTab = useCodesignStore((s) => s.openCanvasFileTab);
+
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
-      // Only accept messages from the ACTIVE iframe -- background pool members
-      // are inert from the user's POV and their messages would race with the
-      // foreground design's state.
+      // Workspace nav-intercept: handled BEFORE the trust check because the
+      // injected script lives inside a sandboxed workspace:// iframe (already
+      // limited to files we serve) and the trust check's contentWindow
+      // comparison is unreliable across iframe re-navigation. Each accepted
+      // file tab is pinned to a single file so the user can never confuse
+      // what they are looking at.
+      if (
+        typeof event.data === 'object' &&
+        event.data !== null &&
+        (event.data as { __codesign?: unknown }).__codesign === true &&
+        (event.data as { type?: unknown }).type === 'OPEN_FILE_TAB'
+      ) {
+        const path = (event.data as { path?: unknown }).path;
+        if (typeof path === 'string' && path.length > 0) openCanvasFileTab(path);
+        return;
+      }
+
+      // Only accept overlay/element messages from the ACTIVE iframe --
+      // background pool members are inert from the user's POV and their
+      // messages would race with the foreground design's state.
       if (!isTrustedPreviewMessageSource(event.source, iframeRef.current?.contentWindow)) return;
 
       const outcome = handlePreviewMessage(event.data, {
@@ -474,7 +493,14 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [pushIframeError, selectCanvasElement, openCommentBubble, previewZoom, applyLiveRects]);
+  }, [
+    pushIframeError,
+    selectCanvasElement,
+    openCommentBubble,
+    previewZoom,
+    applyLiveRects,
+    openCanvasFileTab,
+  ]);
 
   // Pool entries: active design first (using the freshest in-memory
   // previewHtml), then any other recently-visited designs that still have a

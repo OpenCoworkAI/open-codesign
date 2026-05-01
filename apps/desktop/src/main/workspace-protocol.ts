@@ -47,6 +47,18 @@ const ALLOWED_MIME_BY_EXT = new Map<string, string>([
 
 const VALID_DESIGN_ID = /^[a-zA-Z0-9_-]+$/;
 
+// Injected at the end of every HTML response served from a workspace. Its
+// job is to convert in-iframe navigations (a user clicking a `<a href="...">`
+// that resolves to another file in the same workspace) into a postMessage
+// to the parent renderer, which then opens that file in its own canvas tab.
+// Without this, clicking a link inside, say, "Aide Sketch.html" would silently
+// repoint the iframe at "Profil Sketch.html" while the tab still showed
+// "Aide Sketch.html" -- one tab, two files, total confusion.
+//
+// Only `.html` / `.htm` workspace links are intercepted. Hash links, JS URLs,
+// external schemes, and asset links pass through to the browser default.
+export const WORKSPACE_NAV_INTERCEPT_SCRIPT = `<script>(function(){var s=function(e){try{var t=e.target&&e.target.closest&&e.target.closest('a[href]');if(!t){return;}var h=t.getAttribute('href');if(!h){return;}if(h.charAt(0)==='#'||h.toLowerCase().indexOf('javascript:')===0){return;}var u;try{u=new URL(h,location.href);}catch(_){return;}if(u.protocol!=='workspace:'||u.host!==location.host){return;}var p=decodeURIComponent(u.pathname).replace(/^\\/+/,'');if(!/\\.(html?|htm)$/i.test(p)){return;}e.preventDefault();try{window.parent.postMessage({__codesign:true,type:'OPEN_FILE_TAB',path:p},'*');}catch(_){}}catch(_){}};document.addEventListener('click',s,true);})();</script>`;
+
 export type WorkspaceProtocolError =
   | 'bad_url'
   | 'unknown_design'
@@ -188,7 +200,11 @@ export function registerWorkspaceProtocolHandler(opts: RegisterWorkspaceProtocol
 
     try {
       const data = await readFile(result.value.absPath);
-      return new Response(data, {
+      const isHtml = result.value.mime.startsWith('text/html');
+      const body: BodyInit = isHtml
+        ? `${data.toString('utf8')}${WORKSPACE_NAV_INTERCEPT_SCRIPT}`
+        : (data as unknown as Uint8Array);
+      return new Response(body, {
         status: 200,
         headers: {
           'Content-Type': result.value.mime,
