@@ -154,8 +154,8 @@ interface PreviewSlotProps {
 }
 
 // One iframe per pool entry. Hidden (display:none) when not active, but kept
-// in the DOM so its document — already parsed HTML, executed scripts, laid
-// out — survives design switches. That's the whole point of the pool. The
+// in the DOM so its document -- already parsed HTML, executed scripts, laid
+// out -- survives design switches. That's the whole point of the pool. The
 // srcDocStableKey trick is per-slot so token-only tweaks via postMessage
 // don't rebuild the document (~300-500ms blank on JSX cards).
 function PreviewSlot({
@@ -194,7 +194,7 @@ function PreviewSlot({
       srcDoc={srcDoc}
       onLoad={(e) => {
         // Once the iframe's document has actually loaded, its in-page message
-        // handler is ready — this is the reliable moment to (re)post SET_MODE.
+        // handler is ready -- this is the reliable moment to (re)post SET_MODE.
         // The parent's currentDesignId useEffect can fire before the document
         // loads, so that post may be dropped. Only re-post for the active
         // slot so we don't redirect background iframes into comment mode.
@@ -311,7 +311,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // submit; explicit close (Esc / ×) deliberately preserves.
   const bubbleDraftsRef = useRef<Map<string, string>>(new Map());
   const iframesByDesign = useRef<Map<string, HTMLIFrameElement>>(new Map());
-  // Bumped every time the active iframe fires onLoad — used to re-trigger
+  // Bumped every time the active iframe fires onLoad -- used to re-trigger
   // the WATCH_SELECTORS effect so we don't race past overlay installation
   // on first mount.
   const [iframeLoadTick, setIframeLoadTick] = useState(0);
@@ -332,7 +332,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   );
 
   // When the active design changes, retarget iframeRef and re-broadcast the
-  // current interaction mode. Background iframes keep their last mode — fine,
+  // current interaction mode. Background iframes keep their last mode -- fine,
   // they're inert until reactivated.
   useEffect(() => {
     if (currentDesignId === null) {
@@ -344,7 +344,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     if (el) {
       postModeToPreviewWindow(el.contentWindow, interactionMode, pushIframeError);
     }
-    // New iframe / new design → liveRects from the old one are stale.
+    // New iframe / new design -> liveRects from the old one are stale.
     clearLiveRects();
   }, [currentDesignId, interactionMode, pushIframeError, clearLiveRects]);
 
@@ -353,7 +353,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // Selectors: all comments on the current snapshot + the active bubble's
   // selector (usually the freshly-pinned one, included for the moment
   // between click and save).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: currentDesignId and iframeLoadTick are deliberate triggers — iframeRef.current is a ref so biome can't see it swap when the active design changes, and we must wait for the iframe's onLoad before the overlay's message listener exists (otherwise the post is dropped).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentDesignId and iframeLoadTick are deliberate triggers -- iframeRef.current is a ref so biome can't see it swap when the active design changes, and we must wait for the iframe's onLoad before the overlay's message listener exists (otherwise the post is dropped).
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
@@ -370,13 +370,13 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         '*',
       );
     } catch {
-      /* sandbox gone — retry happens next render */
+      /* sandbox gone -- retry happens next render */
     }
   }, [comments, currentSnapshotId, commentBubble, currentDesignId, iframeLoadTick]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
-      // Only accept messages from the ACTIVE iframe — background pool members
+      // Only accept messages from the ACTIVE iframe -- background pool members
       // are inert from the user's POV and their messages would race with the
       // foreground design's state.
       if (!isTrustedPreviewMessageSource(event.source, iframeRef.current?.contentWindow)) return;
@@ -469,7 +469,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     currentDesignId !== null && poolEntries.some((e) => e.id === currentDesignId);
 
   // When a design already has persisted content (thumbnail from a prior save,
-  // or chat history), the preview IS coming — we're just waiting on the IPC
+  // or chat history), the preview IS coming -- we're just waiting on the IPC
   // round-trip for the snapshot. Show a skeleton instead of the new-design
   // welcome screen so users don't read the transient state as "load failed".
   const currentDesign = currentDesignId ? designs.find((d) => d.id === currentDesignId) : undefined;
@@ -482,7 +482,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // Only take over the whole pane with ErrorState when there's nothing to
   // show yet. If the agent produced a preview before failing on the last
   // step (common with token-overflow / validation errors), keep the preview
-  // visible — the user can still inspect and tweak what did generate.
+  // visible -- the user can still inspect and tweak what did generate.
   // A small dismissible error banner surfaces via CanvasErrorBar / toast.
   if (errorMessage && !previewHtml) {
     body = (
@@ -494,10 +494,10 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         onDismiss={clearError}
       />
     );
-  } else if (activeTab?.kind === 'files' && previewHtml) {
+  } else if (activeTab?.kind === 'files') {
     body = <FilesTabView />;
   } else {
-    // Pool slots stay mounted even when the current design has no preview —
+    // Pool slots stay mounted even when the current design has no preview --
     // background iframes for recently-visited designs keep their documents
     // alive for instant switch-back. EmptyState is overlaid in the same
     // stacking context when the active design has no content yet.
@@ -607,7 +607,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
                     // bubble open so the user's draft survives. A toast has
                     // already been surfaced by the store layer.
                     if (!row) return;
-                    // Persisted — wipe the stashed draft so the next open
+                    // Persisted -- wipe the stashed draft so the next open
                     // starts clean (a reopened chip re-reads from DB).
                     bubbleDraftsRef.current.delete(bubbleKey);
                     const win = iframeRef.current?.contentWindow;
@@ -619,7 +619,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
                       }
                     }
                     closeCommentBubble();
-                    // Stage only — user clicks the "Apply" button on the chip bar
+                    // Stage only -- user clicks the "Apply" button on the chip bar
                     // to send all accumulated edits in one go.
                   }}
                 />

@@ -1,5 +1,5 @@
 /**
- * list_files — show the agent the contents of its virtual FS so it can
+ * list_files -- show the agent the contents of its virtual FS so it can
  * decide what to view/edit next without guessing at filenames.
  */
 
@@ -23,8 +23,11 @@ export function makeListFilesTool(
     name: 'list_files',
     label: 'List files',
     description:
-      'List files in the design virtual filesystem. Pass an optional `dir` ' +
-      '(defaults to the design root). Returns one filename per line, sorted.',
+      'List files in the design virtual filesystem, recursively. Pass an ' +
+      'optional `dir` (defaults to the design root). Returns every file path ' +
+      'under that directory, one per line, sorted -- not just the first level. ' +
+      'Call this once at the start of a turn to see the whole project tree ' +
+      'instead of recursing one directory at a time.',
     parameters: ListFilesParams,
     async execute(_id, params): Promise<AgentToolResult<ListFilesDetails>> {
       const dir = (params.dir ?? '').replace(/^\/+|\/+$/g, '');

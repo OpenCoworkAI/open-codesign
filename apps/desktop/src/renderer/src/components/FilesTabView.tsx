@@ -10,7 +10,7 @@ function truncatePath(path: string, maxLength = 40): string {
   if (path.length <= maxLength) return path;
   const start = path.substring(0, maxLength / 2 - 2);
   const end = path.substring(path.length - maxLength / 2 + 2);
-  return `${start}…${end}`;
+  return `${start}...${end}`;
 }
 
 function WorkspaceSection() {
