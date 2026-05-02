@@ -1,31 +1,16 @@
+import type { Dirent } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+import type { CoreLogger } from '@open-codesign/core';
 import { CodesignError } from '@open-codesign/shared';
 import type Database from 'better-sqlite3';
 import { ipcMain } from './electron-runtime';
-import type { Logger as CoreLogger } from './logger';
 import { getDesign } from './snapshots-db';
-
-// Hard cap so a workspace pointed at a huge tree (a node_modules-less but
-// otherwise giant repo) doesn't lock the renderer with a 50k-file payload.
-// Skipped dirs already prune most offenders; this is the last line of defence.
-const FILES_LIST_MAX = 500;
-
-const FILES_LIST_SKIP_DIRS = new Set([
-  '.git',
-  'node_modules',
-  '.next',
-  '.turbo',
-  '.cache',
-  '.pnpm-store',
-  'dist',
-  'build',
-  'out',
-  '.idea',
-  '.vscode',
-  'coverage',
-  '.codesign',
-]);
+import {
+  WORKSPACE_WALK_MAX_FILES,
+  shouldSkipDirEntry,
+  shouldSkipFileEntry,
+} from './workspace-walk';
 
 const HTML_EXTS = new Set(['.html', '.htm']);
 // Anything renderable in an iframe directly (or useful to surface in the
@@ -73,13 +58,13 @@ export interface FilesIpcEntry {
 
 export async function walkWorkspaceFiles(
   workspacePath: string,
-  max: number = FILES_LIST_MAX,
+  max: number = WORKSPACE_WALK_MAX_FILES,
 ): Promise<FilesIpcEntry[]> {
   const out: FilesIpcEntry[] = [];
 
   async function walk(absDir: string, relDir: string): Promise<void> {
     if (out.length >= max) return;
-    let entries: Awaited<ReturnType<typeof readdir>>;
+    let entries: Dirent[];
     try {
       entries = await readdir(absDir, { withFileTypes: true });
     } catch {
@@ -93,12 +78,11 @@ export async function walkWorkspaceFiles(
       const relPath = relDir === '' ? entry.name : `${relDir}/${entry.name}`;
 
       if (entry.isDirectory()) {
-        if (FILES_LIST_SKIP_DIRS.has(entry.name) || entry.name.startsWith('.')) continue;
+        if (shouldSkipDirEntry(entry.name)) continue;
         await walk(absPath, relPath);
         continue;
       }
-      if (!entry.isFile()) continue;
-      if (entry.name.startsWith('.')) continue;
+      if (!entry.isFile() || shouldSkipFileEntry(entry.name)) continue;
 
       const ext = path.extname(entry.name).toLowerCase();
       const kind: FilesIpcEntryKind | null = HTML_EXTS.has(ext)

@@ -91,6 +91,11 @@ import {
 } from './snapshots-ipc';
 import { initStorageSettings } from './storage-settings';
 import { registerWorkspaceProtocolHandler, registerWorkspaceScheme } from './workspace-protocol';
+import {
+  WORKSPACE_WALK_MAX_FILES,
+  shouldSkipDirEntry,
+  shouldSkipFileEntry,
+} from './workspace-walk';
 
 // ESM shim: package.json "type": "module" means the built bundle is ESM and
 // __dirname/__filename don't exist. Derive them from import.meta.url so the
@@ -277,9 +282,11 @@ function allocateAssetPath(
 // text files into fsMap so the agent's view/list_files tools see what the
 // user already has. Without this, the workspace mirror is write-only and the
 // agent thinks the folder is empty even when it isn't.
-const WORKSPACE_SEED_MAX_FILES = 500;
+//
+// Cap per file so a stray multi-MB log inside the workspace can't blow up
+// the agent's context window or stall the main thread on a single read.
 const WORKSPACE_SEED_MAX_FILE_BYTES = 1_000_000;
-const WORKSPACE_SEED_TEXT_EXTENSIONS = new Set([
+const WORKSPACE_SEED_TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
   '.html',
   '.htm',
   '.css',
@@ -297,20 +304,6 @@ const WORKSPACE_SEED_TEXT_EXTENSIONS = new Set([
   '.yaml',
   '.yml',
   '.toml',
-]);
-const WORKSPACE_SEED_SKIP_DIRS = new Set([
-  '.git',
-  'node_modules',
-  '.next',
-  '.turbo',
-  '.cache',
-  '.pnpm-store',
-  'dist',
-  'build',
-  'out',
-  '.idea',
-  '.vscode',
-  'coverage',
 ]);
 
 export function seedFsMapFromWorkspace(
@@ -337,7 +330,7 @@ export function seedFsMapFromWorkspace(
     entries.sort((a, b) => a.name.localeCompare(b.name));
 
     for (const entry of entries) {
-      if (filesLoaded >= WORKSPACE_SEED_MAX_FILES) {
+      if (filesLoaded >= WORKSPACE_WALK_MAX_FILES) {
         truncated = true;
         return;
       }
@@ -345,7 +338,7 @@ export function seedFsMapFromWorkspace(
       const relPath = relDir === '' ? entry.name : `${relDir}/${entry.name}`;
 
       if (entry.isDirectory()) {
-        if (WORKSPACE_SEED_SKIP_DIRS.has(entry.name) || entry.name.startsWith('.')) {
+        if (shouldSkipDirEntry(entry.name)) {
           filesSkipped += 1;
           continue;
         }
@@ -353,12 +346,7 @@ export function seedFsMapFromWorkspace(
         continue;
       }
 
-      if (!entry.isFile()) {
-        filesSkipped += 1;
-        continue;
-      }
-
-      if (entry.name.startsWith('.')) {
+      if (!entry.isFile() || shouldSkipFileEntry(entry.name)) {
         filesSkipped += 1;
         continue;
       }
