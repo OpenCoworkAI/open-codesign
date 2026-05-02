@@ -31,7 +31,7 @@ export interface DemoTemplate {
   prompt: string;
 }
 
-export const REGISTRY: Record<string, DemoTemplate[]> = {
+const REGISTRY: Record<Locale, DemoTemplate[]> = {
   en: enDemos,
   'zh-CN': zhCNDemos,
   'pt-BR': ptBRDemos,
