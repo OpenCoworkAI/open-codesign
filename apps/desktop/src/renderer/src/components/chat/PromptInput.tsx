@@ -15,6 +15,42 @@ import { useCodesignStore } from '../../store';
 
 const MAX_TEXTAREA_ROWS = 6;
 
+function ExpandPromptIcon(): ReactNode {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      className="h-[14px] w-[14px]"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="square"
+      strokeLinejoin="miter"
+      strokeWidth="1.6"
+    >
+      <path d="M4.25 6.5V4.25H6.5" />
+      <path d="M11.75 9.5v2.25H9.5" />
+    </svg>
+  );
+}
+
+function CollapsePromptIcon(): ReactNode {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      className="h-[14px] w-[14px]"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="square"
+      strokeLinejoin="miter"
+      strokeWidth="1.6"
+    >
+      <path d="M6.5 3.75V6.5H3.75" />
+      <path d="M9.5 12.25V9.5h2.75" />
+    </svg>
+  );
+}
+
 export function getTextareaLineHeight(el: HTMLTextAreaElement): number {
   const styles = getComputedStyle(el);
   const lineHeight = Number.parseFloat(styles.lineHeight);
@@ -27,10 +63,28 @@ export function getTextareaLineHeight(el: HTMLTextAreaElement): number {
   return fontSize * leading;
 }
 
-function resizeTextarea(el: HTMLTextAreaElement): void {
+function resizeTextarea(el: HTMLTextAreaElement, isExpanded: boolean): boolean {
   const rowHeight = getTextareaLineHeight(el);
-  el.style.height = 'auto';
-  el.style.height = `${Math.min(el.scrollHeight, rowHeight * MAX_TEXTAREA_ROWS)}px`;
+
+  // Measure exact text height silently without painting a jump or breaking transitions
+  const cachedTransition = el.style.transition;
+  const cachedHeight = el.style.height;
+
+  el.style.transition = 'none';
+  el.style.height = '1px';
+  const trueScrollHeight = el.scrollHeight;
+
+  el.style.height = cachedHeight;
+  // Force a layout recalc so the browser commits the origin height before transitioning
+  void el.offsetHeight;
+  el.style.transition = cachedTransition;
+
+  if (isExpanded) {
+    el.style.height = `${Math.min(Math.max(trueScrollHeight, window.innerHeight * 0.4), window.innerHeight * 0.6)}px`;
+  } else {
+    el.style.height = `${Math.min(trueScrollHeight, rowHeight * MAX_TEXTAREA_ROWS)}px`;
+  }
+  return trueScrollHeight > rowHeight * 2.5;
 }
 
 export interface PromptInputProps {
@@ -106,9 +160,31 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
       ? `${elapsedSec}s`
       : `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`;
 
+  const isExpanded = useCodesignStore((s) => s.isPromptExpanded);
+  const setIsExpanded = useCodesignStore((s) => s.setPromptExpanded);
+  const [showExpandIcon, setShowExpandIcon] = useState(false);
+
   useEffect(() => {
-    if (taRef.current) resizeTextarea(taRef.current);
-  }, []);
+    const textarea = taRef.current;
+    if (textarea && textarea.value === prompt) {
+      const isOver = resizeTextarea(textarea, isExpanded);
+      setShowExpandIcon(isOver);
+      if (isExpanded) {
+        textarea.focus();
+      }
+    }
+  }, [prompt, isExpanded]);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    const handleDocKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsExpanded(false);
+      }
+    };
+    document.addEventListener('keydown', handleDocKeyDown);
+    return () => document.removeEventListener('keydown', handleDocKeyDown);
+  }, [isExpanded, setIsExpanded]);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -139,7 +215,9 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="relative rounded-[16px] bg-[var(--color-surface)] border-[1.5px] border-[var(--color-border-muted)] focus-within:border-[var(--color-accent)] transition-colors duration-150 ease-out">
+      <div
+        className={`relative rounded-[16px] bg-[var(--color-surface)] border-[1.5px] border-[var(--color-border-muted)] focus-within:border-[var(--color-accent)] transition-[border-color,shadow] duration-150 ease-out ${isExpanded ? 'shadow-[var(--shadow-elevated)]' : ''}`}
+      >
         {contextSummary ? (
           <div className="border-b border-[var(--color-border-subtle)] px-[12px] py-[10px]">
             {contextSummary}
@@ -150,14 +228,33 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
           value={prompt}
           onChange={(e) => {
             setPrompt(e.target.value);
-            resizeTextarea(e.currentTarget);
+            const isOver = resizeTextarea(e.currentTarget, isExpanded);
+            setShowExpandIcon(isOver);
           }}
           onKeyDown={handleKeyDown}
           placeholder={t('chat.placeholderRich')}
           rows={1}
-          className="codesign-prompt-textarea block w-full resize-none appearance-none border-0 bg-transparent px-[14px] pt-[12px] pb-[44px] text-[14px] leading-[1.55] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] shadow-none outline-none focus:outline-none focus:ring-0 min-h-[24px] overflow-y-auto"
-          style={{ fontFamily: 'var(--font-sans)' }}
+          className="codesign-prompt-textarea block w-full resize-none appearance-none border-0 bg-transparent pl-[14px] pr-[36px] pt-[12px] pb-[44px] text-[14px] leading-[1.55] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] shadow-none outline-none focus:outline-none focus:ring-0 min-h-[24px] overflow-y-auto"
+          style={{
+            fontFamily: 'var(--font-sans)',
+            transition: 'height 0.2s cubic-bezier(0.2,0.8,0.2,1)',
+          }}
         />
+
+        <div
+          className={`absolute top-[8px] right-[8px] transition-opacity duration-200 z-[2] ${showExpandIcon || isExpanded ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        >
+          <Tooltip label={isExpanded ? t('chat.collapse') : t('chat.expand')} side="top">
+            <button
+              type="button"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+              aria-label={isExpanded ? t('chat.collapse') : t('chat.expand')}
+            >
+              {isExpanded ? <CollapsePromptIcon /> : <ExpandPromptIcon />}
+            </button>
+          </Tooltip>
+        </div>
 
         {leadingAction ? (
           <div className="absolute bottom-[8px] left-[8px]">{leadingAction}</div>

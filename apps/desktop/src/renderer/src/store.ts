@@ -229,6 +229,7 @@ interface CodesignState {
    *  only persisted to SQLite when the result arrives (done/error). */
   pendingToolCalls: ChatToolCallPayload[];
   sidebarCollapsed: boolean;
+  isPromptExpanded: boolean;
 
   // Workstream D — comments
   comments: CommentRow[];
@@ -415,6 +416,7 @@ interface CodesignState {
    *  panel to write a re-serialized EDITMODE block back into the artifact. */
   setPreviewHtml: (content: string) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  setPromptExpanded: (val: boolean) => void;
 
   // Workstream D — comments
   loadCommentsForCurrentDesign: () => Promise<void>;
@@ -1383,6 +1385,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   chatMessages: [],
   chatLoaded: false,
   sidebarCollapsed: false,
+  isPromptExpanded: false,
 
   comments: [],
   commentsLoaded: false,
@@ -2546,6 +2549,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   setSidebarCollapsed(collapsed: boolean) {
     set({ sidebarCollapsed: collapsed });
+  },
+
+  setPromptExpanded(val: boolean) {
+    set({ isPromptExpanded: val });
   },
 
   async loadCommentsForCurrentDesign() {
