@@ -80,7 +80,10 @@ export function registerLocaleIpc(): void {
       lower.startsWith('zh-hans') ||
       lower === 'zh-cn' ||
       lower === 'zh_cn' ||
-      lower.startsWith('en');
+      lower.startsWith('en') ||
+      lower === 'es' ||
+      lower.startsWith('es-') ||
+      lower === 'es_';
     if (!recognized) {
       throw new Error(
         `locale:set received unsupported locale "${raw}"; expected one of: ${availableLocales.join(', ')}`,

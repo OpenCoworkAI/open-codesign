@@ -13,6 +13,7 @@
 
 import { type Locale, availableLocales, normalizeLocale } from '@open-codesign/i18n';
 import { enExamples } from './locales/en';
+import { esExamples } from './locales/es';
 import { ptBRExamples } from './locales/pt-BR';
 import { zhCNExamples } from './locales/zh-CN';
 import {
@@ -217,6 +218,7 @@ const REGISTRY: Record<Locale, Record<string, ExampleContent>> = {
   en: enExamples,
   'zh-CN': zhCNExamples,
   'pt-BR': ptBRExamples,
+  es: esExamples,
 };
 
 function getRegistry(locale: string | undefined): Record<string, ExampleContent> {
