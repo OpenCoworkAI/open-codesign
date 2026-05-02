@@ -64,11 +64,17 @@ dmg:
       path: /Applications
 win:
   icon: resources/icon.ico
-  artifactName: open-codesign-${version}-${arch}-setup.${ext}
+  # Windows package-manager channels have different needs: winget installs the
+  # NSIS setup exe, while Scoop should consume a plain portable zip so it does
+  # not have to unpack electron-builder's nested NSIS payload.
+  artifactName: open-codesign-${version}-${arch}.${ext}
   target:
     - target: nsis
       arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
 nsis:
+  artifactName: open-codesign-${version}-${arch}-setup.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
 linux:

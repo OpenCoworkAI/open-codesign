@@ -161,7 +161,7 @@ brew install --cask opencoworkai/tap/open-codesign
 
 | 管理器 | 命令 | 状态 |
 |---|---|---|
-| Scoop（Windows） | `scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket && scoop install open-codesign` | 🟢 可用 |
+| Scoop（Windows） | `scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket && scoop install opencoworkai/open-codesign` | 🟢 可用 |
 | Flathub（Linux） | `flatpak install flathub ai.opencowork.codesign` | ⏸ 延后到 v0.2（需要签名构建 + AppStream 元数据） |
 | Snap（Linux） | `snap install --dangerous open-codesign-*.snap` | 🟡 随 release 尽量附带，尚未接入 Snap Store |
 

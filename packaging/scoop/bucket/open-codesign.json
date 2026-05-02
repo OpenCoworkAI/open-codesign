@@ -1,19 +1,32 @@
 {
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Open-source desktop AI design tool — prompt to prototype, BYOK, local-first",
   "homepage": "https://opencoworkai.github.io/open-codesign/",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/OpenCoworkAI/open-codesign/releases/download/v0.1.3/open-codesign-0.1.3-x64-setup.exe#/dl.7z",
-      "hash": "5ce878da5f78f884fa4140e8d85cf16679b76ace392fbacea785a3f8f7081dec"
+      "url": "https://github.com/OpenCoworkAI/open-codesign/releases/download/v0.1.4/open-codesign-0.1.4-x64-setup.exe#/dl.7z",
+      "hash": "103c4bc278a9db6f0ac8d05aaa738232edee71f4da333ee51c21a1b315715ac6",
+      "installer": {
+        "script": "Expand-7zipArchive \"$dir\\app-64.7z\" \"$dir\""
+      }
     },
     "arm64": {
-      "url": "https://github.com/OpenCoworkAI/open-codesign/releases/download/v0.1.3/open-codesign-0.1.3-arm64-setup.exe#/dl.7z",
-      "hash": "4277578c6b29899d386a8c59c991fd03bd92342cb7c20e46f4bae1ea11c21e99"
+      "url": "https://github.com/OpenCoworkAI/open-codesign/releases/download/v0.1.4/open-codesign-0.1.4-arm64-setup.exe#/dl.7z",
+      "hash": "00c7883ce7e992149ca465b94bb6b68c1ce714c4a97e73dc9bf148d589ceb5ba",
+      "installer": {
+        "script": "Expand-7zipArchive \"$dir\\app-arm64.7z\" \"$dir\""
+      }
     }
   },
-  "bin": "Open CoDesign.exe",
+  "extract_dir": "\\$PLUGINSDIR",
+  "pre_install": "Get-ChildItem \"$dir\" -Exclude \"app-64.7z\", \"app-arm64.7z\" | Remove-Item -Force -Recurse",
+  "bin": [
+    [
+      "Open CoDesign.exe",
+      "open-codesign"
+    ]
+  ],
   "shortcuts": [
     [
       "Open CoDesign.exe",
@@ -30,5 +43,6 @@
         "url": "https://github.com/OpenCoworkAI/open-codesign/releases/download/v$version/open-codesign-$version-arm64-setup.exe#/dl.7z"
       }
     }
-  }
+  },
+  "post_install": "Remove-Item \"$dir\\app-64.7z\", \"$dir\\app-arm64.7z\" -ErrorAction SilentlyContinue"
 }

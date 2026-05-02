@@ -2,6 +2,8 @@
 
 Canonical sources for Open CoDesign's package manager manifests. The `packaging/` tree is the source of truth; after each tag push `release.yml` auto-runs `update-shas.sh` and commits the synced manifests back to `main`.
 
+Windows releases publish both NSIS setup exes and portable zip archives. winget uses the setup exes. Scoop uses the zip archives so installation does not depend on unpacking electron-builder's nested NSIS payload; older releases without zip assets use the manifest's legacy NSIS fallback.
+
 All artifacts are **unsigned** for the v0.1 line. Each channel's README / caveats explains the Gatekeeper or SmartScreen workaround.
 
 ## Layout
@@ -26,7 +28,8 @@ packaging/
 
 1. Push a `vX.Y.Z` tag. `release.yml` builds + publishes the installers.
 2. After `publish` succeeds, the **`bump-manifests`** job auto-runs `update-shas.sh`: it pulls `SHA256SUMS.txt` from the release, rewrites versions / URLs / checksums across all four channels (and auto-creates the new winget version directory by copying from the previous one), then commits the diff back to `main` as `chore(release): sync manifests to vX.Y.Z`.
-3. Downstream mirroring (tap / bucket / winget-pkgs / Flathub) is still handled per-channel — see below.
+3. The **`scoop`** job copies the generated Scoop manifest into `OpenCoworkAI/scoop-bucket` when `SCOOP_BUCKET_TOKEN` is configured.
+4. Other downstream mirroring (tap / winget-pkgs / Flathub) is still handled per-channel — see below.
 
 To run the sync manually (e.g. to backfill a past release or test script changes):
 
@@ -34,6 +37,7 @@ To run the sync manually (e.g. to backfill a past release or test script changes
 ./packaging/update-shas.sh              # uses apps/desktop/package.json version
 ./packaging/update-shas.sh 0.1.2        # override version
 ./packaging/update-shas.sh 0.1.2 ./dist # hash local artifacts instead of downloading
+PACKAGING_CHANNEL=scoop ./packaging/update-shas.sh 0.1.2
 ```
 
 The script derives the mac `.app` bundle name and Windows `.exe` from `productName` in `apps/desktop/electron-builder.yml`, so renaming productName propagates into the cask's `app` field and the scoop `bin` automatically.
@@ -78,7 +82,7 @@ winget install OpenCoworkAI.OpenCoDesign
 
 ### Scoop — `OpenCoworkAI/scoop-bucket`
 
-Separate public bucket repo. Copy `packaging/scoop/bucket/open-codesign.json` to its `bucket/` directory.
+Separate public bucket repo. Once `SCOOP_BUCKET_TOKEN` is configured with `contents:write` access to `OpenCoworkAI/scoop-bucket`, `release.yml` copies `packaging/scoop/bucket/open-codesign.json` into its `bucket/` directory after each stable tag publish. Manual backfill is still just a copy:
 
 ```sh
 gh repo create OpenCoworkAI/scoop-bucket --public \
@@ -93,8 +97,8 @@ cd /tmp/scoop-bucket && git add -A && \
 Users install with:
 
 ```pwsh
-scoop bucket add opencowork https://github.com/OpenCoworkAI/scoop-bucket
-scoop install opencowork/open-codesign
+scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket
+scoop install opencoworkai/open-codesign
 ```
 
 ## Signing status

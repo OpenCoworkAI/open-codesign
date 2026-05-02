@@ -137,7 +137,9 @@ jobs:
           - os: windows-latest
             label: windows-latest
             artifact_name: installer-windows-latest
-            artifact_glob: 'apps/desktop/release/*.exe'
+            artifact_glob: |
+              apps/desktop/release/*.exe
+              apps/desktop/release/*.zip
           - os: ubuntu-latest
             label: ubuntu-latest
             artifact_name: installer-ubuntu-latest
@@ -454,6 +456,70 @@ jobs:
           # Rebase in case main advanced while the release job ran.
           git pull --rebase origin main
           git push origin HEAD:main
+
+  # ------------------------------------------------------------------
+  # Scoop bucket bump — publishes the generated manifest to the actual
+  # OpenCoworkAI/scoop-bucket repo users install from. Scoop consumes the
+  # Windows zip artifacts for new releases, with a legacy NSIS fallback for
+  # releases published before the zip target existed.
+  # ------------------------------------------------------------------
+  scoop:
+    name: Bump Scoop bucket
+    needs: [publish]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && !contains(github.ref_name, '-')
+    steps:
+      - name: Guard on secret
+        id: guard
+        env:
+          SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+        run: |
+          if [ -z "$SCOOP_BUCKET_TOKEN" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::SCOOP_BUCKET_TOKEN not set — skipping Scoop bucket bump. See packaging/README.md."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.skip == 'false'
+
+      - name: Derive version from tag
+        if: steps.guard.outputs.skip == 'false'
+        id: ver
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Scoop manifest
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          PACKAGING_CHANNEL: scoop
+        run: ./packaging/update-shas.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Checkout Scoop bucket
+        if: steps.guard.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: OpenCoworkAI/scoop-bucket
+          path: scoop-bucket
+          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+
+      - name: Commit + push
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          mkdir -p scoop-bucket/bucket
+          cp packaging/scoop/bucket/open-codesign.json scoop-bucket/bucket/open-codesign.json
+          cd scoop-bucket
+          if git diff --quiet bucket/open-codesign.json; then
+            echo "::notice::Scoop bucket already up to date — no commit"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bucket/open-codesign.json
+          git commit -m "chore: bump open-codesign to ${GITHUB_REF_NAME}"
+          git push
 
   # ------------------------------------------------------------------
   # Homebrew Cask bump — opens a PR against OpenCoworkAI/homebrew-tap
