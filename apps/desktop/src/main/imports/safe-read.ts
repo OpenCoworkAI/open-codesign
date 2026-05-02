@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 import { getLogger } from '../logger';
 
 /**
@@ -11,9 +11,10 @@ import { getLogger } from '../logger';
  *   - plant a 10-GB file at the same path and exhaust the heap;
  *   - point the path at a socket / FIFO / directory to hang `readFile`.
  *
- * `safeReadImportFile` stats first, rejects anything that isn't a regular
- * file or that exceeds `MAX_IMPORT_FILE_BYTES`, and falls through to
- * `readFile` only when the stat says it's safe. Returns `null` on
+ * `safeReadImportFile` opens the path once, stats via that handle,
+ * rejects anything that isn't a regular file or that exceeds
+ * `MAX_IMPORT_FILE_BYTES`, and reads only when the stat says it's safe.
+ * Returns `null` on
  * missing/too-big/not-a-file so callers keep their existing "no config
  * found" branches; logs the reason so diagnostics bundles capture a
  * rejection trail.
@@ -26,28 +27,44 @@ const log = getLogger('import-read');
 export const MAX_IMPORT_FILE_BYTES = 256 * 1024;
 
 export async function safeReadImportFile(path: string): Promise<string | null> {
-  let stats: Awaited<ReturnType<typeof stat>>;
+  let fileHandle: Awaited<ReturnType<typeof open>>;
   try {
-    stats = await stat(path);
+    fileHandle = await open(path, 'r');
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') return null;
-    log.warn('safe_read.stat_failed', { path, code: code ?? 'unknown' });
+    log.warn('safe_read.open_failed', { path, code: code ?? 'unknown' });
     return null;
   }
-  if (!stats.isFile()) {
-    // Symlink to /dev/zero, symlink to a directory, named pipe, etc.
-    // `isFile()` follows symlinks, so a symlink to a regular file is fine.
-    log.warn('safe_read.not_regular_file', { path });
-    return null;
+
+  try {
+    let stats: Awaited<ReturnType<typeof stat>>;
+    try {
+      stats = await fileHandle.stat();
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') return null;
+      log.warn('safe_read.stat_failed', { path, code: code ?? 'unknown' });
+      return null;
+    }
+
+    if (!stats.isFile()) {
+      // Symlink to /dev/zero, symlink to a directory, named pipe, etc.
+      // `isFile()` follows symlinks, so a symlink to a regular file is fine.
+      log.warn('safe_read.not_regular_file', { path });
+      return null;
+    }
+    if (stats.size > MAX_IMPORT_FILE_BYTES) {
+      log.warn('safe_read.size_exceeded', {
+        path,
+        size: stats.size,
+        cap: MAX_IMPORT_FILE_BYTES,
+      });
+      return null;
+    }
+
+    return fileHandle.readFile('utf8');
+  } finally {
+    await fileHandle.close();
   }
-  if (stats.size > MAX_IMPORT_FILE_BYTES) {
-    log.warn('safe_read.size_exceeded', {
-      path,
-      size: stats.size,
-      cap: MAX_IMPORT_FILE_BYTES,
-    });
-    return null;
-  }
-  return readFile(path, 'utf8');
 }
