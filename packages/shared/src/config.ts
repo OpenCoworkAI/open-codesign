@@ -21,6 +21,7 @@ export const SUPPORTED_ONBOARDING_PROVIDERS = [
   'openai',
   'openrouter',
   'ollama',
+  'minimax',
 ] as const;
 export type SupportedOnboardingProvider = (typeof SUPPORTED_ONBOARDING_PROVIDERS)[number];
 
@@ -327,6 +328,28 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
       modelDiscoveryMode: 'models',
     },
   },
+  minimax: {
+    id: 'minimax',
+    name: 'MiniMax',
+    builtin: true,
+    wire: 'openai-chat',
+    baseUrl: 'https://api.minimax.io/v1',
+    envKey: 'MINIMAX_API_KEY',
+    defaultModel: 'MiniMax-M2.7',
+    modelsHint: ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed'],
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: false,
+      supportsChatCompletions: true,
+      supportsResponsesApi: false,
+      supportsSystemRole: true,
+      supportsDeveloperRole: false,
+      supportsReasoning: false,
+      supportsToolCalling: true,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'static-hint',
+    },
+  },
 } as const;
 
 // ── ConfigSchema v3 — canonical on-disk shape ────────────────────────────────
@@ -519,6 +542,13 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     keyHelpUrl: 'https://ollama.com/download',
     primary: [OLLAMA_DEFAULT_MODEL, 'llama3.1', 'qwen2.5'],
     defaultPrimary: OLLAMA_DEFAULT_MODEL,
+  },
+  minimax: {
+    provider: 'minimax',
+    label: 'MiniMax',
+    keyHelpUrl: 'https://platform.minimax.io/user-center/basic-information/interface-key',
+    primary: ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed'],
+    defaultPrimary: 'MiniMax-M2.7',
   },
 };
 

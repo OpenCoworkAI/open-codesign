@@ -67,6 +67,13 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
         headers: () => ({}),
       };
     }
+    case 'minimax': {
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://api.minimax.io';
+      return {
+        url: `${root}/v1/models`,
+        headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+      };
+    }
   }
 }
 
@@ -97,7 +104,7 @@ export async function pingProvider(
 ): Promise<ValidateResult> {
   if (!isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
-      `Provider "${provider}" is not supported in v0.1. Supported: anthropic, openai, openrouter, ollama.`,
+      `Provider "${provider}" is not supported in v0.1. Supported: anthropic, openai, openrouter, ollama, minimax.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }

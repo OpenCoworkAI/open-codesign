@@ -285,7 +285,7 @@ function parseValidateKey(raw: unknown): ValidateKeyInput {
   }
   if (!isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
-      `Provider "${provider}" is not supported in v0.1. Only anthropic, openai, openrouter.`,
+      `Provider "${provider}" is not supported in v0.1. Only anthropic, openai, openrouter, minimax.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }

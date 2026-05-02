@@ -205,4 +205,34 @@ describe('pingProvider', () => {
     });
     await pingProvider('anthropic', 'sk-ant-oat-xyz', 'https://sub2api.example.com');
   });
+
+  it('validates MiniMax with Bearer auth and returns model count', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toBe('https://api.minimax.io/v1/models');
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['authorization']).toBe('Bearer mm-test-key');
+      return new Response(
+        JSON.stringify({ data: [{ id: 'MiniMax-M2.7' }, { id: 'MiniMax-M2.7-highspeed' }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    const result = await pingProvider('minimax', 'mm-test-key');
+    expect(result).toEqual({ ok: true, modelCount: 2 });
+  });
+
+  it('returns 401 code for MiniMax invalid key', async () => {
+    mockFetch(async () => new Response('unauthorized', { status: 401 }));
+    const result = await pingProvider('minimax', 'bad-key');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('401');
+  });
+
+  it('respects custom baseUrl for MiniMax', async () => {
+    mockFetch(async (url) => {
+      expect(url).toBe('https://api.minimaxi.com/v1/models');
+      return new Response(JSON.stringify({ data: [{ id: 'MiniMax-M2.7' }] }), { status: 200 });
+    });
+    const result = await pingProvider('minimax', 'mm-test-key', 'https://api.minimaxi.com/v1');
+    expect(result).toEqual({ ok: true, modelCount: 1 });
+  });
 });
