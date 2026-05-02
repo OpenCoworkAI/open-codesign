@@ -9,11 +9,15 @@
  * EDITMODE block at the top so the host can render a tweak panel.
  */
 
-import androidJsx from './android.jsx?raw';
-import ipadJsx from './ipad.jsx?raw';
-import iphoneJsx from './iphone.jsx?raw';
-import macosSafariJsx from './macos-safari.jsx?raw';
-import watchJsx from './watch.jsx?raw';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function loadFrame(name: string): string {
+  return readFileSync(resolve(__dirname, name), 'utf-8');
+}
 
 const FRAME_FILES = [
   'iphone.jsx',
@@ -26,9 +30,9 @@ const FRAME_FILES = [
 export type FrameName = (typeof FRAME_FILES)[number];
 
 export const FRAME_TEMPLATES: ReadonlyArray<readonly [string, string]> = Object.freeze([
-  ['iphone.jsx', iphoneJsx],
-  ['ipad.jsx', ipadJsx],
-  ['watch.jsx', watchJsx],
-  ['android.jsx', androidJsx],
-  ['macos-safari.jsx', macosSafariJsx],
+  ['iphone.jsx', loadFrame('iphone.jsx')],
+  ['ipad.jsx', loadFrame('ipad.jsx')],
+  ['watch.jsx', loadFrame('watch.jsx')],
+  ['android.jsx', loadFrame('android.jsx')],
+  ['macos-safari.jsx', loadFrame('macos-safari.jsx')],
 ] as const);
