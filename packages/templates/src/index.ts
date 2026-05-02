@@ -9,6 +9,7 @@
 
 import { availableLocales, type Locale, normalizeLocale } from '@open-codesign/i18n';
 import { enDemos } from './locales/en';
+import { esDemos } from './locales/es';
 import { ptBRDemos } from './locales/pt-BR';
 import { zhCNDemos } from './locales/zh-CN';
 
@@ -31,8 +32,9 @@ export interface DemoTemplate {
 
 const REGISTRY: Record<Locale, DemoTemplate[]> = {
   en: enDemos,
-  'zh-CN': zhCNDemos,
+  es: esDemos,
   'pt-BR': ptBRDemos,
+  'zh-CN': zhCNDemos,
 };
 
 export function getDemos(locale: string | undefined): DemoTemplate[] {

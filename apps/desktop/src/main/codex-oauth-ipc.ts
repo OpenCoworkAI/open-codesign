@@ -278,11 +278,11 @@ async function runLogout(): Promise<CodexOAuthStatus> {
 }
 
 /**
- * One-shot boot migration for experimental-branch testers: if an older build
- * wrote `chatgpt-codex` with stale `wire`/`baseUrl`, overwrite with the
- * canonical values so the first generate after upgrade works without requiring
- * a manual re-login. No-op when the entry is absent or already canonical.
- * Safe to call on every boot — writes only when state diverges.
+ * One-shot boot migration for feat-branch testers: if an older build wrote
+ * `chatgpt-codex` with Phase 1's stale `wire`/`baseUrl`, overwrite with the
+ * Phase 2 canonical values so the first generate after upgrade works without
+ * requiring a manual re-login. No-op when the entry is absent or already
+ * canonical. Safe to call on every boot — writes only when state diverges.
  *
  * The public card used to ship disabled, so this migration only fires for
  * users who ran the experimental branch directly; zero writes on fresh
