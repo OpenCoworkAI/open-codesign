@@ -263,7 +263,7 @@ else:
             ),
         ]
     )
-    manifest["extract_dir"] = "\\$PLUGINSDIR"
+    manifest["extract_dir"] = "$PLUGINSDIR"
     manifest["pre_install"] = 'Get-ChildItem "$dir" -Exclude "app-64.7z", "app-arm64.7z" | Remove-Item -Force -Recurse'
     manifest["post_install"] = 'Remove-Item "$dir\\app-64.7z", "$dir\\app-arm64.7z" -ErrorAction SilentlyContinue'
     manifest["autoupdate"] = OrderedDict(

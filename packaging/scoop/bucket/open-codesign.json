@@ -19,7 +19,7 @@
       }
     }
   },
-  "extract_dir": "\\$PLUGINSDIR",
+  "extract_dir": "$PLUGINSDIR",
   "pre_install": "Get-ChildItem \"$dir\" -Exclude \"app-64.7z\", \"app-arm64.7z\" | Remove-Item -Force -Recurse",
   "bin": [
     [
