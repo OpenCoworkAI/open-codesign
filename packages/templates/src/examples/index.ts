@@ -217,6 +217,7 @@ const REGISTRY: Record<Locale, Record<string, ExampleContent>> = {
   en: enExamples,
   'zh-CN': zhCNExamples,
   'pt-BR': ptBRExamples,
+  ko: enExamples,
 };
 
 function getRegistry(locale: string | undefined): Record<string, ExampleContent> {

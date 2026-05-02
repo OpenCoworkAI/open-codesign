@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./locales/en": "./src/locales/en.json",
-    "./locales/zh-CN": "./src/locales/zh-CN.json"
+    "./locales/zh-CN": "./src/locales/zh-CN.json",
+    "./locales/pt-BR": "./src/locales/pt-BR.json",
+    "./locales/ko": "./src/locales/ko.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

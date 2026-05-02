@@ -397,7 +397,8 @@
       "languageLoadFailed": "加载语言设置失败",
       "langEn": "English",
       "langZhCN": "中文 (简体)",
-      "langPtBR": "Português (BR)"
+      "langPtBR": "Português (BR)",
+      "langKo": "한국어"
     },
     "language": {
       "label": "语言",
