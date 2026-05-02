@@ -307,8 +307,8 @@ describe('useCodesignStore generation cancellation', () => {
     expect(state.lastError).toBe('Upstream proxy aborted the response');
     expect(state.toasts.at(-1)).toMatchObject({
       variant: 'error',
-      description: 'Upstream proxy aborted the response',
     });
+    expect(state.toasts.at(-1)?.description).toContain('Upstream proxy aborted the response');
   });
 });
 
@@ -1315,12 +1315,16 @@ describe('applyGenerateError via sendPrompt', () => {
     await initI18n('en');
   });
 
-  async function runFailingGenerate(err: unknown): Promise<void> {
+  async function runFailingGenerate(
+    err: unknown,
+    extras: Record<string, unknown> = {},
+  ): Promise<void> {
     const recordRendererError = vi.fn().mockResolvedValue({ eventId: null });
     vi.stubGlobal('window', {
       codesign: {
         generate: vi.fn().mockRejectedValue(err),
         diagnostics: { recordRendererError },
+        ...extras,
       },
     });
     resetStore();
@@ -1352,15 +1356,105 @@ describe('applyGenerateError via sendPrompt', () => {
       code: 'PROVIDER_HTTP_5XX',
       upstream_provider: 'anthropic',
       upstream_status: 502,
+      upstream_baseurl: 'https://secret-relay.example.com/v1',
       retry_count: 2,
     });
     await runFailingGenerate(err);
     const records = useCodesignStore.getState().reportableErrors;
     expect(records[0]?.code).toBe('PROVIDER_HTTP_5XX');
-    expect(records[0]?.context).toEqual({
+    expect(records[0]?.context).toMatchObject({
       upstream_provider: 'anthropic',
       upstream_status: 502,
+      upstream_baseurl: '[url omitted]',
       retry_count: 2,
+      diagnostic_category: 'upstream-server-error',
+    });
+  });
+
+  it('cleans Electron IPC wrapper for toast/chat while preserving raw report context', async () => {
+    const rawMessage =
+      "Error invoking remote method 'codesign:v1:generate': CodesignError: 404 model 'models/gemini-2.5-pro' not found";
+    const err = Object.assign(new Error(rawMessage), {
+      code: 'PROVIDER_ERROR',
+      upstream_provider: 'ollama',
+      upstream_model_id: 'models/gemini-2.5-pro',
+      upstream_status: 404,
+    });
+
+    await runFailingGenerate(err);
+
+    const state = useCodesignStore.getState();
+    expect(state.lastError).toBe("404 model 'models/gemini-2.5-pro' not found");
+    expect(state.toasts[0]?.description).toContain("404 model 'models/gemini-2.5-pro' not found");
+    expect(state.toasts[0]?.description).not.toContain('Error invoking remote method');
+
+    const record = state.reportableErrors[0];
+    expect(record?.message).toBe(rawMessage);
+    expect(record?.context).toMatchObject({
+      diagnostic_category: 'model-id-shape',
+      display_message: "404 model 'models/gemini-2.5-pro' not found",
+      recovery_action: 'normalizeModelId',
+      upstream_model_id: 'models/gemini-2.5-pro',
+    });
+  });
+
+  it('cleans Electron IPC wrapper when validation errors have no ErrorName prefix', async () => {
+    const rawMessage =
+      'Error invoking remote method \'codesign:v1:generate\': [\n  { "message": "Invalid url", "path": ["referenceUrl"] }\n]';
+
+    await runFailingGenerate(new Error(rawMessage));
+
+    const state = useCodesignStore.getState();
+    expect(state.lastError).toContain('Invalid url');
+    expect(state.lastError).not.toContain('Error invoking remote method');
+    expect(state.toasts[0]?.description).not.toContain('Error invoking remote method');
+  });
+
+  it('offers a safe provider update action for model-id diagnostics', async () => {
+    const nextConfig = { ...READY_CONFIG, modelPrimary: 'gemini-2.5-pro' };
+    const updateProvider = vi.fn().mockResolvedValue(nextConfig);
+    const err = Object.assign(
+      new Error(
+        "Error invoking remote method 'codesign:v1:generate': CodesignError: 404 model 'models/gemini-2.5-pro' not found",
+      ),
+      {
+        code: 'PROVIDER_ERROR',
+        upstream_provider: 'ollama',
+        upstream_model_id: 'models/gemini-2.5-pro',
+        upstream_status: 404,
+      },
+    );
+
+    await runFailingGenerate(err, { config: { updateProvider } });
+    useCodesignStore.getState().toasts[0]?.action?.onClick();
+    await Promise.resolve();
+
+    expect(updateProvider).toHaveBeenCalledWith({
+      id: 'ollama',
+      defaultModel: 'gemini-2.5-pro',
+    });
+  });
+
+  it('offers a safe provider update action for reasoning-policy diagnostics', async () => {
+    const updateProvider = vi.fn().mockResolvedValue(READY_CONFIG);
+    const err = Object.assign(
+      new Error(
+        "Error invoking remote method 'codesign:v1:generate': CodesignError: 400 The `reasoning_content` in the thinking mode must be passed back to the API.",
+      ),
+      {
+        code: 'PROVIDER_ERROR',
+        upstream_provider: 'custom-deepseek',
+        upstream_status: 400,
+      },
+    );
+
+    await runFailingGenerate(err, { config: { updateProvider } });
+    useCodesignStore.getState().toasts[0]?.action?.onClick();
+    await Promise.resolve();
+
+    expect(updateProvider).toHaveBeenCalledWith({
+      id: 'custom-deepseek',
+      reasoningLevel: 'off',
     });
   });
 });

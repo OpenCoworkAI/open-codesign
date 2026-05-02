@@ -11,7 +11,7 @@
 
 import type { AgentMessage } from '@mariozechner/pi-agent-core';
 import { completeWithRetry } from '@open-codesign/providers';
-import type { ChatMessage, ModelRef, WireApi } from '@open-codesign/shared';
+import type { ChatMessage, ModelRef, ReasoningLevel, WireApi } from '@open-codesign/shared';
 import { remapProviderError } from './errors.js';
 import { escapeUntrustedXml } from './lib/context-format.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
@@ -137,6 +137,7 @@ export interface UpdateDesignMemoryInput {
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
+  reasoningLevel?: ReasoningLevel | undefined;
   logger?: CoreLogger | undefined;
 }
 
@@ -193,6 +194,7 @@ export async function updateDesignMemory(
         ...(input.wire !== undefined ? { wire: input.wire } : {}),
         ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
         ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
+        ...(input.reasoningLevel !== undefined ? { reasoning: input.reasoningLevel } : {}),
         maxTokens: MEMORY_MAX_OUTPUT_TOKENS,
       },
       {

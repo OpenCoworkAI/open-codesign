@@ -57,30 +57,33 @@ describe('diagnose', () => {
   // Regression: Zhipu GLM (issue #179) — baseUrl is /api/paas/v4, /models 404
   // is because GLM does not expose /models, NOT because /v1 is missing.
   // Auto-suggesting "add /v1" would corrupt a correct baseUrl.
-  it('404 skips missingV1 when baseUrl already has /v4 (GLM)', () => {
+  it('404 classifies endpoint-not-found when baseUrl already has /v4 (GLM)', () => {
     const result = diagnose('404', {
       ...baseCtx,
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     });
-    expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
+    expect(result[0]?.cause).toBe('diagnostics.cause.endpointNotFound');
+    expect(result[0]?.category).toBe('endpoint-not-found');
     expect(result[0]?.suggestedFix).toBeUndefined();
   });
 
-  it('404 skips missingV1 when baseUrl already has /v1 (e.g. Cloudflare Workers AI)', () => {
+  it('404 classifies endpoint-not-found when baseUrl already has /v1 (e.g. Cloudflare Workers AI)', () => {
     const result = diagnose('404', {
       ...baseCtx,
       baseUrl: 'https://gateway.ai.cloudflare.com/v1/account/foo/openai',
     });
-    expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
+    expect(result[0]?.cause).toBe('diagnostics.cause.endpointNotFound');
+    expect(result[0]?.category).toBe('endpoint-not-found');
     expect(result[0]?.suggestedFix).toBeUndefined();
   });
 
-  it('404 skips missingV1 when baseUrl already has /v1beta (AI Studio)', () => {
+  it('404 classifies endpoint-not-found when baseUrl already has /v1beta (AI Studio)', () => {
     const result = diagnose('404', {
       ...baseCtx,
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     });
-    expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
+    expect(result[0]?.cause).toBe('diagnostics.cause.endpointNotFound');
+    expect(result[0]?.category).toBe('endpoint-not-found');
     expect(result[0]?.suggestedFix).toBeUndefined();
   });
 
@@ -145,6 +148,9 @@ describe('diagnoseGenerateFailure', () => {
   it('maps 404 to missingV1 with an /v1 baseUrl transform', () => {
     const result = diagnoseGenerateFailure({ ...ctx, status: 404 });
     expect(result[0]?.cause).toBe('diagnostics.cause.missingV1');
+    expect(result[0]?.category).toBe('missing-base-v1');
+    expect(result[0]?.severity).toBe('warning');
+    expect(result[0]?.suggestedFix?.kind).toBe('baseUrlTransform');
     expect(result[0]?.suggestedFix?.baseUrlTransform?.('https://relay.example.com')).toBe(
       'https://relay.example.com/v1',
     );
@@ -170,6 +176,59 @@ describe('diagnoseGenerateFailure', () => {
   it('maps 403 to keyInvalid hypothesis', () => {
     const result = diagnoseGenerateFailure({ ...ctx, status: 403 });
     expect(result[0]?.cause).toBe('diagnostics.cause.keyInvalid');
+    expect(result[0]?.category).toBe('auth');
+  });
+
+  it('maps 422 developer role rejection to unsupported-role with a wire switch fix', () => {
+    const result = diagnoseGenerateFailure({
+      ...ctx,
+      status: 422,
+      wire: 'openai-chat',
+      message:
+        'Invalid input: messages.0.role Input should be system, user, assistant or tool; input "developer"',
+    });
+    expect(result[0]?.category).toBe('unsupported-role');
+    expect(result[0]?.cause).toBe('diagnostics.cause.unsupportedRole');
+    expect(result[0]?.suggestedFix?.kind).toBe('switchWire');
+    expect(result[0]?.suggestedFix?.wire).toBe('openai-chat');
+  });
+
+  it('maps reasoning_content round-trip errors to reasoning-policy', () => {
+    const result = diagnoseGenerateFailure({
+      ...ctx,
+      status: 400,
+      message: 'The `reasoning_content` in the thinking mode must be passed back to the API.',
+    });
+    expect(result[0]?.category).toBe('reasoning-policy');
+    expect(result[0]?.cause).toBe('diagnostics.cause.reasoningPolicy');
+    expect(result[0]?.suggestedFix?.kind).toBe('setReasoning');
+    expect(result[0]?.suggestedFix?.reasoningLevel).toBe('off');
+  });
+
+  it('maps models/ prefixed 404 model errors to model-id-shape', () => {
+    const result = diagnoseGenerateFailure({
+      provider: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      status: 404,
+      message: "404 model 'models/gemini-2.5-pro' not found",
+    });
+    expect(result[0]?.category).toBe('model-id-shape');
+    expect(result[0]?.cause).toBe('diagnostics.cause.modelIdShape');
+    expect(result[0]?.suggestedFix?.kind).toBe('normalizeModelId');
+    expect(result[0]?.suggestedFix?.modelIdTransform?.('models/gemini-2.5-pro')).toBe(
+      'gemini-2.5-pro',
+    );
+  });
+
+  it('maps reference URL errors by CodesignError code before provider heuristics', () => {
+    const result = diagnoseGenerateFailure({
+      ...ctx,
+      code: 'REFERENCE_URL_FETCH_TIMEOUT',
+      message: 'Failed to fetch reference URL https://example.com',
+    });
+    expect(result[0]?.category).toBe('reference-url-fetch-timeout');
+    expect(result[0]?.cause).toBe('diagnostics.cause.referenceUrlTimeout');
+    expect(result[0]?.suggestedFix?.kind).toBe('openSettings');
   });
 
   it('maps 500 with "not implemented" body to gatewayIncompatible', () => {
@@ -230,6 +289,7 @@ describe('diagnoseGenerateFailure', () => {
         wire: 'openai-responses',
         message: 'fetch failed: terminated',
       });
+      expect(result[0]?.category).toBe('relay-stream-cutoff');
       expect(result[0]?.cause).toBe('diagnostics.cause.relayStreamingBug');
       expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.relayStreamingBug');
     });

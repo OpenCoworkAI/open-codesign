@@ -1,6 +1,13 @@
-import type { CommentScope, LocalInputFile, OnboardingState } from '@open-codesign/shared';
+import type {
+  CommentScope,
+  LocalInputFile,
+  OnboardingState,
+  ReasoningLevel,
+  WireApi,
+} from '@open-codesign/shared';
 import type { CodesignApi, ExportFormat } from '../../../../preload/index.js';
 import { recordAction } from '../../lib/action-timeline.js';
+import { redactUrls } from '../../lib/redact.js';
 import {
   hasWorkspaceSourceReference,
   resolveWorkspacePreviewSource,
@@ -10,6 +17,7 @@ import { modelRef, newId, normalizeReferenceUrl, tr, uniqueFiles } from '../lib/
 import { finishIfCurrent, isReadyConfig } from '../lib/ready-config.js';
 import {
   buildGenerateErrorDescription,
+  cleanGenerateErrorMessage,
   deriveGenerateHypothesis,
   extractCodesignErrorCode,
   extractUpstreamContext,
@@ -39,6 +47,13 @@ type SetState = (
   updater: ((state: CodesignState) => Partial<CodesignState> | object) | Partial<CodesignState>,
 ) => void;
 type GetState = () => CodesignState;
+
+type ProviderFixPatch = {
+  baseUrl?: string;
+  defaultModel?: string;
+  wire?: WireApi;
+  reasoningLevel?: ReasoningLevel | null;
+};
 
 interface PromptRequest {
   prompt: string;
@@ -255,13 +270,14 @@ function applyGenerateError(
   err: unknown,
   designIdAtStart: string | null,
 ): void {
-  const msg = err instanceof Error ? err.message : tr('errors.unknown');
+  const rawMsg = err instanceof Error ? err.message : tr('errors.unknown');
+  const displayMsg = cleanGenerateErrorMessage(rawMsg);
   if (get().activeGenerationId !== generationId) return;
   // TODO: replace with rendererLogger once renderer-logger lands
   console.error('[store] applyGenerateError', {
     generationId,
     designId: designIdAtStart,
-    message: msg,
+    message: rawMsg,
   });
 
   finishIfCurrent<CodesignState>(set, generationId, () => ({
@@ -269,8 +285,8 @@ function applyGenerateError(
     activeGenerationId: null,
     generatingDesignId: null,
     streamingAssistantText: null,
-    errorMessage: msg,
-    lastError: msg,
+    errorMessage: displayMsg,
+    lastError: displayMsg,
     generationStage: 'error' as GenerationStage,
   }));
   const designId = designIdAtStart ?? get().currentDesignId;
@@ -278,7 +294,7 @@ function applyGenerateError(
     void get().appendChatMessage({
       designId,
       kind: 'error',
-      payload: { message: msg },
+      payload: { message: displayMsg },
     });
   }
   const code = extractCodesignErrorCode(err) ?? 'GENERATION_FAILED';
@@ -290,8 +306,9 @@ function applyGenerateError(
   // home for gateway / instructions-required hints.
   const cfg = get().config;
   const hypothesis = deriveGenerateHypothesis(err, cfg);
-  const description = buildGenerateErrorDescription(msg, hypothesis);
+  const description = buildGenerateErrorDescription(displayMsg, hypothesis);
   const action = buildGenerateFixAction(get, set, hypothesis, err, cfg);
+  const reportContext = buildGenerateReportContext(upstream, hypothesis, displayMsg);
 
   get().pushToast({
     variant: 'error',
@@ -301,12 +318,31 @@ function applyGenerateError(
     localId: get().createReportableError({
       code,
       scope: 'generate',
-      message: msg,
+      message: rawMsg,
       ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
       runId: generationId,
-      ...(upstream !== undefined ? { context: upstream } : {}),
+      ...(reportContext !== undefined ? { context: reportContext } : {}),
     }),
   });
+}
+
+function buildGenerateReportContext(
+  upstream: Record<string, unknown> | undefined,
+  hypothesis: ReturnType<typeof deriveGenerateHypothesis>,
+  displayMessage: string,
+): Record<string, unknown> | undefined {
+  const context: Record<string, unknown> = { ...(upstream ?? {}) };
+  const upstreamBaseUrl = context['upstream_baseurl'];
+  if (typeof upstreamBaseUrl === 'string') {
+    context['upstream_baseurl'] = redactUrls(upstreamBaseUrl);
+  }
+  if (hypothesis?.category !== undefined) context['diagnostic_category'] = hypothesis.category;
+  if (hypothesis?.severity !== undefined) context['diagnostic_severity'] = hypothesis.severity;
+  if (hypothesis?.suggestedFix?.kind !== undefined) {
+    context['recovery_action'] = hypothesis.suggestedFix.kind;
+  }
+  if (displayMessage.length > 0) context['display_message'] = displayMessage;
+  return Object.keys(context).length > 0 ? context : undefined;
 }
 
 function buildGenerateFixAction(
@@ -318,23 +354,49 @@ function buildGenerateFixAction(
 ): Toast['action'] | undefined {
   const fix = hypothesis?.suggestedFix;
   if (fix === undefined) return undefined;
-  if (fix.baseUrlTransform === undefined) return undefined;
+  if (fix.kind === 'openSettings') {
+    return {
+      label: tr(fix.label),
+      onClick: () => {
+        get().openSettingsTab(fix.settingsTab ?? 'models');
+      },
+    };
+  }
+  if (fix.kind === 'externalUrl' && fix.externalUrl !== undefined) {
+    return {
+      label: tr(fix.label),
+      onClick: () => {
+        window.open(fix.externalUrl, '_blank', 'noopener,noreferrer');
+      },
+    };
+  }
   const providerId = pickUpstreamString(err, 'upstream_provider') ?? cfg?.provider;
-  const baseUrl = pickUpstreamString(err, 'upstream_baseurl') ?? cfg?.baseUrl ?? null;
-  if (
-    providerId === undefined ||
-    providerId === null ||
-    baseUrl === null ||
-    !/^https?:\/\/\S+/i.test(baseUrl.trim())
-  ) {
+  if (providerId === undefined || providerId === null) {
     return undefined;
   }
-  const nextBaseUrl = fix.baseUrlTransform(baseUrl);
-  if (nextBaseUrl === baseUrl) return undefined;
+  let patch: ProviderFixPatch | undefined;
+  if (fix.baseUrlTransform !== undefined) {
+    const baseUrl = pickUpstreamString(err, 'upstream_baseurl') ?? cfg?.baseUrl ?? null;
+    if (baseUrl === null || !/^https?:\/\/\S+/i.test(baseUrl.trim())) return undefined;
+    const nextBaseUrl = fix.baseUrlTransform(baseUrl);
+    if (nextBaseUrl === baseUrl) return undefined;
+    patch = { baseUrl: nextBaseUrl };
+  } else if (fix.kind === 'switchWire' && fix.wire !== undefined) {
+    patch = { wire: fix.wire };
+  } else if (fix.kind === 'setReasoning' && 'reasoningLevel' in fix) {
+    patch = { reasoningLevel: fix.reasoningLevel ?? null };
+  } else if (fix.kind === 'normalizeModelId' && fix.modelIdTransform !== undefined) {
+    const modelId = pickUpstreamString(err, 'upstream_model_id') ?? cfg?.modelPrimary;
+    if (modelId === undefined || modelId === null) return undefined;
+    const nextModelId = fix.modelIdTransform(modelId);
+    if (nextModelId === modelId || nextModelId.trim().length === 0) return undefined;
+    patch = { defaultModel: nextModelId };
+  }
+  if (patch === undefined) return undefined;
   return {
-    label: tr('notifications.generationFailedApplyFix'),
+    label: tr(fix.label),
     onClick: () => {
-      void applyGenerateBaseUrlFix(get, set, providerId, nextBaseUrl);
+      void applyGenerateProviderFix(get, set, providerId, patch);
     },
   };
 }
@@ -344,6 +406,15 @@ export async function applyGenerateBaseUrlFix(
   set: SetState,
   providerId: string,
   nextBaseUrl: string,
+): Promise<void> {
+  await applyGenerateProviderFix(get, set, providerId, { baseUrl: nextBaseUrl });
+}
+
+export async function applyGenerateProviderFix(
+  get: GetState,
+  set: SetState,
+  providerId: string,
+  patch: ProviderFixPatch,
 ): Promise<void> {
   const api = window.codesign?.config?.updateProvider;
   // Don't silently swallow "this app version lacks the IPC" — surface it as a
@@ -359,7 +430,7 @@ export async function applyGenerateBaseUrlFix(
     return;
   }
   try {
-    const next = await api({ id: providerId, baseUrl: nextBaseUrl });
+    const next = await api({ id: providerId, ...patch });
     set({ config: next });
     get().pushToast({
       variant: 'success',

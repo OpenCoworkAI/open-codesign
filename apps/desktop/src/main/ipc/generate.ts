@@ -577,6 +577,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               ...(baseUrl !== undefined ? { baseUrl } : {}),
               wire: active.wire,
               ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+              ...(active.reasoningLevel !== undefined
+                ? { reasoningLevel: active.reasoningLevel }
+                : {}),
               ...(allowKeyless ? { allowKeyless: true } : {}),
               signal: controller.signal,
               logger: coreLogger,
@@ -613,6 +616,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               ...(baseUrl !== undefined ? { baseUrl } : {}),
               wire: active.wire,
               ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+              ...(active.reasoningLevel !== undefined
+                ? { reasoningLevel: active.reasoningLevel }
+                : {}),
               ...(allowKeyless ? { allowKeyless: true } : {}),
             }).catch((err) => {
               logIpc.warn('memory.update.fail', {
@@ -643,6 +649,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             }
             if (errAsRec['upstream_provider'] === undefined) {
               errAsRec['upstream_provider'] = active.model.provider;
+            }
+            if (errAsRec['upstream_model_id'] === undefined) {
+              errAsRec['upstream_model_id'] = active.model.modelId;
             }
             if (errAsRec['upstream_baseurl'] === undefined && baseUrl !== undefined) {
               errAsRec['upstream_baseurl'] = baseUrl;
@@ -758,6 +767,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               ...(baseUrl !== undefined ? { baseUrl } : {}),
               wire: active.wire,
               ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+              ...(active.reasoningLevel !== undefined
+                ? { reasoningLevel: active.reasoningLevel }
+                : {}),
               ...(allowKeyless ? { allowKeyless: true } : {}),
               signal: controller.signal,
               logger: coreLogger,
@@ -827,6 +839,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           ...(baseUrl !== undefined ? { baseUrl } : {}),
           wire: active.wire,
           ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+          ...(active.reasoningLevel !== undefined ? { reasoningLevel: active.reasoningLevel } : {}),
           ...(allowKeyless ? { allowKeyless: true } : {}),
           logger: titleLogger,
         });

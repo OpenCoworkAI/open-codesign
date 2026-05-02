@@ -3,6 +3,7 @@ import {
   BUILTIN_PROVIDERS,
   CodesignError,
   canonicalBaseUrl,
+  type DiagnosticCategory,
   ERROR_CODES,
   ensureVersionedBase,
   isSupportedOnboardingProvider,
@@ -69,6 +70,8 @@ export interface ConnectionTestResult {
    * false-positive for a user whose provider is on the Responses API.
    */
   probeMethod?: 'models' | 'chat_completion_degraded' | 'responses_degraded';
+  compatibility?: 'compatible' | 'degraded';
+  reasonCategory?: DiagnosticCategory;
 }
 
 export interface ConnectionTestError {
@@ -76,6 +79,8 @@ export interface ConnectionTestError {
   code: 'IPC_BAD_INPUT' | '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE';
   message: string;
   hint: string;
+  compatibility?: 'incompatible';
+  reasonCategory?: DiagnosticCategory;
 }
 
 export type ConnectionTestResponse = ConnectionTestResult | ConnectionTestError;
@@ -244,6 +249,16 @@ export function classifyHttpError(status: number): {
     };
   }
   return { code: 'NETWORK', hint: `服务器返回 HTTP ${status}` };
+}
+
+function connectionCategoryForStatus(status: number, baseUrl: string): DiagnosticCategory {
+  if (status === 401 || status === 403) return 'auth';
+  if (status === 404) {
+    return /\/v\d+[a-z]*(?:\/|$)/i.test(baseUrl) ? 'endpoint-not-found' : 'missing-base-v1';
+  }
+  if (status === 429) return 'rate-limit';
+  if (status >= 500) return 'upstream-server-error';
+  return 'unknown';
 }
 
 function classifyNetworkError(err: unknown): { code: ConnectionTestError['code']; hint: string } {
@@ -479,6 +494,8 @@ async function testChatGPTCodexOAuth(): Promise<ConnectionTestResponse> {
       code: '401',
       message: 'No ChatGPT OAuth token stored',
       hint: 'ChatGPT 订阅未登录，请到 Settings 登录',
+      compatibility: 'incompatible',
+      reasonCategory: 'auth',
     };
   }
   if (stored.expiresAt < Date.now()) {
@@ -487,9 +504,11 @@ async function testChatGPTCodexOAuth(): Promise<ConnectionTestResponse> {
       code: '401',
       message: 'ChatGPT OAuth token expired',
       hint: 'ChatGPT 订阅登录已过期，请重新登录',
+      compatibility: 'incompatible',
+      reasonCategory: 'auth',
     };
   }
-  return { ok: true };
+  return { ok: true, compatibility: 'compatible' };
 }
 
 export async function runProviderTest(
@@ -522,6 +541,8 @@ export async function runProviderTest(
       code,
       message: err instanceof Error ? err.message : 'Network request failed',
       hint,
+      compatibility: 'incompatible',
+      reasonCategory: code === 'ECONNREFUSED' ? 'network-unreachable' : 'unknown',
     };
   }
   if (!res.ok) {
@@ -538,9 +559,16 @@ export async function runProviderTest(
       // and report the original /models 404.
     }
     const { code, hint } = classifyHttpError(res.status);
-    return { ok: false, code, message: `HTTP ${res.status}`, hint };
+    return {
+      ok: false,
+      code,
+      message: `HTTP ${res.status}`,
+      hint,
+      compatibility: 'incompatible',
+      reasonCategory: connectionCategoryForStatus(res.status, normalizedBaseUrl),
+    };
   }
-  return { ok: true, probeMethod: 'models' };
+  return { ok: true, probeMethod: 'models', compatibility: 'compatible' };
 }
 
 async function tryDegradeProbe(
@@ -553,11 +581,20 @@ async function tryDegradeProbe(
     return {
       ok: true,
       probeMethod: wire === 'openai-responses' ? 'responses_degraded' : 'chat_completion_degraded',
+      compatibility: 'degraded',
+      reasonCategory: 'model-discovery-degraded',
     };
   }
   if (probe.kind === 'http' && probe.status !== 404) {
     const { code, hint } = classifyHttpError(probe.status);
-    return { ok: false, code, message: `HTTP ${probe.status}`, hint };
+    return {
+      ok: false,
+      code,
+      message: `HTTP ${probe.status}`,
+      hint,
+      compatibility: 'incompatible',
+      reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
+    };
   }
   return null;
 }

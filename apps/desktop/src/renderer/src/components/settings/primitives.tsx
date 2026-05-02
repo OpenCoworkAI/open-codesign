@@ -521,7 +521,7 @@ export function RowModelSelector({
   );
 }
 
-type ReasoningOption = '' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+type ReasoningOption = '' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export function ReasoningDepthSelector({
   provider,
@@ -576,6 +576,7 @@ export function ReasoningDepthSelector({
 
   const options: Array<{ value: ReasoningOption; label: string }> = [
     { value: '', label: t('settings.providers.reasoning.default') },
+    { value: 'off', label: t('settings.providers.reasoning.off') },
     { value: 'minimal', label: t('settings.providers.reasoning.minimal') },
     { value: 'low', label: t('settings.providers.reasoning.low') },
     { value: 'medium', label: t('settings.providers.reasoning.medium') },

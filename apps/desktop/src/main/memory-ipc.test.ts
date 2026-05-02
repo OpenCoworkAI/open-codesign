@@ -107,10 +107,14 @@ describe('triggerMemoryUpdate', () => {
       conversationMessages: [],
       model: { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
       apiKey: 'test-key',
+      reasoningLevel: 'off',
       db: null,
     });
 
     expect(updateDesignMemory).toHaveBeenCalledOnce();
+    expect(updateDesignMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ reasoningLevel: 'off' }),
+    );
     const content = await readFile(path.join(tempDir, 'memory.md'), 'utf-8');
     expect(content).toBe('# Updated Memory');
   });

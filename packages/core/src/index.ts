@@ -1,9 +1,9 @@
-import type { ReasoningLevel } from '@open-codesign/providers';
 import { completeWithRetry, type RetryReason } from '@open-codesign/providers';
 import type {
   Artifact,
   ChatMessage,
   ModelRef,
+  ReasoningLevel,
   ResourceStateV1,
   SelectedElement,
   StoredDesignSystem,
@@ -485,6 +485,8 @@ export interface GenerateTitleInput {
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
+  /** @see GenerateInput.reasoningLevel */
+  reasoningLevel?: ReasoningLevel | undefined;
   signal?: AbortSignal | undefined;
   logger?: CoreLogger | undefined;
 }
@@ -541,6 +543,7 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
         ...(input.wire !== undefined ? { wire: input.wire } : {}),
         ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
         ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
+        ...(input.reasoningLevel !== undefined ? { reasoning: input.reasoningLevel } : {}),
         ...(input.signal !== undefined ? { signal: input.signal } : {}),
         maxTokens: 200,
       },

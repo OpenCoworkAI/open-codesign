@@ -290,8 +290,11 @@ export type {
 } from './detection';
 export type {
   DiagnoseContext,
+  DiagnosticCategory,
   DiagnosticFix,
+  DiagnosticFixKind,
   DiagnosticHypothesis,
+  DiagnosticSeverity,
   ErrorCode,
   GenerateFailureContext,
 } from './diagnostics';

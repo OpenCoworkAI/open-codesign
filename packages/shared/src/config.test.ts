@@ -54,6 +54,35 @@ describe('config v3 schema', () => {
     expect(parsed.providers['custom-lite']?.capabilities?.modelDiscoveryMode).toBe('manual');
   });
 
+  it('accepts off as an explicit provider reasoning override', () => {
+    const parsed = ConfigV3Schema.parse({
+      version: 3,
+      activeProvider: 'custom-lite',
+      activeModel: 'gpt-5',
+      secrets: {},
+      providers: {
+        'custom-lite': {
+          id: 'custom-lite',
+          name: 'Lite Gateway',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://proxy.example.com/v1',
+          defaultModel: 'gpt-5',
+          reasoningLevel: 'off',
+        },
+      },
+    });
+    expect(parsed.providers['custom-lite']?.reasoningLevel).toBe('off');
+  });
+
+  it('does not treat an explicit off override as reasoning support', () => {
+    const caps = defaultProviderCapabilities('custom-lite', {
+      wire: 'openai-chat',
+      reasoningLevel: 'off',
+    });
+    expect(caps.supportsReasoning).toBe(false);
+  });
+
   it('rejects unknown wire values', () => {
     const bad = {
       version: 3,

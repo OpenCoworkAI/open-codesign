@@ -397,6 +397,81 @@ describe('complete', () => {
     );
   });
 
+  it('synthesizes custom openai-chat reasoning models without developer-role support', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (model) => {
+      expect(model.reasoning).toBe(true);
+      expect(model.compat?.supportsDeveloperRole).toBe(false);
+      expect(model.baseUrl).toBe('https://services.ai.azure.com/openai/v1');
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'custom-azure',
+        model: 'gpt-5.5',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    const result = await complete(
+      { provider: 'custom-azure', modelId: 'gpt-5.5' },
+      [{ role: 'user', content: 'hello' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://services.ai.azure.com/openai/v1',
+      },
+    );
+
+    expect(result.content).toBe('ok');
+  });
+
+  it('omits pi-ai reasoning option when caller explicitly sets reasoning off', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
+      expect(opts.reasoning).toBeUndefined();
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'custom-openai',
+        model: 'gpt-5.5',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    const result = await complete(
+      { provider: 'custom-openai', modelId: 'gpt-5.5' },
+      [{ role: 'user', content: 'hello' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://proxy.example.com/v1',
+        reasoning: 'off',
+      },
+    );
+
+    expect(result.content).toBe('ok');
+  });
+
   it('rejects oversized combined image inputs for openai-codex-responses', async () => {
     getModelMock.mockReturnValue({
       id: 'gpt-5.4',

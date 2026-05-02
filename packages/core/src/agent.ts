@@ -129,6 +129,9 @@ interface PiModel {
   provider: string;
   baseUrl: string;
   reasoning: boolean;
+  compat?: {
+    supportsDeveloperRole?: boolean;
+  };
   input: ('text' | 'image')[];
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
   contextWindow: number;
@@ -143,6 +146,18 @@ function apiForWire(wire: WireApi | undefined): string {
   // openai-chat is the canonical wire for everything else that uses the
   // openai chat-completions wire format (openai, openrouter, deepseek, etc.).
   return 'openai-completions';
+}
+
+function supportsOpenAIDeveloperRole(wire: WireApi | undefined, baseUrl: string): boolean {
+  if (wire !== 'openai-chat') return true;
+  const host = (() => {
+    try {
+      return new URL(baseUrl).hostname.toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
+  return host === 'api.openai.com' || host.endsWith('.openai.com') || host === 'openrouter.ai';
 }
 
 const BUILTIN_PUBLIC_BASE_URLS: Record<string, string> = {
@@ -192,6 +207,9 @@ function buildPiModel(
     contextWindow: 200000,
     maxTokens: 32000,
   };
+  if (!supportsOpenAIDeveloperRole(wire, canonicalBase)) {
+    out.compat = { supportsDeveloperRole: false };
+  }
   if (httpHeaders !== undefined) out.headers = httpHeaders;
 
   // sub2api / claude2api gateways 403 any request without claude-cli

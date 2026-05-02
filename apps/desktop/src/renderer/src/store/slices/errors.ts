@@ -98,6 +98,9 @@ export function extractUpstreamContext(err: unknown): Record<string, unknown> | 
     'upstream_code',
     'upstream_message',
     'upstream_request_id',
+    'upstream_baseurl',
+    'upstream_wire',
+    'upstream_model_id',
     'retry_count',
     'redacted_body_head',
     'original_error_name',
@@ -152,12 +155,16 @@ export function deriveGenerateHypothesis(
   const provider = pickUpstreamString(err, 'upstream_provider') ?? cfg?.provider ?? 'unknown';
   const baseUrl = pickUpstreamString(err, 'upstream_baseurl') ?? cfg?.baseUrl ?? undefined;
   const wire = pickUpstreamString(err, 'upstream_wire');
+  const modelId = pickUpstreamString(err, 'upstream_model_id') ?? cfg?.modelPrimary ?? undefined;
+  const code = extractCodesignErrorCode(err);
   const status = extractGenerateStatus(err);
   const message = err instanceof Error ? err.message : undefined;
   const ctx = {
     provider,
     ...(baseUrl !== undefined && baseUrl !== null ? { baseUrl } : {}),
     ...(wire !== undefined ? { wire } : {}),
+    ...(modelId !== undefined ? { modelId } : {}),
+    ...(code !== undefined ? { code } : {}),
     ...(status !== undefined ? { status } : {}),
     ...(message !== undefined ? { message } : {}),
   };
@@ -169,6 +176,13 @@ export function deriveGenerateHypothesis(
     return undefined;
   }
   return primary;
+}
+
+export function cleanGenerateErrorMessage(originalMessage: string): string {
+  return originalMessage.replace(
+    /^Error invoking remote method '[^']*':\s*(?:[A-Za-z]*Error:\s*)?/,
+    '',
+  );
 }
 
 export function buildGenerateErrorDescription(

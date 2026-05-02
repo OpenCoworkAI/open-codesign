@@ -395,6 +395,39 @@ describe('generateViaAgent()', () => {
     expect(model?.reasoning).toBe(false);
   });
 
+  it('disables developer-role compatibility for custom OpenAI-chat reasoning models', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-azure', modelId: 'gpt-5.5' },
+      apiKey: 'sk-test',
+      baseUrl: 'https://services.ai.azure.com/openai/v1',
+      wire: 'openai-chat',
+    });
+
+    const model = agentCalls[0]?.options.initialState?.model as
+      | { reasoning?: boolean; compat?: { supportsDeveloperRole?: boolean } }
+      | undefined;
+    expect(model?.reasoning).toBe(true);
+    expect(model?.compat?.supportsDeveloperRole).toBe(false);
+  });
+
+  it('honors explicit reasoningLevel=off instead of model-family defaults', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-5.5' },
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.openai.com/v1',
+      wire: 'openai-chat',
+      reasoningLevel: 'off',
+    });
+
+    expect(agentCalls[0]?.options.initialState?.thinkingLevel).toBe('off');
+  });
+
   it('leaves native Gemini endpoint model IDs untouched', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent({

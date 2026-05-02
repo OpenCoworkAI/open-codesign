@@ -11,6 +11,7 @@ import {
   CodesignError,
   ERROR_CODES,
   type ModelRef,
+  type ReasoningLevel as SharedReasoningLevel,
   type WireApi,
 } from '@open-codesign/shared';
 import {
@@ -24,10 +25,10 @@ import { normalizeGeminiModelId } from './gemini-compat';
  * field, which Anthropic adapters translate to extended-thinking effort/budget
  * (and OpenAI/Gemini adapters translate to their respective reasoning knobs).
  *
- * Only the named effort levels pi-ai actually understands. Sending this to a
- * non-reasoning model is a silent downgrade, so callers must whitelist
- * known-capable models before passing a value (see `reasoningForModel`). */
-export type ReasoningLevel = 'low' | 'medium' | 'high' | 'xhigh';
+ * `off` is an Open CoDesign config/UI override and is intentionally omitted
+ * before calling pi-ai. */
+export type ReasoningLevel = SharedReasoningLevel;
+type PiReasoningLevel = Exclude<ReasoningLevel, 'off'>;
 
 export interface GenerateOptions {
   apiKey: string;
@@ -120,6 +121,9 @@ interface PiModel {
   name?: string;
   baseUrl?: string;
   reasoning?: boolean;
+  compat?: {
+    supportsDeveloperRole?: boolean;
+  };
   input?: string[];
   cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   contextWindow?: number;
@@ -232,6 +236,21 @@ export function inferReasoning(
   }
 }
 
+function supportsOpenAIDeveloperRole(
+  wire: GenerateOptions['wire'],
+  baseUrl: string | undefined,
+): boolean {
+  if (wire !== 'openai-chat' || baseUrl === undefined) return true;
+  const host = (() => {
+    try {
+      return new URL(baseUrl).hostname.toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
+  return host === 'api.openai.com' || host.endsWith('.openai.com') || host === 'openrouter.ai';
+}
+
 /**
  * Synthesize a PiModel for a wire + custom baseUrl so custom provider ids
  * (DeepSeek, Ollama, LiteLLM, Azure, …) route to the correct pi-ai adapter
@@ -264,6 +283,9 @@ function synthesizeWireModel(
     maxTokens: 131072,
   };
   if (baseUrl !== undefined) base.baseUrl = baseUrl;
+  if (!supportsOpenAIDeveloperRole(wire, baseUrl)) {
+    base.compat = { supportsDeveloperRole: false };
+  }
   return base;
 }
 
@@ -299,7 +321,7 @@ export async function complete(
         baseUrl?: string;
         signal?: AbortSignal;
         maxTokens?: number;
-        reasoning?: ReasoningLevel;
+        reasoning?: PiReasoningLevel;
         headers?: Record<string, string>;
         onPayload?: (payload: unknown) => unknown;
       },
@@ -327,7 +349,7 @@ export async function complete(
     baseUrl?: string;
     signal?: AbortSignal;
     maxTokens?: number;
-    reasoning?: ReasoningLevel;
+    reasoning?: PiReasoningLevel;
     headers?: Record<string, string>;
     onPayload?: (payload: unknown) => unknown;
   } = {
@@ -336,7 +358,7 @@ export async function complete(
   if (opts.baseUrl !== undefined) piOpts.baseUrl = opts.baseUrl;
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
-  if (opts.reasoning !== undefined) piOpts.reasoning = opts.reasoning;
+  if (opts.reasoning !== undefined && opts.reasoning !== 'off') piOpts.reasoning = opts.reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };
 
   // Strict OpenAI-Responses gateways (e.g. sub2api-style routers) 400 when

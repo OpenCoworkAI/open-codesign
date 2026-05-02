@@ -118,6 +118,7 @@ export interface TriggerMemoryUpdateOpts {
   wire?: WireApi | undefined;
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
+  reasoningLevel?: UpdateDesignMemoryInput['reasoningLevel'] | undefined;
 }
 
 async function doMemoryUpdate(opts: TriggerMemoryUpdateOpts): Promise<void> {
@@ -134,6 +135,7 @@ async function doMemoryUpdate(opts: TriggerMemoryUpdateOpts): Promise<void> {
     ...(opts.wire !== undefined ? { wire: opts.wire } : {}),
     ...(opts.httpHeaders !== undefined ? { httpHeaders: opts.httpHeaders } : {}),
     ...(opts.allowKeyless === true ? { allowKeyless: true } : {}),
+    ...(opts.reasoningLevel !== undefined ? { reasoningLevel: opts.reasoningLevel } : {}),
     logger: {
       info: (event, data) => log.info(event, data),
       warn: (event, data) => log.warn(event, data),

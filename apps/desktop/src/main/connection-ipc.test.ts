@@ -911,7 +911,11 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
         baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
       });
       expect(res.ok).toBe(true);
-      if (res.ok) expect(res.probeMethod).toBe('chat_completion_degraded');
+      if (res.ok) {
+        expect(res.probeMethod).toBe('chat_completion_degraded');
+        expect(res.compatibility).toBe('degraded');
+        expect(res.reasonCategory).toBe('model-discovery-degraded');
+      }
       expect(calls).toHaveLength(2);
       expect(calls[0]?.url).toMatch(/\/models$/);
       expect(calls[1]?.url).toMatch(/\/chat\/completions$/);
@@ -939,7 +943,28 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       if (!res.ok) {
         expect(res.code).toBe('404');
         expect(res.message).toBe('HTTP 404');
+        expect(res.compatibility).toBe('incompatible');
+        expect(res.reasonCategory).toBe('endpoint-not-found');
       }
+    } finally {
+      restore();
+    }
+  });
+
+  it('openai-chat: /models 404 classifies the normalized attempted endpoint, not the raw baseUrl', async () => {
+    const { calls, restore } = installFakeFetch(() => ({ status: 404 }));
+    try {
+      const res = await runProviderTest({
+        provider: 'broken-gateway',
+        wire: 'openai-chat',
+        apiKey: 'sk-test',
+        baseUrl: 'https://broken.example.com',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.reasonCategory).toBe('endpoint-not-found');
+      }
+      expect(calls[0]?.url).toBe('https://broken.example.com/v1/models');
     } finally {
       restore();
     }
@@ -996,7 +1021,10 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
         baseUrl: 'https://api.openai.com/v1',
       });
       expect(res.ok).toBe(true);
-      if (res.ok) expect(res.probeMethod).toBe('models');
+      if (res.ok) {
+        expect(res.probeMethod).toBe('models');
+        expect(res.compatibility).toBe('compatible');
+      }
       expect(calls).toHaveLength(1);
       expect(calls[0]?.method).toBe('GET');
     } finally {
@@ -1015,6 +1043,7 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       });
       expect(res.ok).toBe(false);
       if (!res.ok) expect(res.code).toBe('404');
+      if (!res.ok) expect(res.compatibility).toBe('incompatible');
       // Only /v1/models should have been probed — no /v1/messages degrade.
       expect(calls).toHaveLength(1);
       expect(calls[0]?.url).toMatch(/\/v1\/models$/);
@@ -1037,7 +1066,11 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
         baseUrl: 'https://gateway.example.com/v1',
       });
       expect(res.ok).toBe(true);
-      if (res.ok) expect(res.probeMethod).toBe('responses_degraded');
+      if (res.ok) {
+        expect(res.probeMethod).toBe('responses_degraded');
+        expect(res.compatibility).toBe('degraded');
+        expect(res.reasonCategory).toBe('model-discovery-degraded');
+      }
       expect(calls).toHaveLength(2);
       expect(calls[0]?.url).toMatch(/\/models$/);
       expect(calls[1]?.url).toMatch(/\/responses$/);

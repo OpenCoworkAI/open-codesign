@@ -421,6 +421,26 @@ describe('resolveActiveModel', () => {
     expect(result.baseUrl).toBe('https://api.duckcoding.ai/v1');
   });
 
+  it('threads through the per-provider reasoning override for the canonical active', () => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-5.5',
+      secrets: {
+        openai: { ciphertext: 'enc-oai' },
+      },
+      providers: {
+        openai: {
+          ...BUILTIN_PROVIDERS.openai,
+          defaultModel: 'gpt-5.5',
+          reasoningLevel: 'off',
+        },
+      },
+    });
+    const result = resolveActiveModel(cfg, { provider: 'openai', modelId: 'gpt-5.5' });
+
+    expect(result.reasoningLevel).toBe('off');
+  });
+
   it('ignores stale hint baseUrl entry and returns active provider baseUrl on override', () => {
     const cfg = makeCfg({
       provider: 'openrouter',

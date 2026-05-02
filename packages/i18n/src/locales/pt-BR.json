@@ -331,6 +331,7 @@
       "reasoning": {
         "label": "Profundidade de raciocínio",
         "default": "Padrão (automático)",
+        "off": "Desligado",
         "minimal": "Mínima",
         "low": "Baixa",
         "medium": "Média",
@@ -816,6 +817,19 @@
       "timedOut": "Tempo da requisição esgotado — verifique firewall ou VPN.",
       "corsError": "Erro de CORS (não deveria acontecer no processo principal). Isso é um bug.",
       "sslError": "Erro de SSL / certificado (certificado autoassinado no relay?).",
+      "endpointNotFound": "A URL base já contém um caminho de versão, mas o provedor não expôs esta rota.",
+      "gatewayIncompatible": "O gateway aceitou a conexão, mas não implementa a API deste provedor. Tente trocar o wire, por exemplo para openai-chat.",
+      "openaiResponsesMisconfigured": "O endpoint rejeitou o formato da requisição. O wire pode estar errado; tente openai-chat.",
+      "unsupportedRole": "O endpoint rejeitou o formato de role enviado ao modelo. Normalmente é incompatibilidade de wire ou política do modelo.",
+      "reasoningPolicy": "O endpoint rejeitou metadados de reasoning para este modelo. Reduza a profundidade de reasoning e tente novamente.",
+      "modelIdShape": "O id do modelo selecionado inclui um prefixo de provedor que este endpoint não aceita.",
+      "relayStreamingBug": "O gateway pode tratar incorretamente eventos SSE da OpenAI Responses API e cortar o stream cedo.",
+      "transportInterrupted": "A conexão com o provedor terminou antes da conclusão. Normalmente é timeout do gateway ou interrupção de rede.",
+      "referenceUrlInvalid": "A URL de referência é inválida ou não é suportada.",
+      "referenceUrlFetchFailed": "Não foi possível buscar a URL de referência.",
+      "referenceUrlTimeout": "A busca da URL de referência excedeu o tempo limite.",
+      "referenceUrlTooLarge": "O conteúdo da URL de referência é grande demais para incluir.",
+      "serverError": "Erro do servidor upstream. Pode ser temporário; tente novamente.",
       "unknown": "Erro desconhecido — veja o log completo para detalhes."
     },
     "fix": {
@@ -827,7 +841,13 @@
       "checkNetwork": "Verificar rede / VPN",
       "checkVpn": "Verificar VPN / firewall",
       "reportBug": "Reportar este bug",
-      "disableTls": "Desativar verificação TLS"
+      "disableTls": "Desativar verificação TLS",
+      "switchWire": "Trocar wire nas Configurações",
+      "setReasoningMinimal": "Definir reasoning como minimal",
+      "disableReasoning": "Desativar reasoning",
+      "normalizeModelId": "Remover prefixo do modelo",
+      "checkReferenceUrl": "Verificar URL de referência",
+      "relayStreamingBug": "Atualize o relay, troque o wire para openai-chat ou use api.openai.com diretamente"
     },
     "applyFix": "Aplicar esta correção",
     "setBaseUrlFirst": "Defina uma URL base primeiro",

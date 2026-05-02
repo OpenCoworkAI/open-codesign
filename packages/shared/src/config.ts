@@ -99,7 +99,7 @@ export type StoredDesignSystem = z.infer<typeof StoredDesignSystem>;
 
 // ── ProviderEntry (v3) ───────────────────────────────────────────────────────
 
-export const ReasoningLevelSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']);
+export const ReasoningLevelSchema = z.enum(['off', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 export type ReasoningLevel = z.infer<typeof ReasoningLevelSchema>;
 
 export const ProviderModelDiscoveryModeSchema = z.enum(['models', 'static-hint', 'manual']);
@@ -198,7 +198,7 @@ export function defaultProviderCapabilities(
     supportsKeyless: entry.requiresApiKey === false,
     supportsModelsEndpoint,
     supportsReasoning:
-      entry.reasoningLevel !== undefined ||
+      (entry.reasoningLevel !== undefined && entry.reasoningLevel !== 'off') ||
       entry.wire === 'anthropic' ||
       entry.wire === 'openai-responses' ||
       entry.wire === 'openai-codex-responses',
