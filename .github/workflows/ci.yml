@@ -52,17 +52,3 @@ jobs:
   # to main during its ~13 min runtime. The smoke workflow has its own
   # per-SHA concurrency group so each packaging-touching commit gets an
   # independent smoke that always runs to completion.
-
-  dco:
-    name: DCO check
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Verify Signed-off-by lines
-        run: |
-          git log --no-merges --format='%B' origin/${{ github.base_ref }}..HEAD \
-            | grep -q 'Signed-off-by:' \
-            || (echo 'Missing Signed-off-by. Run: git commit -s' && exit 1)

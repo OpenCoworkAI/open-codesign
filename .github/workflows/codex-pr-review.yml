@@ -79,6 +79,15 @@ jobs:
             ${{ github.event.pull_request.base.ref }} \
             +refs/pull/${{ github.event.pull_request.number }}/head
 
+      - name: Restore trusted review prompt
+        if: steps.check_bot.outputs.has_review_for_current_head != 'true'
+        run: |
+          # This workflow runs under pull_request_target so it can post reviews.
+          # The checked-out merge ref is untrusted contributor content; never
+          # let a PR modify the prompt that receives write-token access.
+          git show "origin/${{ github.event.pull_request.base.ref }}:.github/prompts/codex-pr-review.md" \
+            > .github/prompts/codex-pr-review.md
+
       - name: Run Codex for PR Review
         id: run_codex
         if: steps.check_bot.outputs.has_review_for_current_head != 'true'

@@ -7,7 +7,7 @@ updates:
       day: monday
       time: "06:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - chore
       - area:build
@@ -49,7 +49,7 @@ updates:
           - tailwindcss
           - "@tailwindcss/*"
     ignore:
-      - dependency-name: electron
+      - dependency-name: "*"
         update-types:
           - version-update:semver-major
 
@@ -60,10 +60,14 @@ updates:
       day: monday
       time: "06:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels:
       - chore
       - area:build
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
