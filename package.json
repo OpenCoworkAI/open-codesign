@@ -42,7 +42,7 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.13",
+    "@biomejs/biome": "^2.4.14",
     "@changesets/cli": "^2.27.11",
     "@iarna/toml": "^2.2.5",
     "@open-codesign/core": "workspace:*",
@@ -51,7 +51,7 @@
     "acorn": "^8.14.0",
     "husky": "^9.1.7",
     "tsx": "^4.19.2",
-    "turbo": "^2.3.3",
+    "turbo": "^2.9.7",
     "typescript": "^6.0.3"
   }
 }
