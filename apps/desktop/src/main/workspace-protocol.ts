@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import path_module from 'node:path';
+import type { CoreLogger } from '@open-codesign/core';
 import type Database from 'better-sqlite3';
 import { protocol } from './electron-runtime';
-import type { Logger as CoreLogger } from './logger';
 import { getDesign } from './snapshots-db';
 
 export const WORKSPACE_SCHEME = 'workspace';
@@ -57,7 +57,33 @@ const VALID_DESIGN_ID = /^[a-zA-Z0-9_-]+$/;
 //
 // Only `.html` / `.htm` workspace links are intercepted. Hash links, JS URLs,
 // external schemes, and asset links pass through to the browser default.
-export const WORKSPACE_NAV_INTERCEPT_SCRIPT = `<script>(function(){var s=function(e){try{var t=e.target&&e.target.closest&&e.target.closest('a[href]');if(!t){return;}var h=t.getAttribute('href');if(!h){return;}if(h.charAt(0)==='#'||h.toLowerCase().indexOf('javascript:')===0){return;}var u;try{u=new URL(h,location.href);}catch(_){return;}if(u.protocol!=='workspace:'||u.host!==location.host){return;}var p=decodeURIComponent(u.pathname).replace(/^\\/+/,'');if(!/\\.(html?|htm)$/i.test(p)){return;}e.preventDefault();try{window.parent.postMessage({__codesign:true,type:'OPEN_FILE_TAB',path:p},'*');}catch(_){}}catch(_){}};document.addEventListener('click',s,true);})();</script>`;
+export const WORKSPACE_NAV_INTERCEPT_SCRIPT = `<script>
+(function () {
+  function onClick(e) {
+    try {
+      var anchor = e.target && e.target.closest && e.target.closest('a[href]');
+      if (!anchor) return;
+      var href = anchor.getAttribute('href');
+      if (!href) return;
+      if (href.charAt(0) === '#') return;
+      if (href.toLowerCase().indexOf('javascript:') === 0) return;
+      var url;
+      try { url = new URL(href, location.href); } catch (_) { return; }
+      if (url.protocol !== 'workspace:' || url.host !== location.host) return;
+      var relPath = decodeURIComponent(url.pathname).replace(/^\\/+/, '');
+      if (!/\\.html?$/i.test(relPath)) return;
+      e.preventDefault();
+      try {
+        window.parent.postMessage(
+          { __codesign: true, type: 'OPEN_FILE_TAB', path: relPath },
+          '*',
+        );
+      } catch (_) {}
+    } catch (_) {}
+  }
+  document.addEventListener('click', onClick, true);
+})();
+</script>`;
 
 export type WorkspaceProtocolError =
   | 'bad_url'
@@ -201,7 +227,7 @@ export function registerWorkspaceProtocolHandler(opts: RegisterWorkspaceProtocol
     try {
       const data = await readFile(result.value.absPath);
       const isHtml = result.value.mime.startsWith('text/html');
-      const body: BodyInit = isHtml
+      const body: string | Uint8Array = isHtml
         ? `${data.toString('utf8')}${WORKSPACE_NAV_INTERCEPT_SCRIPT}`
         : (data as unknown as Uint8Array);
       return new Response(body, {
