@@ -3,7 +3,8 @@ import type { ExampleContent } from '../index';
 export const esExamples: Record<string, ExampleContent> = {
   'cosmic-animation': {
     title: 'Animación a escala cósmica',
-    description: 'Encabezado animado con anillos orbitando, un sol brillante y un campo de estrellas disperso.',
+    description:
+      'Encabezado animado con anillos orbitando, un sol brillante y un campo de estrellas disperso.',
   },
   'organic-loaders': {
     title: 'Cargadores orgánicos',
@@ -86,7 +87,8 @@ export const esExamples: Record<string, ExampleContent> = {
   },
   'ai-product-hero': {
     title: 'Encabezado de producto de IA',
-    description: 'Encabezado con degradado, orbe brillante, título con cursor parpadeante y dos CTA.',
+    description:
+      'Encabezado con degradado, orbe brillante, título con cursor parpadeante y dos CTA.',
   },
   'weather-card': {
     title: 'Tarjeta de clima móvil',
