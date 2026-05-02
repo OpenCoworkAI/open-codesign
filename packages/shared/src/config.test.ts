@@ -92,7 +92,7 @@ describe('config v3 schema', () => {
 });
 
 describe('migrateLegacyToV3', () => {
-  it('seeds three builtin providers from an empty v2', () => {
+  it('seeds all builtin providers from an empty v2', () => {
     const legacy = {
       version: 2 as const,
       provider: 'anthropic' as const,
@@ -344,6 +344,42 @@ describe('provider capability helpers', () => {
     expect(caps.supportsSystemRole).toBe(false);
     expect(caps.supportsDeveloperRole).toBe(true);
     expect(caps.supportsToolCalling).toBe(false);
+  });
+});
+
+describe('MiniMax builtin provider', () => {
+  it('is included in SUPPORTED_ONBOARDING_PROVIDERS', () => {
+    expect(SUPPORTED_ONBOARDING_PROVIDERS).toContain('minimax');
+  });
+
+  it('has correct wire and baseUrl', () => {
+    expect(BUILTIN_PROVIDERS.minimax.wire).toBe('openai-chat');
+    expect(BUILTIN_PROVIDERS.minimax.baseUrl).toBe('https://api.minimax.io/v1');
+  });
+
+  it('uses static-hint model discovery with M2.7 models', () => {
+    expect(BUILTIN_PROVIDERS.minimax.capabilities?.modelDiscoveryMode).toBe('static-hint');
+    expect(BUILTIN_PROVIDERS.minimax.modelsHint).toEqual([
+      'MiniMax-M2.7',
+      'MiniMax-M2.7-highspeed',
+    ]);
+    expect(BUILTIN_PROVIDERS.minimax.defaultModel).toBe('MiniMax-M2.7');
+  });
+
+  it('reads MINIMAX_API_KEY env var', () => {
+    expect(BUILTIN_PROVIDERS.minimax.envKey).toBe('MINIMAX_API_KEY');
+  });
+
+  it('resolves capabilities correctly via resolveProviderCapabilities', () => {
+    const caps = resolveProviderCapabilities('minimax', {
+      wire: 'openai-chat',
+      baseUrl: 'https://api.minimax.io/v1',
+    });
+    expect(caps.supportsChatCompletions).toBe(true);
+    expect(caps.supportsSystemRole).toBe(true);
+    expect(caps.supportsToolCalling).toBe(true);
+    expect(caps.requiresClaudeCodeIdentity).toBe(false);
+    expect(caps.supportsReasoning).toBe(false);
   });
 });
 

@@ -48,6 +48,7 @@ export const ALLOWED_IMPORT_ENV_KEYS: ReadonlySet<string> = new Set([
   'GEMINI_API_KEY',
   'GOOGLE_API_KEY',
   'GROQ_API_KEY',
+  'MINIMAX_API_KEY',
   'MISTRAL_API_KEY',
   'OPENAI_API_KEY',
   'OPENROUTER_API_KEY',
