@@ -397,7 +397,8 @@
       "languageLoadFailed": "Failed to load language",
       "langEn": "English",
       "langZhCN": "中文 (简体)",
-      "langPtBR": "Português (BR)"
+      "langPtBR": "Português (BR)",
+      "langEs": "Español"
     },
     "language": {
       "label": "Language",
