@@ -142,7 +142,7 @@ When a concern only appears under a self-contradictory configuration, a delibera
 - **Linked issue claims**: if a PR claims to close/implement an issue, verify the issue acceptance criteria against the diff and tests before accepting the claim.
 - **Missing info**: ask only when required; max 4 questions.
 - **Language**: match the PR's language (Chinese or English); if mixed, use the dominant language.
-- **Signature**: end with `*open-codesign Bot*`.
+- **Signature**: end with `*Open-CoDesign Bot*`.
 - **Diff focus**: only comment on added/modified lines; use unchanged code only for context.
 - **Fresh-head only**: before posting, re-fetch live PR head SHA; if it differs from `CURRENT_HEAD_SHA`, stop without posting a stale review.
 - **Attribution**: report only issues introduced or directly triggered by the diff.

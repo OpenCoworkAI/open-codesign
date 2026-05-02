@@ -16,6 +16,7 @@
       "!**/.turbo",
       "!**/vendor",
       "!**/packaging",
+      "!**/.github/scripts",
       "!apps/desktop/resources/templates",
       "!**/*.vue"
     ]

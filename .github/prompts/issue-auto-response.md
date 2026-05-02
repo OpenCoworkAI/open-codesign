@@ -19,7 +19,7 @@ gh issue view "$issue_number" -R "$repo" --json number,title,body,labels,author,
 Exit immediately if any:
 - Issue body is empty/whitespace only
 - Has label: `duplicate`, `spam`, or `bot-skip`
-- Already has a comment containing `*open-codesign Bot*`
+- Already has a comment containing `*Open-CoDesign Bot*`
 
 ## Project Context
 
@@ -76,7 +76,7 @@ Public context: `README.md`, `CLAUDE.md`, `AGENTS.md` if present, package manife
 
 ---
 
-*open-codesign Bot*
+*Open-CoDesign Bot*
 ```
 
 ## Post to GitHub (MANDATORY)
