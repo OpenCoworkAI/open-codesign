@@ -33,9 +33,9 @@ export interface DemoTemplate {
 
 const REGISTRY: Record<Locale, DemoTemplate[]> = {
   en: enDemos,
-  'zh-CN': zhCNDemos,
-  'pt-BR': ptBRDemos,
   es: esDemos,
+  'pt-BR': ptBRDemos,
+  'zh-CN': zhCNDemos,
 };
 
 export function getDemos(locale: string | undefined): DemoTemplate[] {

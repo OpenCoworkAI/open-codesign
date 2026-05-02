@@ -20,16 +20,16 @@ import es from './locales/es.json';
 import ptBR from './locales/pt-BR.json';
 import zhCN from './locales/zh-CN.json';
 
-export const availableLocales = ['en', 'zh-CN', 'pt-BR', 'es'] as const;
+export const availableLocales = ['en', 'es', 'pt-BR', 'zh-CN'] as const;
 export type Locale = (typeof availableLocales)[number];
 
 const DEFAULT_LOCALE: Locale = 'en';
 
 const resources = {
   en: { translation: en },
-  'zh-CN': { translation: zhCN },
-  'pt-BR': { translation: ptBR },
   es: { translation: es },
+  'pt-BR': { translation: ptBR },
+  'zh-CN': { translation: zhCN },
 } as const;
 
 export function isSupportedLocale(value: string | undefined | null): value is Locale {

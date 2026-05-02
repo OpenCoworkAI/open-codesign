@@ -81,6 +81,9 @@ export function registerLocaleIpc(): void {
       lower === 'zh-cn' ||
       lower === 'zh_cn' ||
       lower.startsWith('en') ||
+      lower === 'pt-br' ||
+      lower.startsWith('pt-') ||
+      lower === 'pt_br' ||
       lower === 'es' ||
       lower.startsWith('es-') ||
       lower === 'es_';
