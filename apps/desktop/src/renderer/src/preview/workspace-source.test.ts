@@ -101,4 +101,20 @@ describe('workspace preview source resolution', () => {
       }),
     ).resolves.toEqual({ path: 'index.html', content: source });
   });
+
+  it('falls back to original source when referenced workspace read throws', async () => {
+    const source = '<!doctype html><body><!-- artifact source lives in index.jsx --></body>';
+    const read = vi.fn<WorkspacePreviewRead>(async () => {
+      throw new Error('files API unavailable');
+    });
+
+    await expect(
+      resolveWorkspacePreviewSource({
+        designId: 'd1',
+        source,
+        read,
+        requireReferencedSource: false,
+      }),
+    ).resolves.toEqual({ path: 'index.html', content: source });
+  });
 });

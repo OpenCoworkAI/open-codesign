@@ -763,7 +763,10 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
-      if (design.workspacePath === null) return [];
+      if (design.workspacePath === null) {
+        logger.warn('files.list.workspace_missing', { designId: design.id });
+        return [];
+      }
       const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
       try {
         return await listWorkspaceFilesAt(workspacePath);
@@ -846,6 +849,9 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       const design = runDb('files:write.lookup-design', () => getDesign(db, designId));
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      if (design.workspacePath === null) {
+        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
       }
       const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
 

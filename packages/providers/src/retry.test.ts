@@ -108,6 +108,11 @@ describe('classifyError', () => {
   it('recognizes provider-side aborted transport messages for agent replay only', () => {
     expect(isProviderAbortedTransportError('Request was aborted')).toBe(true);
     expect(isProviderAbortedTransportError('Generation aborted by provider')).toBe(true);
+    expect(isProviderAbortedTransportError('fetch failed: aborted')).toBe(true);
+    expect(isProviderAbortedTransportError('ReadTimeout while waiting for upstream')).toBe(true);
+    expect(isProviderAbortedTransportError('Connection reset by upstream')).toBe(true);
+    expect(isProviderAbortedTransportError('The user aborted a request')).toBe(false);
+    expect(isProviderAbortedTransportError('AbortError: The user aborted a request')).toBe(false);
     expect(isProviderAbortedTransportError('Generation aborted by user')).toBe(false);
   });
   it('does not retry regular errors without transport indicators', () => {

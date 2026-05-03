@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const fakePdfBytes = Buffer.from('%PDF-1.4 fake');
-const CHROME_TEST_TIMEOUT_MS = process.platform === 'win32' ? 30_000 : 10_000;
+const CHROME_TEST_TIMEOUT_MS = process.env['CI'] || process.platform === 'win32' ? 30_000 : 15_000;
 
 const launchMock = vi.fn();
 const newPageMock = vi.fn();

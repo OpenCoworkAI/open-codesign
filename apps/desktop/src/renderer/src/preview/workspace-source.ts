@@ -70,8 +70,14 @@ export async function resolveWorkspacePreviewSource(input: {
     referenced = await input.read(input.designId, referencedPath);
   } catch (err) {
     if (input.requireReferencedSource) throw err;
+    console.warn('Failed to read referenced preview source; falling back to original.', err);
     return { content: input.source, path };
   }
-  if (referenced.content.trim().length === 0) return { content: input.source, path };
+  if (referenced.content.trim().length === 0) {
+    console.warn('Referenced preview source is empty; falling back to original.', {
+      path: referenced.path,
+    });
+    return { content: input.source, path };
+  }
   return { content: referenced.content, path: referenced.path };
 }

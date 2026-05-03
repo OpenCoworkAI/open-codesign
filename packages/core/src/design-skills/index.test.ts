@@ -34,6 +34,10 @@ describe.sequential('loadDesignSkills', () => {
     await expect(loadDesignSkills(dir)).resolves.toEqual([]);
   });
 
+  it('returns an explicit empty state when the directory has no skill files', async () => {
+    await expect(loadDesignSkills(dir)).resolves.toEqual([]);
+  });
+
   it('throws when a declared skill file is missing from an existing directory', async () => {
     for (const name of DESIGN_SKILL_FILES.slice(0, 3)) {
       writeFileSync(path.join(dir, name), 'body', 'utf8');
@@ -56,7 +60,7 @@ describe.sequential('loadDesignSkills', () => {
     if (existsSync(linkPath)) unlinkSync(linkPath);
     try {
       try {
-        symlinkSync(path.join(outside, 'secret.jsx'), linkPath, 'file');
+        symlinkSync(path.join(outside, 'secret.jsx'), linkPath);
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
         throw err;

@@ -676,8 +676,32 @@ async function probeInferenceEndpoint(
   // 401/403 — endpoint alive but auth rejected; surface as auth error so the
   // diagnostics panel shows the key-invalid hint instead of the 404 one.
   if (res.status === 401 || res.status === 403) return { kind: 'http', status: res.status };
+  if (wire === 'anthropic') {
+    const body = await responseJson(res);
+    return hasAnthropicApiErrorShape(body)
+      ? { kind: 'pass' }
+      : { kind: 'http', status: res.status };
+  }
   // 400/402/422/429 etc. — endpoint alive, request-level rejection.
   return { kind: 'pass' };
+}
+
+async function responseJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasAnthropicApiErrorShape(value: unknown): boolean {
+  if (!isJsonRecord(value)) return false;
+  const error = value['error'];
+  return isJsonRecord(error) && typeof error['type'] === 'string';
 }
 
 export function registerConnectionIpc(): void {

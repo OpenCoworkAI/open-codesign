@@ -1056,7 +1056,12 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
   it('anthropic: /models 404 + /v1/messages 400 degrades because Messages endpoint is alive', async () => {
     const { calls, restore } = installFakeFetch((url) => {
       if (url.endsWith('/v1/models')) return { status: 404 };
-      if (url.endsWith('/v1/messages')) return { status: 400, body: { error: 'model missing' } };
+      if (url.endsWith('/v1/messages')) {
+        return {
+          status: 400,
+          body: { error: { type: 'invalid_request_error', message: 'model missing' } },
+        };
+      }
       return { status: 500 };
     });
     try {
@@ -1079,6 +1084,29 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(body.max_tokens).toBe(1);
       expect(body.stream).toBe(false);
       expect(Array.isArray(body.messages)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('anthropic: /models 404 + generic /v1/messages 400 surfaces the 400', async () => {
+    const { restore } = installFakeFetch((url) => {
+      if (url.endsWith('/v1/models')) return { status: 404 };
+      if (url.endsWith('/v1/messages')) return { status: 400, body: { error: 'bad request' } };
+      return { status: 500 };
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'anthropic-like',
+        wire: 'anthropic',
+        apiKey: 'sk-ant-test',
+        baseUrl: 'https://proxy.example.com/anthropic',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe('NETWORK');
+        expect(res.message).toBe('HTTP 400');
+      }
     } finally {
       restore();
     }

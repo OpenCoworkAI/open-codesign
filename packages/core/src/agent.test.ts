@@ -1571,7 +1571,7 @@ describe('loadFrameTemplates — device frame starter assets', () => {
       rmSync(linkPath, { force: true });
       if (existsSync(linkPath)) unlinkSync(linkPath);
       try {
-        symlinkSync(path.join(outside, 'secret.jsx'), linkPath, 'file');
+        symlinkSync(path.join(outside, 'secret.jsx'), linkPath);
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
         throw err;
