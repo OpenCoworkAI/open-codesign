@@ -1,8 +1,8 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { resolveWorkspaceUrl } from './workspace-protocol';
+import { resolveWorkspaceRealPath, resolveWorkspaceUrl } from './workspace-protocol';
 
 describe('resolveWorkspaceUrl', () => {
   let workspaceDir: string;
@@ -162,5 +162,33 @@ describe('resolveWorkspaceUrl', () => {
     const r = resolveWorkspaceUrl(`workspace://${designId}/My%20File.html`, resolveWorkspace);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.relPath).toBe('My File.html');
+  });
+
+  it('rejects symlinks that resolve outside the workspace', async () => {
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), 'oc-wsproto-outside-'));
+    const outsideFile = path.join(outsideDir, 'secret.html');
+    await writeFile(outsideFile, '<html>secret</html>');
+    await symlink(outsideFile, path.join(workspaceDir, 'linked.html'));
+
+    const r = resolveWorkspaceUrl(`workspace://${designId}/linked.html`, resolveWorkspace);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    const checked = await resolveWorkspaceRealPath(r.value);
+    expect(checked).toEqual({ ok: false, error: 'traversal' });
+  });
+
+  it('accepts symlinks that stay inside the workspace', async () => {
+    await writeFile(path.join(workspaceDir, 'target.html'), '<html>target</html>');
+    await symlink(path.join(workspaceDir, 'target.html'), path.join(workspaceDir, 'inside.html'));
+
+    const r = resolveWorkspaceUrl(`workspace://${designId}/inside.html`, resolveWorkspace);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    const checked = await resolveWorkspaceRealPath(r.value);
+    expect(checked.ok).toBe(true);
+    if (checked.ok)
+      expect(checked.value.absPath).toBe(await realpath(path.join(workspaceDir, 'target.html')));
   });
 });

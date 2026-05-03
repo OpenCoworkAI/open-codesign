@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import path_module from 'node:path';
 import type { CoreLogger } from '@open-codesign/core';
 import type Database from 'better-sqlite3';
@@ -97,6 +97,7 @@ export interface WorkspaceResolution {
   mime: string;
   designId: string;
   relPath: string;
+  workspacePath: string;
 }
 
 export interface WorkspaceResolveResult {
@@ -163,7 +164,31 @@ export function resolveWorkspaceUrl(
     return { ok: false, error: 'unsupported_mime' };
   }
 
-  return { ok: true, value: { absPath, mime, designId, relPath } };
+  return {
+    ok: true,
+    value: { absPath, mime, designId, relPath, workspacePath: normalizedWorkspace },
+  };
+}
+
+export async function resolveWorkspaceRealPath(
+  resolution: WorkspaceResolution,
+): Promise<WorkspaceResolveResult | WorkspaceResolveFailure> {
+  const realWorkspace = await realpath(resolution.workspacePath);
+  const realAbsPath = await realpath(resolution.absPath);
+  const sep = path_module.sep;
+  const isInside =
+    realAbsPath === realWorkspace || realAbsPath.startsWith(`${realWorkspace}${sep}`);
+  if (!isInside) {
+    return { ok: false, error: 'traversal' };
+  }
+  return {
+    ok: true,
+    value: {
+      ...resolution,
+      absPath: realAbsPath,
+      workspacePath: realWorkspace,
+    },
+  };
 }
 
 export function registerWorkspaceScheme(): void {
@@ -225,15 +250,24 @@ export function registerWorkspaceProtocolHandler(opts: RegisterWorkspaceProtocol
     }
 
     try {
-      const data = await readFile(result.value.absPath);
-      const isHtml = result.value.mime.startsWith('text/html');
+      const realPathResult = await resolveWorkspaceRealPath(result.value);
+      if (!realPathResult.ok) {
+        logger.warn('workspace.protocol.reject', { url: request.url, error: realPathResult.error });
+        return new Response(realPathResult.error, {
+          status: 403,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        });
+      }
+
+      const data = await readFile(realPathResult.value.absPath);
+      const isHtml = realPathResult.value.mime.startsWith('text/html');
       const body: string | Uint8Array = isHtml
         ? `${data.toString('utf8')}${WORKSPACE_NAV_INTERCEPT_SCRIPT}`
         : (data as unknown as Uint8Array);
       return new Response(body, {
         status: 200,
         headers: {
-          'Content-Type': result.value.mime,
+          'Content-Type': realPathResult.value.mime,
           // Iframe is sandboxed (opaque origin); permissive CORS keeps fetch()
           // and dynamic <script> imports working when pages need them.
           'Access-Control-Allow-Origin': '*',
