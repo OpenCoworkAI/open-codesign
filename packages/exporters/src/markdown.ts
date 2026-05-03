@@ -174,12 +174,7 @@ export function sanitizeUrl(raw: string, kind: 'link' | 'image'): string | null 
   const output = stripControlChars(raw).trim();
   if (!output) return null;
 
-  let probe = output;
-  for (let i = 0; i < 3; i += 1) {
-    const next = decodeEntities(probe);
-    if (next === probe) break;
-    probe = next;
-  }
+  let probe = decodeEntities(output);
   let encodedScheme: string | null = null;
   const colonIdx = probe.indexOf(':');
   if (colonIdx > 0) {
