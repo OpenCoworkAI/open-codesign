@@ -164,7 +164,7 @@ function PreviewSlot({
     );
   } else {
     body = (
-      <div className="h-full w-full relative">
+      <div className="h-full w-full min-w-0 relative overflow-auto">
         {showCommentUi && active ? (
           <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
         ) : null}

@@ -29,6 +29,11 @@ function makeFs(initial: Record<string, string> = {}): TextEditorFsCallbacks {
 }
 
 describe('done tool', () => {
+  it('documents unresolved-error warnings for artifact finalization', () => {
+    const tool = makeDoneTool(makeFs());
+    expect(tool.description).toContain('surface warnings to the user');
+  });
+
   it('returns ok when index.html parses cleanly', async () => {
     const fs = makeFs({
       'index.html':

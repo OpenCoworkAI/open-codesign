@@ -45,13 +45,15 @@ async function assertTemplatePathIsNotSymlink(filePath: string): Promise<void> {
  * canonical order defined by `DESIGN_SKILL_FILES`.
  */
 export async function loadDesignSkills(dir: string): Promise<Array<[string, string]>> {
+  let entries: string[];
   try {
-    await readdir(dir);
+    entries = await readdir(dir);
     await assertTemplatePathIsNotSymlink(dir);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw err;
   }
+  if (entries.length === 0) return [];
   return Promise.all(
     DESIGN_SKILL_FILES.map(async (name): Promise<[string, string]> => {
       const filePath = path.join(dir, name);

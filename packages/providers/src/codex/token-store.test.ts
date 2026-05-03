@@ -379,10 +379,8 @@ describe('CodexTokenStore', () => {
     const authA = baseAuth({ accessToken: 'concurrent-A' });
     const authB = baseAuth({ accessToken: 'concurrent-B' });
 
-    // Fire both writes without awaiting in between. Before the fix these
-    // would race on the same `${path}.tmp.${pid}` and one could unlink or
-    // overwrite the other's tmp, potentially leaving the target file
-    // missing or corrupted.
+    // Fire both writes without awaiting in between. The store should serialize
+    // final-path replacement even though each write gets its own tmp file.
     await Promise.all([store.write(authA), store.write(authB)]);
 
     const persisted = JSON.parse(await readFile(filePath, 'utf8')) as StoredCodexAuth;

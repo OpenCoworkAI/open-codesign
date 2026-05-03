@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const fakePdfBytes = Buffer.from('%PDF-1.4 fake');
+const CHROME_TEST_TIMEOUT_MS = process.env['CI'] || process.platform === 'win32' ? 30_000 : 15_000;
 
 const launchMock = vi.fn();
 const newPageMock = vi.fn();
@@ -46,42 +47,54 @@ afterAll(() => {
 });
 
 describe('exportPdf', () => {
-  it('writes a PDF via puppeteer-core against the discovered Chrome', async () => {
-    const { exportPdf } = await import('./pdf');
-    const dest = join(tempDir, 'out.pdf');
-    const result = await exportPdf('<h1>hi</h1>', dest);
+  it(
+    'writes a PDF via puppeteer-core against the discovered Chrome',
+    async () => {
+      const { exportPdf } = await import('./pdf');
+      const dest = join(tempDir, 'out.pdf');
+      const result = await exportPdf('<h1>hi</h1>', dest);
 
-    expect(launchMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        executablePath: expect.stringContaining('Chrome'),
-        headless: true,
-      }),
-    );
-    expect(setContentMock).toHaveBeenCalledWith(
-      '<h1>hi</h1>',
-      expect.objectContaining({ waitUntil: 'networkidle0' }),
-    );
-    expect(pdfMock).toHaveBeenCalled();
-    expect(closeMock).toHaveBeenCalled();
-    expect(result.path).toBe(dest);
-    expect(result.bytes).toBe(fakePdfBytes.length);
-  });
+      expect(launchMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executablePath: expect.stringContaining('Chrome'),
+          headless: true,
+        }),
+      );
+      expect(setContentMock).toHaveBeenCalledWith(
+        '<h1>hi</h1>',
+        expect.objectContaining({ waitUntil: 'networkidle0' }),
+      );
+      expect(pdfMock).toHaveBeenCalled();
+      expect(closeMock).toHaveBeenCalled();
+      expect(result.path).toBe(dest);
+      expect(result.bytes).toBe(fakePdfBytes.length);
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it('respects a chromePath override (no discovery call needed)', async () => {
-    launchMock.mockClear();
-    const { exportPdf } = await import('./pdf');
-    const dest = join(tempDir, 'override.pdf');
-    await exportPdf('<p>x</p>', dest, { chromePath: '/tmp/fake-chrome' });
-    expect(launchMock).toHaveBeenCalledWith(
-      expect.objectContaining({ executablePath: '/tmp/fake-chrome' }),
-    );
-  });
+  it(
+    'respects a chromePath override (no discovery call needed)',
+    async () => {
+      launchMock.mockClear();
+      const { exportPdf } = await import('./pdf');
+      const dest = join(tempDir, 'override.pdf');
+      await exportPdf('<p>x</p>', dest, { chromePath: '/tmp/fake-chrome' });
+      expect(launchMock).toHaveBeenCalledWith(
+        expect.objectContaining({ executablePath: '/tmp/fake-chrome' }),
+      );
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it('wraps puppeteer failures in EXPORTER_PDF_FAILED', async () => {
-    pdfMock.mockRejectedValueOnce(new Error('boom'));
-    const { exportPdf } = await import('./pdf');
-    await expect(exportPdf('<p>x</p>', join(tempDir, 'fail.pdf'))).rejects.toMatchObject({
-      code: 'EXPORTER_PDF_FAILED',
-    });
-  });
+  it(
+    'wraps puppeteer failures in EXPORTER_PDF_FAILED',
+    async () => {
+      pdfMock.mockRejectedValueOnce(new Error('boom'));
+      const { exportPdf } = await import('./pdf');
+      await expect(exportPdf('<p>x</p>', join(tempDir, 'fail.pdf'))).rejects.toMatchObject({
+        code: 'EXPORTER_PDF_FAILED',
+      });
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 });

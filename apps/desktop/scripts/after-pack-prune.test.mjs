@@ -37,7 +37,7 @@ describe('after-pack-prune', () => {
       await afterPackPrune({
         appOutDir: root,
         electronPlatformName: 'darwin',
-        arch: 3,
+        arch: 'arm64',
         packager: { appInfo: { productFilename: 'Open CoDesign' } },
       });
 
@@ -64,7 +64,7 @@ describe('after-pack-prune', () => {
         afterPackPrune({
           appOutDir: root,
           electronPlatformName: 'darwin',
-          arch: 3,
+          arch: 'arm64',
           packager: { appInfo: { productFilename: 'Open CoDesign' } },
         }),
       ).resolves.toBeUndefined();

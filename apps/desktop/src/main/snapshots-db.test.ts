@@ -14,6 +14,7 @@ import {
   recordDiagnosticEvent,
   updateDesignWorkspace,
 } from './snapshots-db';
+import { normalizeWorkspacePath } from './workspace-path';
 
 describe('json design store', () => {
   it('persists designs and snapshots without a native database binding', async () => {
@@ -33,7 +34,7 @@ describe('json design store', () => {
       });
 
       const reopened = initSnapshotsDb(storePath);
-      expect(getDesign(reopened, design.id)?.workspacePath).toBe(root);
+      expect(getDesign(reopened, design.id)?.workspacePath).toBe(normalizeWorkspacePath(root));
       expect(listDesigns(reopened).map((row) => row.id)).toEqual([design.id]);
       expect(listSnapshots(reopened, design.id).map((row) => row.id)).toEqual([snapshot.id]);
       await expect(readFile(storePath, 'utf8')).resolves.toContain('Workspace-first design');

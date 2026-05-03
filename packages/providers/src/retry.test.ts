@@ -1,7 +1,13 @@
 import { type ChatMessage, CodesignError, type ModelRef } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import type { GenerateOptions, GenerateResult } from './index';
-import { classifyError, completeWithRetry, type RetryReason, withBackoff } from './retry';
+import {
+  classifyError,
+  completeWithRetry,
+  isProviderAbortedTransportError,
+  type RetryReason,
+  withBackoff,
+} from './retry';
 
 const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
 const MESSAGES: ChatMessage[] = [{ role: 'user', content: 'hi' }];
@@ -98,6 +104,16 @@ describe('classifyError', () => {
     const err = Object.assign(new Error('connection reset'), { code: 'ECONNRESET' });
     const d = classifyError(err);
     expect(d.retry).toBe(true);
+  });
+  it('recognizes provider-side aborted transport messages for agent replay only', () => {
+    expect(isProviderAbortedTransportError('Request was aborted')).toBe(true);
+    expect(isProviderAbortedTransportError('Generation aborted by provider')).toBe(true);
+    expect(isProviderAbortedTransportError('fetch failed: aborted')).toBe(true);
+    expect(isProviderAbortedTransportError('ReadTimeout while waiting for upstream')).toBe(true);
+    expect(isProviderAbortedTransportError('Connection reset by upstream')).toBe(true);
+    expect(isProviderAbortedTransportError('The user aborted a request')).toBe(false);
+    expect(isProviderAbortedTransportError('AbortError: The user aborted a request')).toBe(false);
+    expect(isProviderAbortedTransportError('Generation aborted by user')).toBe(false);
   });
   it('does not retry regular errors without transport indicators', () => {
     const d = classifyError(new Error('something went wrong'));
