@@ -212,6 +212,7 @@
       "addCustom": "Adicionar personalizado",
       "empty": "Nenhum provedor configurado ainda. Adicione um para começar a gerar.",
       "active": "Ativo",
+      "noModel": "Nenhum modelo selecionado",
       "decryptionFailed": "Falha na descriptografia",
       "setActive": "Definir como ativo",
       "reEnterKey": "Redigitar chave",

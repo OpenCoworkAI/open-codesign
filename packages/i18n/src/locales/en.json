@@ -241,6 +241,7 @@
       "empty": "No providers configured yet. Add one to start generating.",
       "active": "Active",
       "activeNotInList": "(active, not in provider list)",
+      "noModel": "No model selected",
       "decryptionFailed": "Decryption failed",
       "setActive": "Set active",
       "reEnterKey": "Re-enter key",

@@ -77,6 +77,27 @@ describe('initI18n + setLocale (live switching)', () => {
     warn.mockRestore();
   });
 
+  it('serves provider no-model copy in every supported locale', async () => {
+    const { i18n } = await import('./index');
+    await initI18n('en');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    for (const locale of availableLocales) {
+      await setLocale(locale);
+      const value = i18n.t('settings.providers.noModel');
+      expect(value, `${locale} should translate settings.providers.noModel`).not.toContain(
+        'settings.providers.noModel',
+      );
+      expect(
+        value.trim().length,
+        `${locale} provider no-model copy should not be empty`,
+      ).toBeGreaterThan(0);
+    }
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('setLocale updates getCurrentLocale and i18n.t() immediately (no restart needed)', async () => {
     const { i18n } = await import('./index');
     await initI18n('en');
