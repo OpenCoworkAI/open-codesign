@@ -1,7 +1,7 @@
 /**
  * Gateway compatibility detection.
  *
- * Third-party Anthropic-compatible relays (sub2api, claude2api, anyrouter…)
+ * Third-party Anthropic-compatible relays (sub2api, claude2api, anyrouter...)
  * frequently implement GET /v1/models (which is what our connection test
  * hits) but stub out POST /v1/messages with "not implemented" / 501. That
  * combination passes the onboarding check but explodes on the first real
