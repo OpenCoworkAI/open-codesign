@@ -21,7 +21,7 @@
     "@open-codesign/runtime": "workspace:*",
     "@open-codesign/shared": "workspace:*",
     "pptxgenjs": "^4.0.1",
-    "puppeteer-core": "^24.10.0",
+    "puppeteer-core": "^24.42.0",
     "zip-lib": "^1.0.4"
   },
   "devDependencies": {

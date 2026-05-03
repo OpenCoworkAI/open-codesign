@@ -20,12 +20,11 @@ Use our issue templates:
 
 1. **Open an issue or discussion first** for anything bigger than a typo. We may have already considered the change, or have a better path in mind.
 2. **Fork, branch, code.** Branch name: `<type>/<short-slug>` (e.g. `feat/url-style-steal`, `fix/cjk-pptx-wrap`).
-3. **Sign your commits** with DCO: `git commit -s -m "feat(core): add url style steal"`. PRs without `Signed-off-by` are blocked by CI.
-4. **Conventional Commits** subject required. Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `ci`, `build`.
-5. **Run locally**: `pnpm lint && pnpm typecheck && pnpm test`.
-6. **Add a changeset** if your change is user-visible: `pnpm changeset`.
-7. **One concern per PR.** Refactors, fixes, and features in separate PRs.
-8. **Keep PRs small.** Anything over ~400 LOC of substantive change should be split or pre-discussed.
+3. **Conventional Commits** subject required. Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `ci`, `build`.
+4. **Run locally**: `pnpm lint && pnpm typecheck && pnpm test`. If lint only reports Biome formatting or safe autofix issues, run `pnpm lint:fix`, commit the result, then rerun the checks.
+5. **Add a changeset** if your change is user-visible: `pnpm changeset`.
+6. **One concern per PR.** Refactors, fixes, and features in separate PRs.
+7. **Keep PRs small.** Anything over ~400 LOC of substantive change should be split or pre-discussed.
 
 ## Dependency policy
 
@@ -43,7 +42,7 @@ Biome handles formatting and most lint rules. `pnpm lint:fix` applies fixes. Don
 
 ## Licensing of contributions
 
-By submitting a PR with `Signed-off-by`, you certify the [Developer Certificate of Origin](https://developercertificate.org/). Your contributions are licensed under MIT.
+By submitting a PR, you agree that your contributions are licensed under MIT.
 
 ## Where to ask questions
 

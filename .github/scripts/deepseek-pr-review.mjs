@@ -1,118 +1,207 @@
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import {
+  assertNonEmptyParsedString,
+  callDeepSeekJsonWithRetries,
+  ensureBotSignature,
+  listPullRequestFiles,
+  loadEventPayload,
+  loadPullRequestFileExcerpts,
+  loadRepoDocs,
+  printUsage,
+  readTextFileIfExists,
+  requireEnv,
+  runGh,
+  truncate,
+  writeTempJson,
+} from './deepseek-common.mjs';
 
-const marker = '*Open-CoDesign Bot*';
+function buildSystemPrompt(basePrompt) {
+  return `${basePrompt}
 
-function requiredEnv(name) {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required`);
-  return value;
+Implementation note:
+- You are running through DeepSeek chat completions, not Codex tools.
+- Return ONLY valid JSON with the shape {"body":"FULL_MARKDOWN_REVIEW_BODY"}.
+- Put every finding directly in the review body itself.
+- Do not assume inline review comments are available.
+- Keep the markdown body ready to post as a summary-only GitHub PR review.`;
 }
 
-function runGit(args, fallback = '') {
-  try {
-    return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
-  } catch {
-    return fallback;
+function serializeDocs(docs) {
+  if (docs.length === 0) {
+    return 'No repo docs were found in this checkout.';
   }
+  return docs.map((doc) => `## ${doc.path}\n${doc.content}`).join('\n\n');
 }
 
-async function github(path, init = {}) {
-  const token = requiredEnv('GITHUB_TOKEN');
-  const response = await fetch(`https://api.github.com${path}`, {
-    ...init,
-    headers: {
-      accept: 'application/vnd.github+json',
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      'x-github-api-version': '2022-11-28',
-      ...init.headers,
-    },
-  });
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`GitHub API ${response.status}: ${body}`);
+function serializeFiles(files) {
+  if (files.length === 0) {
+    return 'No changed files metadata available.';
   }
-  return response.status === 204 ? null : response.json();
+  return files
+    .map((file) =>
+      [
+        `### ${file.filename}`,
+        `status: ${file.status}`,
+        `additions: ${file.additions}`,
+        `deletions: ${file.deletions}`,
+        file.patch ? truncate(file.patch, 6000, `${file.filename} patch`) : '[no patch available]',
+      ].join('\n'),
+    )
+    .join('\n\n');
 }
 
-async function deepseekReview(prompt) {
-  const apiKey = requiredEnv('DEEPSEEK_API_KEY');
-  const baseUrl = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
-  const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are reviewing an Open CoDesign pull request. Prioritize correctness, regressions, missing tests, and security. Be concise.',
-        },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.1,
-    }),
-  });
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`DeepSeek API ${response.status}: ${body}`);
+function serializeExcerpts(excerpts) {
+  if (excerpts.length === 0) {
+    return 'No PR-head file excerpts available.';
   }
-  const payload = await response.json();
-  return payload?.choices?.[0]?.message?.content?.trim() || 'No review comments returned.';
-}
-
-function buildPrompt(event) {
-  const baseRef = event.pull_request.base.ref;
-  const baseSha = event.pull_request.base.sha;
-  const headSha = event.pull_request.head.sha;
-  const promptTemplate = readFileSync('.github/prompts/codex-pr-review.md', 'utf8');
-  const stat = runGit(['diff', '--stat', `${baseSha}...${headSha}`]);
-  const diff = runGit(['diff', '--find-renames', '--unified=80', `${baseSha}...${headSha}`]);
-  const clippedDiff =
-    diff.length > 180_000
-      ? `${diff.slice(0, 180_000)}\n\n[diff clipped at 180000 characters]\n`
-      : diff;
-  return `${promptTemplate}
-
-Repository: ${process.env.GITHUB_REPOSITORY}
-Pull request: #${event.pull_request.number}
-Base branch: ${baseRef}
-Head SHA: ${headSha}
-
-Diff stat:
-${stat}
-
-Diff:
-${clippedDiff}`;
+  return excerpts.map((entry) => `## ${entry.path}\n${entry.content}`).join('\n\n');
 }
 
 async function main() {
-  const event = JSON.parse(readFileSync(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
-  const [owner, repo] = requiredEnv('GITHUB_REPOSITORY').split('/');
-  const pullNumber = event.pull_request.number;
-  const prompt = buildPrompt(event);
-  const review = await deepseekReview(prompt);
-  const body = `${marker}
+  const apiKey = requireEnv('DEEPSEEK_API_KEY');
+  const baseUrl = requireEnv('DEEPSEEK_BASE_URL');
+  const model = requireEnv('DEEPSEEK_MODEL');
+  const effort = process.env.DEEPSEEK_EFFORT || 'high';
+  const payload = loadEventPayload();
+  const prNumber = String(payload.pull_request.number);
+  const repo = payload.repository.full_name;
+  const currentHeadSha = process.env.CURRENT_HEAD_SHA || payload.pull_request.head.sha;
+  const latestBotReviewId = process.env.LATEST_BOT_REVIEW_ID || '';
+  const latestBotReviewCommit = process.env.LATEST_BOT_REVIEW_COMMIT || '';
+  const isFollowUpReview = process.env.IS_FOLLOW_UP_REVIEW === 'true';
 
-${review}`;
+  const prompt = readTextFileIfExists('.github/prompts/codex-pr-review.md');
+  if (!prompt) {
+    throw new Error('Missing .github/prompts/codex-pr-review.md');
+  }
 
-  await github(`/repos/${owner}/${repo}/pulls/${pullNumber}/reviews`, {
-    method: 'POST',
-    body: JSON.stringify({
-      commit_id: process.env.CURRENT_HEAD_SHA || event.pull_request.head.sha,
-      event: 'COMMENT',
-      body,
-    }),
+  const prMeta = JSON.parse(
+    runGh([
+      'pr',
+      'view',
+      prNumber,
+      '-R',
+      repo,
+      '--json',
+      'number,title,body,labels,author,additions,deletions,changedFiles,headRefOid,baseRefName,headRefName,url',
+    ]),
+  );
+  const diff = runGh(['pr', 'diff', prNumber, '-R', repo]);
+  const files = listPullRequestFiles(repo, prNumber);
+  const docs = loadRepoDocs(
+    [
+      'CLAUDE.md',
+      'AGENTS.md',
+      'README.md',
+      '.github/PULL_REQUEST_TEMPLATE.md',
+      'package.json',
+      'pnpm-lock.yaml',
+    ],
+    7000,
+  );
+  const excerpts = loadPullRequestFileExcerpts(
+    prNumber,
+    files.map((file) => file.filename),
+    8,
+    5000,
+  );
+
+  let followUpContext = 'None.';
+  if (isFollowUpReview && latestBotReviewId) {
+    const review = runGh(['api', `repos/${repo}/pulls/${prNumber}/reviews/${latestBotReviewId}`]);
+    const reviewComments = runGh([
+      'api',
+      `repos/${repo}/pulls/${prNumber}/reviews/${latestBotReviewId}/comments`,
+    ]);
+    let compareDiff = '';
+    if (latestBotReviewCommit && latestBotReviewCommit !== currentHeadSha) {
+      compareDiff = runGh([
+        'api',
+        '-H',
+        'Accept: application/vnd.github.v3.diff',
+        `repos/${repo}/compare/${latestBotReviewCommit}...${currentHeadSha}`,
+      ]);
+    }
+    followUpContext = [
+      'Previous bot review:',
+      truncate(review, 8000, 'previous review'),
+      'Previous bot review comments:',
+      truncate(reviewComments, 8000, 'previous review comments'),
+      compareDiff
+        ? `Compare diff since previous review:\n${truncate(compareDiff, 24000, 'compare diff')}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  const userPrompt = [
+    `Repo: ${repo}`,
+    `PR number: ${prNumber}`,
+    `Current head SHA: ${currentHeadSha}`,
+    `Review mode hint: ${isFollowUpReview ? 'follow-up after new commits' : 'initial'}`,
+    '',
+    'PR metadata:',
+    JSON.stringify(prMeta, null, 2),
+    '',
+    'Repository docs:',
+    serializeDocs(docs),
+    '',
+    'Changed files and patches:',
+    serializeFiles(files),
+    '',
+    'PR head file excerpts:',
+    serializeExcerpts(excerpts),
+    '',
+    'Unified diff:',
+    truncate(diff, 140000, 'PR diff'),
+    '',
+    'Follow-up context:',
+    followUpContext,
+  ].join('\n');
+
+  const { parsed, usage } = await callDeepSeekJsonWithRetries({
+    apiKey,
+    baseUrl,
+    model,
+    effort,
+    systemPrompt: buildSystemPrompt(prompt),
+    userPrompt,
   });
+
+  const body = ensureBotSignature(assertNonEmptyParsedString(parsed, 'body'));
+  const liveHeadSha = runGh([
+    'pr',
+    'view',
+    prNumber,
+    '-R',
+    repo,
+    '--json',
+    'headRefOid',
+    '-q',
+    '.headRefOid',
+  ]);
+  if (liveHeadSha !== currentHeadSha) {
+    console.log(`PR head moved from ${currentHeadSha} to ${liveHeadSha}; skipping stale review.`);
+    return;
+  }
+
+  const reviewPayload = writeTempJson('deepseek-pr-review', {
+    event: 'COMMENT',
+    commit_id: currentHeadSha,
+    body,
+  });
+  runGh([
+    'api',
+    `repos/${repo}/pulls/${prNumber}/reviews`,
+    '--method',
+    'POST',
+    '--input',
+    reviewPayload,
+  ]);
+  printUsage('DeepSeek PR review', usage);
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.stack || error.message : error);
+  console.error(error.stack || error.message);
   process.exit(1);
 });

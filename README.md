@@ -342,7 +342,7 @@ See also the Chinese README: [README.zh-CN.md#社群](./README.zh-CN.md#%E7%A4%B
 
 ## Contributing
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before writing code, sign commits with DCO, run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
+Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before writing code and run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
 
 ## License
 

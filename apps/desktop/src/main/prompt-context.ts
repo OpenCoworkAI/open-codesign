@@ -45,7 +45,7 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 
 const MAX_ATTACHMENT_CHARS = 6_000;
 const MAX_TEXT_ATTACHMENT_BYTES = 256_000;
-const MAX_BINARY_ATTACHMENT_BYTES = 10_000_000;
+const MAX_BINARY_ATTACHMENT_BYTES = 10_000_000; // 10MB - images get full read for data URL, non-image binary only needs filename
 const MAX_URL_EXCERPT_CHARS = 1_200;
 const MAX_URL_RESPONSE_BYTES = 256_000;
 const MAX_REFERENCE_URL_REDIRECTS = 3;
@@ -353,6 +353,8 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
   const extension = extname(file.name).toLowerCase();
   const imageMimeType = IMAGE_MIME_TYPES[extension];
 
+  // Binary attachments (images, etc) - images need full content for data URL
+  // So allow larger size limit than text
   const isKnownTextExtension = TEXT_EXTS.has(extension);
   const maxFileBytes = isKnownTextExtension
     ? MAX_TEXT_ATTACHMENT_BYTES

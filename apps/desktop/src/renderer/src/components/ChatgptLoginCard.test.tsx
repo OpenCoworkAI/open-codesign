@@ -7,7 +7,12 @@ import {
   resolveViewState,
 } from './ChatgptLoginCard';
 
-const LOGIN_STRINGS = { failedTitle: 'login failed', unknownError: 'unknown' };
+const LOGIN_STRINGS = {
+  failedTitle: 'login failed',
+  unknownError: 'unknown',
+  unsupportedCountryRegion:
+    'ChatGPT subscription login is not available for this account, country, region, or territory.',
+};
 const LOGOUT_STRINGS = {
   confirmMessage: 'sign out?',
   failedTitle: 'logout failed',
@@ -100,6 +105,37 @@ describe('performLogin', () => {
     expect(pushToast).toHaveBeenCalledWith(
       expect.objectContaining({ variant: 'error', description: 'network down' }),
     );
+  });
+
+  it('shows a friendly message when OpenAI rejects the OAuth exchange for country or region support', async () => {
+    const rawMessage =
+      'Error invoking remote method \'codex-oauth:v1:login\': CodesignError: Codex login failed: Codex OAuth exchange failed: 403 {"error":{"code":"unsupported_country_region_territory","message":"Country, region, or territory not supported","param":null,"type":"request_forbidden"}}';
+    const api = {
+      status: vi.fn(),
+      login: vi.fn().mockRejectedValue(new Error(rawMessage)),
+      cancelLogin: vi.fn(),
+      logout: vi.fn(),
+    };
+    const setLoading = vi.fn();
+    const pushToast = vi.fn();
+
+    await performLogin({
+      api,
+      setStatus: vi.fn(),
+      setLoading,
+      pushToast,
+      strings: LOGIN_STRINGS,
+    });
+
+    expect(pushToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variant: 'error',
+        title: 'login failed',
+        description: LOGIN_STRINGS.unsupportedCountryRegion,
+      }),
+    );
+    const toast = pushToast.mock.calls[0]?.[0] as { description?: string };
+    expect(toast.description).not.toContain('unsupported_country_region_territory');
   });
 
   it('silently resets loading when login is cancelled by the user', async () => {

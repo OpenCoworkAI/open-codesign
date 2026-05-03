@@ -16,18 +16,20 @@ import i18next from 'i18next';
 import { useCallback } from 'react';
 import { initReactI18next, useTranslation } from 'react-i18next';
 import en from './locales/en.json';
+import es from './locales/es.json';
 import ptBR from './locales/pt-BR.json';
 import zhCN from './locales/zh-CN.json';
 
-export const availableLocales = ['en', 'zh-CN', 'pt-BR'] as const;
+export const availableLocales = ['en', 'es', 'pt-BR', 'zh-CN'] as const;
 export type Locale = (typeof availableLocales)[number];
 
 const DEFAULT_LOCALE: Locale = 'en';
 
 const resources = {
   en: { translation: en },
-  'zh-CN': { translation: zhCN },
+  es: { translation: es },
   'pt-BR': { translation: ptBR },
+  'zh-CN': { translation: zhCN },
 } as const;
 
 export function isSupportedLocale(value: string | undefined | null): value is Locale {
@@ -44,6 +46,9 @@ export function normalizeLocale(value: string | undefined | null): Locale {
   }
   if (lower === 'pt-br' || lower === 'pt_br' || lower === 'pt' || lower.startsWith('pt-')) {
     return 'pt-BR';
+  }
+  if (lower === 'es' || lower.startsWith('es-') || lower === 'es_') {
+    return 'es';
   }
   if (lower.startsWith('en')) return 'en';
   console.warn(

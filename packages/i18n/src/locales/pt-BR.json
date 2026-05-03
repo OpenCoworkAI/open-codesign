@@ -206,7 +206,8 @@
         "loginFailedTitle": "Falha ao entrar no ChatGPT",
         "logoutFailedTitle": "Falha ao sair do ChatGPT",
         "statusFailedTitle": "Falha ao verificar status do ChatGPT",
-        "unknownError": "Erro desconhecido"
+        "unknownError": "Erro desconhecido",
+        "unsupportedCountryRegion": "O login com assinatura do ChatGPT não está disponível para esta conta, país, região ou território."
       },
       "addProvider": "Adicionar provedor",
       "addCustom": "Adicionar personalizado",
@@ -363,7 +364,8 @@
       "languageLoadFailed": "Falha ao carregar o idioma",
       "langEn": "English",
       "langZhCN": "中文 (简体)",
-      "langPtBR": "Português (BR)"
+      "langPtBR": "Português (BR)",
+      "langEs": "Español"
     },
     "language": {
       "label": "Idioma",
@@ -1083,6 +1085,7 @@
     "PROVIDER_ERROR": "O provedor retornou um erro. Verifique sua chave de API e tente novamente.",
     "PROVIDER_HTTP_4XX": "O provedor rejeitou a requisição. Verifique sua chave de API e o faturamento.",
     "PROVIDER_UPSTREAM_ERROR": "O provedor retornou um erro inesperado. Detalhes estão no log.",
+    "PROVIDER_GATEWAY_INCOMPATIBLE": "Sua porta de entrada retornou 'não implementado' para a API de Mensagens. Tente mudar o protocolo para openai-chat nas Configurações, ou use uma porta de entrada que suporte a API de Mensagens da Anthropic.",
     "PROVIDER_ABORTED": "Geração cancelada.",
     "PROVIDER_RETRY_EXHAUSTED": "O provedor falhou após várias tentativas. Verifique sua conexão e tente novamente.",
     "CLAUDE_CODE_OAUTH_ONLY": "Seu login no Claude Code usa uma assinatura Anthropic (Pro/Max). Apps de terceiros não podem reutilizar a cota da assinatura — gere uma chave de API em console.anthropic.com e use aqui.",

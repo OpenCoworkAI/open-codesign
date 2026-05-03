@@ -5,24 +5,40 @@ import { TextDecoder } from 'node:util';
 
 export const DEFAULT_WORKSPACE_PATTERNS = [
   '**/*.html',
+  '**/*.htm',
   '**/*.jsx',
+  '**/*.ts',
   '**/*.tsx',
   '**/*.css',
   '**/*.js',
+  '**/*.mjs',
+  '**/*.cjs',
+  '**/*.json',
+  '**/*.svg',
+  '**/*.md',
+  '**/*.txt',
+  '**/*.yaml',
+  '**/*.yml',
+  '**/*.toml',
 ] as const;
 
-/** Dirs we never recurse into. Matches the set used by design-system.ts plus a
- * few electron-era additions (.vite, __pycache__) and our own workspace cache
- * (.codesign). Keeps a huge node_modules from drowning the scan. */
-const IGNORED_DIRS = new Set<string>([
+/** Ignored by `listWorkspaceFilesAt`, `readWorkspaceFilesAt`, and the
+ *  workspace file watcher. Keeps the scan bounded on workspaces that have a
+ *  bundled node_modules or build outputs lying around. */
+export const WORKSPACE_IGNORED_DIRS = new Set<string>([
   'node_modules',
   '.git',
   '.codesign',
   'dist',
+  'build',
   'out',
+  '.next',
   '.turbo',
   '.vite',
+  '.cache',
+  '.pnpm-store',
   '__pycache__',
+  'coverage',
 ]);
 
 /** Hard caps: stop after 200 files or 2 MB total bytes, whichever first. Main-
@@ -70,13 +86,22 @@ export async function readWorkspaceFilesAt(
       if (out.length >= MAX_FILES || totalBytes >= MAX_BYTES) return;
       const abs = join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (IGNORED_DIRS.has(entry.name)) continue;
+        if (WORKSPACE_IGNORED_DIRS.has(entry.name)) continue;
         await walk(abs);
         continue;
       }
       if (!entry.isFile()) continue;
       const rel = normalizeSlashes(relative(root, abs));
       if (!matchers.some((re) => re.test(rel))) continue;
+      let size = 0;
+      try {
+        size = (await stat(abs)).size;
+      } catch (err) {
+        throw new Error(
+          `Failed to stat workspace file ${rel}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      if (size > MAX_SINGLE_FILE_BYTES) continue;
       let contents: string;
       try {
         contents = await readUtf8TextFile(abs);
@@ -115,20 +140,6 @@ export type WorkspaceFileKind = 'html' | 'jsx' | 'tsx' | 'css' | 'js' | 'asset';
 export interface WorkspaceFileReadResult extends WorkspaceFileEntry {
   content: string;
 }
-
-/** Ignored by `listWorkspaceFilesAt`, `readWorkspaceFilesAt`, and the
- *  workspace file watcher. Keeps the scan bounded on workspaces that have a
- *  bundled node_modules or build outputs lying around. */
-export const WORKSPACE_IGNORED_DIRS = new Set<string>([
-  'node_modules',
-  '.git',
-  '.codesign',
-  'dist',
-  'out',
-  '.turbo',
-  '.vite',
-  '__pycache__',
-]);
 
 const LIST_IGNORED_DIRS = WORKSPACE_IGNORED_DIRS;
 

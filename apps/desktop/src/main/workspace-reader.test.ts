@@ -28,8 +28,10 @@ describe('readWorkspaceFilesAt', () => {
   it('returns matching files and skips ignored dirs under default patterns', async () => {
     await writeFile(join(root, 'index.html'), '<!doctype html><p>hi</p>');
     await writeFile(join(root, 'app.js'), 'export const x = 1;');
-    await mkdir(join(root, 'node_modules', 'pkg'), { recursive: true });
-    await writeFile(join(root, 'node_modules', 'pkg', 'index.js'), 'module.exports={};');
+    for (const dir of ['node_modules/pkg', 'build', '.next']) {
+      await mkdir(join(root, dir), { recursive: true });
+      await writeFile(join(root, dir, 'index.js'), 'module.exports={};');
+    }
 
     const result = await readWorkspaceFilesAt(root);
     const files = result.map((f) => f.file).sort();
@@ -50,10 +52,18 @@ describe('readWorkspaceFilesAt', () => {
     expect(result.map((f) => f.file)).toEqual(['src/components/Button.jsx']);
   });
 
-  it('includes tsx files in the default source scan', async () => {
+  it('includes common text project files in the default source scan', async () => {
     await writeFile(join(root, 'App.tsx'), 'function App(): JSX.Element { return <main/>; }');
+    await writeFile(join(root, 'state.ts'), 'export const state = {};');
+    await writeFile(join(root, 'package.json'), '{"type":"module"}');
+    await writeFile(join(root, 'README.md'), '# Notes');
     const result = await readWorkspaceFilesAt(root);
-    expect(result.map((f) => f.file)).toEqual(['App.tsx']);
+    expect(result.map((f) => f.file).sort()).toEqual([
+      'App.tsx',
+      'README.md',
+      'package.json',
+      'state.ts',
+    ]);
   });
 
   it('caps output at 200 files', async () => {
@@ -81,6 +91,15 @@ describe('readWorkspaceFilesAt', () => {
     // Allow one file of overshoot — we check the cap before admitting a file
     // but the final accepted one can push us over.
     expect(bytes).toBeLessThan(2 * 1024 * 1024 + 150 * 1024);
+  });
+
+  it('skips individual matched files larger than the per-file cap', async () => {
+    await writeFile(join(root, 'package-lock.json'), 'x'.repeat(3 * 1024 * 1024));
+    await writeFile(join(root, 'index.html'), '<main>ok</main>');
+
+    const result = await readWorkspaceFilesAt(root);
+
+    expect(result.map((f) => f.file)).toEqual(['index.html']);
   });
 
   it('throws when a matched source file cannot be read as UTF-8 text', async () => {

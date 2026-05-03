@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@open-codesign/shared": "workspace:*",
-    "zod": "^4.3.6"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

@@ -8,6 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./locales/en": "./src/locales/en.json",
+    "./locales/es": "./src/locales/es.json",
+    "./locales/pt-BR": "./src/locales/pt-BR.json",
     "./locales/zh-CN": "./src/locales/zh-CN.json"
   },
   "scripts": {
@@ -15,8 +17,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "i18next": "^26.0.7",
-    "react-i18next": "^17.0.4"
+    "i18next": "^26.0.8",
+    "react-i18next": "^17.0.6"
   },
   "peerDependencies": {
     "react": "^19.0.0"

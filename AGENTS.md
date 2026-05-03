@@ -90,7 +90,7 @@ Do not reintroduce a verifier subagent, snip tool, custom bash tool, custom list
 - Lint and format: Biome.
 - Tests: Vitest for unit tests, Playwright for E2E.
 - TypeScript: strict mode, `verbatimModuleSyntax`, bundler resolution, no `any`.
-- Commits: Conventional Commits with DCO sign-off.
+- Commits: Conventional Commits.
 - Versioning: Changesets. Do not hand-edit `CHANGELOG.md`.
 - Node: 22 LTS, pinned by `.nvmrc` and `engines`.
 - Exact package versions live in `package.json`, workspace manifests, and `pnpm-lock.yaml`. Read those files instead of trusting stale docs.

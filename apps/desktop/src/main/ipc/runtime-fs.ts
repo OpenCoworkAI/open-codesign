@@ -60,6 +60,7 @@ interface CreateRuntimeTextEditorFsOptions {
   generationId: string;
   designId: string | null;
   previousHtml: string | null;
+  initialFiles?: ReadonlyArray<{ file: string; contents: string }>;
   sendEvent: (event: AgentStreamEvent) => void;
   logger: Pick<CoreLogger, 'error'>;
   frames?: ReadonlyArray<readonly [string, string]>;
@@ -71,6 +72,7 @@ export function createRuntimeTextEditorFs({
   generationId,
   designId,
   previousHtml,
+  initialFiles = [],
   sendEvent,
   logger,
   frames = [],
@@ -86,6 +88,9 @@ export function createRuntimeTextEditorFs({
   }
   for (const [name, content] of designSkills) {
     fsMap.set(`skills/${name}`, content);
+  }
+  for (const file of initialFiles) {
+    fsMap.set(normalizeDesignFilePath(file.file), file.contents);
   }
 
   function emitFsUpdated(filePath: string, content: string): void {
@@ -178,14 +183,13 @@ export function createRuntimeTextEditorFs({
     },
     listDir(dir: string) {
       const prefix = dir.length === 0 || dir === '.' ? '' : `${dir.replace(/\/+$/, '')}/`;
-      const entries = new Set<string>();
+      const entries: string[] = [];
       for (const p of fsMap.keys()) {
         if (!p.startsWith(prefix)) continue;
         const rest = p.slice(prefix.length);
-        const firstSegment = rest.split('/')[0];
-        if (firstSegment) entries.add(firstSegment);
+        if (rest.length > 0) entries.push(rest);
       }
-      return [...entries].sort();
+      return entries.sort();
     },
   };
 

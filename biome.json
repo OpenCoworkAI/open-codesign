@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.14/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -16,6 +16,7 @@
       "!**/.turbo",
       "!**/vendor",
       "!**/packaging",
+      "!**/.github/scripts",
       "!apps/desktop/resources/templates",
       "!**/*.vue"
     ]

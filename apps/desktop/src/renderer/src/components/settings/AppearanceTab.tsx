@@ -116,8 +116,9 @@ export function AppearanceTab() {
             onChange={handleLocaleChange}
             options={[
               { value: 'en', label: t('settings.appearance.langEn') },
-              { value: 'zh-CN', label: t('settings.appearance.langZhCN') },
+              { value: 'es', label: t('settings.appearance.langEs') },
               { value: 'pt-BR', label: t('settings.appearance.langPtBR') },
+              { value: 'zh-CN', label: t('settings.appearance.langZhCN') },
             ]}
           />
         </Row>

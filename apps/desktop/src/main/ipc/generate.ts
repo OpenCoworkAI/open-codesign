@@ -226,9 +226,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const toolStartedAt = new Map<string, number>();
     const runtimeVerify = makeRuntimeVerifier();
     const templatesRoot = path_module.join(app.getPath('userData'), 'templates');
-    const [frames, designSkills] = await Promise.all([
+    const [frames, designSkills, initialWorkspaceFiles] = await Promise.all([
       loadFrameTemplates(path_module.join(templatesRoot, 'frames')),
       loadDesignSkills(path_module.join(templatesRoot, 'design-skills')),
+      readWorkspaceFilesAt(workspaceRoot),
     ]);
     const { fs, fsMap } = createRuntimeTextEditorFs({
       db,
@@ -236,6 +237,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       generationId: id,
       logger: logIpc,
       previousHtml,
+      initialFiles: initialWorkspaceFiles,
       sendEvent,
       frames,
       designSkills,

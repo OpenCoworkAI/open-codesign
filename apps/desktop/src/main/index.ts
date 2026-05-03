@@ -31,6 +31,7 @@ import {
   registerWorkspaceIpc,
 } from './snapshots-ipc';
 import { initStorageSettings } from './storage-settings';
+import { registerWorkspaceProtocolHandler, registerWorkspaceScheme } from './workspace-protocol';
 
 // Re-exports kept for index.workspace.test.ts and any external callers.
 export { createRuntimeTextEditorFs, resolveLocalAssetRefs } from './ipc/runtime-fs';
@@ -136,6 +137,8 @@ async function scheduleStartupUpdateCheck(): Promise<void> {
 }
 
 if (!IS_VITEST) {
+  registerWorkspaceScheme();
+
   void app.whenReady().then(async () => {
     // Extracted so the outer try/catch AND post-init listeners (whose callbacks
     // fire outside this block) can route failures through the same boot-fallback
@@ -217,6 +220,10 @@ if (!IS_VITEST) {
       if (dbResult.ok) {
         registerSnapshotsIpc(dbResult.db);
         registerWorkspaceIpc(dbResult.db, getMainWindow);
+        registerWorkspaceProtocolHandler({
+          db: dbResult.db,
+          logger: getLogger('workspace-protocol'),
+        });
         try {
           pruneDiagnosticEvents(dbResult.db, 500);
         } catch (err) {

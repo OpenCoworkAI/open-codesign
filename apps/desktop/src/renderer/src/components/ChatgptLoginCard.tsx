@@ -36,12 +36,25 @@ export interface PerformLoginDeps {
   setLoading: (v: boolean) => void;
   pushToast: PushToastLike;
   onStatusChange?: () => void | Promise<void>;
-  strings: { failedTitle: string; unknownError: string };
+  strings: { failedTitle: string; unknownError: string; unsupportedCountryRegion: string };
 }
 
 function isCodexLoginCancelledError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   return /Codex login cancelled|Codex OAuth callback aborted/.test(err.message);
+}
+
+function isUnsupportedCountryRegionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.message.includes('unsupported_country_region_territory');
+}
+
+function formatLoginErrorDescription(
+  err: unknown,
+  strings: { unknownError: string; unsupportedCountryRegion: string },
+): string {
+  if (isUnsupportedCountryRegionError(err)) return strings.unsupportedCountryRegion;
+  return err instanceof Error ? err.message : strings.unknownError;
 }
 
 export async function performLogin(deps: PerformLoginDeps): Promise<void> {
@@ -55,7 +68,7 @@ export async function performLogin(deps: PerformLoginDeps): Promise<void> {
     deps.pushToast({
       variant: 'error',
       title: deps.strings.failedTitle,
-      description: err instanceof Error ? err.message : deps.strings.unknownError,
+      description: formatLoginErrorDescription(err, deps.strings),
     });
   } finally {
     deps.setLoading(false);
@@ -159,6 +172,7 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
       strings: {
         failedTitle: t('settings.providers.chatgptLogin.loginFailedTitle'),
         unknownError: t('settings.providers.chatgptLogin.unknownError'),
+        unsupportedCountryRegion: t('settings.providers.chatgptLogin.unsupportedCountryRegion'),
       },
       ...(onStatusChange !== undefined ? { onStatusChange } : {}),
     });

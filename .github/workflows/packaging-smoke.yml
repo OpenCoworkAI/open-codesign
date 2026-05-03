@@ -23,8 +23,6 @@ on:
       - '.github/workflows/packaging-smoke.yml'
       - '.github/workflows/release.yml'
       - '.github/workflows/release-macos-x64-native-check.yml'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
   pull_request:
     branches: [main, dev/v0.2]
     paths:
@@ -35,8 +33,6 @@ on:
       - '.github/workflows/packaging-smoke.yml'
       - '.github/workflows/release.yml'
       - '.github/workflows/release-macos-x64-native-check.yml'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
 
 # Per-SHA group, no cancellation. Each commit gets an independent smoke
 # that always runs to completion (or fails loudly). Skipping the

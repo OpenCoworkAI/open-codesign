@@ -193,16 +193,21 @@ export function defaultWorkspacePreviewPath(files: DesignFileEntry[]): string | 
   );
 }
 
-export function workspaceBaseHrefFromPath(path: string | null | undefined): string | undefined {
-  if (!path) return undefined;
-  let normalized = path.replaceAll('\\', '/');
-  if (/^[A-Za-z]:\//.test(normalized)) normalized = `/${normalized}`;
-  if (!normalized.endsWith('/')) normalized = `${normalized}/`;
-  const encoded = normalized
+export function workspaceBaseHrefForFile(input: {
+  designId: string | null | undefined;
+  workspacePath: string | null | undefined;
+  filePath: string | null | undefined;
+}): string | undefined {
+  if (!input.designId || !input.workspacePath) return undefined;
+  const normalizedPath = (input.filePath ?? '').replaceAll('\\', '/');
+  const slashIndex = normalizedPath.lastIndexOf('/');
+  const dir = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : '';
+  const encodedDir = dir
     .split('/')
-    .map((segment, index) => (index === 0 ? '' : encodeURIComponent(segment).replace(/%3A/g, ':')))
+    .filter((segment) => segment.length > 0)
+    .map(encodeURIComponent)
     .join('/');
-  return `file://${encoded}`;
+  return `workspace://${input.designId}/${encodedDir}${encodedDir.length > 0 ? '/' : ''}`;
 }
 
 export type WorkspacePreviewSourceMode = 'read-workspace' | 'preview-html-fallback' | 'unavailable';
@@ -257,7 +262,6 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   const workspaceFiles = files ?? observedFiles;
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const effectiveFile = file ?? workspaceFiles.find((f) => f.path === path) ?? null;
-  const baseHref = workspaceBaseHrefFromPath(currentDesign?.workspacePath);
   const renderable = effectiveFile
     ? isRenderableDesignFileKind(effectiveFile.kind)
     : isRenderablePath(path);
@@ -330,12 +334,17 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   const srcDoc = useMemo(() => {
     if (!previewSource || !renderable) return null;
     try {
+      const baseHref = workspaceBaseHrefForFile({
+        designId: currentDesignId,
+        workspacePath: currentDesign?.workspacePath,
+        filePath: previewSource.path,
+      });
       return buildPreviewDocument(previewSource.content, { path: previewSource.path, baseHref });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return `<!doctype html><html><body style="font: 13px system-ui; color: #71717a; display: grid; place-items: center; min-height: 100vh; margin: 0;">${escapeHtmlText(message)}</body></html>`;
     }
-  }, [baseHref, previewSource, renderable]);
+  }, [currentDesign?.workspacePath, currentDesignId, previewSource, renderable]);
 
   if (!renderable) {
     return (

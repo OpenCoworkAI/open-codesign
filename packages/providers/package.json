@@ -14,7 +14,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "^0.69.0",
+    "@mariozechner/pi-ai": "^0.72.1",
     "@open-codesign/shared": "workspace:*"
   },
   "devDependencies": {
