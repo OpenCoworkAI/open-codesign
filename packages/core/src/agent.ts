@@ -417,6 +417,40 @@ function formatDoneRepairLimitText(details: DoneDetails): string {
   ].join('\n');
 }
 
+function isReasoningContentRoundTripError(errorMessage: string | undefined): boolean {
+  if (!errorMessage) return false;
+  const message = errorMessage.toLowerCase();
+  return message.includes('reasoning_content');
+}
+
+function stripTerminalAssistantFailure(messages: readonly AgentMessage[]): AgentMessage[] {
+  const out = [...messages];
+  const last = out[out.length - 1];
+  if (
+    last?.role === 'assistant' &&
+    ((last as PiAssistantMessage).stopReason === 'error' ||
+      (last as PiAssistantMessage).stopReason === 'aborted')
+  ) {
+    out.pop();
+  }
+  return out;
+}
+
+function prepareReasoningFallback(messages: readonly AgentMessage[]): {
+  messages: AgentMessage[];
+  mode: 'continue' | 'prompt';
+} {
+  const cleanMessages = stripTerminalAssistantFailure(messages);
+  const last = cleanMessages[cleanMessages.length - 1];
+  if (last?.role === 'toolResult') {
+    return { messages: cleanMessages, mode: 'continue' };
+  }
+  if (last?.role === 'user') {
+    return { messages: cleanMessages.slice(0, -1), mode: 'prompt' };
+  }
+  return { messages: cleanMessages, mode: 'prompt' };
+}
+
 function projectContextSections(context: GenerateInput['projectContext']): string[] {
   if (!context) return [];
   const sections: string[] = [];
@@ -728,14 +762,17 @@ export async function generateViaAgent(
 
   // Factory for creating agents with a given message history. Used for both
   // the initial agent and transport-level retry agents (conversation replay).
-  const createRetryAgent = (messages: AgentMessage[]): Agent => {
+  const createRetryAgent = (
+    messages: AgentMessage[],
+    retryThinkingLevel = thinkingLevel,
+  ): Agent => {
     const retryAgent = new Agent({
       initialState: {
         systemPrompt: augmentedSystemPrompt,
         model: piModel as unknown as PiAiModel<'openai-completions'>,
         messages,
         tools,
-        thinkingLevel,
+        thinkingLevel: retryThinkingLevel,
       },
       convertToLlm: (msgs) =>
         msgs.filter(
@@ -767,15 +804,18 @@ export async function generateViaAgent(
     return retryAgent;
   };
 
+  const attachAbortSignal = (target: Agent): void => {
+    if (!input.signal) return;
+    if (input.signal.aborted) {
+      target.abort();
+    } else {
+      input.signal.addEventListener('abort', () => target.abort(), { once: true });
+    }
+  };
+
   let agent = createRetryAgent(historyAsAgentMessages);
 
-  if (input.signal) {
-    if (input.signal.aborted) {
-      agent.abort();
-    } else {
-      input.signal.addEventListener('abort', () => agent.abort(), { once: true });
-    }
-  }
+  attachAbortSignal(agent);
 
   log.info('[generate] step=send_request', ctx);
   const sendStart = Date.now();
@@ -842,17 +882,60 @@ export async function generateViaAgent(
     throw remapProviderError(err, input.model.provider, input.wire);
   }
 
-  // Post-agent transport-level retry: if the agent loop exited with a
-  // transport-level error (terminated, premature close, ECONNRESET), create a
-  // fresh agent with the successful conversation history and retry the turn.
-  // This handles proxy servers that drop long-lived SSE connections after N
-  // minutes. Tool side effects (file writes) are idempotent, so replaying
-  // prior turns is safe.
+  // Post-agent recovery:
+  // - Retry transport-level failures by replaying the turn from clean history.
+  // - Retry reasoning_content round-trip failures once with thinking off,
+  //   preserving the current transcript up to the failed provider response.
   let transportRetryCount = 0;
-  while (transportRetryCount < MAX_TRANSPORT_RETRIES) {
+  let reasoningFallbackUsed = false;
+  while (true) {
     const checkMsg = findFinalAssistantMessage(agent.state.messages);
     if (!checkMsg || checkMsg.stopReason === 'stop') break;
     if (input.signal?.aborted) break;
+
+    const shouldRetryWithoutReasoning =
+      !reasoningFallbackUsed &&
+      thinkingLevel !== 'off' &&
+      checkMsg.stopReason === 'error' &&
+      isReasoningContentRoundTripError(checkMsg.errorMessage);
+    if (shouldRetryWithoutReasoning) {
+      reasoningFallbackUsed = true;
+      log.warn('[generate] step=reasoning_retry', {
+        ...ctx,
+        reason: checkMsg.errorMessage,
+      });
+      deps.onRetry?.({
+        attempt: 1,
+        totalAttempts: 1,
+        delayMs: 0,
+        reason: `reasoning retry: ${checkMsg.errorMessage}`,
+      });
+
+      const fallback = prepareReasoningFallback(agent.state.messages);
+      capturedGetApiKeyError = null;
+      agent = createRetryAgent(fallback.messages, 'off');
+      attachAbortSignal(agent);
+
+      const retryStart = Date.now();
+      try {
+        if (fallback.mode === 'continue') {
+          await agent.continue();
+        } else {
+          await agent.prompt(userContent);
+        }
+        await agent.waitForIdle();
+      } catch (err) {
+        log.error('[generate] step=reasoning_retry.fail', {
+          ...ctx,
+          ms: Date.now() - retryStart,
+          errorClass: err instanceof Error ? err.constructor.name : typeof err,
+        });
+        throw remapProviderError(err, input.model.provider, input.wire);
+      }
+      continue;
+    }
+
+    if (transportRetryCount >= MAX_TRANSPORT_RETRIES) break;
     const retryableTransportFailure =
       checkMsg.stopReason === 'error'
         ? isTransportLevelError(checkMsg.errorMessage)
@@ -879,13 +962,7 @@ export async function generateViaAgent(
     const cleanMessages = stripFailedTurn(agent.state.messages);
     capturedGetApiKeyError = null;
     agent = createRetryAgent(cleanMessages);
-    if (input.signal) {
-      if (input.signal.aborted) {
-        agent.abort();
-      } else {
-        input.signal.addEventListener('abort', () => agent.abort(), { once: true });
-      }
-    }
+    attachAbortSignal(agent);
 
     const retryStart = Date.now();
     try {
