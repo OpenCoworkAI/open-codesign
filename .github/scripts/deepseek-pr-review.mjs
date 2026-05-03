@@ -10,6 +10,7 @@ import {
   readTextFileIfExists,
   requireEnv,
   runGh,
+  runGit,
   truncate,
   writeTempJson,
 } from './deepseek-common.mjs';
@@ -56,6 +57,29 @@ function serializeExcerpts(excerpts) {
   return excerpts.map((entry) => `## ${entry.path}\n${entry.content}`).join('\n\n');
 }
 
+function loadPullRequestDiff(prNumber, repo, prMeta) {
+  try {
+    return runGh(['pr', 'diff', prNumber, '-R', repo]);
+  } catch (error) {
+    const message = String(error?.message || error);
+    if (!message.includes('diff exceeded the maximum number of files')) {
+      throw error;
+    }
+    const baseRef = prMeta.baseRefName;
+    const headRef = `refs/remotes/pull/${prNumber}/head`;
+    const localDiff = runGit([
+      'diff',
+      '--find-renames',
+      '--unified=80',
+      `origin/${baseRef}...${headRef}`,
+    ]);
+    return [
+      'GitHub PR diff API refused this large PR diff (>300 files); using local git diff.',
+      localDiff,
+    ].join('\n\n');
+  }
+}
+
 async function main() {
   const apiKey = requireEnv('DEEPSEEK_API_KEY');
   const baseUrl = requireEnv('DEEPSEEK_BASE_URL');
@@ -85,8 +109,8 @@ async function main() {
       'number,title,body,labels,author,additions,deletions,changedFiles,headRefOid,baseRefName,headRefName,url',
     ]),
   );
-  const diff = runGh(['pr', 'diff', prNumber, '-R', repo]);
   const files = listPullRequestFiles(repo, prNumber);
+  const diff = loadPullRequestDiff(prNumber, repo, prMeta);
   const docs = loadRepoDocs(
     [
       'CLAUDE.md',

@@ -14,8 +14,62 @@ import { ERROR_CODES } from './error-codes';
  * tweak block"; present-but-malformed markers are a protocol error.
  */
 
-const EDITMODE_RE = /\/\*\s*EDITMODE-BEGIN\s*\*\/([\s\S]*?)\/\*\s*EDITMODE-END\s*\*\//;
-const TWEAK_SCHEMA_RE = /\/\*\s*TWEAK-SCHEMA-BEGIN\s*\*\/([\s\S]*?)\/\*\s*TWEAK-SCHEMA-END\s*\*\//;
+interface MarkerBlock {
+  start: number;
+  end: number;
+  innerStart: number;
+  innerEnd: number;
+  inner: string;
+}
+
+function compactMarkerName(value: string): string {
+  let out = '';
+  for (const ch of value) {
+    if (ch.trim().length !== 0) out += ch;
+  }
+  return out;
+}
+
+function findMarker(
+  source: string,
+  marker: string,
+  from = 0,
+): { start: number; end: number } | null {
+  let start = source.indexOf('/*', from);
+  while (start >= 0) {
+    const end = source.indexOf('*/', start + 2);
+    if (end < 0) return null;
+    if (compactMarkerName(source.slice(start + 2, end)) === marker) {
+      return { start, end: end + 2 };
+    }
+    start = source.indexOf('/*', end + 2);
+  }
+  return null;
+}
+
+function findMarkerBlock(source: string, kind: 'EDITMODE' | 'TWEAK-SCHEMA'): MarkerBlock | null {
+  const begin = findMarker(source, `${kind}-BEGIN`);
+  if (begin === null) return null;
+  const end = findMarker(source, `${kind}-END`, begin.end);
+  if (end === null) return null;
+  return {
+    start: begin.start,
+    end: end.end,
+    innerStart: begin.end,
+    innerEnd: end.start,
+    inner: source.slice(begin.end, end.start),
+  };
+}
+
+function replaceMarkerBlock(
+  source: string,
+  kind: 'EDITMODE' | 'TWEAK-SCHEMA',
+  replacement: string,
+): string {
+  const block = findMarkerBlock(source, kind);
+  if (block === null) return source;
+  return `${source.slice(0, block.start)}/*${kind}-BEGIN*/${replacement}/*${kind}-END*/${source.slice(block.end)}`;
+}
 
 export interface EditmodeBlock {
   tokens: Record<string, unknown>;
@@ -26,9 +80,9 @@ export interface EditmodeBlock {
 }
 
 export function parseEditmodeBlock(source: string): EditmodeBlock | null {
-  const match = EDITMODE_RE.exec(source);
-  if (!match) return null;
-  const raw = (match[1] ?? '').trim();
+  const block = findMarkerBlock(source, 'EDITMODE');
+  if (block === null) return null;
+  const raw = block.inner.trim();
   if (raw.length === 0) return { tokens: {}, raw, source: 'marked' };
   let parsed: unknown;
   try {
@@ -53,10 +107,7 @@ export function parseEditmodeBlock(source: string): EditmodeBlock | null {
 
 export function replaceEditmodeBlock(source: string, newTokens: Record<string, unknown>): string {
   const json = JSON.stringify(newTokens, null, 2);
-  if (EDITMODE_RE.test(source)) {
-    return source.replace(EDITMODE_RE, `/*EDITMODE-BEGIN*/${json}/*EDITMODE-END*/`);
-  }
-  return source;
+  return replaceMarkerBlock(source, 'EDITMODE', json);
 }
 
 /**
@@ -147,9 +198,9 @@ function validateEntry(value: unknown): TokenSchemaEntry | null {
 }
 
 export function parseTweakSchema(source: string): TweakSchema | null {
-  const match = TWEAK_SCHEMA_RE.exec(source);
-  if (!match) return null;
-  const raw = (match[1] ?? '').trim();
+  const block = findMarkerBlock(source, 'TWEAK-SCHEMA');
+  if (block === null) return null;
+  const raw = block.inner.trim();
   if (raw.length === 0) return {};
   let parsed: unknown;
   try {
@@ -192,13 +243,13 @@ export function parseTweakSchema(source: string): TweakSchema | null {
  */
 export function replaceTweakSchema(source: string, schema: TweakSchema): string {
   const json = JSON.stringify(schema, null, 2);
-  if (TWEAK_SCHEMA_RE.test(source)) {
-    return source.replace(TWEAK_SCHEMA_RE, `/*TWEAK-SCHEMA-BEGIN*/${json}/*TWEAK-SCHEMA-END*/`);
+  if (findMarkerBlock(source, 'TWEAK-SCHEMA')) {
+    return replaceMarkerBlock(source, 'TWEAK-SCHEMA', json);
   }
-  const marked = EDITMODE_RE.exec(source);
+  const marked = findMarkerBlock(source, 'EDITMODE');
   if (marked) {
     // Find the end of the statement containing the EDITMODE block (next ';').
-    const editEnd = marked.index + marked[0].length;
+    const editEnd = marked.end;
     const semi = source.indexOf(';', editEnd);
     const insertAt = semi >= 0 ? semi + 1 : editEnd;
     const block = `\nconst TWEAK_SCHEMA = /*TWEAK-SCHEMA-BEGIN*/${json}/*TWEAK-SCHEMA-END*/;`;

@@ -513,7 +513,14 @@ export function isSupportedOnboardingProvider(p: string): p is SupportedOnboardi
 export function detectWireFromBaseUrl(baseUrl: string): WireApi {
   const lower = baseUrl.toLowerCase();
   if (lower.includes('anthropic')) return 'anthropic';
-  if (lower.includes('openai.azure.com') || lower.includes('/responses')) {
+  let host = '';
+  try {
+    host = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    host = '';
+  }
+  const isAzureOpenAiHost = host === 'openai.azure.com' || host.endsWith('.openai.azure.com');
+  if (isAzureOpenAiHost || lower.includes('/responses')) {
     return 'openai-responses';
   }
   return 'openai-chat';

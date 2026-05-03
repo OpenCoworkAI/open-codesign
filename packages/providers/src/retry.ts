@@ -84,19 +84,65 @@ function classifyByStatus(status: number, err: unknown, wire?: WireApi): RetryDe
   return undefined;
 }
 
-const TRANSPORT_ERROR_RE =
-  /(?:fetch\s+failed.*\bterminated\b|\bterminated\b|premature\s+close|stream\s+(?:ended|closed)|ECONNRESET)\b/i;
-const PROVIDER_ABORTED_TRANSPORT_RE =
-  /(?:fetch\s+failed.*\baborted\b|request\s+was\s+aborted|generation\s+aborted\s+by\s+provider|provider\s+aborted|upstream\s+aborted|read\s*timeout|connection\s+reset|socket\s+hang\s+up)\b/i;
+function normalizeErrorText(errorMessage: string): string {
+  let out = '';
+  let inWhitespace = false;
+  for (const ch of errorMessage.toLowerCase()) {
+    if (ch.trim().length === 0) {
+      if (!inWhitespace) out += ' ';
+      inWhitespace = true;
+    } else {
+      out += ch;
+      inWhitespace = false;
+    }
+  }
+  return out;
+}
+
+function includesWord(message: string, word: string): boolean {
+  let index = message.indexOf(word);
+  while (index >= 0) {
+    const before = message[index - 1];
+    const after = message[index + word.length];
+    const beforeOk = before === undefined || !isWordChar(before);
+    const afterOk = after === undefined || !isWordChar(after);
+    if (beforeOk && afterOk) return true;
+    index = message.indexOf(word, index + word.length);
+  }
+  return false;
+}
+
+function isWordChar(ch: string): boolean {
+  const code = ch.charCodeAt(0);
+  return (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || ch === '_';
+}
 
 export function isTransportLevelError(errorMessage: string | undefined): boolean {
   if (!errorMessage) return false;
-  return TRANSPORT_ERROR_RE.test(errorMessage);
+  const message = normalizeErrorText(errorMessage);
+  return (
+    includesWord(message, 'terminated') ||
+    message.includes('premature close') ||
+    message.includes('stream ended') ||
+    message.includes('stream closed') ||
+    message.includes('econnreset')
+  );
 }
 
 export function isProviderAbortedTransportError(errorMessage: string | undefined): boolean {
   if (!errorMessage) return false;
-  return PROVIDER_ABORTED_TRANSPORT_RE.test(errorMessage);
+  const message = normalizeErrorText(errorMessage);
+  return (
+    (message.includes('fetch failed') && message.includes('aborted')) ||
+    message.includes('request was aborted') ||
+    message.includes('generation aborted by provider') ||
+    message.includes('provider aborted') ||
+    message.includes('upstream aborted') ||
+    message.includes('read timeout') ||
+    message.includes('readtimeout') ||
+    message.includes('connection reset') ||
+    message.includes('socket hang up')
+  );
 }
 
 function classifyByNetwork(err: unknown): RetryDecision | undefined {

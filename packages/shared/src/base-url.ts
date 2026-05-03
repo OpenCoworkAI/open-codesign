@@ -28,18 +28,37 @@ const INFERENCE_ENDPOINT_SUFFIXES: readonly string[] = [
   'models',
 ];
 
-const ENDPOINT_SUFFIX_RE = new RegExp(
-  `/(?:${[...INFERENCE_ENDPOINT_SUFFIXES]
-    .sort((a, b) => b.length - a.length)
-    .map((s) => s.replace(/\//g, '\\/'))
-    .join('|')})$`,
-);
+function trimTrailingSlashes(input: string): string {
+  let out = input;
+  while (out.endsWith('/')) out = out.slice(0, -1);
+  return out;
+}
 
 export function stripInferenceEndpointSuffix(baseUrl: string): string {
   let out = baseUrl.split('#')[0]?.split('?')[0] ?? '';
-  out = out.replace(/\/+$/, '');
-  out = out.replace(ENDPOINT_SUFFIX_RE, '');
+  out = trimTrailingSlashes(out);
+  const lower = out.toLowerCase();
+  for (const suffix of [...INFERENCE_ENDPOINT_SUFFIXES].sort((a, b) => b.length - a.length)) {
+    const needle = `/${suffix}`;
+    if (lower.endsWith(needle)) {
+      return out.slice(0, out.length - needle.length);
+    }
+  }
   return out;
+}
+
+function isVersionSegment(segment: string): boolean {
+  if (segment.length < 2 || segment[0]?.toLowerCase() !== 'v') return false;
+  const second = segment.charCodeAt(1);
+  if (second < 48 || second > 57) return false;
+  for (let i = 2; i < segment.length; i += 1) {
+    const code = segment.charCodeAt(i);
+    const digit = code >= 48 && code <= 57;
+    const lower = code >= 97 && code <= 122;
+    const upper = code >= 65 && code <= 90;
+    if (!digit && !lower && !upper) return false;
+  }
+  return true;
 }
 
 /**
@@ -59,7 +78,7 @@ export function stripInferenceEndpointSuffix(baseUrl: string): string {
  */
 export function ensureVersionedBase(baseUrl: string): string {
   const cleaned = stripInferenceEndpointSuffix(baseUrl);
-  if (/\/v\d+[a-z\d]*(\/|$)/i.test(cleaned)) return cleaned;
+  if (cleaned.split('/').some(isVersionSegment)) return cleaned;
   return `${cleaned}/v1`;
 }
 
@@ -88,15 +107,13 @@ export type CanonicalWire =
  */
 export function canonicalBaseUrl(baseUrl: string, wire: CanonicalWire): string {
   if (wire === 'openai-codex-responses') {
-    // Non-regex trailing-slash trim. CodeQL flags `/\/+$/` as a polynomial
-    // regex (ReDoS-adjacent on long all-slash inputs). A plain while-loop
-    // is O(n) with no backtracking and makes the bound obvious to readers.
-    let out = baseUrl;
-    while (out.endsWith('/')) out = out.slice(0, -1);
-    return out;
+    return trimTrailingSlashes(baseUrl);
   }
   const stripped = stripInferenceEndpointSuffix(baseUrl);
-  if (wire === 'anthropic') return stripped.replace(/\/v1$/, '');
+  if (wire === 'anthropic' && stripped.toLowerCase().endsWith('/v1')) {
+    return stripped.slice(0, -3);
+  }
+  if (wire === 'anthropic') return stripped;
   return ensureVersionedBase(stripped);
 }
 

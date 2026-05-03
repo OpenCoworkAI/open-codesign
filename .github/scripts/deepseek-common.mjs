@@ -86,6 +86,20 @@ export function runGh(args, options = {}) {
   }
 }
 
+export function runGit(args, fallback = '') {
+  try {
+    return execFileSync('git', args, {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      maxBuffer: 40 * 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch (error) {
+    if (fallback !== '') return fallback;
+    throw new Error(formatCommandError('git', args, error));
+  }
+}
+
 function runGitGrepFromRgArgs(args) {
   let fixedStrings = false;
   let lineNumbers = false;

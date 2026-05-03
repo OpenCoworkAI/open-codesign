@@ -1,3 +1,10 @@
+import {
+  collapseWhitespace,
+  extractHtmlElementInner,
+  removeHtmlComments,
+  removeHtmlElementBlocks,
+  stripHtmlTags,
+} from '@open-codesign/shared/html-utils';
 import type { ExportResult } from './index';
 
 export interface MarkdownMeta {
@@ -65,20 +72,19 @@ function escapeYaml(value: string): string {
 }
 
 function deriveTitle(html: string): string {
-  const t = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html ?? '');
-  if (t?.[1]) return decodeEntities(stripTags(t[1])).trim();
-  const h1 = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html ?? '');
-  if (h1?.[1]) return decodeEntities(stripTags(h1[1])).trim();
+  const title = extractHtmlElementInner(html ?? '', 'title');
+  if (title) return decodeEntities(stripTags(title)).trim();
+  const h1 = extractHtmlElementInner(html ?? '', 'h1');
+  if (h1) return decodeEntities(stripTags(h1)).trim();
   return 'open-codesign export';
 }
 
 function convertBody(html: string): string {
   let out = html;
-  const headRe = /<head[\s>][\s\S]*?<\/head>/gi;
-  out = out.replace(headRe, '');
-  out = out.replace(/<script[\s\S]*?<\/script>/gi, '');
-  out = out.replace(/<style[\s\S]*?<\/style>/gi, '');
-  out = out.replace(/<!--[\s\S]*?-->/g, '');
+  out = removeHtmlElementBlocks(out, 'head');
+  out = removeHtmlElementBlocks(out, 'script');
+  out = removeHtmlElementBlocks(out, 'style');
+  out = removeHtmlComments(out);
 
   out = out.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_m, inner: string) => {
     const text = decodeEntities(stripTags(inner));
@@ -144,7 +150,9 @@ function renderList(inner: string, ordered: boolean): string {
   while (m !== null) {
     const text = decodeEntities(stripTags(m[1] ?? ''))
       .trim()
-      .replace(/\s+/g, ' ');
+      .split('\n')
+      .map((line) => collapseWhitespace(line).trim())
+      .join(' ');
     const prefix = ordered ? `${i}.` : '-';
     items.push(`${prefix} ${text}`);
     i += 1;
@@ -154,7 +162,7 @@ function renderList(inner: string, ordered: boolean): string {
 }
 
 function stripTags(input: string): string {
-  return input.replace(/<[^>]+>/g, '');
+  return stripHtmlTags(input);
 }
 
 /**

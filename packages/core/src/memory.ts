@@ -327,13 +327,17 @@ export function parseGlobalMemoryIndex(raw: string): GlobalMemoryEntry[] {
  * Looks for the "Purpose:" line under "## Overview".
  */
 export function extractSummaryFromMemory(memoryContent: string): string {
-  const purposeMatch = memoryContent.match(/^-\s*Purpose:\s*(.+)$/m);
-  if (purposeMatch?.[1]) {
-    return purposeMatch[1].trim().slice(0, 40);
+  let style = '';
+  for (const rawLine of memoryContent.split('\n')) {
+    const line = rawLine.trimStart();
+    if (!line.startsWith('-')) continue;
+    const body = line.slice(1).trimStart();
+    if (body.startsWith('Purpose:')) {
+      return body.slice('Purpose:'.length).trim().slice(0, 40);
+    }
+    if (!style && body.startsWith('Style:')) {
+      style = body.slice('Style:'.length).trim().slice(0, 40);
+    }
   }
-  const styleMatch = memoryContent.match(/^-\s*Style:\s*(.+)$/m);
-  if (styleMatch?.[1]) {
-    return styleMatch[1].trim().slice(0, 40);
-  }
-  return '';
+  return style;
 }

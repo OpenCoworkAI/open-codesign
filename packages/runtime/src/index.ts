@@ -12,6 +12,11 @@
  */
 
 import { ensureEditmodeMarkers } from '@open-codesign/shared';
+import {
+  getHtmlAttribute,
+  removeCspMetaTags,
+  transformHtmlElementBlocks,
+} from '@open-codesign/shared/html-utils';
 
 import BABEL_STANDALONE from '../vendor/babel.standalone.js?raw';
 import DESIGN_CANVAS_JSX from '../vendor/design-canvas.jsx?raw';
@@ -32,9 +37,6 @@ const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
 const OVERLAY_MARKER = '<!-- CODESIGN_OVERLAY_SCRIPT -->';
 const JSX_RUNTIME_MARKER = '<!-- CODESIGN_JSX_RUNTIME -->';
 const STANDALONE_RUNTIME_MARKER = '<!-- CODESIGN_STANDALONE_RUNTIME -->';
-const ARTIFACT_SOURCE_REFERENCE_RE =
-  /<!--\s*artifact source lives in\s+([^<>]+?\.(?:jsx|tsx))\s*-->/i;
-
 export type RenderableSourceKind = 'html' | 'jsx' | 'tsx' | 'unknown';
 
 export interface BuildPreviewDocumentOptions {
@@ -60,10 +62,10 @@ function looksLikeFullHtmlDocument(source: string): boolean {
 function looksLikeJsxSource(source: string): boolean {
   return (
     source.includes(JSX_TEMPLATE_BEGIN) ||
-    /EDITMODE-BEGIN/.test(source) ||
-    /\bReactDOM\.createRoot\s*\(/.test(source) ||
-    /(?:^|\n)\s*(?:function|const|let)\s+_?App\b/.test(source) ||
-    /<[A-Z][A-Za-z0-9]*(?:\s|>|\/)/.test(source)
+    source.includes('EDITMODE-BEGIN') ||
+    source.includes('ReactDOM.createRoot') ||
+    containsAppDeclaration(source) ||
+    containsUppercaseJsxTag(source)
   );
 }
 
@@ -94,8 +96,8 @@ function normalizeArtifactSourceReferencePath(reference: string): string | null 
   if (
     normalized.length === 0 ||
     normalized.startsWith('/') ||
-    /^[A-Za-z]:\//.test(normalized) ||
-    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(normalized)
+    hasWindowsDrivePrefix(normalized) ||
+    hasUrlSchemePrefix(normalized)
   ) {
     return null;
   }
@@ -110,10 +112,93 @@ function normalizeArtifactSourceReferencePath(reference: string): string | null 
   return normalized;
 }
 
+function hasWindowsDrivePrefix(value: string): boolean {
+  if (value.length < 3) return false;
+  const first = value.charCodeAt(0);
+  const isLetter = (first >= 65 && first <= 90) || (first >= 97 && first <= 122);
+  return isLetter && value[1] === ':' && value[2] === '/';
+}
+
+function hasUrlSchemePrefix(value: string): boolean {
+  const colon = value.indexOf(':');
+  if (colon <= 0) return false;
+  const first = value.charCodeAt(0);
+  const firstOk = (first >= 65 && first <= 90) || (first >= 97 && first <= 122);
+  if (!firstOk) return false;
+  for (let i = 1; i < colon; i += 1) {
+    const code = value.charCodeAt(i);
+    const ok =
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57) ||
+      value[i] === '+' ||
+      value[i] === '.' ||
+      value[i] === '-';
+    if (!ok) return false;
+  }
+  return true;
+}
+
+function isIdentifierBoundary(ch: string | undefined): boolean {
+  return ch === undefined || !/[A-Za-z0-9_$]/u.test(ch);
+}
+
+function containsNamedDeclaration(source: string, name: 'App' | '_App'): boolean {
+  for (const keyword of ['function', 'const', 'let']) {
+    let index = source.indexOf(keyword);
+    while (index >= 0) {
+      const before = source[index - 1];
+      const after = source[index + keyword.length];
+      if (isIdentifierBoundary(before) && isIdentifierBoundary(after)) {
+        let cursor = index + keyword.length;
+        while (cursor < source.length && source[cursor]?.trim().length === 0) cursor += 1;
+        if (
+          source.slice(cursor, cursor + name.length) === name &&
+          isIdentifierBoundary(source[cursor + name.length])
+        ) {
+          return true;
+        }
+      }
+      index = source.indexOf(keyword, index + keyword.length);
+    }
+  }
+  return false;
+}
+
+function containsAppDeclaration(source: string): boolean {
+  return containsNamedDeclaration(source, 'App') || containsNamedDeclaration(source, '_App');
+}
+
+function isUppercaseAscii(ch: string | undefined): boolean {
+  if (!ch) return false;
+  const code = ch.charCodeAt(0);
+  return code >= 65 && code <= 90;
+}
+
+function containsUppercaseJsxTag(source: string): boolean {
+  let index = source.indexOf('<');
+  while (index >= 0) {
+    if (isUppercaseAscii(source[index + 1])) return true;
+    index = source.indexOf('<', index + 1);
+  }
+  return false;
+}
+
 export function findArtifactSourceReference(source: string): string | null {
-  const match = ARTIFACT_SOURCE_REFERENCE_RE.exec(source);
-  if (!match) return null;
-  return normalizeArtifactSourceReferencePath(match[1] ?? '');
+  let cursor = 0;
+  const prefix = 'artifact source lives in';
+  while (cursor < source.length) {
+    const start = source.indexOf('<!--', cursor);
+    if (start < 0) return null;
+    const end = source.indexOf('-->', start + 4);
+    if (end < 0) return null;
+    const body = source.slice(start + 4, end).trim();
+    if (body.toLowerCase().startsWith(prefix)) {
+      return normalizeArtifactSourceReferencePath(body.slice(prefix.length).trim());
+    }
+    cursor = end + 3;
+  }
+  return null;
 }
 
 export function resolveArtifactSourceReferencePath(
@@ -140,7 +225,7 @@ function escapeForScriptLiteral(jsx: string): string {
   // JSON.stringify handles quotes/newlines; the </script> escape prevents the
   // outer <script> from being closed early if the agent's source happens to
   // contain that literal string.
-  return JSON.stringify(jsx).replace(/<\/script>/g, '<\\/script>');
+  return JSON.stringify(jsx).split('</script>').join('<\\/script>');
 }
 
 function escapeHtmlAttr(value: string): string {
@@ -156,10 +241,10 @@ function baseTag(baseHref: string | undefined): string {
 }
 
 function autoMountJsxIfNeeded(source: string): string {
-  if (/\bReactDOM\.createRoot\s*\(/.test(source)) return source;
-  const component = /(?:^|\n)\s*(?:function|const|let)\s+App\b/.test(source)
+  if (source.includes('ReactDOM.createRoot')) return source;
+  const component = containsNamedDeclaration(source, 'App')
     ? 'App'
-    : /(?:^|\n)\s*(?:function|const|let)\s+_App\b/.test(source)
+    : containsNamedDeclaration(source, '_App')
       ? '_App'
       : null;
   if (component === null) return source;
@@ -288,15 +373,24 @@ function overlayScriptTag(): string {
 // pay zero inline-script cost.
 function needsJsxRuntimeInHtml(html: string): boolean {
   return (
-    /<script[^>]*type=["']text\/babel["']/i.test(html) ||
-    /\bReactDOM\.createRoot\b/.test(html) ||
-    /\bReact\.createElement\b/.test(html) ||
-    /\bIOSDevice\b/.test(html) ||
-    /\bDesignCanvas\b/.test(html) ||
-    /\bAppleWatchUltra\b/.test(html) ||
-    /\bAndroidPhone\b/.test(html) ||
-    /\bMacOSSafari\b/.test(html)
+    hasTextBabelScript(html) ||
+    html.includes('ReactDOM.createRoot') ||
+    html.includes('React.createElement') ||
+    html.includes('IOSDevice') ||
+    html.includes('DesignCanvas') ||
+    html.includes('AppleWatchUltra') ||
+    html.includes('AndroidPhone') ||
+    html.includes('MacOSSafari')
   );
+}
+
+function hasTextBabelScript(html: string): boolean {
+  let found = false;
+  transformHtmlElementBlocks(html, 'script', ({ attrs, tag }) => {
+    if (getHtmlAttribute(attrs, 'type')?.toLowerCase() === 'text/babel') found = true;
+    return tag;
+  });
+  return found;
 }
 
 function jsxRuntimeScripts(): string {
@@ -310,41 +404,48 @@ function jsxRuntimeScripts(): string {
 }
 
 function stripHostJsxRuntimeScripts(html: string): string {
-  return html.replace(
-    /<script\b[^>]*\bsrc=(["'])([^"']+)\1[^>]*>\s*<\/script>/gi,
-    (tag, _quote: string, rawSrc: string) => {
-      let url: URL;
-      try {
-        url = new URL(rawSrc);
-      } catch {
-        return tag;
-      }
-      const path = url.pathname;
-      const isReactUmd =
-        /\/react@\d[^/]*\/umd\/react\.(?:development|production(?:\.min)?)\.js$/i.test(path);
-      const isReactDomUmd =
-        /\/react-dom@\d[^/]*\/umd\/react-dom\.(?:development|production(?:\.min)?)\.js$/i.test(
-          path,
-        );
-      const isBabelStandalone = /\/@babel\/standalone(?:@\d[^/]*)?\/babel\.min\.js$/i.test(path);
-      return isReactUmd || isReactDomUmd || isBabelStandalone ? '' : tag;
-    },
-  );
+  return transformHtmlElementBlocks(html, 'script', ({ attrs, tag }) => {
+    const rawSrc = getHtmlAttribute(attrs, 'src');
+    if (rawSrc === null) return tag;
+    let url: URL;
+    try {
+      url = new URL(rawSrc);
+    } catch {
+      return tag;
+    }
+    return isKnownHostJsxRuntimePath(url.pathname) ? '' : tag;
+  });
+}
+
+function isKnownHostJsxRuntimePath(path: string): boolean {
+  const parts = path.toLowerCase().split('/').filter(Boolean);
+  const last = parts[parts.length - 1] ?? '';
+  const parent = parts[parts.length - 2] ?? '';
+  const pkg = parts[parts.length - 3] ?? '';
+  if (parent === 'umd' && pkg.startsWith('react@')) {
+    return last === 'react.development.js' || last === 'react.production.min.js';
+  }
+  if (parent === 'umd' && pkg.startsWith('react-dom@')) {
+    return last === 'react-dom.development.js' || last === 'react-dom.production.min.js';
+  }
+  return last === 'babel.min.js' && parts.some((part) => part.startsWith('@babel'));
 }
 
 function inlineScriptLooksLikeJsx(scriptBody: string): boolean {
   return (
-    /\bReactDOM\.createRoot\b/.test(scriptBody) &&
-    (/\)\s*\.render\s*\(\s*</.test(scriptBody) ||
-      /return\s*\(\s*</.test(scriptBody) ||
-      /return\s*</.test(scriptBody) ||
-      /<[A-Z][A-Za-z0-9]*(?:\s|>|\/)/.test(scriptBody))
+    scriptBody.includes('ReactDOM.createRoot') &&
+    (scriptBody.includes('.render(<') ||
+      scriptBody.includes('return (<') ||
+      scriptBody.includes('return <') ||
+      containsUppercaseJsxTag(scriptBody))
   );
 }
 
 function markInlineJsxScriptsAsBabel(html: string): string {
-  return html.replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (tag, attrs: string, body) => {
-    if (/\bsrc\s*=/i.test(attrs) || /\btype\s*=/i.test(attrs)) return tag;
+  return transformHtmlElementBlocks(html, 'script', ({ attrs, body, tag }) => {
+    if (getHtmlAttribute(attrs, 'src') !== null || getHtmlAttribute(attrs, 'type') !== null) {
+      return tag;
+    }
     if (!inlineScriptLooksLikeJsx(body)) return tag;
     return `<script type="text/babel"${attrs}>${body}</script>`;
   });
@@ -454,10 +555,7 @@ export function buildPreviewDocument(
   userSource: string,
   opts: BuildPreviewDocumentOptions = {},
 ): string {
-  const stripped = userSource.replace(
-    /<meta[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi,
-    '',
-  );
+  const stripped = removeCspMetaTags(userSource);
   // Already-wrapped srcdoc (round-trip safe). When the workspace preview path
   // supplies a base URL, inject it once so relative assets still resolve.
   if (stripped.includes(JSX_TEMPLATE_BEGIN)) {
@@ -504,10 +602,7 @@ export function buildStandaloneDocument(
   userSource: string,
   opts: BuildPreviewDocumentOptions = {},
 ): string {
-  const stripped = userSource.replace(
-    /<meta[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi,
-    '',
-  );
+  const stripped = removeCspMetaTags(userSource);
   const classified = classifyRenderableSource(stripped, opts.path);
   const kind = classified === 'unknown' && opts.path === undefined ? 'jsx' : classified;
   if (kind === 'unknown') {

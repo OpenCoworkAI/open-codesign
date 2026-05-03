@@ -11,6 +11,13 @@ import {
   type LocalInputFile,
   type StoredDesignSystem,
 } from '@open-codesign/shared';
+import {
+  collapseWhitespace,
+  extractHtmlElementInner,
+  getHtmlAttribute,
+  removeHtmlElementBlocks,
+  stripHtmlTags,
+} from '@open-codesign/shared/html-utils';
 import { resolveSafeWorkspaceChildPath } from './workspace-reader';
 
 const TEXT_EXTS = new Set([
@@ -253,12 +260,35 @@ function cleanText(raw: string, maxChars: number): string {
 }
 
 function stripHtml(raw: string): string {
-  return raw
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return collapseWhitespace(
+    stripHtmlTags(removeHtmlElementBlocks(removeHtmlElementBlocks(raw, 'script'), 'style')),
+  ).trim();
+}
+
+function metaDescription(html: string): string | undefined {
+  let description: string | undefined;
+  const lower = html.toLowerCase();
+  let cursor = 0;
+  while (cursor < html.length) {
+    const start = lower.indexOf('<meta', cursor);
+    if (start < 0) break;
+    const next = lower[start + 5] ?? '';
+    if (next !== '>' && next.trim().length !== 0) {
+      cursor = start + 5;
+      continue;
+    }
+    const end = html.indexOf('>', start);
+    if (end < 0) break;
+    const attrs = html.slice(start + 5, end);
+    const name = getHtmlAttribute(attrs, 'name')?.toLowerCase();
+    const property = getHtmlAttribute(attrs, 'property')?.toLowerCase();
+    if (name === 'description' || property === 'og:description') {
+      const content = getHtmlAttribute(attrs, 'content');
+      if (content) description = content;
+    }
+    cursor = end + 1;
+  }
+  return description;
 }
 
 function isProbablyText(buffer: Buffer, extension: string): boolean {
@@ -670,10 +700,8 @@ async function inspectReferenceUrl(
     }
 
     const html = await readResponseText(response, fetchedUrl);
-    const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim();
-    const description =
-      html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1] ??
-      html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1];
+    const title = extractHtmlElementInner(html, 'title')?.trim();
+    const description = metaDescription(html);
 
     return {
       url: fetchedUrl,

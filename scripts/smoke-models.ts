@@ -31,6 +31,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import * as TOML from '@iarna/toml';
 import { generateViaAgent, type TextEditorFsCallbacks } from '@open-codesign/core';
+import { transformHtmlElementBlocks } from '@open-codesign/shared/html-utils';
 import { Parser } from 'acorn';
 
 interface SmokeModel {
@@ -98,7 +99,7 @@ function slug(model: SmokeModel, prompt: SmokePrompt): string {
 function qualityCheck(html: string): string[] {
   const issues: string[] = [];
 
-  const mainCount = (html.match(/<main[\s>]/gi) ?? []).length;
+  const mainCount = countStartTags(html, 'main');
   if (mainCount > 1) issues.push(`${mainCount}x <main> elements`);
 
   // Emoji used as content icons (anti-slop). Heuristic: emoji codepoint sitting
@@ -113,23 +114,38 @@ function qualityCheck(html: string): string[] {
   // distinguish module from script (Babel handles JSX in the artifact at
   // runtime) — just check it's lexically clean enough that tools like esbuild
   // wouldn't choke.
-  const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
-  for (const m of scripts) {
-    const body = m[1]?.trim();
-    if (!body) continue;
+  let scriptSyntaxFailed = false;
+  transformHtmlElementBlocks(html, 'script', ({ body, tag }) => {
+    if (scriptSyntaxFailed) return tag;
+    const trimmed = body.trim();
+    if (!trimmed) return tag;
     try {
-      Parser.parse(body, { ecmaVersion: 'latest', sourceType: 'script' });
+      Parser.parse(trimmed, { ecmaVersion: 'latest', sourceType: 'script' });
     } catch (err) {
       issues.push(`script syntax error: ${(err as Error).message.split('\n')[0]}`);
-      break;
+      scriptSyntaxFailed = true;
     }
-  }
+    return tag;
+  });
 
-  if (!/TWEAK_DEFAULTS\s*=\s*\/\*EDITMODE-BEGIN\*\//.test(html)) {
+  if (!html.includes('TWEAK_DEFAULTS') || !html.includes('/*EDITMODE-BEGIN*/')) {
     issues.push('no EDITMODE block');
   }
 
   return issues;
+}
+
+function countStartTags(html: string, tagName: string): number {
+  const lower = html.toLowerCase();
+  const needle = `<${tagName.toLowerCase()}`;
+  let count = 0;
+  let index = lower.indexOf(needle);
+  while (index >= 0) {
+    const next = lower[index + needle.length] ?? '';
+    if (next === '>' || next.trim().length === 0) count += 1;
+    index = lower.indexOf(needle, index + needle.length);
+  }
+  return count;
 }
 
 function printResult(r: RunResult): void {

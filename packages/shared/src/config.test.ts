@@ -352,6 +352,9 @@ describe('detectWireFromBaseUrl', () => {
   it('routes Azure to openai-responses', () => {
     expect(detectWireFromBaseUrl('https://org.openai.azure.com/openai')).toBe('openai-responses');
   });
+  it('does not classify arbitrary hosts containing the Azure domain string as Azure', () => {
+    expect(detectWireFromBaseUrl('https://openai.azure.com.evil.test/v1')).toBe('openai-chat');
+  });
   it('defaults to openai-chat', () => {
     expect(detectWireFromBaseUrl('https://api.deepseek.com/v1')).toBe('openai-chat');
     expect(detectWireFromBaseUrl('http://localhost:11434/v1')).toBe('openai-chat');
