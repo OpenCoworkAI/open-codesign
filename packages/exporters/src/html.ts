@@ -1,5 +1,10 @@
 import { buildStandaloneDocument } from '@open-codesign/runtime';
-import { findHtmlStartTag, insertAfterHtmlStartTag } from '@open-codesign/shared/html-utils';
+import {
+  findHtmlStartTag,
+  getHtmlAttribute,
+  insertAfterHtmlStartTag,
+  transformHtmlElementBlocks,
+} from '@open-codesign/shared/html-utils';
 import type { ExportResult } from './index';
 
 const TAILWIND_CDN = 'https://cdn.tailwindcss.com';
@@ -70,7 +75,19 @@ ${trimmed}
 }
 
 function hasTailwindScript(html: string): boolean {
-  return html.toLowerCase().includes('cdn.tailwindcss.com');
+  let found = false;
+  transformHtmlElementBlocks(html, 'script', ({ attrs, tag }) => {
+    const src = getHtmlAttribute(attrs, 'src');
+    if (src !== null) {
+      try {
+        found = new URL(src).hostname.toLowerCase() === 'cdn.tailwindcss.com';
+      } catch {
+        found = src.toLowerCase() === TAILWIND_CDN;
+      }
+    }
+    return tag;
+  });
+  return found;
 }
 
 function injectIntoHead(html: string, tag: string): string {

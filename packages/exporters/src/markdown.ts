@@ -180,12 +180,13 @@ export function sanitizeUrl(raw: string, kind: 'link' | 'image'): string | null 
     if (next === probe) break;
     probe = next;
   }
+  let encodedScheme: string | null = null;
   const colonIdx = probe.indexOf(':');
   if (colonIdx > 0) {
     const schemePart = probe.slice(0, colonIdx);
     if (hasPercentEncodedByte(schemePart)) {
       try {
-        probe = decodeURIComponent(schemePart) + probe.slice(colonIdx);
+        encodedScheme = urlScheme(`${decodeURIComponent(schemePart)}:`);
       } catch {
         // Leave probe untouched; the scheme parser below catches unsafe forms.
       }
@@ -193,7 +194,7 @@ export function sanitizeUrl(raw: string, kind: 'link' | 'image'): string | null 
   }
   probe = stripControlChars(probe).trim();
 
-  const scheme = urlScheme(probe);
+  const scheme = urlScheme(probe) ?? encodedScheme;
   if (scheme === 'http' || scheme === 'https' || scheme === 'mailto') return output;
   if (kind === 'image' && isAllowedImageDataUrl(probe)) {
     return output;
