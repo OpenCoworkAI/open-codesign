@@ -29,7 +29,7 @@ describe('isOfficialAnthropicBaseUrl', () => {
   });
   it('strips default ports so :443 / :80 still count as official', () => {
     // WHATWG URL already strips :443 from https:// and :80 from http://,
-    // but cross-scheme typos (http://…:443) would otherwise leak the port
+    // but cross-scheme typos (http://...:443) would otherwise leak the port
     // into host and misclassify the endpoint as custom.
     expect(isOfficialAnthropicBaseUrl('https://api.anthropic.com:443')).toBe(true);
     expect(isOfficialAnthropicBaseUrl('http://api.anthropic.com:443')).toBe(true);
@@ -37,7 +37,7 @@ describe('isOfficialAnthropicBaseUrl', () => {
   });
   it('preserves non-default ports as custom proxies', () => {
     // A user pointing at api.anthropic.com:8443 is running a local proxy,
-    // not the canonical endpoint — inject CC identity headers.
+    // not the canonical endpoint: inject CC identity headers.
     expect(isOfficialAnthropicBaseUrl('https://api.anthropic.com:8443')).toBe(false);
   });
 });
