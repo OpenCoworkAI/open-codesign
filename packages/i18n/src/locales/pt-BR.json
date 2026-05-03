@@ -384,7 +384,7 @@
       "data": "Diretório de dados",
       "change": "Alterar",
       "restartHint": "Escolha onde o open-codesign guarda configuração, logs e dados locais de design. As alterações são salvas permanentemente e se aplicam depois de reiniciar o app.",
-      "workspaceHint": "Pastas de workspace são gerenciadas por design no painel Arquivos. Alterar estes caminhos de armazenamento não move nem revincula arquivos de workspace existentes.",
+      "workspaceHint": "O diretório de dados cria os workspaces padrão de novos designs depois da reinicialização. Workspaces existentes continuam vinculados por design; altere ou migre pelo painel Arquivos.",
       "locationSavedToast": "Local de armazenamento salvo. Reinicie o app para aplicar.",
       "locationSaveFailed": "Não foi possível salvar o local de armazenamento",
       "onboardingTitle": "Onboarding",

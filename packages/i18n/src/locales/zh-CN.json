@@ -419,7 +419,7 @@
       "data": "数据目录",
       "change": "更改",
       "restartHint": "选择 open-codesign 保存配置、日志和本地设计数据的位置。更改会永久保存，重启应用后生效。",
-      "workspaceHint": "设计工作区按单个设计在文件面板中管理。修改这些存储路径不会移动或重新绑定已有工作区文件。",
+      "workspaceHint": "数据目录会在重启后作为新建设计默认工作区的根目录。已有设计的工作区仍按单个设计绑定；如需更改或迁移，请在文件面板操作。",
       "locationSavedToast": "存储位置已保存。重启应用后生效。",
       "locationSaveFailed": "无法保存存储位置",
       "onboardingTitle": "首次引导",

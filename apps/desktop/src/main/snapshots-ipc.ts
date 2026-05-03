@@ -87,8 +87,15 @@ function isAlreadyExists(err: unknown): boolean {
   return (err as NodeJS.ErrnoException).code === 'EEXIST';
 }
 
-async function allocateDefaultWorkspacePath(name: string): Promise<string> {
-  const defaultRoot = path.join(app.getPath('documents'), 'CoDesign');
+function resolveDefaultWorkspaceRoot(db: Database): string {
+  if (path.isAbsolute(db.dataDir)) {
+    return path.join(db.dataDir, 'workspaces');
+  }
+  return path.join(app.getPath('documents'), 'CoDesign');
+}
+
+async function allocateDefaultWorkspacePath(db: Database, name: string): Promise<string> {
+  const defaultRoot = resolveDefaultWorkspaceRoot(db);
   await mkdir(defaultRoot, { recursive: true });
   const slug = defaultDesignSlug(name);
 
@@ -421,13 +428,14 @@ export function registerSnapshotsIpc(db: Database): void {
       const name = (r['name'] as string).trim();
       const requestedWorkspacePath = parseCreateDesignWorkspacePath(r);
       const design = runDb('create-design', () => createDesign(db, name));
-      // v0.2: every design MUST have a workspace — per docs/v0.2-plan.md §2.3.
-      // When the user hasn't picked one explicitly, seed
-      //   <Documents>/CoDesign/<slug(name)>[-N]/
-      // and bind it. Collision suffix handles duplicate names.
+      // v0.2: every design must have a workspace. When the user has not picked
+      // one explicitly, seed it under the active data directory so Storage >
+      // Data applies to future default workspaces. Existing designs keep their
+      // explicit binding until the user changes or migrates it from Files.
       let autoWorkspacePath: string | null = null;
       try {
-        const workspacePath = requestedWorkspacePath ?? (await allocateDefaultWorkspacePath(name));
+        const workspacePath =
+          requestedWorkspacePath ?? (await allocateDefaultWorkspacePath(db, name));
         if (requestedWorkspacePath === undefined) {
           autoWorkspacePath = workspacePath;
         }
@@ -549,7 +557,7 @@ export function registerSnapshotsIpc(db: Database): void {
       }
       let autoWorkspacePath: string | null = null;
       try {
-        const workspacePath = await allocateDefaultWorkspacePath(name);
+        const workspacePath = await allocateDefaultWorkspacePath(db, name);
         autoWorkspacePath = workspacePath;
         await copyTrackedWorkspaceFiles(db, sourceId, sourceWorkspacePath, workspacePath);
         const bound = await bindWorkspace(db, cloned.id, workspacePath, false);

@@ -419,7 +419,7 @@
       "data": "Data directory",
       "change": "Change",
       "restartHint": "Choose where open-codesign stores config, logs, and local design data. Changes are saved permanently and take effect after restarting the app.",
-      "workspaceHint": "Design workspace folders are managed per design from the Files panel. Changing these storage paths does not move or rebind existing workspace files.",
+      "workspaceHint": "The data directory seeds default workspaces for new designs after restart. Existing design workspace folders stay bound per design; change or migrate them from the Files panel.",
       "locationSavedToast": "Storage location saved. Restart the app to apply it.",
       "locationSaveFailed": "Could not save storage location",
       "onboardingTitle": "Onboarding",
