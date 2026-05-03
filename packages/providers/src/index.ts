@@ -194,6 +194,20 @@ function isReasoningModelId(modelId: string): boolean {
 }
 
 /**
+ * Some vendors use OpenAI-compatible chat endpoints but reject the
+ * reasoning/developer-role path. Check these before the broad reasoning
+ * allowlist below so namespaced catalog IDs do not accidentally opt in.
+ */
+const OPENAI_CHAT_NON_REASONING_MODEL_PATTERN = new RegExp(
+  ['(^|/)kimi[-/]', '(^|/)moonshot[-/]', '(^|/)minimax[-/]'].join('|'),
+  'i',
+);
+
+function isKnownOpenAIChatNonReasoningModelId(modelId: string): boolean {
+  return OPENAI_CHAT_NON_REASONING_MODEL_PATTERN.test(modelId);
+}
+
+/**
  * Matches reasoning-capable model IDs commonly proxied through OpenAI-compatible
  * gateways (OpenRouter, univibe, sub2api, etc). This pattern matches the same
  * set that OPENROUTER_REASONING_MODEL_RE uses for OpenRouter, but applies to
@@ -204,7 +218,6 @@ const REASONING_MODEL_ID_PATTERN = new RegExp(
     ':thinking$',
     '(^|/)claude-(?:opus|sonnet)-4',
     '^(?:openai/)?(?:o1|o3|o4|gpt-5)(?:[-.].*)?$',
-    '^minimax/minimax-m\\d',
     '^deepseek/deepseek-r\\d',
     '^qwen/qwq',
   ].join('|'),
@@ -223,6 +236,9 @@ export function inferReasoning(
     case 'openai-codex-responses':
       return true;
     case 'openai-chat':
+      if (isKnownOpenAIChatNonReasoningModelId(modelId)) {
+        return false;
+      }
       // For official OpenAI, check both base URL and model ID pattern
       if (isOpenAIOfficial(baseUrl)) {
         return isReasoningModelId(modelId);

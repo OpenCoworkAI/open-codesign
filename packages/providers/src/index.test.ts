@@ -435,6 +435,51 @@ describe('complete', () => {
     expect(result.content).toBe('ok');
   });
 
+  it('synthesizes Kimi and MiniMax openai-chat models with reasoning disabled', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementation(async (model) => {
+      expect(model.reasoning).toBe(false);
+      expect(model.api).toBe('openai-completions');
+      expect(model.compat?.supportsDeveloperRole).toBe(false);
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: model.provider,
+        model: model.id,
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete(
+      { provider: 'custom-azure-kimi', modelId: 'Kimi-K2.6-2026-04-20' },
+      [{ role: 'user', content: 'hello' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://services.ai.azure.com/openai/v1',
+      },
+    );
+    await complete(
+      { provider: 'custom-minimax', modelId: 'minimax/minimax-m2.7' },
+      [{ role: 'user', content: 'hello' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://api.minimaxi.com/v1',
+      },
+    );
+  });
+
   it('omits pi-ai reasoning option when caller explicitly sets reasoning off', async () => {
     getModelMock.mockReturnValue(undefined);
     completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {
@@ -740,6 +785,22 @@ describe('inferReasoning', () => {
   });
 
   it('returns false for third-party openai-chat with non-reasoning model ID', () => {
+    expect(
+      inferReasoning(
+        'openai-chat',
+        'Kimi-K2.6-2026-04-20',
+        'https://services.ai.azure.com/openai/v1',
+      ),
+    ).toBe(false);
+    expect(
+      inferReasoning('openai-chat', 'moonshotai/kimi-k2-instruct', 'https://my-proxy.example/v1'),
+    ).toBe(false);
+    expect(inferReasoning('openai-chat', 'MiniMax-M2.7', 'https://api.minimaxi.com/v1')).toBe(
+      false,
+    );
+    expect(
+      inferReasoning('openai-chat', 'minimax/minimax-m2.7', 'https://api.minimaxi.com/v1'),
+    ).toBe(false);
     expect(
       inferReasoning(
         'openai-chat',
