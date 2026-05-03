@@ -1,4 +1,9 @@
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import {
+  collectLocalAssetsFromHtml,
+  type LocalAssetOptions,
+  rewriteHtmlLocalAssetReferences,
+} from './assets';
 import type { ExportResult } from './index';
 
 export interface ZipAsset {
@@ -8,9 +13,11 @@ export interface ZipAsset {
   content: Buffer | string;
 }
 
-export interface ExportZipOptions {
+export interface ExportZipOptions extends LocalAssetOptions {
   /** Extra files to bundle alongside `index.html` and the README. */
   assets?: ZipAsset[];
+  /** Automatically bundle local src/href/url() references when assetBasePath is set. */
+  collectLocalAssets?: boolean;
   /** Override the README banner. */
   readmeTitle?: string;
 }
@@ -55,8 +62,15 @@ export async function exportZip(
 
   const stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-zip-'));
   try {
+    const collectedAssets =
+      (opts.collectLocalAssets ?? true) ? await collectLocalAssetsFromHtml(htmlContent, opts) : [];
+    const exportHtml =
+      (opts.collectLocalAssets ?? true)
+        ? rewriteHtmlLocalAssetReferences(htmlContent, opts)
+        : htmlContent;
+
     const indexPath = path.join(stagingDir, 'index.html');
-    await fs.writeFile(indexPath, htmlContent, 'utf8');
+    await fs.writeFile(indexPath, exportHtml, 'utf8');
 
     const readme = README_TEMPLATE(
       opts.readmeTitle ?? 'open-codesign export',
@@ -69,13 +83,16 @@ export async function exportZip(
     zip.addFile(indexPath, 'index.html');
     zip.addFile(readmePath, 'README.md');
 
-    if (opts.assets) {
+    const assets = [...collectedAssets, ...(opts.assets ?? [])];
+    if (assets.length > 0) {
       const stagingResolved = path.resolve(stagingDir);
-      for (const asset of opts.assets) {
+      const written = new Set<string>();
+      for (const asset of assets) {
         // Normalize backslashes first: on POSIX `path.resolve` treats `\` as a
         // literal char, so a Windows-style ZIP entry like `..\..\etc\passwd`
         // would slip past the containment check unless rewritten to `/`.
         const normalized = asset.path.replace(/\\/g, '/').replace(/^\/+/, '');
+        if (written.has(normalized)) continue;
         const localPath = path.resolve(stagingDir, normalized);
         const rel = path.relative(stagingResolved, localPath);
         if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
@@ -87,6 +104,7 @@ export async function exportZip(
         await fs.mkdir(path.dirname(localPath), { recursive: true });
         await fs.writeFile(localPath, asset.content);
         zip.addFile(localPath, normalized);
+        written.add(normalized);
       }
     }
 

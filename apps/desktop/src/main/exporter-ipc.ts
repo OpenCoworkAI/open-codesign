@@ -1,4 +1,5 @@
-import { type ExporterFormat, exportArtifact } from '@open-codesign/exporters';
+import path from 'node:path';
+import { type ExporterFormat, type ExportOptions, exportArtifact } from '@open-codesign/exporters';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type { BrowserWindow } from 'electron';
 import { dialog, ipcMain } from './electron-runtime';
@@ -15,6 +16,8 @@ export interface ExportRequest {
   format: ExporterFormat;
   htmlContent: string;
   defaultFilename?: string;
+  workspacePath?: string;
+  sourcePath?: string;
 }
 
 export interface ExportResponse {
@@ -31,6 +34,8 @@ export function parseRequest(raw: unknown): ExportRequest {
   const format = r['format'];
   const html = r['htmlContent'];
   const defaultFilename = r['defaultFilename'];
+  const workspacePath = r['workspacePath'];
+  const sourcePath = r['sourcePath'];
   if (
     format !== 'html' &&
     format !== 'pdf' &&
@@ -50,7 +55,22 @@ export function parseRequest(raw: unknown): ExportRequest {
   if (typeof defaultFilename === 'string' && defaultFilename.length > 0) {
     out.defaultFilename = defaultFilename;
   }
+  if (typeof workspacePath === 'string' && workspacePath.length > 0) {
+    out.workspacePath = workspacePath;
+  }
+  if (typeof sourcePath === 'string' && sourcePath.length > 0) {
+    out.sourcePath = sourcePath;
+  }
   return out;
+}
+
+export function exportAssetOptions(req: ExportRequest): ExportOptions {
+  if (!req.workspacePath) return {};
+  const sourceDir = path.dirname(req.sourcePath ?? 'index.html');
+  return {
+    assetRootPath: req.workspacePath,
+    assetBasePath: path.resolve(req.workspacePath, sourceDir),
+  };
 }
 
 export function registerExporterIpc(getWindow: () => BrowserWindow | null): void {
@@ -68,9 +88,14 @@ export function registerExporterIpc(getWindow: () => BrowserWindow | null): void
       return { status: 'cancelled' };
     }
 
-    // All four formats ship in tier 1; the heavy deps load lazily inside
+    // Export formats load their heavy deps lazily inside
     // exportArtifact. Errors propagate to the renderer as toasts (PRINCIPLES §10).
-    const result = await exportArtifact(req.format, req.htmlContent, picked.filePath);
+    const result = await exportArtifact(
+      req.format,
+      req.htmlContent,
+      picked.filePath,
+      exportAssetOptions(req),
+    );
     return { status: 'saved', path: result.path, bytes: result.bytes };
   });
 }

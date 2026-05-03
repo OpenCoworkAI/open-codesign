@@ -72,6 +72,13 @@ export interface ExportInvokeResponse {
   path?: string;
   bytes?: number;
 }
+export interface ExportInvokePayload {
+  format: ExportFormat;
+  htmlContent: string;
+  defaultFilename?: string;
+  workspacePath?: string;
+  sourcePath?: string;
+}
 
 export interface ProviderRow {
   provider: string;
@@ -291,7 +298,7 @@ const api = {
     ipcRenderer.invoke('codesign:pick-design-system-directory') as Promise<OnboardingState>,
   clearDesignSystem: () =>
     ipcRenderer.invoke('codesign:clear-design-system') as Promise<OnboardingState>,
-  export: (payload: { format: ExportFormat; htmlContent: string; defaultFilename?: string }) =>
+  export: (payload: ExportInvokePayload) =>
     ipcRenderer.invoke('codesign:export', payload) as Promise<ExportInvokeResponse>,
   locale: {
     getSystem: () => ipcRenderer.invoke('locale:get-system') as Promise<string>,

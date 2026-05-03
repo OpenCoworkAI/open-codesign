@@ -5,14 +5,17 @@ import {
   insertAfterHtmlStartTag,
   transformHtmlElementBlocks,
 } from '@open-codesign/shared/html-utils';
+import { inlineLocalAssetsInHtml, type LocalAssetOptions } from './assets';
 import type { ExportResult } from './index';
 
 const TAILWIND_CDN = 'https://cdn.tailwindcss.com';
 const TAILWIND_TAG = `<script src="${TAILWIND_CDN}"></script>`;
 
-export interface ExportHtmlOptions {
+export interface ExportHtmlOptions extends LocalAssetOptions {
   /** Inject the Tailwind CDN script if missing. Defaults to true. */
   injectTailwind?: boolean;
+  /** Inline local src/href/url() references as data URIs when assetBasePath is set. */
+  inlineLocalAssets?: boolean;
   /** Prettify with two-space indentation. Defaults to true. */
   prettify?: boolean;
   /** Comment banner injected at the top of the file. */
@@ -21,12 +24,13 @@ export interface ExportHtmlOptions {
 
 /**
  * Export an HTML artifact to disk as a single self-contained file.
+ * Workspace-local src/href/url() references are inlined when the caller
+ * provides asset paths.
  *
- * Tier 1 inlines what we can do without parsing the DOM: the Tailwind CDN
- * tag, a doctype, a viewport meta, and a small comment banner. Anything that
- * needs a real HTML parser (font subsetting, SVG inlining, JS bundling) waits
- * for Tier 2 — and is loud about it: never silently skip work the caller
- * believed we did.
+ * The document shell still injects the Tailwind CDN
+ * tag, a doctype, a viewport meta, and a small comment banner. Remote assets
+ * still depend on network availability; local workspace references are handled
+ * during export.
  */
 export async function exportHtml(
   htmlContent: string,
@@ -34,7 +38,10 @@ export async function exportHtml(
   opts: ExportHtmlOptions = {},
 ): Promise<ExportResult> {
   const fs = await import('node:fs/promises');
-  const final = buildHtmlDocument(htmlContent, opts);
+  let final = buildHtmlDocument(htmlContent, opts);
+  if (opts.inlineLocalAssets ?? true) {
+    final = await inlineLocalAssetsInHtml(final, opts);
+  }
   await fs.writeFile(destinationPath, final, 'utf8');
   const stat = await fs.stat(destinationPath);
   return { bytes: stat.size, path: destinationPath };

@@ -879,10 +879,16 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         }
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const ext = format === 'markdown' ? 'md' : format;
+        const activeDesign =
+          designId === null
+            ? null
+            : (get().designs.find((design) => design.id === designId) ?? null);
         const res = await window.codesign.export({
           format,
           htmlContent,
           defaultFilename: `codesign-${stamp}.${ext}`,
+          ...(activeDesign?.workspacePath ? { workspacePath: activeDesign.workspacePath } : {}),
+          sourcePath: resolved.path,
         });
         if (res.status === 'saved' && res.path) {
           set({ toastMessage: tr('notifications.exportedTo', { path: res.path }) });

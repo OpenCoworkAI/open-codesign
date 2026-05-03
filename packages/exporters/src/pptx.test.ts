@@ -1,13 +1,50 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { exportPptx, extractSlides } from './pptx';
+
+const pngBytes = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+const launchMock = vi.fn();
+const newPageMock = vi.fn();
+const setViewportMock = vi.fn();
+const setContentMock = vi.fn();
+const evaluateMock = vi.fn();
+const screenshotMock = vi.fn();
+const closeMock = vi.fn();
+const sectionBoundingBoxMock = vi.fn();
+const querySectionsMock = vi.fn();
+
+vi.mock('puppeteer-core', () => ({
+  default: { launch: launchMock },
+}));
+
+vi.mock('./chrome-discovery', () => ({
+  findSystemChrome: vi.fn(async () => '/tmp/fake-chrome'),
+}));
 
 let tempDir = '';
 
 beforeAll(() => {
   tempDir = mkdtempSync(join(tmpdir(), 'codesign-pptx-test-'));
+  launchMock.mockResolvedValue({
+    newPage: newPageMock,
+    close: closeMock,
+  });
+  newPageMock.mockResolvedValue({
+    setViewport: setViewportMock,
+    setContent: setContentMock,
+    evaluate: evaluateMock,
+    screenshot: screenshotMock,
+    $$: querySectionsMock,
+  });
+  evaluateMock.mockResolvedValue(undefined);
+  screenshotMock.mockResolvedValue(pngBytes);
+  sectionBoundingBoxMock.mockResolvedValue({ x: 0, y: 0, width: 1280, height: 720 });
+  querySectionsMock.mockResolvedValue([{ boundingBox: sectionBoundingBoxMock }]);
 });
 
 afterAll(() => {
@@ -50,7 +87,7 @@ describe('exportPptx', () => {
     const result = await exportPptx(
       '<section><h1>你好世界</h1><p>第一张幻灯片</p></section>',
       dest,
-      { deckTitle: 'CJK smoke test' },
+      { deckTitle: 'CJK smoke test', renderMode: 'editable' },
     );
 
     expect(existsSync(dest)).toBe(true);
@@ -66,7 +103,23 @@ describe('exportPptx', () => {
 
   it('throws EXPORTER_PPTX_FAILED on writeFile errors', async () => {
     await expect(
-      exportPptx('<section>x</section>', join(tempDir, 'nope', 'missing-dir', 'fail.pptx')),
+      exportPptx('<section>x</section>', join(tempDir, 'nope', 'missing-dir', 'fail.pptx'), {
+        renderMode: 'editable',
+      }),
     ).rejects.toMatchObject({ code: 'EXPORTER_PPTX_FAILED' });
+  });
+
+  it('renders rich HTML slides as screenshots by default', async () => {
+    const dest = join(tempDir, 'visual.pptx');
+    const result = await exportPptx('<section><h1>Visual</h1><img src="hero.png"></section>', dest);
+
+    expect(result.bytes).toBeGreaterThan(1000);
+    expect(launchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ executablePath: '/tmp/fake-chrome' }),
+    );
+    expect(querySectionsMock).toHaveBeenCalled();
+    expect(screenshotMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'png', clip: expect.any(Object) }),
+    );
   });
 });

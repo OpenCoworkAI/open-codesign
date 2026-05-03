@@ -13,8 +13,10 @@ export const EXPORTER_FORMATS = ['html', 'pdf', 'pptx', 'zip', 'markdown'] as co
 export type ExporterFormat = (typeof EXPORTER_FORMATS)[number];
 
 export interface ExportOptions {
-  artifactId: string;
-  destinationPath: string;
+  /** Directory used to resolve relative HTML asset references during export. */
+  assetBasePath?: string | undefined;
+  /** Workspace/root directory used for root-relative references and containment. */
+  assetRootPath?: string | undefined;
 }
 
 export interface ExportResult {
@@ -26,6 +28,7 @@ export function isExporterReady(_format: ExporterFormat): boolean {
   return true;
 }
 
+export type { LocalAssetOptions } from './assets';
 export { type ChromeDiscoveryDeps, findSystemChrome } from './chrome-discovery';
 export type { ExportHtmlOptions } from './html';
 export type { ExportMarkdownOptions, MarkdownMeta } from './markdown';
@@ -47,21 +50,22 @@ export async function exportArtifact(
   format: ExporterFormat,
   htmlContent: string,
   destinationPath: string,
+  opts: ExportOptions = {},
 ): Promise<ExportResult> {
   if (format === 'html') {
-    return exportHtml(htmlContent, destinationPath);
+    return exportHtml(htmlContent, destinationPath, opts);
   }
   if (format === 'pdf') {
     const mod = await import('./pdf');
-    return mod.exportPdf(htmlContent, destinationPath);
+    return mod.exportPdf(htmlContent, destinationPath, opts);
   }
   if (format === 'pptx') {
     const mod = await import('./pptx');
-    return mod.exportPptx(htmlContent, destinationPath);
+    return mod.exportPptx(htmlContent, destinationPath, opts);
   }
   if (format === 'zip') {
     const mod = await import('./zip');
-    return mod.exportZip(htmlContent, destinationPath);
+    return mod.exportZip(htmlContent, destinationPath, opts);
   }
   if (format === 'markdown') {
     const mod = await import('./markdown');

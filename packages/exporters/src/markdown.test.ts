@@ -42,6 +42,26 @@ describe('htmlToMarkdown', () => {
     expect(ol).toContain('2. y');
   });
 
+  it('converts tables without flattening rows into paragraphs', () => {
+    const out = htmlToMarkdown(
+      '<table><tr><th>Name</th><th>Score</th></tr><tr><td>Ada</td><td>10</td></tr></table>',
+      META,
+    );
+
+    expect(out).toContain('| Name | Score |');
+    expect(out).toContain('| --- | --- |');
+    expect(out).toContain('| Ada | 10 |');
+  });
+
+  it('escapes table cell pipes and backslashes', () => {
+    const out = htmlToMarkdown(
+      '<table><tr><th>Path</th></tr><tr><td>C:\\temp|draft</td></tr></table>',
+      META,
+    );
+
+    expect(out).toContain('| C:\\\\temp\\|draft |');
+  });
+
   it('converts strong/em/code/pre', () => {
     const out = htmlToMarkdown(
       '<p><strong>bold</strong> and <em>italic</em> with <code>x</code></p><pre>line1\nline2</pre>',

@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -8,6 +16,8 @@ let tempDir = '';
 
 beforeAll(() => {
   tempDir = realpathSync(mkdtempSync(join(tmpdir(), 'codesign-zip-test-')));
+  mkdirSync(join(tempDir, 'assets'), { recursive: true });
+  writeFileSync(join(tempDir, 'assets', 'logo.svg'), '<svg></svg>');
 });
 
 afterAll(() => {
@@ -48,6 +58,22 @@ describe('exportZip', () => {
     const dest = join(tempDir, 'minimal.zip');
     const result = await exportZip('<p>x</p>', dest);
     expect(result.bytes).toBeGreaterThan(50);
+  });
+
+  it('auto-collects local asset references and rewrites root-relative paths', async () => {
+    const dest = join(tempDir, 'auto-assets.zip');
+    await exportZip('<img src="/assets/logo.svg">', dest, {
+      assetBasePath: tempDir,
+      assetRootPath: tempDir,
+    });
+
+    const { Unzip } = await import('zip-lib');
+    const extractDir = join(tempDir, 'auto-extracted');
+    const unzip = new Unzip();
+    await unzip.extract(dest, extractDir);
+
+    expect(existsSync(join(extractDir, 'assets', 'logo.svg'))).toBe(true);
+    expect(readFileSync(join(extractDir, 'index.html'), 'utf8')).toContain('src="assets/logo.svg"');
   });
 
   it('throws EXPORTER_ZIP_FAILED when the destination cannot be written', async () => {

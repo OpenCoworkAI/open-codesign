@@ -97,4 +97,26 @@ describe('exportPdf', () => {
     },
     CHROME_TEST_TIMEOUT_MS,
   );
+
+  it(
+    'passes header and footer options through to Chrome PDF rendering',
+    async () => {
+      pdfMock.mockClear();
+      const { exportPdf } = await import('./pdf');
+      await exportPdf('<p>x</p>', join(tempDir, 'header.pdf'), {
+        chromePath: '/tmp/fake-chrome',
+        headerTemplate: '<span class="title">Title</span>',
+        footerTemplate: '<span class="pageNumber"></span>',
+      });
+
+      expect(pdfMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          displayHeaderFooter: true,
+          headerTemplate: '<span class="title">Title</span>',
+          footerTemplate: '<span class="pageNumber"></span>',
+        }),
+      );
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 });

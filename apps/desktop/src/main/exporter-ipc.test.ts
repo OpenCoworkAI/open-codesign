@@ -1,6 +1,6 @@
 import { CodesignError } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
-import { parseRequest } from './exporter-ipc';
+import { exportAssetOptions, parseRequest } from './exporter-ipc';
 
 describe('parseRequest', () => {
   it('rejects a null payload with IPC_BAD_INPUT', () => {
@@ -31,5 +31,20 @@ describe('parseRequest', () => {
     expect(result.format).toBe('pdf');
     expect(result.htmlContent).toBe('<html/>');
     expect(result.defaultFilename).toBe('report.pdf');
+  });
+
+  it('accepts workspace source context for local asset exports', () => {
+    const result = parseRequest({
+      format: 'zip',
+      htmlContent: '<img src="assets/logo.svg">',
+      workspacePath: '/workspace',
+      sourcePath: 'screens/home/index.html',
+    });
+
+    expect(result.workspacePath).toBe('/workspace');
+    expect(result.sourcePath).toBe('screens/home/index.html');
+    expect(exportAssetOptions(result)).toMatchObject({
+      assetRootPath: '/workspace',
+    });
   });
 });

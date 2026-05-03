@@ -120,6 +120,10 @@ function convertBody(html: string): string {
     return safeSrc ? `![${alt}](${safeSrc})` : '';
   });
 
+  out = out.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_m, inner: string) => {
+    return renderTable(inner);
+  });
+
   out = out.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_m, level: string, inner: string) => {
     const hashes = '#'.repeat(Number(level));
     return `\n\n${hashes} ${decodeEntities(stripTags(inner)).trim()}\n\n`;
@@ -159,6 +163,41 @@ function renderList(inner: string, ordered: boolean): string {
     m = re.exec(inner);
   }
   return `\n\n${items.join('\n')}\n\n`;
+}
+
+function renderTable(inner: string): string {
+  const rows: string[][] = [];
+  const trRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  let rowMatch: RegExpExecArray | null = trRe.exec(inner);
+  while (rowMatch !== null) {
+    const cells: string[] = [];
+    const cellRe = /<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi;
+    let cellMatch: RegExpExecArray | null = cellRe.exec(rowMatch[1] ?? '');
+    while (cellMatch !== null) {
+      const cell = escapeMarkdownTableCell(
+        collapseWhitespace(decodeEntities(stripTags(cellMatch[1] ?? ''))).trim(),
+      );
+      cells.push(cell);
+      cellMatch = cellRe.exec(rowMatch[1] ?? '');
+    }
+    if (cells.length > 0) rows.push(cells);
+    rowMatch = trRe.exec(inner);
+  }
+  if (rows.length === 0) return '';
+
+  const width = Math.max(...rows.map((row) => row.length));
+  const padded = rows.map((row) => [
+    ...row,
+    ...Array.from({ length: width - row.length }, () => ''),
+  ]);
+  const header = padded[0] ?? [];
+  const separator = Array.from({ length: width }, () => '---');
+  const body = padded.slice(1);
+  return `\n\n${[header, separator, ...body].map((row) => `| ${row.join(' | ')} |`).join('\n')}\n\n`;
+}
+
+function escapeMarkdownTableCell(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 }
 
 function stripTags(input: string): string {
