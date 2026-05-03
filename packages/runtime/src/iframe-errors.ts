@@ -1,12 +1,12 @@
 /**
- * Iframe runtime error reporting — types + guard.
+ * Iframe runtime error reporting: types + guard.
  *
  * The overlay script (see `overlay.ts`) installs `window.onerror` and
  * `unhandledrejection` listeners inside the sandbox iframe and forwards
  * captured errors to the parent via postMessage. This file is the contract
  * the parent uses to type-narrow incoming messages.
  *
- * Hard rule (PRINCIPLES §10): never swallow these errors. The parent must
+ * Hard rule (PRINCIPLES 10): never swallow these errors. The parent must
  * surface every `IFRAME_ERROR` message in the UI (e.g. CanvasErrorBar).
  */
 
