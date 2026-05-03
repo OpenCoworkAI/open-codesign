@@ -166,12 +166,12 @@ describe('bindWorkspace', () => {
   it('throws when another active design already owns the workspace path', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db);
-    const otherDesign = createDesign(db);
+    const otherDesign = createDesign(db, 'Landing page variants');
     const conflictPath = normalizeWorkspacePath(await makeTempDir('ocd-ws-conflict-'));
     updateDesignWorkspace(db, otherDesign.id, conflictPath);
 
     await expect(bindWorkspace(db, design.id, conflictPath, false)).rejects.toThrow(
-      'Workspace path is already bound to another design',
+      'Workspace path is already bound to another design ("Landing page variants"). Choose a different folder, or open that design and change its workspace before reusing this folder.',
     );
     expect(getDesign(db, design.id)?.workspacePath).toBeNull();
   });

@@ -45,13 +45,30 @@ export function checkWorkspaceConflict(
   designId: string,
   normalizedPath: string,
 ): boolean {
+  return findWorkspaceConflict(db, designId, normalizedPath) !== null;
+}
+
+export function findWorkspaceConflict(
+  db: Database,
+  designId: string,
+  normalizedPath: string,
+): Design | null {
   const comparisonPath = workspacePathComparisonKey(normalizedPath);
-  return listDesigns(db).some(
-    (design) =>
-      design.id !== designId &&
-      design.workspacePath !== null &&
-      workspacePathComparisonKey(design.workspacePath) === comparisonPath,
+  return (
+    listDesigns(db).find(
+      (design) =>
+        design.id !== designId &&
+        design.workspacePath !== null &&
+        workspacePathComparisonKey(design.workspacePath) === comparisonPath,
+    ) ?? null
   );
+}
+
+function workspaceConflictMessage(conflict: Design): string {
+  return [
+    `Workspace path is already bound to another design ("${conflict.name}").`,
+    'Choose a different folder, or open that design and change its workspace before reusing this folder.',
+  ].join(' ');
 }
 
 export async function migrateWorkspaceFiles(
@@ -150,8 +167,9 @@ export async function bindWorkspace(
     logger.info('workspace.bind.noop', { designId, workspacePath: normalizedPath });
     return current;
   }
-  if (checkWorkspaceConflict(db, designId, normalizedPath)) {
-    throw new Error('Workspace path is already bound to another design');
+  const conflict = findWorkspaceConflict(db, designId, normalizedPath);
+  if (conflict !== null) {
+    throw new Error(workspaceConflictMessage(conflict));
   }
   await assertExistingWorkspaceDirectory(normalizedPath);
 
