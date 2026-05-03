@@ -216,7 +216,11 @@ export function chooseWorkspacePreviewSourceMode(input: {
   path: string;
   hasReadApi: boolean;
   hasPreviewHtml: boolean;
+  preferPreviewHtml?: boolean;
 }): WorkspacePreviewSourceMode {
+  if (input.preferPreviewHtml === true && input.path === 'index.html' && input.hasPreviewHtml) {
+    return 'preview-html-fallback';
+  }
   if (input.hasReadApi) return 'read-workspace';
   if (input.path === 'index.html' && input.hasPreviewHtml) return 'preview-html-fallback';
   return 'unavailable';
@@ -262,6 +266,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   const workspaceFiles = files ?? observedFiles;
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const effectiveFile = file ?? workspaceFiles.find((f) => f.path === path) ?? null;
+  const prefersPreviewHtml = effectiveFile?.source === 'preview-html';
   const renderable = effectiveFile
     ? isRenderableDesignFileKind(effectiveFile.kind)
     : isRenderablePath(path);
@@ -303,6 +308,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
       path,
       hasReadApi: typeof read === 'function',
       hasPreviewHtml: Boolean(previewHtml),
+      preferPreviewHtml: prefersPreviewHtml,
     });
     if (sourceMode === 'preview-html-fallback' && previewHtml) {
       setPreviewSource({ content: previewHtml, path });
@@ -329,7 +335,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
     return () => {
       cancelled = true;
     };
-  }, [currentDesignId, previewDependencyKey, path, previewHtml, renderable, t]);
+  }, [currentDesignId, previewDependencyKey, path, previewHtml, renderable, t, prefersPreviewHtml]);
 
   const srcDoc = useMemo(() => {
     if (!previewSource || !renderable) return null;
