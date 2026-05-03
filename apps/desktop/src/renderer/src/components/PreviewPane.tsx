@@ -42,6 +42,35 @@ export function isTrustedPreviewMessageSource(
   return source !== null && source === previewWindow;
 }
 
+export function isSafeWorkspaceHtmlPath(path: string): boolean {
+  if (path.length === 0 || path.startsWith('/') || path.startsWith('\\')) return false;
+  if (path.includes('\0') || path.includes('\\')) return false;
+  const parts = path.split('/');
+  if (parts.some((part) => part.length === 0 || part === '.' || part === '..')) return false;
+  return /\.html?$/i.test(path);
+}
+
+export function getTrustedWorkspaceFileTabPath(
+  data: unknown,
+  source: MessageEventSource | null,
+  opts: {
+    previewWindow: Window | null | undefined;
+    currentDesignId: string | null;
+    workspacePath: string | null | undefined;
+  },
+): string | null {
+  if (!isTrustedPreviewMessageSource(source, opts.previewWindow)) return null;
+  if (opts.currentDesignId === null || opts.workspacePath == null) return null;
+  if (typeof data !== 'object' || data === null) return null;
+
+  const envelope = data as { __codesign?: unknown; type?: unknown; path?: unknown };
+  if (envelope.__codesign !== true || envelope.type !== 'OPEN_FILE_TAB') return null;
+  if (typeof envelope.path !== 'string' || envelope.path.length === 0) return null;
+  if (!isSafeWorkspaceHtmlPath(envelope.path)) return null;
+
+  return envelope.path;
+}
+
 export function postModeToPreviewWindow(
   win: Window | null | undefined,
   mode: string,
@@ -360,6 +389,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const applyLiveRects = useCodesignStore((s) => s.applyLiveRects);
   const clearLiveRects = useCodesignStore((s) => s.clearLiveRects);
   const liveRects = useCodesignStore((s) => s.liveRects);
+  const currentDesign = currentDesignId ? designs.find((d) => d.id === currentDesignId) : undefined;
 
   // Active iframe ref consumed by TweakPanel (postMessage target) and by the
   // window.message guard. We re-point this whenever the active design changes
@@ -438,20 +468,13 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
-      // Workspace nav-intercept: handled BEFORE the trust check because the
-      // injected script lives inside a sandboxed workspace:// iframe (already
-      // limited to files we serve) and the trust check's contentWindow
-      // comparison is unreliable across iframe re-navigation. Each accepted
-      // file tab is pinned to a single file so the user can never confuse
-      // what they are looking at.
-      if (
-        typeof event.data === 'object' &&
-        event.data !== null &&
-        (event.data as { __codesign?: unknown }).__codesign === true &&
-        (event.data as { type?: unknown }).type === 'OPEN_FILE_TAB'
-      ) {
-        const path = (event.data as { path?: unknown }).path;
-        if (typeof path === 'string' && path.length > 0) openCanvasFileTab(path);
+      const workspaceFileTabPath = getTrustedWorkspaceFileTabPath(event.data, event.source, {
+        previewWindow: iframeRef.current?.contentWindow,
+        currentDesignId,
+        workspacePath: currentDesign?.workspacePath,
+      });
+      if (workspaceFileTabPath !== null) {
+        openCanvasFileTab(workspaceFileTabPath);
         return;
       }
 
@@ -500,6 +523,8 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     previewZoom,
     applyLiveRects,
     openCanvasFileTab,
+    currentDesignId,
+    currentDesign?.workspacePath,
   ]);
 
   // Pool entries: active design first (using the freshest in-memory
@@ -568,7 +593,6 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // or chat history), the preview IS coming -- we're just waiting on the IPC
   // round-trip for the snapshot. Show a skeleton instead of the new-design
   // welcome screen so users don't read the transient state as "load failed".
-  const currentDesign = currentDesignId ? designs.find((d) => d.id === currentDesignId) : undefined;
   const designHasContent =
     currentDesign !== undefined &&
     ((currentDesign.thumbnailText !== null && currentDesign.thumbnailText.length > 0) ||

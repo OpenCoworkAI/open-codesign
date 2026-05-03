@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { existsSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import {
   updateDesignWorkspace,
   viewDesignFile,
 } from './snapshots-db';
+import { WORKSPACE_WALK_MAX_FILES } from './workspace-walk';
 
 vi.mock('electron', () => ({
   dialog: {
@@ -69,7 +70,11 @@ vi.mock('./storage-settings', () => ({
   initStorageSettings: vi.fn(() => ({})),
 }));
 
-import { createRuntimeTextEditorFs } from './index';
+import {
+  WORKSPACE_SEED_MAX_TOTAL_BYTES,
+  createRuntimeTextEditorFs,
+  seedFsMapFromWorkspace,
+} from './index';
 
 function makeTempDir(prefix: string): string {
   return mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -95,7 +100,7 @@ describe('createRuntimeTextEditorFs', () => {
     const design = createDesign(db, 'Workspaceless');
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
-    const { fs } = createRuntimeTextEditorFs({
+    const { fs } = await createRuntimeTextEditorFs({
       db,
       designId: design.id,
       generationId: 'gen-create-db-only',
@@ -120,7 +125,7 @@ describe('createRuntimeTextEditorFs', () => {
     updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceDir));
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
-    const { fs } = createRuntimeTextEditorFs({
+    const { fs } = await createRuntimeTextEditorFs({
       db,
       designId: design.id,
       generationId: 'gen-create-workspace',
@@ -152,7 +157,7 @@ describe('createRuntimeTextEditorFs', () => {
     updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceFile));
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
-    const { fs } = createRuntimeTextEditorFs({
+    const { fs } = await createRuntimeTextEditorFs({
       db,
       designId: design.id,
       generationId: 'gen-create-workspace-fail',
@@ -182,7 +187,7 @@ describe('createRuntimeTextEditorFs', () => {
     updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceDir));
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
-    const { fs } = createRuntimeTextEditorFs({
+    const { fs } = await createRuntimeTextEditorFs({
       db,
       designId: design.id,
       generationId: 'gen-replace-workspace',
@@ -219,7 +224,7 @@ describe('createRuntimeTextEditorFs', () => {
     writeFileSync(workspaceFile, 'occupied', 'utf8');
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
-    const { fs } = createRuntimeTextEditorFs({
+    const { fs } = await createRuntimeTextEditorFs({
       db,
       designId: design.id,
       generationId: 'gen-replace-workspace-fail',
@@ -253,7 +258,7 @@ describe('createRuntimeTextEditorFs', () => {
     writeFileSync(workspaceFile, 'occupied', 'utf8');
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
-    const { fs } = createRuntimeTextEditorFs({
+    const { fs } = await createRuntimeTextEditorFs({
       db,
       designId: design.id,
       generationId: 'gen-insert-workspace-fail',
@@ -286,7 +291,7 @@ describe('createRuntimeTextEditorFs', () => {
     updateDesignWorkspace(db, design.id, normalizeWorkspacePath(workspaceDir));
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
-    const { fs } = createRuntimeTextEditorFs({
+    const { fs } = await createRuntimeTextEditorFs({
       db,
       designId: design.id,
       generationId: 'gen-insert-workspace',
@@ -323,7 +328,7 @@ describe('createRuntimeTextEditorFs', () => {
     const workspaceDir = makeTempDir('ocd-runtime-null-workspace-');
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
-    const { fs } = createRuntimeTextEditorFs({
+    const { fs } = await createRuntimeTextEditorFs({
       db,
       designId: design.id,
       generationId: 'gen-null-workspace',
@@ -351,7 +356,7 @@ describe('createRuntimeTextEditorFs', () => {
   it('emits fs_updated for anonymous mutations without db persistence', async () => {
     const sendEvent = vi.fn();
     const logger = { error: vi.fn() };
-    const { fs } = createRuntimeTextEditorFs({
+    const { fs } = await createRuntimeTextEditorFs({
       db: initInMemoryDb(),
       designId: null,
       generationId: 'gen-anon',
@@ -366,5 +371,65 @@ describe('createRuntimeTextEditorFs', () => {
 
     expect(listFsUpdatedEvents(sendEvent)).toHaveLength(0);
     expect(logger.error).not.toHaveBeenCalled();
+  });
+});
+
+describe('seedFsMapFromWorkspace', () => {
+  it('truncates after the workspace file-count cap', async () => {
+    const workspaceDir = makeTempDir('ocd-runtime-seed-file-cap-');
+    const fsMap = new Map<string, string>();
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    try {
+      for (let i = 0; i < WORKSPACE_WALK_MAX_FILES + 1; i += 1) {
+        writeFileSync(path.join(workspaceDir, `${String(i).padStart(3, '0')}.html`), 'ok', 'utf8');
+      }
+
+      const result = await seedFsMapFromWorkspace(workspaceDir, fsMap, logger);
+
+      expect(result.filesLoaded).toBe(WORKSPACE_WALK_MAX_FILES);
+      expect(result.filesSkipped).toBe(0);
+      expect(result.bytesLoaded).toBe(WORKSPACE_WALK_MAX_FILES * 2);
+      expect(result.truncated).toBe(true);
+      expect(fsMap.size).toBe(WORKSPACE_WALK_MAX_FILES);
+      expect(fsMap.has('500.html')).toBe(false);
+      expect(logger.error).not.toHaveBeenCalled();
+    } finally {
+      cleanupDir(workspaceDir);
+    }
+  });
+
+  it('caps seeded workspace text by per-file bytes and total bytes', async () => {
+    const workspaceDir = makeTempDir('ocd-runtime-seed-caps-');
+    const fsMap = new Map<string, string>();
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    try {
+      writeFileSync(path.join(workspaceDir, '0-oversize.json'), 'o'.repeat(1_000_001), 'utf8');
+      writeFileSync(path.join(workspaceDir, 'a.html'), 'a'.repeat(1_000_000), 'utf8');
+      writeFileSync(path.join(workspaceDir, 'b.css'), 'b'.repeat(1_000_000), 'utf8');
+      writeFileSync(path.join(workspaceDir, 'c.js'), 'c'.repeat(1_000_000), 'utf8');
+      writeFileSync(path.join(workspaceDir, 'd.ts'), 'd'.repeat(1_000_000), 'utf8');
+      writeFileSync(path.join(workspaceDir, 'e.md'), 'e'.repeat(1_000_000), 'utf8');
+      writeFileSync(path.join(workspaceDir, 'f.txt'), 'f', 'utf8');
+      mkdirSync(path.join(workspaceDir, 'node_modules'));
+      writeFileSync(path.join(workspaceDir, 'node_modules', 'ignored.js'), 'ignored', 'utf8');
+
+      const result = await seedFsMapFromWorkspace(workspaceDir, fsMap, logger);
+
+      expect(result).toEqual({
+        filesLoaded: 5,
+        filesSkipped: 2,
+        bytesLoaded: WORKSPACE_SEED_MAX_TOTAL_BYTES,
+        truncated: true,
+      });
+      expect(fsMap.size).toBe(5);
+      expect(fsMap.has('f.txt')).toBe(false);
+      expect(fsMap.has('0-oversize.json')).toBe(false);
+      expect(fsMap.has('node_modules/ignored.js')).toBe(false);
+      expect(logger.error).not.toHaveBeenCalled();
+    } finally {
+      cleanupDir(workspaceDir);
+    }
   });
 });

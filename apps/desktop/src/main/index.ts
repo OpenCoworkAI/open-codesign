@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdirSync } from 'node:fs';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path_module from 'node:path';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -286,6 +286,7 @@ function allocateAssetPath(
 // Cap per file so a stray multi-MB log inside the workspace can't blow up
 // the agent's context window or stall the main thread on a single read.
 const WORKSPACE_SEED_MAX_FILE_BYTES = 1_000_000;
+export const WORKSPACE_SEED_MAX_TOTAL_BYTES = 5_000_000;
 const WORKSPACE_SEED_TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
   '.html',
   '.htm',
@@ -306,20 +307,30 @@ const WORKSPACE_SEED_TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
   '.toml',
 ]);
 
-export function seedFsMapFromWorkspace(
+type WorkspaceSeedLogger = Pick<CoreLogger, 'error'> & Partial<Pick<CoreLogger, 'info'>>;
+
+export interface WorkspaceSeedResult {
+  filesLoaded: number;
+  filesSkipped: number;
+  bytesLoaded: number;
+  truncated: boolean;
+}
+
+export async function seedFsMapFromWorkspace(
   workspacePath: string,
   fsMap: Map<string, string>,
-  logger: Pick<CoreLogger, 'error'>,
-): { filesLoaded: number; filesSkipped: number; truncated: boolean } {
+  logger: WorkspaceSeedLogger,
+): Promise<WorkspaceSeedResult> {
   let filesLoaded = 0;
   let filesSkipped = 0;
+  let bytesLoaded = 0;
   let truncated = false;
 
-  const walk = (absDir: string, relDir: string): void => {
+  const walk = async (absDir: string, relDir: string): Promise<void> => {
     if (truncated) return;
     let entries: import('node:fs').Dirent[];
     try {
-      entries = readdirSync(absDir, { withFileTypes: true });
+      entries = await readdir(absDir, { withFileTypes: true });
     } catch (err) {
       logger.error('workspace.seed.readdir.fail', {
         path: absDir,
@@ -342,7 +353,7 @@ export function seedFsMapFromWorkspace(
           filesSkipped += 1;
           continue;
         }
-        walk(absPath, relPath);
+        await walk(absPath, relPath);
         continue;
       }
 
@@ -359,7 +370,7 @@ export function seedFsMapFromWorkspace(
 
       let size: number;
       try {
-        size = statSync(absPath).size;
+        size = (await stat(absPath)).size;
       } catch (err) {
         logger.error('workspace.seed.stat.fail', {
           path: absPath,
@@ -373,10 +384,15 @@ export function seedFsMapFromWorkspace(
         filesSkipped += 1;
         continue;
       }
+      if (bytesLoaded + size > WORKSPACE_SEED_MAX_TOTAL_BYTES) {
+        filesSkipped += 1;
+        truncated = true;
+        return;
+      }
 
       let content: string;
       try {
-        content = readFileSync(absPath, 'utf8');
+        content = await readFile(absPath, 'utf8');
       } catch (err) {
         logger.error('workspace.seed.read.fail', {
           path: absPath,
@@ -386,13 +402,21 @@ export function seedFsMapFromWorkspace(
         continue;
       }
 
+      const contentBytes = Buffer.byteLength(content, 'utf8');
+      if (bytesLoaded + contentBytes > WORKSPACE_SEED_MAX_TOTAL_BYTES) {
+        filesSkipped += 1;
+        truncated = true;
+        return;
+      }
+
       fsMap.set(relPath, content);
       filesLoaded += 1;
+      bytesLoaded += contentBytes;
     }
   };
 
-  walk(workspacePath, '');
-  return { filesLoaded, filesSkipped, truncated };
+  await walk(workspacePath, '');
+  return { filesLoaded, filesSkipped, bytesLoaded, truncated };
 }
 
 interface CreateRuntimeTextEditorFsOptions {
@@ -401,10 +425,10 @@ interface CreateRuntimeTextEditorFsOptions {
   designId: string | null;
   previousHtml: string | null;
   sendEvent: (event: AgentStreamEvent) => void;
-  logger: Pick<CoreLogger, 'error'>;
+  logger: WorkspaceSeedLogger;
 }
 
-export function createRuntimeTextEditorFs({
+export async function createRuntimeTextEditorFs({
   db,
   generationId,
   designId,
@@ -433,7 +457,15 @@ export function createRuntimeTextEditorFs({
     try {
       const design = getDesign(db, designId);
       if (design?.workspacePath) {
-        seedFsMapFromWorkspace(design.workspacePath, fsMap, logger);
+        const seed = await seedFsMapFromWorkspace(design.workspacePath, fsMap, logger);
+        logger.info?.('workspace.seed.ok', {
+          designId,
+          workspacePath: design.workspacePath,
+          filesLoaded: seed.filesLoaded,
+          filesSkipped: seed.filesSkipped,
+          bytesLoaded: seed.bytesLoaded,
+          truncated: seed.truncated,
+        });
       }
     } catch (err) {
       logger.error('workspace.seed.fail', {
@@ -635,7 +667,7 @@ function registerIpcHandlers(db: Database | null): void {
    * `agent:event:v1` so the sidebar chat can render incremental output
    * instead of waiting for the full final message.
    */
-  const runGenerate = (
+  const runGenerate = async (
     input: Parameters<typeof generate>[0],
     id: string,
     designId: string | null,
@@ -658,7 +690,7 @@ function registerIpcHandlers(db: Database | null): void {
     const designHasWorkspace =
       designId !== null && db !== null ? (getDesign(db, designId)?.workspacePath ?? null) : null;
     const runtimeVerify = designHasWorkspace !== null ? undefined : makeRuntimeVerifier();
-    const { fs, fsMap } = createRuntimeTextEditorFs({
+    const { fs, fsMap } = await createRuntimeTextEditorFs({
       db,
       designId,
       generationId: id,

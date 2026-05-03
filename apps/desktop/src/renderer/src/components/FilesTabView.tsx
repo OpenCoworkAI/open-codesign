@@ -198,7 +198,7 @@ export function FilesTabView() {
   // (rendered by PreviewPane above us) stays the way to switch between
   // already-opened tabs.
   const collapsedRail = (
-    <aside className="w-[36px] shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] flex flex-col items-center pt-[var(--space-3)]">
+    <aside className="w-[var(--size-files-rail)] shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] flex flex-col items-center pt-[var(--space-3)]">
       <button
         type="button"
         onClick={() => setCollapsed(false)}

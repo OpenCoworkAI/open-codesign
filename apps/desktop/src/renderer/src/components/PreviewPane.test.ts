@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { useCodesignStore } from '../store';
 import {
+  getTrustedWorkspaceFileTabPath,
   handlePreviewMessage,
+  isSafeWorkspaceHtmlPath,
   isTrustedPreviewMessageSource,
   postModeToPreviewWindow,
   scaleRectForZoom,
@@ -16,6 +18,65 @@ describe('isTrustedPreviewMessageSource', () => {
     expect(isTrustedPreviewMessageSource(previewWindow, previewWindow)).toBe(true);
     expect(isTrustedPreviewMessageSource(otherWindow, previewWindow)).toBe(false);
     expect(isTrustedPreviewMessageSource(null, previewWindow)).toBe(false);
+  });
+});
+
+describe('getTrustedWorkspaceFileTabPath', () => {
+  const previewWindow = {} as Window;
+  const otherWindow = {} as Window;
+
+  it('accepts file-tab requests only from the active workspace iframe and safe HTML paths', () => {
+    const path = getTrustedWorkspaceFileTabPath(
+      { __codesign: true, type: 'OPEN_FILE_TAB', path: 'pages/about.html' },
+      previewWindow,
+      {
+        previewWindow,
+        currentDesignId: 'design-1',
+        workspacePath: '/tmp/workspace',
+      },
+    );
+
+    expect(path).toBe('pages/about.html');
+  });
+
+  it('rejects inactive frames, unbound workspaces, and unsafe paths', () => {
+    const msg = { __codesign: true, type: 'OPEN_FILE_TAB', path: 'assets/app.html' };
+    expect(
+      getTrustedWorkspaceFileTabPath(msg, otherWindow, {
+        previewWindow,
+        currentDesignId: 'design-1',
+        workspacePath: '/tmp/workspace',
+      }),
+    ).toBeNull();
+    expect(
+      getTrustedWorkspaceFileTabPath(msg, previewWindow, {
+        previewWindow,
+        currentDesignId: 'design-1',
+        workspacePath: null,
+      }),
+    ).toBeNull();
+    expect(
+      getTrustedWorkspaceFileTabPath(
+        { __codesign: true, type: 'OPEN_FILE_TAB', path: '../secret.html' },
+        previewWindow,
+        {
+          previewWindow,
+          currentDesignId: 'design-1',
+          workspacePath: '/tmp/workspace',
+        },
+      ),
+    ).toBeNull();
+  });
+});
+
+describe('isSafeWorkspaceHtmlPath', () => {
+  it('allows relative HTML files and rejects traversal, absolute, and asset paths', () => {
+    expect(isSafeWorkspaceHtmlPath('index.html')).toBe(true);
+    expect(isSafeWorkspaceHtmlPath('pages/about.htm')).toBe(true);
+    expect(isSafeWorkspaceHtmlPath('../index.html')).toBe(false);
+    expect(isSafeWorkspaceHtmlPath('/index.html')).toBe(false);
+    expect(isSafeWorkspaceHtmlPath('pages//index.html')).toBe(false);
+    expect(isSafeWorkspaceHtmlPath('assets/app.css')).toBe(false);
   });
 });
 

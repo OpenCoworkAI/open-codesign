@@ -138,6 +138,9 @@
   /* Hub sidebar (Designs hub left rail) */
   --size-hub-sidebar: 360px;
 
+  /* Files panel collapsed rail */
+  --size-files-rail: 36px;
+
   /* Modal widths */
   --size-modal-md: 560px;
 
