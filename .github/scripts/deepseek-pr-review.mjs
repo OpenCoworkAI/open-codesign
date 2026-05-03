@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-const marker = '*open-codesign Bot*';
+const marker = '*Open-CoDesign Bot*';
 
 function requiredEnv(name) {
   const value = process.env[name];
