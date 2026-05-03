@@ -235,6 +235,8 @@ function buildPiModel(
 // active. Keeps the base prompt (shared with the non-agent path) unchanged.
 // ---------------------------------------------------------------------------
 
+const MAX_DONE_ERROR_ROUNDS = 3;
+
 const AGENTIC_TOOL_GUIDANCE = [
   '## Workspace output contract',
   '',
@@ -249,7 +251,7 @@ const AGENTIC_TOOL_GUIDANCE = [
   '2. Load optional resources explicitly with `skill(name)` or `scaffold({kind, destPath})` before relying on them.',
   '3. Write/edit `index.html`, then call `preview(path)` when available.',
   '4. Call `tweaks()` for meaningful EDITMODE controls.',
-  '5. Call `done(path)` after the final mutation. Fix errors, then call `done` again.',
+  `5. Call \`done(path)\` after the final mutation. If it reports errors, fix and retry, but stop after ${MAX_DONE_ERROR_ROUNDS} error rounds.`,
   '',
   '## File-edit discipline',
   '',
@@ -363,9 +365,12 @@ function wrapScaffoldState(
 function wrapDoneState(
   tool: AgentTool<TSchema, unknown>,
   resourceState: ResourceStateV1,
+  onRepairLimitReached?: (() => void) | undefined,
 ): AgentTool<TSchema, unknown> {
+  let errorRounds = 0;
   return {
     ...tool,
+    executionMode: 'sequential',
     async execute(id, params, signal): Promise<AgentToolResult<unknown>> {
       const result = await tool.execute(id, params, signal);
       const details = result.details as DoneDetails | undefined;
@@ -375,10 +380,41 @@ function wrapDoneState(
           path: details.path,
           errorCount: details.errors.length,
         });
+        if (details.status === 'ok') {
+          errorRounds = 0;
+        } else {
+          errorRounds += 1;
+          if (errorRounds >= MAX_DONE_ERROR_ROUNDS) {
+            onRepairLimitReached?.();
+            return {
+              ...result,
+              content: [{ type: 'text', text: formatDoneRepairLimitText(details) }],
+              terminate: true,
+            };
+          }
+        }
       }
       return result;
     },
   };
+}
+
+function formatDoneRepairLimitText(details: DoneDetails): string {
+  const remainingErrors =
+    details.errors.length === 0
+      ? ['- done() still reported errors, but no actionable verifier details were returned.']
+      : details.errors.map(
+          (error) => `- ${error.message}${error.lineno ? ` (line ${error.lineno})` : ''}`,
+        );
+  return [
+    'has_errors',
+    `Repair limit reached after ${MAX_DONE_ERROR_ROUNDS} done() error rounds.`,
+    'STOP. Do not call done, preview, edit, or any other tool again.',
+    'The host will keep the latest artifact when possible and surface these warnings to the user.',
+    '',
+    'Remaining verifier output:',
+    ...remainingErrors,
+  ].join('\n');
 }
 
 function projectContextSections(context: GenerateInput['projectContext']): string[] {
@@ -514,6 +550,7 @@ export async function generateViaAgent(
   const buildStart = Date.now();
   const resourceState = cloneResourceState(input.initialResourceState);
   const trackedFs = deps.fs ? trackFsMutations(deps.fs, resourceState) : undefined;
+  let doneRepairLimitReached = false;
   const skillsBuiltinDir = input.templatesRoot
     ? path.join(input.templatesRoot, 'skills')
     : undefined;
@@ -595,6 +632,9 @@ export async function generateViaAgent(
       wrapDoneState(
         makeDoneTool(trackedFs, deps.runtimeVerify) as unknown as AgentTool<TSchema, unknown>,
         resourceState,
+        () => {
+          doneRepairLimitReached = true;
+        },
       ),
     );
   }
@@ -866,7 +906,9 @@ export async function generateViaAgent(
   if (!finalAssistant) {
     throw new CodesignError('Agent produced no assistant message', ERROR_CODES.PROVIDER_ERROR);
   }
-  if (finalAssistant.stopReason !== 'stop') {
+  const stoppedAfterDoneRepairLimit =
+    doneRepairLimitReached && finalAssistant.stopReason === 'toolUse';
+  if (finalAssistant.stopReason !== 'stop' && !stoppedAfterDoneRepairLimit) {
     // Prefer the original `getApiKey` throw (e.g. PROVIDER_AUTH_MISSING after
     // mid-run logout) over pi-agent-core's flattened plain-string failure,
     // so the renderer's error-code routing stays consistent with the path
@@ -902,13 +944,15 @@ export async function generateViaAgent(
 
   log.info('[generate] step=parse_response', ctx);
   const parseStart = Date.now();
-  const fullText = finalAssistant.content
-    .filter(
-      (c): c is { type: 'text'; text: string } =>
-        c.type === 'text' && typeof (c as { text?: unknown }).text === 'string',
-    )
-    .map((c) => c.text)
-    .join('');
+  const fullText = stoppedAfterDoneRepairLimit
+    ? `Stopped after ${MAX_DONE_ERROR_ROUNDS} done() error rounds. The latest artifact is available with warnings.`
+    : finalAssistant.content
+        .filter(
+          (c): c is { type: 'text'; text: string } =>
+            c.type === 'text' && typeof (c as { text?: unknown }).text === 'string',
+        )
+        .map((c) => c.text)
+        .join('');
 
   const collected: Collected = { text: fullText, artifacts: [] };
 

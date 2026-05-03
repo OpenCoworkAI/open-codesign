@@ -71,6 +71,16 @@ interface AgentScript {
    */
   invokeGetApiKey?: boolean;
   /**
+   * Execute one configured tool during prompt(). This lets tests exercise
+   * generateViaAgent's tool wrappers without reimplementing pi-agent-core's
+   * full model/tool loop in the mock.
+   */
+  executeTool?: {
+    name: string;
+    times?: number;
+    params?: Record<string, unknown>;
+  };
+  /**
    * When set, the mock switches to `overrideScript` starting from this
    * agent-call index (0-based). Lets transport-retry tests script
    * "first agent fails, second agent succeeds" without mutating
@@ -169,6 +179,17 @@ vi.mock('@mariozechner/pi-agent-core', () => {
         }
       }
 
+      if (script.executeTool) {
+        const tool = this.call.options.initialState?.tools?.find(
+          (candidate) => candidate.name === script.executeTool?.name,
+        );
+        if (!tool) throw new Error(`scripted tool not found: ${script.executeTool.name}`);
+        const times = script.executeTool.times ?? 1;
+        for (let index = 0; index < times; index += 1) {
+          await tool.execute(`scripted-tool-${index}`, script.executeTool.params ?? {});
+        }
+      }
+
       this.emit({ type: 'agent_start' });
       this.emit({ type: 'turn_start' });
       const userMsg: AgentMessage = {
@@ -255,6 +276,7 @@ import { applyComment } from './index.js';
 const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
 
 const SAMPLE_HTML = `<!doctype html><html lang="en"><body><h1>Hi</h1></body></html>`;
+const HTML_WITH_MISSING_ALT = `<!doctype html><html lang="en"><body><img src="hero.png"></body></html>`;
 const DESIGN_SYSTEM: StoredDesignSystem = {
   schemaVersion: STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
   rootPath: '/repo',
@@ -669,6 +691,61 @@ describe('generateViaAgent()', () => {
     expect(result.warnings).toEqual([expect.stringContaining('done() reported unresolved errors')]);
   });
 
+  it('terminates done after three error rounds', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { fs: makeStubFs({ 'index.html': HTML_WITH_MISSING_ALT }) },
+    );
+    const doneTool = agentCalls[0]?.options.initialState?.tools?.find(
+      (tool) => tool.name === 'done',
+    );
+    if (!doneTool) throw new Error('expected done tool');
+
+    const first = await doneTool.execute('done-1', { path: 'index.html' });
+    const second = await doneTool.execute('done-2', { path: 'index.html' });
+    const third = await doneTool.execute('done-3', { path: 'index.html' });
+
+    expect(first.terminate).toBeUndefined();
+    expect(second.terminate).toBeUndefined();
+    expect(third.terminate).toBe(true);
+    const thirdDetails = third.details as { status?: string; errors?: unknown[] };
+    expect(thirdDetails.status).toBe('has_errors');
+    expect(thirdDetails.errors).toHaveLength(1);
+    expect(third.content[0]?.type).toBe('text');
+    expect(JSON.stringify(third.content)).toContain(
+      'Repair limit reached after 3 done() error rounds',
+    );
+  });
+
+  it('keeps the latest artifact when the agent stops on the done repair limit', async () => {
+    scriptedAgent = {
+      assistantText: '',
+      stopReason: 'toolUse',
+      executeTool: { name: 'done', times: 3, params: { path: 'index.html' } },
+    };
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        initialResourceState: resourceState({ mutationSeq: 1 }),
+      },
+      { fs: makeStubFs({ 'index.html': HTML_WITH_MISSING_ALT }) },
+    );
+
+    expect(result.artifacts).toHaveLength(1);
+    expect(result.message).toContain('Stopped after 3 done() error rounds');
+    expect(result.warnings).toEqual([expect.stringContaining('done() reported unresolved errors')]);
+    expect(result.resourceState?.lastDone?.status).toBe('has_errors');
+  });
+
   it('allows a done ok state that covers the latest mutation', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     const result = await generateViaAgent(
@@ -982,6 +1059,7 @@ describe('generateViaAgent()', () => {
     expect(sys).toContain('workspace file `index.html`');
     expect(sys).toContain('Local workspace assets and scaffolded files are allowed');
     expect(sys).toContain('Call `done(path)` after the final mutation');
+    expect(sys).toContain('stop after 3 error rounds');
     expect(sys).not.toContain('text_editor.create(');
     expect(sys).not.toContain('view("index.html"');
     expect(sys).not.toContain('IOSDevice, IOSStatusBar');
