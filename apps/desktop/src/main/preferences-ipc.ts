@@ -54,7 +54,7 @@ const DEFAULTS: Preferences = {
   // 1200s (20 min); users on fast endpoints can lower this
   // in Settings → Advanced.
   generationTimeoutSec: 1200,
-  checkForUpdatesOnStartup: true,
+  checkForUpdatesOnStartup: false,
   dismissedUpdateVersion: '',
   diagnosticsLastReadTs: 0,
 };

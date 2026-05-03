@@ -51,7 +51,7 @@ describe('readPersisted()', () => {
     expect(result).toEqual({
       updateChannel: 'stable',
       generationTimeoutSec: 1200,
-      checkForUpdatesOnStartup: true,
+      checkForUpdatesOnStartup: false,
       dismissedUpdateVersion: '',
       diagnosticsLastReadTs: 0,
     });
@@ -253,7 +253,7 @@ describe('preferences v4 schema fields', () => {
       JSON.stringify({ schemaVersion: 3, updateChannel: 'stable', generationTimeoutSec: 1200 }),
     );
     const prefs = await readPersisted();
-    expect(prefs.checkForUpdatesOnStartup).toBe(true);
+    expect(prefs.checkForUpdatesOnStartup).toBe(false);
     expect(prefs.dismissedUpdateVersion).toBe('');
   });
 

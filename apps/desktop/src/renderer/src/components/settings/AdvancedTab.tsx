@@ -31,7 +31,7 @@ export function AdvancedTab() {
   const [prefs, setPrefs] = useState<Preferences>({
     updateChannel: 'stable',
     generationTimeoutSec: 1200,
-    checkForUpdatesOnStartup: true,
+    checkForUpdatesOnStartup: false,
     dismissedUpdateVersion: '',
     diagnosticsLastReadTs: 0,
   });

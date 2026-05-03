@@ -2,6 +2,7 @@ import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { app, ipcMain } from '../electron-runtime';
 import { getLogger } from '../logger';
+import { getUpdateErrorMessage, isMissingUpdateMetadataError } from '../update-errors';
 
 // Cached update-available payload so a window opened after the event still
 // shows the banner. Cleared only on app quit (matching the one-shot nature
@@ -20,8 +21,14 @@ export function setupAutoUpdater(getMainWindow: () => ElectronBrowserWindow | nu
     getMainWindow()?.webContents.send('codesign:update-available', info);
   });
   autoUpdater.on('error', (err) => {
-    getLogger('main:updates').error('autoUpdater.error', {
-      message: err.message,
+    const log = getLogger('main:updates');
+    const message = getUpdateErrorMessage(err);
+    if (isMissingUpdateMetadataError(err)) {
+      log.warn('autoUpdater.missingChannel', { message });
+      return;
+    }
+    log.error('autoUpdater.error', {
+      message,
       stack: err.stack,
     });
   });

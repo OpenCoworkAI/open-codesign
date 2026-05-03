@@ -31,6 +31,7 @@ import {
   registerWorkspaceIpc,
 } from './snapshots-ipc';
 import { initStorageSettings } from './storage-settings';
+import { getUpdateErrorMessage, isMissingUpdateMetadataError } from './update-errors';
 import { registerWorkspaceProtocolHandler, registerWorkspaceScheme } from './workspace-protocol';
 
 // Re-exports kept for index.workspace.test.ts and any external callers.
@@ -124,14 +125,20 @@ async function scheduleStartupUpdateCheck(): Promise<void> {
     const updateLog = getLogger('main:updates');
     try {
       autoUpdater.checkForUpdates().catch((err: unknown) => {
-        updateLog.error('startup.checkForUpdates.fail', {
-          message: err instanceof Error ? err.message : String(err),
-        });
+        const message = getUpdateErrorMessage(err);
+        if (isMissingUpdateMetadataError(err)) {
+          updateLog.warn('startup.checkForUpdates.missingChannel', { message });
+          return;
+        }
+        updateLog.error('startup.checkForUpdates.fail', { message });
       });
     } catch (err) {
-      updateLog.error('startup.checkForUpdates.throw', {
-        message: err instanceof Error ? err.message : String(err),
-      });
+      const message = getUpdateErrorMessage(err);
+      if (isMissingUpdateMetadataError(err)) {
+        updateLog.warn('startup.checkForUpdates.missingChannel', { message });
+        return;
+      }
+      updateLog.error('startup.checkForUpdates.throw', { message });
     }
   }, 30_000);
 }
