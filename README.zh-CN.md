@@ -35,7 +35,7 @@
 
 ## 最近更新
 
-- **v0.2.0** *（准备中，预计一周左右发布）* — Agentic Design：带真实工作区的设计会话 · 带权限的文件 / 工具循环 · 按需加载 skill 和 scaffold · `DESIGN.md` 设计系统
+- **v0.2.0** *（准备中，预计一周左右发布）* — Agentic Design：带真实工作区的设计会话 · 带权限的文件 / 工具循环 · 按需加载 skill 和 scaffold · `DESIGN.md` 设计系统 · **Decompose to UI Kit**（把生成的图 / HTML 拆成 `ui_kits/<slug>/` 给下游 coding agent 接手 · 12 项 boolean 视觉 check（不是浮点分数）· 自检后自动迭代修补 · 每次 decompose 的成本 toast 实时显示 · [BENCHMARKS.md](./BENCHMARKS.md) · 这是 [#225](https://github.com/OpenCoworkAI/open-codesign/issues/225) 的 Phase 1）
 - **v0.1.4** *（2026-04-23）* — AI 图像生成 · 支持 ChatGPT Plus / Codex 订阅登录 · CLIProxyAPI 一键导入 · API 配置稳定性优化
 - **v0.1.3** *（2026-04-21）* — 修复 Gemini `models/` 前缀 key · 修复 OpenAI 兼容中转 "instructions required" 报错 · 新增第三方中转 SSE 截断提示
 - **v0.1.2** *（2026-04-21）* — 发版流程 · Homebrew / winget / Scoop 打包清单
@@ -228,6 +228,13 @@ brew install --cask opencoworkai/tap/open-codesign
 - **AI 图像生成**：可选启用，为 hero、产品图、背景和插画生成位图素材
 - **AI 自动生成调节参数**：模型会主动暴露值得调的参数，比如颜色、间距和字体
 - **Comment mode**：点击预览中的任意元素，留下批注，模型只重写对应局部
+- **拆解为 UI Kit**：聊天侧边栏一键, 把当前 artifact 拆成 `ui_kits/<slug>/` 目录（`index.html` + `components/*.tsx` + `tokens.css` + `manifest.json` + `README.md`），形态对齐 coding agent 接入。内置确定性 + 视觉双 verifier 用 12 项 boolean check 自检（不是浮点分数），不达标自动迭代。每次成本以 toast 实时显示。详见 [BENCHMARKS.md](./BENCHMARKS.md)。
+
+  ![拆解为 UI Kit — source 与 agent 生成 ui_kit 并排对比](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/decompose-to-ui-kit.png)
+  <sub>左边是 gpt-image 生成的 source 图，右边是 agent 输出的 <code>ui_kit</code> headless 渲染结果。parity score 与 status 完全由 12 条 boolean check 推导：<code>parityScore = passCount / totalChecks</code>，不是 LLM 自己打的浮点分。图中的数字是 <code>e2e-opus-final</code> 真实跑出来的，不是 mock。</sub>
+
+  ![iter-0 → iter-1 reconcile loop, 真实 score drift](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/decompose-iter-reel.gif)
+  <sub>来自 <code>e2e-nodebench-iter</code> 的 4 帧 reel: source → iter-0（parityScore 0.82, 6 个 gap）→ iter-1（parityScore 0.78, 5 个 gap）→ honest verdict。Agent 修了一些 gap 但又 introduced 新的 layout drift，boolean rubric 把 regression 直接 surface 出来不藏。<a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/decompose-iter-reel.mp4">MP4 版本</a>。</sub>
 - **支持中途取消生成**：停止后也不会丢失之前的上下文和结果
 
 ### 预览与工作流

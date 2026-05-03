@@ -37,7 +37,7 @@
 
 ## What's new
 
-- **v0.2.0** *(in preparation, expected in about a week)* — Agentic Design: workspace-backed design sessions · permissioned file/tool loop · lazy skills and scaffolds · `DESIGN.md` design systems
+- **v0.2.0** *(in preparation, expected in about a week)* — Agentic Design: workspace-backed design sessions · permissioned file/tool loop · lazy skills and scaffolds · `DESIGN.md` design systems · **Decompose to UI Kit** (image → componentized `ui_kits/<slug>/` bundle for coding-agent handoff · 12-check boolean visual parity judge · verify-and-iterate loop · per-decompose cost row · [BENCHMARKS.md](./BENCHMARKS.md) · Phase 1 of [#225](https://github.com/OpenCoworkAI/open-codesign/issues/225))
 - **v0.1.4** *(2026-04-23)* — AI image generation · ChatGPT Plus/Codex subscription support · CLIProxyAPI one-click import · API config hardening
 - **v0.1.3** *(2026-04-21)* — Gemini `models/` prefix fix · OpenAI-compatible relay "instructions required" fix · third-party relay SSE-truncation hint
 - **v0.1.2** *(2026-04-21)* — Release pipeline · Homebrew / winget / Scoop packaging manifests
@@ -230,6 +230,13 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 - **AI image generation** — opt-in bitmap assets for heroes, product shots, backgrounds, and illustrations
 - **AI-generated sliders** — the model emits the parameters worth tweaking (color, spacing, font)
 - **Comment mode** — click any element in the preview to drop a pin, leave a note, and let the model rewrite only that region
+- **Decompose to UI Kit** — one click in the chat sidebar emits a `ui_kits/<slug>/` folder (`index.html` + `components/*.tsx` + `tokens.css` + `manifest.json` + `README.md`) shaped for coding-agent handoff. Built-in deterministic + vision verifiers self-check parity using a 12-question boolean rubric (no floating-point arbitrary scores) and re-iterate on gaps. Per-decompose cost surfaces inline as a toast. See [BENCHMARKS.md](./BENCHMARKS.md).
+
+  ![Decompose to UI Kit — source image vs agent-emitted ui_kit, side-by-side parity check](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/decompose-to-ui-kit.png)
+  <sub>Source image (gpt-image input) on the left, agent-emitted <code>ui_kit</code> rendered headlessly on the right. Parity score and status are derived deterministically — <code>parityScore = passCount / totalChecks</code> — from the 12-check boolean rubric. Numbers are from a real <code>e2e-opus-final</code> run, not a mock.</sub>
+
+  ![Iter-0 → iter-1 reconcile loop with honest score drift](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/decompose-iter-reel.gif)
+  <sub>4-frame reel from the <code>e2e-nodebench-iter</code> run: source → iter-0 (parityScore 0.82, 6 gaps) → iter-1 (parityScore 0.78, 5 gaps) → honest verdict. The agent fixed some gaps and introduced new layout drift; the boolean rubric exposes the regression instead of hiding it. <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/decompose-iter-reel.mp4">MP4 version</a>.</sub>
 - **Generation cancellation** — stop mid-stream without losing prior turns
 
 ### Preview and workflow

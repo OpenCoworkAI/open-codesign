@@ -15,7 +15,7 @@ import {
   generateTitle,
   generateViaAgent,
 } from '@open-codesign/core';
-import { detectProviderFromKey, generateImage } from '@open-codesign/providers';
+import { complete, detectProviderFromKey, generateImage } from '@open-codesign/providers';
 import {
   ApplyCommentPayload,
   BRAND,
@@ -57,6 +57,7 @@ import {
   toGenerateImageOptions,
 } from './image-generation-settings';
 import { maybeAbortIfRunningFromDmg } from './install-check';
+import { makeJudgeVisualParity } from './judge-visual-parity';
 import { registerLocaleIpc } from './locale-ipc';
 import { getLogPath, getLogger, initLogger } from './logger';
 import {
@@ -72,6 +73,7 @@ import { readPersisted as readPreferences, registerPreferencesIpc } from './pref
 import { preparePromptContext } from './prompt-context';
 import { createProviderContextStore } from './provider-context';
 import { resolveActiveModel } from './provider-settings';
+import { makeUiKitRenderer } from './render-ui-kit';
 import { cleanupStaleTmps } from './reported-fingerprints';
 import { resolveActiveApiKey, resolveApiKeyWithKeylessFallback } from './resolve-api-key';
 import { withRun } from './runContext';
@@ -278,6 +280,15 @@ interface CreateRuntimeTextEditorFsOptions {
   previousHtml: string | null;
   sendEvent: (event: AgentStreamEvent) => void;
   logger: Pick<CoreLogger, 'error'>;
+  /**
+   * Image attachments from `preparePromptContext`. The first image (if any) is
+   * persisted into the agent's virtual FS as `source.png` so that
+   * `verify_ui_kit_visual_parity({slug})` can read it via its default
+   * `sourceImagePath`. Without this, the visual judge silently degrades to
+   * `status: 'unavailable'` even when the host has wired up the judge
+   * callback (review finding #2 on PR #241).
+   */
+  sourceAttachments?: ReadonlyArray<{ imageDataUrl?: string | undefined }> | undefined;
 }
 
 export function createRuntimeTextEditorFs({
@@ -287,6 +298,7 @@ export function createRuntimeTextEditorFs({
   previousHtml,
   sendEvent,
   logger,
+  sourceAttachments,
 }: CreateRuntimeTextEditorFsOptions) {
   const baseCtx = { designId: designId ?? '', generationId } as const;
   const fsMap = new Map<string, string>();
@@ -298,6 +310,13 @@ export function createRuntimeTextEditorFs({
   }
   for (const [name, content] of DESIGN_SKILLS) {
     fsMap.set(`skills/${name}`, content);
+  }
+  // Seed source.png from the first image attachment so the visual verifier
+  // can read it via its default `sourceImagePath: 'source.png'`. Stored as a
+  // data URL to match `verify_ui_kit_visual_parity`'s expected format.
+  const firstSourceImage = sourceAttachments?.find((a) => Boolean(a.imageDataUrl));
+  if (firstSourceImage?.imageDataUrl) {
+    fsMap.set('source.png', firstSourceImage.imageDataUrl);
   }
 
   function emitFsUpdated(filePath: string, content: string): void {
@@ -508,6 +527,9 @@ function registerIpcHandlers(db: Database | null): void {
       logger: logIpc,
       previousHtml,
       sendEvent,
+      // Pipe image attachments through so `source.png` is seeded for
+      // verify_ui_kit_visual_parity (PR #241 review fix #2).
+      sourceAttachments: input.attachments,
     });
     const cfg = getCachedConfig();
     const imageConfig = cfg ? resolveImageGenerationConfig(cfg) : null;
@@ -572,9 +594,40 @@ function registerIpcHandlers(db: Database | null): void {
     let deltaCount = 0;
     let toolCount = 0;
 
+    // Visual parity verification — render decomposed ui_kits HTML in a hidden
+    // BrowserWindow + ask the user's primary vision-capable model to score 12
+    // boolean parity checks (boolean-per-dimension, no floating-point arbitrary
+    // scores). Uses the SAME model/apiKey/baseUrl as the active generation so
+    // we don't need a separate judge config. If the user's model isn't vision-
+    // capable, the judge call will throw and the agent falls back to the
+    // deterministic verify_ui_kit_parity tool.
+    const renderUiKit = makeUiKitRenderer();
+    const judgeVisualParity = makeJudgeVisualParity(
+      async ({ systemPrompt, userText, userImages, maxTokens, signal: judgeSignal }) => {
+        const judgeMessages = [
+          { role: 'system' as const, content: systemPrompt },
+          { role: 'user' as const, content: userText },
+        ];
+        const judgeOpts: Parameters<typeof complete>[2] = {
+          apiKey: input.apiKey ?? '',
+          maxTokens,
+          userImages,
+          ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
+          ...(input.wire ? { wire: input.wire } : {}),
+          ...(input.httpHeaders ? { httpHeaders: input.httpHeaders } : {}),
+          ...(input.capabilities ? { capabilities: input.capabilities } : {}),
+          ...(judgeSignal ? { signal: judgeSignal } : {}),
+        };
+        const r = await complete(input.model, judgeMessages, judgeOpts);
+        return { content: r.content, costUsd: r.costUsd };
+      },
+    );
+
     return generateViaAgent(input, {
       fs,
       runtimeVerify,
+      renderUiKit,
+      judgeVisualParity,
       ...(generateImageAsset !== undefined ? { generateImageAsset } : {}),
       onEvent: (event: AgentEvent) => {
         // High-signal only. Skip per-token deltas and inner message_*
