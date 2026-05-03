@@ -16,8 +16,8 @@ import type { CodesignState } from '../../store.js';
 import { modelRef, newId, normalizeReferenceUrl, tr, uniqueFiles } from '../lib/locale.js';
 import { finishIfCurrent, isReadyConfig } from '../lib/ready-config.js';
 import {
+  buildGenerateDisplayMessage,
   buildGenerateErrorDescription,
-  cleanGenerateErrorMessage,
   deriveGenerateHypothesis,
   extractCodesignErrorCode,
   extractUpstreamContext,
@@ -271,7 +271,9 @@ function applyGenerateError(
   designIdAtStart: string | null,
 ): void {
   const rawMsg = err instanceof Error ? err.message : tr('errors.unknown');
-  const displayMsg = cleanGenerateErrorMessage(rawMsg);
+  const cfg = get().config;
+  const hypothesis = deriveGenerateHypothesis(err, cfg);
+  const displayMsg = buildGenerateDisplayMessage(rawMsg, hypothesis);
   if (get().activeGenerationId !== generationId) return;
   // TODO: replace with rendererLogger once renderer-logger lands
   console.error('[store] applyGenerateError', {
@@ -304,8 +306,6 @@ function applyGenerateError(
   // toast tells the user WHY and WHAT TO TRY instead of just dumping the
   // upstream message. Fixes #130 (404 → "add /v1") and gives #158 / #134 a
   // home for gateway / instructions-required hints.
-  const cfg = get().config;
-  const hypothesis = deriveGenerateHypothesis(err, cfg);
   const description = buildGenerateErrorDescription(displayMsg, hypothesis);
   const action = buildGenerateFixAction(get, set, hypothesis, err, cfg);
   const reportContext = buildGenerateReportContext(upstream, hypothesis, displayMsg);

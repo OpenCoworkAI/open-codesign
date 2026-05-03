@@ -1351,6 +1351,25 @@ describe('applyGenerateError via sendPrompt', () => {
     expect(records[0]?.code).toBe('GENERATION_FAILED');
   });
 
+  it('classifies opaque terminated transport failures while keeping the raw detail', async () => {
+    const err = new Error(
+      "Error invoking remote method 'codesign:v1:generate': CodesignError: terminated",
+    );
+
+    await runFailingGenerate(err);
+
+    const state = useCodesignStore.getState();
+    expect(state.lastError).toContain('The provider connection ended before the turn completed');
+    expect(state.lastError).toContain('Technical detail: terminated');
+    expect(state.lastError).not.toBe('terminated');
+    expect(state.toasts[0]?.description).toBe(state.lastError);
+    expect(state.reportableErrors[0]?.message).toBe(err.message);
+    expect(state.reportableErrors[0]?.context).toMatchObject({
+      diagnostic_category: 'transport-interrupted',
+      display_message: state.lastError,
+    });
+  });
+
   it('attaches upstream context from a NormalizedProviderError-shaped error', async () => {
     const err = Object.assign(new Error('http 502'), {
       code: 'PROVIDER_HTTP_5XX',

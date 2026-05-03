@@ -185,6 +185,43 @@ export function cleanGenerateErrorMessage(originalMessage: string): string {
   );
 }
 
+function isTransportDiagnostic(
+  hypothesis: DiagnosticHypothesis | undefined,
+): hypothesis is DiagnosticHypothesis {
+  return (
+    hypothesis?.category === 'transport-interrupted' ||
+    hypothesis?.category === 'relay-stream-cutoff'
+  );
+}
+
+function isOpaqueTransportMessage(message: string): boolean {
+  const normalized = message
+    .trim()
+    .toLowerCase()
+    .replace(/^error:\s*/, '');
+  // Keep this intentionally narrow: only terse transport-layer strings get
+  // replaced. More specific upstream messages should stay visible verbatim.
+  return (
+    /^(?:fetch failed:\s*)?terminated$/.test(normalized) ||
+    normalized === 'stream terminated' ||
+    normalized === 'premature close' ||
+    normalized === 'connection error' ||
+    normalized === 'request was aborted' ||
+    normalized === 'generation aborted by provider'
+  );
+}
+
+export function buildGenerateDisplayMessage(
+  originalMessage: string,
+  hypothesis: DiagnosticHypothesis | undefined,
+): string {
+  const cleaned = cleanGenerateErrorMessage(originalMessage);
+  if (!isTransportDiagnostic(hypothesis) || !isOpaqueTransportMessage(cleaned)) return cleaned;
+  const summary = tr(hypothesis.cause);
+  if (summary === hypothesis.cause) return cleaned;
+  return `${summary}\n\nTechnical detail: ${cleaned}`;
+}
+
 export function buildGenerateErrorDescription(
   originalMessage: string,
   hypothesis: DiagnosticHypothesis | undefined,
@@ -194,5 +231,6 @@ export function buildGenerateErrorDescription(
   // When the i18n key was missing, tr() falls back to returning the key
   // itself; don't double up "diagnostics.cause.x" in the toast.
   if (hint === hypothesis.cause) return originalMessage;
+  if (originalMessage.includes(hint)) return originalMessage;
   return `${originalMessage}\n\n${tr('diagnostics.mostLikelyCause')} ${hint}`;
 }
