@@ -1,4 +1,5 @@
 import { buildStandaloneDocument } from '@open-codesign/runtime';
+import { findHtmlStartTag, insertAfterHtmlStartTag } from '@open-codesign/shared/html-utils';
 import type { ExportResult } from './index';
 
 const TAILWIND_CDN = 'https://cdn.tailwindcss.com';
@@ -53,8 +54,8 @@ export function buildHtmlDocument(htmlContent: string, opts: ExportHtmlOptions =
 
 function ensureDocumentShell(html: string): string {
   const trimmed = html.trim();
-  if (/^<!doctype/i.test(trimmed)) return trimmed;
-  if (/<html[\s>]/i.test(trimmed)) return `<!doctype html>\n${trimmed}`;
+  if (trimmed.toLowerCase().startsWith('<!doctype')) return trimmed;
+  if (findHtmlStartTag(trimmed, 'html')) return `<!doctype html>\n${trimmed}`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -69,15 +70,15 @@ ${trimmed}
 }
 
 function hasTailwindScript(html: string): boolean {
-  return /cdn\.tailwindcss\.com/i.test(html);
+  return html.toLowerCase().includes('cdn.tailwindcss.com');
 }
 
 function injectIntoHead(html: string, tag: string): string {
-  if (/<head[\s>]/i.test(html)) {
-    return html.replace(/<head([^>]*)>/i, (m) => `${m}\n  ${tag}`);
+  if (findHtmlStartTag(html, 'head')) {
+    return insertAfterHtmlStartTag(html, 'head', `\n  ${tag}`);
   }
-  if (/<html[^>]*>/i.test(html)) {
-    return html.replace(/<html([^>]*)>/i, (m) => `${m}\n<head>\n  ${tag}\n</head>`);
+  if (findHtmlStartTag(html, 'html')) {
+    return insertAfterHtmlStartTag(html, 'html', `\n<head>\n  ${tag}\n</head>`);
   }
   return `${tag}\n${html}`;
 }

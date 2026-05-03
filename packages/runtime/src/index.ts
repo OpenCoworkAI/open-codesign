@@ -13,7 +13,10 @@
 
 import { ensureEditmodeMarkers } from '@open-codesign/shared';
 import {
+  findHtmlStartTag,
   getHtmlAttribute,
+  insertAfterHtmlStartTag,
+  insertBeforeHtmlEndTag,
   removeCspMetaTags,
   transformHtmlElementBlocks,
 } from '@open-codesign/shared/html-utils';
@@ -457,12 +460,10 @@ function injectJsxRuntimeIntoHtml(html: string): string {
   const stack = `${JSX_RUNTIME_MARKER}\n${jsxRuntimeScripts()}`;
   // Insert at the very top of <body> so user's own `<script type="text/babel">`
   // tags (which typically sit inside <body>) see React/Babel already loaded.
-  if (/<body[^>]*>/i.test(cleaned)) {
-    return cleaned.replace(/(<body[^>]*>)/i, (_match, open: string) => `${open}\n${stack}`);
-  }
-  if (/<\/head>/i.test(cleaned)) {
-    return cleaned.replace(/(<\/head>)/i, (close) => `${stack}\n${close}`);
-  }
+  if (findHtmlStartTag(cleaned, 'body'))
+    return insertAfterHtmlStartTag(cleaned, 'body', `\n${stack}`);
+  const withHead = insertBeforeHtmlEndTag(cleaned, 'head', `${stack}\n`);
+  if (withHead !== cleaned) return withHead;
   return `${stack}\n${cleaned}`;
 }
 
@@ -470,12 +471,10 @@ function injectStandaloneJsxRuntimeIntoHtml(html: string): string {
   if (html.includes(STANDALONE_RUNTIME_MARKER)) return html;
   const cleaned = markInlineJsxScriptsAsBabel(stripHostJsxRuntimeScripts(html));
   const stack = `${STANDALONE_RUNTIME_MARKER}\n${jsxRuntimeBaseScripts()}`;
-  if (/<body[^>]*>/i.test(cleaned)) {
-    return cleaned.replace(/(<body[^>]*>)/i, (_match, open: string) => `${open}\n${stack}`);
-  }
-  if (/<\/head>/i.test(cleaned)) {
-    return cleaned.replace(/(<\/head>)/i, (close) => `${stack}\n${close}`);
-  }
+  if (findHtmlStartTag(cleaned, 'body'))
+    return insertAfterHtmlStartTag(cleaned, 'body', `\n${stack}`);
+  const withHead = insertBeforeHtmlEndTag(cleaned, 'head', `${stack}\n`);
+  if (withHead !== cleaned) return withHead;
   return `${stack}\n${cleaned}`;
 }
 
@@ -484,12 +483,10 @@ function injectOverlayIntoHtmlDocument(html: string): string {
     return html;
   }
   const script = overlayScriptTag();
-  if (/<\/body\s*>/i.test(html)) {
-    return html.replace(/<\/body\s*>/i, () => `${script}</body>`);
-  }
-  if (/<\/html\s*>/i.test(html)) {
-    return html.replace(/<\/html\s*>/i, () => `${script}</html>`);
-  }
+  const withBody = insertBeforeHtmlEndTag(html, 'body', script);
+  if (withBody !== html) return withBody;
+  const withHtml = insertBeforeHtmlEndTag(html, 'html', script);
+  if (withHtml !== html) return withHtml;
   return `${html}${script}`;
 }
 
@@ -497,7 +494,7 @@ const PREVIEW_VIEWPORT_MARKER = '<!-- OPEN-CODESIGN-PREVIEW-VIEWPORT -->';
 
 function previewViewportSupportTags(): string {
   return `${PREVIEW_VIEWPORT_MARKER}
-<meta name="viewport" content="width=device-width, initial-scale=1.0" data-open-codesign="viewport" />
+${PREVIEW_VIEWPORT_META}
 <style data-open-codesign="preview-viewport">:root{--codesign-preview-width:100vw;--codesign-preview-height:100vh;}*,*::before,*::after{box-sizing:border-box;}html,body{max-width:100%;}</style>
 <script data-open-codesign="preview-viewport">
 (() => {
@@ -511,33 +508,42 @@ function previewViewportSupportTags(): string {
 </script>`;
 }
 
+const PREVIEW_VIEWPORT_META =
+  '<meta name="viewport" content="width=device-width, initial-scale=1.0" data-open-codesign="viewport" />';
+
 function injectPreviewViewportSupportIntoHtmlDocument(html: string): string {
   if (html.includes(PREVIEW_VIEWPORT_MARKER)) return html;
   const tags = previewViewportSupportTags();
-  const hasViewport = /<meta[^>]+name=["']viewport["'][^>]*>/i.test(html);
-  const support = hasViewport
-    ? tags.replace(
-        /<meta name="viewport" content="width=device-width, initial-scale=1\.0" data-open-codesign="viewport" \/>\n/,
-        '',
-      )
-    : tags;
-  if (/<\/head>/i.test(html)) {
-    return html.replace(/<\/head>/i, (close) => `${support}\n${close}`);
-  }
-  if (/<html[^>]*>/i.test(html)) {
-    return html.replace(/(<html[^>]*>)/i, `$1\n<head>\n${support}\n</head>`);
+  const support = hasViewportMeta(html) ? tags.split(`${PREVIEW_VIEWPORT_META}\n`).join('') : tags;
+  const withHead = insertBeforeHtmlEndTag(html, 'head', `${support}\n`);
+  if (withHead !== html) return withHead;
+  if (findHtmlStartTag(html, 'html')) {
+    return insertAfterHtmlStartTag(html, 'html', `\n<head>\n${support}\n</head>`);
   }
   return `${support}\n${html}`;
 }
 
-function injectBaseHrefIntoHtmlDocument(html: string, baseHref: string | undefined): string {
-  if (!baseHref || /<base\s/i.test(html)) return html;
-  const tag = baseTag(baseHref).trimEnd();
-  if (/<head[^>]*>/i.test(html)) {
-    return html.replace(/(<head[^>]*>)/i, `$1\n${tag}`);
+function hasViewportMeta(html: string): boolean {
+  const lower = html.toLowerCase();
+  let cursor = 0;
+  while (cursor < html.length) {
+    const start = lower.indexOf('<meta', cursor);
+    if (start < 0) return false;
+    const end = html.indexOf('>', start);
+    if (end < 0) return false;
+    const attrs = html.slice(start + 5, end);
+    if (getHtmlAttribute(attrs, 'name')?.toLowerCase() === 'viewport') return true;
+    cursor = end + 1;
   }
-  if (/<html[^>]*>/i.test(html)) {
-    return html.replace(/(<html[^>]*>)/i, `$1\n<head>\n${tag}\n</head>`);
+  return false;
+}
+
+function injectBaseHrefIntoHtmlDocument(html: string, baseHref: string | undefined): string {
+  if (!baseHref || findHtmlStartTag(html, 'base')) return html;
+  const tag = baseTag(baseHref).trimEnd();
+  if (findHtmlStartTag(html, 'head')) return insertAfterHtmlStartTag(html, 'head', `\n${tag}`);
+  if (findHtmlStartTag(html, 'html')) {
+    return insertAfterHtmlStartTag(html, 'html', `\n<head>\n${tag}\n</head>`);
   }
   return `${tag}\n${html}`;
 }

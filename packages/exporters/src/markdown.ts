@@ -183,22 +183,65 @@ export function sanitizeUrl(raw: string, kind: 'link' | 'image'): string | null 
   const colonIdx = probe.indexOf(':');
   if (colonIdx > 0) {
     const schemePart = probe.slice(0, colonIdx);
-    if (/%[0-9a-fA-F]{2}/.test(schemePart)) {
+    if (hasPercentEncodedByte(schemePart)) {
       try {
         probe = decodeURIComponent(schemePart) + probe.slice(colonIdx);
       } catch {
-        // Leave probe untouched — the regex below will catch obviously unsafe forms.
+        // Leave probe untouched; the scheme parser below catches unsafe forms.
       }
     }
   }
   probe = stripControlChars(probe).trim();
 
-  if (/^(https?:|mailto:)/i.test(probe)) return output;
-  if (kind === 'image' && /^data:image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp);/i.test(probe)) {
+  const scheme = urlScheme(probe);
+  if (scheme === 'http' || scheme === 'https' || scheme === 'mailto') return output;
+  if (kind === 'image' && isAllowedImageDataUrl(probe)) {
     return output;
   }
-  if (/^[a-z][a-z0-9+.-]*:/i.test(probe)) return null;
+  if (scheme !== null) return null;
   return output;
+}
+
+function hasPercentEncodedByte(value: string): boolean {
+  for (let i = 0; i + 2 < value.length; i += 1) {
+    if (value[i] !== '%') continue;
+    if (isHex(value[i + 1] ?? '') && isHex(value[i + 2] ?? '')) return true;
+  }
+  return false;
+}
+
+function isHex(ch: string): boolean {
+  const code = ch.charCodeAt(0);
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 70) || (code >= 97 && code <= 102);
+}
+
+function urlScheme(value: string): string | null {
+  const colon = value.indexOf(':');
+  if (colon <= 0) return null;
+  const first = value.charCodeAt(0);
+  const startsAlpha = (first >= 65 && first <= 90) || (first >= 97 && first <= 122);
+  if (!startsAlpha) return null;
+  for (let i = 1; i < colon; i += 1) {
+    const code = value.charCodeAt(i);
+    const ok =
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57) ||
+      value[i] === '+' ||
+      value[i] === '.' ||
+      value[i] === '-';
+    if (!ok) return null;
+  }
+  return value.slice(0, colon).toLowerCase();
+}
+
+function isAllowedImageDataUrl(value: string): boolean {
+  const lower = value.toLowerCase();
+  if (!lower.startsWith('data:image/')) return false;
+  const semi = lower.indexOf(';');
+  if (semi < 0) return false;
+  const mime = lower.slice('data:image/'.length, semi);
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg+xml', 'avif', 'bmp'].includes(mime);
 }
 
 function decodeEntities(input: string): string {

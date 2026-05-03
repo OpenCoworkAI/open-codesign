@@ -55,6 +55,35 @@ function findOpenTag(htmlLower: string, tagName: string, from: number): number {
   return -1;
 }
 
+export function findHtmlStartTag(
+  html: string,
+  tagName: string,
+): { start: number; end: number; attrs: string; tag: string } | null {
+  const tag = tagName.toLowerCase();
+  const start = findOpenTag(html.toLowerCase(), tag, 0);
+  if (start < 0) return null;
+  const end = tagOpenEnd(html, start);
+  return {
+    start,
+    end,
+    attrs: html.slice(start + tag.length + 1, end - 1),
+    tag: html.slice(start, end),
+  };
+}
+
+export function insertAfterHtmlStartTag(html: string, tagName: string, content: string): string {
+  const startTag = findHtmlStartTag(html, tagName);
+  if (startTag === null) return html;
+  return `${html.slice(0, startTag.end)}${content}${html.slice(startTag.end)}`;
+}
+
+export function insertBeforeHtmlEndTag(html: string, tagName: string, content: string): string {
+  const lower = html.toLowerCase();
+  const closeStart = findClosingTagStart(lower, tagName.toLowerCase(), 0);
+  if (closeStart < 0) return html;
+  return `${html.slice(0, closeStart)}${content}${html.slice(closeStart)}`;
+}
+
 function findClosingTagEnd(htmlLower: string, tagName: string, from: number): number {
   const start = htmlLower.indexOf(`</${tagName}`, from);
   if (start < 0) return -1;
