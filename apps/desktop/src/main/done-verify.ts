@@ -66,7 +66,7 @@ export function makeRuntimeVerifier(): DoneRuntimeVerifier {
     const onConsole = (...args: unknown[]) => {
       // Electron 35+ emits a single Event-like object; older majors emit
       // positional (event, level, message, line, sourceId). Detect by
-      // arity — a single object argument means the new shape.
+      // arity: a single object argument means the new shape.
       let level: ConsoleMessageEvent['level'];
       let message: string;
       let line: number | undefined;
@@ -99,7 +99,7 @@ export function makeRuntimeVerifier(): DoneRuntimeVerifier {
     };
 
     try {
-      // Cast through `any` for the event-name overloads — Electron's WebContents
+      // Cast through `any` for the event-name overloads: Electron's WebContents
       // event union doesn't include 'did-fail-load' / 'preload-error' in the
       // overload set this TS lib resolves, even though the events fire at runtime.
       const wc = win.webContents as unknown as {
