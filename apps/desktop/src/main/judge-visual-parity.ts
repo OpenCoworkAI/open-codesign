@@ -10,66 +10,18 @@
  * plumbing.
  */
 
-import type { JudgeVisualParityFn, VisualParityImageRef } from '@open-codesign/core';
+import {
+  type JudgeVisualParityFn,
+  STANDARD_VISUAL_PARITY_CHECKS,
+  type VisualParityImageRef,
+} from '@open-codesign/core';
 
-const STANDARD_CHECKS: Array<{ id: string; question: string }> = [
-  {
-    id: 'layout.column_count_match',
-    question: 'Does the candidate have the same number of major columns / regions as the source?',
-  },
-  {
-    id: 'layout.region_positions_match',
-    question:
-      'Are major regions (header / sidebar / main / right rail / footer) in the same positions as the source?',
-  },
-  {
-    id: 'layout.hierarchy_preserved',
-    question: 'Is the visual hierarchy (heading > subhead > body > footer) preserved?',
-  },
-  {
-    id: 'color.accent_color_match',
-    question:
-      'Is the primary accent color visually equivalent to the source (same hue family, similar saturation)?',
-  },
-  {
-    id: 'color.palette_consistency_match',
-    question:
-      'Does the overall palette feel match the source (warm/cool, saturated/muted, contrast level)?',
-  },
-  {
-    id: 'typography.font_family_match',
-    question:
-      'Does the font family character (serif / sans / mono) match the source for each text role?',
-  },
-  {
-    id: 'typography.heading_hierarchy_match',
-    question: 'Are heading weights and sizes stepped similarly (H1 vs body vs caption)?',
-  },
-  {
-    id: 'content.text_labels_present',
-    question:
-      'Are all visible text labels from the source present in the candidate (nav items, headings, button text)?',
-  },
-  {
-    id: 'content.all_sections_present',
-    question:
-      'Are all distinct sections from the source present in the candidate (not just one missing region)?',
-  },
-  {
-    id: 'components.repeated_pattern_count_match',
-    question:
-      'Does the candidate have approximately the same count of repeated patterns (cards / list items / nav links) as the source?',
-  },
-  {
-    id: 'components.component_structure_match',
-    question:
-      'Do repeated components have the same internal anatomy (header + body + footer pieces)?',
-  },
-  {
-    id: 'components.icon_motif_match',
-    question: 'Are icons / glyphs in the same style (line vs filled, monochrome vs colored)?',
-  },
-];
+// Use the canonical check list from core. Previously this file kept its own
+// duplicate copy; that risked drift if one was updated without the other
+// (review finding on PR #241). The host prompt only needs id + question, so
+// we project the core's `{id, dimension, question}` down to `{id, question}`.
+const STANDARD_CHECKS: ReadonlyArray<{ id: string; question: string }> =
+  STANDARD_VISUAL_PARITY_CHECKS.map((c) => ({ id: c.id, question: c.question }));
 
 export const SYSTEM_PROMPT = `You are a meticulous visual QA judge comparing two UI screenshots.
 
@@ -191,11 +143,17 @@ export function makeJudgeVisualParity(runVisionPrompt: RunVisionPromptFn): Judge
       { data: dataUrlToBase64(candidate.dataUrl), mimeType: candidate.mediaType },
     ];
 
+    // 4096 fits comfortably under the output cap of every vision model we
+    // currently route to (Gemini Flash ~8k, Sonnet ~8k, GPT-4o ~16k) and
+    // matches the judge's actual envelope: 12 short {passed, reason} entries
+    // + a 1-2 sentence summary lands at ~1.5k tokens in practice. 8000 was a
+    // worst-case safety buffer that caused waste on cheap models without
+    // helping correctness — review nit on PR #241.
     const result = await runVisionPrompt({
       systemPrompt: SYSTEM_PROMPT,
       userText: USER_PROMPT,
       userImages,
-      maxTokens: 8000,
+      maxTokens: 4096,
       ...(signal ? { signal } : {}),
     });
 
