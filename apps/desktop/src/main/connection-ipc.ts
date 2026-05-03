@@ -69,7 +69,11 @@ export interface ConnectionTestResult {
    * endpoint so a gateway that only implements /chat/completions can't
    * false-positive for a user whose provider is on the Responses API.
    */
-  probeMethod?: 'models' | 'chat_completion_degraded' | 'responses_degraded';
+  probeMethod?:
+    | 'models'
+    | 'chat_completion_degraded'
+    | 'responses_degraded'
+    | 'anthropic_messages_degraded';
   compatibility?: 'compatible' | 'degraded';
   reasonCategory?: DiagnosticCategory;
 }
@@ -552,7 +556,12 @@ export async function runProviderTest(
     // chat request before declaring the endpoint dead. We intentionally do
     // not degrade anthropic — its /v1/models is standard, and skipping it
     // would mask real path-shape mistakes.
-    if (res.status === 404 && (creds.wire === 'openai-chat' || creds.wire === 'openai-responses')) {
+    if (
+      res.status === 404 &&
+      (creds.wire === 'openai-chat' ||
+        creds.wire === 'openai-responses' ||
+        creds.wire === 'anthropic')
+    ) {
       const degraded = await tryDegradeProbe(creds.wire, normalizedBaseUrl, headers);
       if (degraded !== null) return degraded;
       // Inference endpoint also 404'd (or the network dropped) — fall through
@@ -572,7 +581,7 @@ export async function runProviderTest(
 }
 
 async function tryDegradeProbe(
-  wire: 'openai-chat' | 'openai-responses',
+  wire: 'openai-chat' | 'openai-responses' | 'anthropic',
   normalizedBaseUrl: string,
   headers: Record<string, string>,
 ): Promise<ConnectionTestResponse | null> {
@@ -580,7 +589,12 @@ async function tryDegradeProbe(
   if (probe.kind === 'pass') {
     return {
       ok: true,
-      probeMethod: wire === 'openai-responses' ? 'responses_degraded' : 'chat_completion_degraded',
+      probeMethod:
+        wire === 'openai-responses'
+          ? 'responses_degraded'
+          : wire === 'anthropic'
+            ? 'anthropic_messages_degraded'
+            : 'chat_completion_degraded',
       compatibility: 'degraded',
       reasonCategory: 'model-discovery-degraded',
     };
@@ -616,28 +630,37 @@ type ProbeResult =
  * shape with a 4xx we still know the route exists.
  */
 async function probeInferenceEndpoint(
-  wire: 'openai-chat' | 'openai-responses',
+  wire: 'openai-chat' | 'openai-responses' | 'anthropic',
   normalizedBaseUrl: string,
   headers: Record<string, string>,
 ): Promise<ProbeResult> {
   const url =
-    wire === 'openai-responses'
-      ? `${normalizedBaseUrl}/responses`
-      : `${normalizedBaseUrl}/chat/completions`;
+    wire === 'anthropic'
+      ? `${normalizedBaseUrl}/v1/messages`
+      : wire === 'openai-responses'
+        ? `${normalizedBaseUrl}/responses`
+        : `${normalizedBaseUrl}/chat/completions`;
   const body =
-    wire === 'openai-responses'
+    wire === 'anthropic'
       ? JSON.stringify({
-          model: 'probe',
-          input: [{ role: 'user', content: [{ type: 'input_text', text: 'ping' }] }],
-          max_output_tokens: 1,
-          stream: false,
-        })
-      : JSON.stringify({
           model: 'probe',
           messages: [{ role: 'user', content: 'ping' }],
           max_tokens: 1,
           stream: false,
-        });
+        })
+      : wire === 'openai-responses'
+        ? JSON.stringify({
+            model: 'probe',
+            input: [{ role: 'user', content: [{ type: 'input_text', text: 'ping' }] }],
+            max_output_tokens: 1,
+            stream: false,
+          })
+        : JSON.stringify({
+            model: 'probe',
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 1,
+            stream: false,
+          });
   let res: Response;
   try {
     res = await fetchWithTimeout(url, {
@@ -653,8 +676,32 @@ async function probeInferenceEndpoint(
   // 401/403 — endpoint alive but auth rejected; surface as auth error so the
   // diagnostics panel shows the key-invalid hint instead of the 404 one.
   if (res.status === 401 || res.status === 403) return { kind: 'http', status: res.status };
+  if (wire === 'anthropic') {
+    const body = await responseJson(res);
+    return hasAnthropicApiErrorShape(body)
+      ? { kind: 'pass' }
+      : { kind: 'http', status: res.status };
+  }
   // 400/402/422/429 etc. — endpoint alive, request-level rejection.
   return { kind: 'pass' };
+}
+
+async function responseJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasAnthropicApiErrorShape(value: unknown): boolean {
+  if (!isJsonRecord(value)) return false;
+  const error = value['error'];
+  return isJsonRecord(error) && typeof error['type'] === 'string';
 }
 
 export function registerConnectionIpc(): void {

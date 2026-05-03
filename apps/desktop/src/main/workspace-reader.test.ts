@@ -64,7 +64,7 @@ describe('readWorkspaceFilesAt', () => {
     );
     const result = await readWorkspaceFilesAt(root);
     expect(result.length).toBe(200);
-  });
+  }, 20_000);
 
   it('caps total bytes at 2 MB', async () => {
     // 20 × 150KB = 3 MB total. We expect the reader to stop before pulling

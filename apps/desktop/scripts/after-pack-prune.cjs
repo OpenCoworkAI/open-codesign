@@ -13,8 +13,53 @@ function archName(arch) {
   return typeof arch === 'number' ? (ARCH_NAMES[arch] ?? String(arch)) : String(arch);
 }
 
+function sleepSync(ms) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    // Busy wait is acceptable here: this is a short build-time retry delay.
+  }
+}
+
+function withRmRetry(fn) {
+  for (let attempt = 0; attempt <= 3; attempt += 1) {
+    try {
+      fn();
+      return;
+    } catch (err) {
+      if (err?.code === 'ENOENT') return;
+      if (!['EBUSY', 'ENOTEMPTY', 'EPERM'].includes(err?.code) || attempt === 3) {
+        throw err;
+      }
+      sleepSync(50 * (attempt + 1));
+    }
+  }
+}
+
 function rm(target) {
-  fs.rmSync(target, { recursive: true, force: true, maxRetries: 3 });
+  const pending = [target];
+  const directories = [];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) continue;
+    let stat;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (err) {
+      if (err?.code === 'ENOENT') continue;
+      throw err;
+    }
+    if (!stat.isDirectory()) {
+      withRmRetry(() => fs.unlinkSync(current));
+      continue;
+    }
+    directories.push(current);
+    for (const entry of fs.readdirSync(current)) {
+      pending.push(path.join(current, entry));
+    }
+  }
+  for (const dir of directories.reverse()) {
+    withRmRetry(() => fs.rmdirSync(dir));
+  }
 }
 
 function existingDirs(paths) {

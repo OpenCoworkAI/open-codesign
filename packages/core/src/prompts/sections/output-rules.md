@@ -21,3 +21,5 @@
 - Use CSS custom properties or a token object for load-bearing visual values.
 - Content must be domain-specific: no lorem ipsum, "John Doe", "Acme Corp", placeholder numbers, or stale dates.
 - Responsive behavior is required for user-facing surfaces unless the artifact is an intentionally fixed-format slide or frame.
+- Keep text readable across the preview's mobile, tablet, and desktop viewports. Prefer `rem`, `%`, viewport-aware layout, and `clamp()` for important type; avoid tiny fixed `px` labels that become unreadable after resizing.
+- Prevent accidental horizontal clipping. Use `box-sizing: border-box`, responsive widths, `max-width: 100%`, and deliberate `overflow-x` behavior for wide slide/report surfaces.

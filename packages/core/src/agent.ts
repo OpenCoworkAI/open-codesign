@@ -33,6 +33,7 @@ import {
   classifyError,
   claudeCodeIdentityHeaders,
   inferReasoning,
+  isProviderAbortedTransportError,
   isTransportLevelError,
   looksLikeClaudeOAuthToken,
   normalizeGeminiModelId,
@@ -811,9 +812,15 @@ export async function generateViaAgent(
   while (transportRetryCount < MAX_TRANSPORT_RETRIES) {
     const checkMsg = findFinalAssistantMessage(agent.state.messages);
     if (!checkMsg || checkMsg.stopReason === 'stop') break;
-    if (checkMsg.stopReason !== 'error') break;
-    if (!isTransportLevelError(checkMsg.errorMessage)) break;
     if (input.signal?.aborted) break;
+    const retryableTransportFailure =
+      checkMsg.stopReason === 'error'
+        ? isTransportLevelError(checkMsg.errorMessage)
+        : checkMsg.stopReason === 'aborted' &&
+          isProviderAbortedTransportError(
+            checkMsg.errorMessage ?? messageForIncompleteStop(checkMsg.stopReason),
+          );
+    if (!retryableTransportFailure) break;
 
     transportRetryCount++;
     log.warn('[generate] step=transport_retry', {
@@ -914,13 +921,15 @@ export async function generateViaAgent(
       collected.artifacts.push(createHtmlArtifact(file.content, 0));
     }
   }
-  if (deps.tools === undefined && deps.fs !== undefined) {
-    assertFinalizationGate({
-      state: resourceState,
-      fs: deps.fs,
-      enforce: resourceState.mutationSeq > 0,
-    });
-  }
+  const finalizationWarnings =
+    deps.tools === undefined && deps.fs !== undefined
+      ? assertFinalizationGate({
+          state: resourceState,
+          fs: deps.fs,
+          enforce: resourceState.mutationSeq > 0,
+          allowUnresolvedDoneWithArtifact: collected.artifacts.length > 0,
+        })
+      : [];
   log.info('[generate] step=parse_response.ok', {
     ...ctx,
     ms: Date.now() - parseStart,
@@ -938,8 +947,9 @@ export async function generateViaAgent(
     costUsd: usage?.cost?.total ?? 0,
     resourceState,
   };
-  return resourceResult.warnings.length > 0
-    ? { ...output, warnings: [...(output.warnings ?? []), ...resourceResult.warnings] }
+  const warnings = [...finalizationWarnings, ...resourceResult.warnings];
+  return warnings.length > 0
+    ? { ...output, warnings: [...(output.warnings ?? []), ...warnings] }
     : output;
 }
 

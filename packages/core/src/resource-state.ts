@@ -49,6 +49,7 @@ export interface FinalizationGateInput {
   state: ResourceStateV1;
   fs: TextEditorFsCallbacks;
   enforce: boolean;
+  allowUnresolvedDoneWithArtifact?: boolean | undefined;
 }
 
 function hasRealChartMarkup(source: string): boolean {
@@ -84,8 +85,8 @@ function validationFailures(state: ResourceStateV1, source: string): string[] {
   return failures;
 }
 
-export function assertFinalizationGate(input: FinalizationGateInput): void {
-  if (!input.enforce) return;
+export function assertFinalizationGate(input: FinalizationGateInput): string[] {
+  if (!input.enforce) return [];
   const file = input.fs.view('index.html');
   if (file === null || file.content.trim().length === 0) {
     throw new CodesignError(
@@ -101,6 +102,9 @@ export function assertFinalizationGate(input: FinalizationGateInput): void {
     );
   }
   if (done.status !== 'ok') {
+    if (input.allowUnresolvedDoneWithArtifact) {
+      return ['done() reported unresolved errors; keeping the generated artifact available.'];
+    }
     throw new CodesignError(
       'Generation incomplete: done() reported unresolved errors.',
       ERROR_CODES.GENERATION_INCOMPLETE,
@@ -119,4 +123,5 @@ export function assertFinalizationGate(input: FinalizationGateInput): void {
       ERROR_CODES.GENERATION_INCOMPLETE,
     );
   }
+  return [];
 }

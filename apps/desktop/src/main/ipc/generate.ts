@@ -50,6 +50,7 @@ import { listSessionChatMessages, type SessionChatStoreOptions } from '../sessio
 import { type Database, getDesign, recordDiagnosticEvent } from '../snapshots-db';
 import { readWorkspaceFilesAt } from '../workspace-reader';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
+import { toolExecutionIsErrorForLog } from './tool-log';
 
 /**
  * Pull an HTTP status code out of a caught provider error. Mirrors
@@ -334,7 +335,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             logIpc.info('agent.tool_end', {
               generationId: id,
               tool: event.toolName,
-              isError: event.isError,
+              isError: toolExecutionIsErrorForLog(event),
             });
           } else if (event.type === 'turn_end') {
             logIpc.info('agent.turn_end', {

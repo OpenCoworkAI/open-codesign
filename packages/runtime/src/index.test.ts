@@ -42,6 +42,15 @@ describe('buildSrcdoc', () => {
     expect(twice).toBe(once);
   });
 
+  it('injects preview viewport support into full-HTML documents without duplicating viewport meta', () => {
+    const out = buildSrcdoc(
+      '<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body><p>x</p></body></html>',
+    );
+    expect(out).toContain('OPEN-CODESIGN-PREVIEW-VIEWPORT');
+    expect(out).toContain('--codesign-preview-width');
+    expect(out.match(/name="viewport"/g)).toHaveLength(1);
+  });
+
   it('injects the JSX runtime stack when a full-HTML payload uses <script type="text/babel">', () => {
     const mixed = [
       '<!doctype html>',

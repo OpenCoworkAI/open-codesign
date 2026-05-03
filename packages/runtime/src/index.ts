@@ -392,6 +392,43 @@ function injectOverlayIntoHtmlDocument(html: string): string {
   return `${html}${script}`;
 }
 
+const PREVIEW_VIEWPORT_MARKER = '<!-- OPEN-CODESIGN-PREVIEW-VIEWPORT -->';
+
+function previewViewportSupportTags(): string {
+  return `${PREVIEW_VIEWPORT_MARKER}
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-open-codesign="viewport" />
+<style data-open-codesign="preview-viewport">:root{--codesign-preview-width:100vw;--codesign-preview-height:100vh;}*,*::before,*::after{box-sizing:border-box;}html,body{max-width:100%;}</style>
+<script data-open-codesign="preview-viewport">
+(() => {
+  const sync = () => {
+    document.documentElement.style.setProperty('--codesign-preview-width', \`\${window.innerWidth}px\`);
+    document.documentElement.style.setProperty('--codesign-preview-height', \`\${window.innerHeight}px\`);
+  };
+  sync();
+  window.addEventListener('resize', sync, { passive: true });
+})();
+</script>`;
+}
+
+function injectPreviewViewportSupportIntoHtmlDocument(html: string): string {
+  if (html.includes(PREVIEW_VIEWPORT_MARKER)) return html;
+  const tags = previewViewportSupportTags();
+  const hasViewport = /<meta[^>]+name=["']viewport["'][^>]*>/i.test(html);
+  const support = hasViewport
+    ? tags.replace(
+        /<meta name="viewport" content="width=device-width, initial-scale=1\.0" data-open-codesign="viewport" \/>\n/,
+        '',
+      )
+    : tags;
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, (close) => `${support}\n${close}`);
+  }
+  if (/<html[^>]*>/i.test(html)) {
+    return html.replace(/(<html[^>]*>)/i, `$1\n<head>\n${support}\n</head>`);
+  }
+  return `${support}\n${html}`;
+}
+
 function injectBaseHrefIntoHtmlDocument(html: string, baseHref: string | undefined): string {
   if (!baseHref || /<base\s/i.test(html)) return html;
   const tag = baseTag(baseHref).trimEnd();
@@ -438,7 +475,9 @@ export function buildPreviewDocument(
       ? injectJsxRuntimeIntoHtml(stripped)
       : stripped;
     return injectOverlayIntoHtmlDocument(
-      injectBaseHrefIntoHtmlDocument(withRuntime, opts.baseHref),
+      injectPreviewViewportSupportIntoHtmlDocument(
+        injectBaseHrefIntoHtmlDocument(withRuntime, opts.baseHref),
+      ),
     );
   }
 

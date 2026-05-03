@@ -556,6 +556,7 @@ export type {
 export {
   classifyError,
   completeWithRetry,
+  isProviderAbortedTransportError,
   isTransportLevelError,
   sleepWithAbort,
   withBackoff,

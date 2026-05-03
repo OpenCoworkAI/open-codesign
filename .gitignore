@@ -57,6 +57,7 @@ pnpm-debug.log*
 # VitePress
 website/.vitepress/dist/
 website/.vitepress/cache/
+website/.vitepress/.temp/
 
 # Playwright MCP screenshots
 .playwright-mcp/
