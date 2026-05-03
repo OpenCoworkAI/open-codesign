@@ -21,6 +21,7 @@ const loadBuiltinSkillsMock = vi.fn(async (): Promise<LoadedSkill[]> => []);
 interface AgentCall {
   options: AgentOptions;
   prompts: Array<{ message: unknown }>;
+  continues: number;
   listeners: Array<(e: AgentEvent) => void>;
   aborted: boolean;
 }
@@ -80,6 +81,7 @@ interface AgentScript {
     times?: number;
     params?: Record<string, unknown>;
   };
+  messagesBeforeAssistant?: AgentMessage[];
   /**
    * When set, the mock switches to `overrideScript` starting from this
    * agent-call index (0-based). Lets transport-retry tests script
@@ -97,7 +99,7 @@ vi.mock('@mariozechner/pi-agent-core', () => {
     readonly state: { messages: AgentMessage[] };
     private readonly call: AgentCall;
     constructor(options: AgentOptions) {
-      this.call = { options, prompts: [], listeners: [], aborted: false };
+      this.call = { options, prompts: [], continues: 0, listeners: [], aborted: false };
       agentCalls.push(this.call);
       const seed = (options.initialState?.messages ?? []) as AgentMessage[];
       this.state = { messages: [...seed] };
@@ -200,6 +202,9 @@ vi.mock('@mariozechner/pi-agent-core', () => {
       this.state.messages.push(userMsg);
       this.emit({ type: 'message_start', message: userMsg });
       this.emit({ type: 'message_end', message: userMsg });
+      for (const extraMessage of script.messagesBeforeAssistant ?? []) {
+        this.state.messages.push(extraMessage);
+      }
 
       const assistantMsg: AgentMessage = {
         role: 'assistant',
@@ -223,6 +228,50 @@ vi.mock('@mariozechner/pi-agent-core', () => {
       };
       this.state.messages.push(assistantMsg);
 
+      for (const e of script.events ?? []) this.emit(e);
+      this.emit({
+        type: 'message_update',
+        message: assistantMsg,
+        // biome-ignore lint/suspicious/noExplicitAny: AssistantMessageEvent shape not re-exported.
+        assistantMessageEvent: { type: 'text_delta', delta: script.assistantText } as any,
+      });
+      this.emit({ type: 'message_end', message: assistantMsg });
+      this.emit({ type: 'turn_end', message: assistantMsg, toolResults: [] });
+      this.emit({ type: 'agent_end', messages: this.state.messages });
+    }
+    async continue(): Promise<void> {
+      this.call.continues += 1;
+      const callIndex = agentCalls.indexOf(this.call);
+      const script =
+        scriptedAgent.overrideScriptForCallIndex !== undefined &&
+        callIndex >= scriptedAgent.overrideScriptForCallIndex &&
+        scriptedAgent.overrideScript
+          ? { ...scriptedAgent, ...scriptedAgent.overrideScript }
+          : scriptedAgent;
+
+      this.emit({ type: 'agent_start' });
+      this.emit({ type: 'turn_start' });
+      const assistantMsg: AgentMessage = {
+        role: 'assistant',
+        // biome-ignore lint/suspicious/noExplicitAny: matches pi-ai Api/Provider literal unions in mocks.
+        api: 'anthropic-messages' as any,
+        // biome-ignore lint/suspicious/noExplicitAny: same.
+        provider: 'anthropic' as any,
+        model: 'mock-model',
+        content: [{ type: 'text', text: script.assistantText }],
+        usage: script.usage ?? {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: script.stopReason ?? 'stop',
+        ...(script.errorMessage ? { errorMessage: script.errorMessage } : {}),
+        timestamp: Date.now(),
+      };
+      this.state.messages.push(assistantMsg);
       for (const e of script.events ?? []) this.emit(e);
       this.emit({
         type: 'message_update',
@@ -448,6 +497,83 @@ describe('generateViaAgent()', () => {
     });
 
     expect(agentCalls[0]?.options.initialState?.thinkingLevel).toBe('off');
+  });
+
+  it('replays the prompt with thinking off after a first-turn reasoning_content error', async () => {
+    scriptedAgent = {
+      assistantText: '',
+      stopReason: 'error',
+      errorMessage:
+        '400 The `reasoning_content` in the thinking mode must be passed back to the API.',
+      overrideScriptForCallIndex: 1,
+      overrideScript: {
+        assistantText: RESPONSE_WITH_ARTIFACT,
+        stopReason: 'stop',
+      },
+    };
+    const onRetry = vi.fn();
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a dashboard',
+        history: [],
+        model: { provider: 'openrouter', modelId: 'deepseek/deepseek-r1' },
+        apiKey: 'sk-test',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        wire: 'openai-chat',
+      },
+      { onRetry, fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+    );
+
+    expect(result.artifacts).toHaveLength(1);
+    expect(agentCalls).toHaveLength(2);
+    expect(agentCalls[1]?.options.initialState?.thinkingLevel).toBe('off');
+    expect(agentCalls[1]?.continues).toBe(0);
+    expect(agentCalls[1]?.prompts).toHaveLength(1);
+    expect(onRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: expect.stringContaining('reasoning_content') }),
+    );
+  });
+
+  it('continues from the last tool result when retrying reasoning_content errors', async () => {
+    scriptedAgent = {
+      assistantText: '',
+      stopReason: 'error',
+      errorMessage:
+        '400 The `reasoning_content` in the thinking mode must be passed back to the API.',
+      messagesBeforeAssistant: [
+        {
+          role: 'toolResult',
+          toolCallId: 'done-call',
+          toolName: 'done',
+          content: [{ type: 'text', text: 'has_errors' }],
+          details: {},
+          isError: false,
+          timestamp: Date.now(),
+        } as unknown as AgentMessage,
+      ],
+      overrideScriptForCallIndex: 1,
+      overrideScript: {
+        assistantText: RESPONSE_WITH_ARTIFACT,
+        stopReason: 'stop',
+      },
+    };
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a dashboard',
+        history: [],
+        model: { provider: 'openrouter', modelId: 'deepseek/deepseek-r1' },
+        apiKey: 'sk-test',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        wire: 'openai-chat',
+      },
+      { fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+    );
+
+    expect(result.artifacts).toHaveLength(1);
+    expect(agentCalls).toHaveLength(2);
+    expect(agentCalls[1]?.options.initialState?.thinkingLevel).toBe('off');
+    expect(agentCalls[1]?.continues).toBe(1);
+    expect(agentCalls[1]?.prompts).toHaveLength(0);
   });
 
   it('leaves native Gemini endpoint model IDs untouched', async () => {
