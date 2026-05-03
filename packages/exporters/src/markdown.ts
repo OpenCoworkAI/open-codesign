@@ -174,7 +174,7 @@ export function sanitizeUrl(raw: string, kind: 'link' | 'image'): string | null 
   const output = stripControlChars(raw).trim();
   if (!output) return null;
 
-  let probe = decodeEntities(output);
+  let probe = decodeUrlEntitiesForScheme(output);
   let encodedScheme: string | null = null;
   const colonIdx = probe.indexOf(':');
   if (colonIdx > 0) {
@@ -238,6 +238,39 @@ function isAllowedImageDataUrl(value: string): boolean {
   if (semi < 0) return false;
   const mime = lower.slice('data:image/'.length, semi);
   return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg+xml', 'avif', 'bmp'].includes(mime);
+}
+
+function decodeUrlEntitiesForScheme(input: string): string {
+  let out = '';
+  for (let i = 0; i < input.length; i += 1) {
+    if (input[i] !== '&') {
+      out += input[i];
+      continue;
+    }
+    const semi = input.indexOf(';', i + 1);
+    if (semi < 0) {
+      out += input[i];
+      continue;
+    }
+    const entity = input.slice(i + 1, semi);
+    let decoded: string | null = null;
+    if (entity.startsWith('#x') || entity.startsWith('#X')) {
+      const code = Number.parseInt(entity.slice(2), 16);
+      decoded = safeFromCodePoint(code);
+    } else if (entity.startsWith('#')) {
+      const code = Number.parseInt(entity.slice(1), 10);
+      decoded = safeFromCodePoint(code);
+    } else if (entity.toLowerCase() === 'colon') {
+      decoded = ':';
+    }
+    if (decoded === null) {
+      out += input.slice(i, semi + 1);
+    } else {
+      out += decoded;
+    }
+    i = semi;
+  }
+  return out;
 }
 
 function decodeEntities(input: string): string {
