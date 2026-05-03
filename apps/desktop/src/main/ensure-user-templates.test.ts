@@ -76,7 +76,73 @@ describe('ensureUserTemplates', () => {
     await expect(ensureUserTemplates(userData, source)).resolves.toMatchObject({
       action: 'skipped',
       copiedFiles: 0,
+      updatedFiles: 0,
     });
+  });
+
+  it('repairs stale scaffold manifest metadata without overwriting user edits', async () => {
+    const source = path.join(root, 'bundle', 'templates');
+    mkdirSync(path.join(source, 'scaffolds'), { recursive: true });
+    writeFileSync(
+      path.join(source, 'scaffolds', 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        scaffolds: {
+          'iphone-frame': {
+            description: 'Default iPhone frame.',
+            path: '../frames/iphone.jsx',
+            category: 'device-frame',
+            license: 'MIT-internal',
+            source: 'Open CoDesign built-in scaffold',
+          },
+          'ipad-frame': {
+            description: 'iPad frame.',
+            path: '../frames/ipad.jsx',
+            category: 'device-frame',
+            license: 'MIT-internal',
+            source: 'Open CoDesign built-in scaffold',
+          },
+        },
+      }),
+    );
+
+    const userData = path.join(root, 'user');
+    const userScaffolds = path.join(userData, 'templates', 'scaffolds');
+    mkdirSync(userScaffolds, { recursive: true });
+    writeFileSync(
+      path.join(userScaffolds, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        scaffolds: {
+          'iphone-frame': {
+            description: 'User edited description.',
+            path: '../frames/iphone.jsx',
+            category: 'device-frame',
+            license: 'MIT-internal',
+            source: '',
+          },
+          'custom-frame': {
+            description: 'User scaffold.',
+            path: 'custom.jsx',
+            license: 'MIT',
+            source: 'User',
+          },
+        },
+      }),
+    );
+
+    const result = await ensureUserTemplates(userData, source);
+    expect(result).toMatchObject({ action: 'merged', copiedFiles: 0, updatedFiles: 1 });
+
+    const repaired = JSON.parse(
+      readFileSync(path.join(userScaffolds, 'manifest.json'), 'utf8'),
+    ) as {
+      scaffolds: Record<string, { description: string; source: string }>;
+    };
+    expect(repaired.scaffolds['iphone-frame']?.description).toBe('User edited description.');
+    expect(repaired.scaffolds['iphone-frame']?.source).toBe('Open CoDesign built-in scaffold');
+    expect(repaired.scaffolds['ipad-frame']?.source).toBe('Open CoDesign built-in scaffold');
+    expect(repaired.scaffolds['custom-frame']?.source).toBe('User');
   });
 
   it('reports missing-source when the bundle dir does not exist', async () => {
