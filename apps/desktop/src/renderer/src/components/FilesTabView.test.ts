@@ -91,6 +91,17 @@ describe('FilesTabView preview helpers', () => {
     ).toBe('read-workspace');
   });
 
+  it('uses previewHtml for virtual fallback entries even when files.read exists', () => {
+    expect(
+      chooseWorkspacePreviewSourceMode({
+        path: 'index.html',
+        hasReadApi: true,
+        hasPreviewHtml: true,
+        preferPreviewHtml: true,
+      }),
+    ).toBe('preview-html-fallback');
+  });
+
   it('falls back to previewHtml only for legacy index.html previews without files.read', () => {
     expect(
       chooseWorkspacePreviewSourceMode({
