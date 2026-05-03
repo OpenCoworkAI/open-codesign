@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { cp, mkdir, readdir } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +8,7 @@ export interface EnsureUserTemplatesResult {
   source: string;
   dest: string;
   copiedFiles?: number;
+  updatedFiles?: number;
 }
 
 /**
@@ -55,9 +56,10 @@ export async function ensureUserTemplates(
   }
 
   const copiedFiles = await copyMissingFiles(sourceDir, dest);
-  return copiedFiles > 0
-    ? { action: 'merged', source: sourceDir, dest, copiedFiles }
-    : { action: 'skipped', source: sourceDir, dest, copiedFiles: 0 };
+  const updatedFiles = await repairBundledManifests(sourceDir, dest);
+  return copiedFiles + updatedFiles > 0
+    ? { action: 'merged', source: sourceDir, dest, copiedFiles, updatedFiles }
+    : { action: 'skipped', source: sourceDir, dest, copiedFiles: 0, updatedFiles: 0 };
 }
 
 async function copyMissingFiles(sourceDir: string, destDir: string): Promise<number> {
@@ -76,4 +78,89 @@ async function copyMissingFiles(sourceDir: string, destDir: string): Promise<num
     copied++;
   }
   return copied;
+}
+
+async function repairBundledManifests(sourceDir: string, destDir: string): Promise<number> {
+  return repairScaffoldManifest(
+    path.join(sourceDir, 'scaffolds', 'manifest.json'),
+    path.join(destDir, 'scaffolds', 'manifest.json'),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function cloneJsonRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+function patchStringField(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+  field: string,
+): boolean {
+  if (isNonEmptyString(target[field]) || !isNonEmptyString(source[field])) return false;
+  target[field] = source[field];
+  return true;
+}
+
+async function repairScaffoldManifest(sourcePath: string, destPath: string): Promise<number> {
+  if (!existsSync(sourcePath) || !existsSync(destPath)) return 0;
+
+  let sourceManifest: unknown;
+  let destManifest: unknown;
+  try {
+    sourceManifest = JSON.parse(await readFile(sourcePath, 'utf8')) as unknown;
+    destManifest = JSON.parse(await readFile(destPath, 'utf8')) as unknown;
+  } catch {
+    return 0;
+  }
+  if (!isRecord(sourceManifest) || !isRecord(destManifest)) return 0;
+  const sourceScaffolds = sourceManifest['scaffolds'];
+  if (!isRecord(sourceScaffolds)) return 0;
+
+  let changed = false;
+  if (destManifest['schemaVersion'] !== sourceManifest['schemaVersion']) {
+    destManifest['schemaVersion'] = sourceManifest['schemaVersion'];
+    changed = true;
+  }
+  if (!isRecord(destManifest['scaffolds'])) {
+    destManifest['scaffolds'] = {};
+    changed = true;
+  }
+  const destScaffolds = destManifest['scaffolds'];
+  if (!isRecord(destScaffolds)) return 0;
+
+  for (const [kind, rawSourceEntry] of Object.entries(sourceScaffolds)) {
+    if (!isRecord(rawSourceEntry)) continue;
+    const rawDestEntry = destScaffolds[kind];
+    if (!isRecord(rawDestEntry)) {
+      destScaffolds[kind] = cloneJsonRecord(rawSourceEntry);
+      changed = true;
+      continue;
+    }
+    for (const field of ['description', 'path', 'license', 'source', 'category']) {
+      changed = patchStringField(rawDestEntry, rawSourceEntry, field) || changed;
+    }
+    if (!Array.isArray(rawDestEntry['aliases']) && Array.isArray(rawSourceEntry['aliases'])) {
+      rawDestEntry['aliases'] = [...rawSourceEntry['aliases']];
+      changed = true;
+    }
+    if (
+      typeof rawDestEntry['sizeBytes'] !== 'number' &&
+      typeof rawSourceEntry['sizeBytes'] === 'number'
+    ) {
+      rawDestEntry['sizeBytes'] = rawSourceEntry['sizeBytes'];
+      changed = true;
+    }
+  }
+
+  if (!changed) return 0;
+  await writeFile(destPath, `${JSON.stringify(destManifest, null, 2)}\n`, 'utf8');
+  return 1;
 }
