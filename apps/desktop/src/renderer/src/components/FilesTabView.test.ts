@@ -5,7 +5,7 @@ import {
   defaultWorkspacePreviewPath,
   isRenderableDesignFileKind,
   resolveReferencedWorkspacePreviewPath,
-  workspaceBaseHrefFromPath,
+  workspaceBaseHrefForFile,
   workspacePreviewDependencyKey,
 } from './FilesTabView';
 
@@ -19,10 +19,38 @@ describe('FilesTabView preview helpers', () => {
     expect(isRenderableDesignFileKind('asset')).toBe(false);
   });
 
-  it('builds a file URL base href for workspace-relative asset resolution', () => {
-    expect(workspaceBaseHrefFromPath('/Users/alice/My Workspace')).toBe(
-      'file:///Users/alice/My%20Workspace/',
-    );
+  it('builds a workspace protocol base href for workspace-relative asset resolution', () => {
+    expect(
+      workspaceBaseHrefForFile({
+        designId: 'design-123',
+        workspacePath: '/Users/alice/My Workspace',
+        filePath: 'nested/My File.html',
+      }),
+    ).toBe('workspace://design-123/nested/');
+    expect(
+      workspaceBaseHrefForFile({
+        designId: 'design-123',
+        workspacePath: '/Users/alice/My Workspace',
+        filePath: 'index.html',
+      }),
+    ).toBe('workspace://design-123/');
+    expect(
+      workspaceBaseHrefForFile({
+        designId: null,
+        workspacePath: '/Users/alice/My Workspace',
+        filePath: 'index.html',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('encodes workspace base href path segments without flattening folders', () => {
+    expect(
+      workspaceBaseHrefForFile({
+        designId: 'design-123',
+        workspacePath: '/Users/alice/My Workspace',
+        filePath: 'Aide Sketch/Dashboard V1 Hi-Fi.html',
+      }),
+    ).toBe('workspace://design-123/Aide%20Sketch/');
   });
 
   it('opens file tabs for JSX paths without rewriting them to index.html', () => {

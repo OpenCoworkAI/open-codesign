@@ -116,6 +116,31 @@ describe('createRuntimeTextEditorFs', () => {
     expect(listFsUpdatedEvents(sendEvent)).toHaveLength(0);
   });
 
+  it('seeds existing workspace text files into the runtime fs', () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Seeded Workspace');
+    const sendEvent = vi.fn();
+    const logger = { error: vi.fn() };
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: design.id,
+      generationId: 'gen-seeded-workspace',
+      logger,
+      previousHtml: '<main>stale preview</main>',
+      initialFiles: [
+        { file: 'index.html', contents: '<main>workspace source</main>' },
+        { file: 'src/App.tsx', contents: 'export function App() { return <main />; }' },
+      ],
+      sendEvent,
+    });
+
+    expect(fs.view('index.html')?.content).toBe('<main>workspace source</main>');
+    expect(fs.view('src/App.tsx')?.content).toContain('export function App');
+    expect(fs.listDir('.')).toContain('src/App.tsx');
+    expect(fs.listDir('src')).toEqual(['App.tsx']);
+    expect(listFsUpdatedEvents(sendEvent)).toHaveLength(0);
+  });
+
   it('persists fs.create to db and writes disk when workspace is bound', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db, 'Workspace');
