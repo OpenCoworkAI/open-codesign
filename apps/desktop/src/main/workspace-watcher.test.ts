@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 const handlers = new Map<string, (e: unknown, raw: unknown) => unknown>();
@@ -80,6 +82,10 @@ function captureError(fn: () => unknown): unknown {
   }
 }
 
+function tempWorkspace(name: string): string {
+  return path.join(tmpdir(), name).replaceAll('\\', '/');
+}
+
 describe('files-watcher subscribe / unsubscribe', () => {
   it('rejects when no design row found', () => {
     reset();
@@ -122,7 +128,10 @@ describe('files-watcher subscribe / unsubscribe', () => {
     watchMock.mockImplementation(() => {
       throw new Error('watch denied');
     });
-    getDesignMock.mockReturnValue({ id: 'd1', workspacePath: '/tmp/ws' });
+    getDesignMock.mockReturnValue({
+      id: 'd1',
+      workspacePath: tempWorkspace('codesign-watch-denied'),
+    });
     registerFilesWatcherIpc({} as never, () => null);
     const sub = getHandler('codesign:files:v1:subscribe');
 
@@ -137,7 +146,10 @@ describe('files-watcher subscribe / unsubscribe', () => {
     vi.useFakeTimers();
     const closeSpy = vi.fn();
     watchMock.mockImplementation(() => ({ on: vi.fn(), close: closeSpy }) as never);
-    getDesignMock.mockReturnValue({ id: 'd1', workspacePath: '/tmp/ws' });
+    getDesignMock.mockReturnValue({
+      id: 'd1',
+      workspacePath: tempWorkspace('codesign-watch-refcount'),
+    });
     registerFilesWatcherIpc({} as never, () => null);
     const sub = getHandler('codesign:files:v1:subscribe');
     const unsub = getHandler('codesign:files:v1:unsubscribe');
@@ -165,9 +177,11 @@ describe('files-watcher subscribe / unsubscribe', () => {
     watchMock
       .mockImplementationOnce(() => ({ on: vi.fn(), close: closeFirst }) as never)
       .mockImplementationOnce(() => ({ on: vi.fn(), close: closeSecond }) as never);
+    const firstWorkspace = tempWorkspace('codesign-watch-one');
+    const secondWorkspace = tempWorkspace('codesign-watch-two');
     getDesignMock
-      .mockReturnValueOnce({ id: 'd1', workspacePath: '/tmp/ws-one/' })
-      .mockReturnValueOnce({ id: 'd1', workspacePath: '/tmp/ws-two' });
+      .mockReturnValueOnce({ id: 'd1', workspacePath: `${firstWorkspace}/` })
+      .mockReturnValueOnce({ id: 'd1', workspacePath: secondWorkspace });
     registerFilesWatcherIpc({} as never, () => null);
     const sub = getHandler('codesign:files:v1:subscribe');
 
@@ -178,13 +192,13 @@ describe('files-watcher subscribe / unsubscribe', () => {
     expect(closeSecond).not.toHaveBeenCalled();
     expect(watchMock).toHaveBeenNthCalledWith(
       1,
-      '/tmp/ws-one',
+      firstWorkspace,
       { recursive: true },
       expect.any(Function),
     );
     expect(watchMock).toHaveBeenNthCalledWith(
       2,
-      '/tmp/ws-two',
+      secondWorkspace,
       { recursive: true },
       expect.any(Function),
     );

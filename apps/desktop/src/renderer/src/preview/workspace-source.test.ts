@@ -84,4 +84,21 @@ describe('workspace preview source resolution', () => {
       }),
     ).rejects.toThrow(/Cannot resolve referenced preview source/);
   });
+
+  it('falls back to original source when referenced workspace read returns empty content', async () => {
+    const source = '<!doctype html><body><!-- artifact source lives in index.jsx --></body>';
+    const read = vi.fn<WorkspacePreviewRead>(async (_designId, path) => ({
+      path,
+      content: '',
+    }));
+
+    await expect(
+      resolveWorkspacePreviewSource({
+        designId: 'd1',
+        source,
+        read,
+        requireReferencedSource: true,
+      }),
+    ).resolves.toEqual({ path: 'index.html', content: source });
+  });
 });

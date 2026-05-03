@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -5,12 +6,12 @@ import { CodesignError } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { invokeSkill, listSkillManifest, makeSkillTool } from './skill';
 
-describe('skill tool', () => {
+describe.sequential('skill tool', () => {
   let skillsRoot: string;
   let brandRefsRoot: string;
 
   beforeEach(() => {
-    const base = path.join(tmpdir(), `codesign-skill-${process.pid}-${Date.now()}`);
+    const base = path.join(tmpdir(), `codesign-skill-${process.pid}-${randomUUID()}`);
     skillsRoot = path.join(base, 'skills');
     brandRefsRoot = path.join(base, 'brand-refs');
     mkdirSync(skillsRoot, { recursive: true });
@@ -101,7 +102,13 @@ describe('skill tool', () => {
   });
 
   it('throws when a registered skill file cannot be read', async () => {
-    rmSync(path.join(brandRefsRoot, 'demo', 'DESIGN.md'));
+    writeFileSync(
+      path.join(brandRefsRoot, 'manifest.json'),
+      JSON.stringify({
+        brands: [{ slug: 'demo', name: 'Demo', category: 'Brand', path: 'demo/MISSING.md' }],
+      }),
+      'utf8',
+    );
     await expect(
       invokeSkill({ name: 'brand:demo', roots: { skillsRoot, brandRefsRoot } }),
     ).rejects.toSatisfy(
@@ -110,7 +117,7 @@ describe('skill tool', () => {
   });
 
   it('rejects brand refs that traverse symlinked template segments', async () => {
-    const outside = path.join(tmpdir(), `codesign-skill-outside-${process.pid}-${Date.now()}`);
+    const outside = path.join(tmpdir(), `codesign-skill-outside-${process.pid}-${randomUUID()}`);
     mkdirSync(outside, { recursive: true });
     writeFileSync(path.join(outside, 'DESIGN.md'), '# Outside Brand\n', 'utf8');
     try {

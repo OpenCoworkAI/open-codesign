@@ -14,7 +14,16 @@ function archName(arch) {
 }
 
 function rm(target) {
-  fs.rmSync(target, { recursive: true, force: true, maxRetries: 3 });
+  if (!fs.existsSync(target)) return;
+  const stat = fs.lstatSync(target);
+  if (!stat.isDirectory()) {
+    fs.unlinkSync(target);
+    return;
+  }
+  for (const entry of fs.readdirSync(target)) {
+    rm(path.join(target, entry));
+  }
+  fs.rmdirSync(target);
 }
 
 function existingDirs(paths) {

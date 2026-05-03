@@ -644,29 +644,29 @@ describe('generateViaAgent()', () => {
     ).rejects.toMatchObject({ code: ERROR_CODES.GENERATION_INCOMPLETE });
   });
 
-  it('throws GENERATION_INCOMPLETE when done reported errors', async () => {
+  it('keeps a valid artifact with a warning when done reported errors', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
-    await expect(
-      generateViaAgent(
-        {
-          prompt: 'design a meditation app',
-          history: [],
-          model: MODEL,
-          apiKey: 'sk-test',
-          initialResourceState: resourceState({
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        initialResourceState: resourceState({
+          mutationSeq: 1,
+          lastDone: {
+            status: 'has_errors',
+            path: 'index.html',
             mutationSeq: 1,
-            lastDone: {
-              status: 'has_errors',
-              path: 'index.html',
-              mutationSeq: 1,
-              errorCount: 1,
-              checkedAt: '2026-04-28T00:00:00.000Z',
-            },
-          }),
-        },
-        { fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
-      ),
-    ).rejects.toMatchObject({ code: ERROR_CODES.GENERATION_INCOMPLETE });
+            errorCount: 1,
+            checkedAt: '2026-04-28T00:00:00.000Z',
+          },
+        }),
+      },
+      { fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+    );
+    expect(result.artifacts).toHaveLength(1);
+    expect(result.warnings).toEqual([expect.stringContaining('done() reported unresolved errors')]);
   });
 
   it('allows a done ok state that covers the latest mutation', async () => {
@@ -1297,6 +1297,52 @@ describe('generateViaAgent() — transport-level retry', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
+  it('retries a provider-side aborted transport error when the user signal is still live', async () => {
+    scriptedAgent = {
+      assistantText: RESPONSE_WITH_ARTIFACT,
+      stopReason: 'aborted',
+      errorMessage: 'Request was aborted',
+      overrideScriptForCallIndex: 1,
+      overrideScript: {
+        assistantText: RESPONSE_WITH_ARTIFACT,
+        stopReason: 'stop',
+      },
+    };
+    const onRetry = vi.fn();
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { onRetry, fs: makeStubFs({ 'index.html': SAMPLE_HTML }) },
+    );
+    expect(result.artifacts).toHaveLength(1);
+    expect(agentCalls.length).toBe(2);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry aborted transport errors after the caller signal is aborted', async () => {
+    scriptedAgent = {
+      assistantText: RESPONSE_WITH_ARTIFACT,
+      stopReason: 'aborted',
+      errorMessage: 'Request was aborted',
+    };
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(
+      generateViaAgent({
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        signal: ctrl.signal,
+      }),
+    ).rejects.toBeTruthy();
+    expect(agentCalls.length).toBe(1);
+  });
+
   it('does not retry non-transport errors like 400', async () => {
     scriptedAgent = {
       assistantText: '',
@@ -1504,7 +1550,9 @@ describe('loadFrameTemplates — device frame starter assets', () => {
   });
 
   it('rejects symlinked frame template files', async () => {
-    const { mkdirSync, rmSync, symlinkSync, writeFileSync } = await import('node:fs');
+    const { existsSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } = await import(
+      'node:fs'
+    );
     const { tmpdir } = await import('node:os');
     const path = await import('node:path');
     const { FRAME_FILES, loadFrameTemplates } = await import('./frames/index.js');
@@ -1519,9 +1567,11 @@ describe('loadFrameTemplates — device frame starter assets', () => {
       const first = FRAME_FILES[0];
       if (first === undefined) throw new Error('expected at least one frame file');
       writeFileSync(path.join(outside, 'secret.jsx'), 'secret', 'utf8');
-      rmSync(path.join(dir, first));
+      const linkPath = path.join(dir, first);
+      rmSync(linkPath, { force: true });
+      if (existsSync(linkPath)) unlinkSync(linkPath);
       try {
-        symlinkSync(path.join(outside, 'secret.jsx'), path.join(dir, first));
+        symlinkSync(path.join(outside, 'secret.jsx'), linkPath, 'file');
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
         throw err;

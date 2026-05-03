@@ -334,7 +334,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             logIpc.info('agent.tool_end', {
               generationId: id,
               tool: event.toolName,
-              isError: event.isError,
+              isError: event.toolName === 'set_todos' ? false : event.isError,
             });
           } else if (event.type === 'turn_end') {
             logIpc.info('agent.turn_end', {

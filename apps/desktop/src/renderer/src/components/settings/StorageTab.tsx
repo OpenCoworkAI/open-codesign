@@ -123,6 +123,9 @@ export function StorageTab() {
       <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-body)]">
         {t('settings.storage.restartHint')}
       </p>
+      <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-body)]">
+        {t('settings.storage.workspaceHint')}
+      </p>
 
       {paths === null ? (
         <div className="flex items-center gap-2 py-4 text-[var(--text-sm)] text-[var(--color-text-muted)]">

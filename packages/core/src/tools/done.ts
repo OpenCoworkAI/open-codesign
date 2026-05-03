@@ -306,7 +306,7 @@ export function makeDoneTool(
       'syntax checks AND loads the file in an isolated runtime to capture ' +
       'console errors / load failures, then replies with ' +
       '`{ status: "ok" | "has_errors", errors: [...] }`. If errors come back, ' +
-      'fix them with str_replace_based_edit_tool and call `done` again. ' +
+      'you MUST fix them with str_replace_based_edit_tool and call `done` again. ' +
       'Stop calling once status is "ok" or after 5 rounds.',
     parameters: DoneParams,
     async execute(_id, params): Promise<AgentToolResult<DoneDetails>> {

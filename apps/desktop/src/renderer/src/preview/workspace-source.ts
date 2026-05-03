@@ -65,6 +65,13 @@ export async function resolveWorkspacePreviewSource(input: {
     }
     return { content: input.source, path };
   }
-  const referenced = await input.read(input.designId, referencedPath);
+  let referenced: WorkspacePreviewReadResult;
+  try {
+    referenced = await input.read(input.designId, referencedPath);
+  } catch (err) {
+    if (input.requireReferencedSource) throw err;
+    return { content: input.source, path };
+  }
+  if (referenced.content.trim().length === 0) return { content: input.source, path };
   return { content: referenced.content, path: referenced.path };
 }

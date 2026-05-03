@@ -86,10 +86,17 @@ function classifyByStatus(status: number, err: unknown, wire?: WireApi): RetryDe
 
 const TRANSPORT_ERROR_RE =
   /(?:fetch\s+failed.*\bterminated\b|\bterminated\b|premature\s+close|stream\s+(?:ended|closed)|ECONNRESET)\b/i;
+const PROVIDER_ABORTED_TRANSPORT_RE =
+  /(?:request\s+was\s+aborted|generation\s+aborted\s+by\s+provider|provider\s+aborted|upstream\s+aborted)\b/i;
 
 export function isTransportLevelError(errorMessage: string | undefined): boolean {
   if (!errorMessage) return false;
   return TRANSPORT_ERROR_RE.test(errorMessage);
+}
+
+export function isProviderAbortedTransportError(errorMessage: string | undefined): boolean {
+  if (!errorMessage) return false;
+  return PROVIDER_ABORTED_TRANSPORT_RE.test(errorMessage);
 }
 
 function classifyByNetwork(err: unknown): RetryDecision | undefined {
