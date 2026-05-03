@@ -47,40 +47,38 @@ export function makeUiKitRenderer(): RenderUiKitFn {
         capturePage: () => Promise<{ toPNG: () => Buffer }>;
       };
 
-      // Race: load + settle window vs hard timeout vs abort signal
+      // Race: load + settle window vs hard timeout vs abort signal.
+      // Centralize cleanup in `finish()` so EVERY exit path
+      // (success, fail, catch, timeout, abort) drops the timeout +
+      // unregisters the abort listener. Earlier this lived only in the
+      // success branch, which leaked the listener on fail/catch/timeout
+      // paths (review finding on PR #241).
       await new Promise<void>((resolve, reject) => {
         let settled = false;
         const finish = (err?: Error) => {
           if (settled) return;
           settled = true;
+          clearTimeout(hardTimeout);
+          signal?.removeEventListener('abort', onAbort);
           if (err) reject(err);
           else resolve();
         };
+        const onAbort = () => finish(new Error('renderUiKit aborted by signal'));
         const hardTimeout = setTimeout(
           () => finish(new Error(`renderUiKit hard timeout after ${HARD_TIMEOUT_MS}ms`)),
           HARD_TIMEOUT_MS,
         );
-        const onAbort = () => {
-          clearTimeout(hardTimeout);
-          finish(new Error('renderUiKit aborted by signal'));
-        };
         signal?.addEventListener('abort', onAbort, { once: true });
 
         wc.once('did-finish-load', () => {
           // Give fonts + CSS animations a moment to settle for visual parity
-          setTimeout(() => {
-            clearTimeout(hardTimeout);
-            signal?.removeEventListener('abort', onAbort);
-            finish();
-          }, SETTLE_AFTER_LOAD_MS);
+          setTimeout(() => finish(), SETTLE_AFTER_LOAD_MS);
         });
         wc.once('did-fail-load', () => {
-          clearTimeout(hardTimeout);
           finish(new Error('renderUiKit did-fail-load'));
         });
 
         void win.loadURL(dataUrl).catch((err: unknown) => {
-          clearTimeout(hardTimeout);
           finish(err instanceof Error ? err : new Error(String(err)));
         });
       });
