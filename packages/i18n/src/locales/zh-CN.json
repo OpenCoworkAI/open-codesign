@@ -773,6 +773,7 @@
     "exporterNotReady": "导出器还在加载，稍等片刻再试。",
     "rendererDisconnected": "渲染进程未连接到主进程。",
     "onboardingIncomplete": "引导流程尚未完成。",
+    "designSystemRequiresOnboarding": "请先完成引导流程，再关联设计系统。",
     "providerMissingKey": "当前 provider「{{provider}}」没有 API key，请打开 Settings 填入。",
     "modelListFailed": "无法加载模型列表。",
     "unknown": "未知错误",

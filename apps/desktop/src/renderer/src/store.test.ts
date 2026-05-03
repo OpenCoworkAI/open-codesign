@@ -490,6 +490,43 @@ describe('useCodesignStore active provider routing', () => {
   });
 });
 
+describe('useCodesignStore design system picker', () => {
+  beforeAll(async () => {
+    await initI18n('en');
+  });
+
+  it('blocks design system linking before onboarding without invoking IPC', async () => {
+    const pickDesignSystemDirectory = vi.fn(async () => READY_CONFIG);
+    vi.stubGlobal('window', {
+      codesign: {
+        pickDesignSystemDirectory,
+      },
+      setTimeout,
+    });
+    useCodesignStore.setState({
+      config: {
+        hasKey: false,
+        provider: null,
+        modelPrimary: null,
+        baseUrl: null,
+        designSystem: null,
+      },
+    });
+
+    await useCodesignStore.getState().pickDesignSystemDirectory();
+
+    expect(pickDesignSystemDirectory).not.toHaveBeenCalled();
+    const state = useCodesignStore.getState();
+    expect(state.toasts[0]).toMatchObject({
+      variant: 'error',
+      title: 'Onboarding is not complete.',
+      description: 'Complete onboarding before linking a design system.',
+    });
+    expect(state.reportableErrors[0]?.code).toBe('DESIGN_SYSTEM_LINK_BLOCKED_ONBOARDING');
+    expect(state.reportableErrors[0]?.scope).toBe('onboarding');
+  });
+});
+
 describe('useCodesignStore previewViewport', () => {
   it('defaults to desktop', () => {
     expect(useCodesignStore.getState().previewViewport).toBe('desktop');

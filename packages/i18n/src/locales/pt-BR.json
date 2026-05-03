@@ -733,6 +733,7 @@
     "exporterNotReady": "O exportador ainda está carregando. Tente novamente em um instante.",
     "rendererDisconnected": "O renderer não está conectado ao processo principal.",
     "onboardingIncomplete": "O onboarding não foi concluído.",
+    "designSystemRequiresOnboarding": "Conclua o onboarding antes de vincular um design system.",
     "providerMissingKey": "O provedor ativo \"{{provider}}\" não tem chave de API. Abra Configurações para adicionar uma.",
     "modelListFailed": "Não foi possível carregar a lista de modelos.",
     "unknown": "Erro desconhecido",

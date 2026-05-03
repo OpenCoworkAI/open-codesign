@@ -773,6 +773,7 @@
     "exporterNotReady": "Exporter is still loading. Try again in a moment.",
     "rendererDisconnected": "Renderer is not connected to the main process.",
     "onboardingIncomplete": "Onboarding is not complete.",
+    "designSystemRequiresOnboarding": "Complete onboarding before linking a design system.",
     "providerMissingKey": "The active provider \"{{provider}}\" has no API key. Open Settings to add one.",
     "modelListFailed": "Could not load model list.",
     "unknown": "Unknown error",

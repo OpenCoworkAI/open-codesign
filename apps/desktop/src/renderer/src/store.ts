@@ -518,6 +518,15 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   async pickDesignSystemDirectory() {
     if (!window.codesign) return;
+    if (get().config?.hasKey !== true) {
+      get().reportableErrorToast({
+        code: 'DESIGN_SYSTEM_LINK_BLOCKED_ONBOARDING',
+        scope: 'onboarding',
+        title: tr('errors.onboardingIncomplete'),
+        description: tr('errors.designSystemRequiresOnboarding'),
+      });
+      return;
+    }
     try {
       const next = await window.codesign.pickDesignSystemDirectory();
       set({ config: next });
