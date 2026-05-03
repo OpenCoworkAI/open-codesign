@@ -1,3 +1,4 @@
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -139,6 +140,96 @@ describe('files-watcher subscribe / unsubscribe', () => {
 
     expect(err).toMatchObject({ name: 'CodesignError', code: 'IPC_DB_ERROR' });
     expect(watchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to polling when native watch is denied by permissions', () => {
+    reset();
+    const err = Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+    watchMock.mockImplementation(() => {
+      throw err;
+    });
+    getDesignMock.mockReturnValue({
+      id: 'd1',
+      workspacePath: tempWorkspace('codesign-watch-eperm'),
+    });
+    registerFilesWatcherIpc({} as never, () => null);
+    const sub = getHandler('codesign:files:v1:subscribe');
+
+    expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
+
+    const entry = __test.watchers.get('d1');
+    expect(watchMock).toHaveBeenCalledTimes(1);
+    expect(entry?.watcher).toBeNull();
+    expect(entry?.pollTimer).not.toBeNull();
+  });
+
+  it('switches an active watcher to polling on runtime permission errors', () => {
+    reset();
+    const closeSpy = vi.fn();
+    let errorHandler: ((err: Error) => void) | undefined;
+    watchMock.mockImplementation(
+      () =>
+        ({
+          on: vi.fn((event: string, cb: (err: Error) => void) => {
+            if (event === 'error') errorHandler = cb;
+          }),
+          close: closeSpy,
+        }) as never,
+    );
+    getDesignMock.mockReturnValue({
+      id: 'd1',
+      workspacePath: tempWorkspace('codesign-watch-runtime-eperm'),
+    });
+    registerFilesWatcherIpc({} as never, () => null);
+    const sub = getHandler('codesign:files:v1:subscribe');
+
+    expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
+    errorHandler?.(Object.assign(new Error('operation not permitted'), { code: 'EPERM' }));
+
+    const entry = __test.watchers.get('d1');
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect(entry?.watcher).toBeNull();
+    expect(entry?.pollTimer).not.toBeNull();
+  });
+
+  it('polling signatures change when workspace file metadata changes', async () => {
+    reset();
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-watch-poll-'));
+    await writeFile(path.join(root, 'index.html'), '<main>one</main>');
+    const first = await __test.pollWorkspaceSignature(root);
+
+    await writeFile(path.join(root, 'index.html'), '<main>two plus more bytes</main>');
+    const second = await __test.pollWorkspaceSignature(root);
+
+    expect(second).not.toBe(first);
+  });
+
+  it('tears down polling watchers after the idle unsubscribe window', () => {
+    reset();
+    vi.useFakeTimers();
+    try {
+      const err = Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+      watchMock.mockImplementation(() => {
+        throw err;
+      });
+      getDesignMock.mockReturnValue({
+        id: 'd1',
+        workspacePath: tempWorkspace('codesign-watch-poll-teardown'),
+      });
+      registerFilesWatcherIpc({} as never, () => null);
+      const sub = getHandler('codesign:files:v1:subscribe');
+      const unsub = getHandler('codesign:files:v1:unsubscribe');
+
+      expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
+      expect(__test.watchers.get('d1')?.pollTimer).not.toBeNull();
+
+      expect(unsub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
+      vi.advanceTimersByTime(__test.IDLE_TEARDOWN_MS + 10);
+
+      expect(__test.watchers.has('d1')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ref-counts subscribers and tears down only after idle window', async () => {
