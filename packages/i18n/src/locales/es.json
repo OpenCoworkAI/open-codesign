@@ -858,6 +858,7 @@
       "corsError": "Error de CORS (no debería pasar en el proceso principal). Esto es un error.",
       "sslError": "Error de SSL / certificado (¿certificado autofirmado en la retransmisión?).",
       "gatewayIncompatible": "La pasarela aceptó la conexión pero no implementa la API de este proveedor. Intenta cambiar de protocolo (ej. openai-chat).",
+      "gatewayWafBlocked": "La pasarela o el proxy inverso bloqueó la generación antes de llegar al modelo. Test Connection puede pasar porque solo prueba el endpoint /models.",
       "openaiResponsesMisconfigured": "El punto final rechazó la forma de la solicitud. El protocolo puede ser incorrecto — intenta cambiar a openai-chat.",
       "relayStreamingBug": "La pasarela puede manejar mal los eventos SSE de la API OpenAI Responses (versiones antiguas de sub2api / claude2api / anyrouter cortan el flujo prematuramente).",
       "serverError": "Error del servidor ascendente. Puede ser transitorio — intenta de nuevo.",
@@ -874,6 +875,7 @@
       "reportBug": "Reportar este error",
       "disableTls": "Desactivar verificación TLS",
       "switchWire": "Cambiar protocolo en Configuración",
+      "gatewayWafBlocked": "Revisar allowlist / headers del proxy",
       "relayStreamingBug": "Actualiza la retransmisión, cambia el protocolo a openai-chat o usa api.openai.com directamente"
     },
     "applyFix": "Aplicar esta corrección",

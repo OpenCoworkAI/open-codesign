@@ -1390,6 +1390,30 @@ describe('applyGenerateError via sendPrompt', () => {
     });
   });
 
+  it('classifies 403 blocked generation errors as gateway WAF blocks', async () => {
+    const err = Object.assign(
+      new Error(
+        "Error invoking remote method 'codesign:v1:generate': CodesignError: 403 Your request was blocked.",
+      ),
+      {
+        code: 'PROVIDER_ERROR',
+        upstream_provider: 'anthropic',
+        upstream_status: 403,
+        upstream_baseurl: 'https://relay.example.com/v1',
+      },
+    );
+
+    await runFailingGenerate(err);
+
+    const state = useCodesignStore.getState();
+    expect(state.toasts[0]?.description).toContain('gateway or reverse proxy blocked');
+    expect(state.toasts[0]?.description).not.toContain('API key invalid');
+    expect(state.reportableErrors[0]?.context).toMatchObject({
+      diagnostic_category: 'gateway-waf-blocked',
+      display_message: '403 Your request was blocked.',
+    });
+  });
+
   it('cleans Electron IPC wrapper for toast/chat while preserving raw report context', async () => {
     const rawMessage =
       "Error invoking remote method 'codesign:v1:generate': CodesignError: 404 model 'models/gemini-2.5-pro' not found";

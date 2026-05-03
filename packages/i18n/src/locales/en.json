@@ -863,6 +863,7 @@
       "sslError": "SSL / certificate error (self-signed cert on relay?).",
       "endpointNotFound": "The endpoint path exists in the Base URL but the provider did not expose this route.",
       "gatewayIncompatible": "The gateway accepted the connection but does not implement this provider's API. Try switching wire (e.g. openai-chat).",
+      "gatewayWafBlocked": "The gateway or reverse proxy blocked the generation request before it reached the model. Test Connection can still pass because it only probes the /models endpoint.",
       "openaiResponsesMisconfigured": "The endpoint rejected the request shape. The wire may be wrong — try switching to openai-chat.",
       "unsupportedRole": "The endpoint rejected the role format sent to the model. This is usually a wire or model-policy mismatch.",
       "reasoningPolicy": "The endpoint rejected reasoning metadata for this model. Lower the reasoning depth and try again.",
@@ -891,6 +892,7 @@
       "disableReasoning": "Turn reasoning off",
       "normalizeModelId": "Remove model prefix",
       "checkReferenceUrl": "Check reference URL",
+      "gatewayWafBlocked": "Check proxy allowlist / headers",
       "relayStreamingBug": "Upgrade the relay, switch wire to openai-chat, or use api.openai.com directly"
     },
     "applyFix": "Apply this fix",

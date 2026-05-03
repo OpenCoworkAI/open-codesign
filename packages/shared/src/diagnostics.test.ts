@@ -173,10 +173,21 @@ describe('diagnoseGenerateFailure', () => {
     expect(result[0]?.cause).toBe('diagnostics.cause.keyInvalid');
   });
 
-  it('maps 403 to keyInvalid hypothesis', () => {
+  it('maps plain 403 to keyInvalid hypothesis', () => {
     const result = diagnoseGenerateFailure({ ...ctx, status: 403 });
     expect(result[0]?.cause).toBe('diagnostics.cause.keyInvalid');
     expect(result[0]?.category).toBe('auth');
+  });
+
+  it('maps 403 blocked generation responses to gatewayWafBlocked', () => {
+    const result = diagnoseGenerateFailure({
+      ...ctx,
+      status: 403,
+      message: '403 Your request was blocked.',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.gatewayWafBlocked');
+    expect(result[0]?.category).toBe('gateway-waf-blocked');
+    expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.gatewayWafBlocked');
   });
 
   it('maps 422 developer role rejection to unsupported-role with a wire switch fix', () => {

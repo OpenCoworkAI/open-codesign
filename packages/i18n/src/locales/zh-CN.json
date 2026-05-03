@@ -859,6 +859,7 @@
       "sslError": "SSL / 证书错误（中转服务使用了自签证书？）。",
       "endpointNotFound": "Base URL 已包含版本路径，但 Provider 没有暴露这个接口路径。",
       "gatewayIncompatible": "网关接受了连接但没有实现该 Provider 的 API。尝试切换 wire（例如改为 openai-chat）。",
+      "gatewayWafBlocked": "网关或反代在请求到达模型前拦截了生成请求。测试连接可能仍然通过，因为它只探测 /models 端点。",
       "openaiResponsesMisconfigured": "端点拒绝了请求格式。wire 可能配错了——尝试切换到 openai-chat。",
       "unsupportedRole": "端点拒绝了发送给模型的 role 格式，通常是 wire 或模型策略不兼容。",
       "reasoningPolicy": "端点拒绝了该模型的 reasoning 元数据。请降低 reasoning 深度后重试。",
@@ -887,6 +888,7 @@
       "disableReasoning": "关闭 reasoning",
       "normalizeModelId": "移除模型前缀",
       "checkReferenceUrl": "检查 Reference URL",
+      "gatewayWafBlocked": "检查代理白名单 / 请求头",
       "relayStreamingBug": "升级中转服务；或把 wire 切到 openai-chat；或改用 api.openai.com"
     },
     "applyFix": "应用此修复",

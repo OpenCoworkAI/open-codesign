@@ -30,6 +30,7 @@ export type DiagnosticCategory =
   | 'reasoning-policy'
   | 'model-id-shape'
   | 'relay-stream-cutoff'
+  | 'gateway-waf-blocked'
   | 'model-discovery-degraded'
   | 'transport-interrupted'
   | 'upstream-server-error'
@@ -312,6 +313,16 @@ function isCustomBaseUrl(baseUrl: string | undefined): boolean {
   }
 }
 
+function looksLikeGatewayWafBlock(message: string): boolean {
+  return (
+    /\byour request was blocked\b/i.test(message) ||
+    /\brequest blocked\b/i.test(message) ||
+    /\bwaf\b/i.test(message) ||
+    /\bcloudflare\b/i.test(message) ||
+    /\bray id\b/i.test(message)
+  );
+}
+
 export function diagnoseGenerateFailure(ctx: GenerateFailureContext): DiagnosticHypothesis[] {
   const message = (ctx.message ?? '').toLowerCase();
   const status = ctx.status;
@@ -456,6 +467,21 @@ export function diagnoseGenerateFailure(ctx: GenerateFailureContext): Diagnostic
           kind: 'openSettings',
           label: 'diagnostics.fix.checkNetwork',
           settingsTab: 'advanced',
+        },
+      }),
+    ];
+  }
+
+  if (status === 403 && looksLikeGatewayWafBlock(message)) {
+    return [
+      h({
+        cause: 'diagnostics.cause.gatewayWafBlocked',
+        category: 'gateway-waf-blocked',
+        severity: 'warning',
+        suggestedFix: {
+          kind: 'openSettings',
+          label: 'diagnostics.fix.gatewayWafBlocked',
+          settingsTab: 'models',
         },
       }),
     ];
