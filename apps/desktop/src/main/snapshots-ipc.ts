@@ -9,7 +9,7 @@
  * initSnapshotsDb().
  */
 
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ChatAppendInput,
@@ -51,6 +51,7 @@ import {
   renameDesign,
   setDesignThumbnail,
   softDeleteDesign,
+  updateDesignWorkspace,
   upsertDesignFile,
 } from './snapshots-db';
 import { prepareWorkspaceWriteContent } from './workspace-file-content';
@@ -70,9 +71,9 @@ const logger = getLogger('snapshots-ipc');
 /**
  * Derive a filesystem-safe directory name from a design title for the
  * auto-bound default workspace. Kept in sync with renderer's workspace-path
- * slug style — ASCII alphanumerics + dashes, max 48 chars.
+ * slug style — Unicode letters/numbers + dashes, max 48 chars.
  */
-function defaultDesignSlug(name: string): string {
+export function defaultDesignSlug(name: string): string {
   const cleaned = name
     .normalize('NFKD')
     .replace(/[^\p{L}\p{N}\s-]/gu, '')
@@ -83,12 +84,35 @@ function defaultDesignSlug(name: string): string {
   return cleaned.length > 0 ? cleaned : 'untitled-design';
 }
 
+function defaultWorkspaceRoot(): string {
+  return path.join(app.getPath('documents'), 'CoDesign');
+}
+
+function isDefaultWorkspaceNameForDesign(workspacePath: string, designName: string): boolean {
+  const base = path.basename(workspacePath);
+  const slug = defaultDesignSlug(designName);
+  return base === slug || base.startsWith(`${slug}-`);
+}
+
+export function isAutoManagedWorkspacePath(input: {
+  workspacePath: string;
+  designName: string;
+  defaultRoot: string;
+}): boolean {
+  const workspacePath = normalizeWorkspacePath(input.workspacePath);
+  const defaultRoot = normalizeWorkspacePath(input.defaultRoot);
+  return (
+    path.dirname(workspacePath) === defaultRoot &&
+    isDefaultWorkspaceNameForDesign(workspacePath, input.designName)
+  );
+}
+
 function isAlreadyExists(err: unknown): boolean {
   return (err as NodeJS.ErrnoException).code === 'EEXIST';
 }
 
 async function allocateDefaultWorkspacePath(name: string): Promise<string> {
-  const defaultRoot = path.join(app.getPath('documents'), 'CoDesign');
+  const defaultRoot = defaultWorkspaceRoot();
   await mkdir(defaultRoot, { recursive: true });
   const slug = defaultDesignSlug(name);
 
@@ -104,6 +128,30 @@ async function allocateDefaultWorkspacePath(name: string): Promise<string> {
   }
 
   throw new Error(`Could not find a unique workspace path under ${defaultRoot}`);
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw err;
+  }
+}
+
+async function allocateRenamedDefaultWorkspacePath(
+  defaultRoot: string,
+  name: string,
+  currentPath: string,
+): Promise<string | null> {
+  const slug = defaultDesignSlug(name);
+  for (let attempt = 0; attempt <= 100; attempt += 1) {
+    const candidate = path.join(defaultRoot, attempt === 0 ? slug : `${slug}-${attempt}`);
+    if (candidate === currentPath) return null;
+    if (!(await pathExists(candidate))) return candidate;
+  }
+  throw new Error(`Could not find a unique renamed workspace path under ${defaultRoot}`);
 }
 
 async function cleanupAutoAllocatedWorkspace(
@@ -187,6 +235,40 @@ function runDb<T>(context: string, fn: () => T): T {
     if (err instanceof CodesignError) throw err;
     throw translateStoreError(err, context);
   }
+}
+
+export async function renameAutoManagedWorkspaceForDesign(input: {
+  db: Database;
+  designBeforeRename: Design;
+  newName: string;
+  defaultRoot?: string | undefined;
+}): Promise<Design | null> {
+  const workspacePath = input.designBeforeRename.workspacePath;
+  if (workspacePath === null) return null;
+
+  const defaultRoot = normalizeWorkspacePath(input.defaultRoot ?? defaultWorkspaceRoot());
+  const currentPath = normalizeWorkspacePath(workspacePath);
+  if (
+    !isAutoManagedWorkspacePath({
+      workspacePath: currentPath,
+      designName: input.designBeforeRename.name,
+      defaultRoot,
+    })
+  ) {
+    return null;
+  }
+
+  const nextPath = await allocateRenamedDefaultWorkspacePath(
+    defaultRoot,
+    input.newName,
+    currentPath,
+  );
+  if (nextPath === null) return null;
+
+  await rename(currentPath, nextPath);
+  return runDb('rename-design.workspace', () =>
+    updateDesignWorkspace(input.db, input.designBeforeRename.id, nextPath),
+  );
 }
 
 /**
@@ -459,27 +541,54 @@ export function registerSnapshotsIpc(db: Database): void {
     return runDb('get-design', () => getDesign(db, id));
   });
 
-  ipcMain.handle('snapshots:v1:rename-design', (_e: unknown, raw: unknown): Design => {
-    if (typeof raw !== 'object' || raw === null) {
-      throw new CodesignError('snapshots:v1:rename-design expects { id, name }', 'IPC_BAD_INPUT');
-    }
-    const r = raw as Record<string, unknown>;
-    requireSchemaV1(r, 'snapshots:v1:rename-design');
-    if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
-      throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
-    }
-    if (typeof r['name'] !== 'string' || r['name'].trim().length === 0) {
-      throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
-    }
-    const updated = runDb('rename-design', () =>
-      renameDesign(db, r['id'] as string, r['name'] as string),
-    );
-    if (updated === null) {
-      throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
-    }
-    logger.info('design.renamed', { id: updated.id, name: updated.name });
-    return updated;
-  });
+  ipcMain.handle(
+    'snapshots:v1:rename-design',
+    async (_e: unknown, raw: unknown): Promise<Design> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError('snapshots:v1:rename-design expects { id, name }', 'IPC_BAD_INPUT');
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'snapshots:v1:rename-design');
+      if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
+        throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      if (typeof r['name'] !== 'string' || r['name'].trim().length === 0) {
+        throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      const before = runDb('rename-design.lookup', () => getDesign(db, r['id'] as string));
+      if (before === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      const updated = runDb('rename-design', () =>
+        renameDesign(db, r['id'] as string, r['name'] as string),
+      );
+      if (updated === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      let finalDesign = updated;
+      try {
+        finalDesign =
+          (await renameAutoManagedWorkspaceForDesign({
+            db,
+            designBeforeRename: before,
+            newName: updated.name,
+          })) ?? updated;
+      } catch (err) {
+        logger.warn('design.workspace_rename.skipped', {
+          id: updated.id,
+          workspacePath: before.workspacePath,
+          targetName: updated.name,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      logger.info('design.renamed', {
+        id: finalDesign.id,
+        name: finalDesign.name,
+        workspacePath: finalDesign.workspacePath,
+      });
+      return finalDesign;
+    },
+  );
 
   ipcMain.handle('snapshots:v1:set-thumbnail', (_e: unknown, raw: unknown): Design => {
     if (typeof raw !== 'object' || raw === null) {
