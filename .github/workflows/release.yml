@@ -20,9 +20,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
+  contents: read
 
 jobs:
   # ------------------------------------------------------------------
@@ -37,7 +35,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -46,7 +44,7 @@ jobs:
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -71,12 +69,15 @@ jobs:
     name: Build changelog
     runs-on: ubuntu-latest
     if: github.repository == 'OpenCoworkAI/open-codesign'
+    permissions:
+      contents: read
+      pull-requests: read
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     outputs:
       changelog: ${{ steps.build.outputs.changelog }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -151,7 +152,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -160,7 +161,7 @@ jobs:
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -232,7 +233,7 @@ jobs:
           exit 1
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_glob }}
@@ -253,7 +254,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -262,7 +263,7 @@ jobs:
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -292,7 +293,9 @@ jobs:
         run: pnpm exec electron-vite build && pnpm exec electron-builder --linux snap --publish never
 
       - name: Upload snap artifact
-        uses: actions/upload-artifact@v4
+        # Inspection-only artifact: snap packaging is intentionally best-effort
+        # and is not attached to the GitHub Release by publish/provenance.
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: installer-snap
           path: apps/desktop/release/*.snap
@@ -305,12 +308,15 @@ jobs:
   # ------------------------------------------------------------------
   provenance:
     name: Checksums + SBOM
-    needs: [build, build-snap]
+    needs: [build]
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -319,7 +325,7 @@ jobs:
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -328,13 +334,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download all installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist/
           merge-multiple: true
 
       - name: Generate CycloneDX SBOM (workspace)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: .
           format: cyclonedx-json
@@ -352,7 +358,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Upload provenance artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: provenance
           path: |
@@ -366,12 +372,15 @@ jobs:
   # ------------------------------------------------------------------
   publish:
     name: Publish GitHub Release
-    needs: [build, build-snap, changelog, provenance]
+    needs: [build, changelog, provenance]
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -390,7 +399,7 @@ jobs:
           fi
 
       - name: Download all installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist/
           merge-multiple: true
@@ -423,7 +432,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           # Check out the default branch (not the tag) so the commit lands
           # on main. We pass the version explicitly to the script.
@@ -481,7 +490,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         if: steps.guard.outputs.skip == 'false'
 
       - name: Derive version from tag
@@ -499,7 +508,7 @@ jobs:
 
       - name: Checkout Scoop bucket
         if: steps.guard.outputs.skip == 'false'
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: OpenCoworkAI/scoop-bucket
           path: scoop-bucket
@@ -544,8 +553,7 @@ jobs:
 
       - name: Bump cask
         if: steps.guard.outputs.skip == 'false'
-        # TODO: pin to commit SHA when flipping HOMEBREW_TAP_TOKEN on (Scorecard).
-        uses: macauley/action-homebrew-bump-cask@v1
+        uses: macauley/action-homebrew-bump-cask@445c42390d790569d938f9068d01af39ca030feb # v1
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           tap: OpenCoworkAI/homebrew-tap
@@ -554,9 +562,12 @@ jobs:
           force: false
 
   # ------------------------------------------------------------------
-  # winget manifest PR — submits to microsoft/winget-pkgs.
+  # Winget manifest PR — submits to microsoft/winget-pkgs.
   # Skipped until WINGET_PAT is set (see packaging/winget/).
   # Requires initial manual submission of the manifest first.
+  #
+  # This uses a copyleft GitHub Action only as workflow tooling; it is not
+  # bundled, vendored, linked, or distributed with Open CoDesign.
   # ------------------------------------------------------------------
   winget:
     name: Submit winget manifest
@@ -577,8 +588,7 @@ jobs:
 
       - name: Release winget package
         if: steps.guard.outputs.skip == 'false'
-        # TODO: pin to commit SHA when flipping WINGET_PAT on (Scorecard).
-        uses: vedantmgoyal9/winget-releaser@v2
+        uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
         with:
           identifier: OpenCoworkAI.OpenCoDesign
           installers-regex: '-x64-setup\.exe$|-arm64-setup\.exe$'

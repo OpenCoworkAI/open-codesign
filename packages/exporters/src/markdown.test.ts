@@ -88,6 +88,12 @@ describe('htmlToMarkdown', () => {
     expect(out).toContain('A & B < C');
   });
 
+  it('decodes common named entities without treating literal comparisons as tags', () => {
+    const out = htmlToMarkdown('<p>2 < 3 &amp;&amp; Tom&apos;s ratio&colon; 5 > 4</p>', META);
+
+    expect(out).toContain("2 < 3 && Tom's ratio: 5 > 4");
+  });
+
   it('handles empty input gracefully', () => {
     const out = htmlToMarkdown('', META);
     expect(out).toContain('schemaVersion: 1');

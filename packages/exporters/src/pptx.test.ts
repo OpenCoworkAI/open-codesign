@@ -79,6 +79,14 @@ describe('extractSlides', () => {
     );
     expect(slides[0]?.bullets).toEqual(['visible']);
   });
+
+  it('preserves literal comparison text and named entities while stripping tags', () => {
+    const slides = extractSlides(
+      '<section><h1>Metrics</h1><p>2 < 3 &amp;&amp; Tom&apos;s ratio&colon; 5 > 4</p></section>',
+    );
+
+    expect(slides[0]?.bullets).toEqual(["2 < 3 && Tom's ratio: 5 > 4"]);
+  });
 });
 
 describe('exportPptx', () => {

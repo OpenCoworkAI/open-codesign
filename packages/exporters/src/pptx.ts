@@ -1,4 +1,10 @@
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import {
+  collapseWhitespace,
+  decodeHtmlEntities,
+  removeHtmlElementBlocks,
+  stripHtmlTags,
+} from '@open-codesign/shared/html-utils';
 import { inlineLocalAssetsInHtml, type LocalAssetOptions } from './assets';
 import { buildHtmlDocument } from './html';
 import type { ExportResult } from './index';
@@ -176,7 +182,6 @@ async function renderSlideScreenshots(
 }
 
 const SECTION_RE = /<section\b[^>]*>([\s\S]*?)<\/section>/gi;
-const TAG_RE = /<[^>]+>/g;
 const HEADING_RE = /<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/i;
 const LIST_ITEM_RE = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
 const PARAGRAPH_RE = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
@@ -214,16 +219,6 @@ function parseSlide(fragment: string): SlideContent {
 }
 
 function stripHtml(s: string): string {
-  return s
-    .replace(/<style\b[\s\S]*?<\/style>/gi, '')
-    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
-    .replace(TAG_RE, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
+  const withoutScripts = removeHtmlElementBlocks(removeHtmlElementBlocks(s, 'style'), 'script');
+  return collapseWhitespace(decodeHtmlEntities(stripHtmlTags(withoutScripts))).trim();
 }

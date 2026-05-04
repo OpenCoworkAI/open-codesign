@@ -25,7 +25,7 @@ Open CoDesign is an open-source AI design tool — Electron desktop app that tur
 
 **Project constraints:**
 - ≤ 30 prod dependencies
-- MIT-compatible permissive licenses only (reject GPL/AGPL/SSPL/proprietary/unclear copied assets)
+- Shipped app/runtime dependencies and copied/bundled assets must be MIT-compatible permissive. Workflow-only CI/release actions may use copyleft licenses when they are not vendored or distributed and their outputs are ordinary metadata/manifests.
 - All LLM calls via `@mariozechner/pi-ai` (no direct provider SDK imports in app code)
 - No silent fallbacks for user-visible failure, data loss, auth/security decisions,
   or persisted state. Best-effort cleanup, optional discovery, and non-critical

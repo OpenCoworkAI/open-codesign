@@ -8,6 +8,9 @@ concurrency:
   group: issue-auto-response-${{ github.event.issue.number }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   auto-response:
     if: |
@@ -23,7 +26,7 @@ jobs:
     steps:
       - name: Check for existing bot response
         id: check_bot
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const marker = "*Open-CoDesign Bot*";
@@ -50,7 +53,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.check_bot.outputs.has_bot != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
@@ -105,7 +108,7 @@ jobs:
 
       - name: Run Codex for Issue Auto Response
         if: steps.check_bot.outputs.has_bot != 'true' && steps.issue_config.outputs.is_deepseek != 'true'
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@e0fdf01220eb9a88167c4898839d273e3f2609d1 # v1
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}

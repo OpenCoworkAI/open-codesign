@@ -1,5 +1,6 @@
 import {
   collapseWhitespace,
+  decodeHtmlEntities,
   extractHtmlElementInner,
   removeHtmlComments,
   removeHtmlElementBlocks,
@@ -280,57 +281,11 @@ function isAllowedImageDataUrl(value: string): boolean {
 }
 
 function decodeUrlEntitiesForScheme(input: string): string {
-  let out = '';
-  for (let i = 0; i < input.length; i += 1) {
-    if (input[i] !== '&') {
-      out += input[i];
-      continue;
-    }
-    const semi = input.indexOf(';', i + 1);
-    if (semi < 0) {
-      out += input[i];
-      continue;
-    }
-    const entity = input.slice(i + 1, semi);
-    let decoded: string | null = null;
-    if (entity.startsWith('#x') || entity.startsWith('#X')) {
-      const code = Number.parseInt(entity.slice(2), 16);
-      decoded = safeFromCodePoint(code);
-    } else if (entity.startsWith('#')) {
-      const code = Number.parseInt(entity.slice(1), 10);
-      decoded = safeFromCodePoint(code);
-    } else if (entity.toLowerCase() === 'colon') {
-      decoded = ':';
-    }
-    if (decoded === null) {
-      out += input.slice(i, semi + 1);
-    } else {
-      out += decoded;
-    }
-    i = semi;
-  }
-  return out;
+  return decodeHtmlEntities(input);
 }
 
 function decodeEntities(input: string): string {
-  return input
-    .replace(/&#x([0-9a-f]+);/gi, (_m, hex: string) => safeFromCodePoint(Number.parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_m, dec: string) => safeFromCodePoint(Number.parseInt(dec, 10)))
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
-function safeFromCodePoint(code: number): string {
-  if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return '';
-  try {
-    return String.fromCodePoint(code);
-  } catch {
-    return '';
-  }
+  return decodeHtmlEntities(input);
 }
 
 function stripControlChars(input: string): string {

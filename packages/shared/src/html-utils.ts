@@ -13,6 +13,62 @@ export function collapseWhitespace(input: string): string {
   return out;
 }
 
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+  amp: '&',
+  apos: "'",
+  colon: ':',
+  gt: '>',
+  lt: '<',
+  nbsp: ' ',
+  quot: '"',
+};
+
+function safeFromCodePoint(code: number): string {
+  if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return '';
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return '';
+  }
+}
+
+function decodeHtmlEntity(entity: string): string | null {
+  if (entity.startsWith('#x') || entity.startsWith('#X')) {
+    return safeFromCodePoint(Number.parseInt(entity.slice(2), 16));
+  }
+  if (entity.startsWith('#')) {
+    return safeFromCodePoint(Number.parseInt(entity.slice(1), 10));
+  }
+  return NAMED_HTML_ENTITIES[entity.toLowerCase()] ?? null;
+}
+
+export function decodeHtmlEntities(input: string): string {
+  let out = '';
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (ch !== '&') {
+      out += ch;
+      continue;
+    }
+
+    const semi = input.indexOf(';', i + 1);
+    if (semi < 0) {
+      out += ch;
+      continue;
+    }
+
+    const rawEntity = input.slice(i + 1, semi);
+    const decoded = decodeHtmlEntity(rawEntity);
+    if (decoded === null) {
+      out += input.slice(i, semi + 1);
+    } else {
+      out += decoded;
+    }
+    i = semi;
+  }
+  return out;
+}
+
 export function stripHtmlTags(input: string): string {
   let out = '';
   let inTag = false;
