@@ -26,6 +26,32 @@ import { useCodesignStore } from '../../store';
 
 const MAX_TEXTAREA_ROWS = 6;
 
+export interface PromptKeyInput {
+  key: string;
+  shiftKey?: boolean;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  isComposing?: boolean;
+  nativeIsComposing?: boolean;
+  keyCode?: number;
+  nativeKeyCode?: number;
+}
+
+export function shouldSubmitPromptKey(input: PromptKeyInput, compositionActive = false): boolean {
+  if (input.key !== 'Enter') return false;
+  if (
+    compositionActive ||
+    input.isComposing === true ||
+    input.nativeIsComposing === true ||
+    input.keyCode === 229 ||
+    input.nativeKeyCode === 229
+  ) {
+    return false;
+  }
+  if (input.shiftKey === true) return false;
+  return true;
+}
+
 export function getTextareaLineHeight(el: HTMLTextAreaElement): number {
   const styles = getComputedStyle(el);
   const lineHeight = Number.parseFloat(styles.lineHeight);
@@ -89,6 +115,7 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
 ) {
   const t = useT();
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const compositionActiveRef = useRef(false);
   const generationStage = useCodesignStore((s) => s.generationStage);
 
   const runningLabel = isGenerating
@@ -148,9 +175,22 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): void {
-    const isSendCombo =
-      (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) ||
-      (e.key === 'Enter' && (e.metaKey || e.ctrlKey));
+    const native = e.nativeEvent as KeyboardEvent['nativeEvent'] & {
+      isComposing?: boolean;
+      keyCode?: number;
+    };
+    const isSendCombo = shouldSubmitPromptKey(
+      {
+        key: e.key,
+        shiftKey: e.shiftKey,
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+        nativeIsComposing: native.isComposing,
+        keyCode: e.keyCode,
+        nativeKeyCode: native.keyCode,
+      },
+      compositionActiveRef.current,
+    );
     if (isSendCombo) {
       e.preventDefault();
       handleSubmit(e);
@@ -196,6 +236,12 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
             resizeTextarea(e.currentTarget);
           }}
           onKeyDown={handleKeyDown}
+          onCompositionStart={() => {
+            compositionActiveRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            compositionActiveRef.current = false;
+          }}
           onPaste={(e) => void handlePaste(e)}
           placeholder={t('chat.placeholderRich')}
           rows={1}
