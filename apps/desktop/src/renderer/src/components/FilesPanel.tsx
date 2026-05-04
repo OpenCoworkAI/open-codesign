@@ -91,13 +91,6 @@ export function FilesPanel() {
 
   async function handleOpenWorkspace() {
     if (!currentDesignId || !window.codesign?.snapshots.openWorkspaceFolder) return;
-    if (isCurrentDesignGenerating) {
-      useCodesignStore.getState().pushToast({
-        variant: 'info',
-        title: t('canvas.workspace.busyGenerating'),
-      });
-      return;
-    }
     try {
       setWorkspaceLoading(true);
       await window.codesign.snapshots.openWorkspaceFolder(currentDesignId);
@@ -181,8 +174,9 @@ export function FilesPanel() {
                 <button
                   type="button"
                   onClick={handleOpenWorkspace}
-                  disabled={workspaceLoading || isCurrentDesignGenerating}
+                  disabled={workspaceLoading}
                   className="h-8 px-3 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title={t('canvas.workspace.open')}
                 >
                   <FolderOpen className="w-3 h-3" aria-hidden />
                 </button>

@@ -357,28 +357,30 @@ async function readWorkspaceRawText(
   }
 }
 
-function safeDesignMd(raw: string): string {
+function designMdContext(raw: string): Pick<ProjectContext, 'designMd' | 'invalidDesignMd'> {
   const findings = validateDesignMd(raw);
   const errors = findings.filter((finding) => finding.severity === 'error');
   if (errors.length > 0) {
-    throw new CodesignError(
-      `DESIGN.md is not valid Google design.md: ${errors
-        .slice(0, 3)
-        .map((finding) => `${finding.path}: ${finding.message}`)
-        .join('; ')}`,
-      ERROR_CODES.CONFIG_SCHEMA_INVALID,
-    );
+    return {
+      invalidDesignMd: {
+        errors: errors.map((finding) => `${finding.path}: ${finding.message}`).slice(0, 10),
+        raw: cleanText(raw, MAX_PROJECT_CONTEXT_CHARS),
+      },
+    };
   }
   try {
-    return formatDesignMdForPrompt(raw);
+    return { designMd: formatDesignMdForPrompt(raw) };
   } catch (cause) {
-    throw new CodesignError(
-      `DESIGN.md could not be prepared for prompt context: ${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
-      ERROR_CODES.CONFIG_SCHEMA_INVALID,
-      { cause },
-    );
+    return {
+      invalidDesignMd: {
+        errors: [
+          `DESIGN.md could not be prepared for prompt context: ${
+            cause instanceof Error ? cause.message : String(cause)
+          }`,
+        ],
+        raw: cleanText(raw, MAX_PROJECT_CONTEXT_CHARS),
+      },
+    };
   }
 }
 
@@ -425,10 +427,10 @@ async function readProjectContext(workspaceRoot: string | undefined): Promise<Pr
     readWorkspaceText(workspaceRoot, '.codesign/settings.json', MAX_PROJECT_SETTINGS_CHARS),
   ]);
   const settingsJson = rawSettings === undefined ? undefined : safeProjectSettings(rawSettings);
-  const designMd = rawDesignMd === undefined ? undefined : safeDesignMd(rawDesignMd);
+  const designMd = rawDesignMd === undefined ? {} : designMdContext(rawDesignMd);
   return {
     ...(agentsMd !== undefined ? { agentsMd } : {}),
-    ...(designMd !== undefined ? { designMd } : {}),
+    ...designMd,
     ...(settingsJson !== undefined ? { settingsJson } : {}),
   };
 }

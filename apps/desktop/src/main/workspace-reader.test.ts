@@ -131,7 +131,14 @@ describe('workspace file metadata/read helpers', () => {
     expect(classifyWorkspaceFileKind('style.css')).toBe('css');
     expect(classifyWorkspaceFileKind('app.js')).toBe('js');
     expect(classifyWorkspaceFileKind('DESIGN.md')).toBe('design-system');
-    expect(classifyWorkspaceFileKind('assets/logo.png')).toBe('asset');
+    expect(classifyWorkspaceFileKind('README.md')).toBe('markdown');
+    expect(classifyWorkspaceFileKind('notes.txt')).toBe('text');
+    expect(classifyWorkspaceFileKind('data.json')).toBe('text');
+    expect(classifyWorkspaceFileKind('assets/logo.png')).toBe('image');
+    expect(classifyWorkspaceFileKind('demo.mp4')).toBe('video');
+    expect(classifyWorkspaceFileKind('voice.wav')).toBe('audio');
+    expect(classifyWorkspaceFileKind('brief.pdf')).toBe('pdf');
+    expect(classifyWorkspaceFileKind('archive.zip')).toBe('asset');
   });
 
   it('reads a single workspace file with metadata', async () => {

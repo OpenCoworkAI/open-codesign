@@ -3,7 +3,9 @@ import { openFileTab } from '../store/slices/tabs';
 import {
   chooseWorkspacePreviewSourceMode,
   defaultWorkspacePreviewPath,
+  isMarkdownPreviewFile,
   isRenderableDesignFileKind,
+  previewKindForFile,
   resolveReferencedWorkspacePreviewPath,
   workspaceBaseHrefForFile,
   workspacePreviewDependencyKey,
@@ -16,8 +18,30 @@ describe('FilesTabView preview helpers', () => {
     expect(isRenderableDesignFileKind('tsx')).toBe(true);
     expect(isRenderableDesignFileKind('css')).toBe(false);
     expect(isRenderableDesignFileKind('js')).toBe(false);
+    expect(isRenderableDesignFileKind('markdown')).toBe(false);
+    expect(isRenderableDesignFileKind('text')).toBe(false);
+    expect(isRenderableDesignFileKind('image')).toBe(false);
+    expect(isRenderableDesignFileKind('video')).toBe(false);
+    expect(isRenderableDesignFileKind('audio')).toBe(false);
+    expect(isRenderableDesignFileKind('pdf')).toBe(false);
     expect(isRenderableDesignFileKind('design-system')).toBe(false);
     expect(isRenderableDesignFileKind('asset')).toBe(false);
+  });
+
+  it('chooses broad preview kinds for common files and defaults unknown assets to text', () => {
+    expect(isMarkdownPreviewFile('README.md', 'markdown')).toBe(true);
+    expect(isMarkdownPreviewFile('DESIGN.md', 'design-system')).toBe(true);
+    expect(previewKindForFile('App.jsx', 'jsx')).toBe('runtime');
+    expect(previewKindForFile('README.md', 'markdown')).toBe('markdown');
+    expect(previewKindForFile('notes.txt', 'text')).toBe('text');
+    expect(previewKindForFile('data.json', 'text')).toBe('text');
+    expect(previewKindForFile('style.css', 'css')).toBe('text');
+    expect(previewKindForFile('assets/logo.png', 'image')).toBe('image');
+    expect(previewKindForFile('clip.mp4', 'video')).toBe('video');
+    expect(previewKindForFile('voice.mp3', 'audio')).toBe('audio');
+    expect(previewKindForFile('brief.pdf', 'pdf')).toBe('pdf');
+    expect(previewKindForFile('Makefile', 'asset')).toBe('text');
+    expect(previewKindForFile('archive.zip', 'asset')).toBe('unsupported');
   });
 
   it('builds a workspace protocol base href for workspace-relative asset resolution', () => {

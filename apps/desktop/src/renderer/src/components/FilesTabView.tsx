@@ -3,6 +3,8 @@ import { buildPreviewDocument, isRenderablePath } from '@open-codesign/runtime';
 import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
 import { FileCode2, Folder, FolderOpen } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { type DesignFileEntry, type DesignFileKind, useDesignFiles } from '../hooks/useDesignFiles';
 import { workspacePathComparisonKey } from '../lib/workspace-path';
 import {
@@ -103,12 +105,6 @@ function WorkspaceSection() {
 
   async function handleOpenWorkspace() {
     if (!currentDesignId || !window.codesign?.snapshots.openWorkspaceFolder) return;
-    if (isCurrentDesignGenerating) {
-      useCodesignStore
-        .getState()
-        .pushToast({ variant: 'info', title: t('canvas.workspace.busyGenerating') });
-      return;
-    }
     try {
       await window.codesign.snapshots.openWorkspaceFolder(currentDesignId);
     } catch (err) {
@@ -160,7 +156,7 @@ function WorkspaceSection() {
           <button
             type="button"
             onClick={handleOpenWorkspace}
-            disabled={isCurrentDesignGenerating}
+            disabled={picking}
             className="h-6 px-2 rounded-[var(--radius-sm)] text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title={t('canvas.workspace.open')}
           >
@@ -181,6 +177,67 @@ function formatBytes(n: number | undefined): string {
 
 export function isRenderableDesignFileKind(kind: DesignFileKind | undefined): boolean {
   return kind === 'html' || kind === 'jsx' || kind === 'tsx';
+}
+
+type FilePreviewKind =
+  | 'runtime'
+  | 'markdown'
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | 'unsupported';
+
+const UNSUPPORTED_PREVIEW_EXTENSIONS = new Set([
+  '.zip',
+  '.tar',
+  '.gz',
+  '.tgz',
+  '.rar',
+  '.7z',
+  '.dmg',
+  '.pkg',
+  '.app',
+  '.exe',
+  '.bin',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+]);
+
+function extensionOf(path: string): string {
+  const name = path.split('/').pop() ?? path;
+  const index = name.lastIndexOf('.');
+  return index <= 0 ? '' : name.slice(index).toLowerCase();
+}
+
+export function isMarkdownPreviewFile(path: string, kind: DesignFileKind | undefined): boolean {
+  const lower = path.toLowerCase();
+  return (
+    kind === 'markdown' ||
+    kind === 'design-system' ||
+    lower.endsWith('.md') ||
+    lower.endsWith('.markdown')
+  );
+}
+
+export function previewKindForFile(
+  path: string,
+  kind: DesignFileKind | undefined,
+): FilePreviewKind {
+  if (isRenderableDesignFileKind(kind) || (kind === undefined && isRenderablePath(path))) {
+    return 'runtime';
+  }
+  if (isMarkdownPreviewFile(path, kind)) return 'markdown';
+  if (kind === 'image') return 'image';
+  if (kind === 'video') return 'video';
+  if (kind === 'audio') return 'audio';
+  if (kind === 'pdf') return 'pdf';
+  if (kind === 'text' || kind === 'css' || kind === 'js') return 'text';
+  if (UNSUPPORTED_PREVIEW_EXTENSIONS.has(extensionOf(path))) return 'unsupported';
+  return 'text';
 }
 
 export function defaultWorkspacePreviewPath(files: DesignFileEntry[]): string | null {
@@ -210,6 +267,21 @@ export function workspaceBaseHrefForFile(input: {
     .map(encodeURIComponent)
     .join('/');
   return `workspace://${input.designId}/${encodedDir}${encodedDir.length > 0 ? '/' : ''}`;
+}
+
+function workspaceUrlForFile(input: {
+  designId: string | null | undefined;
+  filePath: string | null | undefined;
+}): string | undefined {
+  if (!input.designId || !input.filePath) return undefined;
+  const encodedPath = input.filePath
+    .replaceAll('\\', '/')
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .map(encodeURIComponent)
+    .join('/');
+  if (!encodedPath) return undefined;
+  return `workspace://${input.designId}/${encodedPath}`;
 }
 
 export type WorkspacePreviewSourceMode =
@@ -265,6 +337,66 @@ interface WorkspacePreviewSource {
   path: string;
 }
 
+function TextFilePreview({
+  content,
+  previewKind,
+  path,
+}: {
+  content: string;
+  previewKind: FilePreviewKind;
+  path: string;
+}) {
+  return (
+    <div className="h-full overflow-auto bg-[var(--color-background)]">
+      <div className="mx-auto w-full max-w-[860px] px-[var(--space-8)] py-[var(--space-7)]">
+        {previewKind === 'markdown' ? (
+          <article className="codesign-prose rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-6)] py-[var(--space-5)] text-[13px] leading-[var(--leading-body)] text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+          </article>
+        ) : (
+          <pre
+            className="min-h-full overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-5)] py-[var(--space-4)] text-[12px] leading-[1.65] text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            {content}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NativeFilePreview({
+  kind,
+  path,
+  url,
+}: {
+  kind: FilePreviewKind;
+  path: string;
+  url: string;
+}) {
+  if (kind === 'image') {
+    return (
+      <div className="h-full overflow-auto bg-[var(--color-background-secondary)] p-[var(--space-6)]">
+        <div className="flex min-h-full items-center justify-center">
+          <img
+            src={url}
+            alt={path}
+            className="max-h-full max-w-full rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] object-contain shadow-[var(--shadow-soft)]"
+          />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <iframe
+      title={`file-preview-${path}`}
+      src={url}
+      className="h-full w-full border-0 bg-[var(--color-surface)]"
+    />
+  );
+}
+
 export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreviewProps) {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
@@ -277,9 +409,14 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const effectiveFile = file ?? workspaceFiles.find((f) => f.path === path) ?? null;
   const prefersPreviewSource = effectiveFile?.source === 'preview-html';
-  const renderable = effectiveFile
-    ? isRenderableDesignFileKind(effectiveFile.kind)
-    : isRenderablePath(path);
+  const previewKind = previewKindForFile(path, effectiveFile?.kind);
+  const renderable = previewKind === 'runtime';
+  const textPreview = previewKind === 'markdown' || previewKind === 'text';
+  const nativePreview =
+    previewKind === 'image' ||
+    previewKind === 'video' ||
+    previewKind === 'audio' ||
+    previewKind === 'pdf';
   const [previewSource, setPreviewSource] = useState<WorkspacePreviewSource | null>(null);
   const previewDependencyKey = workspacePreviewDependencyKey(
     workspaceFiles,
@@ -308,7 +445,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
     // Re-read when the file watcher reports changed metadata for either the
     // selected file or an HTML placeholder's resolved JSX/TSX source.
     void previewDependencyKey;
-    if (!renderable || !currentDesignId) {
+    if ((!renderable && !textPreview) || !currentDesignId) {
       setPreviewSource(null);
       setReadError(null);
       return;
@@ -351,6 +488,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
     path,
     currentPreviewSource,
     renderable,
+    textPreview,
     t,
     prefersPreviewSource,
   ]);
@@ -370,7 +508,12 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
     }
   }, [currentDesign?.workspacePath, currentDesignId, previewSource, renderable]);
 
-  if (!renderable) {
+  if (nativePreview) {
+    const url = workspaceUrlForFile({ designId: currentDesignId, filePath: path });
+    if (url) return <NativeFilePreview kind={previewKind} path={path} url={url} />;
+  }
+
+  if (previewKind === 'unsupported') {
     return (
       <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
         {t('canvas.filesTabEmpty')}
@@ -379,6 +522,11 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   }
 
   if (!srcDoc) {
+    if (previewSource && textPreview) {
+      return (
+        <TextFilePreview content={previewSource.content} previewKind={previewKind} path={path} />
+      );
+    }
     return (
       <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
         {readError ?? t('canvas.filesTabEmpty')}

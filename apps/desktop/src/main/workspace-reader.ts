@@ -135,7 +135,20 @@ export interface WorkspaceFileEntry {
   updatedAt: string;
 }
 
-export type WorkspaceFileKind = 'html' | 'jsx' | 'tsx' | 'css' | 'js' | 'design-system' | 'asset';
+export type WorkspaceFileKind =
+  | 'html'
+  | 'jsx'
+  | 'tsx'
+  | 'css'
+  | 'js'
+  | 'markdown'
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | 'design-system'
+  | 'asset';
 
 export interface WorkspaceFileReadResult extends WorkspaceFileEntry {
   content: string;
@@ -153,7 +166,36 @@ export function classifyWorkspaceFileKind(path: string): WorkspaceFileKind {
   if (lower.endsWith('.jsx')) return 'jsx';
   if (lower.endsWith('.tsx')) return 'tsx';
   if (lower.endsWith('.css')) return 'css';
-  if (lower.endsWith('.js')) return 'js';
+  if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) return 'js';
+  if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
+  if (lower.endsWith('.pdf')) return 'pdf';
+  if (
+    lower.endsWith('.png') ||
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.gif') ||
+    lower.endsWith('.webp') ||
+    lower.endsWith('.avif') ||
+    lower.endsWith('.ico') ||
+    lower.endsWith('.bmp') ||
+    lower.endsWith('.svg')
+  ) {
+    return 'image';
+  }
+  if (lower.endsWith('.mp4') || lower.endsWith('.webm')) return 'video';
+  if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg')) return 'audio';
+  if (
+    lower.endsWith('.txt') ||
+    lower.endsWith('.json') ||
+    lower.endsWith('.yaml') ||
+    lower.endsWith('.yml') ||
+    lower.endsWith('.toml') ||
+    lower.endsWith('.csv') ||
+    lower.endsWith('.log') ||
+    lower.endsWith('.xml')
+  ) {
+    return 'text';
+  }
   return 'asset';
 }
 

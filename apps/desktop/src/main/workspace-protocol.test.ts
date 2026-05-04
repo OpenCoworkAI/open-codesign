@@ -44,6 +44,14 @@ describe('resolveWorkspaceUrl', () => {
     expect(nested.ok && nested.value.relPath).toBe('screens/index.html');
   });
 
+  it('resolves browser-native preview file types', () => {
+    const image = resolveWorkspaceUrl(`workspace://${designId}/assets/logo.png`, resolveWorkspace);
+    const pdf = resolveWorkspaceUrl(`workspace://${designId}/brief.pdf`, resolveWorkspace);
+
+    expect(image.ok && image.value.mime).toBe('image/png');
+    expect(pdf.ok && pdf.value.mime).toBe('application/pdf');
+  });
+
   it('rejects unknown designs and unsupported file extensions', () => {
     const unknown = resolveWorkspaceUrl('workspace://unknown/index.html', resolveWorkspace);
     const unsupported = resolveWorkspaceUrl(`workspace://${designId}/Makefile`, resolveWorkspace);

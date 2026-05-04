@@ -39,7 +39,8 @@ describe('TweakPanel', () => {
     expect(html).toContain('aria-label="Open tweaks"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('right-[var(--space-4)]');
-    expect(html).toContain('top-[var(--space-4)]');
+    expect(html).toContain('bottom-[var(--space-4)]');
+    expect(html).not.toContain('top-[var(--space-4)]');
     expect(html).not.toContain('Close tweaks');
     expect(html).not.toContain('cursor-grab');
   });

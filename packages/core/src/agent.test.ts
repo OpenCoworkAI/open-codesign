@@ -1379,6 +1379,40 @@ describe('generateViaAgent()', () => {
     ).rejects.toMatchObject({ code: 'CONFIG_SCHEMA_INVALID' });
     expect(agentCalls).toHaveLength(0);
   });
+
+  it('injects invalid workspace DESIGN.md as repair context', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'open this design',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+      projectContext: {
+        invalidDesignMd: {
+          errors: [
+            'project: Unknown Google DESIGN.md top-level field "project"',
+            'name: name is required',
+            'version: version must be a string',
+          ],
+          raw: `---
+project: Studio Loop Welcome Email
+version: 1
+---
+
+## Brand
+
+Use a deep indigo welcome-email system.`,
+        },
+      },
+    });
+
+    const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
+    expect(sys).toContain('# Project Design System Repair Required (DESIGN.md)');
+    expect(sys).toContain('repair DESIGN.md with `str_replace_based_edit_tool`');
+    expect(sys).toContain('project: Unknown Google DESIGN.md top-level field');
+    expect(sys).toContain('<untrusted_scanned_content type="invalid_design_md">');
+    expect(sys).toContain('project: Studio Loop Welcome Email');
+  });
 });
 
 describe('generateViaAgent() — first-turn retry', () => {

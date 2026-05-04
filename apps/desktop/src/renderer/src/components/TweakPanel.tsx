@@ -285,7 +285,7 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
   const countBadge = hasTokens ? String(entries.length) : '—';
 
   return (
-    <div ref={panelRef} className="absolute right-[var(--space-4)] top-[var(--space-4)] z-20">
+    <div ref={panelRef} className="absolute right-[var(--space-4)] bottom-[var(--space-4)] z-20">
       {open ? (
         <div
           aria-label={titleText}

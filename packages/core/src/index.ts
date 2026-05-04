@@ -130,6 +130,12 @@ export interface ReferenceUrlContext {
 export interface ProjectContext {
   agentsMd?: string | undefined;
   designMd?: string | undefined;
+  invalidDesignMd?:
+    | {
+        errors: string[];
+        raw: string;
+      }
+    | undefined;
   settingsJson?: string | undefined;
 }
 

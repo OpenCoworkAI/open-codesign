@@ -151,7 +151,7 @@ h3,
   display: none;
 }
 
-/* Markdown prose inside assistant chat bubbles */
+/* Markdown prose inside assistant chat bubbles and file previews */
 .codesign-prose p {
   margin: 0;
 }

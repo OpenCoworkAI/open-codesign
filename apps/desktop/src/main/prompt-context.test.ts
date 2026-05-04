@@ -398,18 +398,31 @@ describe('preparePromptContext', () => {
     expect(result.projectContext.settingsJson).not.toContain('arbitrary');
   });
 
-  it('rejects invalid workspace DESIGN.md instead of silently ignoring it', async () => {
+  it('passes invalid workspace DESIGN.md as repair context instead of blocking generation', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-design-'));
     await fs.writeFile(
       path.join(dir, 'DESIGN.md'),
-      VALID_DESIGN_MD.replace('rounded:', 'radius:'),
+      `---
+project: Studio Loop Welcome Email
+version: 1
+---
+
+## Brand
+
+Use a deep indigo welcome-email system.
+`,
       'utf8',
     );
 
-    await expect(preparePromptContext({ workspaceRoot: dir })).rejects.toMatchObject({
-      name: 'CodesignError',
-      code: 'CONFIG_SCHEMA_INVALID',
-    });
+    const result = await preparePromptContext({ workspaceRoot: dir });
+
+    expect(result.projectContext.designMd).toBeUndefined();
+    expect(result.projectContext.invalidDesignMd?.errors).toEqual([
+      'project: Unknown Google DESIGN.md top-level field "project"',
+      'name: name is required',
+      'version: version must be a string',
+    ]);
+    expect(result.projectContext.invalidDesignMd?.raw).toContain('project: Studio Loop');
   });
 
   it('rejects project context files that traverse workspace symlinks', async () => {

@@ -371,6 +371,20 @@ describe('FilesPanel workspace integration', () => {
         const html = ReactDOMServer.renderToString(React.createElement(FilesPanel));
         expect(html).toContain('Folder not found on disk');
       });
+
+      it('keeps open-folder available while generation locks workspace switching', () => {
+        useCodesignStore.setState({
+          isGenerating: true,
+          generatingDesignId: 'design-1',
+        });
+
+        const html = ReactDOMServer.renderToString(React.createElement(FilesPanel));
+        const openButton = html.match(/<button[^>]*title="Open folder"[^>]*>/)?.[0];
+
+        expect(openButton).toBeDefined();
+        expect(openButton).not.toContain('disabled=""');
+        expect(html).toContain('disabled=""');
+      });
     });
   });
 });
