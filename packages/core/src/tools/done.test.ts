@@ -109,6 +109,27 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
     expect(res.details.errors.some((e) => /alt/.test(e.message))).toBe(true);
   });
 
+  it('does not count JSX component id props as duplicate DOM ids', async () => {
+    const fs = makeFs({
+      'App.jsx': `function Field({ id, children }) {
+  return <label htmlFor={id}>{children}</label>;
+}
+function App() {
+  return (
+    <main>
+      <Field id="email">
+        <input id="email" />
+      </Field>
+    </main>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
+    });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-jsx-component-id-prop', {});
+    expect(res.details.errors.some((e) => /Duplicate id/.test(e.message))).toBe(false);
+  });
+
   it('merges runtime verifier errors with static lint output', async () => {
     // Syntactically clean HTML — static lint passes — but runtime verifier
     // (host-injected stub here) reports a ReferenceError as if the JSX

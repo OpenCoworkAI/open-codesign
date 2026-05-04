@@ -160,12 +160,22 @@ function findUnclosedTags(html: string): DoneError[] {
 
 function findDuplicateIds(html: string): DoneError[] {
   const seen = new Map<string, number>();
-  const idRe = /\bid\s*=\s*["']([^"']+)["']/g;
-  let m = idRe.exec(html);
-  while (m !== null) {
-    const id = m[1] ?? '';
-    seen.set(id, (seen.get(id) ?? 0) + 1);
-    m = idRe.exec(html);
+  const tagRe = /<([A-Za-z][A-Za-z0-9-]*)\b([^>]*)>/g;
+  let tag = tagRe.exec(html);
+  while (tag !== null) {
+    const tagName = tag[1] ?? '';
+    const attrs = tag[2] ?? '';
+    const isCustomComponent = /^[A-Z]/.test(tagName);
+    if (!isCustomComponent) {
+      const idRe = /\bid\s*=\s*["']([^"']+)["']/g;
+      let idMatch = idRe.exec(attrs);
+      while (idMatch !== null) {
+        const id = idMatch[1] ?? '';
+        seen.set(id, (seen.get(id) ?? 0) + 1);
+        idMatch = idRe.exec(attrs);
+      }
+    }
+    tag = tagRe.exec(html);
   }
   const dupes: DoneError[] = [];
   for (const [id, count] of seen) {
