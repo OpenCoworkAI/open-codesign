@@ -425,6 +425,53 @@ function wrapDoneState(
   };
 }
 
+function wrapSetTodosState(
+  tool: AgentTool<TSchema, unknown>,
+  onSetTodos: () => void,
+): AgentTool<TSchema, unknown> {
+  return {
+    ...tool,
+    async execute(id, params, signal): Promise<AgentToolResult<unknown>> {
+      const result = await tool.execute(id, params, signal);
+      onSetTodos();
+      return result;
+    },
+  };
+}
+
+function wrapEditRequiresTodos(
+  tool: AgentTool<TSchema, unknown>,
+  hasTodos: () => boolean,
+): AgentTool<TSchema, unknown> {
+  return {
+    ...tool,
+    async execute(id, params, signal): Promise<AgentToolResult<unknown>> {
+      const command =
+        typeof params === 'object' && params !== null
+          ? (params as Record<string, unknown>)['command']
+          : undefined;
+      if (
+        (command === 'create' || command === 'str_replace' || command === 'insert') &&
+        !hasTodos()
+      ) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Call set_todos with a short checklist before making substantive file edits, then retry this edit.',
+            },
+          ],
+          details: {
+            status: 'blocked',
+            reason: 'set_todos_required',
+          },
+        };
+      }
+      return tool.execute(id, params, signal);
+    },
+  };
+}
+
 function formatDoneRepairLimitText(details: DoneDetails): string {
   const remainingErrors =
     details.errors.length === 0
@@ -759,7 +806,13 @@ export async function generateViaAgent(
   const getWorkspaceRoot = () => input.getWorkspaceRoot?.() ?? input.workspaceRoot ?? null;
   const defaultToolsByName = new Map<string, AgentTool<TSchema, unknown>>();
   defaultToolsByName.set('set_title', makeSetTitleTool() as unknown as AgentTool<TSchema, unknown>);
-  defaultToolsByName.set('set_todos', makeSetTodosTool() as unknown as AgentTool<TSchema, unknown>);
+  let todosCalledThisRun = false;
+  defaultToolsByName.set(
+    'set_todos',
+    wrapSetTodosState(makeSetTodosTool() as unknown as AgentTool<TSchema, unknown>, () => {
+      todosCalledThisRun = true;
+    }),
+  );
   const loadedSkills = new Set<string>();
   defaultToolsByName.set(
     'skill',
@@ -785,12 +838,17 @@ export async function generateViaAgent(
   if (trackedFs) {
     defaultToolsByName.set(
       'str_replace_based_edit_tool',
-      makeTextEditorTool(trackedFs) as unknown as AgentTool<TSchema, unknown>,
+      wrapEditRequiresTodos(
+        makeTextEditorTool(trackedFs) as unknown as AgentTool<TSchema, unknown>,
+        () => todosCalledThisRun,
+      ),
     );
     defaultToolsByName.set(
       'done',
       wrapDoneState(
-        makeDoneTool(trackedFs, deps.runtimeVerify) as unknown as AgentTool<TSchema, unknown>,
+        makeDoneTool(trackedFs, deps.runtimeVerify, {
+          requireDesignMd: true,
+        }) as unknown as AgentTool<TSchema, unknown>,
         resourceState,
         () => {
           doneRepairLimitReached = true;

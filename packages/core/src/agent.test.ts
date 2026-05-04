@@ -868,7 +868,7 @@ describe('generateViaAgent()', () => {
         model: MODEL,
         apiKey: 'sk-test',
       },
-      { fs: makeStubFs({ 'App.jsx': HTML_WITH_MISSING_ALT }) },
+      { fs: makeStubFs({ 'App.jsx': HTML_WITH_MISSING_ALT, 'DESIGN.md': VALID_DESIGN_MD }) },
     );
     const doneTool = agentCalls[0]?.options.initialState?.tools?.find(
       (tool) => tool.name === 'done',
@@ -905,13 +905,49 @@ describe('generateViaAgent()', () => {
         apiKey: 'sk-test',
         initialResourceState: resourceState({ mutationSeq: 1 }),
       },
-      { fs: makeStubFs({ 'App.jsx': HTML_WITH_MISSING_ALT }) },
+      { fs: makeStubFs({ 'App.jsx': HTML_WITH_MISSING_ALT, 'DESIGN.md': VALID_DESIGN_MD }) },
     );
 
     expect(result.artifacts).toHaveLength(1);
     expect(result.message).toContain('Stopped after 3 done() error rounds');
     expect(result.warnings).toEqual([expect.stringContaining('done() reported unresolved errors')]);
     expect(result.resourceState?.lastDone?.status).toBe('has_errors');
+  });
+
+  it('requires set_todos before substantive file edits', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    const fs = makeStubFs({});
+    await generateViaAgent(
+      {
+        prompt: 'design an invoice',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { fs },
+    );
+
+    const tools = agentCalls[0]?.options.initialState?.tools ?? [];
+    const editor = tools.find((tool) => tool.name === 'str_replace_based_edit_tool');
+    const todos = tools.find((tool) => tool.name === 'set_todos');
+    if (!editor || !todos) throw new Error('expected editor and todos tools');
+
+    const blocked = await editor.execute('edit-1', {
+      command: 'create',
+      path: 'App.jsx',
+      file_text: 'function App() { return <main/>; }',
+    });
+    expect(JSON.stringify(blocked.content)).toContain('Call set_todos');
+    expect(fs.view('App.jsx')).toBeNull();
+
+    await todos.execute('todos-1', { items: [{ text: 'Build invoice', checked: false }] });
+    const created = await editor.execute('edit-2', {
+      command: 'create',
+      path: 'App.jsx',
+      file_text: 'function App() { return <main/>; }',
+    });
+    expect(JSON.stringify(created.content)).toContain('Created App.jsx');
+    expect(fs.view('App.jsx')).not.toBeNull();
   });
 
   it('allows a done ok state that covers the latest mutation', async () => {

@@ -39,6 +39,10 @@ export interface DoneDetails {
   summary?: string;
 }
 
+export interface DoneToolOptions {
+  requireDesignMd?: boolean;
+}
+
 function resolveDonePath(fs: TextEditorFsCallbacks, requested: string | undefined): string {
   if (requested && requested.trim().length > 0) return requested;
   if (fs.view(DEFAULT_SOURCE_ENTRY) !== null) return DEFAULT_SOURCE_ENTRY;
@@ -100,6 +104,18 @@ function designMdWorkspaceErrors(fs: TextEditorFsCallbacks, activePath: string):
     });
   }
   return errors;
+}
+
+function requiredDesignMdErrors(fs: TextEditorFsCallbacks, activePath: string): DoneError[] {
+  if (!isUserDesignSourcePath(activePath)) return [];
+  if (fs.view(DESIGN_MD_ENTRY) !== null) return [];
+  return [
+    {
+      message:
+        'DESIGN.md is required before finishing substantive design work. Create a minimal Google-compatible DESIGN.md with version, name, colors, typography, rounded, spacing, and an Overview section.',
+      source: DESIGN_MD_ENTRY,
+    },
+  ];
 }
 
 /** Host-injected runtime verifier. Receives the raw artifact source (the
@@ -218,6 +234,30 @@ function isJsxShaped(src: string): boolean {
   );
 }
 
+function previousNonWhitespace(src: string, index: number): { ch: string; index: number } | null {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const ch = src[i] ?? '';
+    if (/\s/.test(ch)) continue;
+    return { ch, index: i };
+  }
+  return null;
+}
+
+function precedingWord(src: string, index: number): string {
+  const prefix = src.slice(0, index).match(/[A-Za-z_$][\w$]*\s*$/);
+  return prefix?.[0]?.trim() ?? '';
+}
+
+function shouldStartStringLiteral(src: string, index: number): boolean {
+  const prev = previousNonWhitespace(src, index);
+  if (prev === null) return true;
+  if (prev.ch === '>' && src[prev.index - 1] === '=') return true;
+  if (/^[=([{,:;!&|?+\-*/~^<>]$/.test(prev.ch)) return true;
+  return ['return', 'throw', 'case', 'typeof', 'void', 'delete', 'new'].includes(
+    precedingWord(src, index),
+  );
+}
+
 /**
  * Cheap structural JSX sanity check — catches the 90% of agent mistakes that
  * break Babel compile before the 3-second runtime BrowserWindow load even
@@ -293,7 +333,7 @@ function findJsxStructuralIssues(src: string): DoneError[] {
       i += 1;
       continue;
     }
-    if (ch === '"' || ch === "'" || ch === '`') {
+    if ((ch === '"' || ch === "'" || ch === '`') && shouldStartStringLiteral(src, i)) {
       inStr = ch;
       continue;
     }
@@ -375,6 +415,7 @@ function findJsxStructuralIssues(src: string): DoneError[] {
 export function makeDoneTool(
   fs: TextEditorFsCallbacks,
   runtimeVerify?: DoneRuntimeVerifier,
+  opts: DoneToolOptions = {},
 ): AgentTool<typeof DoneParams, DoneDetails> {
   return {
     name: 'done',
@@ -424,6 +465,7 @@ export function makeDoneTool(
         ...(isJsxShaped(file.content) ? [] : findUnclosedTags(file.content)),
         ...findDuplicateIds(file.content),
         ...findMissingAlt(file.content),
+        ...(opts.requireDesignMd ? requiredDesignMdErrors(fs, path) : []),
         ...designMdWorkspaceErrors(fs, path),
       ];
       if (runtimeVerify) {

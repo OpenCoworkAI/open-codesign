@@ -130,6 +130,37 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
     expect(res.details.errors.some((e) => /Duplicate id/.test(e.message))).toBe(false);
   });
 
+  it('does not treat apostrophes in JSX text as string delimiters', async () => {
+    const fs = makeFs({
+      'App.jsx': `const css = \`
+.paper { background: color-mix(in oklab, #fff 80%, transparent); }
+\`;
+function App() {
+  return (
+    <main>
+      <style>{css}</style>
+      <p>Spring '25 brand refresh, packaging system &amp; site art direction.</p>
+    </main>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
+    });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-jsx-text-apostrophe', {});
+    expect(res.details.errors.some((e) => /Unbalanced/.test(e.message))).toBe(false);
+  });
+
+  it('can require DESIGN.md before accepting an app artifact', async () => {
+    const fs = makeFs({
+      'App.jsx': `function App() { return <main><h1>Hi</h1></main>; }
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
+    });
+    const tool = makeDoneTool(fs, undefined, { requireDesignMd: true });
+    const res = await tool.execute('id-require-design-md', {});
+    expect(res.details.status).toBe('has_errors');
+    expect(res.details.errors.some((e) => e.source === 'DESIGN.md')).toBe(true);
+  });
+
   it('merges runtime verifier errors with static lint output', async () => {
     // Syntactically clean HTML — static lint passes — but runtime verifier
     // (host-injected stub here) reports a ReferenceError as if the JSX

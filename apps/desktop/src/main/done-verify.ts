@@ -47,6 +47,13 @@ export function formatRuntimeLoadError(kind: string, description: string, url?: 
   return `${kind}: ${safeDescription} [${redactRuntimeUrl(url)}]`;
 }
 
+export function isRuntimeVerifierConsoleNoise(message: string): boolean {
+  return (
+    message.includes('Electron Security Warning') &&
+    message.includes('Insecure Content-Security-Policy')
+  );
+}
+
 export function makeRuntimeVerifier(): DoneRuntimeVerifier {
   return async (artifactSource: string): Promise<DoneError[]> => {
     const srcdoc = buildSrcdoc(artifactSource);
@@ -111,6 +118,7 @@ export function makeRuntimeVerifier(): DoneRuntimeVerifier {
       const isError = level === 'error' || level === 3;
       const isWarning = level === 'warning' || level === 2;
       if (!isError && !isWarning) return;
+      if (isRuntimeVerifierConsoleNoise(message)) return;
       pushError(message, isError ? 'console.error' : 'console.warning', line);
     };
     const onFailLoad = (

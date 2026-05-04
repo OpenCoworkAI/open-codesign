@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatRuntimeLoadError } from './done-verify';
+import { formatRuntimeLoadError, isRuntimeVerifierConsoleNoise } from './done-verify';
 
 describe('done runtime verifier error formatting', () => {
   it('redacts self-contained data URLs from load failures', () => {
@@ -10,5 +10,16 @@ describe('done runtime verifier error formatting', () => {
     expect(message).toBe('did-fail-load: ERR_INVALID_URL [data:text/html;base64,...truncated]');
     expect(message).not.toContain('aaaa');
     expect(message.length).toBeLessThan(100);
+  });
+
+  it('filters Electron CSP warnings from artifact verification', () => {
+    expect(
+      isRuntimeVerifierConsoleNoise(
+        '%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold',
+      ),
+    ).toBe(true);
+    expect(isRuntimeVerifierConsoleNoise('ReferenceError: missingValue is not defined')).toBe(
+      false,
+    );
   });
 });
