@@ -184,6 +184,30 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
     expect(res.details.errors.some((e) => /DESIGN\.md/.test(e.message))).toBe(true);
   });
 
+  it('ignores built-in template roots when deciding whether DESIGN.md is required', async () => {
+    const fs = makeFs({
+      'App.jsx': `function App() { return <main><h1>Hi</h1></main>; }
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
+      'frames/iphone.jsx': 'function IPhoneFrame() { return <div />; }',
+      'skills/dashboard.jsx': 'function DashboardSkill() { return <div />; }',
+      '_starters/template.html': '<main>starter</main>',
+    });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-template-roots', { path: 'App.jsx' });
+    expect(res.details.status).toBe('ok');
+  });
+
+  it('ignores renderable asset paths when deciding whether DESIGN.md is required', async () => {
+    const fs = makeFs({
+      'App.jsx': `function App() { return <main><h1>Hi</h1></main>; }
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
+      'assets/demo.html': '<main>asset preview</main>',
+    });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-asset-html', { path: 'App.jsx' });
+    expect(res.details.status).toBe('ok');
+  });
+
   it('flags stray content after ReactDOM.createRoot render (JSX)', async () => {
     const fs = makeFs({
       'index.html': `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{}/*EDITMODE-END*/;

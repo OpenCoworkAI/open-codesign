@@ -56,6 +56,21 @@ function isRenderableDesignSourcePath(path: string): boolean {
   );
 }
 
+function isUserDesignSourcePath(path: string): boolean {
+  const normalized = path.replace(/\\/g, '/').replace(/^\.\/+/, '');
+  const lower = normalized.toLowerCase();
+  if (
+    lower.startsWith('frames/') ||
+    lower.startsWith('skills/') ||
+    lower.startsWith('_starters/') ||
+    lower.startsWith('assets/') ||
+    lower === DESIGN_MD_ENTRY.toLowerCase()
+  ) {
+    return false;
+  }
+  return isRenderableDesignSourcePath(normalized);
+}
+
 function validateDesignMdContent(content: string): DoneError[] {
   return validateDesignMd(content)
     .filter((finding) => finding.severity === 'error')
@@ -74,9 +89,9 @@ function designMdWorkspaceErrors(fs: TextEditorFsCallbacks, activePath: string):
   }
   const renderable = fs
     .listDir('.')
-    .filter((path) => isRenderableDesignSourcePath(path))
+    .filter((path) => isUserDesignSourcePath(path))
     .filter((path) => path !== activePath);
-  if (isRenderableDesignSourcePath(activePath)) renderable.push(activePath);
+  if (isUserDesignSourcePath(activePath)) renderable.push(activePath);
   const uniqueRenderable = [...new Set(renderable)];
   if (uniqueRenderable.length > 1) {
     errors.push({
