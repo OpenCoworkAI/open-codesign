@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportPptx, extractSlides } from './pptx';
 
 const pngBytes = Buffer.from(
@@ -17,6 +17,8 @@ const screenshotMock = vi.fn();
 const closeMock = vi.fn();
 const sectionBoundingBoxMock = vi.fn();
 const querySectionsMock = vi.fn();
+const defaultFallbackSlideSelector =
+  '[data-slide], [data-pptx-slide], [data-slide-container], .slide';
 
 vi.mock('puppeteer-core', () => ({
   default: { launch: launchMock },
@@ -30,6 +32,10 @@ let tempDir = '';
 
 beforeAll(() => {
   tempDir = mkdtempSync(join(tmpdir(), 'codesign-pptx-test-'));
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
   launchMock.mockResolvedValue({
     newPage: newPageMock,
     close: closeMock,
@@ -50,6 +56,12 @@ beforeAll(() => {
 afterAll(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
+
+function mockPaginationPageCount(pageCount: number): void {
+  evaluateMock.mockImplementation(async (source: unknown) =>
+    typeof source === 'function' ? { pageCount } : undefined,
+  );
+}
 
 describe('extractSlides', () => {
   it('treats each <section> as a slide and pulls the heading + bullets', () => {
@@ -129,6 +141,87 @@ describe('exportPptx', () => {
     expect(screenshotMock).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'png', clip: expect.any(Object) }),
     );
+  });
+
+  it('uses slide-like containers when section elements are absent', async () => {
+    querySectionsMock.mockImplementation(async (selector: string) =>
+      selector === 'section' ? [] : [{ boundingBox: sectionBoundingBoxMock }],
+    );
+    const dest = join(tempDir, 'slide-class-visual.pptx');
+
+    await exportPptx('<div class="slide"><h1>Visual</h1></div>', dest);
+
+    expect(querySectionsMock).toHaveBeenNthCalledWith(1, 'section');
+    expect(querySectionsMock).toHaveBeenNthCalledWith(2, defaultFallbackSlideSelector);
+    expect(screenshotMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'png', clip: expect.any(Object) }),
+    );
+  });
+
+  it('uses a caller-provided fallback slide selector', async () => {
+    querySectionsMock.mockImplementation(async (selector: string) =>
+      selector === '[data-slide-container]' ? [{ boundingBox: sectionBoundingBoxMock }] : [],
+    );
+    const dest = join(tempDir, 'custom-slide-selector.pptx');
+
+    await exportPptx('<article data-slide-container><h1>Visual</h1></article>', dest, {
+      slideSelector: '[data-slide-container]',
+    });
+
+    expect(querySectionsMock).toHaveBeenNthCalledWith(1, 'section');
+    expect(querySectionsMock).toHaveBeenNthCalledWith(2, '[data-slide-container]');
+    expect(screenshotMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('paginates sectionless documents into viewport-sized screenshots', async () => {
+    querySectionsMock.mockResolvedValue([]);
+    mockPaginationPageCount(3);
+    const dest = join(tempDir, 'sectionless-visual.pptx');
+
+    await exportPptx('<main><h1>Long artifact</h1></main>', dest);
+
+    expect(screenshotMock).toHaveBeenCalledTimes(3);
+    expect(screenshotMock).toHaveBeenNthCalledWith(1, {
+      type: 'png',
+      clip: { x: 0, y: 0, width: 1280, height: 720 },
+    });
+    expect(screenshotMock).toHaveBeenNthCalledWith(2, {
+      type: 'png',
+      clip: { x: 0, y: 720, width: 1280, height: 720 },
+    });
+    expect(screenshotMock).toHaveBeenNthCalledWith(3, {
+      type: 'png',
+      clip: { x: 0, y: 1440, width: 1280, height: 720 },
+    });
+    expect(screenshotMock).not.toHaveBeenCalledWith(expect.objectContaining({ fullPage: true }));
+  });
+
+  it('keeps short sectionless documents to one viewport-sized screenshot', async () => {
+    querySectionsMock.mockResolvedValue([]);
+    mockPaginationPageCount(1);
+    const dest = join(tempDir, 'short-sectionless-visual.pptx');
+
+    await exportPptx('<main><h1>Short artifact</h1></main>', dest);
+
+    expect(screenshotMock).toHaveBeenCalledTimes(1);
+    expect(screenshotMock).toHaveBeenCalledWith({
+      type: 'png',
+      clip: { x: 0, y: 0, width: 1280, height: 720 },
+    });
+  });
+
+  it('exports an empty sectionless document as one screenshot slide', async () => {
+    querySectionsMock.mockResolvedValue([]);
+    mockPaginationPageCount(1);
+    const dest = join(tempDir, 'empty-sectionless-visual.pptx');
+
+    await exportPptx('', dest);
+
+    expect(screenshotMock).toHaveBeenCalledTimes(1);
+    expect(screenshotMock).toHaveBeenCalledWith({
+      type: 'png',
+      clip: { x: 0, y: 0, width: 1280, height: 720 },
+    });
   });
 
   it('wraps JSX source before screenshotting PPTX slides', async () => {
