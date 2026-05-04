@@ -23,12 +23,18 @@ export interface ExportPptxOptions extends LocalAssetOptions {
   renderTimeoutMs?: number;
   /** Viewport used when rasterizing slides. */
   viewport?: { width: number; height: number };
+  /** CSS selector used to find slide-like containers when no <section> elements exist. */
+  slideSelector?: string;
 }
 
 interface SlideContent {
   title: string;
   bullets: string[];
 }
+
+const PRIMARY_SLIDE_SELECTOR: string = 'section';
+const DEFAULT_FALLBACK_SLIDE_SELECTOR: string =
+  '[data-slide], [data-pptx-slide], [data-slide-container], .slide';
 
 /**
  * Render a design source artifact to PPTX using pptxgenjs.
@@ -129,7 +135,11 @@ async function renderSlideScreenshots(
   const { findSystemChrome } = await import('./chrome-discovery');
   const puppeteer = (await import('puppeteer-core')).default;
 
-  const viewport = opts.viewport ?? { width: 1280, height: 720 };
+  const requestedViewport = opts.viewport ?? { width: 1280, height: 720 };
+  const viewport = {
+    width: Math.max(1, requestedViewport.width),
+    height: Math.max(1, requestedViewport.height),
+  };
   const executablePath = opts.chromePath ?? (await findSystemChrome());
   let html = buildHtmlDocument(artifactSource, { prettify: false });
   html = await inlineLocalAssetsInHtml(html, opts);
@@ -154,11 +164,15 @@ async function renderSlideScreenshots(
     });
     await page.evaluate('document.fonts?.ready ?? Promise.resolve()');
 
-    const sectionHandles = await page.$$('section');
     const screenshots: Buffer[] = [];
-    if (sectionHandles.length > 0) {
-      for (const section of sectionHandles) {
-        const box = await section.boundingBox();
+    let slideHandles = await page.$$(PRIMARY_SLIDE_SELECTOR);
+    if (slideHandles.length === 0) {
+      slideHandles = await page.$$(opts.slideSelector ?? DEFAULT_FALLBACK_SLIDE_SELECTOR);
+    }
+
+    if (slideHandles.length > 0) {
+      for (const slideElement of slideHandles) {
+        const box = await slideElement.boundingBox();
         if (!box || box.width <= 0 || box.height <= 0) continue;
         const image = await page.screenshot({
           type: 'png',
@@ -173,8 +187,40 @@ async function renderSlideScreenshots(
       }
     }
     if (screenshots.length === 0) {
-      const image = await page.screenshot({ type: 'png', fullPage: true });
-      screenshots.push(Buffer.from(image));
+      const pagination = (await page.evaluate(`
+        (() => {
+          const slideHeight = ${JSON.stringify(viewport.height)};
+          const root = document.documentElement;
+          const body = document.body;
+          const scrollHeight = Math.max(
+            root.scrollHeight,
+            root.offsetHeight,
+            root.clientHeight,
+            body ? body.scrollHeight : 0,
+            body ? body.offsetHeight : 0,
+            body ? body.clientHeight : 0
+          );
+          const pageCount = Math.max(1, Math.ceil(scrollHeight / slideHeight));
+          const captureHeight = pageCount * slideHeight;
+          root.style.minHeight = captureHeight + 'px';
+          if (body) body.style.minHeight = captureHeight + 'px';
+          return { pageCount };
+        })()
+      `)) as { pageCount: number };
+      const pageCount = Number.isFinite(pagination.pageCount) ? pagination.pageCount : 1;
+
+      for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+        const image = await page.screenshot({
+          type: 'png',
+          clip: {
+            x: 0,
+            y: pageIndex * viewport.height,
+            width: viewport.width,
+            height: viewport.height,
+          },
+        });
+        screenshots.push(Buffer.from(image));
+      }
     }
     return screenshots;
   } finally {
