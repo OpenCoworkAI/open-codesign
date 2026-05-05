@@ -85,12 +85,12 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
         <h1
           className="text-center"
           style={{
-            fontFamily: 'var(--font-display)',
-            fontWeight: 400,
-            fontSize: 'clamp(32px, 3.5vw, 46px)',
-            lineHeight: 1.1,
-            letterSpacing: '-0.025em',
-            color: '#142d4c',
+            fontFamily: 'var(--font-sans)',
+            fontWeight: 650,
+            fontSize: 'clamp(28px, 3vw, 40px)',
+            lineHeight: 1.12,
+            letterSpacing: '0',
+            color: 'var(--color-text-primary)',
           }}
         >
           {t('emptyState.heading')}
@@ -112,7 +112,7 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
         <div className="w-full mt-[48px]">
           <p
             className="mb-[14px] font-medium uppercase"
-            style={{ fontSize: '11px', letterSpacing: '0.12em', color: '#a89e92' }}
+            style={{ fontSize: '11px', letterSpacing: '0.08em', color: '#a89e92' }}
           >
             {t('emptyState.tryThese')}
           </p>

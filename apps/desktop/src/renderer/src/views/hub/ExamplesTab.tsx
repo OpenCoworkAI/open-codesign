@@ -45,10 +45,7 @@ export function ExamplesTab({ onUsePrompt }: ExamplesTabProps) {
   return (
     <section className="flex flex-col gap-[var(--space-6)]">
       <header className="flex flex-col gap-[var(--space-2)]">
-        <h1
-          className="text-[var(--font-size-display-lg)] leading-[var(--leading-heading)] tracking-[var(--tracking-heading)] text-[var(--color-text-primary)]"
-          style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}
-        >
+        <h1 className="text-[var(--text-xl)] font-semibold leading-[var(--leading-heading)] tracking-[var(--tracking-normal)] text-[var(--color-text-primary)]">
           {t('examples.title')}
         </h1>
         <p className="max-w-2xl text-[var(--font-size-body)] leading-[var(--leading-body)] text-[var(--color-text-secondary)]">

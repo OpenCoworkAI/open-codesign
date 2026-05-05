@@ -3,6 +3,7 @@ import {
   elapsedSecondsSince,
   formatElapsedSeconds,
   getTextareaLineHeight,
+  getTextareaVerticalPadding,
   shouldSubmitPromptKey,
 } from './chat/PromptInput';
 
@@ -50,6 +51,23 @@ describe('getTextareaLineHeight', () => {
     );
 
     expect(() => getTextareaLineHeight({} as HTMLTextAreaElement)).toThrow(/missing or invalid/);
+  });
+});
+
+describe('getTextareaVerticalPadding', () => {
+  it('sums textarea vertical padding and treats invalid values as zero', () => {
+    vi.stubGlobal(
+      'getComputedStyle',
+      vi.fn(
+        () =>
+          ({
+            paddingTop: '5px',
+            paddingBottom: '7px',
+          }) as unknown as CSSStyleDeclaration,
+      ),
+    );
+
+    expect(getTextareaVerticalPadding({} as HTMLTextAreaElement)).toBe(12);
   });
 });
 

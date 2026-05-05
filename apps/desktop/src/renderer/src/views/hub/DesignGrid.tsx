@@ -161,10 +161,7 @@ export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps)
                 </button>
 
                 <div className="relative z-[2] flex flex-col gap-[2px] px-[2px]">
-                  <span
-                    className="truncate text-[var(--text-md)] text-[var(--color-text-primary)] tracking-[var(--tracking-tight)]"
-                    style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}
-                  >
+                  <span className="truncate text-[var(--text-base)] font-semibold text-[var(--color-text-primary)] tracking-[var(--tracking-normal)]">
                     {d.name}
                   </span>
                   {updated ? (

@@ -77,10 +77,7 @@ export function LoadingState({ stage: stageProp }: LoadingStateProps = {}) {
             <StageIcon stage={activeStage} />
           </div>
           <div className="min-w-0">
-            <div
-              className="truncate text-[var(--text-sm)] text-[var(--color-text-primary)]"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
+            <div className="truncate text-[var(--text-sm)] font-semibold text-[var(--color-text-primary)]">
               {t('preview.loading.title')}
             </div>
             <div className="mt-[2px] text-[var(--text-xs)] text-[var(--color-text-secondary)]">

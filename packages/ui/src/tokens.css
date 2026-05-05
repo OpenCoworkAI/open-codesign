@@ -197,13 +197,13 @@
   --transition-fast: all var(--duration-fast) var(--ease-out);
 }
 
-/* Display headings use Fraunces */
+/* App headings use the product UI sans; reserve Fraunces for explicit brand moments. */
 h1,
 h2,
 h3,
 .display {
-  font-family: var(--font-display);
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-weight: 600;
 }
 
 /* Monospaced numbers and code */

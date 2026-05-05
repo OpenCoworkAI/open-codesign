@@ -64,6 +64,13 @@ export function getTextareaLineHeight(el: HTMLTextAreaElement): number {
   return fontSize * leading;
 }
 
+export function getTextareaVerticalPadding(el: HTMLTextAreaElement): number {
+  const styles = getComputedStyle(el);
+  const top = Number.parseFloat(styles.paddingTop);
+  const bottom = Number.parseFloat(styles.paddingBottom);
+  return (Number.isFinite(top) ? top : 0) + (Number.isFinite(bottom) ? bottom : 0);
+}
+
 export function elapsedSecondsSince(
   startedAt: number | null | undefined,
   now = Date.now(),
@@ -80,8 +87,11 @@ export function formatElapsedSeconds(elapsedSec: number): string {
 
 function resizeTextarea(el: HTMLTextAreaElement): void {
   const rowHeight = getTextareaLineHeight(el);
+  const verticalPadding = getTextareaVerticalPadding(el);
+  const maxHeight = rowHeight * MAX_TEXTAREA_ROWS + verticalPadding;
   el.style.height = 'auto';
-  el.style.height = `${Math.min(el.scrollHeight, rowHeight * MAX_TEXTAREA_ROWS)}px`;
+  el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
 }
 
 export interface PromptInputProps {
@@ -177,7 +187,7 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
 
   useEffect(() => {
     if (taRef.current) resizeTextarea(taRef.current);
-  }, []);
+  });
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -232,6 +242,12 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
   const sendDisabledReason = isGenerating
     ? t('disabledReason.generatingInProgress')
     : t('disabledReason.typePromptToSend');
+  const composerFrameClass = [
+    'relative rounded-[12px] border bg-[var(--color-surface)] shadow-[var(--shadow-soft)] transition-[border-color,box-shadow,background-color] duration-150 ease-out',
+    isGenerating
+      ? 'border-[var(--color-border-muted)] bg-[color-mix(in_srgb,var(--color-surface)_94%,var(--color-background-secondary))]'
+      : 'border-[var(--color-border-muted)] focus-within:border-[var(--color-border-strong)] focus-within:shadow-[0_0_0_2px_var(--color-accent-soft),var(--shadow-soft)]',
+  ].join(' ');
 
   return (
     <form
@@ -239,80 +255,74 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
       onDrop={(e) => void handleDrop(e)}
       onDragOver={(e) => e.preventDefault()}
     >
-      <div className="relative rounded-[14px] bg-[var(--color-surface)] border border-[var(--color-border-muted)] shadow-[var(--shadow-soft)] focus-within:border-[var(--color-border-strong)] focus-within:shadow-[0_0_0_2px_var(--color-accent-soft),var(--shadow-soft)] transition-[border-color,box-shadow] duration-150 ease-out">
+      <div className={composerFrameClass}>
         {contextSummary ? (
           <div className="border-b border-[var(--color-border-subtle)] px-[12px] py-[10px]">
             {contextSummary}
           </div>
         ) : null}
-        <textarea
-          ref={taRef}
-          value={prompt}
-          onChange={(e) => {
-            setPrompt(e.target.value);
-            resizeTextarea(e.currentTarget);
-          }}
-          onKeyDown={handleKeyDown}
-          onCompositionStart={() => {
-            compositionActiveRef.current = true;
-          }}
-          onCompositionEnd={() => {
-            compositionActiveRef.current = false;
-          }}
-          onPaste={(e) => void handlePaste(e)}
-          placeholder={t('chat.placeholderRich')}
-          rows={1}
-          className="codesign-prompt-textarea block w-full resize-none appearance-none border-0 bg-transparent px-[14px] pt-[12px] pb-[44px] text-[14px] leading-[1.55] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] shadow-none outline-none focus:outline-none focus:ring-0 min-h-[24px] overflow-y-auto"
-          style={{ fontFamily: 'var(--font-sans)' }}
-        />
+        <div className="flex items-end gap-[var(--space-2)] px-[var(--space-2)] py-[var(--space-2)]">
+          {leadingAction ? <div className="shrink-0 pb-[1px]">{leadingAction}</div> : null}
+          <textarea
+            ref={taRef}
+            value={prompt}
+            onChange={(e) => {
+              setPrompt(e.target.value);
+              resizeTextarea(e.currentTarget);
+            }}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={() => {
+              compositionActiveRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              compositionActiveRef.current = false;
+            }}
+            onPaste={(e) => void handlePaste(e)}
+            placeholder={t('chat.placeholderRich')}
+            rows={1}
+            className="codesign-prompt-textarea block min-h-[30px] min-w-0 flex-1 resize-none appearance-none border-0 bg-transparent px-[2px] py-[5px] text-[13.5px] leading-[1.55] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] shadow-none outline-none focus:outline-none focus:ring-0"
+            style={{ fontFamily: 'var(--font-sans)' }}
+          />
 
-        {leadingAction ? (
-          <div className="absolute bottom-[8px] left-[8px]">{leadingAction}</div>
-        ) : null}
-
-        {/* Send / Stop button — bottom right, modern circular */}
-        <div className="absolute bottom-[8px] right-[8px]">
-          {isGenerating ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              aria-label={t('chat.stop')}
-              className="relative inline-flex items-center justify-center w-[32px] h-[32px] rounded-full bg-[var(--color-accent)] text-white shadow-[0_2px_6px_color-mix(in_srgb,var(--color-accent)_35%,transparent)] hover:bg-[var(--color-accent-hover)] active:scale-[0.92] transition-all duration-150"
-            >
-              <span
-                aria-hidden
-                className="absolute inset-0 rounded-full bg-[var(--color-accent)] opacity-40 animate-ping"
-              />
-              <Square className="relative w-[10px] h-[10px]" strokeWidth={0} fill="currentColor" />
-            </button>
-          ) : (
-            <Tooltip label={!canSend ? sendDisabledReason : undefined} side="top">
+          <div className="shrink-0 pb-[1px]">
+            {isGenerating ? (
               <button
-                type="submit"
-                disabled={!canSend}
-                aria-label={t('chat.send')}
-                className="inline-flex items-center justify-center w-[32px] h-[32px] rounded-full bg-[var(--color-accent)] text-white shadow-[0_2px_6px_color-mix(in_srgb,var(--color-accent)_30%,transparent)] hover:bg-[var(--color-accent-hover)] hover:shadow-[0_3px_10px_color-mix(in_srgb,var(--color-accent)_40%,transparent)] active:scale-[0.92] disabled:opacity-25 disabled:shadow-none disabled:cursor-not-allowed transition-all duration-150"
+                type="button"
+                onClick={onCancel}
+                aria-label={t('chat.stop')}
+                className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface-hover)] text-[var(--color-error)] shadow-[var(--shadow-soft)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--color-error)]/40 hover:bg-[var(--color-surface-active)] active:scale-[0.94]"
               >
-                <ArrowUp className="w-[16px] h-[16px]" strokeWidth={2.5} />
+                <Square className="w-[9px] h-[9px]" strokeWidth={0} fill="currentColor" />
               </button>
-            </Tooltip>
-          )}
+            ) : (
+              <Tooltip label={!canSend ? sendDisabledReason : undefined} side="top">
+                <button
+                  type="submit"
+                  disabled={!canSend}
+                  aria-label={t('chat.send')}
+                  className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-accent)] text-white shadow-[var(--shadow-soft)] transition-[background-color,box-shadow,transform] duration-150 hover:bg-[var(--color-accent-hover)] hover:shadow-[var(--shadow-card)] active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-25 disabled:shadow-none"
+                >
+                  <ArrowUp className="w-[15px] h-[15px]" strokeWidth={2.5} />
+                </button>
+              </Tooltip>
+            )}
+          </div>
         </div>
       </div>
       {runningLabel ? (
         <div
           aria-live="polite"
-          className="mt-[var(--space-2)] flex items-center justify-between gap-[var(--space-2)] px-[var(--space-1)]"
+          className="mt-[var(--space-2)] flex min-h-[18px] items-center justify-between gap-[var(--space-2)] px-[var(--space-1)] text-[11px] text-[var(--color-text-muted)]"
         >
-          <div className="inline-flex items-center gap-[var(--space-1_5)] rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-[var(--space-2)] py-[3px] text-[11px] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)]">
-            <span aria-hidden className="relative inline-flex h-[6px] w-[6px] shrink-0">
-              <span className="absolute inset-0 rounded-full bg-[var(--color-accent)] opacity-45 animate-ping" />
-              <span className="relative inline-block h-full w-full rounded-full bg-[var(--color-accent)]" />
-            </span>
-            <span className="whitespace-nowrap">{runningLabel}</span>
+          <div className="inline-flex min-w-0 items-center gap-[var(--space-1_5)]">
+            <span
+              aria-hidden
+              className="inline-block h-[6px] w-[6px] shrink-0 rounded-full bg-[var(--color-accent)] opacity-75 animate-pulse"
+            />
+            <span className="truncate">{runningLabel}</span>
           </div>
           <span
-            className="text-[11px] text-[var(--color-text-muted)]"
+            className="shrink-0 tabular-nums"
             style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
           >
             {elapsedText}

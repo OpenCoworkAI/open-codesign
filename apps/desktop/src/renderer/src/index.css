@@ -18,8 +18,9 @@ h1,
 h2,
 h3,
 .display {
-  font-family: var(--font-display);
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 #root {
@@ -160,7 +161,17 @@ h3,
 }
 
 .codesign-prompt-textarea {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
   scrollbar-width: none;
+}
+.codesign-prompt-textarea:focus,
+.codesign-prompt-textarea:focus-visible {
+  border: 0;
+  outline: none;
+  box-shadow: none;
 }
 .codesign-prompt-textarea::-webkit-scrollbar {
   display: none;
@@ -196,6 +207,21 @@ h3,
   background: none;
   padding: 0;
   font-size: 12px;
+}
+.codesign-frontmatter {
+  border-bottom: 1px solid var(--color-border-muted);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+}
+.codesign-frontmatter summary {
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.codesign-frontmatter pre {
+  margin-bottom: 0;
+  white-space: pre-wrap;
 }
 .codesign-prose ul,
 .codesign-prose ol {

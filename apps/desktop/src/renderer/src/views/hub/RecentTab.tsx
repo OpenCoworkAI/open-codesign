@@ -49,10 +49,7 @@ export function RecentTab() {
           <Plus className="w-[28px] h-[28px]" strokeWidth={2} aria-hidden />
         </span>
         <div className="relative flex flex-col items-center gap-[var(--space-1)] px-[var(--space-4)] text-center">
-          <span
-            className="text-[var(--text-lg)] text-[var(--color-text-primary)] tracking-[var(--tracking-tight)]"
-            style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}
-          >
+          <span className="text-[var(--text-md)] font-semibold text-[var(--color-text-primary)] tracking-[var(--tracking-normal)]">
             {t('hub.newDesignCardTitle')}
           </span>
           <span className="text-[11px] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">

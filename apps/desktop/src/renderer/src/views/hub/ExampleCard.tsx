@@ -142,8 +142,8 @@ export function ExampleCard({ example, onUsePrompt }: ExampleCardProps) {
         {/* Title treatment */}
         <div className="absolute inset-x-[var(--space-4)] bottom-[var(--space-4)]">
           <h3
-            className="line-clamp-2 text-[22px] leading-[1.15] font-medium tracking-[var(--tracking-heading)]"
-            style={{ fontFamily: 'var(--font-display)', color: skin.ink }}
+            className="line-clamp-2 text-[20px] font-semibold leading-[1.18] tracking-[var(--tracking-normal)]"
+            style={{ color: skin.ink }}
           >
             {example.title}
           </h3>

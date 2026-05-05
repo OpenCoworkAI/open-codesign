@@ -1,5 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { filterModels } from './ModelSwitcher';
+import { filterModels, formatModelLabel, formatProviderLabel } from './ModelSwitcher';
+
+describe('formatProviderLabel', () => {
+  it('turns raw provider ids into readable labels', () => {
+    expect(formatProviderLabel('codex-coproxy')).toBe('Codex Coproxy');
+    expect(formatProviderLabel('openai_compatible')).toBe('Openai Compatible');
+  });
+
+  it('preserves already-human provider labels', () => {
+    expect(formatProviderLabel('Claude Code (imported)')).toBe('Claude Code (imported)');
+  });
+});
+
+describe('formatModelLabel', () => {
+  it('keeps GPT family names instead of reducing them to version numbers', () => {
+    expect(formatModelLabel('gpt-5.5')).toBe('GPT-5.5');
+    expect(formatModelLabel('openai/gpt-4o')).toBe('GPT-4o');
+  });
+
+  it('formats common Claude and Gemini ids without raw hyphen noise', () => {
+    expect(formatModelLabel('claude-opus-4-7')).toBe('Claude Opus 4.7');
+    expect(formatModelLabel('gemini-2.5-pro')).toBe('Gemini 2.5 pro');
+  });
+});
 
 describe('filterModels', () => {
   const models = [

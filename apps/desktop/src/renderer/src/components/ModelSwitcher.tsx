@@ -15,9 +15,34 @@ interface ModelSwitcherProps {
 // DeepSeek/Zhipu return 40+ IDs).
 const SEARCH_VISIBILITY_THRESHOLD = 12;
 
-function shortenModelLabel(model: string): string {
-  const stripped = model.replace(/^(claude-|gpt-|gemini-)/, '');
-  return stripped.includes('/') ? (stripped.split('/').pop() ?? stripped) : stripped;
+function titleCaseWords(value: string): string {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (/^[A-Z0-9]+$/.test(word)) return word;
+      return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`;
+    })
+    .join(' ');
+}
+
+export function formatProviderLabel(label: string): string {
+  const trimmed = label.trim();
+  if (trimmed.length === 0) return label;
+  if (/^[a-z0-9_-]+$/i.test(trimmed) && /[-_]/.test(trimmed)) return titleCaseWords(trimmed);
+  return trimmed;
+}
+
+export function formatModelLabel(model: string): string {
+  const leaf = model.includes('/') ? (model.split('/').pop() ?? model) : model;
+  const gpt = leaf.match(/^gpt[-_]?(.+)$/i);
+  if (gpt?.[1]) return `GPT-${gpt[1]}`;
+  const claude = leaf.match(/^claude[-_](sonnet|opus|haiku)[-_](.+)$/i);
+  if (claude?.[1] && claude[2])
+    return `Claude ${titleCaseWords(claude[1])} ${claude[2].replace(/-/g, '.')}`;
+  const gemini = leaf.match(/^gemini[-_](.+)$/i);
+  if (gemini?.[1]) return `Gemini ${gemini[1].replace(/-/g, ' ')}`;
+  return leaf;
 }
 
 /**
@@ -108,7 +133,8 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
   if (!provider || !currentModel) return null;
 
   const activeProviderRow = providerRows?.find((r) => r.provider === provider) ?? null;
-  const providerLabel = activeProviderRow?.label ?? provider;
+  const providerLabel = formatProviderLabel(activeProviderRow?.label ?? provider);
+  const modelLabel = formatModelLabel(currentModel);
 
   async function switchModel(model: string) {
     if (!window.codesign || !provider || model === currentModel) {
@@ -146,28 +172,28 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
         onClick={() => setOpen((v) => !v)}
         className={
           isSidebar
-            ? 'inline-flex items-center gap-[3px] text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer'
-            : 'flex h-10 w-[clamp(300px,26vw,340px)] items-center gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] select-none whitespace-nowrap transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]'
+            ? 'inline-flex h-5 min-w-0 items-center gap-[3px] rounded-[var(--radius-sm)] px-[2px] text-[11px] text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-secondary)] cursor-pointer'
+            : 'inline-flex h-10 min-w-[220px] max-w-[340px] items-center gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] select-none whitespace-nowrap transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]'
         }
         aria-haspopup="listbox"
         aria-expanded={open}
         title={isSidebar ? currentModel : `${providerLabel} · ${currentModel}`}
       >
         {isSidebar ? (
-          <span className="truncate" style={{ fontFamily: 'var(--font-mono)' }}>
-            {currentModel}
+          <span className="truncate" style={{ fontFamily: 'var(--font-sans)' }}>
+            {modelLabel}
           </span>
         ) : (
-          <span className="flex min-w-0 flex-1 items-center gap-[6px] text-[var(--text-xs)] leading-none">
-            <span className="min-w-0 flex-1 truncate text-[var(--color-text-secondary)]">
+          <span className="inline-flex min-w-0 flex-1 items-center gap-[6px] text-[var(--text-xs)] leading-none">
+            <span className="min-w-0 max-w-[170px] truncate text-[var(--color-text-secondary)]">
               {providerLabel}
             </span>
             <span className="shrink-0 text-[var(--color-border-strong)]">·</span>
             <span
-              className="max-w-[96px] shrink-0 truncate text-[var(--color-text-muted)]"
-              style={{ fontFamily: 'var(--font-mono)' }}
+              className="max-w-[112px] shrink-0 truncate text-[var(--color-text-muted)]"
+              style={{ fontFamily: 'var(--font-sans)' }}
             >
-              {shortenModelLabel(currentModel)}
+              {modelLabel}
             </span>
           </span>
         )}

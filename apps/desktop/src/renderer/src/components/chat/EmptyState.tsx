@@ -34,10 +34,7 @@ export function EmptyState({ onPickStarter }: EmptyStateProps) {
   return (
     <div className="h-full flex flex-col items-center justify-center px-[var(--space-2)] py-[var(--space-8)]">
       <div className="w-full max-w-[320px] flex flex-col items-center text-center">
-        <h2
-          className="text-[var(--text-xl)] leading-[var(--leading-heading)] tracking-[var(--tracking-heading)] text-[var(--color-text-primary)]"
-          style={{ fontFamily: 'var(--font-display)', fontWeight: 400 }}
-        >
+        <h2 className="text-[var(--text-lg)] font-semibold leading-[var(--leading-heading)] tracking-[var(--tracking-normal)] text-[var(--color-text-primary)]">
           {t('sidebar.empty.title')}
         </h2>
         <p className="mt-[var(--space-2)] text-[var(--text-sm)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
