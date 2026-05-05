@@ -1466,15 +1466,17 @@ describe('generateViaAgent()', () => {
     expect(sys).toContain('Prefer progressive generation');
     expect(sys).toContain('coherent first pass');
     expect(sys).toContain('complete first pass');
-    expect(sys).toContain('Do not call `preview` while the artifact is still only a scaffold');
-    expect(sys).toContain('A complete `create App.jsx` is acceptable');
+    expect(sys).toContain(
+      'Do not call `preview` while a previewable artifact is still only a scaffold',
+    );
+    expect(sys).toContain('A complete first `create` is acceptable');
     expect(sys).toContain('Interleave major tool groups');
     expect(sys).toContain('under 18 words');
     expect(sys).toContain('`str_replace`, or `insert`');
     expect(sys).toContain('Do not emit `<artifact>`');
     expect(sys).toContain('design source to `App.jsx`');
     expect(sys).toContain('Local workspace assets and scaffolded files are allowed');
-    expect(sys).toContain('Call `done(path)` after the final mutation');
+    expect(sys).toContain('`done(path)` after the final mutation');
     expect(sys).toContain('stop after 3 error rounds');
     expect(sys).not.toContain('text_editor.create(');
     expect(sys).not.toContain('view("index.html"');
@@ -1541,7 +1543,7 @@ describe('generateViaAgent()', () => {
     expect(names).not.toContain('verify_html');
   });
 
-  it('hides tweaks and image tools when the feature profile disables them', async () => {
+  it('hides tweaks and image tools only for explicit high-confidence refusals', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent(
       {
@@ -1554,6 +1556,10 @@ describe('generateViaAgent()', () => {
           tweaks: 'no',
           bitmapAssets: 'no',
           reusableSystem: 'auto',
+          routing: {
+            tweaks: { provenance: 'explicit', confidence: 'high' },
+            bitmapAssets: { provenance: 'explicit', confidence: 'high' },
+          },
         },
         runPreview: async () => ({
           ok: true,
@@ -1584,6 +1590,47 @@ describe('generateViaAgent()', () => {
     expect(sys).not.toContain('Bitmap asset generation');
   });
 
+  it('keeps semantic tools available for inferred low-confidence refusals', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent(
+      {
+        prompt: 'design a landing page',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        runPreferences: {
+          schemaVersion: 1,
+          tweaks: 'no',
+          bitmapAssets: 'no',
+          reusableSystem: 'auto',
+          routing: {
+            tweaks: { provenance: 'inferred', confidence: 'low' },
+            bitmapAssets: { provenance: 'inferred', confidence: 'low' },
+          },
+        },
+        readWorkspaceFiles: async () => [],
+      },
+      {
+        fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }),
+        generateImageAsset: async () => ({
+          path: 'assets/hero.png',
+          dataUrl: 'data:image/png;base64,aW1n',
+          mimeType: 'image/png',
+          model: 'gpt-image-2',
+          provider: 'openai',
+        }),
+      },
+    );
+
+    const tools = (agentCalls[0]?.options.initialState?.tools ?? []) as Array<{ name?: string }>;
+    const names = tools.map((tool) => tool.name);
+    expect(names).toContain('tweaks');
+    expect(names).toContain('generate_image_asset');
+    const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
+    expect(sys).toContain('User-routed preferences');
+    expect(sys).not.toContain('The user explicitly declined');
+  });
+
   it('keeps selective tweaks guidance in auto mode', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent({
@@ -1599,7 +1646,7 @@ describe('generateViaAgent()', () => {
       },
     });
     const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
-    expect(sys).toContain('Call `tweaks()` only when user preference allows');
+    expect(sys).toContain('decide agentically whether tweak controls improve iteration');
   });
 
   it('injects apply-comment supporting context only once through the agent boundary', async () => {

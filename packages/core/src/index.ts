@@ -79,6 +79,16 @@ export {
   recordScaffold,
 } from './resource-state.js';
 export {
+  applyRunPreferenceAnswers,
+  defaultRunPreferences,
+  normalizeRunPreferencesRouterResult,
+  type RouteRunPreferencesInput,
+  type RouteRunPreferencesResult,
+  RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT,
+  routeRunPreferences,
+  runPreferencesFromJson,
+} from './run-preferences.js';
+export {
   type AskAnswer,
   type AskBridge,
   type AskInput,

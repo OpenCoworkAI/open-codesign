@@ -8,8 +8,6 @@ vi.mock('../electron-runtime', () => ({
 import {
   buildRunPreferenceAskInput,
   contextWindowForContextPack,
-  mergeRunPreferenceAnswers,
-  shouldRequestRunPreferencePreflight,
   shouldRunUserMemoryCandidateCapture,
 } from './generate';
 
@@ -49,55 +47,17 @@ describe('generate IPC memory preference helpers', () => {
 });
 
 describe('generate IPC run preference preflight helpers', () => {
-  it('asks fresh designs for tweak preferences', () => {
-    expect(
-      shouldRequestRunPreferencePreflight({
-        hasSource: false,
-        existingPreferences: null,
-        prompt: 'make a dashboard',
-      }),
-    ).toBe(true);
-  });
-
-  it('does not ask again once run preferences are stored', () => {
-    expect(
-      shouldRequestRunPreferencePreflight({
-        hasSource: false,
-        existingPreferences: {
-          schemaVersion: 1,
-          tweaks: 'auto',
-          bitmapAssets: 'auto',
-          reusableSystem: 'auto',
-        },
-        prompt: 'make another screen',
-      }),
-    ).toBe(false);
-  });
-
-  it('updates explicit prompt overrides without preflight', () => {
-    expect(
-      mergeRunPreferenceAnswers(
-        {
-          schemaVersion: 1,
-          tweaks: 'auto',
-          bitmapAssets: 'auto',
-          reusableSystem: 'auto',
-        },
-        [],
-        '不要加微调，也不要生成图片',
-      ),
-    ).toEqual({
-      schemaVersion: 1,
-      tweaks: 'no',
-      bitmapAssets: 'no',
-      reusableSystem: 'auto',
-    });
-  });
-
-  it('builds a required tweaks question for fresh preflight', () => {
-    const input = buildRunPreferenceAskInput('make a landing page');
+  it('builds clarification input from semantic router questions', () => {
+    const input = buildRunPreferenceAskInput([
+      {
+        id: 'bitmapAssets',
+        type: 'text-options',
+        prompt: 'Generate bitmap assets?',
+        options: ['auto', 'no', 'yes'],
+      },
+    ]);
     expect(input.questions[0]).toMatchObject({
-      id: 'tweaks',
+      id: 'bitmapAssets',
       type: 'text-options',
       options: ['auto', 'no', 'yes'],
     });

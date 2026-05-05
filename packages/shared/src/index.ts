@@ -109,6 +109,27 @@ export type ChatMessage = z.infer<typeof ChatMessage>;
 
 export const DesignRunPreferenceMode = z.enum(['yes', 'no', 'auto']);
 export type DesignRunPreferenceMode = z.infer<typeof DesignRunPreferenceMode>;
+export const DesignRunPreferenceProvenance = z.enum(['explicit', 'inferred', 'default']);
+export type DesignRunPreferenceProvenance = z.infer<typeof DesignRunPreferenceProvenance>;
+export const DesignRunPreferenceConfidence = z.enum(['high', 'medium', 'low']);
+export type DesignRunPreferenceConfidence = z.infer<typeof DesignRunPreferenceConfidence>;
+export const DesignRunPreferenceRoutingEntry = z
+  .object({
+    provenance: DesignRunPreferenceProvenance,
+    confidence: DesignRunPreferenceConfidence,
+    reason: z.string().optional(),
+  })
+  .strict();
+export type DesignRunPreferenceRoutingEntry = z.infer<typeof DesignRunPreferenceRoutingEntry>;
+export const DesignRunPreferenceRouting = z
+  .object({
+    tweaks: DesignRunPreferenceRoutingEntry.optional(),
+    bitmapAssets: DesignRunPreferenceRoutingEntry.optional(),
+    reusableSystem: DesignRunPreferenceRoutingEntry.optional(),
+    visualDirection: DesignRunPreferenceRoutingEntry.optional(),
+  })
+  .strict();
+export type DesignRunPreferenceRouting = z.infer<typeof DesignRunPreferenceRouting>;
 
 export const DesignRunPreferencesV1 = z
   .object({
@@ -117,6 +138,7 @@ export const DesignRunPreferencesV1 = z
     bitmapAssets: DesignRunPreferenceMode,
     reusableSystem: DesignRunPreferenceMode,
     visualDirection: z.enum(['editorial', 'professional', 'bold', 'custom']).optional(),
+    routing: DesignRunPreferenceRouting.optional(),
   })
   .strict();
 export type DesignRunPreferencesV1 = z.infer<typeof DesignRunPreferencesV1>;

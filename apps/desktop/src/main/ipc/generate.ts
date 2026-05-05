@@ -1,8 +1,8 @@
 import path_module from 'node:path';
 import {
   type AgentEvent,
-  type AskAnswer,
   type AskInput,
+  applyRunPreferenceAnswers,
   buildApplyCommentUserPrompt,
   buildDesignContextPack,
   type CoreLogger,
@@ -15,6 +15,7 @@ import {
   inspectWorkspaceFiles,
   loadDesignSkills,
   loadFrameTemplates,
+  routeRunPreferences,
   updateDesignSessionBrief,
 } from '@open-codesign/core';
 import { detectProviderFromKey, generateImage } from '@open-codesign/providers';
@@ -22,7 +23,6 @@ import {
   ApplyCommentPayload,
   CancelGenerationPayloadV1,
   CodesignError,
-  type DesignRunPreferencesV1,
   deriveResourceStateFromChatRows,
   GeneratePayloadV1,
 } from '@open-codesign/shared';
@@ -88,65 +88,28 @@ export function shouldRunUserMemoryCandidateCapture(prefs: {
   return prefs.memoryEnabled === true && prefs.userMemoryAutoUpdate === true;
 }
 
-const DEFAULT_RUN_PREFERENCES: DesignRunPreferencesV1 = {
-  schemaVersion: 1,
-  tweaks: 'auto',
-  bitmapAssets: 'auto',
-  reusableSystem: 'auto',
-};
-
-export function shouldRequestRunPreferencePreflight(input: {
-  hasSource: boolean;
-  existingPreferences: DesignRunPreferencesV1 | null;
-  prompt: string;
-}): boolean {
-  if (input.existingPreferences !== null) return false;
-  if (input.hasSource) return false;
-  return input.prompt.trim().length > 0;
-}
-
-export function buildRunPreferenceAskInput(_prompt: string): AskInput {
+export function buildRunPreferenceAskInput(questions: AskInput['questions']): AskInput {
   return {
     rationale: 'A few setup choices help Open CoDesign avoid unnecessary work.',
-    questions: [
-      {
-        id: 'tweaks',
-        type: 'text-options',
-        prompt: 'Do you want tweak controls for this design?',
-        options: ['auto', 'no', 'yes'],
-      },
-    ],
+    questions,
   };
 }
 
-function answerValue(answers: AskAnswer[], questionId: string): string | null {
-  const value = answers.find((answer) => answer.questionId === questionId)?.value;
-  return typeof value === 'string' ? value : null;
-}
-
-export function mergeRunPreferenceAnswers(
-  base: DesignRunPreferencesV1 | null,
-  answers: AskAnswer[],
-  prompt: string,
-): DesignRunPreferencesV1 {
-  const next: DesignRunPreferencesV1 = { ...(base ?? DEFAULT_RUN_PREFERENCES) };
-  const tweakAnswer = answerValue(answers, 'tweaks');
-  if (tweakAnswer === 'yes' || tweakAnswer === 'no' || tweakAnswer === 'auto') {
-    next.tweaks = tweakAnswer;
-  }
-  const lower = prompt.toLowerCase();
-  const disablesTweaks = /不要.*微调|不.*微调|no tweaks?|without tweaks?/.test(lower);
-  if (disablesTweaks) {
-    next.tweaks = 'no';
-  } else if (/加.*微调|要.*微调|add tweaks?|with tweaks?/.test(lower)) {
-    next.tweaks = 'yes';
-  }
-  if (/不要.*(图片|图像)|不.*生成.*(图片|图像)|no images?|without images?/.test(lower)) {
-    next.bitmapAssets = 'no';
-  } else if (/生成.*(图片|图像)|加.*(图片|图像)|generate images?|with images?/.test(lower)) {
-    next.bitmapAssets = 'yes';
-  }
-  return next;
+function recentHistoryForRunPreferenceRouter(
+  chatRows: ReturnType<typeof listSessionChatMessages>,
+): string {
+  return chatRows
+    .slice(-12)
+    .map((row) => {
+      if (row.kind !== 'user' && row.kind !== 'assistant_text') return null;
+      const text =
+        typeof (row.payload as { text?: unknown }).text === 'string'
+          ? (row.payload as { text: string }).text
+          : '';
+      return text.trim().length > 0 ? `[${row.kind}] ${text.trim().slice(0, 800)}` : null;
+    })
+    .filter((line): line is string => line !== null)
+    .join('\n');
 }
 
 function designMdSummaryForMemory(
@@ -797,27 +760,42 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               runPreferenceStoreOptions !== null
                 ? readSessionRunPreferences(runPreferenceStoreOptions, designId)
                 : null;
-            let runPreferences = mergeRunPreferenceAnswers(
-              existingRunPreferences,
-              [],
-              payload.prompt,
-            );
-            if (
-              shouldRequestRunPreferencePreflight({
-                hasSource: Boolean(payload.previousSource?.trim()),
-                existingPreferences: existingRunPreferences,
-                prompt: payload.prompt,
-              })
-            ) {
+            const workspaceState = {
+              sourcePath: payload.previousSource ? 'App.jsx' : null,
+              hasSource: Boolean(payload.previousSource?.trim()),
+              hasDesignMd: Boolean(promptContext.projectContext.designMd?.trim()),
+              hasAgentsMd: Boolean(promptContext.projectContext.agentsMd?.trim()),
+              hasSettingsJson: Boolean(promptContext.projectContext.settingsJson?.trim()),
+            };
+            const routedPreferences = await routeRunPreferences({
+              prompt: payload.prompt,
+              existingPreferences: existingRunPreferences,
+              recentHistory: recentHistoryForRunPreferenceRouter(chatRows),
+              workspaceState,
+              designBrief: existingBrief ? JSON.stringify(existingBrief) : null,
+              userMemory: memoryContext?.userMemory?.content ?? null,
+              workspaceMemory: memoryContext?.workspaceMemory?.content ?? null,
+              model: active.model,
+              apiKey,
+              ...(baseUrl !== undefined ? { baseUrl } : {}),
+              wire: active.wire,
+              ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+              ...(active.reasoningLevel !== undefined
+                ? { reasoningLevel: active.reasoningLevel }
+                : {}),
+              ...(allowKeyless ? { allowKeyless: true } : {}),
+              logger: coreLogger,
+            });
+            let runPreferences = routedPreferences.preferences;
+            if (routedPreferences.needsClarification && routedPreferences.clarificationQuestions) {
               const askResult = await requestAsk(
                 id,
-                buildRunPreferenceAskInput(payload.prompt),
+                buildRunPreferenceAskInput(routedPreferences.clarificationQuestions),
                 () => getMainWindow(),
               );
-              runPreferences = mergeRunPreferenceAnswers(
+              runPreferences = applyRunPreferenceAnswers(
                 runPreferences,
                 askResult.status === 'answered' ? askResult.answers : [],
-                payload.prompt,
               );
             }
             if (runPreferenceStoreOptions !== null) {
