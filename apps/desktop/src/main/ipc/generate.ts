@@ -659,6 +659,15 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           });
           if (capturedMessages !== null) {
             const design = db !== null ? getDesign(db, designId) : null;
+            let memoryWorkspaceRoot = workspaceRoot;
+            try {
+              memoryWorkspaceRoot = requireWorkspaceRootForDesign(designId).workspaceRoot;
+            } catch (err) {
+              logIpc.warn('memory.workspace.resolve.fail', {
+                generationId: id,
+                message: err instanceof Error ? err.message : String(err),
+              });
+            }
             const briefUpdate = updateDesignSessionBrief({
               existingBrief,
               conversationMessages: capturedMessages,
@@ -689,7 +698,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 });
               });
             const memoryUpdate = triggerMemoryUpdate({
-              workspacePath: workspaceRoot,
+              workspacePath: memoryWorkspaceRoot,
               designId,
               designName: design?.name ?? 'Untitled',
               conversationMessages: capturedMessages,

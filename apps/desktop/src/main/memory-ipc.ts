@@ -3,8 +3,8 @@
  * memory.md, orchestrates LLM-based memory updates after generation.
  */
 
-import { readFile, rename, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import {
   extractSummaryFromMemory,
   formatGlobalMemoryIndex,
@@ -35,6 +35,7 @@ export async function readDesignMemoryFile(workspacePath: string): Promise<strin
 export async function writeDesignMemoryFile(workspacePath: string, content: string): Promise<void> {
   const target = join(workspacePath, 'memory.md');
   const tmp = `${target}.tmp`;
+  await mkdir(dirname(target), { recursive: true });
   await writeFile(tmp, content, 'utf-8');
   await rename(tmp, target);
 }

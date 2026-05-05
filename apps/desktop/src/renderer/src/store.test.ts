@@ -191,6 +191,27 @@ describe('useCodesignStore iframe error handling', () => {
   });
 });
 
+describe('useCodesignStore streaming assistant text', () => {
+  it('keeps streaming assistant text isolated per design', () => {
+    const { setStreamingAssistantText } = useCodesignStore.getState();
+
+    setStreamingAssistantText({ designId: 'design-a', text: 'A is drafting' });
+    setStreamingAssistantText({ designId: 'design-b', text: 'B is editing' });
+
+    expect(useCodesignStore.getState().streamingAssistantTextByDesign).toMatchObject({
+      'design-a': 'A is drafting',
+      'design-b': 'B is editing',
+    });
+
+    setStreamingAssistantText({ designId: 'design-a', text: '' });
+
+    expect(useCodesignStore.getState().streamingAssistantTextByDesign).toEqual({
+      'design-b': 'B is editing',
+    });
+    expect(useCodesignStore.getState().streamingAssistantText?.designId).toBe('design-b');
+  });
+});
+
 describe('useCodesignStore generation cancellation', () => {
   beforeAll(async () => {
     await initI18n('en');

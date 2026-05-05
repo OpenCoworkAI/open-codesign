@@ -50,7 +50,7 @@ export function useAgentStream(): void {
   const updateChatToolStatus = useCodesignStore((s) => s.updateChatToolStatus);
   const persistAgentRunSnapshot = useCodesignStore((s) => s.persistAgentRunSnapshot);
   const renameDesign = useCodesignStore((s) => s.renameDesign);
-  const inFlight = useRef<InFlightTurn | null>(null);
+  const inFlight = useRef<Map<string, InFlightTurn>>(new Map());
 
   // Throttled live-preview push. iframe srcdoc reloads the whole page on every
   // change, so a flurry of str_replace events (10+ per turn is normal) would
@@ -94,27 +94,24 @@ export function useAgentStream(): void {
         generationId: event.generationId,
         designId: event.designId,
       });
-      const previous = inFlight.current;
-      const sameRun =
-        previous &&
-        previous.designId === event.designId &&
-        previous.generationId === event.generationId;
-      inFlight.current = {
+      const previous = inFlight.current.get(event.generationId);
+      inFlight.current.set(event.generationId, {
         designId: event.designId,
         generationId: event.generationId,
         textBuffer: '',
-        lastPersistedText: sameRun ? previous.lastPersistedText : null,
-        pendingTools: sameRun ? previous.pendingTools : [],
-      };
+        lastPersistedText: previous?.lastPersistedText ?? null,
+        pendingTools: previous?.pendingTools ?? [],
+      });
       setStreamingAssistantText({ designId: event.designId, text: '' });
     };
 
     const handleTextDelta = (event: AgentStreamEvent) => {
-      if (!inFlight.current || typeof event.delta !== 'string') return;
-      inFlight.current.textBuffer += event.delta;
+      const current = inFlight.current.get(event.generationId);
+      if (!current || typeof event.delta !== 'string') return;
+      current.textBuffer += event.delta;
       setStreamingAssistantText({
-        designId: inFlight.current.designId,
-        text: inFlight.current.textBuffer,
+        designId: current.designId,
+        text: current.textBuffer,
       });
     };
 
@@ -132,7 +129,7 @@ export function useAgentStream(): void {
     };
 
     const handleTurnEnd = (event: AgentStreamEvent) => {
-      const current = inFlight.current;
+      const current = inFlight.current.get(event.generationId);
       // TODO: replace with rendererLogger once renderer-logger lands
       console.debug('[agent] turn_end', {
         generationId: event.generationId,
@@ -150,12 +147,12 @@ export function useAgentStream(): void {
         current.lastPersistedText = finalText;
       }
       if (current) drainPendingTools(current, 'done');
-      setStreamingAssistantText(null);
+      setStreamingAssistantText({ designId: event.designId, text: '' });
       if (current) current.textBuffer = '';
     };
 
     const handleToolCallStart = (event: AgentStreamEvent) => {
-      const current = inFlight.current;
+      const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
       const toolName = event.toolName ?? 'unknown';
       // TODO: replace with rendererLogger once renderer-logger lands
@@ -208,7 +205,7 @@ export function useAgentStream(): void {
     };
 
     const handleToolCallResult = (event: AgentStreamEvent) => {
-      const current = inFlight.current;
+      const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
       if (!current) return;
       const idx = current.pendingTools.findIndex(
@@ -265,7 +262,7 @@ export function useAgentStream(): void {
     };
 
     const handleError = (event: AgentStreamEvent) => {
-      const _current = inFlight.current;
+      const current = inFlight.current.get(event.generationId);
       // TODO: replace with rendererLogger once renderer-logger lands
       console.error('[agent] error', {
         generationId: event.generationId,
@@ -273,8 +270,9 @@ export function useAgentStream(): void {
         message: event.message,
         code: event.code,
       });
-      setStreamingAssistantText(null);
-      inFlight.current = null;
+      if (current) drainPendingTools(current, 'error');
+      setStreamingAssistantText({ designId: event.designId, text: '' });
+      inFlight.current.delete(event.generationId);
       void appendChatMessage({
         designId: event.designId,
         kind: 'error',
@@ -301,7 +299,6 @@ export function useAgentStream(): void {
           generationStage:
             activeForCurrent?.stage ??
             (s.currentDesignId === event.designId ? 'error' : s.generationStage),
-          streamingAssistantText: null,
         });
       }
     };
@@ -320,12 +317,14 @@ export function useAgentStream(): void {
         slot.lastFlushAt = Date.now();
         setPreviewSourceFromAgent(pending);
       }
-      const finalText = inFlight.current?.lastPersistedText ?? undefined;
+      const current = inFlight.current.get(event.generationId);
+      const finalText = current?.lastPersistedText ?? undefined;
       void persistAgentRunSnapshot({
         designId: event.designId,
         ...(finalText ? { finalText } : {}),
       });
-      inFlight.current = null;
+      inFlight.current.delete(event.generationId);
+      setStreamingAssistantText({ designId: event.designId, text: '' });
       // Defensive: clear generation flags. The sendPrompt Promise resolution
       // would normally clear them shortly after, but if the main-process IPC
       // hangs for any reason the UI would be stuck in "running" forever.
@@ -345,7 +344,6 @@ export function useAgentStream(): void {
           generationStage:
             activeForCurrent?.stage ??
             (s.currentDesignId === event.designId ? 'done' : s.generationStage),
-          streamingAssistantText: null,
         });
       }
       // Fire the auto-polish follow-up exactly once per design. Delay so the

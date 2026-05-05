@@ -127,6 +127,18 @@ function startGenerationForDesign(set: SetState, designId: string, generationId:
   });
 }
 
+function clearStreamingForDesign(set: SetState, designId: string): void {
+  set((state) => {
+    const streamingAssistantTextByDesign = { ...state.streamingAssistantTextByDesign };
+    delete streamingAssistantTextByDesign[designId];
+    return {
+      streamingAssistantText:
+        state.streamingAssistantText?.designId === designId ? null : state.streamingAssistantText,
+      streamingAssistantTextByDesign,
+    };
+  });
+}
+
 function updateGenerationStageById(
   get: GetState,
   set: SetState,
@@ -395,8 +407,8 @@ function applyGenerateError(
 
   finishGenerationForDesign(set, designId, generationId, 'error');
   if (get().currentDesignId === designId) {
+    clearStreamingForDesign(set, designId);
     set({
-      streamingAssistantText: null,
       errorMessage: displayMsg,
       lastError: displayMsg,
     });
@@ -664,8 +676,8 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
 
       const generationId = newId();
       startGenerationForDesign(set, designIdAtStart, generationId);
+      clearStreamingForDesign(set, designIdAtStart);
       set(() => ({
-        streamingAssistantText: null,
         errorMessage: null,
         lastPromptInput: request,
         selectedElement: null,
@@ -778,7 +790,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         .then(() => {
           finishGenerationForDesign(set, designId, id, 'idle');
           if (get().currentDesignId === designId) {
-            set({ streamingAssistantText: null });
+            clearStreamingForDesign(set, designId);
           }
         })
         .catch((err) => {

@@ -93,7 +93,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
 
   const chatMessages = useCodesignStore((s) => s.chatMessages);
   const chatLoaded = useCodesignStore((s) => s.chatLoaded);
-  const streamingAssistantText = useCodesignStore((s) => s.streamingAssistantText);
+  const streamingAssistantTextByDesign = useCodesignStore((s) => s.streamingAssistantTextByDesign);
   const pendingToolCalls = useCodesignStore((s) => s.pendingToolCalls);
   const loadChatForCurrentDesign = useCodesignStore((s) => s.loadChatForCurrentDesign);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
@@ -143,9 +143,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
           isGenerating={isGenerating}
           pendingToolCalls={pendingToolCalls}
           streamingText={
-            streamingAssistantText && streamingAssistantText.designId === currentDesignId
-              ? streamingAssistantText.text
-              : null
+            currentDesignId ? (streamingAssistantTextByDesign[currentDesignId] ?? null) : null
           }
           empty={<EmptyState onPickStarter={handlePickStarter} />}
         />

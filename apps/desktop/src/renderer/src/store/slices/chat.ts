@@ -81,7 +81,27 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
     },
 
     setStreamingAssistantText(value) {
-      set({ streamingAssistantText: value });
+      if (value === null) {
+        set({ streamingAssistantText: null, streamingAssistantTextByDesign: {} });
+        return;
+      }
+      set((s) => {
+        const streamingAssistantTextByDesign = { ...s.streamingAssistantTextByDesign };
+        if (value.text.length > 0) {
+          streamingAssistantTextByDesign[value.designId] = value.text;
+        } else {
+          delete streamingAssistantTextByDesign[value.designId];
+        }
+        return {
+          streamingAssistantText:
+            value.text.length > 0
+              ? value
+              : s.streamingAssistantText?.designId === value.designId
+                ? null
+                : s.streamingAssistantText,
+          streamingAssistantTextByDesign,
+        };
+      });
     },
 
     pushPendingToolCall(designId, call) {

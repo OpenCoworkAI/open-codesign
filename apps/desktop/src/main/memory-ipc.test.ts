@@ -76,6 +76,13 @@ describe('writeDesignMemoryFile', () => {
     const content = await readFile(path.join(tempDir, 'memory.md'), 'utf-8');
     expect(content).toBe('# Second');
   });
+
+  it('creates the workspace directory before writing memory', async () => {
+    const workspace = path.join(tempDir, 'missing-workspace');
+    await writeDesignMemoryFile(workspace, '# New Workspace Memory');
+    const content = await readFile(path.join(workspace, 'memory.md'), 'utf-8');
+    expect(content).toBe('# New Workspace Memory');
+  });
 });
 
 describe('loadMemoryContext', () => {

@@ -124,6 +124,7 @@ export interface CodesignState {
    *  waiting for the turn to settle. Cleared on turn_end (the persisted
    *  chat row takes over). */
   streamingAssistantText: { designId: string; text: string } | null;
+  streamingAssistantTextByDesign: Record<string, string>;
   lastUsage: UsageSnapshot | null;
   errorMessage: string | null;
   lastError: string | null;
@@ -418,6 +419,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   generatingDesignId: null,
   generationStage: 'idle' as GenerationStage,
   streamingAssistantText: null,
+  streamingAssistantTextByDesign: {},
   pendingToolCalls: [],
   lastUsage: null,
   errorMessage: null,
