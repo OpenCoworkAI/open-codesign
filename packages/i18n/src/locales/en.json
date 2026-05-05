@@ -184,6 +184,34 @@
       },
       "working": {
         "title": "Working"
+      },
+      "activity": {
+        "working": "Working",
+        "activity": "Activity",
+        "needsAttention": "Needs attention",
+        "oneStep": "1 step",
+        "stepCount": "{{count}} steps",
+        "preparingRun": "Preparing run",
+        "loadedDesignRules": "Loaded design rules",
+        "loadingDesignRules": "Loading design rules",
+        "planProgress": "Plan progress",
+        "checkedWorkspace": "Checked workspace",
+        "checkingWorkspace": "Checking workspace",
+        "workspaceCheckFailed": "Workspace check failed",
+        "titleUpdateFailed": "Title update failed",
+        "finalCheckFailed": "Final check failed",
+        "readFile": "Read file",
+        "createdFile": "Created file",
+        "editedFile": "Edited file",
+        "createdAndEdited": "Created and edited",
+        "previewing": "Previewing",
+        "previewed": "Previewed",
+        "previewFailed": "Preview failed",
+        "updatingMemory": "Updating memory",
+        "createdMemory": "Created memory",
+        "updatedMemory": "Updated memory",
+        "legacyTool": "Legacy tool",
+        "genericTool": "Tool"
       }
     },
     "comments": {

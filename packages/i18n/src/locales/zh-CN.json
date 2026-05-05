@@ -184,6 +184,34 @@
       },
       "working": {
         "title": "处理中"
+      },
+      "activity": {
+        "working": "处理中",
+        "activity": "活动",
+        "needsAttention": "需要处理",
+        "oneStep": "1 步",
+        "stepCount": "{{count}} 步",
+        "preparingRun": "准备运行",
+        "loadedDesignRules": "已加载设计规则",
+        "loadingDesignRules": "正在加载设计规则",
+        "planProgress": "计划进度",
+        "checkedWorkspace": "已检查工作区",
+        "checkingWorkspace": "正在检查工作区",
+        "workspaceCheckFailed": "工作区检查失败",
+        "titleUpdateFailed": "标题更新失败",
+        "finalCheckFailed": "最终检查失败",
+        "readFile": "已读取文件",
+        "createdFile": "已创建文件",
+        "editedFile": "已编辑文件",
+        "createdAndEdited": "已创建并编辑",
+        "previewing": "正在预览",
+        "previewed": "已预览",
+        "previewFailed": "预览失败",
+        "updatingMemory": "正在更新记忆",
+        "createdMemory": "已创建记忆",
+        "updatedMemory": "已更新记忆",
+        "legacyTool": "旧工具",
+        "genericTool": "工具"
       }
     },
     "comments": {

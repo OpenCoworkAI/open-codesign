@@ -4,7 +4,7 @@ import { FileText } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { AssistantText } from './AssistantText';
 import { UserMessage } from './UserMessage';
-import { InlineTodoList, WorkingCard } from './WorkingCard';
+import { PreparingActivity, WorkingCard } from './WorkingCard';
 
 interface ChatMessageListProps {
   messages: ChatMessageRow[];
@@ -91,17 +91,6 @@ export function ChatMessageList({
     if (msg.kind === 'tool_call') {
       const call = (msg.payload as ChatToolCallPayload) ?? null;
       if (!call) continue;
-      // set_todos breaks the bucket — render the checklist exactly where the
-      // agent fired it so the chronological story stays intact (otherwise
-      // WorkingCard would pull the todos to the bottom of the cluster).
-      if (call.toolName === 'set_todos') {
-        flush();
-        items.push({
-          key: `todos-${msg.seq}-${items.length}`,
-          node: <InlineTodoList call={call} />,
-        });
-        continue;
-      }
       if (!bucket) bucket = { calls: [], firstSeq: msg.seq };
       bucket.calls.push(call);
       continue;
@@ -122,11 +111,9 @@ export function ChatMessageList({
       });
     } else if (msg.kind === 'assistant_text') {
       const p = msg.payload as { text?: string };
-      const isLast = msg === messages[messages.length - 1];
-      const streaming = Boolean(isGenerating) && isLast;
       items.push({
         key: `a-${msg.seq}-${items.length}`,
-        node: <AssistantText text={p?.text ?? ''} streaming={streaming} />,
+        node: <AssistantText text={p?.text ?? ''} />,
       });
     } else if (msg.kind === 'artifact_delivered') {
       const p = msg.payload as { filename?: string; createdAt?: string };
@@ -168,33 +155,9 @@ export function ChatMessageList({
       {items.map((item) => (
         <div key={item.key}>{item.node}</div>
       ))}
-      {/* In-flight tool calls (memory only, not yet persisted). Same logic as
-          the persisted stream: set_todos breaks the cluster and renders inline
-          so the chronological position is preserved while the agent is still
-          mid-turn. */}
       {pendingToolCalls && pendingToolCalls.length > 0 && (
         <div key="pending-tools" className="space-y-[var(--space-1)]">
-          {(() => {
-            const groups: React.ReactNode[] = [];
-            let pendingBucket: ChatToolCallPayload[] = [];
-            const flushPending = (idx: number): void => {
-              if (pendingBucket.length === 0) return;
-              groups.push(<WorkingCard key={`p-cluster-${idx}`} calls={pendingBucket} />);
-              pendingBucket = [];
-            };
-            for (let i = 0; i < pendingToolCalls.length; i += 1) {
-              const c = pendingToolCalls[i];
-              if (!c) continue;
-              if (c.toolName === 'set_todos') {
-                flushPending(i);
-                groups.push(<InlineTodoList key={`p-todos-${i}`} call={c} />);
-                continue;
-              }
-              pendingBucket.push(c);
-            }
-            flushPending(pendingToolCalls.length);
-            return groups;
-          })()}
+          <WorkingCard calls={pendingToolCalls} />
         </div>
       )}
       {(() => {
@@ -217,30 +180,14 @@ export function ChatMessageList({
         );
       })()}
       {(() => {
-        // "Agent is thinking" placeholder — shown only when generating and
-        // nothing has arrived yet (no streaming text, last message is the
-        // user's prompt). Bridges the silent gap between submit and first
-        // tool_call / assistant_text / error event.
+        // Lightweight run placeholder: use the same activity ledger visual
+        // language as real tool calls so status never looks like chat prose.
         if (!isGenerating) return null;
         if (streamingText && streamingText.length > 0) return null;
+        if (pendingToolCalls && pendingToolCalls.length > 0) return null;
         const last = messages[messages.length - 1];
-        if (last?.kind !== 'user') return null;
-        return (
-          <div
-            key="thinking-placeholder"
-            className="inline-flex items-center gap-[var(--space-2)] rounded-2xl rounded-bl-md bg-[var(--color-surface)] border border-[var(--color-border-muted)] px-[var(--space-3)] py-[var(--space-2)] text-[12px] text-[var(--color-text-muted)]"
-            aria-live="polite"
-          >
-            <span className="codesign-stream-dot">·</span>
-            <span className="codesign-stream-dot" style={{ animationDelay: '150ms' }}>
-              ·
-            </span>
-            <span className="codesign-stream-dot" style={{ animationDelay: '300ms' }}>
-              ·
-            </span>
-            <span className="ml-[var(--space-1)]">{t('sidebar.chat.thinking')}</span>
-          </div>
-        );
+        if (last?.kind !== 'user' && last?.kind !== 'assistant_text') return null;
+        return <PreparingActivity key="preparing-placeholder" />;
       })()}
       <div ref={bottomRef} />
     </div>
