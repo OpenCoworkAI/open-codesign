@@ -75,6 +75,33 @@ type FramedPreviewViewport = Exclude<PreviewSlotProps['viewport'], 'mobile'>;
 const ARTBOARD_FRAME_CLASS =
   'relative flex-shrink-0 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-[var(--shadow-elevated)] ring-1 ring-[color-mix(in_srgb,var(--color-border)_35%,transparent)]';
 
+const PREVIEW_FRAME_PADDING_PX = 48;
+const PREVIEW_DIMENSIONS = {
+  desktop: { width: 1440, height: 900 },
+  tablet: { width: 768, height: 1024 },
+  mobile: { width: 381, height: 818 },
+} as const satisfies Record<PreviewSlotProps['viewport'], { width: number; height: number }>;
+
+export function previewViewportDimensions(viewport: PreviewSlotProps['viewport']): {
+  width: number;
+  height: number;
+} {
+  return PREVIEW_DIMENSIONS[viewport];
+}
+
+export function computeFitPreviewZoom(input: {
+  containerWidth: number;
+  containerHeight: number;
+  viewport: PreviewSlotProps['viewport'];
+}): number {
+  if (input.containerWidth <= 0 || input.containerHeight <= 0) return 100;
+  const frame = previewViewportDimensions(input.viewport);
+  const availableWidth = Math.max(1, input.containerWidth - PREVIEW_FRAME_PADDING_PX);
+  const availableHeight = Math.max(1, input.containerHeight - PREVIEW_FRAME_PADDING_PX);
+  const fit = Math.min(availableWidth / frame.width, availableHeight / frame.height) * 100;
+  return Math.min(100, Math.max(25, Math.floor(fit)));
+}
+
 export function previewArtboardStyle(viewport: FramedPreviewViewport): CSSProperties {
   return viewport === 'tablet'
     ? {
@@ -89,6 +116,39 @@ export function previewArtboardStyle(viewport: FramedPreviewViewport): CSSProper
 
 export function previewArtboardFrameClass(): string {
   return ARTBOARD_FRAME_CLASS;
+}
+
+function ScaledPreviewFrame({
+  viewport,
+  zoom,
+  children,
+}: {
+  viewport: PreviewSlotProps['viewport'];
+  zoom: number;
+  children: React.ReactNode;
+}) {
+  const frame = previewViewportDimensions(viewport);
+  const scale = zoom / 100;
+  return (
+    <div
+      className="relative flex-shrink-0"
+      style={{
+        width: `${frame.width * scale}px`,
+        height: `${frame.height * scale}px`,
+      }}
+    >
+      <div
+        className="origin-top-left"
+        style={{
+          width: `${frame.width}px`,
+          height: `${frame.height}px`,
+          transform: `scale(${scale})`,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 // One iframe per pool entry. Hidden (display:none) when not active, but kept
@@ -124,9 +184,6 @@ function PreviewSlot({
   );
 
   const isMobile = viewport === 'mobile';
-  const scale = zoom / 100;
-  const inversePct = `${10000 / zoom}%`;
-
   const rawIframe = (
     <iframe
       ref={setRef}
@@ -154,50 +211,44 @@ function PreviewSlot({
       }
     />
   );
-  const iframe =
-    zoom === 100 ? (
-      rawIframe
-    ) : (
-      <div
-        className="origin-top-left"
-        style={{ transform: `scale(${scale})`, width: inversePct, height: inversePct }}
-      >
-        {rawIframe}
-      </div>
-    );
-
   let body: React.ReactNode;
   if (isMobile) {
     body = (
-      <div className="min-h-full p-6 flex flex-col items-center justify-center overflow-auto">
-        <div className="relative inline-flex">
-          <PhoneFrame>{iframe}</PhoneFrame>
-          {active ? pinOverlay : null}
-        </div>
+      <div className="codesign-scroll-area min-h-full p-6 flex flex-col items-center justify-center overflow-auto">
+        <ScaledPreviewFrame viewport="mobile" zoom={zoom}>
+          <div className="relative inline-flex">
+            <PhoneFrame>{rawIframe}</PhoneFrame>
+            {active ? pinOverlay : null}
+          </div>
+        </ScaledPreviewFrame>
       </div>
     );
   } else if (viewport === 'tablet') {
     body = (
-      <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto bg-[var(--color-background-secondary)]">
-        <div className={ARTBOARD_FRAME_CLASS} style={previewArtboardStyle('tablet')}>
-          {showCommentUi && active ? (
-            <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
-          ) : null}
-          {iframe}
-          {active ? pinOverlay : null}
-        </div>
+      <div className="codesign-scroll-area h-full p-6 flex flex-col items-center justify-start overflow-auto bg-[var(--color-background-secondary)]">
+        <ScaledPreviewFrame viewport="tablet" zoom={zoom}>
+          <div className={ARTBOARD_FRAME_CLASS} style={previewArtboardStyle('tablet')}>
+            {showCommentUi && active ? (
+              <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
+            ) : null}
+            {rawIframe}
+            {active ? pinOverlay : null}
+          </div>
+        </ScaledPreviewFrame>
       </div>
     );
   } else {
     body = (
-      <div className="h-full p-6 flex items-start justify-center overflow-auto bg-[var(--color-background-secondary)]">
-        <div className={ARTBOARD_FRAME_CLASS} style={previewArtboardStyle('desktop')}>
-          {showCommentUi && active ? (
-            <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
-          ) : null}
-          {iframe}
-          {active ? pinOverlay : null}
-        </div>
+      <div className="codesign-scroll-area h-full p-6 flex items-start justify-center overflow-auto bg-[var(--color-background-secondary)]">
+        <ScaledPreviewFrame viewport="desktop" zoom={zoom}>
+          <div className={ARTBOARD_FRAME_CLASS} style={previewArtboardStyle('desktop')}>
+            {showCommentUi && active ? (
+              <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
+            ) : null}
+            {rawIframe}
+            {active ? pinOverlay : null}
+          </div>
+        </ScaledPreviewFrame>
       </div>
     );
   }
@@ -227,6 +278,8 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
+  const previewZoomMode = useCodesignStore((s) => s.previewZoomMode);
+  const setPreviewZoomFit = useCodesignStore((s) => s.setPreviewZoomFit);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const comments = useCodesignStore((s) => s.comments);
   const currentSnapshotId = useCodesignStore((s) => s.currentSnapshotId);
@@ -242,6 +295,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // window.message guard. We re-point this whenever the active design changes
   // or the active iframe element re-mounts.
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const canvasHostRef = useRef<HTMLDivElement | null>(null);
   // Unsent bubble drafts, keyed by bubbleKey (edit:<id> | new:<selector>).
   // Lives across bubble remounts so switching to another chip / element and
   // coming back restores the text the user had typed. Cleared on successful
@@ -252,6 +306,32 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // the WATCH_SELECTORS effect so we don't race past overlay installation
   // on first mount.
   const [iframeLoadTick, setIframeLoadTick] = useState(0);
+
+  useEffect(() => {
+    if (previewZoomMode !== 'fit') return;
+    const host = canvasHostRef.current;
+    if (!host) return;
+
+    const updateFitZoom = () => {
+      const next = computeFitPreviewZoom({
+        containerWidth: host.clientWidth,
+        containerHeight: host.clientHeight,
+        viewport: previewViewport,
+      });
+      if (useCodesignStore.getState().previewZoom !== next) {
+        setPreviewZoomFit(next);
+      }
+    };
+
+    updateFitZoom();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateFitZoom);
+      return () => window.removeEventListener('resize', updateFitZoom);
+    }
+    const observer = new ResizeObserver(updateFitZoom);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [previewViewport, previewZoomMode, setPreviewZoomFit]);
 
   const registerIframe = useCallback((designId: string, el: HTMLIFrameElement | null) => {
     if (el) {
@@ -386,7 +466,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const pinOverlay = (
     <PinOverlay
       comments={snapshotComments}
-      zoom={previewZoom}
+      zoom={100}
       liveRects={liveRects}
       onPinClick={(c) => {
         const live = liveRects[c.selector] ?? c.rect;
@@ -502,6 +582,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         )}
         <CanvasErrorBar />
         <div
+          ref={canvasHostRef}
           className="relative flex-1 overflow-hidden"
           onDrop={(e) => void handleDrop(e)}
           onDragOver={(e) => e.preventDefault()}

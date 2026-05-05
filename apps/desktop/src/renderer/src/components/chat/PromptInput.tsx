@@ -239,7 +239,7 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
       onDrop={(e) => void handleDrop(e)}
       onDragOver={(e) => e.preventDefault()}
     >
-      <div className="relative rounded-[16px] bg-[var(--color-surface)] border-[1.5px] border-[var(--color-border-muted)] focus-within:border-[var(--color-accent)] transition-colors duration-150 ease-out">
+      <div className="relative rounded-[14px] bg-[var(--color-surface)] border border-[var(--color-border-muted)] shadow-[var(--shadow-soft)] focus-within:border-[var(--color-border-strong)] focus-within:shadow-[0_0_0_2px_var(--color-accent-soft),var(--shadow-soft)] transition-[border-color,box-shadow] duration-150 ease-out">
         {contextSummary ? (
           <div className="border-b border-[var(--color-border-subtle)] px-[12px] py-[10px]">
             {contextSummary}

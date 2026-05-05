@@ -8,22 +8,28 @@ import logoSrc from '../assets/logo.png';
 
 interface WordmarkProps {
   badge?: string;
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'titlebar';
 }
 
 export function Wordmark({ badge, size = 'md' }: WordmarkProps) {
-  const markPx = size === 'sm' ? 36 : 88;
-  const fontSize = size === 'sm' ? '16px' : '30px';
-  const badgeSize = size === 'sm' ? '8px' : '10px';
-  const gap = size === 'sm' ? '8px' : '16px';
-  const badgeMarginTop = size === 'sm' ? '4px' : '10px';
+  const metrics = {
+    sm: { markPx: 36, fontSize: '16px', badgeSize: '8px', gap: '8px', badgeMarginTop: '4px' },
+    titlebar: {
+      markPx: 56,
+      fontSize: '24px',
+      badgeSize: '9px',
+      gap: '10px',
+      badgeMarginTop: '6px',
+    },
+    md: { markPx: 88, fontSize: '30px', badgeSize: '10px', gap: '16px', badgeMarginTop: '10px' },
+  }[size];
   return (
-    <span className="inline-flex items-center leading-none" style={{ gap }}>
+    <span className="inline-flex items-center leading-none" style={{ gap: metrics.gap }}>
       <img
         src={logoSrc}
         alt=""
-        width={markPx}
-        height={markPx}
+        width={metrics.markPx}
+        height={metrics.markPx}
         className="shrink-0"
         draggable={false}
       />
@@ -32,9 +38,9 @@ export function Wordmark({ badge, size = 'md' }: WordmarkProps) {
           className="leading-none"
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize,
+            fontSize: metrics.fontSize,
             fontWeight: 600,
-            letterSpacing: '-0.03em',
+            letterSpacing: '0',
           }}
         >
           <span style={{ color: '#142d4c' }}>Open </span>
@@ -45,10 +51,10 @@ export function Wordmark({ badge, size = 'md' }: WordmarkProps) {
             className="font-medium uppercase leading-none"
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: badgeSize,
+              fontSize: metrics.badgeSize,
               letterSpacing: '0.12em',
               color: '#9a8a7c',
-              marginTop: badgeMarginTop,
+              marginTop: metrics.badgeMarginTop,
             }}
           >
             {badge}

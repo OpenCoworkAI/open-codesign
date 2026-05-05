@@ -130,7 +130,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
       <div className="h-[var(--space-3)] shrink-0" />
 
       {/* Chat scroll area */}
-      <div className="flex-1 overflow-y-auto px-[var(--space-4)] py-[var(--space-4)]">
+      <div className="codesign-scroll-area flex-1 overflow-y-auto px-[var(--space-4)] py-[var(--space-4)]">
         <ChatMessageList
           messages={chatMessages}
           loading={!chatLoaded}
@@ -223,7 +223,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
             />
           }
         />
-        <div className="flex items-center justify-between gap-[var(--space-2)] px-[2px]">
+        <div className="flex flex-wrap items-center justify-between gap-x-[var(--space-2)] gap-y-[var(--space-1)] px-[2px]">
           <ModelSwitcher variant="sidebar" />
           {lastTokens !== null ? (
             <span

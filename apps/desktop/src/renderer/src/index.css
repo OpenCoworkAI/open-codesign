@@ -11,6 +11,7 @@ body {
   background: var(--color-background);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
 }
 
 h1,
@@ -49,17 +50,33 @@ h3,
 
 *:hover::-webkit-scrollbar-thumb,
 *:focus-within::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-text-tertiary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-text-muted) 35%, transparent);
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--color-text-tertiary) 60%, transparent);
+  background: color-mix(in srgb, var(--color-text-muted) 60%, transparent);
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+.codesign-scroll-area {
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.codesign-scroll-x {
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.codesign-scroll-x::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @keyframes overlay-in {
@@ -142,13 +159,13 @@ h3,
   animation: codesign-stream-blink 1.2s ease-in-out infinite;
 }
 
-/* Hide native scrollbar inside the prompt textarea — keeps the input clean
- * even when content overflows. Scroll still works via wheel/keyboard. */
 .codesign-prompt-textarea {
   scrollbar-width: none;
 }
 .codesign-prompt-textarea::-webkit-scrollbar {
   display: none;
+  width: 0;
+  height: 0;
 }
 
 /* Markdown prose inside assistant chat bubbles and file previews */

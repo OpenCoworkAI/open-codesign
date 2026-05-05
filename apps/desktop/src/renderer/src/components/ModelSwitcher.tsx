@@ -147,21 +147,24 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
         className={
           isSidebar
             ? 'inline-flex items-center gap-[3px] text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer'
-            : 'flex items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2_5)] py-[var(--space-1)] select-none hover:bg-[var(--color-surface-hover)] transition-colors'
+            : 'flex h-10 w-[clamp(300px,26vw,340px)] items-center gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] select-none whitespace-nowrap transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]'
         }
         aria-haspopup="listbox"
         aria-expanded={open}
+        title={isSidebar ? currentModel : `${providerLabel} · ${currentModel}`}
       >
         {isSidebar ? (
           <span className="truncate" style={{ fontFamily: 'var(--font-mono)' }}>
             {currentModel}
           </span>
         ) : (
-          <span className="text-[var(--text-xs)] leading-none flex items-center gap-[6px]">
-            <span className="text-[var(--color-text-secondary)]">{providerLabel}</span>
-            <span className="text-[var(--color-border-strong)]">·</span>
+          <span className="flex min-w-0 flex-1 items-center gap-[6px] text-[var(--text-xs)] leading-none">
+            <span className="min-w-0 flex-1 truncate text-[var(--color-text-secondary)]">
+              {providerLabel}
+            </span>
+            <span className="shrink-0 text-[var(--color-border-strong)]">·</span>
             <span
-              className="text-[var(--color-text-muted)]"
+              className="max-w-[96px] shrink-0 truncate text-[var(--color-text-muted)]"
               style={{ fontFamily: 'var(--font-mono)' }}
             >
               {shortenModelLabel(currentModel)}
@@ -180,7 +183,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
           className={`absolute z-50 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] shadow-[var(--shadow-card)] ${
             isSidebar
               ? 'bottom-full mb-[var(--space-1)] left-0 min-w-[220px]'
-              : 'top-full mt-[var(--space-1)] right-0 min-w-[260px]'
+              : 'top-full mt-[var(--space-1)] right-0 min-w-[320px]'
           }`}
         >
           {showSearch && (
@@ -224,7 +227,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
             </div>
           )}
 
-          <div className="max-h-[280px] overflow-y-auto py-[var(--space-1)]">
+          <div className="codesign-scroll-area max-h-[280px] overflow-y-auto py-[var(--space-1)]">
             {loading ? (
               <div className="flex items-center justify-center py-[var(--space-3)]">
                 <Loader2 className="w-4 h-4 animate-spin text-[var(--color-text-muted)]" />

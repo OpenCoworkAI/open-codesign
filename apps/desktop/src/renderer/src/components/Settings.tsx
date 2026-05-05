@@ -51,9 +51,9 @@ export function Settings() {
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-background)]">
-      <div className="flex-1 grid grid-cols-[11rem_1fr] min-h-0">
-        <aside className="bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] p-[var(--space-3)]">
-          <nav className="space-y-0.5">
+      <div className="flex-1 grid grid-cols-[11rem_1fr] min-h-0 max-[860px]:grid-cols-1">
+        <aside className="bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] p-[var(--space-3)] max-[860px]:border-r-0 max-[860px]:border-b">
+          <nav className="codesign-scroll-x flex gap-[var(--space-1)] overflow-x-auto max-[860px]:pb-[var(--space-1)] min-[861px]:block min-[861px]:space-y-0.5">
             {TABS.map((entry) => {
               const Icon = entry.icon;
               const active = tab === entry.id;
@@ -62,7 +62,7 @@ export function Settings() {
                   key={entry.id}
                   type="button"
                   onClick={() => setTab(entry.id)}
-                  className={`relative w-full flex items-center gap-2 pl-[var(--space-3)] pr-[var(--space-2)] py-[var(--space-2)] rounded-[var(--radius-md)] text-[var(--text-sm)] transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)] ${
+                  className={`relative flex w-full min-w-max items-center gap-2 rounded-[var(--radius-md)] py-[var(--space-2)] pl-[var(--space-3)] pr-[var(--space-2)] text-[var(--text-sm)] whitespace-nowrap transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)] min-[861px]:min-w-0 ${
                     active
                       ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)] font-medium before:absolute before:left-0 before:top-[var(--space-1_5)] before:bottom-[var(--space-1_5)] before:w-[var(--size-accent-stripe)] before:rounded-full before:bg-[var(--color-accent)]'
                       : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
@@ -76,7 +76,7 @@ export function Settings() {
           </nav>
         </aside>
 
-        <section className="flex flex-col min-h-0 overflow-y-auto p-[var(--space-6)]">
+        <section className="codesign-scroll-area flex flex-col min-h-0 overflow-y-auto p-[clamp(var(--space-4),3vw,var(--space-6))]">
           {tab === 'models' ? <ModelsTab /> : null}
           {tab === 'images' ? <ImageGenerationTab /> : null}
           {tab === 'memory' ? <MemoryTab /> : null}

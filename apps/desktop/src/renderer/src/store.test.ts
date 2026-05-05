@@ -1110,11 +1110,21 @@ describe('useCodesignStore design management', () => {
 describe('useCodesignStore previewZoom', () => {
   it('defaults previewZoom to 100', () => {
     expect(useCodesignStore.getState().previewZoom).toBe(100);
+    expect(useCodesignStore.getState().previewZoomMode).toBe('fit');
   });
 
-  it('updates previewZoom via setPreviewZoom', () => {
+  it('updates previewZoom via setPreviewZoom and switches to manual mode', () => {
+    useCodesignStore.getState().setPreviewZoomFit(82);
     useCodesignStore.getState().setPreviewZoom(150);
     expect(useCodesignStore.getState().previewZoom).toBe(150);
+    expect(useCodesignStore.getState().previewZoomMode).toBe('manual');
+  });
+
+  it('updates previewZoom via setPreviewZoomFit while preserving fit mode', () => {
+    useCodesignStore.getState().setPreviewZoom(125);
+    useCodesignStore.getState().setPreviewZoomFit(74);
+    expect(useCodesignStore.getState().previewZoom).toBe(74);
+    expect(useCodesignStore.getState().previewZoomMode).toBe('fit');
   });
 });
 describe('useCodesignStore artifact persistence', () => {

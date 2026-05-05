@@ -122,7 +122,8 @@
     "commentModeHint": "Click any element to comment",
     "runtimeError": "Preview runtime error",
     "dismissErrors": "Dismiss preview errors",
-    "zoom": "Zoom"
+    "zoom": "Zoom",
+    "zoomFit": "Fit"
   },
   "tweaks": {
     "title": "Tweaks",

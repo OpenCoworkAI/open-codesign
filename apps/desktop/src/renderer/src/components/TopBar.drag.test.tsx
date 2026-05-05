@@ -61,4 +61,12 @@ describe('TopBar window drag regions', () => {
     expect(html).toContain('-webkit-app-region:drag');
     expect(html).toContain('-webkit-app-region:no-drag');
   });
+
+  it('keeps the hub chrome clear of macOS controls and prevents tab labels from wrapping', () => {
+    const html = renderToStaticMarkup(<TopBar />);
+
+    expect(html).toContain('padding-left:var(--size-titlebar-pad-left)');
+    expect(html).toContain('min-w-max');
+    expect(html).toContain('whitespace-nowrap');
+  });
 });

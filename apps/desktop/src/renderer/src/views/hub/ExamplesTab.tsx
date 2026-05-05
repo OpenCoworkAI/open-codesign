@@ -43,7 +43,7 @@ export function ExamplesTab({ onUsePrompt }: ExamplesTabProps) {
   const visible = filter === 'all' ? examples : examples.filter((e) => e.category === filter);
 
   return (
-    <section className="flex h-full flex-col gap-[var(--space-6)] overflow-auto px-[var(--space-8)] py-[var(--space-8)]">
+    <section className="flex flex-col gap-[var(--space-6)]">
       <header className="flex flex-col gap-[var(--space-2)]">
         <h1
           className="text-[var(--font-size-display-lg)] leading-[var(--leading-heading)] tracking-[var(--tracking-heading)] text-[var(--color-text-primary)]"
@@ -93,7 +93,7 @@ export function ExamplesTab({ onUsePrompt }: ExamplesTabProps) {
           {t('examples.empty')}
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-[var(--space-4)] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] gap-[var(--space-4)]">
           {visible.map((example) => (
             <ExampleCard key={example.id} example={example} onUsePrompt={onUsePrompt} />
           ))}

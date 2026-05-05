@@ -95,6 +95,7 @@ export type SettingsTab =
 export type HubTab = 'recent' | 'your' | 'examples' | 'designSystems';
 export type InteractionMode = 'default' | 'comment';
 export type PreviewViewport = 'desktop' | 'tablet' | 'mobile';
+export type PreviewZoomMode = 'manual' | 'fit';
 
 export interface CommentBubbleAnchor {
   selector: string;
@@ -172,6 +173,7 @@ export interface CodesignState {
   } | null;
   selectedElement: SelectedElement | null;
   previewZoom: number;
+  previewZoomMode: PreviewZoomMode;
   interactionMode: InteractionMode;
 
   // Sidebar v2 chat state
@@ -293,6 +295,8 @@ export interface CodesignState {
   selectCanvasElement: (selection: SelectedElement) => void;
   clearCanvasElement: () => void;
   setPreviewZoom: (zoom: number) => void;
+  setPreviewZoomFit: (zoom: number) => void;
+  setPreviewZoomMode: (mode: PreviewZoomMode) => void;
   setInteractionMode: (mode: InteractionMode) => void;
 
   setTheme: (theme: Theme) => void;
@@ -465,6 +469,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   lastPromptInput: null,
   selectedElement: null,
   previewZoom: 100,
+  previewZoomMode: 'fit' as PreviewZoomMode,
   interactionMode: 'default' as InteractionMode,
 
   chatMessages: [],
@@ -656,7 +661,15 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   },
 
   setPreviewZoom(zoom) {
-    set({ previewZoom: zoom });
+    set({ previewZoom: zoom, previewZoomMode: 'manual' });
+  },
+
+  setPreviewZoomFit(zoom) {
+    set({ previewZoom: zoom, previewZoomMode: 'fit' });
+  },
+
+  setPreviewZoomMode(mode) {
+    set({ previewZoomMode: mode });
   },
 
   setInteractionMode(mode) {

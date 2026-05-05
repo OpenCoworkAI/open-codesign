@@ -20,7 +20,7 @@ export function CanvasTabBar() {
     <div
       role="tablist"
       aria-label={t('canvas.tabsAriaLabel')}
-      className="flex items-stretch min-w-0"
+      className="codesign-scroll-x flex min-w-0 items-stretch overflow-x-auto overflow-y-hidden"
     >
       {tabs.map((tab, index) => {
         const isActive = index === active;
@@ -33,7 +33,7 @@ export function CanvasTabBar() {
             key={key}
             role="tab"
             aria-selected={isActive}
-            className={`group relative flex items-center gap-[var(--space-2)] px-[var(--space-3)] py-[7px] text-[12px] transition-colors duration-[var(--duration-faster)] ${
+            className={`group relative flex shrink-0 items-center gap-[var(--space-2)] px-[var(--space-3)] py-[7px] text-[12px] transition-colors duration-[var(--duration-faster)] ${
               isActive
                 ? 'text-[var(--color-text-primary)]'
                 : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'

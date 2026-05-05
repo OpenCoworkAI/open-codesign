@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { useCodesignStore } from '../store';
 import {
+  computeFitPreviewZoom,
   handlePreviewMessage,
   isTrustedPreviewMessageSource,
   postModeToPreviewWindow,
   previewArtboardFrameClass,
   previewArtboardStyle,
+  previewViewportDimensions,
   scaleRectForZoom,
   stablePreviewSourceKey,
 } from './PreviewPane';
@@ -64,6 +66,24 @@ describe('preview artboard frame', () => {
     expect(className).toContain('border');
     expect(className).toContain('shadow-[var(--shadow-elevated)]');
     expect(className).toContain('overflow-hidden');
+  });
+
+  it('computes fit zoom from the available preview viewport', () => {
+    expect(previewViewportDimensions('desktop')).toEqual({ width: 1440, height: 900 });
+    expect(
+      computeFitPreviewZoom({
+        containerWidth: 1000,
+        containerHeight: 700,
+        viewport: 'desktop',
+      }),
+    ).toBe(66);
+    expect(
+      computeFitPreviewZoom({
+        containerWidth: 3000,
+        containerHeight: 2000,
+        viewport: 'desktop',
+      }),
+    ).toBe(100);
   });
 });
 
