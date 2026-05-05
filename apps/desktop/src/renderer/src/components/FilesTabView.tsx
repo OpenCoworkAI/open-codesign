@@ -13,6 +13,7 @@ import {
   isTrustedPreviewMessageSource,
   stablePreviewSourceKey,
 } from '../preview/helpers';
+import { LoadingState } from '../preview/LoadingState';
 import { readWorkspacePreviewSource } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
 
@@ -258,6 +259,18 @@ export function shouldShowTweakPanelForFile(input: {
   );
 }
 
+export function shouldGateUnverifiedGeneratingPreview(input: {
+  previewKind: FilePreviewKind;
+  currentDesignGenerating: boolean;
+  currentSnapshotId: string | null;
+}): boolean {
+  return (
+    input.previewKind === 'runtime' &&
+    input.currentDesignGenerating &&
+    input.currentSnapshotId === null
+  );
+}
+
 export function defaultWorkspacePreviewPath(files: DesignFileEntry[]): string | null {
   return (
     files.find((f) => f.path === DEFAULT_SOURCE_ENTRY)?.path ??
@@ -425,6 +438,9 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
   const currentPreviewSource = useCodesignStore((s) => s.previewSource);
+  const currentSnapshotId = useCodesignStore((s) => s.currentSnapshotId);
+  const isGenerating = useCodesignStore((s) => s.isGenerating);
+  const generatingDesignId = useCodesignStore((s) => s.generatingDesignId);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const { files: observedFiles } = useDesignFiles(files ? null : currentDesignId);
@@ -434,6 +450,13 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   const prefersPreviewSource = effectiveFile?.source === 'preview-html';
   const previewKind = previewKindForFile(path, effectiveFile?.kind);
   const renderable = previewKind === 'runtime';
+  const currentDesignGenerating =
+    currentDesignId !== null && isGenerating && generatingDesignId === currentDesignId;
+  const gateUnverifiedPreview = shouldGateUnverifiedGeneratingPreview({
+    previewKind,
+    currentDesignGenerating,
+    currentSnapshotId,
+  });
   const textPreview = previewKind === 'markdown' || previewKind === 'text';
   const nativePreview =
     previewKind === 'image' ||
@@ -547,6 +570,10 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
     previewSourceStableKey,
     renderable,
   ]);
+
+  if (gateUnverifiedPreview) {
+    return <LoadingState />;
+  }
 
   if (nativePreview) {
     const url = workspaceUrlForFile({ designId: currentDesignId, filePath: path });

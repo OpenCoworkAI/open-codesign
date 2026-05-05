@@ -249,8 +249,7 @@ export function buildRows(calls: ChatToolCallPayload[]): ToolRow[] {
         last.editCount = (last.editCount ?? 1) + 1;
         last.label = 'edit';
         last.Icon = FileEdit;
-        if (call.status === 'running') last.status = 'running';
-        else if (last.status !== 'running') last.status = 'done';
+        last.status = call.status;
         continue;
       }
     }
@@ -336,13 +335,19 @@ function ToolRowView({ row }: { row: ToolRow }) {
       ? `${row.detail} (${row.editCount} edits)`
       : row.detail;
   const titleText = row.errorText ?? detailText ?? row.label;
+  const runningFileMutation =
+    row.status === 'running' && (row.label === 'edit' || row.label === 'create');
 
   return (
     <div className="flex items-center gap-[6px] text-[12.5px] py-[1px]" title={titleText}>
-      {row.status === 'running' ? (
+      {runningFileMutation ? (
         <span className="relative inline-flex w-[14px] h-[14px] items-center justify-center shrink-0">
           <span className="absolute inline-block w-[7px] h-[7px] rounded-full bg-[var(--color-accent)] animate-pulse" />
           <span className="absolute inline-block w-[12px] h-[12px] rounded-full border border-[var(--color-accent)]/30 animate-ping" />
+        </span>
+      ) : row.status === 'running' ? (
+        <span className="relative inline-flex w-[14px] h-[14px] items-center justify-center shrink-0">
+          <span className="absolute inline-block w-[6px] h-[6px] rounded-full bg-[var(--color-text-muted)] animate-pulse" />
         </span>
       ) : row.status === 'error' ? (
         <Icon className="w-[14px] h-[14px] shrink-0 text-[var(--color-error)]" aria-hidden />

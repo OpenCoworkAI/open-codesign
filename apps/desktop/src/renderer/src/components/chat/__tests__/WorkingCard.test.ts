@@ -96,7 +96,7 @@ describe('WorkingCard.buildRows', () => {
     expect(rows.map((r) => r.detail)).toEqual(['a.html', 'b.html']);
   });
 
-  it('promotes any running edit status to the merged row', () => {
+  it('uses the latest same-file edit status for the merged row', () => {
     const calls = [
       call({
         toolName: 'str_replace_based_edit_tool',
@@ -113,6 +113,22 @@ describe('WorkingCard.buildRows', () => {
     ];
     const rows = buildRows(calls);
     expect(rows[0]?.status).toBe('running');
+
+    const settledRows = buildRows([
+      call({
+        toolName: 'str_replace_based_edit_tool',
+        command: 'str_replace',
+        args: { path: 'index.html' },
+        status: 'running',
+      }),
+      call({
+        toolName: 'str_replace_based_edit_tool',
+        command: 'str_replace',
+        args: { path: 'index.html' },
+        status: 'done',
+      }),
+    ]);
+    expect(settledRows[0]?.status).toBe('done');
   });
 
   it('renders blocked creates as their own error row instead of merging into later edits', () => {

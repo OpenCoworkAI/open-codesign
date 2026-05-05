@@ -3,11 +3,7 @@ import type { Design } from '@open-codesign/shared';
 import { DEFAULT_SOURCE_ENTRY } from '@open-codesign/shared';
 import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  hasWorkspaceSourceReference,
-  inferPreviewSourcePath,
-  resolveDesignPreviewSource,
-} from '../../preview/workspace-source';
+import { inferPreviewSourcePath, resolveDesignPreviewSource } from '../../preview/workspace-source';
 
 // Hub cards render many iframes in parallel; live CSS animations / transitions /
 // autoplaying media in each one thrash compositor + GPU for no user value (the
@@ -43,11 +39,17 @@ export interface DesignCardPreviewProps {
   design: Design;
 }
 
+interface PreviewCardSource {
+  content: string;
+  path: string;
+}
+
 // Two-tier cache: in-memory (hot path, survives tab switches in a single
 // session) + localStorage (cold start after reopening the app). Keyed on
 // designId + updatedAt so a fresh generate invalidates automatically.
-const memCache = new Map<string, string>();
-const CACHE_VERSION = 'v2';
+const memCache = new Map<string, PreviewCardSource>();
+const CACHE_VERSION = 'v3';
+const LEGACY_LS_PREFIX = 'designCardPreview:v2:';
 const LS_PREFIX = `designCardPreview:${CACHE_VERSION}:`;
 const LS_MAX_CHARS = 300_000; // ~ 300 KB per entry ceiling; skip caching huge sources
 const LS_MAX_ENTRIES = 40;
@@ -59,7 +61,7 @@ function cacheKey(id: string, updatedAt: string): string {
 
 // Map preserves insertion order, so delete+set on access makes the eviction
 // loop drop the least-recently-used key when the cache overflows.
-function memCacheTouch(key: string, value: string): void {
+function memCacheTouch(key: string, value: PreviewCardSource): void {
   memCache.delete(key);
   memCache.set(key, value);
   while (memCache.size > MEM_MAX_ENTRIES) {
@@ -69,7 +71,28 @@ function memCacheTouch(key: string, value: string): void {
   }
 }
 
-function readCache(key: string): string | null {
+export function parseCachedPreview(raw: string): PreviewCardSource | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      (parsed as Record<string, unknown>)['schemaVersion'] === 1 &&
+      typeof (parsed as Record<string, unknown>)['content'] === 'string' &&
+      typeof (parsed as Record<string, unknown>)['path'] === 'string'
+    ) {
+      return {
+        content: (parsed as Record<string, string>)['content'] ?? '',
+        path: (parsed as Record<string, string>)['path'] ?? DEFAULT_SOURCE_ENTRY,
+      };
+    }
+  } catch {
+    // Legacy v2 values were raw source strings.
+  }
+  return raw.trim().length > 0 ? { content: raw, path: inferPreviewSourcePath(raw) } : null;
+}
+
+function readCache(key: string): PreviewCardSource | null {
   const hit = memCache.get(key);
   if (hit !== undefined) {
     memCacheTouch(key, hit);
@@ -78,25 +101,44 @@ function readCache(key: string): string | null {
   if (typeof localStorage === 'undefined') return null;
   try {
     const raw = localStorage.getItem(LS_PREFIX + key);
-    if (raw !== null) memCacheTouch(key, raw);
-    return raw;
+    const legacyRaw = raw ?? localStorage.getItem(LEGACY_LS_PREFIX + key);
+    if (legacyRaw === null) return null;
+    const parsed = parseCachedPreview(legacyRaw);
+    if (parsed !== null) memCacheTouch(key, parsed);
+    return parsed;
   } catch {
     return null;
   }
 }
 
-function writeCache(key: string, source: string): void {
+function writeCache(key: string, source: PreviewCardSource): void {
   memCacheTouch(key, source);
   if (typeof localStorage === 'undefined') return;
-  if (source.length > LS_MAX_CHARS) return;
+  const raw = JSON.stringify({ schemaVersion: 1, path: source.path, content: source.content });
+  if (raw.length > LS_MAX_CHARS) return;
   try {
     // Best-effort eviction: if localStorage is near its quota, pruning the
     // oldest preview keys lets the new one fit. We cap total entries, too.
     pruneOldestCacheEntriesIfNeeded();
-    localStorage.setItem(LS_PREFIX + key, source);
+    localStorage.setItem(LS_PREFIX + key, raw);
   } catch {
     // Quota exceeded or storage disabled — ignore, we still have in-memory.
   }
+}
+
+export function workspaceBaseHrefForPreview(
+  design: Pick<Design, 'id' | 'workspacePath'>,
+  sourcePath: string,
+): string | undefined {
+  if (!design.workspacePath) return undefined;
+  const slashIndex = sourcePath.replaceAll('\\', '/').lastIndexOf('/');
+  const dir = slashIndex >= 0 ? sourcePath.slice(0, slashIndex + 1) : '';
+  const encodedDir = dir
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .map(encodeURIComponent)
+    .join('/');
+  return `workspace://${design.id}/${encodedDir}${encodedDir.length > 0 ? '/' : ''}`;
 }
 
 function pruneOldestCacheEntriesIfNeeded(): void {
@@ -121,7 +163,7 @@ function pruneOldestCacheEntriesIfNeeded(): void {
 }
 
 export function DesignCardPreview({ design }: DesignCardPreviewProps) {
-  const [previewSource, setPreviewSource] = useState<string | null>(() =>
+  const [previewSource, setPreviewSource] = useState<PreviewCardSource | null>(() =>
     readCache(cacheKey(design.id, design.updatedAt)),
   );
   const [failed, setFailed] = useState(false);
@@ -187,10 +229,9 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
     if (!visible) return;
     const key = cacheKey(design.id, design.updatedAt);
     const cached = readCache(key);
-    if (cached !== null && !hasWorkspaceSourceReference(cached)) {
+    if (cached !== null) {
       setPreviewSource(cached);
       setFailed(false);
-      return;
     }
     if (typeof window === 'undefined' || !window.codesign) return;
     let cancelled = false;
@@ -205,8 +246,8 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
           setFailed(true);
           return;
         }
-        writeCache(key, result.content);
-        setPreviewSource(result.content);
+        writeCache(key, result);
+        setPreviewSource(result);
         setFailed(false);
       })
       .catch(() => {
@@ -218,19 +259,19 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
   }, [visible, design.id, design.updatedAt]);
 
   // JSX sources need the React+Babel runtime wrapper; HTML documents render directly.
-  const previewSourcePath = useMemo(
-    () => (previewSource ? inferPreviewSourcePath(previewSource) : DEFAULT_SOURCE_ENTRY),
-    [previewSource],
-  );
+  const previewSourcePath = previewSource?.path ?? DEFAULT_SOURCE_ENTRY;
   const isJsx = useMemo(
-    () => (previewSource ? needsJsxRuntime(previewSource, previewSourcePath) : false),
+    () => (previewSource ? needsJsxRuntime(previewSource.content, previewSourcePath) : false),
     [previewSource, previewSourcePath],
   );
   const srcDoc = useMemo(() => {
     if (!previewSource) return null;
-    const base = buildPreviewDocument(previewSource, { path: previewSourcePath });
+    const base = buildPreviewDocument(previewSource.content, {
+      path: previewSourcePath,
+      baseHref: workspaceBaseHrefForPreview(design, previewSourcePath),
+    });
     return injectThumbnailStyle(base);
-  }, [previewSource, previewSourcePath]);
+  }, [design, previewSource, previewSourcePath]);
 
   return (
     <div ref={rootRef} className="absolute inset-0 overflow-hidden bg-white">

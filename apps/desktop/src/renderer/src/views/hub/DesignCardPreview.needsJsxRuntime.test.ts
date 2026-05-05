@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { needsJsxRuntime } from './DesignCardPreview';
+import {
+  needsJsxRuntime,
+  parseCachedPreview,
+  workspaceBaseHrefForPreview,
+} from './DesignCardPreview';
 
 describe('needsJsxRuntime', () => {
   it('returns true for JSX that also contains <html> inside a return block', () => {
@@ -42,5 +46,38 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`;
         `function App(){return <p/>;}\nReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
       ),
     ).toBe(true);
+  });
+});
+
+describe('DesignCardPreview source helpers', () => {
+  it('keeps the resolved source path when reading v3 cache entries', () => {
+    expect(
+      parseCachedPreview(
+        JSON.stringify({
+          schemaVersion: 1,
+          path: 'screens/App.jsx',
+          content: 'function App(){ return <main />; }',
+        }),
+      ),
+    ).toEqual({
+      path: 'screens/App.jsx',
+      content: 'function App(){ return <main />; }',
+    });
+  });
+
+  it('falls back for legacy raw cache entries', () => {
+    expect(parseCachedPreview('<main>legacy</main>')).toEqual({
+      path: 'index.html',
+      content: '<main>legacy</main>',
+    });
+  });
+
+  it('builds workspace base hrefs from resolved nested source paths', () => {
+    expect(
+      workspaceBaseHrefForPreview(
+        { id: 'design-1', workspacePath: '/Users/alice/CoDesign/Nested' },
+        'screens/App.jsx',
+      ),
+    ).toBe('workspace://design-1/screens/');
   });
 });
