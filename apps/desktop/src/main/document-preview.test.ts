@@ -44,6 +44,13 @@ describe('createWorkspaceDocumentPreview', () => {
       { label: 'Words', value: '1480' },
       { label: 'Author', value: 'Alice' },
     ]);
+    expect(preview.thumbnailDataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
+    const thumbnailSvg = Buffer.from(
+      preview.thumbnailDataUrl?.replace(/^data:image\/svg\+xml;base64,/, '') ?? '',
+      'base64',
+    ).toString('utf8');
+    expect(thumbnailSvg).toContain('Snake Assignment');
+    expect(thumbnailSvg).toContain('Build a Snake game.');
     expect(preview.sections).toEqual([
       {
         title: 'Document',

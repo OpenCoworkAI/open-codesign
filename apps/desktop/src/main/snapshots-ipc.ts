@@ -28,7 +28,7 @@ import {
 } from './design-workspace';
 import {
   createWorkspaceDocumentPreview,
-  generateQuickLookThumbnailDataUrl,
+  createWorkspaceDocumentThumbnail,
   type WorkspaceDocumentPreviewResult,
   type WorkspaceDocumentThumbnailResult,
 } from './document-preview';
@@ -1291,8 +1291,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       } catch (cause) {
         throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
       }
-      const thumbnailDataUrl = await generateQuickLookThumbnailDataUrl(absPath);
-      return { schemaVersion: 1, path: normalizedPath, thumbnailDataUrl };
+      return await createWorkspaceDocumentThumbnail({ absPath, relPath: normalizedPath });
     },
   );
 
