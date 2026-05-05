@@ -33,6 +33,15 @@ export function formatProviderLabel(label: string): string {
   return trimmed;
 }
 
+export function formatCompactProviderLabel(label: string): string {
+  const formatted = formatProviderLabel(label);
+  const compact = formatted
+    .replace(/\s+\(imported\)$/i, '')
+    .replace(/\s+Imported$/i, '')
+    .trim();
+  return compact.length > 0 ? compact : formatted;
+}
+
 export function formatModelLabel(model: string): string {
   const leaf = model.includes('/') ? (model.split('/').pop() ?? model) : model;
   const gpt = leaf.match(/^gpt[-_]?(.+)$/i);
@@ -43,6 +52,17 @@ export function formatModelLabel(model: string): string {
   const gemini = leaf.match(/^gemini[-_](.+)$/i);
   if (gemini?.[1]) return `Gemini ${gemini[1].replace(/-/g, ' ')}`;
   return leaf;
+}
+
+export function formatCompactModelLabel(providerLabel: string, modelLabel: string): string {
+  const providerLower = providerLabel.toLowerCase();
+  if (
+    (providerLower.includes('claude') || providerLower.includes('anthropic')) &&
+    modelLabel.startsWith('Claude ')
+  ) {
+    return modelLabel.slice('Claude '.length);
+  }
+  return modelLabel;
 }
 
 /**
@@ -133,8 +153,10 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
   if (!provider || !currentModel) return null;
 
   const activeProviderRow = providerRows?.find((r) => r.provider === provider) ?? null;
-  const providerLabel = formatProviderLabel(activeProviderRow?.label ?? provider);
+  const fullProviderLabel = formatProviderLabel(activeProviderRow?.label ?? provider);
+  const providerLabel = formatCompactProviderLabel(fullProviderLabel);
   const modelLabel = formatModelLabel(currentModel);
+  const compactModelLabel = formatCompactModelLabel(providerLabel, modelLabel);
 
   async function switchModel(model: string) {
     if (!window.codesign || !provider || model === currentModel) {
@@ -177,23 +199,23 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
         }
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={isSidebar ? currentModel : `${providerLabel} · ${currentModel}`}
+        title={isSidebar ? currentModel : `${fullProviderLabel} · ${currentModel}`}
       >
         {isSidebar ? (
           <span className="truncate" style={{ fontFamily: 'var(--font-sans)' }}>
             {modelLabel}
           </span>
         ) : (
-          <span className="inline-flex min-w-0 flex-1 items-center gap-[6px] text-[var(--text-xs)] leading-none">
-            <span className="min-w-0 max-w-[170px] truncate text-[var(--color-text-secondary)]">
+          <span className="inline-flex min-w-0 flex-1 items-center gap-[6px] overflow-hidden text-[var(--text-xs)] leading-none">
+            <span className="min-w-[72px] basis-[45%] truncate text-[var(--color-text-secondary)]">
               {providerLabel}
             </span>
             <span className="shrink-0 text-[var(--color-border-strong)]">·</span>
             <span
-              className="max-w-[112px] shrink-0 truncate text-[var(--color-text-muted)]"
+              className="min-w-[64px] basis-[55%] truncate text-[var(--color-text-muted)]"
               style={{ fontFamily: 'var(--font-sans)' }}
             >
-              {modelLabel}
+              {compactModelLabel}
             </span>
           </span>
         )}
