@@ -48,6 +48,10 @@
       "unavailable": "Document preview unavailable",
       "empty": "No extractable text was found for this document.",
       "thumbnailAlt": "{{name}} preview",
+      "section": {
+        "document": "Document text",
+        "workbook": "Workbook text"
+      },
       "stats": {
         "author": "Author",
         "pages": "Pages",

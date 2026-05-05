@@ -48,6 +48,10 @@
       "unavailable": "Prévia do documento indisponível",
       "empty": "Nenhum texto extraível foi encontrado neste documento.",
       "thumbnailAlt": "Prévia de {{name}}",
+      "section": {
+        "document": "Texto do documento",
+        "workbook": "Texto da planilha"
+      },
       "stats": {
         "author": "Autor",
         "pages": "Páginas",

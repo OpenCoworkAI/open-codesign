@@ -481,6 +481,12 @@ function documentStatLabel(label: string, t: (key: string) => string): string {
   }
 }
 
+function documentSectionTitle(title: string, t: (key: string) => string): string {
+  if (title === 'Document') return t('canvas.documentPreview.section.document');
+  if (title === 'Workbook') return t('canvas.documentPreview.section.workbook');
+  return title;
+}
+
 function DocumentFilePreview({
   path,
   designId,
@@ -564,83 +570,111 @@ function DocumentFilePreview({
   const hasText = preview.sections.some((section) => section.lines.length > 0);
 
   return (
-    <div className="h-full overflow-auto bg-[var(--color-background-secondary)]">
-      <div className="mx-auto grid w-full max-w-[1120px] grid-cols-[minmax(260px,360px)_1fr] gap-[var(--space-6)] px-[var(--space-7)] py-[var(--space-7)] max-[920px]:grid-cols-1">
-        <div className="min-w-0">
-          <div className="aspect-[4/5] overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-soft)]">
-            {thumbnailDataUrl ? (
-              <img
-                src={thumbnailDataUrl}
-                alt={t('canvas.documentPreview.thumbnailAlt', { name: preview.fileName })}
-                className="h-full w-full object-contain"
-              />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-[var(--space-4)] px-[var(--space-6)] text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] text-[var(--color-accent)]">
-                  <FileText className="h-7 w-7" aria-hidden />
+    <div className="h-full overflow-hidden bg-[var(--color-background-secondary)]">
+      <div className="grid h-full min-h-0 grid-cols-[minmax(320px,42%)_minmax(0,1fr)] max-[980px]:grid-cols-1">
+        <aside className="min-h-0 overflow-auto border-r border-[var(--color-border-muted)] bg-[color-mix(in_srgb,var(--color-background)_92%,var(--color-surface))] max-[980px]:border-r-0 max-[980px]:border-b">
+          <div className="flex min-h-full flex-col px-[var(--space-7)] py-[var(--space-6)]">
+            <div className="mb-[var(--space-4)] flex items-center justify-between gap-[var(--space-3)]">
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
+                  {preview.format.toUpperCase()}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
-                    {preview.format.toUpperCase()}
-                  </div>
-                  <div className="mt-2 break-words text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
-                    {preview.fileName}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="min-w-0">
-          <div className="mb-[var(--space-5)] border-b border-[var(--color-border-muted)] pb-[var(--space-4)]">
-            <div className="mb-[var(--space-2)] text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
-              {t('canvas.documentPreview.previewLabel')}
-            </div>
-            <h3 className="m-0 break-words text-[24px] leading-[1.2] text-[var(--color-text-primary)]">
-              {preview.title}
-            </h3>
-            {preview.stats.length > 0 ? (
-              <div className="mt-[var(--space-4)] flex flex-wrap gap-[var(--space-2)]">
-                {preview.stats.map((stat) => (
-                  <span
-                    key={`${stat.label}:${stat.value}`}
-                    className="inline-flex items-center gap-[var(--space-1)] rounded-[var(--radius-sm)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-2)] py-[3px] text-[11px] text-[var(--color-text-secondary)]"
-                  >
-                    <span>{documentStatLabel(stat.label, t)}</span>
-                    <span style={{ fontFamily: 'var(--font-mono)' }}>{stat.value}</span>
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          {hasText ? (
-            <div className="flex flex-col gap-[var(--space-4)]">
-              {preview.sections.map((section) => (
-                <section
-                  key={section.title}
-                  className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-5)] py-[var(--space-4)] shadow-[var(--shadow-soft)]"
+                <div
+                  className="mt-1 truncate text-[12px] text-[var(--color-text-secondary)]"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                  title={preview.fileName}
                 >
-                  <h4 className="m-0 mb-[var(--space-3)] text-[12px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
-                    {section.title}
-                  </h4>
-                  <div className="space-y-[var(--space-2)] text-[13px] leading-[1.75] text-[var(--color-text-primary)]">
-                    {section.lines.map((line, index) => (
-                      <p key={`${section.title}:${index}`} className="m-0 break-words">
-                        {line}
-                      </p>
+                  {preview.fileName}
+                </div>
+              </div>
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] text-[var(--color-accent)] shadow-[var(--shadow-soft)]">
+                <FileText className="h-5 w-5" aria-hidden />
+              </div>
+            </div>
+
+            <div className="flex flex-1 items-start justify-center">
+              <div className="w-full max-w-[560px]">
+                <div className="relative mx-auto overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[0_18px_55px_color-mix(in_srgb,var(--color-text-primary)_15%,transparent)]">
+                  <div className="aspect-[4/5] max-h-[calc(100vh-230px)] min-h-[360px] w-full max-[980px]:max-h-none max-[980px]:min-h-[300px]">
+                    {thumbnailDataUrl ? (
+                      <img
+                        src={thumbnailDataUrl}
+                        alt={t('canvas.documentPreview.thumbnailAlt', { name: preview.fileName })}
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <div className="flex h-full flex-col items-center justify-center gap-[var(--space-4)] px-[var(--space-6)] text-center">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] text-[var(--color-accent)]">
+                          <FileText className="h-8 w-8" aria-hidden />
+                        </div>
+                        <div className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
+                          {preview.fileName}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {preview.stats.length > 0 ? (
+                  <div className="mt-[var(--space-4)] grid grid-cols-3 gap-[var(--space-2)] max-[1180px]:grid-cols-2">
+                    {preview.stats.slice(0, 6).map((stat) => (
+                      <div
+                        key={`${stat.label}:${stat.value}`}
+                        className="min-w-0 rounded-[var(--radius-sm)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-2)]"
+                      >
+                        <div className="truncate text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
+                          {documentStatLabel(stat.label, t)}
+                        </div>
+                        <div
+                          className="mt-[2px] truncate text-[12px] text-[var(--color-text-primary)]"
+                          style={{ fontFamily: 'var(--font-mono)' }}
+                          title={stat.value}
+                        >
+                          {stat.value}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </section>
-              ))}
+                ) : null}
+              </div>
             </div>
-          ) : (
-            <div className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-5)] py-[var(--space-4)] text-[13px] text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
-              {t('canvas.documentPreview.empty')}
-            </div>
-          )}
-        </div>
+          </div>
+        </aside>
+
+        <main className="min-h-0 overflow-auto bg-[var(--color-background)]">
+          <article className="mx-auto w-full max-w-[860px] px-[var(--space-8)] py-[var(--space-7)]">
+            <header className="mb-[var(--space-6)] border-b border-[var(--color-border-muted)] pb-[var(--space-5)]">
+              <div className="mb-[var(--space-2)] text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
+                {t('canvas.documentPreview.previewLabel')}
+              </div>
+              <h3 className="m-0 text-[28px] leading-[1.16] text-[var(--color-text-primary)]">
+                {preview.title}
+              </h3>
+            </header>
+
+            {hasText ? (
+              <div className="space-y-[var(--space-7)]">
+                {preview.sections.map((section) => (
+                  <section key={section.title} className="min-w-0">
+                    <h4 className="m-0 mb-[var(--space-4)] text-[11px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
+                      {documentSectionTitle(section.title, t)}
+                    </h4>
+                    <div className="space-y-[var(--space-3)] text-[14px] leading-[1.82] text-[var(--color-text-primary)]">
+                      {section.lines.map((line, index) => (
+                        <p key={`${section.title}:${index}`} className="m-0 break-words">
+                          {line}
+                        </p>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-5)] py-[var(--space-4)] text-[13px] text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
+                {t('canvas.documentPreview.empty')}
+              </div>
+            )}
+          </article>
+        </main>
       </div>
     </div>
   );

@@ -48,6 +48,10 @@
       "unavailable": "Vista previa no disponible",
       "empty": "No se encontró texto extraíble para este documento.",
       "thumbnailAlt": "Vista previa de {{name}}",
+      "section": {
+        "document": "Texto del documento",
+        "workbook": "Texto del libro"
+      },
       "stats": {
         "author": "Autor",
         "pages": "Páginas",

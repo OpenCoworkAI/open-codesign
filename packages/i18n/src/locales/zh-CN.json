@@ -48,6 +48,10 @@
       "unavailable": "暂时无法预览此文档",
       "empty": "没有提取到可预览的文本内容。",
       "thumbnailAlt": "{{name}} 预览",
+      "section": {
+        "document": "正文摘录",
+        "workbook": "工作簿摘录"
+      },
       "stats": {
         "author": "作者",
         "pages": "页数",
