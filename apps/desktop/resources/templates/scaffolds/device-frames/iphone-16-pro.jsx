@@ -1,7 +1,10 @@
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "bezelColor": "#1c1c1e",
   "screenBg": "#000000",
-  "accentColor": "#0a84ff"
+  "accentColor": "#0a84ff",
+  "screenTitle": "Mobile flow",
+  "screenBody": "Primary screen content for the brief.",
+  "actionLabel": "Primary action"
 }/*EDITMODE-END*/;
 
 function _App() {
@@ -62,10 +65,10 @@ function _App() {
               gap: 16,
             }}
           >
-            <h1 style={{ fontSize: 34, fontWeight: 700, margin: 0 }}>iPhone 16 Pro</h1>
-            <p style={{ opacity: 0.7, margin: 0 }}>
-              Replace this content with the screen for the user's brief.
-            </p>
+            <h1 style={{ fontSize: 34, fontWeight: 700, margin: 0 }}>
+              {TWEAK_DEFAULTS.screenTitle}
+            </h1>
+            <p style={{ opacity: 0.7, margin: 0 }}>{TWEAK_DEFAULTS.screenBody}</p>
             <div
               style={{
                 marginTop: 'auto',
@@ -76,7 +79,7 @@ function _App() {
                 fontWeight: 600,
               }}
             >
-              Primary action
+              {TWEAK_DEFAULTS.actionLabel}
             </div>
           </div>
         </div>

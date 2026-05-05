@@ -1,6 +1,8 @@
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "url": "https://example.com",
-  "theme": "light"
+  "url": "codesign.local/workspace",
+  "theme": "light",
+  "pageTitle": "Workspace overview",
+  "pageBody": "Primary page state staged inside Chrome."
 }/*EDITMODE-END*/;
 
 function _App() {
@@ -77,8 +79,8 @@ function _App() {
           </div>
         </div>
         <div style={{ minHeight: 480, padding: 32, color: text }}>
-          <h1 style={{ fontSize: 36, fontWeight: 700 }}>Page content</h1>
-          <p style={{ opacity: 0.7 }}>Replace with the brief.</p>
+          <h1 style={{ fontSize: 36, fontWeight: 700 }}>{TWEAK_DEFAULTS.pageTitle}</h1>
+          <p style={{ opacity: 0.7 }}>{TWEAK_DEFAULTS.pageBody}</p>
         </div>
       </div>
     </div>

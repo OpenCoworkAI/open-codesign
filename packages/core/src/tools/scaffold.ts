@@ -167,9 +167,19 @@ export interface ScaffoldRequest {
 export interface ScaffoldResult {
   ok: boolean;
   reason?: string;
+  destPath?: string;
+  requestedDestPath?: string;
   written?: string;
   bytes?: number;
   normalizedEditmode?: boolean;
+}
+
+function destinationPathForSource(destPath: string, sourcePath: string): string {
+  const sourceExt = path.extname(sourcePath);
+  if (sourceExt.length === 0) return destPath;
+  const parsed = path.parse(destPath);
+  if (parsed.ext.toLowerCase() === sourceExt.toLowerCase()) return destPath;
+  return path.join(parsed.dir, `${parsed.name}${sourceExt}`);
 }
 
 export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult> {
@@ -215,8 +225,9 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
   }
 
   let dest: string;
+  const actualDestPath = destinationPathForSource(req.destPath, source);
   try {
-    dest = await resolveSafeChildPath(req.workspaceRoot, req.destPath);
+    dest = await resolveSafeChildPath(req.workspaceRoot, actualDestPath);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     return {
@@ -228,6 +239,8 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
   await writeFile(dest, contents, 'utf8');
   return {
     ok: true,
+    destPath: actualDestPath,
+    ...(actualDestPath !== req.destPath ? { requestedDestPath: req.destPath } : {}),
     written: dest,
     bytes: Buffer.byteLength(contents, 'utf8'),
     ...(normalizedEditmode ? { normalizedEditmode } : {}),
@@ -243,7 +256,7 @@ const ScaffoldParams = Type.Object({
   destPath: Type.String({
     minLength: 1,
     description:
-      'Workspace-relative destination path (e.g. "frames/iphone.jsx"). Parent directories are created.',
+      'Workspace-relative destination path (e.g. "frames/iphone.jsx"). Parent directories are created. If the source scaffold has a different extension, the tool preserves the source extension and reports the adjusted destPath.',
   }),
 });
 
@@ -255,6 +268,7 @@ export type ScaffoldDetails =
       written: string;
       bytes: number;
       normalizedEditmode?: boolean;
+      requestedDestPath?: string;
     }
   | { ok: false; kind: string; destPath: string; reason: string }
   | { ok: false; reason: string };
@@ -294,17 +308,25 @@ export function makeScaffoldTool(
       });
       if (result.ok && result.written && typeof result.bytes === 'number') {
         const suffix = result.normalizedEditmode ? ' (normalized legacy EDITMODE block)' : '';
+        const destPath = result.destPath ?? params.destPath;
+        const adjusted =
+          result.requestedDestPath !== undefined
+            ? ` (destPath adjusted from ${params.destPath})`
+            : '';
         return {
           content: [
             {
               type: 'text',
-              text: `Scaffolded ${params.kind} -> ${result.written} (${result.bytes} bytes)${suffix}`,
+              text: `Scaffolded ${params.kind} -> ${destPath} (${result.bytes} bytes)${suffix}${adjusted}`,
             },
           ],
           details: {
             ok: true,
             kind: params.kind,
-            destPath: params.destPath,
+            destPath,
+            ...(result.requestedDestPath !== undefined
+              ? { requestedDestPath: result.requestedDestPath }
+              : {}),
             written: result.written,
             bytes: result.bytes,
             ...(result.normalizedEditmode ? { normalizedEditmode: true } : {}),

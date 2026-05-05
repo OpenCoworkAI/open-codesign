@@ -1,7 +1,10 @@
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "bezelColor": "#2a2a2d",
   "screenBg": "#0b1020",
-  "accentColor": "#a78bfa"
+  "accentColor": "#a78bfa",
+  "screenTitle": "Desktop workspace",
+  "screenBody": "Primary desktop layout for the brief.",
+  "actionLabel": "Primary action"
 }/*EDITMODE-END*/;
 
 function _App() {
@@ -54,10 +57,10 @@ function _App() {
               fontFamily: '-apple-system, "SF Pro", system-ui',
             }}
           >
-            <h1 style={{ fontSize: 48, fontWeight: 700, marginTop: 60 }}>MacBook Pro 16"</h1>
-            <p style={{ opacity: 0.7, maxWidth: 600 }}>
-              Replace this with the desktop layout for the user's brief.
-            </p>
+            <h1 style={{ fontSize: 48, fontWeight: 700, marginTop: 60 }}>
+              {TWEAK_DEFAULTS.screenTitle}
+            </h1>
+            <p style={{ opacity: 0.7, maxWidth: 600 }}>{TWEAK_DEFAULTS.screenBody}</p>
             <button
               type="button"
               style={{
@@ -71,7 +74,7 @@ function _App() {
                 cursor: 'pointer',
               }}
             >
-              Primary action
+              {TWEAK_DEFAULTS.actionLabel}
             </button>
           </div>
         </div>

@@ -1,6 +1,10 @@
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "bg": "#ffffff",
-  "accent": "#0f172a"
+  "accent": "#0f172a",
+  "title": "Drawer title",
+  "body": "Context, decision details, or a short form can live in this sheet.",
+  "primaryAction": "Confirm",
+  "secondaryAction": "Cancel"
 }/*EDITMODE-END*/;
 
 function _App() {
@@ -67,11 +71,9 @@ function _App() {
               }}
             />
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: TWEAK_DEFAULTS.accent }}>
-              Drawer title
+              {TWEAK_DEFAULTS.title}
             </h2>
-            <p style={{ color: '#475569', marginTop: 8 }}>
-              Drag the handle or tap the backdrop to dismiss. Replace this content with the brief.
-            </p>
+            <p style={{ color: '#475569', marginTop: 8 }}>{TWEAK_DEFAULTS.body}</p>
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
               <button
                 type="button"
@@ -86,7 +88,7 @@ function _App() {
                   cursor: 'pointer',
                 }}
               >
-                Confirm
+                {TWEAK_DEFAULTS.primaryAction}
               </button>
               <button
                 type="button"
@@ -101,7 +103,7 @@ function _App() {
                   cursor: 'pointer',
                 }}
               >
-                Cancel
+                {TWEAK_DEFAULTS.secondaryAction}
               </button>
             </div>
           </div>

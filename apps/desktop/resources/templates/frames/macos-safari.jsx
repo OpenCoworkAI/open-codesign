@@ -4,13 +4,13 @@
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "theme": "light",
-  "url": "https://example.com",
+  "url": "codesign.local",
   "width": 860,
   "height": 580
 }/*EDITMODE-END*/;
 
 function MacOSSafari({
-  url = 'https://example.com',
+  url = 'codesign.local',
   tabs = null,
   theme = 'light',
   scale = 1,
@@ -22,9 +22,9 @@ function MacOSSafari({
   const [urlVal, setUrlVal] = React.useState(url);
   const dk = theme === 'dark';
   const defaultTabs = tabs || [
-    { title: 'New Tab', url: url, active: true },
-    { title: 'GitHub', url: 'https://github.com' },
-    { title: 'Figma', url: 'https://figma.com' },
+    { title: 'Brief', url: url, active: true },
+    { title: 'Design', url: 'codesign.local/design' },
+    { title: 'Preview', url: 'codesign.local/preview' },
   ];
 
   const chromeBg = dk ? '#3a3a3c' : 'linear-gradient(180deg,#f6f6f8 0%,#ebebed 100%)';

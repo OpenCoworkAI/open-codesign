@@ -2,67 +2,362 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Slide deck</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>16:9 deck scaffold</title>
     <style>
-      :root { --accent: #6366f1; }
-      .reveal { font-family: "Inter", system-ui, sans-serif; }
-      .reveal h1, .reveal h2 { letter-spacing: -0.02em; }
-      .reveal section.title { background: linear-gradient(135deg, #0f172a, #1e1b4b); }
-      .reveal .accent { color: var(--accent); }
-      .reveal .grid { display: grid; gap: 24px; grid-template-columns: 1fr 1fr; }
+      :root {
+        --deck-bg: #f7f3ec;
+        --deck-paper: #fffaf2;
+        --deck-ink: #10172b;
+        --deck-muted: #5d6680;
+        --deck-line: #ded6c8;
+        --deck-accent: #e0522d;
+        --deck-blue: #465a82;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 18% 12%, rgba(224, 82, 45, 0.1), transparent 34%),
+          linear-gradient(135deg, #ebe3d5, #f8f4ee);
+        color: var(--deck-ink);
+        font-family:
+          "DM Sans",
+          "Inter",
+          ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+
+      .deck {
+        width: min(92vw, 1280px);
+        aspect-ratio: 16 / 9;
+        position: relative;
+        overflow: hidden;
+        border-radius: 18px;
+        background: var(--deck-paper);
+        border: 1px solid rgba(16, 23, 43, 0.08);
+        box-shadow: 0 26px 80px rgba(16, 23, 43, 0.16);
+      }
+
+      .slide {
+        position: absolute;
+        inset: 0;
+        display: none;
+        padding: 64px 72px 52px;
+      }
+
+      .slide[data-active="true"] {
+        display: grid;
+      }
+
+      .title-slide {
+        grid-template-columns: 1fr 0.72fr;
+        gap: 52px;
+        align-items: end;
+      }
+
+      .kicker {
+        margin: 0 0 18px;
+        color: var(--deck-accent);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        letter-spacing: -0.04em;
+        line-height: 0.96;
+      }
+
+      h1 {
+        max-width: 720px;
+        font-size: clamp(64px, 8vw, 110px);
+      }
+
+      h2 {
+        font-size: clamp(42px, 5.6vw, 76px);
+      }
+
+      .lead {
+        max-width: 720px;
+        margin: 28px 0 0;
+        color: var(--deck-muted);
+        font-size: 22px;
+        line-height: 1.35;
+      }
+
+      .number-grid {
+        align-self: stretch;
+        display: grid;
+        grid-template-rows: repeat(3, 1fr);
+        border-left: 1px solid var(--deck-line);
+      }
+
+      .number-card {
+        padding: 24px 0 24px 32px;
+        border-bottom: 1px solid var(--deck-line);
+      }
+
+      .number-card:last-child {
+        border-bottom: 0;
+      }
+
+      .metric {
+        color: var(--deck-accent);
+        font-size: 46px;
+        font-weight: 800;
+        letter-spacing: -0.05em;
+      }
+
+      .metric-label {
+        margin-top: 6px;
+        color: var(--deck-muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .content-slide {
+        grid-template-columns: 0.85fr 1.15fr;
+        gap: 48px;
+        align-items: stretch;
+      }
+
+      .content-copy {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .bullets {
+        display: grid;
+        gap: 18px;
+        margin-top: 34px;
+      }
+
+      .bullet {
+        display: grid;
+        grid-template-columns: 32px 1fr;
+        gap: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--deck-line);
+      }
+
+      .bullet b {
+        color: var(--deck-accent);
+        font-family: "SF Mono", ui-monospace, monospace;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+      }
+
+      .bullet strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 17px;
+      }
+
+      .bullet span {
+        color: var(--deck-muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .chart {
+        align-self: center;
+        width: 100%;
+        aspect-ratio: 1.32;
+        border-radius: 18px;
+        border: 1px solid var(--deck-line);
+        background:
+          linear-gradient(to right, transparent 24%, rgba(70, 90, 130, 0.08) 24% 25%, transparent 25% 49%, rgba(70, 90, 130, 0.08) 49% 50%, transparent 50% 74%, rgba(70, 90, 130, 0.08) 74% 75%, transparent 75%),
+          linear-gradient(to top, transparent 24%, rgba(70, 90, 130, 0.08) 24% 25%, transparent 25% 49%, rgba(70, 90, 130, 0.08) 49% 50%, transparent 50% 74%, rgba(70, 90, 130, 0.08) 74% 75%, transparent 75%),
+          #fffdf8;
+        padding: 28px;
+        position: relative;
+      }
+
+      .curve {
+        position: absolute;
+        left: 34px;
+        right: 34px;
+        bottom: 42px;
+        height: 56%;
+        border-bottom: 5px solid var(--deck-accent);
+        border-right: 5px solid var(--deck-accent);
+        border-radius: 0 0 80% 0;
+        transform: skewY(-12deg);
+      }
+
+      .flatline {
+        position: absolute;
+        left: 34px;
+        right: 34px;
+        top: 54%;
+        border-top: 2px solid var(--deck-blue);
+      }
+
+      .legend {
+        position: absolute;
+        left: 28px;
+        bottom: 18px;
+        display: flex;
+        gap: 18px;
+        color: var(--deck-muted);
+        font-size: 12px;
+      }
+
+      .swatch {
+        display: inline-block;
+        width: 18px;
+        height: 2px;
+        margin-right: 6px;
+        vertical-align: middle;
+        background: var(--deck-accent);
+      }
+
+      .swatch.secondary {
+        background: var(--deck-blue);
+      }
+
+      .footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        bottom: 26px;
+        display: flex;
+        justify-content: space-between;
+        color: var(--deck-blue);
+        font-family: "SF Mono", ui-monospace, monospace;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .controls {
+        position: fixed;
+        right: 24px;
+        bottom: 22px;
+        display: flex;
+        gap: 8px;
+      }
+
+      .controls button {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        border: 1px solid rgba(16, 23, 43, 0.14);
+        background: rgba(255, 250, 242, 0.88);
+        color: var(--deck-ink);
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
-    <div class="reveal">
-      <div class="slides">
-        <section class="title">
-          <h1>Deck title</h1>
-          <p><span class="accent">Subtitle here</span> — replace with the brief.</p>
-        </section>
-        <section>
-          <h2>Section header</h2>
-          <ul>
-            <li>Point one</li>
-            <li>Point two</li>
-            <li>Point three</li>
-          </ul>
-        </section>
-        <section>
-          <h2>Two columns</h2>
-          <div class="grid">
-            <div>
-              <h3>Left</h3>
-              <p>Description for the left column.</p>
+    <main class="deck" aria-live="polite">
+      <section class="slide title-slide" data-active="true">
+        <div>
+          <p class="kicker">Opening claim</p>
+          <h1>Why now.</h1>
+          <p class="lead">
+            Demand, distribution, and execution readiness are converging into a narrow decision
+            window.
+          </p>
+        </div>
+        <aside class="number-grid" aria-label="Key metrics">
+          <div class="number-card">
+            <div class="metric">3x</div>
+            <div class="metric-label">Primary acceleration or scale metric.</div>
+          </div>
+          <div class="number-card">
+            <div class="metric">42%</div>
+            <div class="metric-label">Adoption, cost, or conversion proof point.</div>
+          </div>
+          <div class="number-card">
+            <div class="metric">18 mo</div>
+            <div class="metric-label">Timing window or urgency indicator.</div>
+          </div>
+        </aside>
+        <div class="footer"><span>Company / Confidential</span><span>01 / 02</span></div>
+      </section>
+
+      <section class="slide content-slide">
+        <div class="content-copy">
+          <div>
+            <p class="kicker">Market timing</p>
+            <h2>Signals crossed.</h2>
+            <p class="lead">Three independent signals now point at the same opening.</p>
+          </div>
+          <div class="bullets">
+            <div class="bullet">
+              <b>01</b>
+              <div>
+                <strong>Demand inflected.</strong>
+                <span>Teams are pulling the workflow into budgeted, repeatable use cases.</span>
+              </div>
             </div>
-            <div>
-              <h3>Right</h3>
-              <p>Description for the right column.</p>
+            <div class="bullet">
+              <b>02</b>
+              <div>
+                <strong>Distribution opened.</strong>
+                <span>Native entry points now sit where the work already happens.</span>
+              </div>
+            </div>
+            <div class="bullet">
+              <b>03</b>
+              <div>
+                <strong>Execution is ready.</strong>
+                <span>The product loop is narrow enough to compound with every shipped cycle.</span>
+              </div>
             </div>
           </div>
-        </section>
-        <section>
-          <h2>Quote</h2>
-          <blockquote>"Replace this quote with the brief."</blockquote>
-          <p>— Attribution</p>
-        </section>
-        <section>
-          <h1 class="accent">Thank you</h1>
-          <p>Q&amp;A</p>
-        </section>
-      </div>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+        </div>
+        <figure class="chart" aria-label="Indexed trend chart">
+          <div class="flatline"></div>
+          <div class="curve"></div>
+          <figcaption class="legend">
+            <span><i class="swatch"></i>New curve</span>
+            <span><i class="swatch secondary"></i>Legacy baseline</span>
+          </figcaption>
+        </figure>
+        <div class="footer"><span>Series A / Draft</span><span>02 / 02</span></div>
+      </section>
+    </main>
+
+    <nav class="controls" aria-label="Slide controls">
+      <button type="button" data-dir="-1" aria-label="Previous slide">&larr;</button>
+      <button type="button" data-dir="1" aria-label="Next slide">&rarr;</button>
+    </nav>
+
     <script>
-      Reveal.initialize({
-        hash: true,
-        width: 1280,
-        height: 720,
-        margin: 0.06,
-        controls: true,
-        progress: true,
+      const slides = Array.from(document.querySelectorAll('.slide'));
+      let index = 0;
+      function show(next) {
+        index = (next + slides.length) % slides.length;
+        slides.forEach((slide, i) => {
+          slide.dataset.active = String(i === index);
+        });
+      }
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowRight' || event.key === ' ') show(index + 1);
+        if (event.key === 'ArrowLeft') show(index - 1);
+      });
+      document.querySelectorAll('[data-dir]').forEach((button) => {
+        button.addEventListener('click', () => show(index + Number(button.dataset.dir)));
       });
     </script>
   </body>

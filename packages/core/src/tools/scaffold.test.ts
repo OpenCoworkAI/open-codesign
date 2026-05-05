@@ -21,6 +21,13 @@ const MANIFEST = {
       license: 'MIT-internal',
       source: 'test fixture',
     },
+    'demo-html': {
+      description: 'Full HTML scaffold',
+      path: 'decks/demo.html',
+      category: 'deck',
+      license: 'MIT-internal',
+      source: 'test fixture',
+    },
   },
 } as const;
 
@@ -31,6 +38,7 @@ describe('scaffold tool', () => {
     scaffoldsRoot = path.join(tmpdir(), `codesign-scaffold-src-${process.pid}-${Date.now()}`);
     mkdirSync(path.join(scaffoldsRoot, 'device-frames'), { recursive: true });
     mkdirSync(path.join(scaffoldsRoot, 'backgrounds'), { recursive: true });
+    mkdirSync(path.join(scaffoldsRoot, 'decks'), { recursive: true });
     writeFileSync(path.join(scaffoldsRoot, 'manifest.json'), JSON.stringify(MANIFEST), 'utf8');
     writeFileSync(
       path.join(scaffoldsRoot, 'device-frames', 'demo.jsx'),
@@ -42,6 +50,11 @@ describe('scaffold tool', () => {
       '.demo { background: linear-gradient(red, blue); }\n',
       'utf8',
     );
+    writeFileSync(
+      path.join(scaffoldsRoot, 'decks', 'demo.html'),
+      '<!doctype html><html><body><main>Deck</main></body></html>\n',
+      'utf8',
+    );
   });
 
   afterEach(() => {
@@ -51,7 +64,7 @@ describe('scaffold tool', () => {
   it('manifest loads and contains entries', async () => {
     const m = await loadScaffoldManifest(scaffoldsRoot);
     expect(m.schemaVersion).toBe(1);
-    expect(Object.keys(m.scaffolds).length).toBe(2);
+    expect(Object.keys(m.scaffolds).length).toBe(3);
   });
 
   it('listScaffoldKinds returns sorted unique keys', async () => {
@@ -73,6 +86,28 @@ describe('scaffold tool', () => {
       expect(result.ok).toBe(true);
       expect(result.written?.startsWith(wsroot)).toBe(true);
       expect(result.bytes).toBeGreaterThan(0);
+    } finally {
+      rmSync(wsroot, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves the source scaffold extension when the requested destination is wrong', async () => {
+    const wsroot = path.join(tmpdir(), `codesign-scaffold-ws-${process.pid}-${Date.now()}`);
+    mkdirSync(wsroot, { recursive: true });
+    try {
+      const result = await runScaffold({
+        kind: 'demo-html',
+        destPath: '_starters/slide-deck.jsx',
+        workspaceRoot: wsroot,
+        scaffoldsRoot,
+      });
+      expect(result).toMatchObject({
+        ok: true,
+        destPath: '_starters/slide-deck.html',
+        requestedDestPath: '_starters/slide-deck.jsx',
+      });
+      expect(existsSync(path.join(wsroot, '_starters', 'slide-deck.html'))).toBe(true);
+      expect(existsSync(path.join(wsroot, '_starters', 'slide-deck.jsx'))).toBe(false);
     } finally {
       rmSync(wsroot, { recursive: true, force: true });
     }
@@ -336,6 +371,33 @@ export const Demo = () => null;
       expect(details.written?.startsWith(wsroot)).toBe(true);
       expect(details.bytes).toBeGreaterThan(0);
       expect(details.kind).toBe('demo-frame');
+      expect((details as { destPath?: string }).destPath).toBe('out.jsx');
+    } finally {
+      rmSync(wsroot, { recursive: true, force: true });
+    }
+  });
+
+  it('makeScaffoldTool reports the adjusted destination path', async () => {
+    const wsroot = path.join(tmpdir(), `codesign-scaffold-tool-${process.pid}-${Date.now()}`);
+    mkdirSync(wsroot, { recursive: true });
+    try {
+      const tool = makeScaffoldTool(
+        () => wsroot,
+        () => scaffoldsRoot,
+      );
+      const result = await tool.execute('call-3', {
+        kind: 'demo-html',
+        destPath: '_starters/slide-deck.jsx',
+      });
+      expect(result.content[0]?.type === 'text' ? result.content[0].text : '').toContain(
+        '_starters/slide-deck.html',
+      );
+      expect(result.details).toMatchObject({
+        ok: true,
+        kind: 'demo-html',
+        destPath: '_starters/slide-deck.html',
+        requestedDestPath: '_starters/slide-deck.jsx',
+      });
     } finally {
       rmSync(wsroot, { recursive: true, force: true });
     }

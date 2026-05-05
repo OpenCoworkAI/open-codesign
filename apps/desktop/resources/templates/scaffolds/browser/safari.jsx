@@ -1,6 +1,8 @@
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "url": "apple.com",
-  "title": "Apple"
+  "title": "Apple",
+  "pageTitle": "Product moment.",
+  "pageBody": "Primary public page state staged inside Safari."
 }/*EDITMODE-END*/;
 
 function _App() {
@@ -49,8 +51,10 @@ function _App() {
           <div style={{ width: 80 }} />
         </div>
         <div style={{ minHeight: 520, padding: 40, color: '#1d1d1f' }}>
-          <h1 style={{ fontSize: 56, fontWeight: 700, letterSpacing: -1 }}>Headline.</h1>
-          <p style={{ opacity: 0.7, fontSize: 18 }}>Replace with the brief.</p>
+          <h1 style={{ fontSize: 56, fontWeight: 700, letterSpacing: -1 }}>
+            {TWEAK_DEFAULTS.pageTitle}
+          </h1>
+          <p style={{ opacity: 0.7, fontSize: 18 }}>{TWEAK_DEFAULTS.pageBody}</p>
         </div>
       </div>
     </div>

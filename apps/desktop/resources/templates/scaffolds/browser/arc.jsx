@@ -1,6 +1,8 @@
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "spaceColor": "#f7c0a3",
-  "spaceName": "Work"
+  "spaceName": "Work",
+  "pageTitle": "Workspace overview",
+  "pageBody": "Primary workspace state staged inside Arc."
 }/*EDITMODE-END*/;
 
 function _App() {
@@ -73,8 +75,8 @@ function _App() {
           boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
         }}
       >
-        <h1 style={{ fontSize: 36, fontWeight: 700 }}>Page content</h1>
-        <p style={{ opacity: 0.7 }}>Replace with the brief.</p>
+        <h1 style={{ fontSize: 36, fontWeight: 700 }}>{TWEAK_DEFAULTS.pageTitle}</h1>
+        <p style={{ opacity: 0.7 }}>{TWEAK_DEFAULTS.pageBody}</p>
       </main>
     </div>
   );

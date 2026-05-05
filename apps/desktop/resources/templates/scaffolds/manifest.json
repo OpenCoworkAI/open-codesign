@@ -86,7 +86,7 @@
       "source": "Open CoDesign built-in scaffold"
     },
     "terminal": {
-      "description": "Single-file HTML terminal simulator with prompt and basic commands.",
+      "description": "Single-file HTML terminal simulator with prompt and basic commands; keep as .html when scaffolded.",
       "path": "dev-mockups/terminal.html",
       "category": "dev-mockup",
       "license": "MIT-internal",
@@ -205,7 +205,7 @@
       "source": "Open CoDesign built-in scaffold"
     },
     "slide-16-9-deck": {
-      "description": "Reveal.js 16:9 slide deck skeleton (CDN-hosted, no build).",
+      "description": "Self-contained 16:9 HTML pitch deck starter with local CSS/JS controls; keep as .html when scaffolded.",
       "path": "decks/slide-16-9.html",
       "category": "deck",
       "license": "MIT-internal",
