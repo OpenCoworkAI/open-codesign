@@ -12,6 +12,9 @@ import {
   formatIframeError,
   handlePreviewMessage,
   isTrustedPreviewMessageSource,
+  type PreviewMessageHandlers,
+  postModeToPreviewWindow,
+  scaleRectForZoom,
   stablePreviewSourceKey,
 } from '../preview/helpers';
 import {
@@ -447,6 +450,46 @@ interface WorkspaceFilePreviewProps {
   files?: DesignFileEntry[] | null | undefined;
 }
 
+interface WorkspaceFilePreviewMessageHandlerInput {
+  previewZoom: number;
+  selectCanvasElement: ReturnType<typeof useCodesignStore.getState>['selectCanvasElement'];
+  openCommentBubble: ReturnType<typeof useCodesignStore.getState>['openCommentBubble'];
+  applyLiveRects: ReturnType<typeof useCodesignStore.getState>['applyLiveRects'];
+  pushIframeError: ReturnType<typeof useCodesignStore.getState>['pushIframeError'];
+}
+
+export function createWorkspaceFilePreviewMessageHandlers({
+  previewZoom,
+  selectCanvasElement,
+  openCommentBubble,
+  applyLiveRects,
+  pushIframeError,
+}: WorkspaceFilePreviewMessageHandlerInput): PreviewMessageHandlers {
+  return {
+    onElementSelected: (msg) => {
+      const scaled = scaleRectForZoom(msg.rect, previewZoom);
+      selectCanvasElement({
+        selector: msg.selector,
+        tag: msg.tag,
+        outerHTML: msg.outerHTML,
+        rect: scaled,
+      });
+      openCommentBubble({
+        selector: msg.selector,
+        tag: msg.tag,
+        outerHTML: msg.outerHTML,
+        rect: scaled,
+        ...(typeof msg.parentOuterHTML === 'string' && msg.parentOuterHTML.length > 0
+          ? { parentOuterHTML: msg.parentOuterHTML }
+          : {}),
+      });
+    },
+    onElementRects: (msg) => applyLiveRects(msg.entries),
+    onIframeError: (msg) =>
+      pushIframeError(formatIframeError(msg.kind, msg.message, msg.source, msg.lineno)),
+  };
+}
+
 interface WorkspacePreviewSource {
   content: string;
   path: string;
@@ -798,8 +841,12 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
   const currentPreviewSource = useCodesignStore((s) => s.previewSource);
+  const previewZoom = useCodesignStore((s) => s.previewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
+  const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
+  const openCommentBubble = useCodesignStore((s) => s.openCommentBubble);
+  const applyLiveRects = useCodesignStore((s) => s.applyLiveRects);
   const { files: observedFiles } = useDesignFiles(files ? null : currentDesignId);
   const workspaceFiles = files ?? observedFiles;
   const currentDesign = designs.find((d) => d.id === currentDesignId);
@@ -840,17 +887,25 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
       if (!isTrustedPreviewMessageSource(event.source, iframeRef.current?.contentWindow)) return;
-      handlePreviewMessage(event.data, {
-        onElementSelected: () => {},
-        onElementRects: () => {},
-        onIframeError: (msg) =>
-          pushIframeError(formatIframeError(msg.kind, msg.message, msg.source, msg.lineno)),
-      });
+      handlePreviewMessage(
+        event.data,
+        createWorkspaceFilePreviewMessageHandlers({
+          previewZoom,
+          selectCanvasElement,
+          openCommentBubble,
+          applyLiveRects,
+          pushIframeError,
+        }),
+      );
     }
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [pushIframeError]);
+  }, [pushIframeError, previewZoom, selectCanvasElement, openCommentBubble, applyLiveRects]);
+
+  useEffect(() => {
+    postModeToPreviewWindow(iframeRef.current?.contentWindow, interactionMode, pushIframeError);
+  }, [interactionMode, pushIframeError]);
 
   useEffect(() => {
     // Re-read when the file watcher reports changed metadata for either the
@@ -1006,13 +1061,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
         srcDoc={srcDoc}
         onLoad={() => {
           const win = iframeRef.current?.contentWindow;
-          if (!win) return;
-          try {
-            win.postMessage({ __codesign: true, type: 'SET_MODE', mode: interactionMode }, '*');
-          } catch (err) {
-            const reason = err instanceof Error ? err.message : String(err);
-            pushIframeError(`SET_MODE postMessage failed: ${reason}`);
-          }
+          postModeToPreviewWindow(win, interactionMode, pushIframeError);
         }}
         className="w-full h-full bg-white border-0 block"
       />

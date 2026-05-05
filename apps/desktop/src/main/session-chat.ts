@@ -10,10 +10,14 @@ import type {
   ChatMessageKind,
   ChatMessageRow,
   ChatToolCallPayload,
+  CommentCreateInput,
+  CommentRow,
+  CommentUpdateInput,
   DesignRunPreferencesV1,
 } from '@open-codesign/shared';
 import {
   CodesignError,
+  CommentRowV1,
   DesignRunPreferencesV1 as DesignRunPreferencesV1Schema,
 } from '@open-codesign/shared';
 import { compactToolResultForHistory } from './ipc/tool-log';
@@ -22,6 +26,7 @@ import { normalizeWorkspacePath } from './workspace-path';
 
 export const CHAT_MESSAGE_CUSTOM_TYPE = 'open-codesign.chat.message';
 export const CHAT_TOOL_STATUS_CUSTOM_TYPE = 'open-codesign.chat.tool_status';
+export const COMMENT_CUSTOM_TYPE = 'open-codesign.comment.v1';
 export const CONTEXT_BRIEF_CUSTOM_TYPE = 'open-codesign.context.brief.v1';
 export const RUN_PREFERENCES_CUSTOM_TYPE = 'open-codesign.context.run_preferences.v1';
 
@@ -56,6 +61,30 @@ interface StoredToolStatusUpdate {
   durationMs?: number;
   errorMessage?: string;
 }
+
+type StoredCommentEvent =
+  | {
+      schemaVersion: 1;
+      action: 'add';
+      row: CommentRow;
+    }
+  | {
+      schemaVersion: 1;
+      action: 'update';
+      id: string;
+      patch: CommentUpdateInput;
+    }
+  | {
+      schemaVersion: 1;
+      action: 'remove';
+      id: string;
+    }
+  | {
+      schemaVersion: 1;
+      action: 'mark-applied';
+      ids: string[];
+      snapshotId: string;
+    };
 
 interface StoredDesignBrief {
   schemaVersion: 1;
@@ -156,6 +185,50 @@ function parseStatusUpdate(value: unknown): StoredToolStatusUpdate | null {
   };
 }
 
+function parseCommentEvent(value: unknown): StoredCommentEvent | null {
+  if (!isRecord(value)) return null;
+  if (value['schemaVersion'] !== 1) return null;
+  const action = value['action'];
+  if (action === 'add') {
+    const parsed = CommentRowV1.safeParse(value['row']);
+    if (!parsed.success) return null;
+    return { schemaVersion: 1, action, row: parsed.data };
+  }
+  if (action === 'update') {
+    if (typeof value['id'] !== 'string') return null;
+    const patch = value['patch'];
+    if (!isRecord(patch)) return null;
+    const nextPatch: CommentUpdateInput = {};
+    if (typeof patch['text'] === 'string') nextPatch.text = patch['text'];
+    if (
+      patch['status'] === 'pending' ||
+      patch['status'] === 'applied' ||
+      patch['status'] === 'dismissed'
+    ) {
+      nextPatch.status = patch['status'];
+    }
+    if (Object.keys(nextPatch).length === 0) return null;
+    return { schemaVersion: 1, action, id: value['id'], patch: nextPatch };
+  }
+  if (action === 'remove') {
+    if (typeof value['id'] !== 'string') return null;
+    return { schemaVersion: 1, action, id: value['id'] };
+  }
+  if (action === 'mark-applied') {
+    if (!Array.isArray(value['ids']) || !value['ids'].every((id) => typeof id === 'string')) {
+      return null;
+    }
+    if (typeof value['snapshotId'] !== 'string' || value['snapshotId'].length === 0) return null;
+    return {
+      schemaVersion: 1,
+      action,
+      ids: value['ids'],
+      snapshotId: value['snapshotId'],
+    };
+  }
+  return null;
+}
+
 function parseStoredBrief(value: unknown): StoredDesignBrief | null {
   if (!isRecord(value)) return null;
   if (value['schemaVersion'] !== 1) return null;
@@ -241,6 +314,151 @@ export function listSessionChatMessages(
   if (!existsSync(file)) return [];
   const manager = SessionManager.open(file, opts.sessionDir, cwd);
   return replayEntries(designId, manager.getEntries());
+}
+
+function replayCommentEvents(designId: string, entries: unknown[]): CommentRow[] {
+  const rows = new Map<string, CommentRow>();
+  for (const raw of entries) {
+    const entry = raw as CustomEntryLike;
+    if (entry.type !== 'custom' || entry.customType !== COMMENT_CUSTOM_TYPE) continue;
+    const event = parseCommentEvent(entry.data);
+    if (event === null) {
+      throw new CodesignError('Malformed stored comment entry', 'IPC_DB_ERROR');
+    }
+    if (event.action === 'add') {
+      if (event.row.designId === designId) rows.set(event.row.id, event.row);
+      continue;
+    }
+    if (event.action === 'update') {
+      const row = rows.get(event.id);
+      if (row !== undefined) rows.set(event.id, { ...row, ...event.patch });
+      continue;
+    }
+    if (event.action === 'remove') {
+      rows.delete(event.id);
+      continue;
+    }
+    for (const id of event.ids) {
+      const row = rows.get(id);
+      if (row !== undefined) {
+        rows.set(id, {
+          ...row,
+          status: 'applied',
+          appliedInSnapshotId: event.snapshotId,
+        });
+      }
+    }
+  }
+  return Array.from(rows.values()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export function listSessionComments(
+  opts: SessionChatStoreOptions,
+  designId: string,
+  snapshotId?: string,
+): CommentRow[] {
+  const cwd = resolveSessionCwd(opts, designId);
+  const file = sessionFileForDesign(opts.sessionDir, designId);
+  if (!existsSync(file)) return [];
+  const manager = SessionManager.open(file, opts.sessionDir, cwd);
+  const rows = replayCommentEvents(designId, manager.getEntries());
+  return snapshotId === undefined ? rows : rows.filter((row) => row.snapshotId === snapshotId);
+}
+
+export function listPendingSessionCommentEdits(
+  opts: SessionChatStoreOptions,
+  designId: string,
+): CommentRow[] {
+  return listSessionComments(opts, designId).filter(
+    (row) => row.kind === 'edit' && row.status === 'pending',
+  );
+}
+
+function appendCommentEvent(
+  opts: SessionChatStoreOptions,
+  designId: string,
+  event: StoredCommentEvent,
+): void {
+  const manager = openSession(opts, designId);
+  const entryId = manager.appendCustomEntry(COMMENT_CUSTOM_TYPE, event);
+  const entry = manager.getEntry(entryId);
+  flushSession(manager);
+  const createdAt = entry?.timestamp ?? new Date().toISOString();
+  touchDesignActivity(opts.db, designId, createdAt);
+}
+
+export function appendSessionComment(
+  opts: SessionChatStoreOptions,
+  input: CommentCreateInput,
+): CommentRow {
+  const createdAt = new Date().toISOString();
+  const row = CommentRowV1.parse({
+    schemaVersion: 1,
+    id: crypto.randomUUID(),
+    designId: input.designId,
+    snapshotId: input.snapshotId,
+    kind: input.kind,
+    selector: input.selector,
+    tag: input.tag,
+    outerHTML: input.outerHTML,
+    rect: input.rect,
+    text: input.text,
+    status: 'pending',
+    createdAt,
+    appliedInSnapshotId: null,
+    ...(input.scope !== undefined ? { scope: input.scope } : {}),
+    ...(input.parentOuterHTML !== undefined ? { parentOuterHTML: input.parentOuterHTML } : {}),
+  });
+  appendCommentEvent(opts, input.designId, {
+    schemaVersion: 1,
+    action: 'add',
+    row,
+  });
+  return row;
+}
+
+export function updateSessionComment(
+  opts: SessionChatStoreOptions,
+  designId: string,
+  id: string,
+  patch: CommentUpdateInput,
+): CommentRow | null {
+  const existing = listSessionComments(opts, designId).find((row) => row.id === id);
+  if (existing === undefined) return null;
+  appendCommentEvent(opts, designId, { schemaVersion: 1, action: 'update', id, patch });
+  return { ...existing, ...patch };
+}
+
+export function removeSessionComment(
+  opts: SessionChatStoreOptions,
+  designId: string,
+  id: string,
+): boolean {
+  const exists = listSessionComments(opts, designId).some((row) => row.id === id);
+  if (!exists) return false;
+  appendCommentEvent(opts, designId, { schemaVersion: 1, action: 'remove', id });
+  return true;
+}
+
+export function markSessionCommentsApplied(
+  opts: SessionChatStoreOptions,
+  designId: string,
+  ids: string[],
+  snapshotId: string,
+): CommentRow[] {
+  const uniqueIds = Array.from(new Set(ids));
+  if (uniqueIds.length === 0) return [];
+  const rows = listSessionComments(opts, designId);
+  const existingIds = new Set(rows.map((row) => row.id));
+  const presentIds = uniqueIds.filter((id) => existingIds.has(id));
+  if (presentIds.length === 0) return [];
+  appendCommentEvent(opts, designId, {
+    schemaVersion: 1,
+    action: 'mark-applied',
+    ids: presentIds,
+    snapshotId,
+  });
+  return listSessionComments(opts, designId).filter((row) => presentIds.includes(row.id));
 }
 
 export function appendSessionChatMessage(

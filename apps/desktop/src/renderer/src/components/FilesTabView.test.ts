@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { openFileTab } from '../store/slices/tabs';
 import {
   chooseWorkspacePreviewSourceMode,
+  createWorkspaceFilePreviewMessageHandlers,
   defaultWorkspacePreviewPath,
   isMarkdownPreviewFile,
   isPreviewSourceUsableForSelectedPath,
@@ -17,6 +18,44 @@ import {
 } from './FilesTabView';
 
 describe('FilesTabView preview helpers', () => {
+  it('forwards element selection messages from file preview iframes into comment state', () => {
+    const selectCanvasElement = vi.fn();
+    const openCommentBubble = vi.fn();
+    const applyLiveRects = vi.fn();
+    const pushIframeError = vi.fn();
+    const handlers = createWorkspaceFilePreviewMessageHandlers({
+      previewZoom: 50,
+      selectCanvasElement,
+      openCommentBubble,
+      applyLiveRects,
+      pushIframeError,
+    });
+
+    handlers.onElementSelected({
+      __codesign: true,
+      type: 'ELEMENT_SELECTED',
+      selector: '#hero',
+      tag: 'section',
+      outerHTML: '<section id="hero">Hello</section>',
+      parentOuterHTML: '<main><section id="hero">Hello</section></main>',
+      rect: { top: 20, left: 40, width: 200, height: 100 },
+    });
+
+    expect(selectCanvasElement).toHaveBeenCalledWith({
+      selector: '#hero',
+      tag: 'section',
+      outerHTML: '<section id="hero">Hello</section>',
+      rect: { top: 10, left: 20, width: 100, height: 50 },
+    });
+    expect(openCommentBubble).toHaveBeenCalledWith({
+      selector: '#hero',
+      tag: 'section',
+      outerHTML: '<section id="hero">Hello</section>',
+      parentOuterHTML: '<main><section id="hero">Hello</section></main>',
+      rect: { top: 10, left: 20, width: 100, height: 50 },
+    });
+  });
+
   it('marks html/jsx/tsx files as renderable', () => {
     expect(isRenderableDesignFileKind('html')).toBe(true);
     expect(isRenderableDesignFileKind('jsx')).toBe(true);

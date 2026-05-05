@@ -14,11 +14,14 @@ import path from 'node:path';
 import type {
   ChatAppendInput,
   ChatMessageRow,
+  CommentCreateInput,
+  CommentRow,
+  CommentUpdateInput,
   Design,
   DesignSnapshot,
   SnapshotCreateInput,
 } from '@open-codesign/shared';
-import { ChatMessageKind, CodesignError } from '@open-codesign/shared';
+import { ChatMessageKind, CodesignError, CommentKind, CommentRect } from '@open-codesign/shared';
 import type { BrowserWindow } from 'electron';
 import {
   bindWorkspace,
@@ -36,11 +39,17 @@ import { app, dialog, ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
 import {
   appendSessionChatMessage,
+  appendSessionComment,
   appendSessionToolStatus,
   type ChatToolStatusUpdate,
+  listPendingSessionCommentEdits,
   listSessionChatMessages,
+  listSessionComments,
+  markSessionCommentsApplied,
+  removeSessionComment,
   type SessionChatStoreOptions,
   seedSessionChatFromSnapshots,
+  updateSessionComment,
 } from './session-chat';
 import {
   createDesign,
@@ -649,6 +658,148 @@ function parseToolStatusInput(raw: unknown): ChatToolStatusUpdate {
   };
 }
 
+function parseCommentCreateInput(raw: unknown): CommentCreateInput {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError('comments:v1:add expects a comment object', 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, 'comments:v1:add');
+  if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  if (typeof r['snapshotId'] !== 'string' || r['snapshotId'].trim().length === 0) {
+    throw new CodesignError('snapshotId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  const kind = CommentKind.safeParse(r['kind']);
+  if (!kind.success) {
+    throw new CodesignError('kind must be note or edit', 'IPC_BAD_INPUT');
+  }
+  if (typeof r['selector'] !== 'string') {
+    throw new CodesignError('selector must be a string', 'IPC_BAD_INPUT');
+  }
+  if (typeof r['tag'] !== 'string') {
+    throw new CodesignError('tag must be a string', 'IPC_BAD_INPUT');
+  }
+  if (typeof r['outerHTML'] !== 'string') {
+    throw new CodesignError('outerHTML must be a string', 'IPC_BAD_INPUT');
+  }
+  const rect = CommentRect.safeParse(r['rect']);
+  if (!rect.success) {
+    throw new CodesignError(
+      'rect must include numeric top, left, width, and height',
+      'IPC_BAD_INPUT',
+    );
+  }
+  if (typeof r['text'] !== 'string' || r['text'].trim().length === 0) {
+    throw new CodesignError('text must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  const scope = r['scope'];
+  if (scope !== undefined && scope !== 'element' && scope !== 'global') {
+    throw new CodesignError('scope must be element or global', 'IPC_BAD_INPUT');
+  }
+  if (r['parentOuterHTML'] !== undefined && typeof r['parentOuterHTML'] !== 'string') {
+    throw new CodesignError('parentOuterHTML must be a string when provided', 'IPC_BAD_INPUT');
+  }
+  return {
+    designId: r['designId'],
+    snapshotId: r['snapshotId'],
+    kind: kind.data,
+    selector: r['selector'],
+    tag: r['tag'],
+    outerHTML: r['outerHTML'],
+    rect: rect.data,
+    text: r['text'],
+    ...(scope === 'element' || scope === 'global' ? { scope } : {}),
+    ...(typeof r['parentOuterHTML'] === 'string' ? { parentOuterHTML: r['parentOuterHTML'] } : {}),
+  };
+}
+
+function parseCommentUpdateInput(raw: unknown): {
+  designId: string;
+  id: string;
+  patch: CommentUpdateInput;
+} {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError('comments:v1:update expects { designId, id, patch }', 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, 'comments:v1:update');
+  if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
+    throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  const rawPatch = r['patch'];
+  if (!isRecord(rawPatch)) {
+    throw new CodesignError('patch must be an object', 'IPC_BAD_INPUT');
+  }
+  const patch: CommentUpdateInput = {};
+  if (rawPatch['text'] !== undefined) {
+    if (typeof rawPatch['text'] !== 'string') {
+      throw new CodesignError('patch.text must be a string', 'IPC_BAD_INPUT');
+    }
+    patch.text = rawPatch['text'];
+  }
+  if (rawPatch['status'] !== undefined) {
+    if (
+      rawPatch['status'] !== 'pending' &&
+      rawPatch['status'] !== 'applied' &&
+      rawPatch['status'] !== 'dismissed'
+    ) {
+      throw new CodesignError(
+        'patch.status must be pending, applied, or dismissed',
+        'IPC_BAD_INPUT',
+      );
+    }
+    patch.status = rawPatch['status'];
+  }
+  if (Object.keys(patch).length === 0) {
+    throw new CodesignError('patch must include text or status', 'IPC_BAD_INPUT');
+  }
+  return { designId: r['designId'], id: r['id'], patch };
+}
+
+function parseCommentRemoveInput(raw: unknown): { designId: string; id: string } {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError('comments:v1:remove expects { designId, id }', 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, 'comments:v1:remove');
+  if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  if (typeof r['id'] !== 'string' || r['id'].trim().length === 0) {
+    throw new CodesignError('id must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  return { designId: r['designId'], id: r['id'] };
+}
+
+function parseCommentMarkAppliedInput(raw: unknown): {
+  designId: string;
+  ids: string[];
+  snapshotId: string;
+} {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError(
+      'comments:v1:mark-applied expects { designId, ids, snapshotId }',
+      'IPC_BAD_INPUT',
+    );
+  }
+  const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, 'comments:v1:mark-applied');
+  if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  if (!Array.isArray(r['ids']) || !r['ids'].every((id) => typeof id === 'string')) {
+    throw new CodesignError('ids must be an array of strings', 'IPC_BAD_INPUT');
+  }
+  if (typeof r['snapshotId'] !== 'string' || r['snapshotId'].trim().length === 0) {
+    throw new CodesignError('snapshotId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  return { designId: r['designId'], ids: r['ids'], snapshotId: r['snapshotId'] };
+}
+
 function chatStoreOptions(db: Database): SessionChatStoreOptions {
   return {
     db,
@@ -957,6 +1108,61 @@ export function registerSnapshotsIpc(db: Database): void {
     const input = parseToolStatusInput(raw);
     runDb('chat:update-tool-status', () => appendSessionToolStatus(chatStoreOptions(db), input));
     return { ok: true };
+  });
+
+  ipcMain.handle('comments:v1:list', (_e: unknown, raw: unknown): CommentRow[] => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError('comments:v1:list expects { designId }', 'IPC_BAD_INPUT');
+    }
+    const r = raw as Record<string, unknown>;
+    requireSchemaV1(r, 'comments:v1:list');
+    const designId = parseDesignIdPayload(raw, 'comments:v1:list');
+    const snapshotId = r['snapshotId'];
+    if (snapshotId !== undefined && snapshotId !== null && typeof snapshotId !== 'string') {
+      throw new CodesignError('snapshotId must be a string or null', 'IPC_BAD_INPUT');
+    }
+    return runDb('comments:list', () =>
+      listSessionComments(
+        chatStoreOptions(db),
+        designId,
+        typeof snapshotId === 'string' ? snapshotId : undefined,
+      ),
+    );
+  });
+
+  ipcMain.handle('comments:v1:list-pending-edits', (_e: unknown, raw: unknown): CommentRow[] => {
+    const designId = parseDesignIdPayload(raw, 'comments:v1:list-pending-edits');
+    return runDb('comments:list-pending-edits', () =>
+      listPendingSessionCommentEdits(chatStoreOptions(db), designId),
+    );
+  });
+
+  ipcMain.handle('comments:v1:add', (_e: unknown, raw: unknown): CommentRow => {
+    const input = parseCommentCreateInput(raw);
+    return runDb('comments:add', () => appendSessionComment(chatStoreOptions(db), input));
+  });
+
+  ipcMain.handle('comments:v1:update', (_e: unknown, raw: unknown): CommentRow | null => {
+    const input = parseCommentUpdateInput(raw);
+    return runDb('comments:update', () =>
+      updateSessionComment(chatStoreOptions(db), input.designId, input.id, input.patch),
+    );
+  });
+
+  ipcMain.handle('comments:v1:remove', (_e: unknown, raw: unknown): { removed: boolean } => {
+    const input = parseCommentRemoveInput(raw);
+    return {
+      removed: runDb('comments:remove', () =>
+        removeSessionComment(chatStoreOptions(db), input.designId, input.id),
+      ),
+    };
+  });
+
+  ipcMain.handle('comments:v1:mark-applied', (_e: unknown, raw: unknown): CommentRow[] => {
+    const input = parseCommentMarkAppliedInput(raw);
+    return runDb('comments:mark-applied', () =>
+      markSessionCommentsApplied(chatStoreOptions(db), input.designId, input.ids, input.snapshotId),
+    );
   });
 }
 
@@ -1527,6 +1733,12 @@ export const SNAPSHOTS_CHANNELS_V1 = [
   'chat:v1:append',
   'chat:v1:seed-from-snapshots',
   'chat:v1:update-tool-status',
+  'comments:v1:list',
+  'comments:v1:list-pending-edits',
+  'comments:v1:add',
+  'comments:v1:update',
+  'comments:v1:remove',
+  'comments:v1:mark-applied',
 ] as const;
 
 export function registerSnapshotsUnavailableIpc(reason: string): void {

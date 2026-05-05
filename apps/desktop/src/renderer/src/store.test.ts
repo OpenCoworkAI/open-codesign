@@ -1,6 +1,9 @@
 import { initI18n } from '@open-codesign/i18n';
 import type {
   ChatAppendInput,
+  CommentCreateInput,
+  CommentRow,
+  CommentUpdateInput,
   LocalInputFile,
   OnboardingState,
   SelectedElement,
@@ -115,10 +118,10 @@ function mockChatApi() {
 function mockCommentsApi() {
   return {
     list: vi.fn(async (_designId: string) => []),
-    add: vi.fn(async () => null),
-    update: vi.fn(async () => null),
-    remove: vi.fn(async () => {}),
-    markApplied: vi.fn(async () => []),
+    add: vi.fn(async (_input: CommentCreateInput) => null as CommentRow | null),
+    update: vi.fn(async (_designId: string, _id: string, _patch: CommentUpdateInput) => null),
+    remove: vi.fn(async (_designId: string, _id: string) => ({ removed: false })),
+    markApplied: vi.fn(async (_designId: string, _ids: string[], _snapshotId: string) => []),
   };
 }
 

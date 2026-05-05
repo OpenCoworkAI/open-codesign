@@ -124,8 +124,10 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
 
     async updateComment(id, patch) {
       if (!window.codesign) return null;
+      const designId = get().currentDesignId;
+      if (!designId) return null;
       try {
-        const updated = await window.codesign.comments.update(id, patch);
+        const updated = await window.codesign.comments.update(designId, id, patch);
         if (!updated) return null;
         set((s) => ({
           comments: s.comments.map((c) => (c.id === id ? updated : c)),
@@ -165,8 +167,10 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
 
     async removeComment(id) {
       if (!window.codesign) return;
+      const designId = get().currentDesignId;
+      if (!designId) return;
       try {
-        await window.codesign.comments.remove(id);
+        await window.codesign.comments.remove(designId, id);
         set((s) => ({ comments: s.comments.filter((c) => c.id !== id) }));
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');

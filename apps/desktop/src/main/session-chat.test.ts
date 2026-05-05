@@ -6,15 +6,20 @@ import { type DesignSessionBriefV1, SessionManager } from '@open-codesign/core';
 import { describe, expect, it, vi } from 'vitest';
 import {
   appendSessionChatMessage,
+  appendSessionComment,
   appendSessionDesignBrief,
   appendSessionRunPreferences,
   appendSessionToolStatus,
   CHAT_TOOL_STATUS_CUSTOM_TYPE,
   CONTEXT_BRIEF_CUSTOM_TYPE,
   listSessionChatMessages,
+  listSessionComments,
+  markSessionCommentsApplied,
   readSessionDesignBrief,
   readSessionRunPreferences,
+  removeSessionComment,
   seedSessionChatFromSnapshots,
+  updateSessionComment,
 } from './session-chat';
 import {
   createDesign,
@@ -329,6 +334,42 @@ describe('session design brief storage', () => {
         reusableSystem: 'auto',
         visualDirection: 'professional',
       });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('replays comment add/update/remove/apply events from JSONL', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-session-comments-'));
+    try {
+      const db = initSnapshotsDb(path.join(root, 'design-store.json'));
+      const design = createDesign(db, 'Comment test');
+      updateDesignWorkspace(db, design.id, root);
+      const opts = { db, sessionDir: db.sessionDir };
+
+      const row = appendSessionComment(opts, {
+        designId: design.id,
+        snapshotId: 'snapshot-a',
+        kind: 'edit',
+        selector: '#hero',
+        tag: 'section',
+        outerHTML: '<section id="hero">Hello</section>',
+        rect: { top: 1, left: 2, width: 3, height: 4 },
+        text: 'Make it bolder',
+      });
+
+      expect(listSessionComments(opts, design.id)).toMatchObject([
+        { id: row.id, status: 'pending', text: 'Make it bolder' },
+      ]);
+
+      expect(
+        updateSessionComment(opts, design.id, row.id, { text: 'Make it calmer' }),
+      ).toMatchObject({ id: row.id, text: 'Make it calmer' });
+      expect(markSessionCommentsApplied(opts, design.id, [row.id], 'snapshot-b')).toMatchObject([
+        { id: row.id, status: 'applied', appliedInSnapshotId: 'snapshot-b' },
+      ]);
+      expect(removeSessionComment(opts, design.id, row.id)).toBe(true);
+      expect(listSessionComments(opts, design.id)).toEqual([]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

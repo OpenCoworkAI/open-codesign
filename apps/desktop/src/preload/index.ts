@@ -755,19 +755,42 @@ const api = {
     },
   },
   comments: {
-    // TODO(v0.2): re-route through session JSONL — see T2.6.
-    // Stubs reject so renderer surfaces a toast instead of pushing
-    // `null` rows into the store (which used to crash CommentChipBar).
-    add: (_input: CommentCreateInput) =>
-      Promise.reject(
-        new Error('Comments are being migrated to session JSONL in v0.2 — not yet wired.'),
-      ) as Promise<CommentRow>,
-    list: (_designId: string, _snapshotId?: string) => Promise.resolve([] as CommentRow[]),
-    listPendingEdits: (_designId: string) => Promise.resolve([] as CommentRow[]),
-    update: (_id: string, _patch: { text?: string; status?: CommentStatus }) =>
-      Promise.resolve(null as CommentRow | null),
-    remove: (_id: string) => Promise.resolve({ removed: false }),
-    markApplied: (_ids: string[], _snapshotId: string) => Promise.resolve([] as CommentRow[]),
+    add: (input: CommentCreateInput) =>
+      ipcRenderer.invoke('comments:v1:add', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<CommentRow>,
+    list: (designId: string, snapshotId?: string) =>
+      ipcRenderer.invoke('comments:v1:list', {
+        schemaVersion: 1,
+        designId,
+        ...(snapshotId !== undefined ? { snapshotId } : {}),
+      }) as Promise<CommentRow[]>,
+    listPendingEdits: (designId: string) =>
+      ipcRenderer.invoke('comments:v1:list-pending-edits', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<CommentRow[]>,
+    update: (designId: string, id: string, patch: { text?: string; status?: CommentStatus }) =>
+      ipcRenderer.invoke('comments:v1:update', {
+        schemaVersion: 1,
+        designId,
+        id,
+        patch,
+      }) as Promise<CommentRow | null>,
+    remove: (designId: string, id: string) =>
+      ipcRenderer.invoke('comments:v1:remove', {
+        schemaVersion: 1,
+        designId,
+        id,
+      }) as Promise<{ removed: boolean }>,
+    markApplied: (designId: string, ids: string[], snapshotId: string) =>
+      ipcRenderer.invoke('comments:v1:mark-applied', {
+        schemaVersion: 1,
+        designId,
+        ids,
+        snapshotId,
+      }) as Promise<CommentRow[]>,
   },
   diagnostics: {
     log: (entry: {

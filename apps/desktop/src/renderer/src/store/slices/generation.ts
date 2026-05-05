@@ -833,7 +833,11 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
               }
             }
             if (appliedIn) {
-              const updated = await window.codesign.comments.markApplied(pendingEditIds, appliedIn);
+              const updated = await window.codesign.comments.markApplied(
+                designIdAtStart,
+                pendingEditIds,
+                appliedIn,
+              );
               if (get().currentDesignId === designIdAtStart && updated.length > 0) {
                 set((s) => ({
                   comments: s.comments.map((c) => updated.find((u) => u.id === c.id) ?? c),
