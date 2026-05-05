@@ -12,19 +12,11 @@ interface DesignRun {
 
 export function buildRecentDesigns<
   T extends { id: string; updatedAt: string; deletedAt: string | null },
->(
-  designs: T[],
-  currentDesignId: string | null,
-  generationByDesign: Record<string, DesignRun>,
-  limit = RECENT_LIMIT,
-): T[] {
+>(designs: T[], generationByDesign: Record<string, DesignRun>, limit = RECENT_LIMIT): T[] {
   const sorted = [...designs]
     .filter((d) => d.deletedAt === null)
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-  const activeIds = new Set([
-    ...(currentDesignId === null ? [] : [currentDesignId]),
-    ...Object.keys(generationByDesign),
-  ]);
+  const activeIds = new Set([...Object.keys(generationByDesign)]);
   const active = sorted.filter((d) => activeIds.has(d.id));
   const rest = sorted.filter((d) => !activeIds.has(d.id));
   return [...active, ...rest].slice(0, limit);
@@ -33,13 +25,9 @@ export function buildRecentDesigns<
 export function RecentTab() {
   const t = useT();
   const designs = useCodesignStore((s) => s.designs);
-  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const generationByDesign = useCodesignStore((s) => s.generationByDesign);
   const openNewDesignDialog = useCodesignStore((s) => s.openNewDesignDialog);
-  const isGenerating = useCodesignStore(
-    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
-  );
-  const recent = buildRecentDesigns(designs, currentDesignId, generationByDesign, RECENT_LIMIT);
+  const recent = buildRecentDesigns(designs, generationByDesign, RECENT_LIMIT);
 
   function handleNewDesign(): void {
     openNewDesignDialog();
@@ -49,11 +37,10 @@ export function RecentTab() {
     <button
       type="button"
       onClick={() => void handleNewDesign()}
-      disabled={isGenerating}
       aria-label={t('hub.newDesign')}
-      className="group relative flex w-full text-left disabled:opacity-50 disabled:cursor-not-allowed"
+      className="group relative flex w-full text-left"
     >
-      <div className="relative w-full aspect-[4/3] flex flex-col items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-lg)] border-[1.5px] border-dashed border-[var(--color-border)] bg-[linear-gradient(135deg,var(--color-background-secondary)_0%,var(--color-accent-soft)_100%)] transition-[transform,border-color] duration-[var(--duration-base)] ease-[var(--ease-out)] group-hover:-translate-y-[2px] group-hover:border-[var(--color-accent)] group-disabled:translate-y-0 group-disabled:border-[var(--color-border)] overflow-hidden">
+      <div className="relative w-full aspect-[4/3] flex flex-col items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-lg)] border-[1.5px] border-dashed border-[var(--color-border)] bg-[linear-gradient(135deg,var(--color-background-secondary)_0%,var(--color-accent-soft)_100%)] transition-[transform,border-color] duration-[var(--duration-base)] ease-[var(--ease-out)] group-hover:-translate-y-[2px] group-hover:border-[var(--color-accent)] overflow-hidden">
         <span
           aria-hidden
           className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,var(--color-accent-soft)_0%,transparent_60%)] opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--duration-base)]"
