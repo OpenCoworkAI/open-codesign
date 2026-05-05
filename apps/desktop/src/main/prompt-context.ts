@@ -3,7 +3,7 @@ import { open, readFile } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
-import { extname } from 'node:path';
+import { extname, isAbsolute } from 'node:path';
 import type { AttachmentContext, ProjectContext, ReferenceUrlContext } from '@open-codesign/core';
 import {
   CodesignError,
@@ -435,7 +435,72 @@ async function readProjectContext(workspaceRoot: string | undefined): Promise<Pr
   };
 }
 
-async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> {
+const WORKSPACE_ATTACHMENT_DIRS = ['references', 'assets'] as const;
+
+function normalizePromptPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function workspaceAttachmentRelativePath(filePath: string): string | null {
+  const normalized = filePath.replace(/\\/g, '/');
+  const alreadyRelative = normalizePromptPath(normalized);
+  if (WORKSPACE_ATTACHMENT_DIRS.some((dir) => alreadyRelative.startsWith(`${dir}/`))) {
+    return alreadyRelative;
+  }
+
+  for (const dir of WORKSPACE_ATTACHMENT_DIRS) {
+    const marker = `/${dir}/`;
+    const index = normalized.lastIndexOf(marker);
+    if (index !== -1) return normalized.slice(index + 1);
+  }
+  return null;
+}
+
+async function openAttachment(
+  file: LocalInputFile,
+  workspaceRoot: string | undefined,
+): Promise<{ handle: Awaited<ReturnType<typeof open>>; promptPath: string }> {
+  const candidates: Array<{ readPath: string; promptPath: string }> = [];
+
+  if (!isAbsolute(file.path)) {
+    if (workspaceRoot !== undefined) {
+      const promptPath = normalizePromptPath(file.path);
+      candidates.push({
+        readPath: await resolveSafeWorkspaceChildPath(workspaceRoot, promptPath),
+        promptPath,
+      });
+    } else {
+      candidates.push({ readPath: file.path, promptPath: file.path });
+    }
+  } else {
+    candidates.push({ readPath: file.path, promptPath: file.path });
+    if (workspaceRoot !== undefined) {
+      const promptPath = workspaceAttachmentRelativePath(file.path);
+      if (promptPath !== null) {
+        candidates.push({
+          readPath: await resolveSafeWorkspaceChildPath(workspaceRoot, promptPath),
+          promptPath,
+        });
+      }
+    }
+  }
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return { handle: await open(candidate.readPath, 'r'), promptPath: candidate.promptPath };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+async function readAttachment(
+  file: LocalInputFile,
+  workspaceRoot: string | undefined,
+): Promise<AttachmentContext> {
   const extension = extname(file.name).toLowerCase();
   const imageMimeType = IMAGE_MIME_TYPES[extension];
 
@@ -456,8 +521,11 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
 
   let buffer: Buffer;
   let handle: Awaited<ReturnType<typeof open>> | null = null;
+  let promptPath = file.path;
   try {
-    handle = await open(file.path, 'r');
+    const opened = await openAttachment(file, workspaceRoot);
+    handle = opened.handle;
+    promptPath = opened.promptPath;
 
     // Always read a small probe first to detect if it's actually text
     const probeBytes = 512;
@@ -518,7 +586,7 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
     if (imageMimeType) {
       return {
         name: file.name,
-        path: file.path,
+        path: promptPath,
         note: 'Image attachment metadata is available; visual pixels may only be available on vision-capable provider paths. If image content is unavailable, use the filename and user prompt as hints.',
         mediaType: imageMimeType,
         imageDataUrl: `data:${imageMimeType};base64,${buffer.toString('base64')}`,
@@ -526,7 +594,7 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
     }
     return {
       name: file.name,
-      path: file.path,
+      path: promptPath,
       note: `Binary or unsupported format (${extension || 'unknown'}). Use the filename as a hint, not quoted content.`,
     };
   }
@@ -534,7 +602,7 @@ async function readAttachment(file: LocalInputFile): Promise<AttachmentContext> 
   const fullText = buffer.toString('utf8');
   return {
     name: file.name,
-    path: file.path,
+    path: promptPath,
     excerpt: cleanText(fullText, MAX_ATTACHMENT_CHARS),
     note:
       Buffer.byteLength(fullText, 'utf8') > MAX_ATTACHMENT_CHARS
@@ -797,7 +865,7 @@ export async function preparePromptContext(input: {
   workspaceRoot?: string | undefined;
 }): Promise<PreparedPromptContext> {
   const attachments = await Promise.all(
-    (input.attachments ?? []).map((file) => readAttachment(file)),
+    (input.attachments ?? []).map((file) => readAttachment(file, input.workspaceRoot)),
   );
   const referenceUrl =
     typeof input.referenceUrl === 'string' && input.referenceUrl.trim().length > 0

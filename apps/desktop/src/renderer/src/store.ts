@@ -561,7 +561,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   attachImportedFiles(files) {
     const next = files.map((file) => ({
-      path: file.absolutePath,
+      path: file.path,
       name: file.name,
       size: file.size,
     }));

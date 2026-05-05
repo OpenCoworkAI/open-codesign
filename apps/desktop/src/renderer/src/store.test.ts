@@ -898,7 +898,7 @@ describe('useCodesignStore design management', () => {
       timestamp: expect.any(String),
     });
     expect(useCodesignStore.getState().inputFiles).toEqual([
-      { path: '/workspace/references/brief.md', name: 'brief.md', size: 42 },
+      { path: 'references/brief.md', name: 'brief.md', size: 42 },
     ]);
   });
 

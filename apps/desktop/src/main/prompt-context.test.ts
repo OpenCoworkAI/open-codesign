@@ -62,6 +62,49 @@ describe('preparePromptContext', () => {
     });
   });
 
+  it('resolves workspace-relative attachments against the current workspace root', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-relative-attachment-'));
+    const relativePath = 'references/brief.md';
+    const filePath = path.join(dir, relativePath);
+    const text = 'Use the uploaded benchmark chart as the content reference.';
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, text);
+
+    const result = await preparePromptContext({
+      workspaceRoot: dir,
+      attachments: [{ path: relativePath, name: 'brief.md', size: Buffer.byteLength(text) }],
+    });
+
+    expect(result.attachments[0]).toMatchObject({
+      name: 'brief.md',
+      path: relativePath,
+      excerpt: text,
+    });
+  });
+
+  it('rebases stale auto-managed workspace attachment paths after a workspace rename', async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-renamed-attachment-'));
+    const newWorkspace = path.join(parent, '数据对比图页面');
+    const relativePath = 'references/shot.png';
+    const filePath = path.join(newWorkspace, relativePath);
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, pngBytes);
+
+    const stalePath = path.join(parent, 'Untitled-design-1-25', relativePath);
+    const result = await preparePromptContext({
+      workspaceRoot: newWorkspace,
+      attachments: [{ path: stalePath, name: 'shot.png', size: pngBytes.length }],
+    });
+
+    expect(result.attachments[0]).toMatchObject({
+      name: 'shot.png',
+      path: relativePath,
+      mediaType: 'image/png',
+      imageDataUrl: `data:image/png;base64,${pngBytes.toString('base64')}`,
+    });
+  });
+
   it('throws a CodesignError when a text attachment is too large', async () => {
     await expect(
       preparePromptContext({
