@@ -253,7 +253,7 @@ describe('session design brief storage', () => {
           content: [{ type: 'text', text: 'preview ok' }],
           details: {
             ok: true,
-            screenshot: 'data:image/png;base64,' + 'x'.repeat(50_000),
+            screenshot: `data:image/png;base64,${'x'.repeat(50_000)}`,
             domOutline: 'd'.repeat(8_000),
             consoleErrors: Array.from({ length: 25 }, (_, index) => ({
               level: 'error',

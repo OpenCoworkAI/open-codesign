@@ -144,7 +144,7 @@ describe('summarizeToolResultForStream', () => {
       content: [{ type: 'text', text: 'preview ok' }],
       details: {
         ok: true,
-        screenshot: 'data:image/png;base64,' + 'x'.repeat(50_000),
+        screenshot: `data:image/png;base64,${'x'.repeat(50_000)}`,
         domOutline: 'd'.repeat(10_000),
         consoleErrors: Array.from({ length: 20 }, (_, index) => ({
           level: 'error',
@@ -166,7 +166,7 @@ describe('summarizeToolResultForStream', () => {
 
   it('compacts done details to a short structured summary', () => {
     const compacted = compactToolResultForHistory('done', {
-      content: [{ type: 'text', text: 'has_errors\n' + 'x'.repeat(20_000) }],
+      content: [{ type: 'text', text: `has_errors\n${'x'.repeat(20_000)}` }],
       details: {
         status: 'has_errors',
         path: 'App.jsx',
