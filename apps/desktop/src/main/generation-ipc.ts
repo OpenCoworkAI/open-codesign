@@ -8,6 +8,7 @@ export function cancelGenerationRequest(
   raw: unknown,
   inFlight: Map<string, AbortController>,
   logIpc: CancellationLogger,
+  inFlightByDesign?: Map<string, string>,
 ): void {
   if (typeof raw !== 'string') {
     throw new CodesignError(
@@ -21,6 +22,11 @@ export function cancelGenerationRequest(
 
   controller.abort();
   inFlight.delete(raw);
+  if (inFlightByDesign !== undefined) {
+    for (const [designId, generationId] of inFlightByDesign) {
+      if (generationId === raw) inFlightByDesign.delete(designId);
+    }
+  }
   logIpc.info('generate.cancelled', { id: raw });
 }
 
@@ -36,6 +42,31 @@ export async function withInFlightGeneration<T>(
   } finally {
     if (inFlight.get(id) === controller) {
       inFlight.delete(id);
+    }
+  }
+}
+
+export async function withInFlightGenerationForDesign<T>(
+  id: string,
+  designId: string,
+  inFlight: Map<string, AbortController>,
+  inFlightByDesign: Map<string, string>,
+  controller: AbortController,
+  run: () => Promise<T>,
+): Promise<T> {
+  const existing = inFlightByDesign.get(designId);
+  if (existing !== undefined && existing !== id) {
+    throw new CodesignError(
+      'A generation is already running for this design. Wait for it to finish or stop it before continuing.',
+      'GENERATION_ALREADY_RUNNING',
+    );
+  }
+  inFlightByDesign.set(designId, id);
+  try {
+    return await withInFlightGeneration(id, inFlight, controller, run);
+  } finally {
+    if (inFlightByDesign.get(designId) === id) {
+      inFlightByDesign.delete(designId);
     }
   }
 }

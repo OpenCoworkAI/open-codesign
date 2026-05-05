@@ -5,6 +5,7 @@ import {
   cancelGenerationRequest,
   extractGenerationTimeoutError,
   withInFlightGeneration,
+  withInFlightGenerationForDesign,
 } from './generation-ipc';
 
 function makeController() {
@@ -115,6 +116,92 @@ describe('withInFlightGeneration', () => {
 
     expect(result).toBe('old-done');
     expect(inFlight.get('gen-1')).toBe(newController);
+  });
+});
+
+describe('withInFlightGenerationForDesign', () => {
+  it('rejects a second generation for the same design while the first is running', async () => {
+    const controller = new AbortController();
+    const otherController = new AbortController();
+    const inFlight = new Map<string, AbortController>();
+    const inFlightByDesign = new Map<string, string>();
+    let releaseFirst!: () => void;
+    const firstDone = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const first = withInFlightGenerationForDesign(
+      'gen-1',
+      'design-1',
+      inFlight,
+      inFlightByDesign,
+      controller,
+      async () => {
+        await firstDone;
+        return 'done';
+      },
+    );
+
+    await vi.waitFor(() => expect(inFlightByDesign.get('design-1')).toBe('gen-1'));
+    await expect(
+      withInFlightGenerationForDesign(
+        'gen-2',
+        'design-1',
+        inFlight,
+        inFlightByDesign,
+        otherController,
+        async () => 'should-not-run',
+      ),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'GENERATION_ALREADY_RUNNING',
+    });
+
+    expect(inFlight.get('gen-1')).toBe(controller);
+    expect(inFlight.has('gen-2')).toBe(false);
+    releaseFirst();
+    await expect(first).resolves.toBe('done');
+    expect(inFlightByDesign.has('design-1')).toBe(false);
+  });
+
+  it('allows different designs to run concurrently', async () => {
+    const inFlight = new Map<string, AbortController>();
+    const inFlightByDesign = new Map<string, string>();
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+
+    await expect(
+      Promise.all([
+        withInFlightGenerationForDesign(
+          'gen-1',
+          'design-1',
+          inFlight,
+          inFlightByDesign,
+          firstController,
+          async () => 'one',
+        ),
+        withInFlightGenerationForDesign(
+          'gen-2',
+          'design-2',
+          inFlight,
+          inFlightByDesign,
+          secondController,
+          async () => 'two',
+        ),
+      ]),
+    ).resolves.toEqual(['one', 'two']);
+  });
+
+  it('clears the design lock when cancellation removes the generation', async () => {
+    const controller = makeController();
+    const inFlight = new Map([['gen-1', controller]]);
+    const inFlightByDesign = new Map([['design-1', 'gen-1']]);
+    const logIpc = { info: vi.fn() };
+
+    cancelGenerationRequest('gen-1', inFlight, logIpc, inFlightByDesign);
+
+    expect(inFlight.has('gen-1')).toBe(false);
+    expect(inFlightByDesign.has('design-1')).toBe(false);
   });
 });
 

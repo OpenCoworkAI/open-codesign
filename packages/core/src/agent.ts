@@ -255,7 +255,7 @@ const MAX_DONE_ERROR_ROUNDS = 3;
 
 function agenticToolGuidance(input: { inspectWorkspace: boolean }): string {
   const requiredSteps = [
-    '1. Call `set_title`.',
+    '1. For a fresh design, call `set_title` once. For continuation or existing-source turns, do not call `set_title` unless the user explicitly asks to rename or pivot to a new artifact.',
     '2. Call `set_todos` with a short checklist before any `create`, `str_replace`, or `insert` file mutation. This is required even for fresh single-file designs.',
     '3. If an edit tool reports `set_todos_required`, immediately call `set_todos`, then retry the same edit. The blocked edit did not write a file.',
     '4. Load optional resources explicitly with `skill(name)` or `scaffold({kind, destPath})` before relying on them.',
@@ -275,7 +275,7 @@ function agenticToolGuidance(input: { inspectWorkspace: boolean }): string {
     '- Progressive generation is required: make the first workspace mutation a compact file scaffold, then add sections, data, interactions, and polish in smaller edits before previewing.',
     '- Fresh workspace sequence: `set_title` -> `set_todos` -> optional `skill`/`scaffold` -> `create App.jsx` with a small shell -> incremental edits to a complete first pass -> `preview(App.jsx)`.',
     '- Do not call `preview` while the artifact is still only a scaffold, loading state, skeleton, placeholder, or empty lower section. Preview should represent a coherent first pass unless the user explicitly asked for a loading-state design.',
-    '- Existing-source sequence: `set_title` -> `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. Do not edit an existing source from memory.',
+    '- Existing-source sequence: `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. Do not edit an existing source from memory, and do not rebuild unless the user explicitly asks.',
     '- Use `create` for new files; follow-up edits use `view`, `str_replace`, or `insert`.',
     '- Do not emit `<artifact>` tags, fenced source blocks, raw HTML/JSX/CSS, or HTML wrappers in chat.',
     '- Local workspace assets and scaffolded files are allowed. External scripts remain restricted by the base output rules.',
@@ -673,7 +673,7 @@ function buildWorkspaceBrief(
   ];
   lines.push(
     sources.length > 0
-      ? 'Before editing existing source files, call set_todos, inspect the workspace when available, then view the current source file. Preserve and extend the current design unless the user explicitly asks for a rebuild.'
+      ? 'Before editing existing source files, call set_todos, inspect the workspace when available, then view the current source file. Existing-source sequence: `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. For continuation or existing-source turns, do not call `set_title`; preserve and extend the current design unless the user explicitly asks for a rebuild.'
       : `This is an empty workspace. Call set_todos first, then create ${DEFAULT_SOURCE_ENTRY} as the main design source.`,
   );
   if (hasDesignMd) {

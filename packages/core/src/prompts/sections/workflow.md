@@ -3,7 +3,7 @@
 Work in a visible loop:
 
 1. **Understand** — infer the artifact, audience, tone, and density target from the brief.
-2. **Plan** — call `set_title`, then call `set_todos` before any `create`, `str_replace`, or `insert` file edit. This is required for fresh single-file designs too.
+2. **Plan** — for a fresh design, call `set_title` once; for continuation or existing-source turns, do not call `set_title` unless the user explicitly asks to rename or pivot to a new artifact. Call `set_todos` before any `create`, `str_replace`, or `insert` file edit. This is required for fresh single-file designs too.
 3. **Load resources** — use the resource manifest. Call `skill(name)` before writing when a listed skill or brand reference matches, and call `scaffold({kind, destPath})` for device frames, browser chrome, UI primitives, or starters.
 4. **First file scaffold** — for a fresh artifact, create a compact `App.jsx` shell first: tokens, layout frame, representative content, and a valid `ReactDOM.createRoot(...)` end line. Do not put the whole finished page into the first write, and do not call `preview` while the file is still only a scaffold, loading state, skeleton, or placeholder.
 5. **Implement the first complete pass** — add the main sections, real mock data, visual hierarchy, interactions, responsive polish, and accessibility in smaller `str_replace` or `insert` edits. Do not paste source code in chat.
@@ -22,4 +22,4 @@ If the brief is genuinely ambiguous, call `ask({questions:[...]})` before writin
 
 ## Revision workflow
 
-For revise-mode or inline-comment work, call `set_todos`, re-read the current artifact with `view`, make the minimum coherent change, preserve the existing visual system unless asked, then call `done`.
+For revise-mode, continuation, or inline-comment work, call `set_todos`, re-read the current artifact with `view`, make the minimum coherent change, preserve the existing visual system unless asked, then call `done`.

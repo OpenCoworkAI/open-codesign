@@ -1352,6 +1352,10 @@ describe('generateViaAgent()', () => {
     expect(prompt).toContain('Workspace context');
     expect(prompt).toContain('Existing source candidates: App.jsx');
     expect(prompt).toContain('Before editing existing source files, call set_todos');
+    expect(prompt).toContain(
+      'Existing-source sequence: `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`',
+    );
+    expect(prompt).not.toContain('Existing-source sequence: `set_title`');
     expect(prompt).toContain('then view the current source file');
     expect(prompt).not.toContain('revision turn');
     expect(prompt).not.toContain('takeover mode');
@@ -1417,6 +1421,7 @@ describe('generateViaAgent()', () => {
     const prompt = agentCalls[0]?.prompts[0]?.message as string;
     expect(prompt).toContain('DESIGN.md is present');
     expect(prompt).toContain('design baton');
+    expect(prompt).toContain('For continuation or existing-source turns, do not call `set_title`');
   });
 
   it('surfaces reference materials in the workspace brief', async () => {

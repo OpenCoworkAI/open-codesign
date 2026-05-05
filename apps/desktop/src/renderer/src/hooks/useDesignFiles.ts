@@ -21,6 +21,65 @@ export interface UseDesignFilesResult {
   backend: 'workspace' | 'snapshots';
 }
 
+export interface WorkspaceListErrorToastState {
+  key: string | null;
+  toastId: string | null;
+}
+
+interface WorkspaceListErrorToastInput {
+  state: WorkspaceListErrorToastState;
+  key: string;
+  message: string;
+  pushToast: (toast: { variant: 'error'; title: string; description?: string }) => string;
+  dismissToast: (id: string) => void;
+}
+
+export function handleWorkspaceListSuccessToast(
+  state: WorkspaceListErrorToastState,
+  dismissToast: (id: string) => void,
+  staleToastIds: string[] = [],
+): void {
+  const dismissed = new Set<string>();
+  if (state.toastId !== null) {
+    dismissToast(state.toastId);
+    dismissed.add(state.toastId);
+  }
+  for (const id of staleToastIds) {
+    if (dismissed.has(id)) continue;
+    dismissToast(id);
+  }
+  state.key = null;
+  state.toastId = null;
+}
+
+export function isWorkspaceListFailureToast(toast: { description?: string }): boolean {
+  const description = toast.description ?? '';
+  return (
+    description.includes('codesign:files:v1:list') ||
+    description.includes('Failed to list workspace files')
+  );
+}
+
+function currentWorkspaceListFailureToastIds(): string[] {
+  return useCodesignStore
+    .getState()
+    .toasts.filter(isWorkspaceListFailureToast)
+    .map((toast) => toast.id);
+}
+
+export function handleWorkspaceListErrorToast(input: WorkspaceListErrorToastInput): void {
+  if (input.state.key === input.key) return;
+  if (input.state.toastId !== null) {
+    input.dismissToast(input.state.toastId);
+  }
+  input.state.key = input.key;
+  input.state.toastId = input.pushToast({
+    variant: 'error',
+    title: tr('canvas.workspace.updateFailed'),
+    description: input.message,
+  });
+}
+
 export function previewSourceFallbackFile(
   previewSource: string | null,
   updatedAt = new Date().toISOString(),
@@ -67,9 +126,10 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
     designId === null ? undefined : s.designs.find((d) => d.id === designId)?.updatedAt,
   );
   const pushToast = useCodesignStore((s) => s.pushToast);
+  const dismissToast = useCodesignStore((s) => s.dismissToast);
   const [files, setFiles] = useState<DesignFileEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const lastListErrorRef = useRef<string | null>(null);
+  const listErrorToastRef = useRef<WorkspaceListErrorToastState>({ key: null, toastId: null });
   const backend: 'workspace' | 'snapshots' =
     typeof window !== 'undefined' && (window.codesign as unknown as { files?: unknown })?.files
       ? 'workspace'
@@ -77,12 +137,21 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
 
   const refetch = useCallback(async () => {
     if (!designId) {
+      handleWorkspaceListSuccessToast(
+        listErrorToastRef.current,
+        dismissToast,
+        currentWorkspaceListFailureToastIds(),
+      );
       setFiles([]);
       return;
     }
     if (backend === 'workspace') {
       if (workspacePath === null) {
-        lastListErrorRef.current = null;
+        handleWorkspaceListSuccessToast(
+          listErrorToastRef.current,
+          dismissToast,
+          currentWorkspaceListFailureToastIds(),
+        );
         setFiles(withPreviewSourceFallback([], previewSource, designUpdatedAt));
         return;
       }
@@ -107,19 +176,22 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
           source: 'workspace' as const,
         }));
         setFiles(withPreviewSourceFallback(workspaceRows, previewSource, designUpdatedAt));
-        lastListErrorRef.current = null;
+        handleWorkspaceListSuccessToast(
+          listErrorToastRef.current,
+          dismissToast,
+          currentWorkspaceListFailureToastIds(),
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : tr('errors.unknown');
         setFiles(withPreviewSourceFallback([], previewSource, designUpdatedAt));
         const errorKey = `${designId}:${workspacePath}:${message}`;
-        if (lastListErrorRef.current !== errorKey) {
-          lastListErrorRef.current = errorKey;
-          pushToast({
-            variant: 'error',
-            title: tr('canvas.workspace.updateFailed'),
-            description: message,
-          });
-        }
+        handleWorkspaceListErrorToast({
+          state: listErrorToastRef.current,
+          key: errorKey,
+          message,
+          pushToast,
+          dismissToast,
+        });
       } finally {
         setLoading(false);
       }
@@ -128,8 +200,13 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
     // Legacy fallback: no files IPC → derive a single source entry from
     // the last preview if we have one. Kept so downstream tests that mock a
     // codesign-without-files preload keep passing.
+    handleWorkspaceListSuccessToast(
+      listErrorToastRef.current,
+      dismissToast,
+      currentWorkspaceListFailureToastIds(),
+    );
     setFiles(withPreviewSourceFallback([], previewSource, designUpdatedAt));
-  }, [designId, backend, designUpdatedAt, previewSource, pushToast, workspacePath]);
+  }, [designId, backend, designUpdatedAt, dismissToast, previewSource, pushToast, workspacePath]);
 
   // Initial fetch + refetch when the design changes.
   useEffect(() => {
