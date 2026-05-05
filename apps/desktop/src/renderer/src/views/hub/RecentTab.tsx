@@ -5,17 +5,41 @@ import { DesignGrid } from './DesignGrid';
 
 const RECENT_LIMIT = 6;
 
+interface DesignRun {
+  generationId: string;
+  stage: string;
+}
+
+export function buildRecentDesigns<
+  T extends { id: string; updatedAt: string; deletedAt: string | null },
+>(
+  designs: T[],
+  currentDesignId: string | null,
+  generationByDesign: Record<string, DesignRun>,
+  limit = RECENT_LIMIT,
+): T[] {
+  const sorted = [...designs]
+    .filter((d) => d.deletedAt === null)
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  const activeIds = new Set([
+    ...(currentDesignId === null ? [] : [currentDesignId]),
+    ...Object.keys(generationByDesign),
+  ]);
+  const active = sorted.filter((d) => activeIds.has(d.id));
+  const rest = sorted.filter((d) => !activeIds.has(d.id));
+  return [...active, ...rest].slice(0, limit);
+}
+
 export function RecentTab() {
   const t = useT();
   const designs = useCodesignStore((s) => s.designs);
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const generationByDesign = useCodesignStore((s) => s.generationByDesign);
   const openNewDesignDialog = useCodesignStore((s) => s.openNewDesignDialog);
   const isGenerating = useCodesignStore(
     (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
   );
-  const recent = [...designs]
-    .filter((d) => d.deletedAt === null)
-    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    .slice(0, RECENT_LIMIT);
+  const recent = buildRecentDesigns(designs, currentDesignId, generationByDesign, RECENT_LIMIT);
 
   function handleNewDesign(): void {
     openNewDesignDialog();

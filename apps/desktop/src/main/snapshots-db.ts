@@ -187,6 +187,23 @@ export function listDesigns(db: Database): Design[] {
     });
 }
 
+export function touchDesignActivity(
+  db: Database,
+  id: string,
+  updatedAt: string = nowIso(),
+): Design | null {
+  return mutateStore(db, (data) => {
+    const idx = data.designs.findIndex((design) => design.id === id);
+    if (idx < 0) return null;
+    const current = data.designs[idx];
+    if (current === undefined) return null;
+    const nextUpdatedAt = updatedAt > current.updatedAt ? updatedAt : current.updatedAt;
+    const updated: Design = { ...current, updatedAt: nextUpdatedAt };
+    data.designs[idx] = updated;
+    return updated;
+  });
+}
+
 export function renameDesign(db: Database, id: string, name: string): Design | null {
   const trimmed = name.trim();
   if (trimmed.length === 0) throw new Error('Design name must not be empty');
@@ -452,6 +469,7 @@ export function upsertDesignFile(
 ): DesignFile {
   const normalizedPath = normalizeDesignFilePath(filePath);
   const now = nowIso();
+  touchDesignActivity(_db, designId, now);
   return {
     schemaVersion: 1,
     id: `${designId}:${normalizedPath}`,

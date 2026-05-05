@@ -5,6 +5,11 @@ import { type MouseEvent, useEffect, useState } from 'react';
 import { useCodesignStore } from '../../store';
 import { DesignCardPreview } from './DesignCardPreview';
 
+interface DesignRun {
+  generationId: string;
+  stage: string;
+}
+
 export interface DesignGridProps {
   designs: Design[];
   emptyLabel: string;
@@ -56,12 +61,25 @@ function useMenu() {
   return { pos, open: setPos, close: () => setPos(null) };
 }
 
+export function getDesignCardStatus(
+  designId: string,
+  currentDesignId: string | null,
+  generationByDesign: Record<string, DesignRun>,
+): { isCurrent: boolean; isWorking: boolean } {
+  return {
+    isCurrent: designId === currentDesignId,
+    isWorking: generationByDesign[designId] !== undefined,
+  };
+}
+
 export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps) {
   const t = useT();
   const switchDesign = useCodesignStore((s) => s.switchDesign);
   const setView = useCodesignStore((s) => s.setView);
   const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
   const requestDeleteDesign = useCodesignStore((s) => s.requestDeleteDesign);
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const generationByDesign = useCodesignStore((s) => s.generationByDesign);
   const { pos, open, close } = useMenu();
 
   if (designs.length === 0 && !prefixTile) {
@@ -89,6 +107,24 @@ export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps)
         {prefixTile ? <li>{prefixTile}</li> : null}
         {designs.map((d) => {
           const updated = formatRelativeTime(d.updatedAt);
+          const { isCurrent, isWorking } = getDesignCardStatus(
+            d.id,
+            currentDesignId,
+            generationByDesign,
+          );
+          const statusLabels = [
+            isCurrent ? t('projects.switcher.currentLabel') : null,
+            isWorking ? t('common.working') : null,
+          ].filter((label): label is string => label !== null);
+          const statusLabel = statusLabels.join(' · ');
+          const previewFrameClass = [
+            'relative aspect-[4/3] overflow-hidden rounded-[var(--radius-lg)] border bg-[var(--color-background-secondary)] transition-[transform,border-color,box-shadow] duration-[var(--duration-fast)] ease-[var(--ease-out)] group-hover:-translate-y-[2px] group-hover:shadow-[var(--shadow-card)] focus-within:ring-2 focus-within:ring-[var(--color-focus-ring)]',
+            isCurrent
+              ? 'border-[var(--color-accent)] shadow-[0_0_0_2px_var(--color-focus-ring),var(--shadow-card)] group-hover:border-[var(--color-accent)]'
+              : isWorking
+                ? 'border-[var(--color-accent)] shadow-[var(--shadow-soft)] group-hover:border-[var(--color-accent)]'
+                : 'border-[var(--color-border-subtle)] group-hover:border-[var(--color-border)]',
+          ].join(' ');
           return (
             <li key={d.id}>
               <div
@@ -101,14 +137,34 @@ export function DesignGrid({ designs, emptyLabel, prefixTile }: DesignGridProps)
                     await switchDesign(d.id);
                     setView('workspace');
                   }}
-                  aria-label={t('hub.your.openAria', { name: d.name })}
+                  aria-current={isCurrent ? 'true' : undefined}
+                  aria-label={
+                    statusLabel
+                      ? `${t('hub.your.openAria', { name: d.name })} — ${statusLabel}`
+                      : t('hub.your.openAria', { name: d.name })
+                  }
                   className="absolute inset-0 z-[1] text-left focus-visible:outline-none rounded-[var(--radius-lg)]"
                 >
                   <span className="sr-only">{d.name}</span>
                 </button>
 
-                <div className="relative aspect-[4/3] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] bg-[var(--color-background-secondary)] transition-[transform,border-color,box-shadow] duration-[var(--duration-fast)] ease-[var(--ease-out)] group-hover:-translate-y-[2px] group-hover:border-[var(--color-border)] group-hover:shadow-[var(--shadow-card)] focus-within:ring-2 focus-within:ring-[var(--color-focus-ring)]">
+                <div className={previewFrameClass}>
                   <DesignCardPreview design={d} />
+                  {statusLabels.length > 0 ? (
+                    <div className="pointer-events-none absolute left-[var(--space-2)] top-[var(--space-2)] z-[2] flex max-w-[calc(100%-44px)] flex-wrap items-center gap-[var(--space-1)]">
+                      {isCurrent ? (
+                        <span className="inline-flex h-6 max-w-full items-center rounded-full bg-[var(--color-accent)] px-[var(--space-2)] text-[10px] font-medium uppercase tracking-[var(--tracking-label)] text-[var(--color-on-accent)] shadow-[var(--shadow-soft)]">
+                          <span className="truncate">{t('projects.switcher.currentLabel')}</span>
+                        </span>
+                      ) : null}
+                      {isWorking ? (
+                        <span className="inline-flex h-6 max-w-full items-center gap-[var(--space-1)] rounded-full border border-[var(--color-border-muted)] bg-[color-mix(in_srgb,var(--color-surface)_88%,transparent)] px-[var(--space-2)] text-[10px] font-medium uppercase tracking-[var(--tracking-label)] text-[var(--color-text-primary)] shadow-[var(--shadow-soft)] backdrop-blur-sm">
+                          <span className="codesign-stream-dot !h-[5px] !w-[5px]" aria-hidden />
+                          <span className="truncate">{t('common.working')}</span>
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
                 <button

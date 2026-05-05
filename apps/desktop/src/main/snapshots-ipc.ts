@@ -51,6 +51,7 @@ import {
   renameDesign,
   setDesignThumbnail,
   softDeleteDesign,
+  touchDesignActivity,
   updateDesignWorkspace,
   upsertDesignFile,
 } from './snapshots-db';
@@ -1318,6 +1319,8 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
           source,
         });
       }
+
+      runDb('files:import.touch-design', () => touchDesignActivity(db, designId));
 
       return imported;
     },

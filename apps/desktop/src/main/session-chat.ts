@@ -12,7 +12,7 @@ import type {
   ChatToolCallPayload,
 } from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
-import { type Database, getDesign, listSnapshots } from './snapshots-db';
+import { type Database, getDesign, listSnapshots, touchDesignActivity } from './snapshots-db';
 import { normalizeWorkspacePath } from './workspace-path';
 
 export const CHAT_MESSAGE_CUSTOM_TYPE = 'open-codesign.chat.message';
@@ -54,6 +54,10 @@ interface StoredToolStatusUpdate {
 interface StoredDesignBrief {
   schemaVersion: 1;
   brief: DesignSessionBriefV1;
+}
+
+interface AppendSessionChatMessageOptions {
+  touchActivity?: boolean;
 }
 
 interface CustomEntryLike {
@@ -228,6 +232,7 @@ export function listSessionChatMessages(
 export function appendSessionChatMessage(
   opts: SessionChatStoreOptions,
   input: ChatAppendInput,
+  options: AppendSessionChatMessageOptions = {},
 ): ChatMessageRow {
   const manager = openSession(opts, input.designId);
   const seq = listSessionChatMessages(opts, input.designId).length;
@@ -242,6 +247,10 @@ export function appendSessionChatMessage(
   const entryId = manager.appendCustomEntry(CHAT_MESSAGE_CUSTOM_TYPE, stored);
   const entry = manager.getEntry(entryId);
   flushSession(manager);
+  const createdAt = entry?.timestamp ?? new Date().toISOString();
+  if (options.touchActivity !== false) {
+    touchDesignActivity(opts.db, input.designId, createdAt);
+  }
   return {
     schemaVersion: 1,
     id: stored.id,
@@ -250,7 +259,7 @@ export function appendSessionChatMessage(
     kind: input.kind,
     payload: stored.payload,
     snapshotId: stored.snapshotId,
-    createdAt: entry?.timestamp ?? new Date().toISOString(),
+    createdAt,
   };
 }
 
@@ -267,8 +276,10 @@ export function appendSessionToolStatus(
     ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
     ...(input.errorMessage !== undefined ? { errorMessage: input.errorMessage } : {}),
   };
-  manager.appendCustomEntry(CHAT_TOOL_STATUS_CUSTOM_TYPE, stored);
+  const entryId = manager.appendCustomEntry(CHAT_TOOL_STATUS_CUSTOM_TYPE, stored);
+  const entry = manager.getEntry(entryId);
   flushSession(manager);
+  touchDesignActivity(opts.db, input.designId, entry?.timestamp ?? new Date().toISOString());
 }
 
 export function readSessionDesignBrief(
@@ -310,19 +321,27 @@ export function seedSessionChatFromSnapshots(
   let inserted = 0;
   for (const snapshot of snapshots) {
     if (typeof snapshot.prompt === 'string' && snapshot.prompt.trim().length > 0) {
-      appendSessionChatMessage(opts, {
-        designId,
-        kind: 'user',
-        payload: { text: snapshot.prompt },
-      });
+      appendSessionChatMessage(
+        opts,
+        {
+          designId,
+          kind: 'user',
+          payload: { text: snapshot.prompt },
+        },
+        { touchActivity: false },
+      );
       inserted += 1;
     }
-    appendSessionChatMessage(opts, {
-      designId,
-      kind: 'artifact_delivered',
-      payload: { createdAt: snapshot.createdAt },
-      snapshotId: snapshot.id,
-    });
+    appendSessionChatMessage(
+      opts,
+      {
+        designId,
+        kind: 'artifact_delivered',
+        payload: { createdAt: snapshot.createdAt },
+        snapshotId: snapshot.id,
+      },
+      { touchActivity: false },
+    );
     inserted += 1;
   }
   return inserted;

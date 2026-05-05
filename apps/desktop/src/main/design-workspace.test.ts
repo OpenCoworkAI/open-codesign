@@ -155,11 +155,14 @@ describe('bindWorkspace', () => {
     const bound = updateDesignWorkspace(db, design.id, normalized);
     await writeWorkspaceFile(workspace, 'tracked.txt', 'tracked');
     createDesignFile(db, design.id, 'tracked.txt', 'tracked');
+    const currentAfterFileSeed = getDesign(db, design.id);
     const destinationBefore = await stat(path.join(workspace, 'tracked.txt'));
 
     const rebound = await bindWorkspace(db, design.id, `${workspace}${path.sep}`, true);
 
-    expect(rebound).toEqual(bound);
+    expect(bound).not.toBeNull();
+    expect(currentAfterFileSeed).not.toBeNull();
+    expect(rebound).toEqual(currentAfterFileSeed);
     expect(await stat(path.join(workspace, 'tracked.txt'))).toEqual(destinationBefore);
   });
 

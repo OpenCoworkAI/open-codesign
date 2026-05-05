@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDesign, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
+import { createDesign, getDesign, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
 import { registerWorkspaceIpc } from './snapshots-ipc';
 
 type Handler = (event: unknown, raw: unknown) => unknown;
@@ -98,6 +98,31 @@ describe('workspace files IPC legacy workspace fallback', () => {
     });
   });
 
+  it('touches design activity when writing a workspace file', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-write-touch-'));
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-05-01T00:00:00.000Z'));
+      const db = initInMemoryDb();
+      const design = createDesign(db, 'Write activity');
+      updateDesignWorkspace(db, design.id, root);
+      registerWorkspaceIpc(db, () => null);
+
+      vi.setSystemTime(new Date('2026-05-02T00:00:00.000Z'));
+      const write = getHandler('codesign:files:v1:write');
+      await write(null, {
+        schemaVersion: 1,
+        designId: design.id,
+        path: 'App.jsx',
+        content: 'function App() { return <main />; }',
+      });
+
+      expect(getDesign(db, design.id)?.updatedAt).toBe('2026-05-02T00:00:00.000Z');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('imports external files into references or assets with deduped names', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codesign-import-workspace-'));
     const sourceDir = await mkdtemp(path.join(tmpdir(), 'codesign-import-source-'));
@@ -131,6 +156,34 @@ describe('workspace files IPC legacy workspace fallback', () => {
     await expect(readFile(path.join(root, 'assets', 'logo.png'))).resolves.toEqual(
       Buffer.from([0x89, 0x50, 0x4e, 0x47]),
     );
+  });
+
+  it('touches design activity when importing files into the workspace', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-import-touch-workspace-'));
+    const sourceDir = await mkdtemp(path.join(tmpdir(), 'codesign-import-touch-source-'));
+    const briefPath = path.join(sourceDir, 'brief.md');
+    await writeFile(briefPath, '# Brief', 'utf8');
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-05-01T00:00:00.000Z'));
+      const db = initInMemoryDb();
+      const design = createDesign(db, 'Import activity');
+      updateDesignWorkspace(db, design.id, root);
+      registerWorkspaceIpc(db, () => null);
+
+      vi.setSystemTime(new Date('2026-05-02T00:00:00.000Z'));
+      const importFiles = getHandler('codesign:files:v1:import-to-workspace');
+      await importFiles(null, {
+        schemaVersion: 1,
+        designId: design.id,
+        source: 'workspace',
+        files: [{ path: briefPath }],
+      });
+
+      expect(getDesign(db, design.id)?.updatedAt).toBe('2026-05-02T00:00:00.000Z');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('writes clipboard blobs to references with stable pasted names', async () => {

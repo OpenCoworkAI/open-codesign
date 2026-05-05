@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createDesign,
   createSnapshot,
@@ -12,7 +12,9 @@ import {
   listDiagnosticEvents,
   listSnapshots,
   recordDiagnosticEvent,
+  touchDesignActivity,
   updateDesignWorkspace,
+  upsertDesignFile,
 } from './snapshots-db';
 import { normalizeWorkspacePath } from './workspace-path';
 
@@ -78,5 +80,33 @@ describe('json design store', () => {
     expect(listDiagnosticEvents(db, { includeTransient: true })).toMatchObject([
       { id: first, count: 2, transient: true },
     ]);
+  });
+
+  it('sorts designs by explicit activity time without moving timestamps backward', () => {
+    const db = initInMemoryDb();
+    const first = createDesign(db, 'First');
+    const second = createDesign(db, 'Second');
+
+    touchDesignActivity(db, first.id, '2099-01-01T00:00:00.000Z');
+    touchDesignActivity(db, first.id, '2000-01-01T00:00:00.000Z');
+
+    expect(getDesign(db, first.id)?.updatedAt).toBe('2099-01-01T00:00:00.000Z');
+    expect(listDesigns(db).map((design) => design.id)).toEqual([first.id, second.id]);
+  });
+
+  it('touches design activity when workspace files are upserted', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-05-01T00:00:00.000Z'));
+      const db = initInMemoryDb();
+      const design = createDesign(db, 'Workspace edits');
+
+      vi.setSystemTime(new Date('2026-05-02T00:00:00.000Z'));
+      upsertDesignFile(db, design.id, 'App.jsx', 'function App() { return <main />; }');
+
+      expect(getDesign(db, design.id)?.updatedAt).toBe('2026-05-02T00:00:00.000Z');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
