@@ -1,12 +1,12 @@
 import { buildPreviewDocument, requiresPreviewScripts } from '@open-codesign/runtime';
 import type { Design } from '@open-codesign/shared';
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import { DEFAULT_SOURCE_ENTRY } from '@open-codesign/shared';
 import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   hasWorkspaceSourceReference,
   inferPreviewSourcePath,
-  resolveWorkspacePreviewSource,
+  resolveDesignPreviewSource,
 } from '../../preview/workspace-source';
 
 // Hub cards render many iframes in parallel; live CSS animations / transitions /
@@ -194,28 +194,17 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
     }
     if (typeof window === 'undefined' || !window.codesign) return;
     let cancelled = false;
-    // TODO(v0.2/T2.4): re-route through session JSONL — see T2.6.
-    void window.codesign.snapshots
-      .list(design.id)
-      .then((snaps) => {
+    void resolveDesignPreviewSource({
+      designId: design.id,
+      read: window.codesign.files?.read,
+      listSnapshots: window.codesign.snapshots.list,
+    })
+      .then((result) => {
         if (cancelled || !mounted.current) return;
-        const latest = snaps[0];
-        const source = latest?.artifactSource ?? '';
-        if (source.trim().length === 0) {
+        if (result === null) {
           setFailed(true);
           return;
         }
-        const referencesWorkspaceSource = hasWorkspaceSourceReference(source, LEGACY_SOURCE_ENTRY);
-        return resolveWorkspacePreviewSource({
-          designId: design.id,
-          source,
-          path: referencesWorkspaceSource ? LEGACY_SOURCE_ENTRY : inferPreviewSourcePath(source),
-          read: window.codesign?.files?.read,
-          requireReferencedSource: referencesWorkspaceSource,
-        });
-      })
-      .then((result) => {
-        if (cancelled || !mounted.current || !result) return;
         writeCache(key, result.content);
         setPreviewSource(result.content);
         setFailed(false);

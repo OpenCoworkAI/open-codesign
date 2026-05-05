@@ -324,6 +324,14 @@ describe('composeSystemPrompt()', () => {
     expect(p).toContain('Preview early');
     expect(p).toContain('Implement incrementally');
   });
+
+  it('asks the agent to interleave concise progress notes with tool phases', () => {
+    const p = composeSystemPrompt({ mode: 'create' });
+    expect(p).toContain('Visible progress');
+    expect(p).toContain('Interleave tool groups with short assistant text');
+    expect(p).toContain('under 18 words');
+    expect(p).toContain('Do not narrate every tiny edit');
+  });
 });
 
 describe('prompt section .md vs TS drift', () => {

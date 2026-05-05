@@ -278,6 +278,7 @@ function agenticToolGuidance(input: { inspectWorkspace: boolean }): string {
     '- Use `create` for new files; follow-up edits use `view`, `str_replace`, or `insert`.',
     '- Do not emit `<artifact>` tags, fenced source blocks, raw HTML/JSX/CSS, or HTML wrappers in chat.',
     '- Local workspace assets and scaffolded files are allowed. External scripts remain restricted by the base output rules.',
+    '- Interleave major tool groups with one short assistant progress sentence: what you are about to inspect/write/preview/fix, or what the preview showed. Keep it under 18 words and do not reveal hidden reasoning.',
     '',
     '## Required tool loop',
     '',

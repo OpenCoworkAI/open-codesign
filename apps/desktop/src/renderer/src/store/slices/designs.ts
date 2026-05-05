@@ -1,8 +1,7 @@
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import { DEFAULT_SOURCE_ENTRY } from '@open-codesign/shared';
 import {
-  hasWorkspaceSourceReference,
-  inferPreviewSourcePath,
-  resolveWorkspacePreviewSource,
+  resolveDesignPreviewSource,
+  type WorkspacePreviewReadResult,
 } from '../../preview/workspace-source.js';
 import type { CodesignState } from '../../store.js';
 import { tr } from '../lib/locale.js';
@@ -15,20 +14,16 @@ type SetState = (
 ) => void;
 type GetState = () => CodesignState;
 
-async function resolveDesignPreviewSource(
+async function resolveDesignPreview(
   designId: string,
-  source: string | null,
-): Promise<string | null> {
-  if (source === null || !window.codesign) return source;
-  const referencesWorkspaceSource = hasWorkspaceSourceReference(source, LEGACY_SOURCE_ENTRY);
-  const resolved = await resolveWorkspacePreviewSource({
+  snapshotSource: string | null,
+): Promise<WorkspacePreviewReadResult | null> {
+  if (!window.codesign) return null;
+  return resolveDesignPreviewSource({
     designId,
-    source,
-    path: referencesWorkspaceSource ? LEGACY_SOURCE_ENTRY : inferPreviewSourcePath(source),
+    snapshotSource,
     read: window.codesign.files?.read,
-    requireReferencedSource: referencesWorkspaceSource,
   });
-  return resolved.content;
 }
 
 interface DesignsSliceActions {
@@ -145,19 +140,16 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
             const snapshots = await window.codesign?.snapshots.list(id);
             if (!snapshots || get().currentDesignId !== id) return;
             const latest = snapshots[0] ?? null;
-            const fresh = await resolveDesignPreviewSource(
-              id,
-              latest ? latest.artifactSource : null,
-            );
-            if (fresh !== null && fresh !== get().previewSource) {
+            const fresh = await resolveDesignPreview(id, latest ? latest.artifactSource : null);
+            if (fresh !== null && fresh.content !== get().previewSource) {
               const refreshed = recordPreviewSourceInPool(
                 get().previewSourceByDesign,
                 get().recentDesignIds,
                 id,
-                fresh,
+                fresh.content,
               );
               set({
-                previewSource: fresh,
+                previewSource: fresh.content,
                 previewSourceByDesign: refreshed.cache,
                 recentDesignIds: refreshed.recent,
               });
@@ -225,19 +217,16 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
             const snapshots = await window.codesign?.snapshots.list(id);
             if (!snapshots || get().currentDesignId !== id) return;
             const latest = snapshots[0] ?? null;
-            const fresh = await resolveDesignPreviewSource(
-              id,
-              latest ? latest.artifactSource : null,
-            );
-            if (fresh !== null && fresh !== get().previewSource) {
+            const fresh = await resolveDesignPreview(id, latest ? latest.artifactSource : null);
+            if (fresh !== null && fresh.content !== get().previewSource) {
               const refreshed = recordPreviewSourceInPool(
                 get().previewSourceByDesign,
                 get().recentDesignIds,
                 id,
-                fresh,
+                fresh.content,
               );
               set({
-                previewSource: fresh,
+                previewSource: fresh.content,
                 previewSourceByDesign: refreshed.cache,
                 recentDesignIds: refreshed.recent,
               });
@@ -253,17 +242,17 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       try {
         const snapshots = await window.codesign.snapshots.list(id);
         const latest = snapshots[0] ?? null;
-        const source = await resolveDesignPreviewSource(id, latest ? latest.artifactSource : null);
+        const source = await resolveDesignPreview(id, latest ? latest.artifactSource : null);
         const incomingPool = recordPreviewSourceInPool(
           outgoingPool.cache,
           outgoingPool.recent,
           id,
-          source,
+          source?.content ?? null,
         );
         set({
           currentDesignId: id,
           ...projectGenerationForDesign(get(), id),
-          previewSource: source,
+          previewSource: source?.content ?? null,
           previewSourceByDesign: incomingPool.cache,
           recentDesignIds: incomingPool.recent,
           errorMessage: null,
@@ -278,10 +267,8 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
           commentsLoaded: false,
           commentBubble: null,
           currentSnapshotId: null,
-          canvasTabs: latest
-            ? [FILES_TAB, { kind: 'file', path: DEFAULT_SOURCE_ENTRY }]
-            : [FILES_TAB],
-          activeCanvasTab: latest ? 1 : 0,
+          canvasTabs: source ? [FILES_TAB, { kind: 'file', path: source.path }] : [FILES_TAB],
+          activeCanvasTab: source ? 1 : 0,
         });
         void get().loadChatForCurrentDesign();
         void get().loadCommentsForCurrentDesign();

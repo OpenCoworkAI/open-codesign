@@ -15,6 +15,14 @@ export type WorkspacePreviewRead = (
   path: string,
 ) => Promise<WorkspacePreviewReadResult>;
 
+export interface DesignPreviewSnapshotLike {
+  artifactSource: string;
+}
+
+export type DesignPreviewSnapshotList = (
+  designId: string,
+) => Promise<readonly DesignPreviewSnapshotLike[]>;
+
 export function hasWorkspaceSourceReference(
   source: string,
   path: string = LEGACY_SOURCE_ENTRY,
@@ -46,7 +54,9 @@ function looksLikeJsxModule(source: string): boolean {
 
 export function resolveReferencedWorkspacePreviewPath(source: string, path: string): string | null {
   const lower = path.toLowerCase();
-  if (!lower.endsWith('.html') && !lower.endsWith('.htm')) return null;
+  const canContainSourceReference =
+    lower.endsWith('.html') || lower.endsWith('.htm') || looksLikeLegacyHtmlFragment(source);
+  if (!canContainSourceReference) return null;
   if (looksLikeJsxModule(source)) return null;
   const reference = findArtifactSourceReference(source);
   return reference === null ? null : resolveArtifactSourceReferencePath(path, reference);
@@ -63,6 +73,60 @@ export async function readWorkspacePreviewSource(input: {
     source: result.content,
     path: result.path,
     read: input.read,
+  });
+}
+
+async function tryReadWorkspacePreviewSource(input: {
+  designId: string;
+  path: string;
+  read: WorkspacePreviewRead;
+}): Promise<WorkspacePreviewReadResult | null> {
+  try {
+    const result = await readWorkspacePreviewSource(input);
+    return result.content.trim().length > 0 ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveDesignPreviewSource(input: {
+  designId: string;
+  read?: WorkspacePreviewRead | undefined;
+  snapshotSource?: string | null | undefined;
+  listSnapshots?: DesignPreviewSnapshotList | undefined;
+}): Promise<WorkspacePreviewReadResult | null> {
+  if (input.read) {
+    for (const path of [DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY]) {
+      const result = await tryReadWorkspacePreviewSource({
+        designId: input.designId,
+        path,
+        read: input.read,
+      });
+      if (result !== null) return result;
+    }
+  }
+
+  let source =
+    typeof input.snapshotSource === 'string' && input.snapshotSource.trim().length > 0
+      ? input.snapshotSource
+      : null;
+  if (source === null && input.listSnapshots) {
+    try {
+      const snapshots = await input.listSnapshots(input.designId);
+      source = snapshots[0]?.artifactSource ?? null;
+    } catch {
+      source = null;
+    }
+  }
+  if (source === null || source.trim().length === 0) return null;
+
+  const referencesWorkspaceSource = hasWorkspaceSourceReference(source, LEGACY_SOURCE_ENTRY);
+  return resolveWorkspacePreviewSource({
+    designId: input.designId,
+    source,
+    path: referencesWorkspaceSource ? LEGACY_SOURCE_ENTRY : inferPreviewSourcePath(source),
+    read: input.read,
+    requireReferencedSource: false,
   });
 }
 

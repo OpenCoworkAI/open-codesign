@@ -612,6 +612,48 @@ describe('useCodesignStore design management', () => {
     expect(useCodesignStore.getState().currentDesignId).toBe('design-a');
   });
 
+  it('hydrates switchDesign preview directly from workspace files when no snapshot exists', async () => {
+    const design = {
+      schemaVersion: 1 as const,
+      id: 'workspace-only',
+      name: 'Workspace only',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-02T00:00:00.000Z',
+      thumbnailText: null,
+      deletedAt: null,
+      workspacePath: '/tmp/workspace-only',
+    };
+    const source =
+      'function App(){ return <main id="workspace-only">Hi</main>; }\nReactDOM.createRoot(document.getElementById("root")).render(<App/>);';
+    const read = vi.fn(async (_designId: string, path: string) => {
+      if (path !== 'App.jsx') throw new Error(`missing ${path}`);
+      return { path, content: source };
+    });
+
+    vi.stubGlobal('window', {
+      codesign: {
+        files: { read },
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+        snapshots: {
+          listDesigns: vi.fn(() => Promise.resolve([design])),
+          list: vi.fn(() => Promise.resolve([])),
+        },
+      },
+      setTimeout,
+    });
+
+    await useCodesignStore.getState().switchDesign(design.id);
+
+    expect(useCodesignStore.getState().currentDesignId).toBe(design.id);
+    expect(useCodesignStore.getState().previewSource).toBe(source);
+    expect(useCodesignStore.getState().previewSourceByDesign[design.id]).toBe(source);
+    expect(useCodesignStore.getState().canvasTabs).toEqual([
+      expect.objectContaining({ kind: 'files' }),
+      { kind: 'file', path: 'App.jsx' },
+    ]);
+  });
+
   it('createNewDesign resets messages + preview and stores the new id as current', async () => {
     const created = {
       schemaVersion: 1 as const,

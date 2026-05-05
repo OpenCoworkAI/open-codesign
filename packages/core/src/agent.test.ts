@@ -1471,6 +1471,8 @@ describe('generateViaAgent()', () => {
     expect(sys).toContain('Progressive generation is required');
     expect(sys).toContain('small shell');
     expect(sys).toContain('large initial writes are rejected');
+    expect(sys).toContain('Interleave major tool groups');
+    expect(sys).toContain('under 18 words');
     expect(sys).toContain('`str_replace`, or `insert`');
     expect(sys).toContain('Do not emit `<artifact>`');
     expect(sys).toContain('design source to `App.jsx`');
