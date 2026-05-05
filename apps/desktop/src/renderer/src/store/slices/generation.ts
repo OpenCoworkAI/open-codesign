@@ -769,8 +769,14 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         void get().appendChatMessage({
           designId: designIdAtStart,
           kind: 'user',
-          payload: { text: request.prompt },
+          payload: {
+            text: request.prompt,
+            ...(request.attachments.length > 0 ? { attachments: request.attachments } : {}),
+          },
         });
+        if (request.attachments.length > 0) {
+          set({ inputFiles: [] });
+        }
       }
 
       if (!input.silent) {
@@ -924,8 +930,14 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       void get().appendChatMessage({
         designId: designIdAtStart,
         kind: 'user',
-        payload: { text: userMessageText },
+        payload: {
+          text: userMessageText,
+          ...(attachments.length > 0 ? { attachments } : {}),
+        },
       });
+      if (attachments.length > 0) {
+        set({ inputFiles: [] });
+      }
 
       try {
         const result = await window.codesign.applyComment({

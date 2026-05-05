@@ -72,6 +72,7 @@ export interface ChatAppendInput {
 // Payload shapes (not strictly validated — payload is opaque JSON in DB).
 export interface ChatUserPayload {
   text: string;
+  attachments?: Array<{ path: string; name: string; size: number }>;
   attachedSkills?: string[];
 }
 export interface ChatAssistantTextPayload {

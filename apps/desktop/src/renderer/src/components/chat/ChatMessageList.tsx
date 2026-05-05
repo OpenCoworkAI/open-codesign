@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import type { ChatMessageRow, ChatToolCallPayload } from '@open-codesign/shared';
+import type { ChatMessageRow, ChatToolCallPayload, ChatUserPayload } from '@open-codesign/shared';
 import { FileText } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { AssistantText } from './AssistantText';
@@ -99,12 +99,13 @@ export function ChatMessageList({
     flush();
 
     if (msg.kind === 'user') {
-      const p = msg.payload as { text?: string; attachedSkills?: string[] };
+      const p = msg.payload as Partial<ChatUserPayload> | undefined;
       items.push({
         key: `u-${msg.seq}-${items.length}`,
         node: (
           <UserMessage
             text={p?.text ?? ''}
+            {...(p?.attachments ? { attachments: p.attachments } : {})}
             {...(p?.attachedSkills ? { attachedSkills: p.attachedSkills } : {})}
           />
         ),

@@ -1,5 +1,10 @@
 import { initI18n } from '@open-codesign/i18n';
-import type { OnboardingState, SelectedElement } from '@open-codesign/shared';
+import type {
+  ChatAppendInput,
+  LocalInputFile,
+  OnboardingState,
+  SelectedElement,
+} from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   coerceUsageSnapshot,
@@ -188,6 +193,62 @@ describe('useCodesignStore iframe error handling', () => {
     // oldest (0-4) should have been shifted out; newest (5-54) remain
     expect(errors[0]).toBe('error-5');
     expect(errors[49]).toBe('error-54');
+  });
+});
+
+describe('useCodesignStore prompt attachments', () => {
+  it('moves sent attachments into the user chat payload and clears the draft files', async () => {
+    const attachments: LocalInputFile[] = [
+      { path: 'references/screenshot.png', name: 'screenshot.png', size: 42_000 },
+    ];
+    const generatedPayloads: unknown[] = [];
+    const generate = vi.fn((payload: unknown) => {
+      generatedPayloads.push(payload);
+      return Promise.resolve({
+        artifacts: [{ content: '<html>ok</html>' }],
+        message: 'Done.',
+      });
+    });
+    const appended: ChatAppendInput[] = [];
+    const append = vi.fn(async (input: ChatAppendInput) => ({
+      schemaVersion: 1 as const,
+      id: `${input.kind}-1`,
+      designId: input.designId,
+      seq: appended.push(input) - 1,
+      kind: input.kind,
+      payload: input.payload,
+      snapshotId: input.snapshotId ?? null,
+      createdAt: new Date().toISOString(),
+    }));
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        chat: { ...mockChatApi(), append },
+        comments: mockCommentsApi(),
+        snapshots: mockSnapshotsApi(),
+      },
+      setTimeout,
+    });
+
+    setWorkspaceBackedDesign();
+    useCodesignStore.setState({ inputFiles: attachments });
+
+    await useCodesignStore.getState().sendPrompt({ prompt: 'Use this screenshot' });
+
+    expect(generatedPayloads[0]).toMatchObject({ attachments });
+    const appendedUserPayload = appended.find(
+      (input) =>
+        input.kind === 'user' &&
+        typeof input.payload === 'object' &&
+        input.payload !== null &&
+        'attachments' in input.payload,
+    )?.payload;
+    expect(appendedUserPayload).toEqual({
+      text: 'Use this screenshot',
+      attachments,
+    });
+    expect(useCodesignStore.getState().inputFiles).toEqual([]);
   });
 });
 
