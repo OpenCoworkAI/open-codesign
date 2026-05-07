@@ -1,6 +1,8 @@
+// @vitest-environment happy-dom
+
 import { describe, expect, it } from 'vitest';
 import type { AskRequest } from '../../../preload/index';
-import { advanceAskQueue, enqueueAskRequest } from './AskModal';
+import { advanceAskQueue, enqueueAskRequest, sanitizeInlineSvg } from './AskModal';
 
 const request = (requestId: string): AskRequest => ({
   requestId,
@@ -8,6 +10,34 @@ const request = (requestId: string): AskRequest => ({
   input: {
     questions: [{ id: 'q1', type: 'freeform', prompt: 'What style?' }],
   },
+});
+
+describe('sanitizeInlineSvg', () => {
+  it('keeps inert SVG presentation markup', () => {
+    const out = sanitizeInlineSvg(
+      '<svg viewBox="0 0 24 24" width="24" height="24"><path d="M1 1L2 2" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+    );
+
+    expect(out).toContain('<svg');
+    expect(out).toContain('<path');
+    expect(out).toContain('d="M1 1L2 2"');
+    expect(out).toContain('stroke-width="2"');
+    expect(out).toContain('viewBox="0 0 24 24"');
+  });
+
+  it('removes executable SVG surfaces and external references', () => {
+    const out = sanitizeInlineSvg(
+      '<svg onload="window.codesign.files.write()"><script>alert(1)</script><foreignObject><button onclick="x()">x</button></foreignObject><a href="javascript:alert(1)"><rect fill="url(https://evil.test/x)"/></a><circle onclick="x()" fill="red"/></svg>',
+    );
+
+    expect(out).not.toContain('onload');
+    expect(out).not.toContain('onclick');
+    expect(out).not.toContain('<script');
+    expect(out).not.toContain('foreignObject');
+    expect(out).not.toContain('javascript:');
+    expect(out).not.toContain('https://evil.test');
+    expect(out).toContain('<circle');
+  });
 });
 
 describe('AskModal queue helpers', () => {

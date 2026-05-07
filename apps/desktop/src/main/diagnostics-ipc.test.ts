@@ -672,9 +672,9 @@ describe('redactSensitiveTomlFields', () => {
   it('masks the ciphertext field used by this codebase to persist secrets', () => {
     // Reproduces the real bundle leak a user reported on 2026-04-22: the
     // `[secrets.*] ciphertext = "..."` field was slipping through because
-    // it wasn't on the field allowlist. "plain:<value>" is the dev-mode
-    // pass-through encoding (see keychain.ts), so the raw token is right
-    // there in the exported zip.
+    // it wasn't on the field allowlist. Modern rows use safeStorage-backed
+    // `safe:<base64>`, but fallback and legacy config rows can still contain
+    // `plain:<value>`, so the raw token must never appear in the exported zip.
     const input = [
       '[secrets.claude-code-imported]',
       'ciphertext = "plain:another-your-anthropic-auth-token"',

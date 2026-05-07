@@ -14,6 +14,7 @@ describe('AddCustomProviderModal', () => {
 
     expect(html).toContain('settings.providers.custom.compatibilityHintTitle');
     expect(html).toContain('settings.providers.custom.compatibilityHintBody');
+    expect(html).toContain('settings.providers.custom.allowPrivateNetwork');
   });
 
   it('hides the compatibility warning when editing a locked builtin endpoint', () => {

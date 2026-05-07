@@ -12,6 +12,7 @@ import {
   buildAuthHeadersForWire,
   CONNECTION_FETCH_TIMEOUT_MS,
   classifyHttpError,
+  classifyNetworkTarget,
   extractIds,
   extractModelIds,
   fetchWithTimeout,
@@ -1196,6 +1197,81 @@ describe('config:v1:test-endpoint response parsing', () => {
         ok: false,
         error: 'parse',
         message: 'Provider returned unexpected models response shape',
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it('classifies private and metadata network targets', () => {
+    expect(classifyNetworkTarget('https://provider.example/v1')).toBe('public');
+    expect(classifyNetworkTarget('http://localhost:8317')).toBe('loopback');
+    expect(classifyNetworkTarget('http://127.0.0.1:8317')).toBe('loopback');
+    expect(classifyNetworkTarget('http://[::1]:8317')).toBe('loopback');
+    expect(classifyNetworkTarget('http://10.0.0.5:8080')).toBe('private');
+    expect(classifyNetworkTarget('http://172.16.4.5:8080')).toBe('private');
+    expect(classifyNetworkTarget('http://192.168.1.50:8080')).toBe('private');
+    expect(classifyNetworkTarget('http://169.254.1.10:8080')).toBe('link-local');
+    expect(classifyNetworkTarget('http://169.254.169.254/latest')).toBe('metadata');
+    expect(classifyNetworkTarget('http://metadata.google.internal')).toBe('metadata');
+  });
+
+  it('requires explicit confirmation for private endpoint probes', async () => {
+    const { restore } = installFakeFetch(() => {
+      throw new Error('fetch should not be called');
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'http://127.0.0.1:8317/v1',
+          apiKey: 'sk-test',
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'private-network-confirmation-required',
+        message: 'Private or local network provider URLs require explicit confirmation.',
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it('allows private endpoint probes after explicit confirmation', async () => {
+    const { restore } = installFakeFetch(() => ({
+      status: 200,
+      body: { data: [{ id: 'local' }] },
+    }));
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'http://127.0.0.1:8317/v1',
+          apiKey: 'sk-test',
+          allowPrivateNetwork: true,
+        }),
+      ).resolves.toEqual({ ok: true, modelCount: 1, models: ['local'] });
+    } finally {
+      restore();
+    }
+  });
+
+  it('blocks metadata endpoint probes even with private-network confirmation', async () => {
+    const { restore } = installFakeFetch(() => {
+      throw new Error('fetch should not be called');
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'http://169.254.169.254/latest',
+          apiKey: 'sk-test',
+          allowPrivateNetwork: true,
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'blocked-network-target',
+        message: 'Metadata service endpoints cannot be used as model provider base URLs.',
       });
     } finally {
       restore();
