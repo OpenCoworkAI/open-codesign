@@ -32,7 +32,25 @@ jobs:
           cache: pnpm
 
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: env -u ELECTRON_SKIP_BINARY_DOWNLOAD -u ELECTRON_SKIP_DOWNLOAD pnpm install --frozen-lockfile --ignore-scripts=false
+
+      - name: Install Electron binary
+        run: |
+          env -u ELECTRON_SKIP_BINARY_DOWNLOAD -u ELECTRON_SKIP_DOWNLOAD pnpm -C apps/desktop exec node -e "
+          const { execFileSync } = require('node:child_process');
+          const path = require('node:path');
+          const electronDir = path.dirname(require.resolve('electron/package.json'));
+          execFileSync(process.execPath, [path.join(electronDir, 'install.js')], { stdio: 'inherit' });
+          "
+
+      - name: Verify Electron binary
+        run: |
+          env -u ELECTRON_SKIP_BINARY_DOWNLOAD -u ELECTRON_SKIP_DOWNLOAD pnpm -C apps/desktop exec node -e "
+          const fs = require('node:fs');
+          const electronPath = require('electron');
+          fs.accessSync(electronPath, fs.constants.X_OK);
+          console.log(electronPath);
+          "
 
       - name: Lint
         run: pnpm lint
