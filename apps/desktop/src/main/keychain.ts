@@ -1,26 +1,28 @@
 import { CodesignError, type Config, ERROR_CODES, type SecretRef } from '@open-codesign/shared';
 import { safeStorage } from './electron-runtime';
+import { getLogger } from './logger';
 
-/**
- * Secret storage is now plaintext-in-config.toml (mode 0600), matching
- * Claude Code / Codex / gh / aws / gcloud. safeStorage was removed because
- * unsigned macOS builds triggered a system keychain password prompt on
- * every decrypt — real UX tax for no real security gain (an attacker with
- * filesystem access could read the plaintext ciphertext either way).
- *
- * The file name stays `keychain.ts` to minimise churn across importers;
- * the module is now really a plaintext passthrough with one-shot legacy
- * migration (safeStorage ciphertext → plaintext on first boot after
- * upgrade).
- */
-
-/** Prefix that marks a new-format (plaintext) stored secret. */
+const ENCRYPTED_PREFIX = 'safe:';
 const PLAIN_PREFIX = 'plain:';
+const logger = getLogger('keychain');
+
+let warnedPlaintextFallback = false;
+
+function warnPlaintextFallback(): void {
+  if (warnedPlaintextFallback) return;
+  warnedPlaintextFallback = true;
+  logger.warn('keychain.safeStorage.unavailable_plaintext_fallback');
+}
 
 export function encryptSecret(plaintext: string): string {
   if (plaintext.length === 0) {
     throw new CodesignError('Cannot store empty secret', ERROR_CODES.KEYCHAIN_EMPTY_INPUT);
   }
+  if (safeStorage.isEncryptionAvailable()) {
+    const ciphertext = safeStorage.encryptString(plaintext).toString('base64');
+    return `${ENCRYPTED_PREFIX}${ciphertext}`;
+  }
+  warnPlaintextFallback();
   return `${PLAIN_PREFIX}${plaintext}`;
 }
 
@@ -28,27 +30,21 @@ export function decryptSecret(stored: string): string {
   if (stored.length === 0) {
     throw new CodesignError('Cannot read empty secret', ERROR_CODES.KEYCHAIN_EMPTY_INPUT);
   }
-  const plaintext = stored.startsWith(PLAIN_PREFIX)
-    ? stored.slice(PLAIN_PREFIX.length)
-    : decryptLegacy(stored);
+  const plaintext = stored.startsWith(ENCRYPTED_PREFIX)
+    ? decryptSafeStorage(stored.slice(ENCRYPTED_PREFIX.length), 'encrypted')
+    : stored.startsWith(PLAIN_PREFIX)
+      ? stored.slice(PLAIN_PREFIX.length)
+      : decryptSafeStorage(stored, 'legacy');
   if (plaintext.length === 0) {
     throw new CodesignError('Cannot read empty secret', ERROR_CODES.KEYCHAIN_EMPTY_INPUT);
   }
   return plaintext;
 }
 
-/**
- * Legacy safeStorage recovery. Invoked only for secrets written by older
- * app versions that encrypted via Electron's `safeStorage`. On macOS this
- * will prompt for the keychain password the FIRST time it's called (and
- * only then — subsequent calls in the same process are served from
- * safeStorage's in-process key cache). After `migrateSecrets` rewrites the
- * config, this path is never hit again.
- */
-function decryptLegacy(base64: string): string {
+function decryptSafeStorage(base64: string, format: 'encrypted' | 'legacy'): string {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new CodesignError(
-      'A legacy encrypted API key was found but the OS keychain is unavailable. Please re-enter your API key in Settings.',
+      `A ${format} API key was found but the OS keychain is unavailable. Please re-enter your API key in Settings.`,
       ERROR_CODES.KEYCHAIN_UNAVAILABLE,
     );
   }
@@ -56,7 +52,7 @@ function decryptLegacy(base64: string): string {
     return safeStorage.decryptString(Buffer.from(base64, 'base64'));
   } catch (err) {
     throw new CodesignError(
-      'Failed to decrypt a legacy API key. Please re-enter your API key in Settings.',
+      `Failed to decrypt a ${format} API key. Please re-enter your API key in Settings.`,
       ERROR_CODES.KEYCHAIN_UNAVAILABLE,
       { cause: err },
     );
@@ -77,28 +73,17 @@ export function buildSecretRef(plaintext: string): SecretRef {
   };
 }
 
-/**
- * One-shot migration run on boot:
- *   1. Any secret stored in legacy safeStorage base64 format → decrypt
- *      once (last keychain prompt ever) → rewrite as `plain:<apikey>`.
- *   2. Any plaintext secret missing its display `mask` → fill it.
- *
- * Idempotent. Decrypt/empty failures are surfaced immediately so the app does
- * not boot with a silently corrupt credential state.
- */
-/** Per-entry migration step: either returns a replacement SecretRef (when
- *  the row is legacy ciphertext or is missing its display mask), or null
- *  when the row is already fully up-to-date and should be left untouched.
- */
 function migrateSecretRef(ref: SecretRef): SecretRef | null {
-  const isLegacy = !ref.ciphertext.startsWith(PLAIN_PREFIX);
+  const isEncrypted = ref.ciphertext.startsWith(ENCRYPTED_PREFIX);
   const needsMask = ref.mask === undefined || ref.mask.length === 0;
-  if (!isLegacy && !needsMask) return null;
+  if (isEncrypted && !needsMask) return null;
 
   const plaintext = decryptSecret(ref.ciphertext);
+  const nextCiphertext =
+    safeStorage.isEncryptionAvailable() && !isEncrypted ? encryptSecret(plaintext) : ref.ciphertext;
 
   return {
-    ciphertext: `${PLAIN_PREFIX}${plaintext}`,
+    ciphertext: nextCiphertext,
     mask: maskSecret(plaintext),
   };
 }
