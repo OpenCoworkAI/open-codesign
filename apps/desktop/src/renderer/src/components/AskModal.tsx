@@ -23,6 +23,120 @@ import type {
 
 type AnswerValue = string | number | string[] | null;
 
+const SVG_ALLOWED_TAGS = new Set([
+  'svg',
+  'g',
+  'path',
+  'rect',
+  'circle',
+  'ellipse',
+  'line',
+  'polyline',
+  'polygon',
+  'text',
+  'tspan',
+  'defs',
+  'linearGradient',
+  'radialGradient',
+  'stop',
+  'clipPath',
+  'mask',
+  'title',
+  'desc',
+]);
+
+const SVG_ALLOWED_ATTRS = new Set([
+  'aria-hidden',
+  'aria-label',
+  'class',
+  'clip-path',
+  'cx',
+  'cy',
+  'd',
+  'dx',
+  'dy',
+  'fill',
+  'fill-opacity',
+  'fill-rule',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'height',
+  'id',
+  'mask',
+  'offset',
+  'opacity',
+  'points',
+  'preserveAspectRatio',
+  'r',
+  'rx',
+  'ry',
+  'stop-color',
+  'stop-opacity',
+  'stroke',
+  'stroke-dasharray',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-opacity',
+  'stroke-width',
+  'text-anchor',
+  'transform',
+  'viewBox',
+  'width',
+  'x',
+  'x1',
+  'x2',
+  'y',
+  'y1',
+  'y2',
+]);
+
+const SAFE_SVG_IRI_RE = /^url\(#[-_a-zA-Z0-9:.]+\)$/;
+const SAFE_SVG_COLOR_RE =
+  /^(none|currentColor|transparent|#[0-9a-fA-F]{3,8}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)|rgba\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*(?:0|1|0?\.\d+)\s*\)|[a-zA-Z]+)$/i;
+
+function isSafeSvgAttrValue(name: string, value: string): boolean {
+  const trimmed = value.trim();
+  if (/javascript:|data:|https?:|file:|vbscript:/i.test(trimmed)) return false;
+  if (name === 'fill' || name === 'stroke' || name === 'clip-path' || name === 'mask') {
+    return SAFE_SVG_COLOR_RE.test(trimmed) || SAFE_SVG_IRI_RE.test(trimmed);
+  }
+  return true;
+}
+
+export function sanitizeInlineSvg(raw: string): string {
+  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') {
+    return '';
+  }
+  const parsed = new DOMParser().parseFromString(raw, 'image/svg+xml');
+  if (parsed.querySelector('parsererror') !== null) return '';
+  const root = parsed.documentElement;
+  if (root.tagName !== 'svg') return '';
+
+  const visit = (node: Element): void => {
+    for (const child of Array.from(node.children)) {
+      if (!SVG_ALLOWED_TAGS.has(child.tagName)) {
+        child.remove();
+        continue;
+      }
+      visit(child);
+    }
+    for (const attr of Array.from(node.attributes)) {
+      if (
+        attr.name.startsWith('on') ||
+        attr.name.includes(':') ||
+        !SVG_ALLOWED_ATTRS.has(attr.name) ||
+        !isSafeSvgAttrValue(attr.name, attr.value)
+      ) {
+        node.removeAttribute(attr.name);
+      }
+    }
+  };
+
+  visit(root);
+  return new XMLSerializer().serializeToString(root);
+}
+
 export interface AskQueueState {
   active: AskRequest | null;
   queue: AskRequest[];
@@ -294,11 +408,10 @@ function SvgOptions({
             <div
               aria-hidden
               className="aspect-square w-full overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-surface-raised)]"
-              // SVG content comes from the agent's own tool call, which is
-              // trusted in this flow (it's the model's structured output, not
-              // user-supplied HTML). Still bounded to the inline svg string.
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted agent-authored SVG
-              dangerouslySetInnerHTML={{ __html: opt.svg }}
+              // Agent output is untrusted: sanitize SVG options before using
+              // the remaining bounded inline-SVG sink in the privileged UI.
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized inert inline SVG
+              dangerouslySetInnerHTML={{ __html: sanitizeInlineSvg(opt.svg) }}
             />
             <span className="break-words">{opt.label}</span>
           </button>
