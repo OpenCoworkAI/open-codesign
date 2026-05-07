@@ -449,7 +449,12 @@ export function ModelsTab() {
 
     setCpaDetection('detecting');
     void window.codesign.config
-      .testEndpoint({ wire: 'anthropic', baseUrl: 'http://127.0.0.1:8317', apiKey: '' })
+      .testEndpoint({
+        wire: 'anthropic',
+        baseUrl: 'http://127.0.0.1:8317',
+        apiKey: '',
+        allowPrivateNetwork: true,
+      })
       .then((res) => {
         setCpaDetection(res.ok ? 'available' : 'unavailable');
       })

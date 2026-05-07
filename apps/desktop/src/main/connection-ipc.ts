@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
 import {
   BUILTIN_PROVIDERS,
   CodesignError,
@@ -41,7 +42,13 @@ interface ModelsListPayloadV1 {
 
 const CONNECTION_TEST_FIELDS = ['provider', 'apiKey', 'baseUrl'] as const;
 const MODELS_LIST_FIELDS = ['provider', 'apiKey', 'baseUrl'] as const;
-const TEST_ENDPOINT_FIELDS = ['wire', 'baseUrl', 'apiKey', 'httpHeaders'] as const;
+const TEST_ENDPOINT_FIELDS = [
+  'wire',
+  'baseUrl',
+  'apiKey',
+  'httpHeaders',
+  'allowPrivateNetwork',
+] as const;
 
 function assertKnownFields(
   record: Record<string, unknown>,
@@ -175,6 +182,62 @@ function parseHttpBaseUrl(value: unknown, field: string): string {
     );
   }
   return trimmed;
+}
+
+export type NetworkTargetClass = 'public' | 'loopback' | 'private' | 'link-local' | 'metadata';
+
+function ipv4ToNumber(ip: string): number | null {
+  const parts = ip.split('.').map((part) => Number(part));
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
+    return null;
+  }
+  const [a, b, c, d] = parts as [number, number, number, number];
+  return ((a << 24) >>> 0) + (b << 16) + (c << 8) + d;
+}
+
+function inIpv4Range(ip: string, base: string, bits: number): boolean {
+  const value = ipv4ToNumber(ip);
+  const baseValue = ipv4ToNumber(base);
+  if (value === null || baseValue === null) return false;
+  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+  return (value & mask) === (baseValue & mask);
+}
+
+export function classifyNetworkTarget(rawBaseUrl: string): NetworkTargetClass {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawBaseUrl);
+  } catch {
+    return 'public';
+  }
+  const host = parsed.hostname.replace(/^\[(.*)\]$/, '$1').toLowerCase();
+  if (
+    host === 'metadata.google.internal' ||
+    host === 'metadata' ||
+    host === '169.254.169.254' ||
+    host === 'fd00:ec2::254'
+  ) {
+    return 'metadata';
+  }
+  if (host === 'localhost') return 'loopback';
+  const family = isIP(host);
+  if (family === 4) {
+    if (inIpv4Range(host, '127.0.0.0', 8)) return 'loopback';
+    if (inIpv4Range(host, '10.0.0.0', 8)) return 'private';
+    if (inIpv4Range(host, '172.16.0.0', 12)) return 'private';
+    if (inIpv4Range(host, '192.168.0.0', 16)) return 'private';
+    if (inIpv4Range(host, '169.254.0.0', 16)) return 'link-local';
+    return 'public';
+  }
+  if (family === 6) {
+    if (host === '::1') return 'loopback';
+    if (host.startsWith('fe80:')) return 'link-local';
+    if (host.startsWith('fc') || host.startsWith('fd')) return 'private';
+  }
+  return 'public';
 }
 
 // ---------------------------------------------------------------------------
@@ -978,6 +1041,22 @@ export async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndp
     };
   }
 
+  const targetClass = classifyNetworkTarget(payload.baseUrl);
+  if (targetClass === 'metadata') {
+    return {
+      ok: false,
+      error: 'blocked-network-target',
+      message: 'Metadata service endpoints cannot be used as model provider base URLs.',
+    };
+  }
+  if (targetClass !== 'public' && payload.allowPrivateNetwork !== true) {
+    return {
+      ok: false,
+      error: 'private-network-confirmation-required',
+      message: 'Private or local network provider URLs require explicit confirmation.',
+    };
+  }
+
   const { url } = buildEndpointForWire(payload.wire, payload.baseUrl);
   const headers = buildAuthHeadersForWire(
     payload.wire,
@@ -1142,6 +1221,7 @@ interface TestEndpointPayload {
   baseUrl: string;
   apiKey: string;
   httpHeaders?: Record<string, string>;
+  allowPrivateNetwork?: boolean;
 }
 
 export type TestEndpointResponse =
@@ -1172,6 +1252,12 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
     baseUrl: parseHttpBaseUrl(baseUrl, 'baseUrl'),
     apiKey: trimmedApiKey,
   };
+  if (r['allowPrivateNetwork'] !== undefined) {
+    if (typeof r['allowPrivateNetwork'] !== 'boolean') {
+      throw new CodesignError('allowPrivateNetwork must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+    }
+    out.allowPrivateNetwork = r['allowPrivateNetwork'];
+  }
   const headers = parseTestEndpointHttpHeaders(r['httpHeaders']);
   if (headers !== undefined) out.httpHeaders = headers;
   return out;

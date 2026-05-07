@@ -100,6 +100,7 @@ export function AddCustomProviderModal({
   const [test, setTest] = useState<TestState>({ kind: 'idle' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allowPrivateNetwork, setAllowPrivateNetwork] = useState(false);
 
   const [discovery, setDiscovery] = useState<DiscoveryState>({ kind: 'idle' });
   // When true, user explicitly chose to type a model name instead of picking from the dropdown.
@@ -131,6 +132,7 @@ export function AddCustomProviderModal({
         wire: currentWire,
         baseUrl: currentBaseUrl.trim(),
         apiKey: '',
+        allowPrivateNetwork,
       });
       if (seq !== discoverySeq.current) return;
       if (res.ok && res.models.length > 0) {
@@ -183,6 +185,7 @@ export function AddCustomProviderModal({
         wire,
         baseUrl: baseUrl.trim(),
         apiKey: apiKey.trim(),
+        allowPrivateNetwork,
       });
       if (res.ok) setTest({ kind: 'ok', modelCount: res.modelCount });
       else setTest({ kind: 'error', message: res.message });
@@ -336,6 +339,26 @@ export function AddCustomProviderModal({
                 {t('settings.providers.custom.compatibilityHintBody')}
               </p>
             </div>
+          )}
+          {!lockEndpoint && (
+            <label className="mt-2 flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] px-3 py-2 text-[var(--text-xs)] text-[var(--color-text-secondary)]">
+              <input
+                type="checkbox"
+                checked={allowPrivateNetwork}
+                onChange={(e) => {
+                  setAllowPrivateNetwork(e.target.checked);
+                  setTest({ kind: 'idle' });
+                  scheduleDiscovery(baseUrl, wire);
+                }}
+                className="mt-0.5 accent-[var(--color-accent)]"
+              />
+              <span>
+                {t('settings.providers.custom.allowPrivateNetwork', {
+                  defaultValue:
+                    'Allow testing local or private-network provider URLs from this computer',
+                })}
+              </span>
+            </label>
           )}
         </Field>
 

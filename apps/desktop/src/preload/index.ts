@@ -515,6 +515,7 @@ const api = {
       baseUrl: string;
       apiKey: string;
       httpHeaders?: Record<string, string>;
+      allowPrivateNetwork?: boolean;
     }) => ipcRenderer.invoke('config:v1:test-endpoint', input) as Promise<TestEndpointResponse>,
     listEndpointModels: (input: { wire: WireApi; baseUrl: string; apiKey: string }) =>
       ipcRenderer.invoke('config:v1:list-endpoint-models', input) as Promise<
