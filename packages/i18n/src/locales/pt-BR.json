@@ -252,7 +252,7 @@
       "sectionTitle": "Provedores de API",
       "chatgptLogin": {
         "title": "Entrar com assinatura do ChatGPT",
-        "description": "Use a cota do seu plano ChatGPT Plus / Pro / Team para chamar modelos Codex (gpt-5.3-codex e afins) — sem precisar de chave de API.",
+        "description": "Use a cota do seu plano ChatGPT Plus / Pro / Team para chamar modelos Codex (gpt-5.5 e afins) — sem precisar de chave de API.",
         "signIn": "Entrar com ChatGPT",
         "inProgress": "Navegador aberto. Conclua a autorização e voltamos automaticamente…",
         "loggedInBadge": "Conectado com ChatGPT",

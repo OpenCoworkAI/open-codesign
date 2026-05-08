@@ -332,7 +332,7 @@
       "sectionTitle": "API Providers",
       "chatgptLogin": {
         "title": "Sign in with ChatGPT subscription",
-        "description": "Use your ChatGPT Plus / Pro / Team plan quota to call Codex models (gpt-5.3-codex and friends) — no API key needed.",
+        "description": "Use your ChatGPT Plus / Pro / Team plan quota to call Codex models (gpt-5.5 and friends) — no API key needed.",
         "signIn": "Sign in with ChatGPT",
         "inProgress": "Browser opened. Complete the authorization and we'll return automatically…",
         "loggedInBadge": "Signed in with ChatGPT",

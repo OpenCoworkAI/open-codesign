@@ -117,6 +117,15 @@ function makeIdToken(payload: Record<string, unknown>): string {
   return `${header}.${body}.sig`;
 }
 
+const EXPECTED_CHATGPT_CODEX_MODELS = [
+  'gpt-5.5',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.3-codex',
+  'gpt-5.3-codex-spark',
+  'gpt-5.2',
+];
+
 describe('codex-oauth:v1:status', () => {
   it('returns loggedIn: false when no token file is present', async () => {
     await register();
@@ -192,7 +201,8 @@ describe('codex-oauth:v1:login', () => {
       name: 'ChatGPT 订阅',
       wire: 'openai-codex-responses',
       baseUrl: 'https://chatgpt.com/backend-api',
-      defaultModel: 'gpt-5.3-codex',
+      defaultModel: 'gpt-5.5',
+      modelsHint: EXPECTED_CHATGPT_CODEX_MODELS,
       requiresApiKey: false,
     });
 
@@ -252,7 +262,7 @@ describe('codex-oauth:v1:login', () => {
     await handlers.get('codex-oauth:v1:login')?.();
 
     expect(fakeCachedConfig?.activeProvider).toBe('chatgpt-codex');
-    expect(fakeCachedConfig?.activeModel).toBe('gpt-5.3-codex');
+    expect(fakeCachedConfig?.activeModel).toBe('gpt-5.5');
   });
 
   it('leaves active provider alone when one is already set and valid', async () => {
@@ -394,10 +404,10 @@ describe('codex-oauth:v1:logout', () => {
 });
 
 describe('migrateStaleCodexEntryIfNeeded', () => {
-  it('rewrites stale codex entry with current wire + baseUrl', async () => {
+  it('rewrites stale codex entry with current wire, baseUrl, and model hints', async () => {
     fakeCachedConfig = {
       activeProvider: 'chatgpt-codex',
-      activeModel: 'gpt-5.3-codex',
+      activeModel: 'gpt-5.1-codex-max',
       secrets: {},
       providers: {
         'chatgpt-codex': {
@@ -408,7 +418,7 @@ describe('migrateStaleCodexEntryIfNeeded', () => {
           wire: 'openai-responses',
           baseUrl: 'https://chatgpt.com/backend-api/codex',
           defaultModel: 'gpt-5.3-codex',
-          modelsHint: ['gpt-5.3-codex'],
+          modelsHint: ['gpt-5.4', 'gpt-5.1-codex-max', 'gpt-5.1'],
           requiresApiKey: false,
         },
       },
@@ -420,6 +430,9 @@ describe('migrateStaleCodexEntryIfNeeded', () => {
     const rewritten = fakeCachedConfig?.providers['chatgpt-codex'] as Record<string, unknown>;
     expect(rewritten['wire']).toBe('openai-codex-responses');
     expect(rewritten['baseUrl']).toBe('https://chatgpt.com/backend-api');
+    expect(rewritten['defaultModel']).toBe('gpt-5.5');
+    expect(rewritten['modelsHint']).toEqual(EXPECTED_CHATGPT_CODEX_MODELS);
+    expect(fakeCachedConfig?.activeModel).toBe('gpt-5.5');
     expect(writeConfigMock).toHaveBeenCalledTimes(1);
   });
 
@@ -435,7 +448,8 @@ describe('migrateStaleCodexEntryIfNeeded', () => {
           builtin: false,
           wire: 'openai-codex-responses',
           baseUrl: 'https://chatgpt.com/backend-api',
-          defaultModel: 'gpt-5.3-codex',
+          defaultModel: 'gpt-5.5',
+          modelsHint: EXPECTED_CHATGPT_CODEX_MODELS,
           requiresApiKey: false,
         },
       },

@@ -280,7 +280,7 @@
       "sectionTitle": "Proveedores de API",
       "chatgptLogin": {
         "title": "Iniciar sesión con suscripción de ChatGPT",
-        "description": "Usa tu cuota del plan ChatGPT Plus / Pro / Team para llamar a modelos Codex (gpt-5.3-codex y similares) — no se necesita clave API.",
+        "description": "Usa tu cuota del plan ChatGPT Plus / Pro / Team para llamar a modelos Codex (gpt-5.5 y similares) — no se necesita clave API.",
         "signIn": "Iniciar sesión con ChatGPT",
         "inProgress": "Navegador abierto. Completa la autorización y regresaremos automáticamente…",
         "loggedInBadge": "Sesión iniciada con ChatGPT",

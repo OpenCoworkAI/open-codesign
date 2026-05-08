@@ -332,7 +332,7 @@
       "sectionTitle": "API 服务",
       "chatgptLogin": {
         "title": "用 ChatGPT 订阅登录",
-        "description": "直接用你的 ChatGPT Plus / Pro / Team 订阅额度调用 Codex 模型（gpt-5.3-codex 等），无需 API key。",
+        "description": "直接用你的 ChatGPT Plus / Pro / Team 订阅额度调用 Codex 模型（gpt-5.5 等），无需 API key。",
         "signIn": "用 ChatGPT 订阅登录",
         "inProgress": "已打开浏览器，完成授权后自动返回…",
         "loggedInBadge": "已登录 ChatGPT",
