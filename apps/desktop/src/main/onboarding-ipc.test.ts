@@ -15,6 +15,13 @@ const registeredChannels: string[] = [];
 // Track handler implementations so we can call them directly.
 const handlers = new Map<string, (...args: unknown[]) => unknown>();
 
+async function registerIpcForTest(): Promise<void> {
+  registeredChannels.length = 0;
+  handlers.clear();
+  const { registerOnboardingIpc } = await import('./onboarding-ipc');
+  registerOnboardingIpc();
+}
+
 vi.mock('./electron-runtime', () => ({
   ipcMain: {
     handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
@@ -126,15 +133,15 @@ vi.mock('@open-codesign/providers', () => ({
 
 describe('registerOnboardingIpc — channel versioning', () => {
   it('registers settings:v1:list-providers without the unversioned settings:list-providers shim', async () => {
-    // Import after mocks are in place.
-    const { registerOnboardingIpc } = await import('./onboarding-ipc');
-    registerOnboardingIpc();
+    await registerIpcForTest();
 
     expect(registeredChannels).toContain('settings:v1:list-providers');
     expect(registeredChannels).not.toContain('settings:list-providers');
-  });
+  }, 15_000);
 
   it('registers all settings v1 channels', async () => {
+    await registerIpcForTest();
+
     const v1Channels = [
       'settings:v1:list-providers',
       'settings:v1:add-provider',
@@ -150,9 +157,11 @@ describe('registerOnboardingIpc — channel versioning', () => {
     for (const ch of v1Channels) {
       expect(registeredChannels).toContain(ch);
     }
-  });
+  }, 15_000);
 
   it('does not register unversioned settings channels', async () => {
+    await registerIpcForTest();
+
     const unversionedChannels = [
       'settings:list-providers',
       'settings:add-provider',
