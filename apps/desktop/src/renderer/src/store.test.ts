@@ -2013,6 +2013,28 @@ describe('applyGenerateError via sendPrompt', () => {
     });
   });
 
+  it('offers an Advanced settings action for generation timeouts', async () => {
+    const err = Object.assign(
+      new Error(
+        "Error invoking remote method 'codesign:v1:generate': CodesignError: Generation aborted after 1200s (Settings -> Advanced -> Generation timeout).",
+      ),
+      { code: 'GENERATION_TIMEOUT' },
+    );
+
+    await runFailingGenerate(err);
+
+    const state = useCodesignStore.getState();
+    expect(state.toasts[0]?.description).toContain('configured timeout');
+    expect(state.reportableErrors[0]?.context).toMatchObject({
+      diagnostic_category: 'generation-timeout',
+      recovery_action: 'openSettings',
+    });
+
+    state.toasts[0]?.action?.onClick();
+    expect(useCodesignStore.getState().view).toBe('settings');
+    expect(useCodesignStore.getState().settingsTab).toBe('advanced');
+  });
+
   it('attaches upstream context from a NormalizedProviderError-shaped error', async () => {
     const err = Object.assign(new Error('http 502'), {
       code: 'PROVIDER_HTTP_5XX',
@@ -2118,6 +2140,35 @@ describe('applyGenerateError via sendPrompt', () => {
     expect(updateProvider).toHaveBeenCalledWith({
       id: 'ollama',
       defaultModel: 'gemini-2.5-pro',
+    });
+  });
+
+  it('offers the model-id fix for models/ prefixed 400 errors with no body', async () => {
+    const nextConfig = { ...READY_CONFIG, modelPrimary: 'gemini-2.5-flash' };
+    const updateProvider = vi.fn().mockResolvedValue(nextConfig);
+    const err = Object.assign(
+      new Error(
+        "Error invoking remote method 'codesign:v1:generate': CodesignError: 400 status code (no body)",
+      ),
+      {
+        code: 'PROVIDER_ERROR',
+        upstream_provider: 'custom-cliproxyapi',
+        upstream_model_id: 'models/gemini-2.5-flash',
+        upstream_status: 400,
+      },
+    );
+
+    await runFailingGenerate(err, { config: { updateProvider } });
+    useCodesignStore.getState().toasts[0]?.action?.onClick();
+    await Promise.resolve();
+
+    expect(useCodesignStore.getState().reportableErrors[0]?.context).toMatchObject({
+      diagnostic_category: 'model-id-shape',
+      recovery_action: 'normalizeModelId',
+    });
+    expect(updateProvider).toHaveBeenCalledWith({
+      id: 'custom-cliproxyapi',
+      defaultModel: 'gemini-2.5-flash',
     });
   });
 

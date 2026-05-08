@@ -31,6 +31,7 @@ export type DiagnosticCategory =
   | 'model-id-shape'
   | 'relay-stream-cutoff'
   | 'gateway-waf-blocked'
+  | 'generation-timeout'
   | 'model-discovery-degraded'
   | 'transport-interrupted'
   | 'upstream-server-error'
@@ -323,10 +324,33 @@ function looksLikeGatewayWafBlock(message: string): boolean {
   );
 }
 
+function hasModelsPrefix(modelId: string | undefined): boolean {
+  return /^models\//i.test(modelId ?? '');
+}
+
+function mentionsModelsPrefix(message: string): boolean {
+  return /\bmodels\/[-._:/a-z0-9]+\b/i.test(message);
+}
+
 export function diagnoseGenerateFailure(ctx: GenerateFailureContext): DiagnosticHypothesis[] {
   const message = (ctx.message ?? '').toLowerCase();
   const status = ctx.status;
   const code = ctx.code;
+
+  if (code === 'GENERATION_TIMEOUT') {
+    return [
+      h({
+        cause: 'diagnostics.cause.generationTimeout',
+        category: 'generation-timeout',
+        severity: 'warning',
+        suggestedFix: {
+          kind: 'openSettings',
+          label: 'diagnostics.fix.adjustGenerationTimeout',
+          settingsTab: 'advanced',
+        },
+      }),
+    ];
+  }
 
   if (code === 'REFERENCE_URL_UNSUPPORTED') {
     return [
@@ -381,7 +405,11 @@ export function diagnoseGenerateFailure(ctx: GenerateFailureContext): Diagnostic
     ];
   }
 
-  if (/model\s+['"]?models\//i.test(ctx.message ?? '')) {
+  if (
+    /model\s+['"]?models\//i.test(ctx.message ?? '') ||
+    ((status === 400 || status === 404 || status === 422) &&
+      (hasModelsPrefix(ctx.modelId) || mentionsModelsPrefix(ctx.message ?? '')))
+  ) {
     return [
       h({
         cause: 'diagnostics.cause.modelIdShape',

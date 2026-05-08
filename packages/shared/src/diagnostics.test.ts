@@ -231,6 +231,33 @@ describe('diagnoseGenerateFailure', () => {
     );
   });
 
+  it('maps models/ prefixed 400 errors to model-id-shape even without a useful body', () => {
+    const result = diagnoseGenerateFailure({
+      provider: 'custom-cliproxyapi',
+      baseUrl: 'https://relay.example.com/v1',
+      status: 400,
+      message: '400 status code (no body)',
+      modelId: 'models/gemini-2.5-flash',
+    });
+
+    expect(result[0]?.category).toBe('model-id-shape');
+    expect(result[0]?.cause).toBe('diagnostics.cause.modelIdShape');
+    expect(result[0]?.suggestedFix?.kind).toBe('normalizeModelId');
+  });
+
+  it('maps generation timeout errors to the Advanced timeout setting', () => {
+    const result = diagnoseGenerateFailure({
+      ...ctx,
+      code: 'GENERATION_TIMEOUT',
+      message: 'Generation aborted after 1200s (Settings -> Advanced -> Generation timeout).',
+    });
+
+    expect(result[0]?.category).toBe('generation-timeout');
+    expect(result[0]?.cause).toBe('diagnostics.cause.generationTimeout');
+    expect(result[0]?.suggestedFix?.kind).toBe('openSettings');
+    expect(result[0]?.suggestedFix?.settingsTab).toBe('advanced');
+  });
+
   it('maps reference URL errors by CodesignError code before provider heuristics', () => {
     const result = diagnoseGenerateFailure({
       ...ctx,
