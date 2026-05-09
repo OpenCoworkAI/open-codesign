@@ -70,6 +70,24 @@ function pickBestModel(models: string[]): string {
   return models[0] ?? '';
 }
 
+export function buildEndpointDiscoveryPayload(
+  wire: WireApi,
+  baseUrl: string,
+  allowPrivateNetwork: boolean,
+): {
+  wire: WireApi;
+  baseUrl: string;
+  apiKey: string;
+  allowPrivateNetwork: boolean;
+} {
+  return {
+    wire,
+    baseUrl: baseUrl.trim(),
+    apiKey: '',
+    allowPrivateNetwork,
+  };
+}
+
 /**
  * Minimal Custom Provider form — wire-agnostic endpoint onboarding.
  * Deliberately barebones (native form + FormData-ish accessors, no schema),
@@ -111,7 +129,11 @@ export function AddCustomProviderModal({
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discoverySeq = useRef(0);
 
-  function scheduleDiscovery(currentBaseUrl: string, currentWire: WireApi) {
+  function scheduleDiscovery(
+    currentBaseUrl: string,
+    currentWire: WireApi,
+    privateNetworkAllowed = allowPrivateNetwork,
+  ) {
     if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
     if (!currentBaseUrl.trim().match(/^https?:\/\//)) {
       discoverySeq.current += 1;
@@ -119,21 +141,22 @@ export function AddCustomProviderModal({
       return;
     }
     debounceTimer.current = setTimeout(() => {
-      void runDiscovery(currentBaseUrl, currentWire);
+      void runDiscovery(currentBaseUrl, currentWire, privateNetworkAllowed);
     }, 500);
   }
 
-  async function runDiscovery(currentBaseUrl: string, currentWire: WireApi) {
+  async function runDiscovery(
+    currentBaseUrl: string,
+    currentWire: WireApi,
+    privateNetworkAllowed = allowPrivateNetwork,
+  ) {
     if (!window.codesign?.config) return;
     const seq = ++discoverySeq.current;
     setDiscovery({ kind: 'discovering' });
     try {
-      const res = await window.codesign.config.testEndpoint({
-        wire: currentWire,
-        baseUrl: currentBaseUrl.trim(),
-        apiKey: '',
-        allowPrivateNetwork,
-      });
+      const res = await window.codesign.config.testEndpoint(
+        buildEndpointDiscoveryPayload(currentWire, currentBaseUrl, privateNetworkAllowed),
+      );
       if (seq !== discoverySeq.current) return;
       if (res.ok && res.models.length > 0) {
         setDiscovery({ kind: 'found', models: res.models });
@@ -346,9 +369,10 @@ export function AddCustomProviderModal({
                 type="checkbox"
                 checked={allowPrivateNetwork}
                 onChange={(e) => {
-                  setAllowPrivateNetwork(e.target.checked);
+                  const nextAllowPrivateNetwork = e.target.checked;
+                  setAllowPrivateNetwork(nextAllowPrivateNetwork);
                   setTest({ kind: 'idle' });
-                  scheduleDiscovery(baseUrl, wire);
+                  scheduleDiscovery(baseUrl, wire, nextAllowPrivateNetwork);
                 }}
                 className="mt-0.5 accent-[var(--color-accent)]"
               />
