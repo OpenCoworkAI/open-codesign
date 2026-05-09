@@ -5,6 +5,14 @@ import { defaultImageModel, generateImage } from './images';
 const PNG_HEADER_BASE64 = 'iVBORw0KGgo=';
 const WEBP_HEADER_BASE64 = 'UklGRgAAAABXRUJQ';
 
+function jwtWithClaims(claims: Record<string, unknown>): string {
+  return [
+    Buffer.from(JSON.stringify({ alg: 'none' })).toString('base64url'),
+    Buffer.from(JSON.stringify(claims)).toString('base64url'),
+    'sig',
+  ].join('.');
+}
+
 describe('generateImage', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -105,6 +113,73 @@ describe('generateImage', () => {
       model: defaultImageModel('openrouter'),
       mimeType: 'image/webp',
       base64: WEBP_HEADER_BASE64,
+    });
+  });
+
+  it('calls ChatGPT Codex responses with OAuth headers and extracts streamed image data', async () => {
+    const token = jwtWithClaims({
+      'https://api.openai.com/auth': { chatgpt_account_id: 'acct_test' },
+      email: 'person@example.com',
+    });
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        [
+          'data: {"type":"response.output_item.done","item":{"type":"image_generation_call","result":"iVBORw0KGgo=","revised_prompt":"A tabby cat with an otter"}}',
+          'data: {"type":"response.completed","response":{"status":"completed","output":[]}}',
+          '',
+        ].join('\n\n'),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateImage({
+      provider: 'chatgpt-codex',
+      apiKey: token,
+      prompt: 'draw a cat hugging an otter',
+      size: '1024x1024',
+      quality: 'high',
+      outputFormat: 'png',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://chatgpt.com/backend-api/codex/responses',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          authorization: `Bearer ${token}`,
+          'chatgpt-account-id': 'acct_test',
+          accept: 'text/event-stream',
+          'openai-beta': 'responses=experimental',
+        }),
+        body: JSON.stringify({
+          model: 'gpt-5.5',
+          store: false,
+          stream: true,
+          input: [
+            {
+              role: 'user',
+              content: [{ type: 'input_text', text: 'draw a cat hugging an otter' }],
+            },
+          ],
+          tools: [
+            {
+              type: 'image_generation',
+              size: '1024x1024',
+              quality: 'high',
+              output_format: 'png',
+            },
+          ],
+          tool_choice: { type: 'image_generation' },
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      provider: 'chatgpt-codex',
+      model: 'gpt-5.5',
+      mimeType: 'image/png',
+      base64: PNG_HEADER_BASE64,
+      revisedPrompt: 'A tabby cat with an otter',
     });
   });
 

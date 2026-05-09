@@ -118,7 +118,11 @@ export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
 
 export const IMAGE_GENERATION_SCHEMA_VERSION = 1 as const;
 
-export const ImageGenerationProviderSchema = z.enum(['openai', 'openrouter']);
+export const ImageGenerationProviderSchema = z.enum([
+  'openai',
+  'openrouter',
+  CHATGPT_CODEX_PROVIDER_ID,
+]);
 export type ImageGenerationProvider = z.infer<typeof ImageGenerationProviderSchema>;
 
 export const ImageGenerationCredentialModeSchema = z.enum(['inherit', 'custom']);

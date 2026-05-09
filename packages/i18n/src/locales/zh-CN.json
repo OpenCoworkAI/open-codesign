@@ -273,6 +273,7 @@
       "hint": "开启后，Agent 在生成设计时可以调用 generate_image_asset 工具。",
       "enabled": "启用图像生成辅助",
       "provider": "服务商",
+      "chatgptSubscription": "ChatGPT 订阅",
       "credentials": "凭据方式",
       "inherit": "沿用模型服务商",
       "customKey": "单独设置 Key",
@@ -285,6 +286,7 @@
       "status": {
         "ready": "可用",
         "needsKey": "缺少 API Key",
+        "needsChatgptLogin": "需要登录 ChatGPT",
         "disabled": "未启用"
       },
       "toast": {

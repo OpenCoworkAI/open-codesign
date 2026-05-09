@@ -273,6 +273,7 @@
       "hint": "When enabled, the agent can invoke generate_image_asset during a run.",
       "enabled": "Enable image generation assist",
       "provider": "Provider",
+      "chatgptSubscription": "ChatGPT subscription",
       "credentials": "Credentials",
       "inherit": "Inherit from model provider",
       "customKey": "Use a separate key",
@@ -285,6 +286,7 @@
       "status": {
         "ready": "Ready",
         "needsKey": "Needs API key",
+        "needsChatgptLogin": "Needs ChatGPT sign-in",
         "disabled": "Disabled"
       },
       "toast": {

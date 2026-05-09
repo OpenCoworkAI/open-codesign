@@ -244,6 +244,7 @@
       "hint": "Cuando está habilitado, el agente puede invocar generate_image_asset durante una ejecución.",
       "enabled": "Habilitar asistente de generación de imágenes",
       "provider": "Proveedor",
+      "chatgptSubscription": "Suscripción de ChatGPT",
       "credentials": "Credenciales",
       "inherit": "Heredar del proveedor del modelo",
       "customKey": "Usar una clave separada",
@@ -256,6 +257,7 @@
       "status": {
         "ready": "Listo",
         "needsKey": "Necesita clave API",
+        "needsChatgptLogin": "Necesita iniciar sesión en ChatGPT",
         "disabled": "Deshabilitado"
       },
       "toast": {

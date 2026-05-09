@@ -455,7 +455,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       designSkills,
     });
     const cfg = getCachedConfig();
-    const imageConfig = cfg ? resolveImageGenerationConfig(cfg) : null;
+    const imageConfig = cfg ? await resolveImageGenerationConfig(cfg) : null;
     const imageLog = getLogger('image-generation');
     const generateImageAsset = imageConfig
       ? async (
