@@ -14,11 +14,11 @@ Answers to the questions people most often ask about Open CoDesign. If your ques
 
 ## What is Open CoDesign?
 
-Open CoDesign is an open-source desktop AI design tool. It turns natural-language prompts into HTML prototypes, React components, slide decks, PDFs, and marketing assets. It is the open-source alternative to Anthropic's Claude Design, Vercel's v0, StackBlitz's Bolt.new, and Lovable — but it runs entirely on your laptop with your own API key for any AI model provider.
+Open CoDesign is an open-source desktop AI design tool. It turns natural-language prompts into HTML prototypes, React components, slide decks, PDFs, and marketing assets. It is the open-source alternative to Anthropic's Claude Design, Vercel's v0, StackBlitz's Bolt.new, and Lovable — but it runs entirely on your laptop with your own API key, local model endpoint, or ChatGPT subscription login.
 
 ## Is Open CoDesign an open-source alternative to Claude Design?
 
-Yes. Open CoDesign is the MIT-licensed, open-source alternative to Anthropic Claude Design. It runs entirely on your desktop, supports any AI model via BYOK (bring your own key), and requires no cloud account or subscription. The repository is at [github.com/OpenCoworkAI/open-codesign](https://github.com/OpenCoworkAI/open-codesign).
+Yes. Open CoDesign is the MIT-licensed, open-source alternative to Anthropic Claude Design. It runs entirely on your desktop, supports any AI model via BYOK (bring your own key), local endpoints, or ChatGPT subscription login, and requires no OpenCoworkAI hosted account. The repository is at [github.com/OpenCoworkAI/open-codesign](https://github.com/OpenCoworkAI/open-codesign).
 
 ## How does Open CoDesign compare to v0 by Vercel?
 
@@ -42,7 +42,7 @@ Bolt.new is a browser-based full-stack app builder running on StackBlitz's WebCo
 
 - **Open source** (Open CoDesign, MIT) vs **closed source** (Lovable).
 - **Local-first** (Open CoDesign) vs **cloud-hosted** (Lovable).
-- **Token cost only** (Open CoDesign) vs **usage-priced subscription** (Lovable).
+- **Provider or existing subscription cost only** (Open CoDesign) vs **usage-priced subscription** (Lovable).
 - **Design-first prototypes** (Open CoDesign) vs **end-to-end product creation with Supabase** (Lovable).
 
 ## How does Open CoDesign compare to Figma AI / Figma Make?
@@ -51,19 +51,19 @@ They serve different surfaces. Figma AI operates inside the Figma canvas and pro
 
 ## Is Open CoDesign free?
 
-Yes. Open CoDesign is MIT licensed. The app itself is free to download, use, modify, and redistribute. You only pay the token cost to whichever model provider you bring your own API key for — there is no subscription and no per-token surcharge from us.
+Yes. Open CoDesign is MIT licensed. The app itself is free to download, use, modify, and redistribute. You only pay the model route you choose, such as provider token cost or your existing ChatGPT subscription — there is no subscription and no per-token surcharge from us.
 
-## Can I use my Claude Code or Codex API key with Open CoDesign?
+## Can I use my Claude Code or Codex setup with Open CoDesign?
 
-Yes. Open CoDesign reads your existing `~/.claude/settings.json` and `~/.codex/config.toml` and imports providers, models, and API keys in one click. The app uses your API key directly against the provider's endpoint — there is no proxy layer, no server-side storage, and no OAuth token hijacking.
+Yes. Open CoDesign reads your existing `~/.claude/settings.json` and `~/.codex/config.toml` and imports API-key providers, models, and keys in one click. If Codex is using ChatGPT subscription login, use Open CoDesign's ChatGPT sign-in instead of importing it as an API-key provider. The app calls the selected model route directly — there is no proxy layer or server-side storage.
 
 ## Can I log in with my ChatGPT Plus or Codex subscription instead of an API key?
 
-Yes. Open CoDesign supports ChatGPT Plus / Codex OAuth subscription login as of v0.1.4. One click, no API key required.
+Yes. Open CoDesign supports ChatGPT Plus / Pro / Team subscription login for Codex models and image generation. One click, no API key required.
 
 ## Does Open CoDesign send my prompts or designs to any third party?
 
-No. Designs, prompts, and scans live on your machine. v0.2 stores design sessions in JSONL and keeps generated sources in workspace files, with configuration in `~/.config/open-codesign/config.toml`. The only outbound network traffic is directly to the model provider you configure with your own API key. No telemetry by default.
+No. Designs, prompts, and scans live on your machine. v0.2 stores design sessions in JSONL and keeps generated sources in workspace files, with configuration in `~/.config/open-codesign/config.toml`. The only outbound network traffic is directly to the model route you configure, such as a provider API, local gateway, or ChatGPT subscription endpoint. No telemetry by default.
 
 ## Which AI models does Open CoDesign support?
 
@@ -116,7 +116,7 @@ Yes, when used with a local model runtime like Ollama. All generation flows thro
 - **PDF one-pagers** — rendered via Puppeteer-core against your local Chrome install.
 - **ZIP asset bundles** — HTML + CSS + JS + assets, deterministic layout. For handoff to engineering.
 - **Markdown exports** — with embedded frontmatter for static-site ingestion.
-- **AI-generated bitmap assets** — hero images, backgrounds, illustrations, logos, generated via gpt-image-2 or OpenRouter image models. Opt-in, off by default.
+- **AI-generated bitmap assets** — hero images, backgrounds, illustrations, logos, generated via OpenAI image models, OpenRouter image models, or signed-in ChatGPT subscription. Opt-in, off by default.
 
 ## What changed in v0.2?
 
@@ -137,8 +137,8 @@ See the [roadmap](/roadmap) for the milestone plan.
 The security model is:
 
 - **Local-first.** Designs, prompts, and scans never leave your machine.
-- **Config on disk, 0600 permissions.** API keys live in `~/.config/open-codesign/config.toml` with the same permission posture as Claude Code / Codex / gh CLI.
-- **No proxy layer.** Your API key hits the provider endpoint directly.
+- **Config on disk, local credential storage.** API keys live in `~/.config/open-codesign/config.toml`; ChatGPT OAuth tokens stay in the app config token store.
+- **No proxy layer.** Your API key or ChatGPT OAuth token is used directly with the selected model route.
 - **No telemetry by default.** No analytics, no auto-update tracking.
 - **Signed SBOM per release.** CycloneDX supply-chain manifest attached to every GitHub Release.
 - **MIT license.** Audit the source yourself.

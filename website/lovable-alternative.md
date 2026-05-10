@@ -12,7 +12,7 @@ head:
 
 # Open CoDesign vs Lovable — Open-Source Lovable Alternative
 
-Looking for an **open-source alternative to Lovable**? Open CoDesign is an MIT-licensed desktop app that takes prompts to polished interfaces — locally, with your own API key, against any model provider.
+Looking for an **open-source alternative to Lovable**? Open CoDesign is an MIT-licensed desktop app that takes prompts to polished interfaces — locally, with your own API key, ChatGPT subscription login, or any compatible model route.
 
 [Download Open CoDesign →](https://github.com/OpenCoworkAI/open-codesign/releases) · [90-second Quickstart](./quickstart)
 
@@ -32,9 +32,9 @@ Pick **Open CoDesign** if you want design-grade frontend prototypes, any model v
 | Runs on                 | **Your laptop (macOS / Windows / Linux)** | Cloud (browser) |
 | Scope                   | Frontend prototypes + design assets | Full-stack apps (with DB + deploy) |
 | Models                  | **Any — Claude, GPT, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama** | Provider-controlled |
-| Pricing                 | **Free (BYOK token cost)**  | Paid subscription |
+| Pricing                 | **Free app (provider or subscription cost only)** | Paid subscription |
 | BYOK                    | **Yes**                     | Limited |
-| Data location           | **SQLite on your machine**  | Provider cloud |
+| Data location           | **Workspace files + JSONL sessions on your machine** | Provider cloud |
 | Local version history   | **Yes**                     | —       |
 | Offline use             | **Yes (with local Ollama)** | No      |
 | Config import           | **Claude Code + Codex, one click** | No |
@@ -45,7 +45,7 @@ Pick **Open CoDesign** if you want design-grade frontend prototypes, any model v
 ## Why someone would switch from Lovable to Open CoDesign
 
 - **Model choice.** Use Claude Opus for visual polish, cheap models (DeepSeek/Kimi) for iteration, local Ollama for privacy work — switch per generation.
-- **BYOK cost control.** Pay only the token cost to your provider. No platform margin.
+- **Cost control.** Use BYOK, local models, or an existing ChatGPT subscription. Open CoDesign adds no platform margin.
 - **On-device privacy.** Prompts, designs, and codebase scans stay on your laptop.
 - **Design-grade prototypes, not app scaffolding.** If your deliverable is a landing page, pitch deck, pricing page, dashboard mockup — not a full-stack app — Open CoDesign is purpose-built for that.
 - **Export flexibility.** PDF one-pagers, PPTX decks, ZIP asset bundles, Markdown with frontmatter — formats Lovable doesn't ship.

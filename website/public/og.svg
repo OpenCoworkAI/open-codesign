@@ -45,7 +45,7 @@
   <text x="80" y="292" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="700" font-size="54" fill="url(#accent)" letter-spacing="-1.6">Ship from your laptop.</text>
 
   <!-- Subtitle -->
-  <text x="80" y="350" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="400" font-size="21" fill="#57544c">Open-source desktop AI design tool — MIT, local-first, BYOK.</text>
+  <text x="80" y="350" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="400" font-size="21" fill="#57544c">Open-source desktop AI design tool — MIT, local-first, BYOK or ChatGPT login.</text>
 
   <!-- Hook line -->
   <text x="80" y="402" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="600" font-size="21" fill="#c96442">One-click import from Claude Code &amp; Codex  →</text>

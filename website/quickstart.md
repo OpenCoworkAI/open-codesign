@@ -46,11 +46,12 @@ Current installers are not notarized or Authenticode-signed yet. **macOS Sequoia
 
 First launch opens the Settings page. Pick one path:
 
+- **ChatGPT subscription** — sign in with ChatGPT to use Codex models without pasting an API key.
 - **Import from Claude Code or Codex** — one click, we read your existing config (`~/.codex/config.toml`, `~/.claude/settings.json`) and bring every provider, model, and key over.
 - **Manual** — paste any API key. Provider is auto-detected from prefix (`sk-ant-…` → Anthropic, `sk-…` → OpenAI, etc.).
 - **Keyless** — for IP-allowlisted proxies (enterprise gateways, local Ollama), leave the key blank.
 
-Supported out of the box: Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, and any OpenAI-compatible endpoint. Credentials stay in `~/.config/open-codesign/config.toml`, encrypted via Electron `safeStorage`. Nothing is uploaded.
+Supported out of the box: Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, ChatGPT subscription login, and any OpenAI-compatible endpoint. API-key credentials stay in `~/.config/open-codesign/config.toml`, encrypted via Electron `safeStorage`; ChatGPT OAuth tokens stay in the app config token store. Nothing is uploaded.
 
 ## 3. Type your first prompt
 

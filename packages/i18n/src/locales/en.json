@@ -16,7 +16,7 @@
     "comingSoon": "Coming soon",
     "loading": "Loading…",
     "preAlpha": "pre-alpha",
-    "tagline": "BYOK · local-first · multi-model",
+    "tagline": "BYOK · ChatGPT login · local-first",
     "done": "Done.",
     "applied": "Applied.",
     "working": "Working"
@@ -268,7 +268,7 @@
     },
     "imageGen": {
       "tabTitle": "Image generation",
-      "tabHint": "Let the design agent call an image model (e.g. gpt-image-2) for heroes, posters, and background bitmaps. Credentials stay local.",
+      "tabHint": "Let the design agent call an image model through OpenAI, OpenRouter, or ChatGPT subscription for heroes, posters, and background bitmaps. Credentials stay local.",
       "title": "Image generation assist",
       "hint": "When enabled, the agent can invoke generate_image_asset during a run.",
       "enabled": "Enable image generation assist",
@@ -628,7 +628,7 @@
         "429": "Rate limited. Wait a moment and try again.",
         "network": "Cannot reach base URL. Check domain/port/network.",
         "unsupported": "Unrecognized key prefix. Supported: sk-ant- (Anthropic), sk- (OpenAI), sk-or- (OpenRouter).",
-        "notSupportedProvider": "{{provider}} is not supported in v0.1. Use Anthropic, OpenAI, or OpenRouter.",
+        "notSupportedProvider": "{{provider}} is not supported by the first-run provider shortcut. Use Anthropic, OpenAI, OpenRouter, Ollama, ChatGPT subscription sign-in, or add a custom provider in Settings.",
         "rendererDisconnected": "Renderer is not connected to the main process.",
         "detectIpc": "Provider detection failed (main process unreachable): {{message}}. Restart the app and try again.",
         "detectNetwork": "Provider detection failed (network error): {{message}}. Check your connection and try again."

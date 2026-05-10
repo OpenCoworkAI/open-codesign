@@ -33,7 +33,7 @@ A bird's-eye view. Detailed module READMEs live in each `packages/*/README.md`.
 
 | Package | Responsibility |
 |---|---|
-| `apps/desktop` | Electron shell — main process owns SQLite, FS, IPC. Renderer hosts React UI. No business logic here. |
+| `apps/desktop` | Electron shell — main process owns disk, workspace files, JSONL sessions, IPC, and desktop integration. Renderer hosts React UI. No provider SDK logic here. |
 | `packages/core` | Generation orchestration. Prompt + design system + history → providers → artifact stream → events. |
 | `packages/providers` | Wraps `@mariozechner/pi-ai` and adds the missing capabilities. App code never imports a provider SDK directly. |
 | `packages/runtime` | Sandbox preview. Iframe `srcdoc` + esbuild-wasm + import maps + overlay scripts for inline comments and sliders. |

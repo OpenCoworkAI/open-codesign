@@ -64,7 +64,7 @@ export async function runImportCodex(imported: CodexImport): Promise<OnboardingS
   if (imported.providers.length === 0) {
     throw new CodesignError(
       (await detectChatgptSubscription())
-        ? 'Detected Codex ChatGPT subscription login (auth_mode: chatgpt). It cannot be imported as an API-key provider yet — the "Sign in with ChatGPT subscription" feature is still being polished and will ship in the next release. For now, configure [model_providers] in ~/.codex/config.toml manually, or switch to API-key mode in Codex. / 检测到 Codex 使用 ChatGPT 订阅登录，无法自动导入为 API key provider。"用 ChatGPT 订阅登录"功能仍在打磨中，下个版本开放 —— 目前请在 ~/.codex/config.toml 里手动配置 [model_providers]，或改用 API key 登录 Codex。'
+        ? 'Detected Codex ChatGPT subscription login (auth_mode: chatgpt). Open CoDesign now supports ChatGPT subscription directly, but Codex config import only reads API-key [model_providers] from ~/.codex/config.toml. Open Settings > Models and use "Sign in with ChatGPT subscription" to add the ChatGPT provider. / 检测到 Codex 使用 ChatGPT 订阅登录。Open CoDesign 现在已支持直接使用 ChatGPT 订阅，但“从 Codex 导入”只读取 ~/.codex/config.toml 中的 API key [model_providers]。请到 设置 > Models 点击“用 ChatGPT 订阅登录”添加 ChatGPT 订阅 provider。'
         : 'No importable API provider found in Codex config (~/.codex/config.toml is missing a [model_providers] section). / Codex 配置里没有可导入的 API provider（~/.codex/config.toml 里缺少 [model_providers] 段）。',
       ERROR_CODES.CONFIG_MISSING,
     );

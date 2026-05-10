@@ -35,8 +35,8 @@ Pick **Open CoDesign** if you want the AI output to be real runnable code/artifa
 | Output form             | **Runnable code** (HTML, React/JSX) + PDF/PPTX/ZIP | Figma frames + components |
 | Models                  | **Any — Claude, GPT, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama** | Figma-hosted |
 | BYOK                    | **Yes**                     | No |
-| Pricing                 | **Free (BYOK token cost)**  | Paid Figma seat + AI add-on |
-| Data location           | **SQLite on your machine**  | Figma cloud |
+| Pricing                 | **Free app (provider or subscription cost only)** | Paid Figma seat + AI add-on |
+| Data location           | **Workspace files + JSONL sessions on your machine** | Figma cloud |
 | Local version history   | **Yes**                     | Figma version history (cloud) |
 | Offline use             | **Yes (with local Ollama)** | Limited |
 | Export                  | **HTML · React/JSX · PDF · PPTX · ZIP · Markdown** | Figma file + code via plugin |
@@ -48,7 +48,7 @@ Pick **Open CoDesign** if you want the AI output to be real runnable code/artifa
 
 - **Output is code, not a canvas.** No design→code handoff step. The prompt produces the thing engineering actually ships.
 - **Model choice.** Figma picks one model for you. Open CoDesign lets you mix Claude, GPT, Gemini, DeepSeek, Ollama by task.
-- **BYOK.** No platform margin on tokens.
+- **Cost control.** Use BYOK, local models, or an existing ChatGPT subscription. Open CoDesign adds no platform margin.
 - **On-device privacy.** Your prompts, designs, and any codebase scans stay on your machine.
 - **Fewer seats.** You only pay Figma per-seat when you actually need Figma. Open CoDesign is a free desktop app.
 - **Export to PDF / PPTX / ZIP** without plugin chains.

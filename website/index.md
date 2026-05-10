@@ -2,7 +2,7 @@
 layout: home
 title: Open CoDesign
 titleTemplate: Open-Source AI Design Tool — BYOK, Local-First, MIT
-description: Open CoDesign is an open-source desktop AI design tool — a self-hosted alternative to Claude Design. Bring your own API key (Anthropic, OpenAI, Gemini, DeepSeek, Ollama). Everything runs locally. MIT licensed.
+description: Open CoDesign is an open-source desktop AI design tool — a self-hosted alternative to Claude Design. Bring your own API key, local Ollama, or ChatGPT subscription login. Everything runs locally. MIT licensed.
 
 hero:
   name: Open CoDesign
@@ -25,10 +25,10 @@ hero:
 features:
   - icon: 🪶
     title: Bring your own model
-    details: Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay — including keyless (IP-allowlisted) proxies. Switch providers in Settings. We don't proxy, we don't charge per token.
+    details: Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, ChatGPT subscription login, or any OpenAI-compatible relay — including keyless (IP-allowlisted) proxies. Switch providers in Settings. We don't proxy, we don't charge per token.
   - icon: ⚡
     title: Import in one click
-    details: Already using Claude Code or Codex? Open CoDesign reads your existing config — providers, models, API keys — and brings it all in with a single click.
+    details: Already using Claude Code or Codex? Open CoDesign reads existing API-key provider configs, and ChatGPT subscription users can sign in directly from Settings.
   - icon: 🏡
     title: Your laptop is the cloud
     details: Designs, prompts, and settings stay on disk. v0.2 stores design sessions in JSONL and keeps generated sources in real workspace files. No mandatory account, no telemetry by default.
@@ -74,8 +74,8 @@ import { withBase } from 'vitepress'
 <div class="codesign-steps">
   <div class="codesign-step">
     <span class="num">1</span>
-    <h3>Bring your own key</h3>
-    <p>Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, Ollama — anything <code>pi-ai</code> speaks. No vendor lock-in.</p>
+    <h3>Bring your own route</h3>
+    <p>Use an API key, ChatGPT subscription sign-in, local Ollama, or any OpenAI-compatible endpoint <code>pi-ai</code> speaks. No vendor lock-in.</p>
   </div>
   <div class="codesign-step">
     <span class="num">2</span>
@@ -120,7 +120,7 @@ import { withBase } from 'vitepress'
   </figure>
   <figure>
     <img :src="withBase('/screenshots/add-provider-menu.png')" alt="Add provider menu — Claude Code, Codex, custom, and presets" />
-    <figcaption><b>Bring your own model.</b> Import Claude Code / Codex configs, or pick any OpenAI-compatible provider.</figcaption>
+    <figcaption><b>Bring your own model.</b> Import Claude Code / Codex API-key configs, sign in with ChatGPT, or pick any OpenAI-compatible provider.</figcaption>
   </figure>
 </div>
 
@@ -148,7 +148,7 @@ import { withBase } from 'vitepress'
 
 |                       | Open source    | Models             | Runs locally | Pricing             |
 | --------------------- | :------------: | :----------------: | :----------: | :-----------------: |
-| **Open CoDesign**     | **MIT**        | **Any (BYOK)**     | **✓**        | **Token cost only** |
+| **Open CoDesign**     | **MIT**        | **Any (BYOK / ChatGPT login)** | **✓**        | **Provider or subscription cost only** |
 | Claude Design         | ✗ Closed       | Opus only          | ✗            | Subscription        |
 | v0 by Vercel          | ✗ Closed       | Curated            | ✗            | Subscription        |
 | Lovable               | ✗ Closed       | Curated            | ✗            | Subscription        |

@@ -2,8 +2,8 @@
  * Tests for settings IPC channel versioning.
  *
  * These tests verify that registerOnboardingIpc exposes only the versioned
- * v1 settings channels. v0.2 has not shipped yet, so renderer/main IPC drift
- * should fail loudly instead of being hidden by unversioned compatibility
+ * v1 settings channels. v0.2 is the shipped IPC surface, so renderer/main IPC
+ * drift should fail loudly instead of being hidden by unversioned compatibility
  * handlers.
  */
 
@@ -778,6 +778,32 @@ describe('getApiKeyForProvider — API key retrieval', () => {
 });
 
 describe('config:v1:import-codex-config empty env handling', () => {
+  it('guides Codex ChatGPT subscription users to the built-in ChatGPT sign-in path', async () => {
+    await registerIpcForTest();
+    const { readCodexConfig, codexAuthPath } = await import('./imports/codex-config');
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    vi.mocked(readCodexConfig).mockResolvedValueOnce({
+      providers: [],
+      activeProvider: null,
+      activeModel: null,
+      envKeyMap: {},
+      apiKeyMap: {},
+      warnings: [],
+    });
+    const dir = join(tmpdir(), `codesign-codex-chatgpt-${Date.now()}-${Math.random()}`);
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, 'auth.json');
+    await writeFile(path, JSON.stringify({ auth_mode: 'chatgpt' }), 'utf8');
+    vi.mocked(codexAuthPath).mockReturnValueOnce(path);
+
+    const handler = handlers.get('config:v1:import-codex-config');
+    await expect(handler?.({} as unknown)).rejects.toThrow(
+      /Open CoDesign now supports ChatGPT subscription directly/,
+    );
+  });
+
   it('rejects imports that only found an empty env credential', async () => {
     const { readCodexConfig } = await import('./imports/codex-config');
     const { encryptSecret } = await import('./keychain');

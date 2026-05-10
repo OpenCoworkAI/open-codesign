@@ -16,7 +16,7 @@
     "comingSoon": "Em breve",
     "loading": "Carregando…",
     "preAlpha": "pré-alfa",
-    "tagline": "BYOK · local-first · multi-modelo",
+    "tagline": "BYOK · login ChatGPT · local-first",
     "done": "Pronto.",
     "applied": "Aplicado.",
     "working": "Trabalhando"
@@ -539,7 +539,7 @@
         "429": "Limite de requisições atingido. Aguarde um momento e tente novamente.",
         "network": "Não foi possível acessar a URL base. Verifique domínio/porta/rede.",
         "unsupported": "Prefixo de chave não reconhecido. Suportados: sk-ant- (Anthropic), sk- (OpenAI), sk-or- (OpenRouter).",
-        "notSupportedProvider": "{{provider}} não é suportado na v0.1. Use Anthropic, OpenAI ou OpenRouter.",
+        "notSupportedProvider": "{{provider}} não é suportado pelo atalho de primeiro uso. Use Anthropic, OpenAI, OpenRouter, Ollama, login por assinatura do ChatGPT ou adicione um provedor personalizado em Configurações.",
         "rendererDisconnected": "O renderer não está conectado ao processo principal.",
         "detectIpc": "Falha na detecção do provedor (processo principal inacessível): {{message}}. Reinicie o app e tente novamente.",
         "detectNetwork": "Falha na detecção do provedor (erro de rede): {{message}}. Verifique sua conexão e tente novamente."

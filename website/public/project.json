@@ -2,7 +2,7 @@
   "name": "Open CoDesign",
   "slug": "open-codesign",
   "alternate_names": ["open-codesign"],
-  "description": "Open CoDesign is an open-source desktop AI design tool. It turns natural-language prompts into HTML prototypes, React components, slide decks, PDFs, and marketing assets while keeping user data local, storing v0.2 design sessions in workspace-backed files, and using bring-your-own-key model access.",
+  "description": "Open CoDesign is an open-source desktop AI design tool. It turns natural-language prompts into HTML prototypes, React components, slide decks, PDFs, and marketing assets while keeping user data local, storing v0.2 design sessions in workspace-backed files, and using bring-your-own-key model access, local endpoints, or ChatGPT subscription login.",
   "canonical_url": "https://opencoworkai.github.io/open-codesign/",
   "repository": "https://github.com/OpenCoworkAI/open-codesign",
   "sourceforge_mirror": "https://sourceforge.net/projects/open-codesign.mirror/files/",
@@ -33,7 +33,7 @@
     "Open-source alternative to Claude Design",
     "Desktop AI design tool",
     "Agentic Design with workspace-backed sessions",
-    "BYOK and multi-model",
+    "BYOK, ChatGPT subscription login, and multi-model",
     "Local-first design history and files",
     "MIT-licensed"
   ],

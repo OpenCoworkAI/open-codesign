@@ -2,7 +2,7 @@
 layout: home
 title: Open CoDesign
 titleTemplate: 开源 AI 设计工具 — 自带密钥，本地优先，MIT
-description: Open CoDesign 是一款开源桌面 AI 设计工具，Claude Design 的自托管替代方案。自带 API Key（Anthropic、OpenAI、Gemini、DeepSeek、Ollama），一切本地运行。MIT 协议。
+description: Open CoDesign 是一款开源桌面 AI 设计工具，Claude Design 的自托管替代方案。可用自带 API Key、本地 Ollama 或 ChatGPT 订阅登录，一切本地运行。MIT 协议。
 
 hero:
   name: Open CoDesign
@@ -25,10 +25,10 @@ hero:
 features:
   - icon: 🪶
     title: 自带模型
-    details: Anthropic、OpenAI、Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama，或任意 OpenAI 兼容中继——包括 keyless（IP 白名单）代理。设置里切 provider，我们不做代理，也不按 token 计费。
+    details: Anthropic、OpenAI、Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama、ChatGPT 订阅登录，或任意 OpenAI 兼容中继——包括 keyless（IP 白名单）代理。设置里切 provider，我们不做代理，也不按 token 计费。
   - icon: ⚡
     title: 一键导入配置
-    details: 已经在用 Claude Code 或 Codex？Open CoDesign 直接读你的配置文件——provider、model、API Key，一次带过来。
+    details: 已经在用 Claude Code 或 Codex？Open CoDesign 会导入已有的 API key provider 配置；ChatGPT 订阅用户可以直接在设置里登录。
   - icon: 🏡
     title: 你的电脑就是云
     details: 设计稿、提示词和设置都在本地磁盘。v0.2 使用 JSONL session，并把生成源码放在真实工作区文件里。无需注册账号，默认无遥测。
@@ -74,8 +74,8 @@ import { withBase } from 'vitepress'
 <div class="codesign-steps">
   <div class="codesign-step">
     <span class="num">1</span>
-    <h3>带上你自己的密钥</h3>
-    <p>Anthropic、OpenAI、Gemini、DeepSeek、OpenRouter、Ollama——只要 <code>pi-ai</code> 支持，全都能用。</p>
+    <h3>带上你自己的模型入口</h3>
+    <p>API Key、ChatGPT 订阅登录、本地 Ollama，或任何 <code>pi-ai</code> 支持的 OpenAI 兼容端点都能用。</p>
   </div>
   <div class="codesign-step">
     <span class="num">2</span>
@@ -120,7 +120,7 @@ import { withBase } from 'vitepress'
   </figure>
   <figure>
     <img :src="withBase('/screenshots/add-provider-menu.png')" alt="添加 provider 菜单——Claude Code、Codex、自定义、预设" />
-    <figcaption><b>自带模型。</b>导入 Claude Code / Codex 配置，或任何 OpenAI 兼容 provider。</figcaption>
+    <figcaption><b>自带模型。</b>导入 Claude Code / Codex 的 API key 配置、登录 ChatGPT 订阅，或选择任何 OpenAI 兼容 provider。</figcaption>
   </figure>
 </div>
 
@@ -148,7 +148,7 @@ import { withBase } from 'vitepress'
 
 |                       | 开源           | 模型                 | 本地运行  | 价格                 |
 | --------------------- | :------------: | :------------------: | :-------: | :------------------: |
-| **Open CoDesign**     | **MIT**        | **任意（自带密钥）** | **✓**     | **仅 token 成本**    |
+| **Open CoDesign**     | **MIT**        | **任意（自带密钥 / ChatGPT 登录）** | **✓** | **仅 provider 或订阅成本** |
 | Claude Design         | ✗ 闭源         | 仅 Opus              | ✗         | 订阅                 |
 | v0 by Vercel          | ✗ 闭源         | 平台精选             | ✗         | 订阅                 |
 | Lovable               | ✗ 闭源         | 平台精选             | ✗         | 订阅                 |

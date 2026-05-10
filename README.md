@@ -50,7 +50,7 @@
 
 Turn a prompt into a polished prototype, slide deck, or marketing asset, locally, with the model you already use.
 
-**Open CoDesign is the open-source Claude Design alternative** — built for people who want the speed of AI-native design tools without subscription lock-in, cloud-only workflows, or being forced onto a single provider. An MIT-licensed desktop app, local-first from day one, with BYOK for any model (Claude, GPT, Gemini, DeepSeek, Kimi, GLM, Ollama, or any OpenAI-compatible endpoint). One-click import of your existing Claude Code or Codex API key gets you running in under 90 seconds.
+**Open CoDesign is the open-source Claude Design alternative** — built for people who want the speed of AI-native design tools without subscription lock-in, cloud-only workflows, or being forced onto a single provider. An MIT-licensed desktop app, local-first from day one, with BYOK for any model (Claude, GPT, Gemini, DeepSeek, Kimi, GLM, Ollama, or any OpenAI-compatible endpoint) plus direct ChatGPT Plus / Pro / Team subscription sign-in for Codex models. One-click import of existing Claude Code or Codex provider configs, or one-click ChatGPT sign-in, gets you running in under 90 seconds.
 
 ---
 
@@ -85,7 +85,7 @@ Open source, desktop-native, and built for people who do not want their design w
 | Version history | ✅ Local sessions + workspace files | ❌ | ❌ | ❌ |
 | Data privacy | ✅ On-device app state | ❌ Cloud-processed | ❌ Cloud | ❌ Cloud |
 | Editable export | ✅ HTML, PDF, PPTX, ZIP, Markdown | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited |
-| Price | ✅ Free app, token cost only | 💳 Subscription | 💳 Subscription | 💳 Subscription |
+| Price | ✅ Free app, provider/subscription cost only | 💳 Subscription | 💳 Subscription | 💳 Subscription |
 
 ---
 
@@ -128,7 +128,7 @@ Open source, desktop-native, and built for people who do not want their design w
 
 **Time to first artifact:** about 3 minutes
 
-**Requires:** one API key or local Ollama
+**Requires:** one API key, ChatGPT subscription sign-in, or local Ollama
 
 **Runs on:** macOS 12+ (Monterey or later), Windows 10+, Linux (glibc ≥ 2.31)
 
@@ -184,16 +184,15 @@ After each stable tag push, CI syncs SHAs back into `packaging/` and publishes d
 >
 > Want a verified build? Compile from source — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-### 2. Add your API key
+### 2. Add a provider
 
-On first launch, Open CoDesign opens the Settings page. Paste any supported provider key:
+On first launch, Open CoDesign opens the Settings page. Pick the path that matches how you already use models:
 
-- Anthropic (`sk-ant-…`)
-- OpenAI (`sk-…`)
-- Google Gemini
-- Any OpenAI-compatible relay (OpenRouter, SiliconFlow, local Ollama)
+- **ChatGPT subscription** — sign in with ChatGPT to use Codex models without pasting an API key.
+- **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
+- **Local / keyless** — use Ollama or an IP-allowlisted OpenAI-compatible gateway.
 
-Credentials stay in `~/.config/open-codesign/config.toml` (file mode 0600, same convention as Claude Code, Codex, and `gh` CLI). Nothing leaves your machine unless your chosen model provider requires it.
+Credentials stay in `~/.config/open-codesign/config.toml` and the ChatGPT OAuth token store under the app config directory. Nothing leaves your machine unless your chosen model route requires it.
 
 ### 3. Type your first prompt
 
@@ -203,7 +202,7 @@ Pick one of **fifteen built-in demos** — landing page, dashboard, pitch slide,
 
 ## Bring your stack
 
-Already using Claude Code or Codex? Your providers, models, and API keys import in one click, with no copy-paste and no need to re-enter settings:
+Already using Claude Code or Codex? API-key provider configs import in one click, with no copy-paste and no need to re-enter settings. If you use Codex through ChatGPT subscription login, sign in directly from Settings:
 
 ![Import from Claude Code or Codex in one click](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/claude-code-import.gif)
 
@@ -223,14 +222,14 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 
 ### Models and providers
 - **Unified provider model** — Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
-- **One-click import** from Claude Code and Codex configs — bring your existing providers, models, and keys in a single click
+- **One-click import and sign-in** — bring Claude Code / Codex API-key provider configs across, or sign in with ChatGPT subscription for Codex models
 - **Dynamic model picker** — every provider exposes its real model catalogue, not a hardcoded shortlist
 
 ### Generation and editing
 - **Prompt → HTML or JSX/React component** prototype, rendered in a sandboxed iframe (vendored React 18 + Babel on-device)
 - **Fifteen built-in demos + twelve design skill modules** — ready-to-edit starting points for common design briefs
 - **Live agent panel** — watch tool calls stream in real time as the model edits files
-- **AI image generation** — opt-in bitmap assets for heroes, product shots, backgrounds, and illustrations
+- **AI image generation** — opt-in bitmap assets for heroes, product shots, backgrounds, and illustrations via OpenAI, OpenRouter, or signed-in ChatGPT subscription
 - **AI-generated sliders** — the model emits the parameters worth tweaking (color, spacing, font)
 - **Comment mode** — click any element in the preview to drop a pin, leave a note, and let the model rewrite only that region
 - **Generation cancellation** — stop mid-stream without losing prior turns
@@ -303,7 +302,7 @@ Have a different priority in mind? [Open an issue](https://github.com/OpenCowork
 
 - Electron + React 19 + Vite 6 + Tailwind v4
 - `@mariozechner/pi-ai` and `pi-coding-agent` (model/provider and agent-loop primitives)
-- `better-sqlite3`, `electron-builder`
+- `electron-builder`
 
 ## Reporting issues
 

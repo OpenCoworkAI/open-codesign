@@ -16,7 +16,7 @@
     "comingSoon": "Próximamente",
     "loading": "Cargando…",
     "preAlpha": "pre-alpha",
-    "tagline": "BYOK · local-first · multi-modelo",
+    "tagline": "BYOK · inicio con ChatGPT · local-first",
     "done": "Listo.",
     "applied": "Aplicado.",
     "working": "Trabajando"
@@ -239,7 +239,7 @@
     },
     "imageGen": {
       "tabTitle": "Generación de imágenes",
-      "tabHint": "Permite que el agente de diseño llame a un modelo de imagen (ej. gpt-image-2) para encabezados, pósteres y mapas de bits de fondo. Las credenciales permanecen locales.",
+      "tabHint": "Permite que el agente de diseño llame a un modelo de imagen mediante OpenAI, OpenRouter o una suscripción de ChatGPT para encabezados, pósteres y mapas de bits de fondo. Las credenciales permanecen locales.",
       "title": "Asistente de generación de imágenes",
       "hint": "Cuando está habilitado, el agente puede invocar generate_image_asset durante una ejecución.",
       "enabled": "Habilitar asistente de generación de imágenes",
@@ -573,7 +573,7 @@
         "429": "Límite de tasa excedido. Espera un momento e intenta de nuevo.",
         "network": "No se puede alcanzar la URL base. Revisa dominio/puerto/red.",
         "unsupported": "Prefijo de clave no reconocido. Soportados: sk-ant- (Anthropic), sk- (OpenAI), sk-or- (OpenRouter).",
-        "notSupportedProvider": "{{provider}} no es compatible en la v0.1. Usa Anthropic, OpenAI o OpenRouter.",
+        "notSupportedProvider": "{{provider}} no es compatible con el acceso rápido del primer inicio. Usa Anthropic, OpenAI, OpenRouter, Ollama, inicia sesión con una suscripción de ChatGPT o añade un proveedor personalizado en Ajustes.",
         "rendererDisconnected": "El renderizador no está conectado al proceso principal.",
         "detectIpc": "Error al detectar proveedor (proceso principal inalcanzable): {{message}}. Reinicia la app e intenta de nuevo.",
         "detectNetwork": "Error al detectar proveedor (error de red): {{message}}. Revisa tu conexión e intenta de nuevo."

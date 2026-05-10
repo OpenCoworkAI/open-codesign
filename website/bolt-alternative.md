@@ -12,7 +12,7 @@ head:
 
 # Open CoDesign vs Bolt.new — Open-Source Bolt Alternative
 
-Looking for an **open-source alternative to Bolt.new**? Open CoDesign is an MIT-licensed desktop app that takes prompts to interactive prototypes — running entirely on your laptop, with your own keys, against any model provider.
+Looking for an **open-source alternative to Bolt.new**? Open CoDesign is an MIT-licensed desktop app that takes prompts to interactive prototypes — running entirely on your laptop, with your own keys, ChatGPT subscription login, or any compatible model route.
 
 [Download Open CoDesign →](https://github.com/OpenCoworkAI/open-codesign/releases) · [90-second Quickstart](./quickstart)
 
@@ -32,10 +32,10 @@ Pick **Open CoDesign** if you want a native desktop tool for design-grade protot
 | Runs on                 | **Your laptop (macOS / Windows / Linux)** | Cloud (browser + WebContainers) |
 | Scope                   | Design-grade prototypes + decks + PDFs | Full-stack web apps in-browser |
 | Models                  | **Any — Claude, GPT, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama** | Provider-bundled |
-| Pricing                 | **Free (BYOK token cost)**  | Paid subscription (token-metered) |
+| Pricing                 | **Free app (provider or subscription cost only)** | Paid subscription (token-metered) |
 | BYOK                    | **Yes — any provider**      | Limited |
-| Data location           | **SQLite on your machine**  | Cloud (StackBlitz infra) |
-| Local version history   | **Yes — snapshots + diff**  | In-app history (cloud) |
+| Data location           | **Workspace files + JSONL sessions on your machine** | Cloud (StackBlitz infra) |
+| Local version history   | **Yes — workspace-backed sessions** | In-app history (cloud) |
 | Offline use             | **Yes (with local Ollama)** | No (needs WebContainers runtime) |
 | Output formats          | **HTML · React/JSX · PDF · PPTX · ZIP · Markdown** | Runnable project + deploy target |
 | Built-in design skills  | **12 modules**              | General code scaffolding |
@@ -45,8 +45,8 @@ Pick **Open CoDesign** if you want a native desktop tool for design-grade protot
 ## Why someone would switch from Bolt.new to Open CoDesign
 
 - **Model freedom.** Use any provider per generation. Polish on Claude Opus, iterate cheaply on DeepSeek/Kimi, go private with Ollama.
-- **No subscription, no token metering.** BYOK — pay your provider directly at their rates.
-- **On-device history.** Every iteration is a local SQLite snapshot you can diff and roll back without needing cloud.
+- **No Open CoDesign subscription, no platform token margin.** Use BYOK, local models, or your existing ChatGPT subscription.
+- **On-device history.** Every design is a local session with JSONL history and workspace files you can inspect without needing cloud.
 - **Export variety.** PDF, PPTX, ZIP, Markdown — not just running web apps.
 - **Native desktop app.** Faster iteration loop than an in-browser IDE; no tab-crash risk.
 

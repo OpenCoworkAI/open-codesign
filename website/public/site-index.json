@@ -19,7 +19,7 @@
       "language": "en-US",
       "type": "home",
       "title": "Open CoDesign",
-      "description": "Open-source desktop AI design tool with BYOK model support and local-first storage."
+      "description": "Open-source desktop AI design tool with BYOK, ChatGPT subscription login, and local-first workspace storage."
     },
     {
       "url": "https://opencoworkai.github.io/open-codesign/quickstart",

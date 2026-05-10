@@ -1,6 +1,6 @@
 # Open CoDesign
 
-> Open CoDesign is an MIT-licensed, open-source desktop AI design tool by OpenCoworkAI. It turns natural-language prompts into HTML prototypes, React / JSX components, slide decks, PDFs, ZIP bundles, Markdown exports, and design assets while keeping project data local and using bring-your-own-key model access.
+> Open CoDesign is an MIT-licensed, open-source desktop AI design tool by OpenCoworkAI. It turns natural-language prompts into HTML prototypes, React / JSX components, slide decks, PDFs, ZIP bundles, Markdown exports, and design assets while keeping project data local and using bring-your-own-key model access, local endpoints, or ChatGPT subscription login.
 
 ## Canonical URLs
 

@@ -48,7 +48,7 @@
 
 Open CoDesign 可以把一句自然语言提示词，直接变成一个完成度很高的 HTML 原型、幻灯片或者营销素材，而且整个过程都可以在你的电脑上完成。
 
-它适合这样一类人：想要 AI 设计工具的速度，但不想被订阅制绑住，不想把工作流全丢到云端，也不想只能用某一家模型。你可以把它理解成一个更开放、更本地化的 Claude Design 替代方案：开源、桌面原生、支持自带 API Key，也支持多模型切换。
+它适合这样一类人：想要 AI 设计工具的速度，但不想被订阅制绑住，不想把工作流全丢到云端，也不想只能用某一家模型。你可以把它理解成一个更开放、更本地化的 Claude Design 替代方案：开源、桌面原生、支持自带 API Key、ChatGPT 订阅登录和多模型切换。
 
 ---
 
@@ -83,7 +83,7 @@ Open CoDesign 可以把一句自然语言提示词，直接变成一个完成度
 | 版本历史 | ✅ 本地 session + 工作区文件 | ❌ | ❌ | ❌ |
 | 数据隐私 | ✅ 应用状态保留在本地 | ❌ 云端处理 | ❌ 云端 | ❌ 云端 |
 | 可编辑导出 | ✅ HTML、PDF、PPTX、ZIP、Markdown | ⚠️ 有限制 | ⚠️ 有限制 | ⚠️ 有限制 |
-| 价格 | ✅ 应用免费，仅承担模型 token 成本 | 💳 订阅制 | 💳 订阅制 | 💳 订阅制 |
+| 价格 | ✅ 应用免费，仅承担 provider 或订阅成本 | 💳 订阅制 | 💳 订阅制 | 💳 订阅制 |
 
 ---
 
@@ -126,7 +126,7 @@ Open CoDesign 可以把一句自然语言提示词，直接变成一个完成度
 
 **第一次生成一个结果，大概只要：** 3 分钟
 
-**你需要准备：** 一个 API Key，或者本地 Ollama
+**你需要准备：** 一个 API Key、ChatGPT 订阅登录，或者本地 Ollama
 
 **支持平台：** macOS、Windows、Linux
 
@@ -182,16 +182,15 @@ scoop install opencoworkai/open-codesign
 >
 > 想要可验证构建可以自己从源码编译，见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-### 2. 添加 API Key
+### 2. 添加 provider
 
-首次启动时，Open CoDesign 会直接打开设置页。你可以粘贴任意支持的 provider key：
+首次启动时，Open CoDesign 会直接打开设置页。按你已有的模型入口选择即可：
 
-- Anthropic（`sk-ant-…`）
-- OpenAI（`sk-…`）
-- Google Gemini
-- 任意 OpenAI 兼容中继，比如 OpenRouter、SiliconFlow、本地 Ollama
+- **ChatGPT 订阅登录**：直接登录 ChatGPT，使用 Codex 模型，无需粘贴 API Key。
+- **API Key**：粘贴 Anthropic（`sk-ant-...`）、OpenAI（`sk-...`）、Google Gemini、OpenRouter、SiliconFlow、DeepSeek 或其他支持的 provider key。
+- **本地 / Keyless**：使用 Ollama，或使用 IP 白名单的 OpenAI 兼容网关。
 
-凭证会保存在 `~/.config/open-codesign/config.toml`（文件权限 0600，与 Claude Code、Codex、`gh` CLI 的做法一致）。除非你选择的模型提供商本身需要联网，请求内容不会额外离开你的机器。
+凭证会保存在 `~/.config/open-codesign/config.toml`，ChatGPT OAuth token 会保存在应用配置目录下的 token store 中。除非你选择的模型入口本身需要联网，请求内容不会额外离开你的机器。
 
 ### 3. 输入第一条提示词
 
@@ -201,7 +200,7 @@ scoop install opencoworkai/open-codesign
 
 ## 可以直接接你现有的开发环境
 
-如果你已经在用 Claude Code 或 Codex，现有的 provider、model 和 API key 都可以一键导入，不用复制粘贴，也不用重新配一遍。
+如果你已经在用 Claude Code 或 Codex，API key 形式的 provider、model 和 key 都可以一键导入；如果你用的是 Codex 的 ChatGPT 订阅登录，可以直接在设置里登录 ChatGPT。
 
 ![一键导入 Claude Code 或 Codex 配置](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/claude-code-import.gif)
 
@@ -221,14 +220,14 @@ scoop install opencoworkai/open-codesign
 
 ### 模型与提供商
 - **统一的 provider 抽象**：支持 Anthropic、OpenAI、Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama，以及任意 OpenAI-compatible relay；同时支持无 key 的 IP 白名单代理
-- **一键导入 Claude Code 和 Codex 配置**：现有的 provider、model 和 key 可以直接带进来
+- **一键导入和登录**：Claude Code / Codex 的 API key provider 配置可以直接带进来，也可以用 ChatGPT 订阅登录使用 Codex 模型
 - **动态模型选择器**：每个 provider 都会展示真实模型列表，而不是一小撮写死的选项
 
 ### 生成与编辑
 - **提示词 → HTML 或 JSX/React 组件原型**，渲染在隔离的 sandbox iframe 中（本地 vendored React 18 + Babel）
 - **十五个内置 demo + 十二个设计技能模块**：给常见设计需求准备好的起点
 - **实时 Agent 面板**：模型编辑文件时，工具调用会实时流式展示
-- **AI 图像生成**：可选启用，为 hero、产品图、背景和插画生成位图素材
+- **AI 图像生成**：可选启用，可通过 OpenAI、OpenRouter 或已登录的 ChatGPT 订阅为 hero、产品图、背景和插画生成位图素材
 - **AI 自动生成调节参数**：模型会主动暴露值得调的参数，比如颜色、间距和字体
 - **Comment mode**：点击预览中的任意元素，留下批注，模型只重写对应局部
 - **支持中途取消生成**：停止后也不会丢失之前的上下文和结果
@@ -293,7 +292,7 @@ v0.2 已经把 Open CoDesign 从一次性生成器升级成一个本地设计 ag
 
 - Electron + React 19 + Vite 6 + Tailwind v4
 - `@mariozechner/pi-ai` 与 `pi-coding-agent`（模型 / provider 与 agent loop 基础能力）
-- `better-sqlite3`、`electron-builder`
+- `electron-builder`
 
 ## 社群
 

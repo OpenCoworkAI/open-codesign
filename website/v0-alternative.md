@@ -12,7 +12,7 @@ head:
 
 # Open CoDesign vs v0 — Open-Source v0 Alternative
 
-Looking for an **open-source alternative to v0 by Vercel**? Open CoDesign is an MIT-licensed desktop app that turns prompts into React components and UI prototypes — but runs entirely on your laptop, with your own API key, against any model you like.
+Looking for an **open-source alternative to v0 by Vercel**? Open CoDesign is an MIT-licensed desktop app that turns prompts into React components and UI prototypes — but runs entirely on your laptop, with your own API key, ChatGPT subscription login, or any compatible model route you like.
 
 [Download Open CoDesign →](https://github.com/OpenCoworkAI/open-codesign/releases) · [90-second Quickstart](./quickstart)
 
@@ -31,10 +31,10 @@ Pick **Open CoDesign** if you want any model (not just OpenAI/Vercel's), BYOK co
 | License                 | **MIT**                     | Closed        |
 | Runs on                 | **Your laptop (macOS / Windows / Linux)** | Cloud (browser) |
 | Models                  | **Any — Claude, GPT, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama, any OpenAI-compatible** | GPT-4o (Vercel-hosted) |
-| Pricing                 | **Free (BYOK token cost)**  | Paid subscription (per-seat) |
+| Pricing                 | **Free app (provider or subscription cost only)** | Paid subscription (per-seat) |
 | BYOK                    | **Yes — any provider**      | No (Vercel hosts the model) |
-| Data location           | **SQLite on your machine**  | Vercel cloud |
-| Local version history   | **Yes — snapshots + diff**  | —             |
+| Data location           | **Workspace files + JSONL sessions on your machine** | Vercel cloud |
+| Local version history   | **Yes — workspace-backed sessions** | —             |
 | Offline use             | **Yes (with local Ollama)** | No            |
 | Config import           | **Claude Code + Codex, one click** | No    |
 | Output formats          | **HTML · React/JSX · PDF · PPTX · ZIP · Markdown** | React/JSX + HTML |

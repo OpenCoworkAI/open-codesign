@@ -97,7 +97,7 @@ export async function pingProvider(
 ): Promise<ValidateResult> {
   if (!isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
-      `Provider "${provider}" is not supported in v0.1. Supported: anthropic, openai, openrouter, ollama.`,
+      `Provider "${provider}" is not supported by the first-run provider shortcut. Supported: anthropic, openai, openrouter, ollama. Add custom providers in Settings, or use ChatGPT subscription sign-in for chatgpt-codex.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }

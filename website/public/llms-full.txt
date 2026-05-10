@@ -38,7 +38,7 @@ Open CoDesign exists for users who want AI-native design speed without subscript
 - Markdown exports.
 - AI-generated bitmap assets when the configured provider supports image generation.
 
-## Shipped v0.1 Capabilities
+## Current Capabilities
 
 - Unified provider model with dynamic model picker.
 - One-click import from Claude Code and Codex configs.

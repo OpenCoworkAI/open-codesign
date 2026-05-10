@@ -16,7 +16,7 @@
     "comingSoon": "即将推出",
     "loading": "加载中…",
     "preAlpha": "预览版",
-    "tagline": "自带密钥 · 本地优先 · 多模型",
+    "tagline": "自带密钥 · ChatGPT 登录 · 本地优先",
     "done": "完成。",
     "applied": "已应用。",
     "working": "处理中"
@@ -268,7 +268,7 @@
     },
     "imageGen": {
       "tabTitle": "图像生成",
-      "tabHint": "允许设计 Agent 调用图像模型（如 gpt-image-2）生成 hero、海报或背景位图。凭据仅保存在本机。",
+      "tabHint": "允许设计 Agent 通过 OpenAI、OpenRouter 或 ChatGPT 订阅调用图像模型，生成 hero、海报或背景位图。凭据仅保存在本机。",
       "title": "图像生成辅助",
       "hint": "开启后，Agent 在生成设计时可以调用 generate_image_asset 工具。",
       "enabled": "启用图像生成辅助",
@@ -628,7 +628,7 @@
         "429": "请求被限流，稍等片刻再试。",
         "network": "无法连接到 Base URL，检查域名 / 端口 / 网络。",
         "unsupported": "无法识别的 Key 前缀。支持：sk-ant-（Anthropic）、sk-（OpenAI）、sk-or-（OpenRouter）。",
-        "notSupportedProvider": "{{provider}} 在 v0.1 中暂不支持，请使用 Anthropic、OpenAI 或 OpenRouter。",
+        "notSupportedProvider": "{{provider}} 不在首次启动的快捷 provider 列表中。请使用 Anthropic、OpenAI、OpenRouter、Ollama、ChatGPT 订阅登录，或在设置中添加自定义 provider。",
         "rendererDisconnected": "渲染进程未连接到主进程。",
         "detectIpc": "提供商识别失败（无法连接主进程）：{{message}}。请重启应用后重试。",
         "detectNetwork": "提供商识别失败（网络错误）：{{message}}。请检查网络后重试。"
