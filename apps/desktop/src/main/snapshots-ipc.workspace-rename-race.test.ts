@@ -16,13 +16,8 @@ type Handler = (event: unknown, raw: unknown) => unknown;
 
 const handlers = vi.hoisted(() => new Map<string, Handler>());
 const testRoots = vi.hoisted(() => {
-  const base = (
-    process.env['RUNNER_TEMP'] ??
-    process.env['TMPDIR'] ??
-    process.env['TEMP'] ??
-    process.env['TMP'] ??
-    (process.platform === 'win32' ? 'C:/Temp' : '/tmp')
-  ).replaceAll('\\', '/');
+  const fallback = process.platform === 'win32' ? 'C:/Temp' : '/tmp';
+  const base = (process.env['TEMP'] ?? process.env['TMP'] ?? fallback).replaceAll('\\', '/');
   return { documentsRoot: `${base}/open-codesign-rename-tests` };
 });
 const renameControl = vi.hoisted(() => {

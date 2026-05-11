@@ -1,8 +1,8 @@
 import type { Design } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
-import { buildRecentDesigns } from './RecentTab';
+import { buildRecentDesigns, collapseWorkspaceDesigns } from './RecentTab';
 
-function design(id: string, updatedAt: string): Design {
+function design(id: string, updatedAt: string, workspacePath: string | null = null): Design {
   return {
     schemaVersion: 1,
     id,
@@ -11,7 +11,7 @@ function design(id: string, updatedAt: string): Design {
     updatedAt,
     deletedAt: null,
     thumbnailText: null,
-    workspacePath: null,
+    workspacePath,
   };
 }
 
@@ -45,5 +45,42 @@ describe('buildRecentDesigns', () => {
         2,
       ).map((d) => d.id),
     ).toEqual(['working-old', 'recent-1']);
+  });
+
+  it('shows one card per workspace and keeps the newest session as the representative', () => {
+    const designs = [
+      design('new-session', '2026-05-05T11:00:00.000Z', 'C:\\Users\\me\\MotsDits'),
+      design('old-session', '2026-05-05T10:00:00.000Z', 'c:/users/me/motsdits/'),
+      design('other-workspace', '2026-05-05T09:00:00.000Z', 'C:/Users/me/Other'),
+    ];
+
+    expect(buildRecentDesigns(designs, {}, 6).map((d) => d.id)).toEqual([
+      'new-session',
+      'other-workspace',
+    ]);
+  });
+
+  it('uses an active session as the workspace representative', () => {
+    const designs = [
+      design('new-idle-session', '2026-05-05T11:00:00.000Z', 'C:/Users/me/MotsDits'),
+      design('old-working-session', '2026-05-05T10:00:00.000Z', 'C:/Users/me/MotsDits'),
+    ];
+
+    expect(
+      buildRecentDesigns(
+        designs,
+        { 'old-working-session': { generationId: 'gen-old', stage: 'streaming' } },
+        6,
+      ).map((d) => d.id),
+    ).toEqual(['old-working-session']);
+  });
+
+  it('does not collapse designs without a workspace path', () => {
+    expect(
+      collapseWorkspaceDesigns([
+        design('blank-1', '2026-05-05T11:00:00.000Z'),
+        design('blank-2', '2026-05-05T10:00:00.000Z'),
+      ]).map((d) => d.id),
+    ).toEqual(['blank-1', 'blank-2']);
   });
 });

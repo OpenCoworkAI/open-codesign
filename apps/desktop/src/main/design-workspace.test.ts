@@ -179,6 +179,29 @@ describe('bindWorkspace', () => {
     expect(getDesign(db, design.id)?.workspacePath).toBeNull();
   });
 
+  it('allows an explicit fresh conversation to share an existing workspace binding', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db);
+    const otherDesign = createDesign(db, 'Landing page variants');
+    const sharedPath = normalizeWorkspacePath(await makeTempDir('ocd-ws-shared-'));
+    await writeWorkspaceFile(
+      sharedPath,
+      'App.jsx',
+      'export default function App() { return null; }',
+    );
+    updateDesignWorkspace(db, otherDesign.id, sharedPath);
+
+    const rebound = await bindWorkspace(db, design.id, sharedPath, false, 'work-on-project', {
+      allowExistingWorkspaceBinding: true,
+    });
+
+    expect(rebound.workspacePath).toBe(sharedPath);
+    expect(getDesign(db, otherDesign.id)?.workspacePath).toBe(sharedPath);
+    await expect(readFile(path.join(sharedPath, 'App.jsx'), 'utf8')).resolves.toBe(
+      'export default function App() { return null; }',
+    );
+  });
+
   it('rejects empty and relative workspace bindings before touching the db', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db);

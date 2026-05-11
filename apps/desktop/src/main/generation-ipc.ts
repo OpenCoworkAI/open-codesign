@@ -1,4 +1,5 @@
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import { workspacePathComparisonKey } from './workspace-path';
 
 export interface CancellationLogger {
   info: (event: string, payload: { id: string }) => void;
@@ -85,9 +86,10 @@ export async function withInFlightGenerationForDesign<T>(
 
 export function acquireInFlightWorkspaceGeneration(
   id: string,
-  workspaceKey: string,
+  workspacePath: string,
   inFlightByWorkspace: Map<string, InFlightGeneration>,
 ): () => void {
+  const workspaceKey = workspacePathComparisonKey(workspacePath);
   const existing = inFlightByWorkspace.get(workspaceKey);
   if (existing !== undefined && existing.generationId !== id) {
     throw new CodesignError(

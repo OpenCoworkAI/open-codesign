@@ -11,7 +11,12 @@ interface DesignRun {
 }
 
 export function buildRecentDesigns<
-  T extends { id: string; updatedAt: string; deletedAt: string | null },
+  T extends {
+    id: string;
+    updatedAt: string;
+    deletedAt: string | null;
+    workspacePath?: string | null | undefined;
+  },
 >(designs: T[], generationByDesign: Record<string, DesignRun>, limit = RECENT_LIMIT): T[] {
   const sorted = [...designs]
     .filter((d) => d.deletedAt === null)
@@ -19,7 +24,31 @@ export function buildRecentDesigns<
   const activeIds = new Set([...Object.keys(generationByDesign)]);
   const active = sorted.filter((d) => activeIds.has(d.id));
   const rest = sorted.filter((d) => !activeIds.has(d.id));
-  return [...active, ...rest].slice(0, limit);
+  return collapseWorkspaceDesigns([...active, ...rest]).slice(0, limit);
+}
+
+export function collapseWorkspaceDesigns<
+  T extends { id: string; workspacePath?: string | null | undefined },
+>(designs: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const design of designs) {
+    const key = workspaceGroupKey(design);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(design);
+  }
+  return out;
+}
+
+function workspaceGroupKey(design: {
+  id: string;
+  workspacePath?: string | null | undefined;
+}): string {
+  const raw = design.workspacePath?.trim();
+  if (!raw) return `design:${design.id}`;
+  const normalized = raw.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  return normalized ? `workspace:${normalized}` : `design:${design.id}`;
 }
 
 export function RecentTab() {

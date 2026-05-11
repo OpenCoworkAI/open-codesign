@@ -33,6 +33,11 @@ export function normalizeWorkspacePath(rawPath: string): string {
   return stripTrailingSlash(normalized);
 }
 
+export function workspacePathComparisonKey(workspacePath: string): string {
+  const normalized = stripTrailingSlash(workspacePath.replaceAll('\\', '/'));
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
 export function assertWorkspacePath(rawPath: string): string {
   return normalizeWorkspacePath(rawPath);
 }

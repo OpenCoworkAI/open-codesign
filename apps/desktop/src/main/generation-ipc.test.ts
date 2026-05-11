@@ -14,6 +14,21 @@ function makeController() {
   return { abort: vi.fn() } as unknown as AbortController;
 }
 
+function withMockedPlatform<T>(platform: NodeJS.Platform, run: () => T): T {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', {
+    value: platform,
+    configurable: true,
+  });
+  try {
+    return run();
+  } finally {
+    if (original) {
+      Object.defineProperty(process, 'platform', original);
+    }
+  }
+}
+
 describe('cancelGenerationRequest', () => {
   it('parses the public v1 cancel-generation payload', () => {
     const payload = CancelGenerationPayloadV1.parse({
@@ -222,6 +237,24 @@ describe('acquireInFlightWorkspaceGeneration', () => {
 
     release();
     expect(inFlightByWorkspace.has('/workspace')).toBe(false);
+  });
+
+  it('treats case-only path differences as the same workspace on Windows', () => {
+    withMockedPlatform('win32', () => {
+      const inFlightByWorkspace = new Map<string, { generationId: string; startedAt: number }>();
+      const release = acquireInFlightWorkspaceGeneration(
+        'gen-1',
+        'C:/Users/Roy/Workspace',
+        inFlightByWorkspace,
+      );
+
+      expect(() =>
+        acquireInFlightWorkspaceGeneration('gen-2', 'c:/users/roy/workspace', inFlightByWorkspace),
+      ).toThrow(CodesignError);
+
+      release();
+      expect(inFlightByWorkspace.has('c:/users/roy/workspace')).toBe(false);
+    });
   });
 
   it('allows different workspaces to run concurrently', () => {
