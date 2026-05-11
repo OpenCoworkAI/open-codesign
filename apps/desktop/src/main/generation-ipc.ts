@@ -14,6 +14,7 @@ export function cancelGenerationRequest(
   inFlight: Map<string, AbortController>,
   logIpc: CancellationLogger,
   inFlightByDesign?: Map<string, InFlightGeneration>,
+  inFlightByWorkspace?: Map<string, InFlightGeneration>,
 ): void {
   if (typeof raw !== 'string') {
     throw new CodesignError(
@@ -30,6 +31,11 @@ export function cancelGenerationRequest(
   if (inFlightByDesign !== undefined) {
     for (const [designId, generation] of inFlightByDesign) {
       if (generation.generationId === raw) inFlightByDesign.delete(designId);
+    }
+  }
+  if (inFlightByWorkspace !== undefined) {
+    for (const [workspaceKey, generation] of inFlightByWorkspace) {
+      if (generation.generationId === raw) inFlightByWorkspace.delete(workspaceKey);
     }
   }
   logIpc.info('generate.cancelled', { id: raw });
@@ -75,6 +81,27 @@ export async function withInFlightGenerationForDesign<T>(
       inFlightByDesign.delete(designId);
     }
   }
+}
+
+export function acquireInFlightWorkspaceGeneration(
+  id: string,
+  workspaceKey: string,
+  inFlightByWorkspace: Map<string, InFlightGeneration>,
+): () => void {
+  const existing = inFlightByWorkspace.get(workspaceKey);
+  if (existing !== undefined && existing.generationId !== id) {
+    throw new CodesignError(
+      'A generation is already running for this workspace. Wait for it to finish or stop it before continuing.',
+      'GENERATION_ALREADY_RUNNING',
+    );
+  }
+  const startedAt = existing?.startedAt ?? Date.now();
+  inFlightByWorkspace.set(workspaceKey, { generationId: id, startedAt });
+  return () => {
+    if (inFlightByWorkspace.get(workspaceKey)?.generationId === id) {
+      inFlightByWorkspace.delete(workspaceKey);
+    }
+  };
 }
 
 export function listInFlightGenerations(

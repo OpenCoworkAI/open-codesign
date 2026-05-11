@@ -8,6 +8,7 @@ import {
   isAutoManagedWorkspacePath,
   renameAutoManagedWorkspaceForDesign,
 } from './snapshots-ipc';
+import { normalizeWorkspacePath } from './workspace-path';
 
 vi.mock('./electron-runtime', () => ({
   app: {
@@ -79,7 +80,7 @@ describe('auto-managed workspace naming', () => {
       defaultRoot: root,
     });
 
-    const expected = path.join(root, 'Studio-Loop-Welcome-Email');
+    const expected = normalizeWorkspacePath(path.join(root, 'Studio-Loop-Welcome-Email'));
     expect(updated?.workspacePath).toBe(expected);
     expect(getDesign(db, design.id)?.workspacePath).toBe(expected);
     await expect(exists(oldWorkspace)).resolves.toBe(false);
@@ -101,7 +102,9 @@ describe('auto-managed workspace naming', () => {
       defaultRoot: root,
     });
 
-    expect(updated?.workspacePath).toBe(path.join(root, 'Studio-Loop-Welcome-Email-1'));
+    expect(updated?.workspacePath).toBe(
+      normalizeWorkspacePath(path.join(root, 'Studio-Loop-Welcome-Email-1')),
+    );
   });
 
   it('leaves user-chosen workspaces alone', async () => {
@@ -119,7 +122,7 @@ describe('auto-managed workspace naming', () => {
       });
 
       expect(updated).toBeNull();
-      expect(getDesign(db, design.id)?.workspacePath).toBe(userWorkspace);
+      expect(getDesign(db, design.id)?.workspacePath).toBe(normalizeWorkspacePath(userWorkspace));
       await expect(exists(userWorkspace)).resolves.toBe(true);
     } finally {
       await rm(userWorkspace, { recursive: true, force: true });

@@ -2,8 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { openFileTab } from '../store/slices/tabs';
 import {
   chooseWorkspacePreviewSourceMode,
+  clampFileBrowserWidth,
   createWorkspaceFilePreviewMessageHandlers,
   defaultWorkspacePreviewPath,
+  detectedPreviewTarget,
+  effectivePreviewModeForDesign,
+  externalAppManagedFallbackPath,
+  htmlRequiresWorkspaceDevServer,
   isMarkdownPreviewFile,
   isPreviewSourceUsableForSelectedPath,
   isRenderableDesignFileKind,
@@ -18,6 +23,90 @@ import {
 } from './FilesTabView';
 
 describe('FilesTabView preview helpers', () => {
+  it('clamps the file browser splitter width to usable bounds', () => {
+    expect(clampFileBrowserWidth(120, 1280)).toBe(260);
+    expect(clampFileBrowserWidth(480.4, 1280)).toBe(480);
+    expect(clampFileBrowserWidth(900, 1280)).toBe(704);
+    expect(clampFileBrowserWidth(900, 900)).toBe(495);
+  });
+
+  it('keeps native app detections on external app preview', () => {
+    expect(
+      detectedPreviewTarget({
+        schemaVersion: 1,
+        found: false,
+        url: null,
+        message: 'Use External app preview.',
+        candidates: [
+          {
+            url: 'http://localhost:1420/',
+            source: 'common local preview port',
+            status: 'native-runtime-required',
+            httpStatus: 200,
+          },
+        ],
+      }),
+    ).toEqual({ mode: 'external-app', url: 'http://localhost:1420/' });
+  });
+
+  it('connects ordinary web previews after detection', () => {
+    expect(
+      detectedPreviewTarget({
+        schemaVersion: 1,
+        found: true,
+        url: 'http://localhost:5173/',
+        message: 'Found a local preview.',
+        candidates: [
+          {
+            url: 'http://localhost:5173/',
+            source: 'package.json script',
+            status: 'matched',
+            httpStatus: 200,
+          },
+        ],
+      }),
+    ).toEqual({ mode: 'connected-url', url: 'http://localhost:5173/' });
+  });
+
+  it('keeps simple HTML workspaces on integrated preview even with package.json present', () => {
+    expect(
+      effectivePreviewModeForDesign({
+        files: [
+          {
+            path: 'index.html',
+            kind: 'html',
+            updatedAt: '2026-05-10T00:00:00.000Z',
+            size: 120,
+          },
+          {
+            path: 'package.json',
+            kind: 'text',
+            updatedAt: '2026-05-10T00:00:00.000Z',
+            size: 80,
+          },
+        ],
+      }),
+    ).toBe('managed-file');
+  });
+
+  it('detects Vite-style app entry HTML that needs a dev server', () => {
+    expect(
+      htmlRequiresWorkspaceDevServer(
+        '<div id="root"></div><script type="module" src="/src/index.tsx"></script>',
+      ),
+    ).toBe(true);
+    expect(
+      htmlRequiresWorkspaceDevServer(
+        '<div id="root"></div><script type="module" src="./src/main.jsx"></script>',
+      ),
+    ).toBe(true);
+    expect(
+      htmlRequiresWorkspaceDevServer(
+        '<main>Hello</main><script type="module">console.log("ok")</script>',
+      ),
+    ).toBe(false);
+  });
+
   it('forwards element selection messages from file preview iframes into comment state', () => {
     const selectCanvasElement = vi.fn();
     const openCommentBubble = vi.fn();
@@ -130,15 +219,23 @@ describe('FilesTabView preview helpers', () => {
     ).toBe(false);
   });
 
-  it('uses the design-level resolver for main design runtime files only', () => {
+  it('uses the design-level resolver only for generated preview fallbacks', () => {
+    expect(
+      shouldUseDesignPreviewResolverForFile({
+        path: 'App.jsx',
+        previewKind: 'runtime',
+        source: 'preview-html',
+      }),
+    ).toBe(true);
     expect(shouldUseDesignPreviewResolverForFile({ path: 'App.jsx', previewKind: 'runtime' })).toBe(
-      true,
+      false,
     );
     expect(
-      shouldUseDesignPreviewResolverForFile({ path: 'index.html', previewKind: 'runtime' }),
-    ).toBe(true);
-    expect(
-      shouldUseDesignPreviewResolverForFile({ path: 'screens/App.jsx', previewKind: 'runtime' }),
+      shouldUseDesignPreviewResolverForFile({
+        path: 'index.html',
+        previewKind: 'runtime',
+        source: 'workspace',
+      }),
     ).toBe(false);
     expect(
       shouldUseDesignPreviewResolverForFile({ path: 'DESIGN.md', previewKind: 'markdown' }),
@@ -288,6 +385,37 @@ describe('FilesTabView preview helpers', () => {
         { path: 'brief.pdf', kind: 'pdf', updatedAt: '2026-04-26T00:00:00Z', size: 100 },
       ]),
     ).toBe('brief.pdf');
+  });
+
+  it('keeps a managed preview fallback available for external-app workspaces', () => {
+    expect(
+      externalAppManagedFallbackPath({
+        selectedPath: 'App.jsx',
+        defaultPath: 'index.html',
+        hasPersistedPreview: true,
+      }),
+    ).toBe('App.jsx');
+    expect(
+      externalAppManagedFallbackPath({
+        selectedPath: null,
+        defaultPath: 'index.html',
+        hasPersistedPreview: true,
+      }),
+    ).toBe('index.html');
+    expect(
+      externalAppManagedFallbackPath({
+        selectedPath: null,
+        defaultPath: null,
+        hasPersistedPreview: true,
+      }),
+    ).toBe('App.jsx');
+    expect(
+      externalAppManagedFallbackPath({
+        selectedPath: null,
+        defaultPath: null,
+        hasPersistedPreview: false,
+      }),
+    ).toBeNull();
   });
 
   it('prefers actual workspace reads over previewSource when the files API is available', () => {

@@ -1,5 +1,6 @@
 import {
   type ChatAppendInput,
+  type ChatMessageRow,
   type ChatToolCallPayload,
   LEGACY_SOURCE_ENTRY,
 } from '@open-codesign/shared';
@@ -17,6 +18,127 @@ import {
   persistArtifactSnapshot,
   recordPreviewSourceInPool,
 } from './snapshots.js';
+
+const CHAT_UI_ROW_LIMIT = 220;
+const CHAT_UI_TEXT_LIMIT = 20_000;
+const CHAT_UI_TOOL_TEXT_LIMIT = 1_200;
+const CHAT_UI_DETAIL_LIMIT = 8_000;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function truncateForUi(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  return `${text.slice(0, Math.max(0, limit - 3))}...`;
+}
+
+function jsonSize(value: unknown): number {
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function compactLargeStringFields(value: unknown, limit: number): unknown {
+  if (typeof value === 'string') return truncateForUi(value, limit);
+  if (Array.isArray(value))
+    return value.slice(0, 20).map((item) => compactLargeStringFields(item, limit));
+  if (!isRecord(value)) return value;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (key === 'screenshot' || key === 'imageDataUrl' || key === 'dataUrl') {
+      out[key] = '[stripped for UI]';
+      continue;
+    }
+    out[key] = compactLargeStringFields(item, limit);
+  }
+  return out;
+}
+
+function compactDetailsForUi(details: unknown): unknown {
+  if (!isRecord(details)) return details;
+  const compacted = compactLargeStringFields(details, CHAT_UI_TOOL_TEXT_LIMIT);
+  if (jsonSize(compacted) <= CHAT_UI_DETAIL_LIMIT) return compacted;
+
+  const summary: Record<string, unknown> = {
+    summarized: true,
+    keys: Object.keys(details).slice(0, 12),
+  };
+  for (const key of [
+    'command',
+    'path',
+    'name',
+    'status',
+    'reason',
+    'ok',
+    'summary',
+    'errorCount',
+    'kind',
+    'destPath',
+    'bytes',
+  ]) {
+    const value = details[key];
+    if (value !== undefined)
+      summary[key] = compactLargeStringFields(value, CHAT_UI_TOOL_TEXT_LIMIT);
+  }
+  return summary;
+}
+
+function compactToolResultForUi(result: unknown): unknown {
+  if (!isRecord(result)) return result;
+  const content = result['content'];
+  const compactedContent = Array.isArray(content)
+    ? content.slice(0, 8).map((item) => {
+        if (!isRecord(item) || item['type'] !== 'text' || typeof item['text'] !== 'string') {
+          return compactLargeStringFields(item, CHAT_UI_TOOL_TEXT_LIMIT);
+        }
+        return { ...item, text: truncateForUi(item['text'], CHAT_UI_TOOL_TEXT_LIMIT) };
+      })
+    : undefined;
+  return {
+    ...result,
+    ...(compactedContent !== undefined ? { content: compactedContent } : {}),
+    ...(result['details'] !== undefined ? { details: compactDetailsForUi(result['details']) } : {}),
+  };
+}
+
+function compactChatRowForUi(row: ChatMessageRow): ChatMessageRow {
+  if (row.kind === 'tool_call') {
+    const payload = isRecord(row.payload) ? (row.payload as unknown as ChatToolCallPayload) : null;
+    if (payload === null) return row;
+    return {
+      ...row,
+      payload: {
+        ...payload,
+        ...(payload.result !== undefined ? { result: compactToolResultForUi(payload.result) } : {}),
+        ...(payload.error?.message !== undefined
+          ? {
+              error: {
+                ...payload.error,
+                message: truncateForUi(payload.error.message, CHAT_UI_TEXT_LIMIT),
+              },
+            }
+          : {}),
+      },
+    };
+  }
+
+  if (!isRecord(row.payload) || typeof row.payload['text'] !== 'string') return row;
+  return {
+    ...row,
+    payload: {
+      ...row.payload,
+      text: truncateForUi(row.payload['text'], CHAT_UI_TEXT_LIMIT),
+    },
+  };
+}
+
+export function compactChatRowsForUi(rows: ChatMessageRow[]): ChatMessageRow[] {
+  return rows.slice(-CHAT_UI_ROW_LIMIT).map(compactChatRowForUi);
+}
 
 type SetState = (
   updater: ((state: CodesignState) => Partial<CodesignState> | object) | Partial<CodesignState>,
@@ -52,7 +174,7 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
         // Guard against a design switch happening while the IPC was in flight —
         // we'd otherwise render the previous design's chat into the new one.
         if (get().currentDesignId !== designId) return;
-        set({ chatMessages: rows, chatLoaded: true });
+        set({ chatMessages: compactChatRowsForUi(rows), chatLoaded: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
         console.warn('[open-codesign] loadChatForCurrentDesign failed:', msg);
@@ -67,7 +189,7 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
         // Only merge into state if the append belongs to the current design —
         // a background append to a previous design must not pollute the view.
         if (get().currentDesignId === input.designId) {
-          set((s) => ({ chatMessages: [...s.chatMessages, row] }));
+          set((s) => ({ chatMessages: compactChatRowsForUi([...s.chatMessages, row]) }));
         }
         return row;
       } catch (err) {
@@ -157,19 +279,21 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
       // immediately without waiting for a list reload.
       if (get().currentDesignId !== designId) return;
       set((s) => ({
-        chatMessages: s.chatMessages.map((m) => {
-          if (m.designId !== designId || m.seq !== seq || m.kind !== 'tool_call') return m;
-          const prev = (m.payload as ChatToolCallPayload | null) ?? null;
-          if (!prev) return m;
-          const nextPayload: ChatToolCallPayload = {
-            ...prev,
-            status,
-            ...(result !== undefined ? { result } : {}),
-            ...(durationMs !== undefined ? { durationMs } : {}),
-            ...(errorMessage !== undefined ? { error: { message: errorMessage } } : {}),
-          };
-          return { ...m, payload: nextPayload };
-        }),
+        chatMessages: compactChatRowsForUi(
+          s.chatMessages.map((m) => {
+            if (m.designId !== designId || m.seq !== seq || m.kind !== 'tool_call') return m;
+            const prev = (m.payload as ChatToolCallPayload | null) ?? null;
+            if (!prev) return m;
+            const nextPayload: ChatToolCallPayload = {
+              ...prev,
+              status,
+              ...(result !== undefined ? { result } : {}),
+              ...(durationMs !== undefined ? { durationMs } : {}),
+              ...(errorMessage !== undefined ? { error: { message: errorMessage } } : {}),
+            };
+            return { ...m, payload: nextPayload };
+          }),
+        ),
       }));
     },
 

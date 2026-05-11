@@ -16,6 +16,7 @@ import type {
   LocalInputFile,
   ModelRef,
   OnboardingState,
+  PreviewMode,
   ReasoningLevel,
   ReportEventInput,
   ReportEventResult,
@@ -43,6 +44,7 @@ export type {
   ExternalConfigsDetection,
   ImageGenerationSettingsView,
   ModelsListResponse,
+  PreviewMode,
   TestEndpointResponse,
 };
 
@@ -77,6 +79,14 @@ export interface WorkspaceFileEntry {
   kind: WorkspaceFileKind;
   size: number;
   updatedAt: string;
+}
+export interface WorkspaceDirectoryEntry {
+  path: string;
+  name: string;
+  type: 'file' | 'directory';
+  kind?: WorkspaceFileKind;
+  size?: number;
+  updatedAt?: string;
 }
 export interface WorkspaceFileReadResult extends WorkspaceFileEntry {
   content: string;
@@ -115,6 +125,25 @@ export interface WorkspaceDocumentThumbnailResult {
   path: string;
   thumbnailDataUrl: string | null;
 }
+
+export interface PreviewDetectCandidate {
+  url: string;
+  source: string;
+  status: 'matched' | 'native-runtime-required' | 'not-preview' | 'unreachable';
+  httpStatus?: number;
+  contentType?: string;
+  title?: string;
+  error?: string;
+}
+
+export interface PreviewDetectResult {
+  schemaVersion: 1;
+  found: boolean;
+  url: string | null;
+  candidates: PreviewDetectCandidate[];
+  message: string;
+}
+
 export type WorkspaceImportSource = 'composer' | 'workspace' | 'canvas' | 'clipboard';
 export type WorkspaceImportKind = 'reference' | 'asset';
 export interface WorkspaceImportFileInput {
@@ -135,6 +164,10 @@ export interface WorkspaceImportResult {
   mediaType: string;
   kind: WorkspaceImportKind;
   source: WorkspaceImportSource;
+}
+
+export interface RenameDesignOptions {
+  renameWorkspace?: boolean;
 }
 
 export interface ExportInvokeResponse {
@@ -594,6 +627,12 @@ const api = {
         schemaVersion: 1,
         designId,
       }) as Promise<WorkspaceFileEntry[]>,
+    listDir: (designId: string, path = '.') =>
+      ipcRenderer.invoke('codesign:files:v1:list-dir', {
+        schemaVersion: 1,
+        designId,
+        path,
+      }) as Promise<WorkspaceDirectoryEntry[]>,
     read: (designId: string, path: string) =>
       ipcRenderer.invoke('codesign:files:v1:read', {
         schemaVersion: 1,
@@ -660,11 +699,14 @@ const api = {
         schemaVersion: 1,
         id,
       }) as Promise<Design | null>,
-    renameDesign: (id: string, name: string) =>
+    renameDesign: (id: string, name: string, options?: RenameDesignOptions) =>
       ipcRenderer.invoke('snapshots:v1:rename-design', {
         schemaVersion: 1,
         id,
         name,
+        ...(options?.renameWorkspace !== undefined
+          ? { renameWorkspace: options.renameWorkspace }
+          : {}),
       }) as Promise<Design>,
     setThumbnail: (id: string, thumbnailText: string | null) =>
       ipcRenderer.invoke('snapshots:v1:set-thumbnail', {
@@ -720,6 +762,18 @@ const api = {
         schemaVersion: 1,
         designId,
       }) as Promise<{ exists: boolean }>,
+    updatePreview: (designId: string, previewMode: PreviewMode, previewUrl?: string | null) =>
+      ipcRenderer.invoke('snapshots:v1:preview:update', {
+        schemaVersion: 1,
+        designId,
+        previewMode,
+        previewUrl: previewUrl ?? null,
+      }) as Promise<Design>,
+    detectPreview: (designId: string) =>
+      ipcRenderer.invoke('snapshots:v1:preview:detect', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<PreviewDetectResult>,
   },
   chat: {
     list: (designId: string) =>
@@ -838,6 +892,7 @@ const api = {
   openExternal: (url: string) =>
     ipcRenderer.invoke('codesign:v1:open-external', url) as Promise<void>,
   ask: {
+    pending: () => ipcRenderer.invoke('ask:list-pending') as Promise<AskRequest[]>,
     onRequest: (cb: (req: AskRequest) => void) => {
       const listener = (_e: unknown, req: AskRequest) => cb(req);
       ipcRenderer.on('ask:request', listener);

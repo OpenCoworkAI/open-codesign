@@ -36,6 +36,7 @@ import { CHATGPT_CODEX_PROVIDER_ID, getCodexTokenStore } from '../codex-oauth-ip
 import { makeRuntimeVerifier } from '../done-verify';
 import { app, ipcMain } from '../electron-runtime';
 import {
+  acquireInFlightWorkspaceGeneration,
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
@@ -673,6 +674,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   /** In-flight requests: generationId → AbortController */
   const inFlight = new Map<string, AbortController>();
   const inFlightByDesign = new Map<string, { generationId: string; startedAt: number }>();
+  const inFlightByWorkspace = new Map<string, { generationId: string; startedAt: number }>();
 
   const armTimeout = (id: string, controller: AbortController) =>
     armGenerationTimeout(
@@ -820,7 +822,13 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
 
           const t0 = Date.now();
           let clearTimeoutGuard: () => void = () => {};
+          let releaseWorkspaceGeneration: () => void = () => {};
           try {
+            releaseWorkspaceGeneration = acquireInFlightWorkspaceGeneration(
+              id,
+              workspaceRoot,
+              inFlightByWorkspace,
+            );
             clearTimeoutGuard = await armTimeout(id, controller);
             const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
             let capturedMessages: DesignBriefConversationMessages | null = null;
@@ -1251,6 +1259,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             throw rethrow;
           } finally {
             clearTimeoutGuard();
+            releaseWorkspaceGeneration();
           }
         },
       );
@@ -1259,7 +1268,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
 
   ipcMain.handle('codesign:v1:cancel-generation', (_e, raw: unknown) => {
     const { generationId } = CancelGenerationPayloadV1.parse(raw);
-    cancelGenerationRequest(generationId, inFlight, logIpc, inFlightByDesign);
+    cancelGenerationRequest(generationId, inFlight, logIpc, inFlightByDesign, inFlightByWorkspace);
   });
 
   ipcMain.handle('codesign:v1:generation-status', () => ({
@@ -1334,7 +1343,13 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
 
           const t0 = Date.now();
           let clearTimeoutGuard: () => void = () => {};
+          let releaseWorkspaceGeneration: () => void = () => {};
           try {
+            releaseWorkspaceGeneration = acquireInFlightWorkspaceGeneration(
+              id,
+              workspaceRoot,
+              inFlightByWorkspace,
+            );
             clearTimeoutGuard = await armTimeout(id, controller);
             const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
             const result = await runGenerate(
@@ -1402,6 +1417,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             throw rethrow;
           } finally {
             clearTimeoutGuard();
+            releaseWorkspaceGeneration();
           }
         },
       );
@@ -1468,5 +1484,6 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     }
     inFlight.clear();
     inFlightByDesign.clear();
+    inFlightByWorkspace.clear();
   };
 }

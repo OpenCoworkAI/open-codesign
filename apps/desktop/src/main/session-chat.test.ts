@@ -89,6 +89,29 @@ describe('session design brief storage', () => {
     }
   });
 
+  it('keeps shared-workspace conversations isolated by design id', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-session-shared-'));
+    try {
+      const db = initSnapshotsDb(path.join(root, 'design-store.json'));
+      const source = createDesign(db, 'Existing conversation');
+      const fresh = createDesign(db, 'Fresh conversation');
+      updateDesignWorkspace(db, source.id, root);
+      updateDesignWorkspace(db, fresh.id, root);
+      const opts = { db, sessionDir: db.sessionDir };
+
+      appendSessionChatMessage(opts, {
+        designId: source.id,
+        kind: 'user',
+        payload: { text: 'keep this in the original session' },
+      });
+
+      expect(listSessionChatMessages(opts, source.id)).toHaveLength(1);
+      expect(listSessionChatMessages(opts, fresh.id)).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('does not make seeded legacy snapshot history look like fresh activity', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codesign-session-seed-'));
     vi.useFakeTimers();

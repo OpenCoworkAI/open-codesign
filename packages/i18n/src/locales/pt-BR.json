@@ -95,7 +95,60 @@
       "rebindDescription": "Este design já tem uma pasta de espaço de trabalho. Escolha como prosseguir:",
       "rebindCancel": "Cancelar",
       "rebindSwitchOnly": "Alternar sem copiar",
-      "rebindSwitchAndCopy": "Alternar e copiar arquivos"
+      "rebindSwitchAndCopy": "Alternar e copiar arquivos",
+      "preview": {
+        "label": "Prévia",
+        "detect": "Detectar",
+        "apply": "Aplicar URL da prévia",
+        "reload": "Recarregar prévia",
+        "openConnected": "Abrir",
+        "openFailed": "Não foi possível abrir a prévia",
+        "saveFailed": "Não foi possível atualizar a prévia",
+        "detectFailed": "Não foi possível detectar a prévia",
+        "detectNone": "Nenhuma prévia em execução encontrada",
+        "urlLabel": "URL da prévia",
+        "urlPlaceholder": "localhost:5173",
+        "urlRequired": "Informe primeiro uma URL local de prévia.",
+        "urlInvalid": "Informe uma URL http ou https válida.",
+        "actions": {
+          "showOptions": "Mostrar opções da prévia",
+          "hideOptions": "Ocultar opções da prévia"
+        },
+        "status": {
+          "saved": "Salva",
+          "auto": "Auto"
+        },
+        "mode": {
+          "label": "Modo",
+          "integrated": "Arquivo integrado",
+          "integratedShort": "Integrada",
+          "connectedUrl": "URL conectada",
+          "connectedUrlShort": "Conectada",
+          "externalApp": "App externo",
+          "externalAppShort": "Externa",
+          "off": "Desativada",
+          "offShort": "Off"
+        },
+        "summary": {
+          "detecting": "Procurando uma prévia local em execução.",
+          "integrated": "Renderizando arquivos do espaço de trabalho dentro do Open CoDesign.",
+          "integratedBlocked": "Este espaço parece um app; use o próprio servidor de desenvolvimento dele para prévia.",
+          "connected": "Prévia de {{url}}.",
+          "waitingUrl": "Informe a URL local da prévia em execução.",
+          "external": "Use a própria janela de prévia do app.",
+          "externalWithUrl": "Prévia externa configurada em {{url}}.",
+          "off": "A prévia está desativada para este espaço."
+        },
+        "hint": {
+          "appWorkspace": "Espaços de app normalmente funcionam melhor no próprio servidor de desenvolvimento ou janela.",
+          "simpleWorkspace": "A prévia integrada renderiza App.jsx ou index.html dentro do Open CoDesign."
+        },
+        "placeholder": {
+          "off": "A prévia está desativada para este espaço.",
+          "external": "Este espaço deve ser pré-visualizado na própria janela do app ou navegador.",
+          "devServerRequired": "Este arquivo e uma entrada de app. Inicie o servidor de desenvolvimento e use Detect ou Connected URL para a previa."
+        }
+      }
     },
     "rail": {
       "title": "Arquivos",
@@ -853,6 +906,7 @@
       "switchFailed": "Não foi possível trocar de design",
       "switchBlockedGenerating": "Aguarde a geração terminar antes de trocar",
       "busyGenerating": "Aguarde a geração atual terminar e tente novamente",
+      "workspaceBusyGenerating": "Já existe uma geração em andamento para este workspace",
       "renameFailed": "Não foi possível renomear o design",
       "duplicated": "Duplicado como \"{{name}}\"",
       "duplicateFailed": "Não foi possível duplicar o design",

@@ -26,7 +26,7 @@ vi.mock('react', async (importOriginal) => {
 });
 
 import type { CodesignApi } from '../../../preload';
-import { useDesignFiles } from '../hooks/useDesignFiles';
+import { useLazyDesignFileTree } from '../hooks/useDesignFiles';
 import { useCodesignStore } from '../store';
 import { FilesPanel } from './FilesPanel';
 
@@ -41,9 +41,13 @@ vi.mock('../store', async (importOriginal) => {
     useCodesignStore: mockStoreHook,
   };
 });
-vi.mock('../hooks/useDesignFiles', () => ({
-  useDesignFiles: vi.fn(),
-}));
+vi.mock('../hooks/useDesignFiles', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../hooks/useDesignFiles')>();
+  return {
+    ...actual,
+    useLazyDesignFileTree: vi.fn(),
+  };
+});
 
 declare global {
   interface Window {
@@ -350,10 +354,12 @@ describe('FilesPanel workspace integration', () => {
 
     describe('FilesPanel rendering UI', () => {
       beforeEach(() => {
-        vi.mocked(useDesignFiles).mockReturnValue({
+        vi.mocked(useLazyDesignFileTree).mockReturnValue({
           files: [],
+          tree: [],
           loading: false,
           backend: 'snapshots',
+          loadDirectory: vi.fn(),
         });
         useCodesignStore.setState({
           currentDesignId: 'design-1',

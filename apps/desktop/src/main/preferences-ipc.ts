@@ -17,7 +17,7 @@ import { getLogger } from './logger';
 
 const logger = getLogger('preferences-ipc');
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 // v1 → v2: raise the abandoned 120s timeout default (which aborted real
 // agentic runs mid-loop) to 600s. Values that happen to equal the old
 // default are treated as unmigrated defaults, not user intent.
@@ -75,7 +75,6 @@ const PREFERENCE_UPDATE_FIELDS = [
   'workspaceMemoryAutoUpdate',
   'userMemoryAutoUpdate',
 ] as const;
-const PERSISTED_PREFERENCE_FIELDS = ['schemaVersion', ...PREFERENCE_UPDATE_FIELDS] as const;
 
 function assertKnownPreferenceFields(r: Record<string, unknown>): void {
   for (const key of Object.keys(r)) {
@@ -93,14 +92,6 @@ function failInvalidPersistedPreference(message: string): never {
     `preferences.json is invalid: ${message}`,
     ERROR_CODES.PREFERENCES_READ_FAIL,
   );
-}
-
-function assertKnownPersistedFields(r: Record<string, unknown>): void {
-  for (const key of Object.keys(r)) {
-    if (!(PERSISTED_PREFERENCE_FIELDS as readonly string[]).includes(key)) {
-      failInvalidPersistedPreference(`unsupported field "${key}"`);
-    }
-  }
 }
 
 function readPersistedSchema(r: Record<string, unknown>): number {
@@ -186,8 +177,11 @@ function parsePersistedFile(rawJson: unknown): Preferences {
     failInvalidPersistedPreference('preferences.json must contain an object');
   }
   const parsed = rawJson as Record<string, unknown>;
-  assertKnownPersistedFields(parsed);
   const persistedSchema = readPersistedSchema(parsed);
+  // Persisted preferences live on the user's machine and may contain keys
+  // from short-lived experimental builds. Once the schema version is known to
+  // be supported, ignore unknown keys so a stale local setting cannot brick
+  // startup after a clean rebuild. IPC update payloads remain strict.
   const rawTimeout = readPersistedTimeout(parsed);
   const migratedTimeout =
     persistedSchema < 2 && rawTimeout === V1_DEFAULT_TIMEOUT_SEC

@@ -2,6 +2,7 @@ import type { Dirent } from 'node:fs';
 import { lstat, readdir, readFile, stat } from 'node:fs/promises';
 import { basename, extname, join, relative, resolve, sep } from 'node:path';
 import { TextDecoder } from 'node:util';
+import { CodesignError } from '@open-codesign/shared';
 
 export const DEFAULT_WORKSPACE_PATTERNS = [
   '**/*.html',
@@ -28,17 +29,22 @@ export const DEFAULT_WORKSPACE_PATTERNS = [
 export const WORKSPACE_IGNORED_DIRS = new Set<string>([
   'node_modules',
   '.git',
+  '.claude',
   '.codesign',
   'dist',
   'build',
   'out',
+  'target',
   '.next',
   '.turbo',
   '.vite',
   '.cache',
+  '.ruff_cache',
   '.pnpm-store',
   '__pycache__',
   'coverage',
+  'playwright-report',
+  'test-results',
 ]);
 
 /** Hard caps: stop after 200 files or 2 MB total bytes, whichever first. Main-
@@ -55,16 +61,19 @@ export interface WorkspaceFile {
 
 /**
  * Scan `root` for files whose workspace-relative path matches any of
- * `patterns` (default: HTML/JSX/CSS/JS). Returns UTF-8 contents. Matching
- * files must be readable text; otherwise the caller gets a visible source-scan
- * error instead of a silently partial tweak scan. Results are truncated to
- * `MAX_FILES` / `MAX_BYTES`.
+ * `patterns` (default: HTML/JSX/CSS/JS). Returns UTF-8 contents. The bulk
+ * context scan is best-effort: matched files that are too large, binary, or
+ * not valid UTF-8 are skipped so one generated build log cannot block a turn.
+ * Results are truncated to `MAX_FILES` / `MAX_BYTES`.
  */
 export async function readWorkspaceFilesAt(
   root: string,
   patterns?: string[],
 ): Promise<WorkspaceFile[]> {
   const active = patterns && patterns.length > 0 ? patterns : [...DEFAULT_WORKSPACE_PATTERNS];
+  const exactMatches = new Set(
+    active.filter((pattern) => !pattern.includes('*') && !pattern.includes('?')),
+  );
   const matchers = active.map(globToRegExp);
 
   const out: WorkspaceFile[] = [];
@@ -86,14 +95,14 @@ export async function readWorkspaceFilesAt(
       if (out.length >= MAX_FILES || totalBytes >= MAX_BYTES) return;
       const abs = join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (WORKSPACE_IGNORED_DIRS.has(entry.name)) continue;
+        if (isIgnoredWorkspaceDirectoryName(entry.name)) continue;
         await walk(abs);
         continue;
       }
       if (!entry.isFile()) continue;
       if (isIgnoredWorkspaceFileName(entry.name)) continue;
       const rel = normalizeSlashes(relative(root, abs));
-      if (!matchers.some((re) => re.test(rel))) continue;
+      if (!exactMatches.has(rel) && !matchers.some((re) => re.test(rel))) continue;
       let size = 0;
       try {
         size = (await stat(abs)).size;
@@ -106,10 +115,8 @@ export async function readWorkspaceFilesAt(
       let contents: string;
       try {
         contents = await readUtf8TextFile(abs);
-      } catch (err) {
-        throw new Error(
-          `Failed to read workspace file ${rel}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      } catch {
+        continue;
       }
       out.push({ file: rel, contents });
       totalBytes += Buffer.byteLength(contents, 'utf8');
@@ -156,8 +163,31 @@ export interface WorkspaceFileReadResult extends WorkspaceFileEntry {
   content: string;
 }
 
+export interface WorkspaceDirectoryEntry {
+  /** Workspace-relative POSIX path. Directories never end with `/`. */
+  path: string;
+  /** Basename for display. */
+  name: string;
+  type: 'file' | 'directory';
+  kind?: WorkspaceFileKind;
+  size?: number;
+  updatedAt?: string;
+}
+
+export interface ListWorkspaceFilesOptions {
+  maxFiles?: number;
+}
+
 const LIST_IGNORED_DIRS = WORKSPACE_IGNORED_DIRS;
-const WORKSPACE_IGNORED_FILE_NAMES = new Set<string>(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
+const WORKSPACE_IGNORED_FILE_NAMES = new Set<string>([
+  '.ds_store',
+  'thumbs.db',
+  'desktop.ini',
+  'build-out.txt',
+  'build-output.txt',
+  'claude.md',
+  'memory.md',
+]);
 
 const LIST_MAX_FILES = 2_000;
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
@@ -216,7 +246,27 @@ export function isWorkspaceTextReadablePath(path: string): boolean {
 }
 
 function isIgnoredWorkspaceFileName(name: string): boolean {
-  return WORKSPACE_IGNORED_FILE_NAMES.has(name);
+  return name.startsWith('.') || WORKSPACE_IGNORED_FILE_NAMES.has(name.toLowerCase());
+}
+
+function isIgnoredWorkspaceDirectoryName(name: string): boolean {
+  return name.startsWith('.') || LIST_IGNORED_DIRS.has(name.toLowerCase());
+}
+
+export function isIgnoredWorkspacePath(path: string): boolean {
+  return normalizeSlashes(path)
+    .split('/')
+    .filter((part) => part.length > 0 && part !== '.')
+    .some((part, index, parts) => {
+      const isLast = index === parts.length - 1;
+      return isIgnoredWorkspaceDirectoryName(part) || (isLast && isIgnoredWorkspaceFileName(part));
+    });
+}
+
+export function assertWorkspacePathVisible(path: string): void {
+  if (isIgnoredWorkspacePath(path)) {
+    throw new CodesignError(`hidden workspace path is not accessible: ${path}`, 'IPC_BAD_INPUT');
+  }
 }
 
 export function classifyWorkspaceFileKind(path: string): WorkspaceFileKind {
@@ -305,11 +355,15 @@ async function readUtf8TextFile(abs: string): Promise<string> {
  * Returns entries sorted by path (POSIX-style separators). A bound workspace
  * that cannot be scanned is an invalid runtime state, so scan failures throw.
  */
-export async function listWorkspaceFilesAt(root: string): Promise<WorkspaceFileEntry[]> {
+export async function listWorkspaceFilesAt(
+  root: string,
+  opts: ListWorkspaceFilesOptions = {},
+): Promise<WorkspaceFileEntry[]> {
   const out: WorkspaceFileEntry[] = [];
+  const maxFiles = opts.maxFiles ?? LIST_MAX_FILES;
 
   async function walk(dir: string): Promise<void> {
-    if (out.length >= LIST_MAX_FILES) return;
+    if (out.length >= maxFiles) return;
     let entries: Dirent[] = [];
     try {
       entries = await readdir(dir, { withFileTypes: true });
@@ -321,10 +375,10 @@ export async function listWorkspaceFilesAt(root: string): Promise<WorkspaceFileE
       );
     }
     for (const entry of entries) {
-      if (out.length >= LIST_MAX_FILES) return;
+      if (out.length >= maxFiles) return;
       const abs = join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (LIST_IGNORED_DIRS.has(entry.name)) continue;
+        if (isIgnoredWorkspaceDirectoryName(entry.name)) continue;
         await walk(abs);
         continue;
       }
@@ -355,6 +409,60 @@ export async function listWorkspaceFilesAt(root: string): Promise<WorkspaceFileE
   await walk(root);
   out.sort((a, b) => a.path.localeCompare(b.path));
   return out;
+}
+
+export async function listWorkspaceDirectoryAt(
+  root: string,
+  dirPath = '.',
+): Promise<WorkspaceDirectoryEntry[]> {
+  const absRoot = resolve(root);
+  const absDir = await resolveSafeWorkspaceChildPath(absRoot, dirPath);
+  const relDir = normalizeSlashes(relative(absRoot, absDir));
+  assertWorkspacePathVisible(relDir);
+  const dirStat = await stat(absDir);
+  if (!dirStat.isDirectory()) {
+    throw new Error(`not a directory: ${dirPath}`);
+  }
+
+  let entries: Dirent[] = [];
+  try {
+    entries = await readdir(absDir, { withFileTypes: true });
+  } catch (err) {
+    throw new Error(
+      `Failed to scan workspace directory ${relDir || '.'}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  const out: WorkspaceDirectoryEntry[] = [];
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) {
+      if (isIgnoredWorkspaceDirectoryName(entry.name)) continue;
+      const relPath = normalizeSlashes(relative(absRoot, join(absDir, entry.name)));
+      out.push({ path: relPath, name: entry.name, type: 'directory' });
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (isIgnoredWorkspaceFileName(entry.name)) continue;
+    const abs = join(absDir, entry.name);
+    const fileStat = await stat(abs);
+    const relPath = normalizeSlashes(relative(absRoot, abs));
+    out.push({
+      path: relPath,
+      name: entry.name,
+      type: 'file',
+      kind: classifyWorkspaceFileKind(relPath),
+      size: fileStat.size,
+      updatedAt: fileStat.mtime.toISOString(),
+    });
+  }
+
+  return out.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  });
 }
 
 /** Tiny glob → regex. Supports `**` (any including slashes), `*` (no slash),
@@ -420,6 +528,7 @@ export async function readWorkspaceFileAt(
 ): Promise<WorkspaceFileReadResult> {
   const abs = await resolveSafeWorkspaceChildPath(root, relPath);
   const rel = normalizeSlashes(relative(resolve(root), abs));
+  assertWorkspacePathVisible(rel);
   let size = 0;
   let mtime = new Date();
   try {

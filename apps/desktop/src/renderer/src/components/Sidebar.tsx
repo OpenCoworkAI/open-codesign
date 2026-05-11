@@ -1,7 +1,7 @@
 import { useT } from '@open-codesign/i18n';
 import type { LocalInputFile, OnboardingState } from '@open-codesign/shared';
 import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useCodesignStore } from '../store';
 import { AskModal } from './AskModal';
 import { AddMenu } from './chat/AddMenu';
@@ -12,9 +12,7 @@ import { PromptInput, type PromptInputHandle } from './chat/PromptInput';
 import { ModelSwitcher } from './ModelSwitcher';
 
 export interface SidebarProps {
-  prompt: string;
-  setPrompt: (value: string) => void;
-  onSubmit: () => void;
+  prefillPrompt: { id: number; text: string } | null;
 }
 
 interface ComposerContextItem {
@@ -74,7 +72,7 @@ function ContextIcon({ icon }: { icon: ComposerContextItem['icon'] }) {
  * stays deferred; the design name + "+" header shows the single current
  * design only.
  */
-export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
+export function Sidebar({ prefillPrompt }: SidebarProps) {
   const t = useT();
   const config = useCodesignStore((s) => s.config);
   const isGenerating = useCodesignStore(
@@ -100,12 +98,28 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   const designs = useCodesignStore((s) => s.designs);
   const _sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
   const _setSidebarCollapsed = useCodesignStore((s) => s.setSidebarCollapsed);
+  const sendPrompt = useCodesignStore((s) => s.sendPrompt);
 
   const promptInputRef = useRef<PromptInputHandle>(null);
   const handlePickStarter = (starterPrompt: string): void => {
-    setPrompt(starterPrompt);
+    promptInputRef.current?.setPrompt(starterPrompt);
     promptInputRef.current?.focus();
   };
+
+  useEffect(() => {
+    if (prefillPrompt === null) return;
+    promptInputRef.current?.setPrompt(prefillPrompt.text);
+    promptInputRef.current?.focus();
+  }, [prefillPrompt]);
+
+  const handleSubmit = useCallback(
+    (text: string): void => {
+      const trimmed = text.trim();
+      if (!trimmed || isGenerating) return;
+      void sendPrompt({ prompt: trimmed });
+    },
+    [isGenerating, sendPrompt],
+  );
 
   const designSystem = config?.designSystem ?? null;
   const _currentDesign = designs.find((d) => d.id === currentDesignId) ?? null;
@@ -150,9 +164,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
         <CommentChipBar />
         <PromptInput
           ref={promptInputRef}
-          prompt={prompt}
-          setPrompt={setPrompt}
-          onSubmit={onSubmit}
+          onSubmit={handleSubmit}
           onCancel={cancelGeneration}
           isGenerating={isGenerating}
           onImportFiles={async (input) => {

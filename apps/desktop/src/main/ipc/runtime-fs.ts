@@ -12,7 +12,11 @@ import {
 import { prepareWorkspaceWriteContent } from '../workspace-file-content';
 import { normalizeWorkspacePath } from '../workspace-path';
 import { withStableWorkspacePath } from '../workspace-path-lock';
-import { resolveSafeWorkspaceChildPath } from '../workspace-reader';
+import {
+  assertWorkspacePathVisible,
+  isIgnoredWorkspacePath,
+  resolveSafeWorkspaceChildPath,
+} from '../workspace-reader';
 
 function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -171,6 +175,7 @@ export function createRuntimeTextEditorFs({
 
   async function persistMutation(filePath: string, content: string): Promise<string> {
     const normalizedPath = normalizeDesignFilePath(filePath);
+    assertWorkspacePathVisible(normalizedPath);
     const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
     if (designId === null || db === null) return writeContent.storedContent;
     try {
@@ -219,6 +224,7 @@ export function createRuntimeTextEditorFs({
     absolutePath?: string,
   ): Promise<{ path: string; content: string }> {
     const normalizedPath = normalizeDesignFilePath(filePath);
+    assertWorkspacePathVisible(normalizedPath);
     const sourcePath = absolutePath;
     let content: string;
     if (!sourcePath) {
@@ -282,6 +288,7 @@ export function createRuntimeTextEditorFs({
       const prefix = dir.length === 0 || dir === '.' ? '' : `${dir.replace(/\/+$/, '')}/`;
       const entries: string[] = [];
       for (const p of fsMap.keys()) {
+        if (isIgnoredWorkspacePath(p)) continue;
         if (!p.startsWith(prefix)) continue;
         const rest = p.slice(prefix.length);
         if (rest.length > 0) entries.push(rest);

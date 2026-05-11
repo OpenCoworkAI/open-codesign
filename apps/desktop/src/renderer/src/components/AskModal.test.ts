@@ -2,7 +2,13 @@
 
 import { describe, expect, it } from 'vitest';
 import type { AskRequest } from '../../../preload/index';
-import { advanceAskQueue, enqueueAskRequest, sanitizeInlineSvg } from './AskModal';
+import {
+  advanceAskQueue,
+  answerValueForImportedFiles,
+  enqueueAskRequest,
+  enqueueAskRequests,
+  sanitizeInlineSvg,
+} from './AskModal';
 
 const request = (requestId: string): AskRequest => ({
   requestId,
@@ -52,6 +58,16 @@ describe('AskModal queue helpers', () => {
     expect(state.queue.map((item) => item.requestId)).toEqual(['ask-2']);
   });
 
+  it('dedupes replayed pending requests', () => {
+    const first = request('ask-1');
+    const second = request('ask-2');
+
+    const state = enqueueAskRequests({ active: first, queue: [second] }, [first, second]);
+
+    expect(state.active?.requestId).toBe('ask-1');
+    expect(state.queue.map((item) => item.requestId)).toEqual(['ask-2']);
+  });
+
   it('advances to the next request after the active request resolves', () => {
     const state = {
       active: request('ask-1'),
@@ -62,5 +78,35 @@ describe('AskModal queue helpers', () => {
 
     expect(next.active?.requestId).toBe('ask-2');
     expect(next.queue.map((item) => item.requestId)).toEqual(['ask-3']);
+  });
+});
+
+describe('file answer helpers', () => {
+  it('prefers imported workspace paths over browser file names', () => {
+    expect(
+      answerValueForImportedFiles({
+        importedPaths: ['references/logo.png'],
+        selectedNames: ['logo.png'],
+      }),
+    ).toBe('references/logo.png');
+  });
+
+  it('keeps multiple imported paths for multi-file answers', () => {
+    expect(
+      answerValueForImportedFiles({
+        importedPaths: ['references/logo.png', 'references/screenshot.png'],
+        selectedNames: ['logo.png', 'screenshot.png'],
+        multiple: true,
+      }),
+    ).toEqual(['references/logo.png', 'references/screenshot.png']);
+  });
+
+  it('falls back to selected names when import is unavailable', () => {
+    expect(
+      answerValueForImportedFiles({
+        importedPaths: [],
+        selectedNames: ['logo.png'],
+      }),
+    ).toBe('logo.png');
   });
 });

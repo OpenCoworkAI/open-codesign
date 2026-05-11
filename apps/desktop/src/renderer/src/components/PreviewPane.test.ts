@@ -3,6 +3,7 @@ import { useCodesignStore } from '../store';
 import {
   computeFitPreviewZoom,
   handlePreviewMessage,
+  isPreviewPaneWelcomeState,
   isTrustedPreviewMessageSource,
   postModeToPreviewWindow,
   previewArtboardFrameClass,
@@ -96,6 +97,32 @@ describe('preview artboard frame', () => {
         viewport: 'desktop',
       }),
     ).toBe(100);
+  });
+});
+
+describe('preview pane welcome state', () => {
+  it('hides chrome only for the empty base files tab', () => {
+    expect(
+      isPreviewPaneWelcomeState({
+        activeTab: { kind: 'files' },
+        tabCount: 1,
+        errorMessage: null,
+        previewSource: null,
+        designHasContent: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps tabs visible for opened file tabs without preview content', () => {
+    expect(
+      isPreviewPaneWelcomeState({
+        activeTab: { kind: 'file', path: 'index.html' },
+        tabCount: 2,
+        errorMessage: null,
+        previewSource: null,
+        designHasContent: false,
+      }),
+    ).toBe(false);
   });
 });
 

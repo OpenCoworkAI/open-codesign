@@ -12,6 +12,8 @@ import type {
   AskSvgOptionsQuestion,
   AskTextOptionsQuestion,
 } from '../../../preload/index';
+import { fileListToWorkspaceImport } from '../lib/file-ingest';
+import { useCodesignStore } from '../store';
 
 /**
  * Inline questionnaire rendered whenever main pushes `ask:request` over IPC.
@@ -21,7 +23,8 @@ import type {
  * interruption.
  */
 
-type AnswerValue = string | number | string[] | null;
+export type AnswerValue = string | number | string[] | null;
+type FileImportHandler = (files: readonly File[]) => Promise<string[]>;
 
 const SVG_ALLOWED_TAGS = new Set([
   'svg',
@@ -143,8 +146,14 @@ export interface AskQueueState {
 }
 
 export function enqueueAskRequest(state: AskQueueState, request: AskRequest): AskQueueState {
+  if (state.active?.requestId === request.requestId) return state;
+  if (state.queue.some((item) => item.requestId === request.requestId)) return state;
   if (state.active === null) return { active: request, queue: state.queue };
   return { active: state.active, queue: [...state.queue, request] };
+}
+
+export function enqueueAskRequests(state: AskQueueState, requests: AskRequest[]): AskQueueState {
+  return requests.reduce((next, request) => enqueueAskRequest(next, request), state);
 }
 
 export function advanceAskQueue(state: AskQueueState): AskQueueState {
@@ -152,18 +161,40 @@ export function advanceAskQueue(state: AskQueueState): AskQueueState {
   return { active: next ?? null, queue: rest };
 }
 
+export function answerValueForImportedFiles(input: {
+  importedPaths: readonly string[];
+  selectedNames: readonly string[];
+  multiple?: boolean | undefined;
+}): AnswerValue {
+  const values = input.importedPaths.length > 0 ? input.importedPaths : input.selectedNames;
+  if (values.length === 0) return null;
+  return input.multiple ? [...values] : (values[0] ?? null);
+}
+
 export function AskModal() {
   const t = useT();
+  const importFilesToWorkspace = useCodesignStore((s) => s.importFilesToWorkspace);
   const [askQueue, setAskQueue] = useState<AskQueueState>({ active: null, queue: [] });
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const panelRef = useRef<HTMLElement>(null);
   const pending = askQueue.active;
 
   useEffect(() => {
+    let disposed = false;
     const off = window.codesign?.ask?.onRequest?.((req) => {
       setAskQueue((prev) => enqueueAskRequest(prev, req));
     });
+    void window.codesign?.ask
+      ?.pending?.()
+      .then((requests) => {
+        if (disposed) return;
+        setAskQueue((prev) => enqueueAskRequests(prev, requests));
+      })
+      .catch(() => {
+        // The live IPC event remains the primary path; pending replay is recovery-only.
+      });
     return () => {
+      disposed = true;
       off?.();
     };
   }, []);
@@ -195,6 +226,15 @@ export function AskModal() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pending, cancel]);
+
+  const importQuestionFiles = useCallback<FileImportHandler>(
+    async (files) => {
+      const input = await fileListToWorkspaceImport(files);
+      const imported = await importFilesToWorkspace({ source: 'composer', ...input });
+      return imported.map((file) => file.path);
+    },
+    [importFilesToWorkspace],
+  );
 
   if (!pending) return null;
 
@@ -243,6 +283,7 @@ export function AskModal() {
                 question={q}
                 value={answers[q.id] ?? null}
                 onChange={(v) => setValue(q.id, v)}
+                onImportFiles={importQuestionFiles}
               />
             ))}
           </div>
@@ -284,9 +325,10 @@ interface FieldProps {
   question: AskQuestion;
   value: AnswerValue;
   onChange: (v: AnswerValue) => void;
+  onImportFiles: FileImportHandler;
 }
 
-function QuestionField({ question, value, onChange }: FieldProps) {
+function QuestionField({ question, value, onChange, onImportFiles }: FieldProps) {
   return (
     <div className="flex flex-col gap-[var(--space-1_5)]">
       <label
@@ -295,7 +337,7 @@ function QuestionField({ question, value, onChange }: FieldProps) {
       >
         {question.prompt}
       </label>
-      {renderControl(question, value, onChange)}
+      {renderControl(question, value, onChange, onImportFiles)}
     </div>
   );
 }
@@ -304,6 +346,7 @@ function renderControl(
   q: AskQuestion,
   value: AnswerValue,
   onChange: (v: AnswerValue) => void,
+  onImportFiles: FileImportHandler,
 ): ReactElement {
   switch (q.type) {
     case 'text-options':
@@ -313,7 +356,7 @@ function renderControl(
     case 'slider':
       return <SliderField q={q} value={value} onChange={onChange} />;
     case 'file':
-      return <FileField q={q} onChange={onChange} />;
+      return <FileField q={q} onChange={onChange} onImportFiles={onImportFiles} />;
     case 'freeform':
       return <FreeformField q={q} value={value} onChange={onChange} />;
   }
@@ -451,24 +494,68 @@ function SliderField({
   );
 }
 
-function FileField({ q, onChange }: { q: AskFileQuestion; onChange: (v: AnswerValue) => void }) {
+function FileField({
+  q,
+  onChange,
+  onImportFiles,
+}: {
+  q: AskFileQuestion;
+  onChange: (v: AnswerValue) => void;
+  onImportFiles: FileImportHandler;
+}) {
+  const t = useT();
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFiles(fileList: FileList | null) {
+    const files = Array.from(fileList ?? []);
+    if (files.length === 0) {
+      onChange(null);
+      return;
+    }
+    const selectedNames = files.map((file) => file.name);
+    setImporting(true);
+    setError(null);
+    try {
+      const importedPaths = await onImportFiles(files);
+      onChange(answerValueForImportedFiles({ importedPaths, selectedNames, multiple: q.multiple }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'File import failed');
+      onChange(
+        answerValueForImportedFiles({ importedPaths: [], selectedNames, multiple: q.multiple }),
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
-    <input
-      id={`ask-q-${q.id}`}
-      type="file"
-      accept={q.accept?.join(',')}
-      multiple={q.multiple}
-      onChange={(e) => {
-        const files = Array.from(e.target.files ?? []);
-        if (files.length === 0) {
-          onChange(null);
-          return;
-        }
-        if (q.multiple) onChange(files.map((f) => f.name));
-        else onChange(files[0]?.name ?? null);
-      }}
-      className="max-w-full text-[12.5px] text-[var(--color-text-primary)]"
-    />
+    <div className="flex flex-col gap-[var(--space-1)]">
+      <input
+        id={`ask-q-${q.id}`}
+        type="file"
+        accept={q.accept?.join(',')}
+        multiple={q.multiple}
+        disabled={importing}
+        aria-busy={importing}
+        onChange={(e) => {
+          void handleFiles(e.currentTarget.files);
+        }}
+        className="max-w-full text-[12.5px] text-[var(--color-text-primary)]"
+      />
+      {importing ? (
+        <p className="text-[11px] text-[var(--color-text-secondary)]">
+          {t('common.loading', { defaultValue: 'Loading...' })}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="text-[11px] text-[var(--color-danger)]">
+          {t('ask.fileImportFallback', {
+            defaultValue: 'Could not import the file automatically; sending the file name instead.',
+          })}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

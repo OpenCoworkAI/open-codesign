@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -64,7 +64,7 @@ describe('parseRequest', () => {
     expect(result.sourcePath).toBe('screens/home/index.html');
     expect(exportAssetOptions(result)).toMatchObject({
       assetRootPath: '/workspace',
-      assetBasePath: '/workspace/screens/home',
+      assetBasePath: resolve('/workspace', 'screens/home'),
       sourcePath: 'screens/home/index.html',
     });
   });
@@ -103,7 +103,7 @@ describe('parseRequest', () => {
 
     expect(result.sourcePath).toBe('screens/home/App.jsx');
     expect(exportAssetOptions(result)).toMatchObject({
-      assetBasePath: '/workspace/screens/home',
+      assetBasePath: resolve('/workspace', 'screens/home'),
       sourcePath: 'screens/home/App.jsx',
     });
   });
@@ -131,7 +131,7 @@ describe('export path helpers', () => {
       now: new Date('2026-05-05T10:20:30.000Z'),
     });
 
-    expect(out).toBe('/Users/roy/Downloads/Launch-Deck-Q2-Home-2026-05-05-102030.pptx');
+    expect(out).toBe(join('/Users/roy/Downloads', 'Launch-Deck-Q2-Home-2026-05-05-102030.pptx'));
   });
 
   it('falls back to an open-codesign name inside Downloads when no design name is available', () => {
@@ -143,7 +143,7 @@ describe('export path helpers', () => {
       now: new Date('2026-05-05T10:20:30.000Z'),
     });
 
-    expect(out).toBe('/Users/roy/Downloads/open-codesign-App-2026-05-05-102030.md');
+    expect(out).toBe(join('/Users/roy/Downloads', 'open-codesign-App-2026-05-05-102030.md'));
   });
 
   it('treats legacy defaultFilename as a Downloads filename, not a cwd-relative path', () => {
@@ -154,7 +154,7 @@ describe('export path helpers', () => {
       now: new Date('2026-05-05T10:20:30.000Z'),
     });
 
-    expect(out).toBe('/Users/roy/Downloads/codesign-2026-05-05T06-04-43.html');
+    expect(out).toBe(join('/Users/roy/Downloads', 'codesign-2026-05-05T06-04-43.html'));
   });
 
   it('keeps legacy defaultFilename on the requested format extension', () => {
@@ -165,7 +165,7 @@ describe('export path helpers', () => {
       now: new Date('2026-05-05T10:20:30.000Z'),
     });
 
-    expect(out).toBe('/Users/roy/Downloads/preview.html.pdf');
+    expect(out).toBe(join('/Users/roy/Downloads', 'preview.html.pdf'));
   });
 
   it('keeps export files on the selected format extension', () => {

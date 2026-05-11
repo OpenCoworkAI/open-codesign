@@ -175,11 +175,12 @@ export interface ScaffoldResult {
 }
 
 function destinationPathForSource(destPath: string, sourcePath: string): string {
+  const normalizedDestPath = destPath.replace(/\\/g, '/');
   const sourceExt = path.extname(sourcePath);
-  if (sourceExt.length === 0) return destPath;
-  const parsed = path.parse(destPath);
-  if (parsed.ext.toLowerCase() === sourceExt.toLowerCase()) return destPath;
-  return path.join(parsed.dir, `${parsed.name}${sourceExt}`);
+  if (sourceExt.length === 0) return normalizedDestPath;
+  const parsed = path.posix.parse(normalizedDestPath);
+  if (parsed.ext.toLowerCase() === sourceExt.toLowerCase()) return normalizedDestPath;
+  return path.posix.join(parsed.dir, `${parsed.name}${sourceExt}`);
 }
 
 export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult> {

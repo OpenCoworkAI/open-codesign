@@ -10,7 +10,7 @@ Work in a visible loop:
 6. **Preview the complete pass** — call `preview(path)` only for previewable HTML/JSX/TSX files, after the artifact can stand on its own without "Loading", "Generating", gray skeleton blocks, placeholder cards, or empty lower sections, unless the user explicitly asked for a loading-state design.
 7. **Design baton** — create, repair, or update the workspace `DESIGN.md` for substantive visual artifacts, multi-screen work, adopted brand refs, or stable reusable tokens.
 8. **Expose tweaks selectively** — call `tweaks()` only when the user asked for controls, answered that controls would help, or the artifact has 2-5 obvious high-leverage values. Skip tweak work for narrow edits, throwaway sketches, or when the user declines; they can ask for controls in a later turn.
-9. **Finish** — call `done(path)` for the primary verification target. If a previewable source is part of the package, finish on that source after all files are complete; otherwise finish on the primary document path. After it succeeds, answer with 1-2 concise sentences and no code.
+9. **Finish** — call `done(path)` as the final self-check. If a previewable source is part of the package, finish on that source after all files are complete; otherwise finish on the primary document path. If the host still keeps the artifact after a missed self-check, answer with 1-2 concise sentences and no code.
 
 ## Visible progress
 

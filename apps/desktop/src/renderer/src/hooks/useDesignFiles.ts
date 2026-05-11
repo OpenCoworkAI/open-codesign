@@ -1,6 +1,7 @@
 import { DEFAULT_SOURCE_ENTRY } from '@open-codesign/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { WorkspaceFileKind } from '../../../preload/index';
+import type { WorkspaceDirectoryEntry, WorkspaceFileKind } from '../../../preload/index';
+import { buildLazyFileTree, type FileTreeNode, type LazyDirectoryMap } from '../lib/file-tree';
 import { useCodesignStore } from '../store';
 import { tr } from '../store/lib/locale';
 
@@ -19,6 +20,11 @@ export interface UseDesignFilesResult {
   files: DesignFileEntry[];
   loading: boolean;
   backend: 'workspace' | 'snapshots';
+}
+
+export interface UseLazyDesignFileTreeResult extends UseDesignFilesResult {
+  tree: FileTreeNode[];
+  loadDirectory: (path: string) => Promise<void>;
 }
 
 export interface WorkspaceListErrorToastState {
@@ -291,6 +297,298 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
   }, [backend, designId, pushToast, refetch, workspacePath]);
 
   return { files, loading, backend };
+}
+
+function filesFromLazyDirectories(directories: LazyDirectoryMap): DesignFileEntry[] {
+  const byPath = new Map<string, DesignFileEntry>();
+  for (const state of Object.values(directories)) {
+    if (!state?.loaded) continue;
+    for (const entry of state.entries) {
+      if (entry.type !== 'file') continue;
+      byPath.set(entry.path, {
+        path: entry.path,
+        kind: entry.kind ?? 'asset',
+        updatedAt: entry.updatedAt ?? new Date().toISOString(),
+        source: 'workspace',
+        ...(entry.size !== undefined ? { size: entry.size } : {}),
+      });
+    }
+  }
+  return Array.from(byPath.values()).sort((a, b) => a.path.localeCompare(b.path));
+}
+
+export function useLazyDesignFileTree(designId: string | null): UseLazyDesignFileTreeResult {
+  const previewSource = useCodesignStore((s) => s.previewSource);
+  const workspacePath = useCodesignStore((s) =>
+    designId === null ? null : (s.designs.find((d) => d.id === designId)?.workspacePath ?? null),
+  );
+  const designUpdatedAt = useCodesignStore((s) =>
+    designId === null ? undefined : s.designs.find((d) => d.id === designId)?.updatedAt,
+  );
+  const pushToast = useCodesignStore((s) => s.pushToast);
+  const dismissToast = useCodesignStore((s) => s.dismissToast);
+  const [directories, setDirectories] = useState<LazyDirectoryMap>({});
+  const [loading, setLoading] = useState(false);
+  const listErrorToastRef = useRef<WorkspaceListErrorToastState>({ key: null, toastId: null });
+  const refetchSeqRef = useRef(0);
+  const directoriesRef = useRef<LazyDirectoryMap>({});
+  const loadContextRef = useRef<{
+    designId: string | null;
+    backend: 'workspace' | 'snapshots';
+    workspacePath: string | null;
+  }>({ designId, backend: 'snapshots', workspacePath });
+  const backend: 'workspace' | 'snapshots' =
+    typeof window !== 'undefined' &&
+    typeof (window.codesign as unknown as { files?: { listDir?: unknown } })?.files?.listDir ===
+      'function'
+      ? 'workspace'
+      : 'snapshots';
+
+  loadContextRef.current = { designId, backend, workspacePath };
+
+  const updateDirectories = useCallback((updater: (prev: LazyDirectoryMap) => LazyDirectoryMap) => {
+    setDirectories((prev) => {
+      const next = updater(prev);
+      directoriesRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const loadDirectory = useCallback(
+    async (path: string) => {
+      const normalizedPath = path.length === 0 ? '.' : path;
+      if (!designId || backend !== 'workspace' || workspacePath === null) return;
+      const context = { designId, backend, workspacePath };
+      const isCurrentContext = () => {
+        const current = loadContextRef.current;
+        return (
+          current.designId === context.designId &&
+          current.backend === context.backend &&
+          current.workspacePath === context.workspacePath
+        );
+      };
+      updateDirectories((prev) => ({
+        ...prev,
+        [normalizedPath]: {
+          entries: prev[normalizedPath]?.entries ?? [],
+          loaded: prev[normalizedPath]?.loaded === true,
+          loading: true,
+        },
+      }));
+      try {
+        const rows = await (
+          window.codesign as unknown as {
+            files: {
+              listDir: (id: string, dirPath: string) => Promise<WorkspaceDirectoryEntry[]>;
+            };
+          }
+        ).files.listDir(designId, normalizedPath);
+        if (!isCurrentContext()) return;
+        updateDirectories((prev) => ({
+          ...prev,
+          [normalizedPath]: { entries: rows, loaded: true, loading: false },
+        }));
+        handleWorkspaceListSuccessToast(
+          listErrorToastRef.current,
+          dismissToast,
+          currentWorkspaceListFailureToastIds(),
+        );
+      } catch (err) {
+        if (!isCurrentContext()) return;
+        const message = err instanceof Error ? err.message : tr('errors.unknown');
+        updateDirectories((prev) => ({
+          ...prev,
+          [normalizedPath]: {
+            entries: prev[normalizedPath]?.entries ?? [],
+            loaded: prev[normalizedPath]?.loaded === true,
+            loading: false,
+          },
+        }));
+        handleWorkspaceListErrorToast({
+          state: listErrorToastRef.current,
+          key: `${designId}:${workspacePath}:${normalizedPath}:${message}`,
+          message,
+          pushToast,
+          dismissToast,
+        });
+      }
+    },
+    [backend, designId, dismissToast, pushToast, updateDirectories, workspacePath],
+  );
+
+  const reloadLoadedDirectories = useCallback(async () => {
+    const seq = ++refetchSeqRef.current;
+    const isCurrent = () => refetchSeqRef.current === seq;
+    if (!designId) {
+      handleWorkspaceListSuccessToast(
+        listErrorToastRef.current,
+        dismissToast,
+        currentWorkspaceListFailureToastIds(),
+      );
+      if (isCurrent()) updateDirectories(() => ({}));
+      return;
+    }
+    if (backend !== 'workspace' || workspacePath === null) {
+      handleWorkspaceListSuccessToast(
+        listErrorToastRef.current,
+        dismissToast,
+        currentWorkspaceListFailureToastIds(),
+      );
+      if (isCurrent()) updateDirectories(() => ({}));
+      return;
+    }
+
+    const context = { designId, backend, workspacePath };
+    const isCurrentContext = () => {
+      const current = loadContextRef.current;
+      return (
+        current.designId === context.designId &&
+        current.backend === context.backend &&
+        current.workspacePath === context.workspacePath
+      );
+    };
+    const currentDirectories = directoriesRef.current;
+    const currentlyLoaded = Object.keys(currentDirectories).filter(
+      (key) => currentDirectories[key]?.loaded === true,
+    );
+    const paths = currentlyLoaded.length > 0 ? currentlyLoaded : ['.'];
+    try {
+      if (isCurrent()) setLoading(true);
+      const rows = await Promise.all(
+        paths.map(async (dirPath) => ({
+          dirPath,
+          entries: await (
+            window.codesign as unknown as {
+              files: {
+                listDir: (id: string, dirPath: string) => Promise<WorkspaceDirectoryEntry[]>;
+              };
+            }
+          ).files.listDir(designId, dirPath),
+        })),
+      );
+      if (!isCurrent() || !isCurrentContext()) return;
+      updateDirectories((prev) => {
+        const next: LazyDirectoryMap = { ...prev };
+        for (const row of rows) {
+          next[row.dirPath] = { entries: row.entries, loaded: true, loading: false };
+        }
+        return next;
+      });
+      handleWorkspaceListSuccessToast(
+        listErrorToastRef.current,
+        dismissToast,
+        currentWorkspaceListFailureToastIds(),
+      );
+    } catch (err) {
+      if (!isCurrent() || !isCurrentContext()) return;
+      const message = err instanceof Error ? err.message : tr('errors.unknown');
+      updateDirectories(() => ({}));
+      handleWorkspaceListErrorToast({
+        state: listErrorToastRef.current,
+        key: `${designId}:${workspacePath}:${message}`,
+        message,
+        pushToast,
+        dismissToast,
+      });
+    } finally {
+      if (isCurrent() && isCurrentContext()) setLoading(false);
+    }
+  }, [backend, designId, dismissToast, pushToast, updateDirectories, workspacePath]);
+
+  useEffect(() => {
+    updateDirectories(() => ({}));
+    void loadDirectory('.');
+  }, [loadDirectory, updateDirectories]);
+
+  const throttleRef = useRef<{ pending: boolean; lastRun: number }>({
+    pending: false,
+    lastRun: 0,
+  });
+  useEffect(() => {
+    if (backend !== 'workspace') return;
+    if (!designId || !window.codesign) return;
+    const off = window.codesign.chat?.onAgentEvent?.((event) => {
+      if (event.designId !== designId) return;
+      const relevant =
+        event.type === 'fs_updated' ||
+        event.type === 'tool_call_result' ||
+        event.type === 'turn_end' ||
+        event.type === 'agent_end';
+      if (!relevant) return;
+      const slot = throttleRef.current;
+      const now = Date.now();
+      const elapsed = now - slot.lastRun;
+      if (elapsed > 250) {
+        slot.lastRun = now;
+        void reloadLoadedDirectories();
+        return;
+      }
+      if (!slot.pending) {
+        slot.pending = true;
+        setTimeout(
+          () => {
+            slot.pending = false;
+            slot.lastRun = Date.now();
+            void reloadLoadedDirectories();
+          },
+          Math.max(0, 250 - elapsed),
+        );
+      }
+    });
+    return () => {
+      off?.();
+    };
+  }, [backend, designId, reloadLoadedDirectories]);
+
+  useEffect(() => {
+    if (backend !== 'workspace') return;
+    if (!designId || workspacePath === null) return;
+    const filesApi = window.codesign?.files as
+      | {
+          subscribe?: (id: string) => Promise<unknown>;
+          unsubscribe?: (id: string) => Promise<unknown>;
+          onChanged?: (cb: (e: { designId: string }) => void) => () => void;
+        }
+      | undefined;
+    if (!filesApi?.subscribe || !filesApi.unsubscribe || !filesApi.onChanged) return;
+    void filesApi.subscribe(designId).catch((err: unknown) => {
+      pushToast({
+        variant: 'error',
+        title: tr('canvas.workspace.updateFailed'),
+        description: err instanceof Error ? err.message : tr('errors.unknown'),
+      });
+    });
+    const off = filesApi.onChanged((event) => {
+      if (event.designId !== designId) return;
+      void reloadLoadedDirectories();
+    });
+    return () => {
+      off();
+      void filesApi.unsubscribe?.(designId);
+    };
+  }, [backend, designId, pushToast, reloadLoadedDirectories, workspacePath]);
+
+  const workspaceFiles = filesFromLazyDirectories(directories);
+  const files = withPreviewSourceFallback(workspaceFiles, previewSource, designUpdatedAt);
+  const tree =
+    workspaceFiles.length === 0 && files.length > 0
+      ? buildLazyFileTree({
+          '.': {
+            entries: files.map((file) => ({
+              path: file.path,
+              name: file.path,
+              type: 'file' as const,
+              kind: file.kind,
+              updatedAt: file.updatedAt,
+              ...(file.size !== undefined ? { size: file.size } : {}),
+            })),
+            loaded: true,
+            loading: false,
+          },
+        })
+      : buildLazyFileTree(directories);
+
+  return { files, tree, loading, backend, loadDirectory };
 }
 
 // Format an ISO timestamp as "22h ago" / "3d ago". Pure for testability.

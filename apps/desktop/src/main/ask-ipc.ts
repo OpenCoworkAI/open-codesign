@@ -20,6 +20,7 @@ interface PendingAsk {
   resolve: (result: AskResult) => void;
   reject: (reason?: unknown) => void;
   sessionId: string;
+  input: AskInput;
 }
 
 const pending = new Map<string, PendingAsk>();
@@ -31,6 +32,8 @@ export interface AskRequestPayload {
 }
 
 export function registerAskIpc(): void {
+  ipcMain.handle('ask:list-pending', () => listPendingAskRequests());
+
   ipcMain.handle('ask:resolve', (_event, raw: unknown) => {
     const requestId = readRequestId(raw, 'ask:resolve');
     const entry = pending.get(requestId);
@@ -70,7 +73,7 @@ export function requestAsk(
 ): Promise<AskResult> {
   const requestId = `ask-${randomUUID()}`;
   return new Promise<AskResult>((resolve, reject) => {
-    pending.set(requestId, { resolve, reject, sessionId });
+    pending.set(requestId, { resolve, reject, sessionId, input });
     const win = getMainWindow();
     if (!win || win.isDestroyed()) {
       pending.delete(requestId);
@@ -86,6 +89,14 @@ export function requestAsk(
     });
     win.webContents.send('ask:request', payload);
   });
+}
+
+export function listPendingAskRequests(): AskRequestPayload[] {
+  return Array.from(pending, ([requestId, entry]) => ({
+    requestId,
+    sessionId: entry.sessionId,
+    input: entry.input,
+  }));
 }
 
 export function cancelPendingAskRequests(sessionId: string): void {

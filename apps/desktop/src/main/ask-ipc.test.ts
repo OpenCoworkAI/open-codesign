@@ -59,6 +59,27 @@ describe('ask-ipc', () => {
     await expect(second).resolves.toEqual({ status: 'cancelled', answers: [] });
   });
 
+  it('lists pending ask requests so the renderer can recover a missed event', async () => {
+    handlers.clear();
+    registerAskIpc();
+    const send = vi.fn();
+    const fakeWindow = {
+      isDestroyed: () => false,
+      webContents: { send },
+    } as unknown as Electron.BrowserWindow;
+    const inFlight = requestAsk('session-recover', sampleInput, () => fakeWindow);
+    const listPending = handlers.get('ask:list-pending');
+    if (!listPending) throw new Error('ask:list-pending handler not registered');
+
+    const result = listPending(null, undefined);
+
+    expect(result).toEqual([
+      expect.objectContaining({ sessionId: 'session-recover', input: sampleInput }),
+    ]);
+    cancelPendingAskRequests('session-recover');
+    await expect(inFlight).resolves.toEqual({ status: 'cancelled', answers: [] });
+  });
+
   it('rejects malformed answers for a known request instead of leaving it pending', async () => {
     handlers.clear();
     registerAskIpc();

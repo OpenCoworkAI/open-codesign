@@ -88,6 +88,43 @@ describe('str_replace_based_edit_tool', () => {
     ).rejects.toThrow(/insert requires numeric insert_line/);
   });
 
+  it('normalizes Windows path separators before touching the virtual workspace', async () => {
+    const tool = makeTextEditorTool(makeMapFs(new Map([['src/App.jsx', 'one']])));
+
+    const result = await tool.execute('call-1', {
+      command: 'view',
+      path: 'src\\App.jsx',
+    });
+
+    expect(result.details).toMatchObject({ command: 'view', path: 'src/App.jsx' });
+    expect(result.content[0]?.type === 'text' ? result.content[0].text : '').toBe('one');
+  });
+
+  it('rejects absolute and traversal paths before reaching the virtual workspace', async () => {
+    const tool = makeTextEditorTool(makeFs('one'));
+
+    await expect(
+      tool.execute('call-1', {
+        command: 'view',
+        path: '../App.jsx',
+      }),
+    ).rejects.toThrow(/workspace-relative/);
+
+    await expect(
+      tool.execute('call-2', {
+        command: 'view',
+        path: 'C:\\Users\\Musson\\App.jsx',
+      }),
+    ).rejects.toThrow(/workspace-relative/);
+
+    await expect(
+      tool.execute('call-3', {
+        command: 'view',
+        path: '/tmp/App.jsx',
+      }),
+    ).rejects.toThrow(/workspace-relative/);
+  });
+
   it('returns a recoverable error when editing an existing file before viewing it', async () => {
     const tool = makeTextEditorTool(makeFs('one'));
 
@@ -231,6 +268,76 @@ describe('str_replace_based_edit_tool', () => {
     expect(afterRewrite.content[0]?.type === 'text' ? afterRewrite.content[0].text : '').toContain(
       'Edited App.jsx',
     );
+  });
+
+  it('does not treat workspace write failures as exact edit misses', async () => {
+    const fs = makeFs('one');
+    const originalReplace = fs.strReplace;
+    let failOnce = true;
+    fs.strReplace = (path, oldStr, newStr) => {
+      if (failOnce) {
+        failOnce = false;
+        throw new Error('Workspace write-through failed for App.jsx: permission request timed out');
+      }
+      return originalReplace(path, oldStr, newStr);
+    };
+    const tool = makeTextEditorTool(fs);
+    await tool.execute('view', { command: 'view', path: 'App.jsx' });
+
+    const failed = await tool.execute('write-fail', {
+      command: 'str_replace',
+      path: 'App.jsx',
+      old_str: 'one',
+      new_str: 'two',
+    });
+    const failedText = failed.content[0]?.type === 'text' ? failed.content[0].text : '';
+    expect(failedText).toContain('could not write App.jsx to the workspace');
+    expect(failedText).toContain('Stop retrying this edit');
+
+    const afterWriteRestored = await tool.execute('write-ok', {
+      command: 'str_replace',
+      path: 'App.jsx',
+      old_str: 'one',
+      new_str: 'two',
+    });
+    expect(
+      afterWriteRestored.content[0]?.type === 'text' ? afterWriteRestored.content[0].text : '',
+    ).toContain('Edited App.jsx');
+  });
+
+  it('does not tell the agent to re-read after workspace insert write failures', async () => {
+    const fs = makeFs('jsx', { 'App.css': 'body {}' });
+    const originalInsert = fs.insert;
+    let failOnce = true;
+    fs.insert = (path, line, text) => {
+      if (failOnce) {
+        failOnce = false;
+        throw new Error('Workspace write-through failed for App.css: permission request timed out');
+      }
+      return originalInsert(path, line, text);
+    };
+    const tool = makeTextEditorTool(fs);
+    await tool.execute('view-css', { command: 'view', path: 'App.css' });
+
+    const failed = await tool.execute('insert-fail', {
+      command: 'insert',
+      path: 'App.css',
+      insert_line: 1,
+      new_str: '.card {}',
+    });
+    const failedText = failed.content[0]?.type === 'text' ? failed.content[0].text : '';
+    expect(failedText).toContain('could not write App.css to the workspace');
+    expect(failedText).not.toContain('Re-read the target range');
+
+    const afterWriteRestored = await tool.execute('insert-ok', {
+      command: 'insert',
+      path: 'App.css',
+      insert_line: 1,
+      new_str: '.card {}',
+    });
+    expect(
+      afterWriteRestored.content[0]?.type === 'text' ? afterWriteRestored.content[0].text : '',
+    ).toContain('Inserted at App.css:1');
   });
 
   it('does not treat a directory view as viewing a concrete file', async () => {

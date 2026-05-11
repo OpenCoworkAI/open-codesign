@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import type { Design } from '@open-codesign/shared';
+import type { Design, WorkspaceMode } from '@open-codesign/shared';
 import { type BrowserWindow, dialog, shell } from 'electron';
 import { getLogger } from './logger';
 import {
@@ -145,6 +145,7 @@ export async function bindWorkspace(
   designId: string,
   workspacePath: string | null,
   migrateFiles: boolean,
+  workspaceMode?: WorkspaceMode,
 ): Promise<Design> {
   const current = requireDesign(db, designId);
 
@@ -183,7 +184,7 @@ export async function bindWorkspace(
     await migrateWorkspaceFiles(db, designId, normalizedPath);
   }
 
-  const updated = updateDesignWorkspace(db, designId, normalizedPath);
+  const updated = updateDesignWorkspace(db, designId, normalizedPath, workspaceMode);
   if (updated === null) {
     throw new Error(`Design not found: ${designId}`);
   }

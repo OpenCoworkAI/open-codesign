@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   classifyWorkspaceFileKind,
+  listWorkspaceDirectoryAt,
   listWorkspaceFilesAt,
   readWorkspaceFileAt,
   readWorkspaceFilesAt,
@@ -102,12 +103,14 @@ describe('readWorkspaceFilesAt', () => {
     expect(result.map((f) => f.file)).toEqual(['index.html']);
   });
 
-  it('throws when a matched source file cannot be read as UTF-8 text', async () => {
+  it('skips matched source files that are not UTF-8 text during bulk scans', async () => {
     await writeFile(join(root, 'ok.html'), '<p>ok</p>');
-    // A stray NUL byte is our binary sniff. Writing .html keeps it on the
-    // default pattern so we prove the binary filter (not the glob) fails it.
+    await writeFile(join(root, 'invalid.txt'), Buffer.from([0xff, 0xfe, 0xfd]));
     await writeFile(join(root, 'binary.html'), Buffer.from([0x00, 0x01, 0x02, 0x03]));
-    await expect(readWorkspaceFilesAt(root)).rejects.toThrow(/Failed to read workspace file/);
+
+    const result = await readWorkspaceFilesAt(root);
+
+    expect(result.map((file) => file.file)).toEqual(['ok.html']);
   });
 
   it('throws when the workspace root cannot be scanned', async () => {
@@ -166,6 +169,37 @@ describe('workspace file metadata/read helpers', () => {
     ]);
   });
 
+  it('lists only immediate visible children for lazy file tree loading', async () => {
+    await mkdir(join(root, 'src', 'components'), { recursive: true });
+    await writeFile(join(root, 'src', 'App.tsx'), 'export function App() { return null; }');
+    await writeFile(join(root, 'src', 'components', 'Button.tsx'), 'export function Button() {}');
+    await writeFile(join(root, 'DESIGN.md'), '# Design');
+
+    const rootEntries = await listWorkspaceDirectoryAt(root, '.');
+    expect(rootEntries.map((entry) => entry.path)).toEqual(['src', 'DESIGN.md']);
+
+    const srcEntries = await listWorkspaceDirectoryAt(root, 'src');
+    expect(srcEntries.map((entry) => entry.path)).toEqual(['src/components', 'src/App.tsx']);
+  });
+
+  it('hides agent worktrees, hidden files, and build outputs from workspace listings', async () => {
+    await mkdir(join(root, '.claude', 'worktrees', 'demo', 'src'), { recursive: true });
+    await mkdir(join(root, 'target', 'debug'), { recursive: true });
+    await mkdir(join(root, 'src'), { recursive: true });
+    await writeFile(join(root, '.claude', 'worktrees', 'demo', 'src', 'App.tsx'), 'wrong app');
+    await writeFile(join(root, 'target', 'debug', 'app.exe'), 'binary');
+    await writeFile(join(root, 'build-out.txt'), Buffer.from([0xff, 0xfe, 0xfd]));
+    await writeFile(join(root, '.gitignore'), 'node_modules');
+    await writeFile(join(root, 'CLAUDE.md'), '# stale model instructions');
+    await writeFile(join(root, 'src', 'App.tsx'), 'right app');
+
+    const rootEntries = await listWorkspaceDirectoryAt(root, '.');
+    expect(rootEntries.map((entry) => entry.path)).toEqual(['src']);
+
+    const recursiveEntries = await listWorkspaceFilesAt(root);
+    expect(recursiveEntries.map((entry) => entry.path)).toEqual(['src/App.tsx']);
+  });
+
   it('skips operating system metadata files from workspace listings', async () => {
     await writeFile(join(root, '.DS_Store'), 'finder metadata');
     await mkdir(join(root, 'assets'), { recursive: true });
@@ -185,6 +219,21 @@ describe('workspace file metadata/read helpers', () => {
 
   it('rejects path escapes in single-file reads', async () => {
     await expect(readWorkspaceFileAt(root, '../outside.jsx')).rejects.toThrow(/escapes/);
+  });
+
+  it('rejects hidden and ignored single-file reads', async () => {
+    await mkdir(join(root, '.claude'), { recursive: true });
+    await writeFile(join(root, '.claude', 'secret.jsx'), 'export const secret = true;');
+    await writeFile(join(root, 'CLAUDE.md'), '# stale model instructions');
+
+    await expect(readWorkspaceFileAt(root, '.claude/secret.jsx')).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_BAD_INPUT',
+    });
+    await expect(readWorkspaceFileAt(root, 'CLAUDE.md')).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_BAD_INPUT',
+    });
   });
 
   it('rejects single-file reads through symlinked workspace path segments', async () => {

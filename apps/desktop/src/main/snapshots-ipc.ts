@@ -9,7 +9,7 @@
  * initSnapshotsDb().
  */
 
-import { copyFile, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ChatAppendInput,
@@ -19,6 +19,7 @@ import type {
   CommentUpdateInput,
   Design,
   DesignSnapshot,
+  PreviewMode,
   SnapshotCreateInput,
 } from '@open-codesign/shared';
 import { ChatMessageKind, CodesignError, CommentKind, CommentRect } from '@open-codesign/shared';
@@ -67,6 +68,7 @@ import {
   setDesignThumbnail,
   softDeleteDesign,
   touchDesignActivity,
+  updateDesignPreview,
   updateDesignWorkspace,
   upsertDesignFile,
 } from './snapshots-db';
@@ -78,10 +80,13 @@ import {
   withStableWorkspacePath,
 } from './workspace-path-lock';
 import {
+  assertWorkspacePathVisible,
   classifyWorkspaceFileKind,
+  listWorkspaceDirectoryAt,
   listWorkspaceFilesAt,
   readWorkspaceFileAt,
   resolveSafeWorkspaceChildPath,
+  type WorkspaceDirectoryEntry,
   type WorkspaceFileEntry,
   type WorkspaceFileReadResult,
 } from './workspace-reader';
@@ -234,6 +239,359 @@ function requireBoundWorkspacePath(design: Design, message: string): string {
   } catch (cause) {
     throw new CodesignError('Stored workspace path is invalid', 'IPC_BAD_INPUT', { cause });
   }
+}
+
+function parsePreviewMode(value: unknown): PreviewMode {
+  if (
+    value === 'managed-file' ||
+    value === 'connected-url' ||
+    value === 'external-app' ||
+    value === 'none'
+  ) {
+    return value;
+  }
+  throw new CodesignError(
+    'previewMode must be managed-file, connected-url, external-app, or none',
+    'IPC_BAD_INPUT',
+  );
+}
+
+function normalizeConnectedPreviewUrl(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') {
+    throw new CodesignError('previewUrl must be a string or null', 'IPC_BAD_INPUT');
+  }
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch (cause) {
+    throw new CodesignError('previewUrl must be a valid URL', 'IPC_BAD_INPUT', { cause });
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new CodesignError('previewUrl must start with http:// or https://', 'IPC_BAD_INPUT');
+  }
+  return url.toString();
+}
+
+const APP_PROJECT_ROOT_FILES = [
+  'angular.json',
+  'astro.config.cjs',
+  'astro.config.js',
+  'astro.config.mjs',
+  'astro.config.ts',
+  'next.config.cjs',
+  'next.config.js',
+  'next.config.mjs',
+  'next.config.ts',
+  'nuxt.config.js',
+  'nuxt.config.mjs',
+  'nuxt.config.ts',
+  'parcel.config.js',
+  'remix.config.js',
+  'remix.config.ts',
+  'svelte.config.js',
+  'svelte.config.ts',
+  'src-tauri/Cargo.toml',
+  'src-tauri/Tauri.toml',
+  'src-tauri/tauri.conf.json',
+  'src-tauri/tauri.conf.json5',
+  'src-tauri/tauri.conf.toml',
+  'tauri.conf.json',
+  'vite.config.js',
+  'vite.config.mjs',
+  'vite.config.ts',
+  'webpack.config.js',
+  'webpack.config.ts',
+] as const;
+
+const NATIVE_APP_PROJECT_FILES = [
+  'src-tauri/Cargo.toml',
+  'src-tauri/Tauri.toml',
+  'src-tauri/tauri.conf.json',
+  'src-tauri/tauri.conf.json5',
+  'src-tauri/tauri.conf.toml',
+  'tauri.conf.json',
+  'electron-builder.yml',
+  'electron-builder.yaml',
+  'electron.vite.config.js',
+  'electron.vite.config.mjs',
+  'electron.vite.config.ts',
+  'capacitor.config.json',
+  'capacitor.config.ts',
+] as const;
+
+const COMMON_DEV_SERVER_PORTS = [
+  5173, 3000, 3001, 5174, 4173, 4200, 4321, 8080, 8000, 5000, 6006, 1234, 1420,
+] as const;
+
+interface PreviewDetectCandidate {
+  url: string;
+  source: string;
+  status: 'matched' | 'native-runtime-required' | 'not-preview' | 'unreachable';
+  httpStatus?: number;
+  contentType?: string;
+  title?: string;
+  error?: string;
+}
+
+interface PreviewDetectResult {
+  schemaVersion: 1;
+  found: boolean;
+  url: string | null;
+  candidates: PreviewDetectCandidate[];
+  message: string;
+}
+
+interface PreviewCandidateSpec {
+  url: string;
+  source: string;
+}
+
+async function readWorkspacePackageJson(
+  workspacePath: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await readFile(path.join(workspacePath, 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function packageScripts(pkg: Record<string, unknown> | null): string[] {
+  if (pkg === null || !isRecord(pkg['scripts'])) return [];
+  return Object.values(pkg['scripts']).filter(
+    (value): value is string => typeof value === 'string',
+  );
+}
+
+function packageNamesFromManifest(pkg: Record<string, unknown> | null): Set<string> {
+  const names = new Set<string>();
+  if (pkg === null) return names;
+  for (const key of ['dependencies', 'devDependencies', 'peerDependencies']) {
+    const entry = pkg[key];
+    if (!isRecord(entry)) continue;
+    for (const name of Object.keys(entry)) names.add(name);
+  }
+  return names;
+}
+
+function scriptsSuggestNativeRuntime(scripts: string[]): boolean {
+  return scripts.some((script) => /\b(?:tauri|electron|capacitor)\b/i.test(script));
+}
+
+function packageManifestLooksLikeApplicationProject(pkg: Record<string, unknown> | null): boolean {
+  const names = packageNamesFromManifest(pkg);
+  if (
+    [
+      '@angular/core',
+      '@astrojs/react',
+      '@capacitor/core',
+      '@remix-run/react',
+      '@sveltejs/kit',
+      '@tauri-apps/api',
+      '@vitejs/plugin-react',
+      'astro',
+      'electron',
+      'next',
+      'nuxt',
+      'parcel',
+      'react-scripts',
+      'svelte',
+      'vite',
+      'webpack',
+    ].some((name) => names.has(name))
+  ) {
+    return true;
+  }
+  return packageScripts(pkg).some((script) =>
+    /\b(?:astro|capacitor|electron|next|nuxt|parcel|react-scripts|remix|svelte-kit|tauri|vite|webpack)\b/i.test(
+      script,
+    ),
+  );
+}
+
+async function workspaceRequiresNativeRuntime(input: {
+  workspacePath: string;
+  packageNames: Set<string>;
+  scripts: string[];
+}): Promise<boolean> {
+  if (
+    input.packageNames.has('@tauri-apps/api') ||
+    input.packageNames.has('electron') ||
+    input.packageNames.has('@capacitor/core') ||
+    Array.from(input.packageNames).some(
+      (name) => name.startsWith('@tauri-apps/plugin-') || name.startsWith('tauri-plugin-'),
+    ) ||
+    scriptsSuggestNativeRuntime(input.scripts)
+  ) {
+    return true;
+  }
+  return workspaceHasAnyFile(input.workspacePath, NATIVE_APP_PROJECT_FILES);
+}
+
+function extractPortsFromScripts(scripts: string[]): number[] {
+  const ports = new Set<number>();
+  const pattern =
+    /(?:--port|--https-port|-p)\s+([0-9]{2,5})|(?:PORT|VITE_PORT|NUXT_PORT|ASTRO_PORT|STORYBOOK_PORT)\s*=\s*([0-9]{2,5})|(?:localhost|127\.0\.0\.1|\[::1\]):([0-9]{2,5})/gi;
+  for (const script of scripts) {
+    for (const match of script.matchAll(pattern)) {
+      const raw = match[1] ?? match[2] ?? match[3];
+      const port = raw ? Number.parseInt(raw, 10) : Number.NaN;
+      if (Number.isInteger(port) && port > 0 && port <= 65535) ports.add(port);
+    }
+  }
+  return Array.from(ports);
+}
+
+async function workspaceHasAnyFile(
+  workspacePath: string,
+  files: readonly string[],
+): Promise<boolean> {
+  for (const file of files) {
+    if (await pathExists(path.join(workspacePath, file))) return true;
+  }
+  return false;
+}
+
+export async function workspaceLooksLikeApplicationProject(
+  workspacePath: string,
+): Promise<boolean> {
+  if (await workspaceHasAnyFile(workspacePath, APP_PROJECT_ROOT_FILES)) return true;
+  return packageManifestLooksLikeApplicationProject(await readWorkspacePackageJson(workspacePath));
+}
+
+function addPreviewCandidate(
+  candidates: Map<string, PreviewCandidateSpec>,
+  url: string,
+  source: string,
+): void {
+  let normalized: string | null;
+  try {
+    normalized = normalizeConnectedPreviewUrl(url);
+  } catch {
+    normalized = null;
+  }
+  if (normalized === null || candidates.has(normalized)) return;
+  candidates.set(normalized, { url: normalized, source });
+}
+
+async function localPreviewCandidatesForWorkspace(input: {
+  workspacePath: string;
+  currentUrl?: string | null;
+}): Promise<PreviewCandidateSpec[]> {
+  const candidates = new Map<string, PreviewCandidateSpec>();
+  if (input.currentUrl) addPreviewCandidate(candidates, input.currentUrl, 'saved preview URL');
+
+  const pkg = await readWorkspacePackageJson(input.workspacePath);
+  for (const port of extractPortsFromScripts(packageScripts(pkg))) {
+    addPreviewCandidate(candidates, `http://localhost:${port}/`, 'package.json script');
+  }
+  for (const port of COMMON_DEV_SERVER_PORTS) {
+    addPreviewCandidate(candidates, `http://localhost:${port}/`, 'common local preview port');
+  }
+  return Array.from(candidates.values());
+}
+
+function titleFromHtml(html: string): string | undefined {
+  const match = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+  const title = match?.[1]?.trim();
+  return title && title.length > 0 ? title : undefined;
+}
+
+function looksLikeHtmlPreview(contentType: string, body: string): boolean {
+  const lowerContentType = contentType.toLowerCase();
+  return (
+    lowerContentType.includes('text/html') ||
+    /^\s*<!doctype html/i.test(body) ||
+    /<html[\s>]/i.test(body)
+  );
+}
+
+function responseDisallowsEmbeddedPreview(headers: Headers): boolean {
+  const xFrameOptions = headers.get('x-frame-options')?.toLowerCase() ?? '';
+  if (xFrameOptions.includes('deny') || xFrameOptions.includes('sameorigin')) return true;
+
+  const csp = headers.get('content-security-policy')?.toLowerCase() ?? '';
+  const frameAncestors = csp.match(/(?:^|;)\s*frame-ancestors\s+([^;]+)/u)?.[1] ?? '';
+  return frameAncestors.includes("'none'") || frameAncestors.includes("'self'");
+}
+
+async function probePreviewCandidate(
+  candidate: PreviewCandidateSpec,
+  options: { nativeRuntimeRequired: boolean },
+): Promise<PreviewDetectCandidate> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 700);
+  try {
+    const response = await fetch(candidate.url, { signal: controller.signal, redirect: 'follow' });
+    const contentType = response.headers.get('content-type') ?? '';
+    const body = await response.text().catch(() => '');
+    const matched = response.status < 500 && looksLikeHtmlPreview(contentType, body);
+    const needsExternalPreview =
+      matched &&
+      (options.nativeRuntimeRequired || responseDisallowsEmbeddedPreview(response.headers));
+    const title = titleFromHtml(body);
+    return {
+      url: candidate.url,
+      source: candidate.source,
+      status: matched
+        ? needsExternalPreview
+          ? 'native-runtime-required'
+          : 'matched'
+        : 'not-preview',
+      httpStatus: response.status,
+      ...(contentType.length > 0 ? { contentType } : {}),
+      ...(title ? { title } : {}),
+    };
+  } catch (err) {
+    return {
+      url: candidate.url,
+      source: candidate.source,
+      status: 'unreachable',
+      error:
+        err instanceof Error && err.name === 'AbortError'
+          ? 'timeout'
+          : err instanceof Error
+            ? err.message
+            : String(err),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function detectLocalPreviewServer(input: {
+  workspacePath: string;
+  currentUrl?: string | null;
+}): Promise<PreviewDetectResult> {
+  const pkg = await readWorkspacePackageJson(input.workspacePath);
+  const scripts = packageScripts(pkg);
+  const nativeRuntimeRequired = await workspaceRequiresNativeRuntime({
+    workspacePath: input.workspacePath,
+    packageNames: packageNamesFromManifest(pkg),
+    scripts,
+  });
+  const candidates = await localPreviewCandidatesForWorkspace(input);
+  const probed = await Promise.all(
+    candidates.map((candidate) => probePreviewCandidate(candidate, { nativeRuntimeRequired })),
+  );
+  const match = probed.find((candidate) => candidate.status === 'matched') ?? null;
+  const nativeMatch =
+    probed.find((candidate) => candidate.status === 'native-runtime-required') ?? null;
+  return {
+    schemaVersion: 1,
+    found: match !== null,
+    url: match?.url ?? null,
+    candidates: probed,
+    message:
+      match !== null
+        ? `Found a local preview at ${match.url}`
+        : nativeMatch !== null
+          ? `Found a local native app at ${nativeMatch.url}. Use External app preview.`
+          : 'No running local preview server was found.',
+  };
 }
 
 /**
@@ -521,7 +879,7 @@ export async function renameAutoManagedWorkspaceForDesign(input: {
 
   await rename(currentPath, nextPath);
   return runDb('rename-design.workspace', () =>
-    updateDesignWorkspace(input.db, input.designBeforeRename.id, nextPath),
+    updateDesignWorkspace(input.db, input.designBeforeRename.id, nextPath, 'blank-canvas'),
   );
 }
 
@@ -534,6 +892,15 @@ function requireSchemaV1(r: Record<string, unknown>, channel: string): void {
   if (r['schemaVersion'] !== 1) {
     throw new CodesignError(`${channel} requires schemaVersion: 1`, 'IPC_BAD_INPUT');
   }
+}
+
+function parseRenameWorkspaceOption(r: Record<string, unknown>): boolean {
+  const value = r['renameWorkspace'];
+  if (value === undefined) return true;
+  if (typeof value !== 'boolean') {
+    throw new CodesignError('renameWorkspace must be a boolean when provided', 'IPC_BAD_INPUT');
+  }
+  return value;
 }
 
 function parseSnapshotCreateInput(raw: unknown): SnapshotCreateInput {
@@ -909,7 +1276,13 @@ export function registerSnapshotsIpc(db: Database): void {
         if (requestedWorkspacePath === undefined) {
           autoWorkspacePath = workspacePath;
         }
-        return await bindWorkspace(db, design.id, workspacePath, false);
+        return await bindWorkspace(
+          db,
+          design.id,
+          workspacePath,
+          false,
+          requestedWorkspacePath === undefined ? 'blank-canvas' : 'work-on-project',
+        );
       } catch (err) {
         if (autoWorkspacePath !== null) {
           await cleanupAutoAllocatedWorkspace(autoWorkspacePath, 'create-design');
@@ -953,6 +1326,7 @@ export function registerSnapshotsIpc(db: Database): void {
       }
       const designId = r['id'] as string;
       const name = r['name'] as string;
+      const renameWorkspace = parseRenameWorkspaceOption(r);
       return await runWithWorkspaceRenameQueue(designId, async () => {
         const before = runDb('rename-design.lookup', () => getDesign(db, designId));
         if (before === null) {
@@ -963,20 +1337,22 @@ export function registerSnapshotsIpc(db: Database): void {
           throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
         }
         let finalDesign = updated;
-        try {
-          finalDesign =
-            (await renameAutoManagedWorkspaceForDesign({
-              db,
-              designBeforeRename: before,
-              newName: updated.name,
-            })) ?? updated;
-        } catch (err) {
-          logger.warn('design.workspace_rename.skipped', {
-            id: updated.id,
-            workspacePath: before.workspacePath,
-            targetName: updated.name,
-            error: err instanceof Error ? err.message : String(err),
-          });
+        if (renameWorkspace) {
+          try {
+            finalDesign =
+              (await renameAutoManagedWorkspaceForDesign({
+                db,
+                designBeforeRename: before,
+                newName: updated.name,
+              })) ?? updated;
+          } catch (err) {
+            logger.warn('design.workspace_rename.skipped', {
+              id: updated.id,
+              workspacePath: before.workspacePath,
+              targetName: updated.name,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
         }
         logger.info('design.renamed', {
           id: finalDesign.id,
@@ -1059,7 +1435,7 @@ export function registerSnapshotsIpc(db: Database): void {
         const workspacePath = await allocateDefaultWorkspacePath(name);
         autoWorkspacePath = workspacePath;
         await copyTrackedWorkspaceFiles(db, sourceId, sourceWorkspacePath, workspacePath);
-        const bound = await bindWorkspace(db, cloned.id, workspacePath, false);
+        const bound = await bindWorkspace(db, cloned.id, workspacePath, false, 'blank-canvas');
         logger.info('design.duplicated', { sourceId, newId: bound.id });
         return bound;
       } catch (err) {
@@ -1081,6 +1457,96 @@ export function registerSnapshotsIpc(db: Database): void {
         });
         throw translateWorkspaceBindError(err, 'Workspace creation failed');
       }
+    },
+  );
+
+  ipcMain.handle(
+    'snapshots:v1:preview:update',
+    async (_e: unknown, raw: unknown): Promise<Design> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError(
+          'snapshots:v1:preview:update expects an object payload',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'snapshots:v1:preview:update');
+      if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+        throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+
+      const designId = r['designId'] as string;
+      const previewMode = parsePreviewMode(r['previewMode']);
+      const previewUrl = normalizeConnectedPreviewUrl(r['previewUrl']);
+      if (previewMode === 'connected-url' && previewUrl === null) {
+        throw new CodesignError(
+          'previewUrl is required when previewMode is connected-url',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const current = await getDesignAfterPendingWorkspaceRename(db, 'preview:update', designId);
+      if (current === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      if (
+        previewMode === 'managed-file' &&
+        current.workspacePath !== null &&
+        (await workspaceLooksLikeApplicationProject(
+          requireBoundWorkspacePath(current, 'No workspace bound to this design'),
+        ))
+      ) {
+        throw new CodesignError(
+          'Integrated preview is not available for app workspaces. Use Local URL or Off.',
+          'IPC_BAD_INPUT',
+        );
+      }
+
+      const updated = runDb('preview:update', () =>
+        updateDesignPreview(db, designId, previewMode, previewUrl),
+      );
+      if (updated === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      logger.info('design.preview_updated', {
+        id: updated.id,
+        previewMode: updated.previewMode,
+        previewUrl: updated.previewUrl,
+      });
+      return updated;
+    },
+  );
+
+  ipcMain.handle(
+    'snapshots:v1:preview:detect',
+    async (_e: unknown, raw: unknown): Promise<PreviewDetectResult> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError(
+          'snapshots:v1:preview:detect expects an object payload',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'snapshots:v1:preview:detect');
+      if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+        throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      const designId = r['designId'] as string;
+      const design = await getDesignAfterPendingWorkspaceRename(db, 'preview:detect', designId);
+      if (design === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      const workspacePath = requireBoundWorkspacePath(design, 'No workspace bound to this design');
+      const result = await detectLocalPreviewServer({
+        workspacePath,
+        currentUrl: design.previewUrl ?? null,
+      });
+      logger.info('design.preview_detected', {
+        id: design.id,
+        found: result.found,
+        url: result.url,
+        candidateCount: result.candidates.length,
+      });
+      return result;
     },
   );
 
@@ -1226,6 +1692,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
           r['designId'] as string,
           workspacePath,
           r['migrateFiles'] as boolean,
+          'work-on-project',
         );
         if (design === null) {
           throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
@@ -1354,6 +1821,54 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
   );
 
   ipcMain.handle(
+    'codesign:files:v1:list-dir',
+    async (_e: unknown, raw: unknown): Promise<WorkspaceDirectoryEntry[]> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError(
+          'codesign:files:v1:list-dir expects { designId, path }',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'codesign:files:v1:list-dir');
+      if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+        throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      const dirPath = r['path'] === undefined ? '.' : r['path'];
+      if (typeof dirPath !== 'string') {
+        throw new CodesignError('path must be a string', 'IPC_BAD_INPUT');
+      }
+      const designId = r['designId'] as string;
+      return withStableWorkspacePath(designId, async () => {
+        const design = await getDesignAfterPendingWorkspaceRename(db, 'files:list-dir', designId);
+        if (design === null) {
+          throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+        }
+        if (design.workspacePath === null) {
+          logger.warn('files.listDir.workspace_missing', { designId: design.id });
+          return [];
+        }
+        const workspacePath = requireBoundWorkspacePath(
+          design,
+          'Design is not bound to a workspace',
+        );
+        if (!(await checkWorkspaceFolderExists(workspacePath))) {
+          logger.warn('files.listDir.workspace_unavailable', {
+            designId: design.id,
+            workspacePath,
+          });
+          return [];
+        }
+        try {
+          return await listWorkspaceDirectoryAt(workspacePath, dirPath);
+        } catch (cause) {
+          throw new CodesignError('Failed to list workspace directory', 'IPC_DB_ERROR', { cause });
+        }
+      });
+    },
+  );
+
+  ipcMain.handle(
     'codesign:files:v1:read',
     async (_e: unknown, raw: unknown): Promise<WorkspaceFileReadResult> => {
       if (typeof raw !== 'object' || raw === null) {
@@ -1428,6 +1943,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         let normalizedPath: string;
         try {
           normalizedPath = normalizeDesignFilePath(r['path'] as string);
+          assertWorkspacePathVisible(normalizedPath);
         } catch (cause) {
           throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
         }
@@ -1479,6 +1995,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         let normalizedPath: string;
         try {
           normalizedPath = normalizeDesignFilePath(r['path'] as string);
+          assertWorkspacePathVisible(normalizedPath);
         } catch (cause) {
           throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
         }
@@ -1521,6 +2038,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       let normalizedPath: string;
       try {
         normalizedPath = normalizeDesignFilePath(r['path'] as string);
+        assertWorkspacePathVisible(normalizedPath);
       } catch (cause) {
         throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
       }
@@ -1721,7 +2239,10 @@ export const SNAPSHOTS_CHANNELS_V1 = [
   'snapshots:v1:workspace:update',
   'snapshots:v1:workspace:open',
   'snapshots:v1:workspace:check',
+  'snapshots:v1:preview:update',
+  'snapshots:v1:preview:detect',
   'codesign:files:v1:list',
+  'codesign:files:v1:list-dir',
   'codesign:files:v1:read',
   'codesign:files:v1:preview',
   'codesign:files:v1:thumbnail',

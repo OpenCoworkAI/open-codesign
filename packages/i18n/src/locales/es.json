@@ -95,7 +95,60 @@
       "rebindDescription": "Este diseño ya tiene una carpeta de espacio de trabajo. Elige cómo proceder:",
       "rebindCancel": "Cancelar",
       "rebindSwitchOnly": "Cambiar sin copiar",
-      "rebindSwitchAndCopy": "Cambiar y copiar archivos"
+      "rebindSwitchAndCopy": "Cambiar y copiar archivos",
+      "preview": {
+        "label": "Vista previa",
+        "detect": "Detectar",
+        "apply": "Aplicar URL de vista previa",
+        "reload": "Recargar vista previa",
+        "openConnected": "Abrir",
+        "openFailed": "No se pudo abrir la vista previa",
+        "saveFailed": "No se pudo actualizar la vista previa",
+        "detectFailed": "No se pudo detectar la vista previa",
+        "detectNone": "No se encontró una vista previa en ejecución",
+        "urlLabel": "URL de vista previa",
+        "urlPlaceholder": "localhost:5173",
+        "urlRequired": "Introduce primero una URL de vista previa local.",
+        "urlInvalid": "Introduce una URL http o https válida.",
+        "actions": {
+          "showOptions": "Mostrar opciones de vista previa",
+          "hideOptions": "Ocultar opciones de vista previa"
+        },
+        "status": {
+          "saved": "Guardada",
+          "auto": "Auto"
+        },
+        "mode": {
+          "label": "Modo",
+          "integrated": "Archivo integrado",
+          "integratedShort": "Integrado",
+          "connectedUrl": "URL conectada",
+          "connectedUrlShort": "Conectada",
+          "externalApp": "App externa",
+          "externalAppShort": "Externa",
+          "off": "Desactivada",
+          "offShort": "Off"
+        },
+        "summary": {
+          "detecting": "Buscando una vista previa local en ejecución.",
+          "integrated": "Renderizando archivos del espacio de trabajo dentro de Open CoDesign.",
+          "integratedBlocked": "Este espacio parece una app; usa su propio servidor de desarrollo para la vista previa.",
+          "connected": "Mostrando {{url}}.",
+          "waitingUrl": "Introduce la URL local de vista previa en ejecución.",
+          "external": "Usa la propia ventana de vista previa de la app.",
+          "externalWithUrl": "Vista previa externa configurada en {{url}}.",
+          "off": "La vista previa está desactivada para este espacio."
+        },
+        "hint": {
+          "appWorkspace": "Los espacios de app suelen verse mejor en su propio servidor de desarrollo o ventana.",
+          "simpleWorkspace": "La vista integrada renderiza App.jsx o index.html dentro de Open CoDesign."
+        },
+        "placeholder": {
+          "off": "La vista previa está desactivada para este espacio.",
+          "external": "Este espacio debe previsualizarse en su propia ventana de app o navegador.",
+          "devServerRequired": "Este archivo es una entrada de app. Inicia su servidor de desarrollo y usa Detect o Connected URL para la vista previa."
+        }
+      }
     },
     "rail": {
       "title": "Archivos",
@@ -892,6 +945,7 @@
       "switchFailed": "No se pudo cambiar de diseño",
       "switchBlockedGenerating": "Espera a que termine la generación antes de cambiar",
       "busyGenerating": "Espera a que termine la generación actual, luego intenta de nuevo",
+      "workspaceBusyGenerating": "Ya hay una generación en curso para este espacio de trabajo",
       "renameFailed": "No se pudo renombrar el diseño",
       "duplicated": "Duplicado como \"{{name}}\"",
       "duplicateFailed": "No se pudo duplicar el diseño",

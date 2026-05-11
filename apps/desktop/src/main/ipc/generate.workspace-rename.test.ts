@@ -1,4 +1,5 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import type { Design } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,7 +67,7 @@ generateControl.reset();
 
 vi.mock('../electron-runtime', () => ({
   app: {
-    getPath: vi.fn(() => '/tmp/open-codesign-generate-rename-tests'),
+    getPath: vi.fn(() => path.join(os.tmpdir(), 'open-codesign-generate-rename-tests')),
   },
   ipcMain: {
     handle: vi.fn((channel: string, handler: Handler) => {
@@ -199,6 +200,7 @@ import { requestAsk } from '../ask-ipc';
 import { appendSessionChatMessage } from '../session-chat';
 import { createDesign, initInMemoryDb, updateDesignWorkspace } from '../snapshots-db';
 import { registerSnapshotsIpc } from '../snapshots-ipc';
+import { normalizeWorkspacePath } from '../workspace-path';
 import { registerGenerateIpc } from './generate';
 
 function getHandler(channel: string): Handler {
@@ -208,8 +210,16 @@ function getHandler(channel: string): Handler {
 }
 
 describe('generate IPC workspace rename coordination', () => {
-  const documentsRoot = '/tmp/open-codesign-generate-rename-tests';
+  const documentsRoot = path.join(os.tmpdir(), 'open-codesign-generate-rename-tests');
   const defaultWorkspaceRoot = path.join(documentsRoot, 'CoDesign');
+
+  function initTestDb() {
+    return {
+      ...initInMemoryDb(),
+      dataDir: path.join(documentsRoot, 'data'),
+      sessionDir: path.join(documentsRoot, 'sessions'),
+    };
+  }
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -223,12 +233,11 @@ describe('generate IPC workspace rename coordination', () => {
 
   afterEach(async () => {
     generateControl.release();
-    await rm(':memory:', { recursive: true, force: true });
     await rm(documentsRoot, { recursive: true, force: true });
   });
 
   it('allows set_title rename to settle while the agent generation is still running', async () => {
-    const db = initInMemoryDb();
+    const db = initTestDb();
     const design = createDesign(db, 'Untitled design 1');
     const oldWorkspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
     await mkdir(oldWorkspace);
@@ -275,7 +284,7 @@ describe('generate IPC workspace rename coordination', () => {
 
     const renamed = await renamePromise;
     expect(renamed.workspacePath).toBe(
-      path.join(defaultWorkspaceRoot, 'Hybrid-Workshop-Day-Agenda'),
+      normalizeWorkspacePath(path.join(defaultWorkspaceRoot, 'Hybrid-Workshop-Day-Agenda')),
     );
   });
 
@@ -298,7 +307,7 @@ describe('generate IPC workspace rename coordination', () => {
         },
       ],
     });
-    const db = initInMemoryDb();
+    const db = initTestDb();
     const design = createDesign(db, 'Untitled design 1');
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
     await mkdir(workspace);
@@ -360,7 +369,7 @@ describe('generate IPC workspace rename coordination', () => {
         },
       ],
     });
-    const db = initInMemoryDb();
+    const db = initTestDb();
     const design = createDesign(db, 'Untitled design 1');
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
     await mkdir(path.join(workspace, 'references'), { recursive: true });
@@ -418,7 +427,7 @@ describe('generate IPC workspace rename coordination', () => {
       ],
     });
     vi.mocked(requestAsk).mockResolvedValueOnce({ status: 'cancelled', answers: [] });
-    const db = initInMemoryDb();
+    const db = initTestDb();
     const design = createDesign(db, 'Untitled design 1');
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
     await mkdir(workspace);
@@ -464,7 +473,7 @@ describe('generate IPC workspace rename coordination', () => {
         },
       ],
     });
-    const db = initInMemoryDb();
+    const db = initTestDb();
     const design = createDesign(db, 'Untitled design 1');
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
     await mkdir(workspace);

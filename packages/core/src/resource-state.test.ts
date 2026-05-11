@@ -48,4 +48,57 @@ describe('resource finalization gate', () => {
       }),
     ).toEqual([]);
   });
+
+  it('surfaces optional skill quality misses as warnings instead of blocking artifacts', () => {
+    const state = cloneResourceState(undefined);
+    state.loadedSkills.push('craft-polish');
+    recordMutation(state);
+    recordDone(state, { status: 'ok', path: 'App.jsx', errorCount: 0 });
+
+    expect(
+      assertFinalizationGate({
+        state,
+        fs: makeFs({
+          'App.jsx': 'export default function App() { return <button>Save</button>; }',
+        }),
+        enforce: true,
+      }),
+    ).toEqual([
+      'Loaded skill craft-polish, but App.jsx is missing basic focus, hover, or non-happy-path state signals.',
+    ]);
+  });
+
+  it('keeps a generated artifact available when done was skipped', () => {
+    const state = cloneResourceState(undefined);
+    recordMutation(state);
+
+    expect(
+      assertFinalizationGate({
+        state,
+        fs: makeFs({ 'App.jsx': 'export default function App() { return <main>Saved</main>; }' }),
+        enforce: true,
+        allowUnresolvedDoneWithArtifact: true,
+      }),
+    ).toEqual([
+      'The agent edited the workspace but did not call done(status="ok"); keeping the generated artifact available.',
+    ]);
+  });
+
+  it('keeps a generated artifact available when edits happened after done', () => {
+    const state = cloneResourceState(undefined);
+    recordMutation(state);
+    recordDone(state, { status: 'ok', path: 'App.jsx', errorCount: 0 });
+    state.mutationSeq += 1;
+
+    expect(
+      assertFinalizationGate({
+        state,
+        fs: makeFs({ 'App.jsx': 'export default function App() { return <main>Updated</main>; }' }),
+        enforce: true,
+        allowUnresolvedDoneWithArtifact: true,
+      }),
+    ).toEqual([
+      'The workspace changed after the last successful done() call; keeping the latest artifact available.',
+    ]);
+  });
 });

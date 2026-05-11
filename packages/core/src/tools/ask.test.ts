@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { type AskInput, type AskResult, makeAskTool, validateAskInput } from './ask';
+import {
+  type AskInput,
+  type AskResult,
+  makeAskTool,
+  summarizeAskResult,
+  validateAskInput,
+} from './ask';
 
 describe('validateAskInput', () => {
   it('accepts a valid single-question payload', () => {
@@ -79,7 +85,23 @@ describe('makeAskTool', () => {
     });
     expect(bridge).toHaveBeenCalledOnce();
     expect(result.details).toEqual(canned);
-    expect(result.content[0]).toMatchObject({ type: 'text', text: 'user answered 2 question(s)' });
+    expect(result.content[0]).toMatchObject({ type: 'text' });
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('user answered 2 question(s)');
+    expect(text).toContain('- q1: Minimal');
+    expect(text).toContain('- q2: 16');
+  });
+
+  it('includes uploaded file answers in the text seen by the model', () => {
+    expect(
+      summarizeAskResult({
+        status: 'answered',
+        answers: [
+          { questionId: 'logo', value: 'references/logo.png' },
+          { questionId: 'screenshots', value: ['references/one.png', 'references/two.png'] },
+        ],
+      }),
+    ).toContain('references/logo.png');
   });
 
   it('short-circuits on invalid input (0 questions) without calling the bridge', async () => {

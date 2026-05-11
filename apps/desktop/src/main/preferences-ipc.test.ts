@@ -108,13 +108,16 @@ describe('readPersisted()', () => {
     });
   });
 
-  it('throws when persisted preferences contain unknown fields', async () => {
-    readFileMock.mockResolvedValueOnce(JSON.stringify({ schemaVersion: 5, accidental: true }));
+  it('ignores unknown fields in persisted preferences from stale local builds', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({
+        schemaVersion: 8,
+        generationTimeoutSec: 900,
+        localWorkspaceDefaultMode: 'work-on-project',
+      }),
+    );
 
-    await expect(readPersisted()).rejects.toMatchObject({
-      code: ERROR_CODES.PREFERENCES_READ_FAIL,
-      message: expect.stringContaining('unsupported field'),
-    });
+    await expect(readPersisted()).resolves.toMatchObject({ generationTimeoutSec: 900 });
   });
 
   it('migrates schemaVersion 1 with legacy 120s timeout to the 1200s default', async () => {
@@ -229,7 +232,7 @@ describe('readPersisted()', () => {
       schemaVersion: number;
       diagnosticsLastReadTs: number;
     };
-    expect(written.schemaVersion).toBe(7);
+    expect(written.schemaVersion).toBe(8);
     expect(written.diagnosticsLastReadTs).toBe(result.diagnosticsLastReadTs);
     expect(written.diagnosticsLastReadTs).toBeGreaterThanOrEqual(before);
     expect(written.diagnosticsLastReadTs).toBeLessThanOrEqual(after);
@@ -349,7 +352,7 @@ describe('preferences memory schema fields', () => {
       workspaceMemoryAutoUpdate: boolean;
       userMemoryAutoUpdate: boolean;
     };
-    expect(written.schemaVersion).toBe(7);
+    expect(written.schemaVersion).toBe(8);
     expect(written.memoryEnabled).toBe(false);
     expect(written.workspaceMemoryAutoUpdate).toBe(false);
     expect(written.userMemoryAutoUpdate).toBe(true);
