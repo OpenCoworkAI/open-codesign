@@ -10,6 +10,7 @@ import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared
 import type { CodesignApi, ExportFormat } from '../../../../preload/index.js';
 import { recordAction } from '../../lib/action-timeline.js';
 import { redactUrls } from '../../lib/redact.js';
+import { workspacePathComparisonKey } from '../../lib/workspace-path.js';
 import {
   hasWorkspaceSourceReference,
   inferPreviewSourcePath,
@@ -98,6 +99,21 @@ function findDesignIdForGeneration(
 ): string | null {
   for (const [designId, run] of Object.entries(generationByDesign)) {
     if (run.generationId === generationId) return designId;
+  }
+  return null;
+}
+
+function findRunningDesignForWorkspace(
+  state: CodesignState,
+  workspacePath: string,
+  excludeDesignId: string,
+): string | null {
+  const targetKey = workspacePathComparisonKey(workspacePath);
+  for (const designId of Object.keys(state.generationByDesign)) {
+    if (designId === excludeDesignId) continue;
+    const design = state.designs.find((candidate) => candidate.id === designId);
+    if (!design?.workspacePath) continue;
+    if (workspacePathComparisonKey(design.workspacePath) === targetKey) return designId;
   }
   return null;
 }
@@ -745,7 +761,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
 
       const designIdAtStart = get().currentDesignId;
       const activeDesign = get().designs.find((design) => design.id === designIdAtStart);
-      if (designIdAtStart === null || activeDesign?.workspacePath === null) {
+      if (designIdAtStart === null || !activeDesign?.workspacePath) {
         const msg = tr('err.WORKSPACE_MISSING');
         set({ errorMessage: msg, lastError: msg });
         get().pushToast({
@@ -762,6 +778,20 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         }
       }
       if (get().generationByDesign[designIdAtStart] !== undefined) return;
+      const runningForWorkspace = findRunningDesignForWorkspace(
+        get(),
+        activeDesign.workspacePath,
+        designIdAtStart,
+      );
+      if (runningForWorkspace !== null) {
+        if (!input.silent) {
+          get().pushToast({
+            variant: 'info',
+            title: tr('projects.notifications.workspaceBusyGenerating'),
+          });
+        }
+        return;
+      }
 
       const generationId = newId();
       startGenerationForDesign(set, designIdAtStart, generationId);

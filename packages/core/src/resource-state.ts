@@ -124,6 +124,11 @@ export function assertFinalizationGate(input: FinalizationGateInput): string[] {
     );
   }
   if (done === null) {
+    if (input.allowUnresolvedDoneWithArtifact) {
+      return [
+        'The agent edited the workspace but did not call done(status="ok"); keeping the generated artifact available.',
+      ];
+    }
     throw new CodesignError(
       'Generation incomplete: the agent edited the workspace but did not call done(status="ok").',
       ERROR_CODES.GENERATION_INCOMPLETE,
@@ -139,6 +144,11 @@ export function assertFinalizationGate(input: FinalizationGateInput): string[] {
     );
   }
   if (done.mutationSeq !== input.state.mutationSeq) {
+    if (input.allowUnresolvedDoneWithArtifact) {
+      return [
+        'The workspace changed after the last successful done() call; keeping the latest artifact available.',
+      ];
+    }
     throw new CodesignError(
       'Generation incomplete: the workspace changed after the last successful done() call.',
       ERROR_CODES.GENERATION_INCOMPLETE,
@@ -148,10 +158,7 @@ export function assertFinalizationGate(input: FinalizationGateInput): string[] {
     ? validationFailures(input.state, file.content, file.path)
     : [];
   if (failures.length > 0) {
-    throw new CodesignError(
-      `Generation incomplete: ${failures.join(' ')}`,
-      ERROR_CODES.GENERATION_INCOMPLETE,
-    );
+    return failures;
   }
   return [];
 }

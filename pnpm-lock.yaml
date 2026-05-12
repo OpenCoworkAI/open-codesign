@@ -53,6 +53,9 @@ importers:
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
+      ms:
+        specifier: 2.1.3
+        version: 2.1.3
       puppeteer-core:
         specifier: ^24.42.0
         version: 24.42.0

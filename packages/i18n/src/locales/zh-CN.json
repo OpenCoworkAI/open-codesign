@@ -95,7 +95,60 @@
       "rebindDescription": "此设计已有工作区文件夹。请选择如何继续：",
       "rebindCancel": "取消",
       "rebindSwitchOnly": "仅切换（不复制文件）",
-      "rebindSwitchAndCopy": "切换并复制文件"
+      "rebindSwitchAndCopy": "切换并复制文件",
+      "preview": {
+        "label": "预览",
+        "detect": "检测",
+        "apply": "应用预览 URL",
+        "reload": "重新加载预览",
+        "openConnected": "打开",
+        "openFailed": "无法打开预览",
+        "saveFailed": "无法更新预览",
+        "detectFailed": "无法检测预览",
+        "detectNone": "未找到正在运行的预览",
+        "urlLabel": "预览 URL",
+        "urlPlaceholder": "localhost:5173",
+        "urlRequired": "请先输入本地预览 URL。",
+        "urlInvalid": "请输入有效的 http 或 https URL。",
+        "actions": {
+          "showOptions": "显示预览选项",
+          "hideOptions": "隐藏预览选项"
+        },
+        "status": {
+          "saved": "已保存",
+          "auto": "自动"
+        },
+        "mode": {
+          "label": "模式",
+          "integrated": "集成文件",
+          "integratedShort": "集成",
+          "connectedUrl": "连接 URL",
+          "connectedUrlShort": "连接",
+          "externalApp": "外部应用",
+          "externalAppShort": "外部",
+          "off": "关闭",
+          "offShort": "关闭"
+        },
+        "summary": {
+          "detecting": "正在查找运行中的本地预览。",
+          "integrated": "在 Open CoDesign 内渲染工作区文件。",
+          "integratedBlocked": "此工作区看起来像应用项目；请使用它自己的开发服务器预览。",
+          "connected": "正在预览 {{url}}。",
+          "waitingUrl": "输入正在运行的本地预览 URL。",
+          "external": "使用应用自己的预览窗口。",
+          "externalWithUrl": "外部预览已配置为 {{url}}。",
+          "off": "此工作区的预览已关闭。"
+        },
+        "hint": {
+          "appWorkspace": "应用工作区通常更适合在自己的开发服务器或应用窗口中预览。",
+          "simpleWorkspace": "集成预览会在 Open CoDesign 内渲染 App.jsx 或 index.html。"
+        },
+        "placeholder": {
+          "off": "此工作区的预览已关闭。",
+          "external": "此工作区应在自己的应用窗口或浏览器中预览。",
+          "devServerRequired": "此文件是应用入口。请启动开发服务器，然后使用 Detect 或 Connected URL 预览。"
+        }
+      }
     },
     "rail": {
       "title": "文件",
@@ -943,6 +996,7 @@
       "switchFailed": "无法切换设计",
       "switchBlockedGenerating": "等当前生成完成后再切换",
       "busyGenerating": "当前生成还没完成，稍等一下再试",
+      "workspaceBusyGenerating": "此工作区已有生成正在运行",
       "renameFailed": "无法重命名设计",
       "duplicated": "已复制为“{{name}}”",
       "duplicateFailed": "无法复制设计",

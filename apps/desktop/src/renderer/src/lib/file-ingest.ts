@@ -28,9 +28,21 @@ export function dataTransferFilesToWorkspaceFiles(
 export async function clipboardFilesToWorkspaceBlobs(
   dataTransfer: DataTransfer,
 ): Promise<{ files: WorkspaceImportFileInput[]; blobs: WorkspaceImportBlobInput[] }> {
+  return filesToWorkspaceImport(Array.from(dataTransfer.files));
+}
+
+export async function fileListToWorkspaceImport(
+  fileList: FileList | readonly File[],
+): Promise<{ files: WorkspaceImportFileInput[]; blobs: WorkspaceImportBlobInput[] }> {
+  return filesToWorkspaceImport(Array.from(fileList));
+}
+
+async function filesToWorkspaceImport(
+  sourceFiles: readonly File[],
+): Promise<{ files: WorkspaceImportFileInput[]; blobs: WorkspaceImportBlobInput[] }> {
   const files: WorkspaceImportFileInput[] = [];
   const blobs: WorkspaceImportBlobInput[] = [];
-  for (const file of Array.from(dataTransfer.files)) {
+  for (const file of sourceFiles) {
     const localPath = (file as FileWithPath).path;
     if (typeof localPath === 'string' && localPath.length > 0) {
       files.push({ path: localPath, name: file.name, size: file.size });

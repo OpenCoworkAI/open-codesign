@@ -95,7 +95,60 @@
       "rebindDescription": "This design already has a workspace folder. Choose how to proceed:",
       "rebindCancel": "Cancel",
       "rebindSwitchOnly": "Switch without copying",
-      "rebindSwitchAndCopy": "Switch and copy files"
+      "rebindSwitchAndCopy": "Switch and copy files",
+      "preview": {
+        "label": "Preview",
+        "detect": "Detect",
+        "apply": "Apply preview URL",
+        "reload": "Reload preview",
+        "openConnected": "Open",
+        "openFailed": "Could not open preview",
+        "saveFailed": "Could not update preview",
+        "detectFailed": "Could not detect preview",
+        "detectNone": "No running preview found",
+        "urlLabel": "Preview URL",
+        "urlPlaceholder": "localhost:5173",
+        "urlRequired": "Enter a local preview URL first.",
+        "urlInvalid": "Enter a valid http or https URL.",
+        "actions": {
+          "showOptions": "Show preview options",
+          "hideOptions": "Hide preview options"
+        },
+        "status": {
+          "saved": "Saved",
+          "auto": "Auto"
+        },
+        "mode": {
+          "label": "Mode",
+          "integrated": "Integrated file",
+          "integratedShort": "Integrated",
+          "connectedUrl": "Connected URL",
+          "connectedUrlShort": "Connected",
+          "externalApp": "External app",
+          "externalAppShort": "External",
+          "off": "Off",
+          "offShort": "Off"
+        },
+        "summary": {
+          "detecting": "Looking for a running local preview.",
+          "integrated": "Rendering workspace files inside Open CoDesign.",
+          "integratedBlocked": "This workspace looks like an app; use its own dev server for preview.",
+          "connected": "Previewing {{url}}.",
+          "waitingUrl": "Enter the running local preview URL.",
+          "external": "Use the app's own preview window.",
+          "externalWithUrl": "External preview configured at {{url}}.",
+          "off": "Preview is off for this workspace."
+        },
+        "hint": {
+          "appWorkspace": "App workspaces usually preview best in their own dev server or app window.",
+          "simpleWorkspace": "Integrated preview renders App.jsx or index.html inside Open CoDesign."
+        },
+        "placeholder": {
+          "off": "Preview is off for this workspace.",
+          "external": "This workspace is meant to be previewed in its own app window or browser.",
+          "devServerRequired": "This file is an app entry. Start its dev server, then use Detect or Connected URL for preview."
+        }
+      }
     },
     "rail": {
       "title": "Files",
@@ -947,6 +1000,7 @@
       "switchFailed": "Could not switch design",
       "switchBlockedGenerating": "Wait for generation to finish before switching",
       "busyGenerating": "Wait for the current generation to finish, then try again",
+      "workspaceBusyGenerating": "A generation is already running for this workspace",
       "renameFailed": "Could not rename the design",
       "duplicated": "Duplicated as \"{{name}}\"",
       "duplicateFailed": "Could not duplicate the design",

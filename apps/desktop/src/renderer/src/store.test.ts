@@ -369,13 +369,17 @@ describe('useCodesignStore generation cancellation', () => {
     });
 
     await vi.waitFor(() =>
-      expect(renameDesign).toHaveBeenCalledWith(designId, '设计 Apple Watch 跑步教练屏幕'),
+      expect(renameDesign).toHaveBeenCalledWith(designId, '设计 Apple Watch 跑步教练屏幕', {
+        renameWorkspace: false,
+      }),
     );
     expect(generateTitle).toHaveBeenCalledOnce();
 
     titleTask.resolve('Apple Watch 跑步教练');
     await vi.waitFor(() =>
-      expect(renameDesign).toHaveBeenCalledWith(designId, 'Apple Watch 跑步教练'),
+      expect(renameDesign).toHaveBeenCalledWith(designId, 'Apple Watch 跑步教练', {
+        renameWorkspace: false,
+      }),
     );
 
     generateTask.resolve({ artifacts: [{ content: '<html></html>' }], message: 'Done.' });
@@ -1221,6 +1225,40 @@ describe('useCodesignStore design management', () => {
       '<html>first</html>',
     );
     expect(useCodesignStore.getState().generationByDesign).toEqual({});
+  });
+
+  it('blocks generation when another session is already running for the same workspace', async () => {
+    const designA = { ...DEFAULT_DESIGN, id: 'design-a', workspacePath: '/tmp/shared' };
+    const designB = { ...DEFAULT_DESIGN, id: 'design-b', workspacePath: '/tmp/shared/' };
+    const generate = vi.fn(async () => ({
+      artifacts: [{ content: '<html>blocked</html>' }],
+      message: 'should not run',
+    }));
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+        snapshots: mockSnapshotsApi(),
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({
+      designs: [designA, designB],
+      currentDesignId: 'design-b',
+      generationByDesign: {
+        'design-a': { generationId: 'gen-design-a', stage: 'streaming' },
+      },
+    });
+
+    await useCodesignStore.getState().sendPrompt({ prompt: 'same workspace prompt' });
+
+    expect(generate).not.toHaveBeenCalled();
+    expect(useCodesignStore.getState().toasts[0]?.title).toBe(
+      'A generation is already running for this workspace',
+    );
   });
 
   it('refreshes the current design when selecting it again from the hub', async () => {

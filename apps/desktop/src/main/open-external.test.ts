@@ -16,6 +16,12 @@ describe('isAllowedExternalUrl', () => {
     ).toBe(true);
   });
 
+  it('accepts loopback preview URLs', () => {
+    expect(isAllowedExternalUrl('http://localhost:5173/preview')).toBe(true);
+    expect(isAllowedExternalUrl('http://127.0.0.1:4173/')).toBe(true);
+    expect(isAllowedExternalUrl('http://[::1]:5173/')).toBe(true);
+  });
+
   it('rejects unrelated host', () => {
     expect(
       isAllowedExternalUrl('https://evil.example.com/OpenCoworkAI/open-codesign/issues/new'),

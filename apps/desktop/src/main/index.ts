@@ -74,9 +74,6 @@ function handleMainWindowNavigation(
   if (isTrustedMainWindowNavigationUrl(url, trustedAppUrl)) return;
 
   event.preventDefault();
-  if (isAllowedExternalUrl(url)) {
-    void shell.openExternal(url);
-  }
 }
 
 function createWindow(): void {

@@ -13,6 +13,7 @@ import {
   listSnapshots,
   recordDiagnosticEvent,
   touchDesignActivity,
+  updateDesignPreview,
   updateDesignWorkspace,
   upsertDesignFile,
 } from './snapshots-db';
@@ -108,5 +109,17 @@ describe('json design store', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('keeps the saved preview URL when switching back to managed preview', () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Preview settings');
+
+    updateDesignPreview(db, design.id, 'connected-url', 'http://localhost:5173/');
+    const managed = updateDesignPreview(db, design.id, 'managed-file', null);
+
+    expect(managed?.previewMode).toBe('managed-file');
+    expect(managed?.previewUrl).toBe('http://localhost:5173/');
+    expect(getDesign(db, design.id)?.previewUrl).toBe('http://localhost:5173/');
   });
 });

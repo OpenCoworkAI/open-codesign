@@ -1,3 +1,6 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   formatRuntimeLoadError,
@@ -34,23 +37,18 @@ describe('done runtime verifier error formatting', () => {
   });
 
   it('allows only the verifier file for file:// requests', () => {
+    const verifyFilePath = join(tmpdir(), 'codesign-done', 'verify.html');
+    expect(isDoneVerifierRequestAllowed(pathToFileURL(verifyFilePath).href, verifyFilePath)).toBe(
+      true,
+    );
     expect(
       isDoneVerifierRequestAllowed(
-        'file:///tmp/codesign-done/verify.html',
-        '/tmp/codesign-done/verify.html',
-      ),
-    ).toBe(true);
-    expect(
-      isDoneVerifierRequestAllowed(
-        'file:///Users/me/private.txt',
-        '/tmp/codesign-done/verify.html',
+        pathToFileURL(join(tmpdir(), 'private.txt')).href,
+        verifyFilePath,
       ),
     ).toBe(false);
-    expect(
-      isDoneVerifierRequestAllowed(
-        'https://fonts.googleapis.com/css2',
-        '/tmp/codesign-done/verify.html',
-      ),
-    ).toBe(true);
+    expect(isDoneVerifierRequestAllowed('https://fonts.googleapis.com/css2', verifyFilePath)).toBe(
+      true,
+    );
   });
 });

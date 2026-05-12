@@ -15,7 +15,9 @@ import type {
   DiagnosticEventInput,
   DiagnosticEventRow,
   DiagnosticLevel,
+  PreviewMode,
   SnapshotCreateInput,
+  WorkspaceMode,
 } from '@open-codesign/shared';
 import { assertWorkspacePath } from './workspace-path';
 
@@ -259,6 +261,7 @@ export function updateDesignWorkspace(
   db: Database,
   id: string,
   workspacePath: string,
+  workspaceMode?: WorkspaceMode,
 ): Design | null {
   const checkedWorkspacePath = assertWorkspacePath(workspacePath);
   return mutateStore(db, (data) => {
@@ -269,6 +272,32 @@ export function updateDesignWorkspace(
     const updated: Design = {
       ...current,
       workspacePath: checkedWorkspacePath,
+      ...(workspaceMode !== undefined ? { workspaceMode } : {}),
+      updatedAt: nowIso(),
+    };
+    data.designs[idx] = updated;
+    return updated;
+  });
+}
+
+export function updateDesignPreview(
+  db: Database,
+  id: string,
+  previewMode: PreviewMode,
+  previewUrl: string | null,
+): Design | null {
+  return mutateStore(db, (data) => {
+    const idx = data.designs.findIndex((design) => design.id === id);
+    if (idx < 0) return null;
+    const current = data.designs[idx];
+    if (current === undefined) return null;
+    const updated: Design = {
+      ...current,
+      previewMode,
+      previewUrl:
+        previewMode === 'connected-url' || previewMode === 'external-app'
+          ? previewUrl
+          : (current.previewUrl ?? null),
       updatedAt: nowIso(),
     };
     data.designs[idx] = updated;

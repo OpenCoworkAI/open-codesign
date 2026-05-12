@@ -2,14 +2,29 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Design } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDesign, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
-import { registerSnapshotsIpc, registerWorkspaceIpc } from './snapshots-ipc';
+import { createDesign, getDesign, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
+import {
+  detectLocalPreviewServer,
+  registerSnapshotsIpc,
+  registerWorkspaceIpc,
+} from './snapshots-ipc';
+import { normalizeWorkspacePath } from './workspace-path';
 import { withStableWorkspacePath } from './workspace-path-lock';
 import type { WorkspaceFileEntry } from './workspace-reader';
 
 type Handler = (event: unknown, raw: unknown) => unknown;
 
 const handlers = vi.hoisted(() => new Map<string, Handler>());
+const testRoots = vi.hoisted(() => {
+  const base = (
+    process.env['RUNNER_TEMP'] ??
+    process.env['TMPDIR'] ??
+    process.env['TEMP'] ??
+    process.env['TMP'] ??
+    (process.platform === 'win32' ? 'C:/Temp' : '/tmp')
+  ).replaceAll('\\', '/');
+  return { documentsRoot: `${base}/open-codesign-rename-tests` };
+});
 const renameControl = vi.hoisted(() => {
   let markStarted: (() => void) | null = null;
   let release: (() => void) | null = null;
@@ -58,7 +73,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 vi.mock('./electron-runtime', () => ({
   app: {
-    getPath: vi.fn(() => '/tmp/open-codesign-tests'),
+    getPath: vi.fn(() => testRoots.documentsRoot),
   },
   dialog: {
     showOpenDialog: vi.fn(),
@@ -91,7 +106,7 @@ async function exists(p: string): Promise<boolean> {
 }
 
 describe('workspace files IPC during auto-managed workspace renames', () => {
-  const documentsRoot = '/tmp/open-codesign-tests';
+  const documentsRoot = testRoots.documentsRoot;
   const defaultWorkspaceRoot = path.join(documentsRoot, 'CoDesign');
   let root: string;
 
@@ -142,8 +157,134 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
     renameControl.release();
     const [updated, files] = await Promise.all([renamePromise, listPromise]);
 
-    expect(updated.workspacePath).toBe(path.join(root, 'General-Agent-Benchmark-Deck'));
+    expect(updated.workspacePath).toBe(
+      normalizeWorkspacePath(path.join(root, 'General-Agent-Benchmark-Deck')),
+    );
     expect(files.map((file) => file.path)).toContain('App.jsx');
+  });
+
+  it('marks reachable Tauri dev servers as external app previews', async () => {
+    const workspace = path.join(root, 'MadWhisp');
+    await mkdir(path.join(workspace, 'src-tauri'), { recursive: true });
+    await writeFile(path.join(workspace, 'src-tauri', 'tauri.conf.json'), '{}', 'utf8');
+
+    const fetchMock = vi.fn(async () => {
+      return new Response('<!doctype html><title>MadWhisp</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const result = await detectLocalPreviewServer({
+        workspacePath: workspace,
+        currentUrl: 'http://localhost:1420/',
+      });
+
+      expect(result.found).toBe(false);
+      expect(result.url).toBeNull();
+      expect(
+        result.candidates.find((candidate) => candidate.url === 'http://localhost:1420/'),
+      ).toMatchObject({
+        status: 'native-runtime-required',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('can rename design metadata without moving an auto-managed workspace folder', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Untitled design 1');
+    const oldWorkspace = path.join(root, 'Untitled-design-1');
+    const newWorkspace = path.join(root, 'Studio-Loop-Welcome-Email');
+    await mkdir(oldWorkspace);
+    await writeFile(path.join(oldWorkspace, 'App.jsx'), 'function App() { return null; }', 'utf8');
+    updateDesignWorkspace(db, design.id, oldWorkspace);
+    registerSnapshotsIpc(db);
+
+    const renameDesign = getHandler('snapshots:v1:rename-design');
+    const updated = (await renameDesign(null, {
+      schemaVersion: 1,
+      id: design.id,
+      name: 'Studio Loop Welcome Email',
+      renameWorkspace: false,
+    })) as Design;
+
+    expect(updated.name).toBe('Studio Loop Welcome Email');
+    expect(updated.workspacePath).toBe(normalizeWorkspacePath(oldWorkspace));
+    await expect(exists(path.join(oldWorkspace, 'App.jsx'))).resolves.toBe(true);
+    await expect(exists(newWorkspace)).resolves.toBe(false);
+  });
+
+  it('stores a connected preview URL without moving the workspace folder', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Local app');
+    const workspace = path.join(root, 'local-app');
+    await mkdir(workspace);
+    updateDesignWorkspace(db, design.id, workspace, 'work-on-project');
+    registerSnapshotsIpc(db);
+
+    const updatePreview = getHandler('snapshots:v1:preview:update');
+    const updated = (await updatePreview(null, {
+      schemaVersion: 1,
+      designId: design.id,
+      previewMode: 'connected-url',
+      previewUrl: 'http://localhost:5173',
+    })) as Design;
+
+    expect(updated.previewMode).toBe('connected-url');
+    expect(updated.previewUrl).toBe('http://localhost:5173/');
+    expect(updated.workspacePath).toBe(normalizeWorkspacePath(workspace));
+    expect(getDesign(db, design.id)?.previewUrl).toBe('http://localhost:5173/');
+    await expect(exists(workspace)).resolves.toBe(true);
+  });
+
+  it('rejects integrated file preview for an app-shaped workspace', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'App workspace');
+    const workspace = path.join(root, 'app-workspace');
+    await mkdir(workspace);
+    await writeFile(path.join(workspace, 'package.json'), '{"scripts":{"dev":"vite"}}', 'utf8');
+    updateDesignWorkspace(db, design.id, workspace, 'work-on-project');
+    registerSnapshotsIpc(db);
+
+    const updatePreview = getHandler('snapshots:v1:preview:update');
+
+    await expect(
+      updatePreview(null, {
+        schemaVersion: 1,
+        designId: design.id,
+        previewMode: 'managed-file',
+        previewUrl: null,
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'IPC_BAD_INPUT',
+    });
+  });
+
+  it('allows integrated file preview for a simple HTML workspace with package metadata', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Simple HTML workspace');
+    const workspace = path.join(root, 'simple-html-workspace');
+    await mkdir(workspace);
+    await writeFile(path.join(workspace, 'index.html'), '<main>Hello</main>', 'utf8');
+    await writeFile(path.join(workspace, 'package.json'), '{"name":"static-page"}', 'utf8');
+    updateDesignWorkspace(db, design.id, workspace, 'work-on-project');
+    registerSnapshotsIpc(db);
+
+    const updatePreview = getHandler('snapshots:v1:preview:update');
+
+    const updated = (await updatePreview(null, {
+      schemaVersion: 1,
+      designId: design.id,
+      previewMode: 'managed-file',
+      previewUrl: null,
+    })) as Design;
+
+    expect(updated.previewMode).toBe('managed-file');
   });
 
   it('defers auto-managed workspace folder renames while generation owns a stable workspace path', async () => {
@@ -188,7 +329,7 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
     const updated = await renamePromise;
     await generationLease;
 
-    expect(updated.workspacePath).toBe(newWorkspace);
+    expect(updated.workspacePath).toBe(normalizeWorkspacePath(newWorkspace));
     await expect(exists(oldWorkspace)).resolves.toBe(false);
     await expect(exists(path.join(newWorkspace, 'App.jsx'))).resolves.toBe(true);
   });

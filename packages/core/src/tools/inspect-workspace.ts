@@ -109,6 +109,22 @@ export function inspectWorkspaceFiles(
 
 export type InspectWorkspaceFn = () => Promise<WorkspaceInspection>;
 
+function summarizeGroup(label: string, values: readonly string[]): string {
+  return values.length > 0 ? `${label}: ${values.join(', ')}` : `${label}: none`;
+}
+
+export function summarizeWorkspaceInspection(result: WorkspaceInspection): string {
+  return [
+    `workspace inspection: ${result.totalFiles} file(s), ${result.entryCandidates.length} entry candidate(s), ${result.sourceFiles.length} source file(s), ${result.referenceDocs.length} reference doc(s), ${result.assets.length} asset(s), truncated: ${result.truncated ? 'yes' : 'no'}`,
+    summarizeGroup('entry candidates', result.entryCandidates),
+    summarizeGroup('source files', result.sourceFiles),
+    summarizeGroup('style files', result.styleFiles),
+    summarizeGroup('design docs', result.designDocs),
+    summarizeGroup('reference docs', result.referenceDocs),
+    summarizeGroup('assets', result.assets),
+  ].join('\n');
+}
+
 export function makeInspectWorkspaceTool(
   inspectWorkspace: InspectWorkspaceFn,
 ): AgentTool<typeof InspectWorkspaceParams, WorkspaceInspection> {
@@ -124,7 +140,7 @@ export function makeInspectWorkspaceTool(
         content: [
           {
             type: 'text',
-            text: `workspace inspection: ${result.totalFiles} file(s), ${result.entryCandidates.length} entry candidate(s), ${result.sourceFiles.length} source file(s), ${result.referenceDocs.length} reference doc(s), truncated: ${result.truncated ? 'yes' : 'no'}`,
+            text: summarizeWorkspaceInspection(result),
           },
         ],
         details: result,

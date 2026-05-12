@@ -23,6 +23,7 @@ async function resolveDesignPreview(
     designId,
     snapshotSource,
     read: window.codesign.files?.read,
+    preferSnapshotSource: true,
   });
 }
 
@@ -81,6 +82,35 @@ function buildSelectedDesignState(
   };
 }
 
+function nextUntitledDesignName(designs: CodesignState['designs']): string {
+  const existingNames = new Set(designs.map((d) => d.name));
+  let n = 1;
+  while (existingNames.has(`Untitled design ${n}`)) n += 1;
+  return `Untitled design ${n}`;
+}
+
+function buildFreshDesignState(state: CodesignState, designId: string): Partial<CodesignState> {
+  return {
+    currentDesignId: designId,
+    ...projectGenerationForDesign(state, designId),
+    previewSource: null,
+    errorMessage: null,
+    iframeErrors: [],
+    selectedElement: null,
+    lastPromptInput: null,
+    designsViewOpen: false,
+    chatMessages: [],
+    chatLoaded: false,
+    pendingToolCalls: [],
+    comments: [],
+    commentsLoaded: false,
+    commentBubble: null,
+    currentSnapshotId: null,
+    canvasTabs: DEFAULT_CANVAS_TABS,
+    activeCanvasTab: 0,
+  };
+}
+
 export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActions {
   return {
     async loadDesigns() {
@@ -125,31 +155,10 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
 
     async createNewDesign(workspacePath?: string | null) {
       if (!window.codesign) return null;
-      const existingNames = new Set(get().designs.map((d) => d.name));
-      let n = 1;
-      while (existingNames.has(`Untitled design ${n}`)) n += 1;
-      const name = `Untitled design ${n}`;
+      const name = nextUntitledDesignName(get().designs);
       try {
         const design = await window.codesign.snapshots.createDesign(name, workspacePath);
-        set({
-          currentDesignId: design.id,
-          ...projectGenerationForDesign(get(), design.id),
-          previewSource: null,
-          errorMessage: null,
-          iframeErrors: [],
-          selectedElement: null,
-          lastPromptInput: null,
-          designsViewOpen: false,
-          chatMessages: [],
-          chatLoaded: false,
-          pendingToolCalls: [],
-          comments: [],
-          commentsLoaded: false,
-          commentBubble: null,
-          currentSnapshotId: null,
-          canvasTabs: DEFAULT_CANVAS_TABS,
-          activeCanvasTab: 0,
-        });
+        set((state) => buildFreshDesignState(state, design.id));
         await get().loadDesigns();
         void get().loadChatForCurrentDesign();
         void get().loadCommentsForCurrentDesign();
@@ -318,12 +327,16 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       await get().renameDesign(id, name);
     },
 
-    async renameDesign(id: string, name: string) {
+    async renameDesign(id: string, name: string, options) {
       if (!window.codesign) return;
       const trimmed = name.trim();
       if (!trimmed) return;
       try {
-        const updated = await window.codesign.snapshots.renameDesign(id, trimmed);
+        const renameWorkspace =
+          options?.renameWorkspace ?? get().generationByDesign[id] === undefined;
+        const updated = await window.codesign.snapshots.renameDesign(id, trimmed, {
+          renameWorkspace,
+        });
         // Use the persisted row instead of synthesizing a partial design; v0.2
         // designs must carry a real workspace binding.
         set((s) => {

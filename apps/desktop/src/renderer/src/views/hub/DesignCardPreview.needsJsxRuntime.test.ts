@@ -129,4 +129,47 @@ describe('DesignCardPreview source helpers', () => {
       clearPreviewCardCachesForTest();
     }
   });
+
+  it('uses the files API to resolve snapshot references to workspace source', async () => {
+    clearPreviewCardCachesForTest();
+    const globalWithWindow = globalThis as unknown as { window?: { codesign?: unknown } };
+    const previousWindow = globalWithWindow.window;
+    const list = vi.fn(async () => [
+      {
+        artifactSource: '<!doctype html><body><!-- artifact source lives in index.jsx --></body>',
+      },
+    ]);
+    const read = vi.fn(async (_designId: string, path: string) => ({
+      path,
+      kind: 'jsx' as const,
+      size: 53,
+      updatedAt: '2026-05-05T00:00:00.000Z',
+      content: 'function App(){ return <main id="workspace-source">Hi</main>; }',
+    }));
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        codesign: {
+          snapshots: { list },
+          files: { read },
+        },
+      },
+    });
+
+    try {
+      const result = await readPreviewSourceForCard('design-1', '2026-05-05T00:00:01.000Z');
+
+      expect(result).toEqual({
+        path: 'index.jsx',
+        content: 'function App(){ return <main id="workspace-source">Hi</main>; }',
+      });
+      expect(read).toHaveBeenCalledWith('design-1', 'index.jsx');
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: previousWindow,
+      });
+      clearPreviewCardCachesForTest();
+    }
+  });
 });

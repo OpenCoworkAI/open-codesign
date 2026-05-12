@@ -7,7 +7,7 @@ import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
 import { type Database, getDesign } from './snapshots-db';
 import { normalizeWorkspacePath } from './workspace-path';
-import { WORKSPACE_IGNORED_DIRS } from './workspace-reader';
+import { isIgnoredWorkspacePath } from './workspace-reader';
 
 /**
  * Files watcher (T2.3 follow-up). Without this, edits made in Finder / a
@@ -54,11 +54,7 @@ const watchers = new Map<string, ActiveWatcher>();
 
 function isIgnored(rel: string): boolean {
   if (!rel) return true;
-  if (rel.endsWith('.DS_Store')) return true;
-  for (const seg of rel.split(/[\\/]/)) {
-    if (WORKSPACE_IGNORED_DIRS.has(seg)) return true;
-  }
-  return false;
+  return isIgnoredWorkspacePath(rel);
 }
 
 function toForwardSlashes(path: string): string {

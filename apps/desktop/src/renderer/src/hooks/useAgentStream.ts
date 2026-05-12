@@ -162,10 +162,8 @@ export function useAgentStream(): void {
         toolCallId: event.toolCallId,
         status: initialStatus,
       });
-      // set_title runs with no side effects on disk — its whole job is
-      // to rename the design. Trigger the rename immediately off the
-      // start event so the sidebar label flips without waiting for the
-      // result round-trip.
+      // set_title updates design metadata only. Moving the workspace folder
+      // here can race with file reads/writes from the active generation.
       if (toolName === 'set_title') {
         const rawTitle = (event.args as { title?: unknown } | undefined)?.title;
         if (typeof rawTitle === 'string' && rawTitle.trim().length > 0) {
@@ -174,7 +172,7 @@ export function useAgentStream(): void {
             .replace(/[\s.,;:!?—–-]+$/u, '')
             .slice(0, 60);
           if (cleaned.length > 0) {
-            void renameDesign(designId, cleaned);
+            void renameDesign(designId, cleaned, { renameWorkspace: false });
           }
         }
       }

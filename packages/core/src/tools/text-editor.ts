@@ -23,7 +23,7 @@ export interface TextEditorFsCallbacks {
     newStr: string,
   ): Promise<{ path: string }> | { path: string };
   insert(path: string, line: number, text: string): Promise<{ path: string }> | { path: string };
-  /** Optional: list files for `view` on a directory. Returns sorted paths. */
+  /** Optional: list files under `dir` for `view` on a directory. */
   listDir(dir: string): string[];
 }
 
@@ -85,6 +85,18 @@ function exactEditFailuresExceededText(path: string, count: number): string {
   return `Too many failed exact edits for ${path} (${count}). Stop using str_replace/insert on this file in this run. Re-read the relevant range and use create to rewrite the complete corrected file, or ask the user to continue.`;
 }
 
+function isExactEditFailure(message: string, path: string): boolean {
+  return (
+    message === `old_str not found in ${path}` ||
+    message === `old_str is ambiguous in ${path}; provide more context`
+  );
+}
+
+function workspaceWriteFailureText(path: string, message: string): string | null {
+  if (!message.startsWith(`Workspace write-through failed for ${path}:`)) return null;
+  return `Edit failed because Open CoDesign could not write ${path} to the workspace. Stop retrying this edit; ask the user to resolve the workspace write problem. Details: ${message}`;
+}
+
 function requireString(
   value: unknown,
   field: string,
@@ -105,6 +117,23 @@ function requireNumber(
     throw new Error(`${command} requires numeric ${field}`);
   }
   return value;
+}
+
+function normalizeToolPath(rawPath: string): string {
+  const normalized = rawPath.trim().replace(/\\/g, '/').replace(/\/+/g, '/');
+  if (normalized.length === 0 || normalized === '.') return '.';
+  if (normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) {
+    throw new Error('Tool paths must be workspace-relative and use "/" separators.');
+  }
+  const parts: string[] = [];
+  for (const part of normalized.split('/')) {
+    if (part.length === 0 || part === '.') continue;
+    if (part === '..') {
+      throw new Error('Tool paths must be workspace-relative and cannot contain traversal.');
+    }
+    parts.push(part);
+  }
+  return parts.join('/') || '.';
 }
 
 export function makeTextEditorTool(
@@ -141,7 +170,7 @@ export function makeTextEditorTool(
       'Without view_range, repeated `view` of the same path within a single run returns only a short summary to protect context.',
     parameters: TextEditorParams,
     async execute(_toolCallId, params): Promise<AgentToolResult<TextEditorDetails>> {
-      const path = params.path;
+      const path = normalizeToolPath(params.path);
       switch (params.command) {
         case 'view': {
           const file = fs.view(path);
@@ -228,9 +257,18 @@ export function makeTextEditorTool(
             changedThisRunPaths.add(path);
             return ok(`Edited ${result.path}`, { command: 'str_replace', path, result });
           } catch (err) {
-            const nextFailedCount = failedCount + 1;
-            failedExactEditCountByPath.set(path, nextFailedCount);
             const message = err instanceof Error ? err.message : String(err);
+            const workspaceFailure = workspaceWriteFailureText(path, message);
+            if (workspaceFailure !== null) {
+              return ok(workspaceFailure, {
+                command: 'str_replace',
+                path,
+                result: { failed: true, message, reason: 'workspace_write_failed' },
+              });
+            }
+            const isExactFailure = isExactEditFailure(message, path);
+            const nextFailedCount = isExactFailure ? failedCount + 1 : failedCount;
+            if (isExactFailure) failedExactEditCountByPath.set(path, nextFailedCount);
             const prefix =
               nextFailedCount >= FAILED_EXACT_EDIT_LIMIT
                 ? `Edit failed: ${message}\n${exactEditFailuresExceededText(path, nextFailedCount)}`
@@ -256,13 +294,19 @@ export function makeTextEditorTool(
             changedThisRunPaths.add(path);
             return ok(`Inserted at ${result.path}:${line}`, { command: 'insert', path, result });
           } catch (err) {
-            const nextFailedCount = failedCount + 1;
-            failedExactEditCountByPath.set(path, nextFailedCount);
             const message = err instanceof Error ? err.message : String(err);
+            const workspaceFailure = workspaceWriteFailureText(path, message);
+            if (workspaceFailure !== null) {
+              return ok(workspaceFailure, {
+                command: 'insert',
+                path,
+                result: { failed: true, message, reason: 'workspace_write_failed' },
+              });
+            }
             return ok(`Edit failed: ${message}. Re-read the target range before retrying.`, {
               command: 'insert',
               path,
-              result: { failed: true, failureCount: nextFailedCount, message },
+              result: { failed: true, failureCount: failedCount, message },
             });
           }
         }

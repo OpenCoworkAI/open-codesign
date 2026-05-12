@@ -273,6 +273,30 @@ function validateAskQuestion(
 
 export type AskBridge = (input: AskInput) => Promise<AskResult>;
 
+const MAX_ASK_VALUE_CHARS = 500;
+
+function truncateAskValue(value: string): string {
+  if (value.length <= MAX_ASK_VALUE_CHARS) return value;
+  return `${value.slice(0, MAX_ASK_VALUE_CHARS - 1)}...`;
+}
+
+function summarizeAskAnswerValue(value: AskAnswer['value']): string {
+  if (value === null) return 'empty';
+  if (Array.isArray(value)) {
+    return value.length > 0 ? truncateAskValue(value.join(', ')) : 'empty';
+  }
+  return truncateAskValue(String(value));
+}
+
+export function summarizeAskResult(result: AskResult): string {
+  if (result.status === 'cancelled') return 'user cancelled';
+  const lines = [`user answered ${result.answers.length} question(s)`];
+  for (const answer of result.answers) {
+    lines.push(`- ${answer.questionId}: ${summarizeAskAnswerValue(answer.value)}`);
+  }
+  return lines.join('\n');
+}
+
 export function makeAskTool(askBridge: AskBridge): AgentTool<typeof AskInput, AskResult> {
   return {
     name: 'ask',
@@ -294,12 +318,8 @@ export function makeAskTool(askBridge: AskBridge): AgentTool<typeof AskInput, As
         };
       }
       const result = await askBridge(params);
-      const summary =
-        result.status === 'answered'
-          ? `user answered ${result.answers.length} question(s)`
-          : 'user cancelled';
       return {
-        content: [{ type: 'text', text: summary }],
+        content: [{ type: 'text', text: summarizeAskResult(result) }],
         details: result,
       };
     },

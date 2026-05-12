@@ -25,11 +25,12 @@ import {
 } from '../preview/helpers';
 import { inferPreviewSourcePath } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
+import type { CanvasTab } from '../store/slices/tabs';
 import { CanvasErrorBar } from './CanvasErrorBar';
 import { CanvasTabBar } from './CanvasTabBar';
 import { CommentBubble } from './comment/CommentBubble';
 import { PinOverlay } from './comment/PinOverlay';
-import { FilesTabView, WorkspaceFilePreview } from './FilesTabView';
+import { FilesTabView } from './FilesTabView';
 import { PhoneFrame } from './PhoneFrame';
 import { PreviewToolbar } from './PreviewToolbar';
 
@@ -90,6 +91,17 @@ const PREVIEW_PANE_LAYOUT_CLASSES = {
 
 export function previewPaneLayoutClasses(): typeof PREVIEW_PANE_LAYOUT_CLASSES {
   return PREVIEW_PANE_LAYOUT_CLASSES;
+}
+
+export function isPreviewPaneWelcomeState(input: {
+  activeTab: CanvasTab | undefined;
+  tabCount: number;
+  errorMessage: string | null;
+  previewSource: string | null;
+  designHasContent: boolean;
+}): boolean {
+  const onlyBaseFilesTab = input.tabCount <= 1 && input.activeTab?.kind === 'files';
+  return onlyBaseFilesTab && !input.errorMessage && !input.previewSource && !input.designHasContent;
 }
 
 export function previewViewportDimensions(viewport: PreviewSlotProps['viewport']): {
@@ -562,7 +574,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   } else if (activeTab?.kind === 'files') {
     body = <FilesTabView />;
   } else if (activeTab?.kind === 'file') {
-    body = <WorkspaceFilePreview path={activeTab.path} />;
+    body = <FilesTabView activePath={activeTab.path} />;
   } else {
     // Pool slots stay mounted even when the current design has no preview —
     // background iframes for recently-visited designs keep their documents
@@ -601,7 +613,13 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   }
 
   const hasTabs = canvasTabs.length > 0;
-  const isWelcome = !errorMessage && !previewSource && !designHasContent;
+  const isWelcome = isPreviewPaneWelcomeState({
+    activeTab,
+    tabCount: canvasTabs.length,
+    errorMessage,
+    previewSource,
+    designHasContent,
+  });
 
   return (
     <div className={PREVIEW_PANE_LAYOUT_CLASSES.root}>

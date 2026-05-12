@@ -194,7 +194,7 @@ async function maybeAutoRename(
   // Rename immediately with a local fallback so the design never stays on
   // "Untitled design N" while the model title request is still in flight.
   const fallbackName = autoNameFromPrompt(firstPrompt);
-  await renameDesignAndRefresh(get, designId, fallbackName);
+  await renameDesignAndRefresh(get, designId, fallbackName, { renameWorkspace: false });
   try {
     const api = window.codesign as unknown as {
       generateTitle?: (prompt: string) => Promise<string>;
@@ -209,7 +209,7 @@ async function maybeAutoRename(
         latest !== undefined &&
         (latest.name === fallbackName || isDefaultDesignName(latest.name))
       ) {
-        await renameDesignAndRefresh(get, designId, trimmed);
+        await renameDesignAndRefresh(get, designId, trimmed, { renameWorkspace: false });
       }
     }
   } catch (err) {
@@ -224,9 +224,10 @@ async function renameDesignAndRefresh(
   get: GetState,
   designId: string,
   name: string,
+  options?: { renameWorkspace?: boolean },
 ): Promise<void> {
   try {
-    await window.codesign?.snapshots.renameDesign(designId, name);
+    await window.codesign?.snapshots.renameDesign(designId, name, options);
     await get().loadDesigns();
   } catch (err) {
     const msg = err instanceof Error ? err.message : tr('errors.unknown');

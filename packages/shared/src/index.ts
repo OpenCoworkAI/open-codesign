@@ -402,7 +402,9 @@ export type {
   DesignFile,
   DesignMessage,
   DesignSnapshot,
+  PreviewMode,
   SnapshotCreateInput,
+  WorkspaceMode,
 } from './snapshot';
 export {
   ChatMessageKind,

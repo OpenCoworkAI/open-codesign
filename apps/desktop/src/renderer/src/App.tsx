@@ -36,10 +36,6 @@ export function App() {
   const loadDesigns = useCodesignStore((s) => s.loadDesigns);
   const syncGenerationStatus = useCodesignStore((s) => s.syncGenerationStatus);
   const switchDesign = useCodesignStore((s) => s.switchDesign);
-  const sendPrompt = useCodesignStore((s) => s.sendPrompt);
-  const isGenerating = useCodesignStore(
-    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
-  );
   const setView = useCodesignStore((s) => s.setView);
   const view = useCodesignStore((s) => s.view);
   const previousView = useCodesignStore((s) => s.previousView);
@@ -56,7 +52,7 @@ export function App() {
   const activeReportLocalId = useCodesignStore((s) => s.activeReportLocalId);
   const closeReportDialog = useCodesignStore((s) => s.closeReportDialog);
 
-  const [prompt, setPrompt] = useState('');
+  const [prefillPrompt, setPrefillPrompt] = useState<{ id: number; text: string } | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     Math.max(320, Math.round(window.innerWidth * 0.25)),
   );
@@ -133,27 +129,13 @@ export function App() {
     void bootstrap();
   }, [loadConfig, loadDesigns, switchDesign, syncGenerationStatus]);
 
-  function submit(): void {
-    const trimmed = prompt.trim();
-    if (!trimmed || isGenerating) return;
-    void sendPrompt({ prompt: trimmed });
-    setPrompt('');
-  }
-
   const ready = configLoaded && config?.hasKey;
+  const prefillComposer = useCallback((text: string) => {
+    setPrefillPrompt((prev) => ({ id: (prev?.id ?? 0) + 1, text }));
+  }, []);
 
   const bindings = useMemo(
     () => [
-      {
-        combo: 'mod+enter',
-        handler: () => {
-          if (!ready) return;
-          const trimmed = prompt.trim();
-          if (!trimmed || isGenerating) return;
-          void sendPrompt({ prompt: trimmed });
-          setPrompt('');
-        },
-      },
       {
         combo: 'mod+,',
         handler: () => {
@@ -195,10 +177,7 @@ export function App() {
       },
     ],
     [
-      prompt,
-      isGenerating,
       ready,
-      sendPrompt,
       view,
       previousView,
       designsViewOpen,
@@ -245,7 +224,7 @@ export function App() {
                 // doesn't quietly land in the current design's input box.
                 const created = await createNewDesign();
                 if (!created) return;
-                setPrompt(p);
+                prefillComposer(p);
                 setView('workspace');
               }}
             />
@@ -259,7 +238,7 @@ export function App() {
             <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex relative">
               {isResizing && <div className="absolute inset-0 z-20 cursor-col-resize" />}
               <div className="relative shrink-0" style={{ width: sidebarWidth }}>
-                <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
+                <Sidebar prefillPrompt={prefillPrompt} />
                 <div
                   role="separator"
                   aria-orientation="vertical"
@@ -270,7 +249,7 @@ export function App() {
               </div>
               <main className="flex flex-col min-h-0 flex-1 min-w-0">
                 <Suspense fallback={null}>
-                  <PreviewPane onPickStarter={(p) => setPrompt(p)} />
+                  <PreviewPane onPickStarter={prefillComposer} />
                 </Suspense>
               </main>
             </div>

@@ -1,6 +1,7 @@
 import { CancelGenerationPayloadV1, CodesignError } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  acquireInFlightWorkspaceGeneration,
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
@@ -197,12 +198,50 @@ describe('withInFlightGenerationForDesign', () => {
     const controller = makeController();
     const inFlight = new Map([['gen-1', controller]]);
     const inFlightByDesign = new Map([['design-1', { generationId: 'gen-1', startedAt: 1234 }]]);
+    const inFlightByWorkspace = new Map([
+      ['/workspace', { generationId: 'gen-1', startedAt: 1234 }],
+    ]);
     const logIpc = { info: vi.fn() };
 
-    cancelGenerationRequest('gen-1', inFlight, logIpc, inFlightByDesign);
+    cancelGenerationRequest('gen-1', inFlight, logIpc, inFlightByDesign, inFlightByWorkspace);
 
     expect(inFlight.has('gen-1')).toBe(false);
     expect(inFlightByDesign.has('design-1')).toBe(false);
+    expect(inFlightByWorkspace.has('/workspace')).toBe(false);
+  });
+});
+
+describe('acquireInFlightWorkspaceGeneration', () => {
+  it('rejects a second generation for the same workspace while the first is running', () => {
+    const inFlightByWorkspace = new Map<string, { generationId: string; startedAt: number }>();
+    const release = acquireInFlightWorkspaceGeneration('gen-1', '/workspace', inFlightByWorkspace);
+
+    expect(() =>
+      acquireInFlightWorkspaceGeneration('gen-2', '/workspace', inFlightByWorkspace),
+    ).toThrow(CodesignError);
+
+    release();
+    expect(inFlightByWorkspace.has('/workspace')).toBe(false);
+  });
+
+  it('allows different workspaces to run concurrently', () => {
+    const inFlightByWorkspace = new Map<string, { generationId: string; startedAt: number }>();
+    const releaseOne = acquireInFlightWorkspaceGeneration(
+      'gen-1',
+      '/workspace-a',
+      inFlightByWorkspace,
+    );
+    const releaseTwo = acquireInFlightWorkspaceGeneration(
+      'gen-2',
+      '/workspace-b',
+      inFlightByWorkspace,
+    );
+
+    expect([...inFlightByWorkspace.keys()].sort()).toEqual(['/workspace-a', '/workspace-b']);
+
+    releaseOne();
+    releaseTwo();
+    expect(inFlightByWorkspace.size).toBe(0);
   });
 });
 

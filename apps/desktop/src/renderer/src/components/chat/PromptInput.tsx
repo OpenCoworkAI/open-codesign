@@ -95,9 +95,7 @@ function resizeTextarea(el: HTMLTextAreaElement): void {
 }
 
 export interface PromptInputProps {
-  prompt: string;
-  setPrompt: (value: string) => void;
-  onSubmit: () => void;
+  onSubmit: (prompt: string) => void;
   onCancel: () => void;
   isGenerating: boolean;
   /** Optional content rendered above the textarea, inside the composer card. */
@@ -113,6 +111,7 @@ export interface PromptInputProps {
 
 export interface PromptInputHandle {
   focus: () => void;
+  setPrompt: (value: string) => void;
 }
 
 /**
@@ -125,21 +124,13 @@ export interface PromptInputHandle {
  *   Shift+Enter     — newline
  */
 export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(function PromptInput(
-  {
-    prompt,
-    setPrompt,
-    onSubmit,
-    onCancel,
-    isGenerating,
-    contextSummary,
-    leadingAction,
-    onImportFiles,
-  },
+  { onSubmit, onCancel, isGenerating, contextSummary, leadingAction, onImportFiles },
   ref,
 ) {
   const t = useT();
   const taRef = useRef<HTMLTextAreaElement>(null);
   const compositionActiveRef = useRef(false);
+  const [prompt, setPrompt] = useState('');
   const generationStage = useCodesignStore((s) => s.generationStage);
   const generationStartedAt = useCodesignStore((s) => {
     const currentDesignId = s.currentDesignId;
@@ -193,12 +184,19 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
     focus: () => {
       taRef.current?.focus();
     },
+    setPrompt: (value) => {
+      setPrompt(value);
+      requestAnimationFrame(() => {
+        if (taRef.current) resizeTextarea(taRef.current);
+      });
+    },
   }));
 
   function handleSubmit(e: FormEvent): void {
     e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
-    onSubmit();
+    onSubmit(prompt.trim());
+    setPrompt('');
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): void {

@@ -952,20 +952,23 @@ describe('generateViaAgent()', () => {
     expect(result.artifacts[0]?.entryPath).toBe('index.html');
   });
 
-  it('throws GENERATION_INCOMPLETE when workspace changed without done ok', async () => {
+  it('keeps a valid artifact with a warning when workspace changed without done ok', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
-    await expect(
-      generateViaAgent(
-        {
-          prompt: 'design a meditation app',
-          history: [],
-          model: MODEL,
-          apiKey: 'sk-test',
-          initialResourceState: resourceState({ mutationSeq: 1 }),
-        },
-        { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }) },
-      ),
-    ).rejects.toMatchObject({ code: ERROR_CODES.GENERATION_INCOMPLETE });
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        initialResourceState: resourceState({ mutationSeq: 1 }),
+      },
+      { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }) },
+    );
+
+    expect(result.artifacts).toHaveLength(1);
+    expect(result.warnings).toEqual([
+      'The agent edited the workspace but did not call done(status="ok"); keeping the generated artifact available.',
+    ]);
   });
 
   it('keeps a valid artifact with a warning when done reported errors', async () => {
@@ -1226,29 +1229,32 @@ describe('generateViaAgent()', () => {
     expect(result.artifacts).toHaveLength(1);
   });
 
-  it('requires another done after a later mutation', async () => {
+  it('keeps a valid artifact with a warning after a later mutation', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
-    await expect(
-      generateViaAgent(
-        {
-          prompt: 'design a meditation app',
-          history: [],
-          model: MODEL,
-          apiKey: 'sk-test',
-          initialResourceState: resourceState({
-            mutationSeq: 2,
-            lastDone: {
-              status: 'ok',
-              path: 'App.jsx',
-              mutationSeq: 1,
-              errorCount: 0,
-              checkedAt: '2026-04-28T00:00:00.000Z',
-            },
-          }),
-        },
-        { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }) },
-      ),
-    ).rejects.toMatchObject({ code: ERROR_CODES.GENERATION_INCOMPLETE });
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        initialResourceState: resourceState({
+          mutationSeq: 2,
+          lastDone: {
+            status: 'ok',
+            path: 'App.jsx',
+            mutationSeq: 1,
+            errorCount: 0,
+            checkedAt: '2026-04-28T00:00:00.000Z',
+          },
+        }),
+      },
+      { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }) },
+    );
+
+    expect(result.artifacts).toHaveLength(1);
+    expect(result.warnings).toEqual([
+      'The workspace changed after the last successful done() call; keeping the latest artifact available.',
+    ]);
   });
 
   it('emits agent lifecycle events through onEvent subscriber in order', async () => {
@@ -1718,7 +1724,7 @@ describe('generateViaAgent()', () => {
     expect(sys).toContain('Do not emit `<artifact>`');
     expect(sys).toContain('design source to `App.jsx`');
     expect(sys).toContain('Local workspace assets and scaffolded files are allowed');
-    expect(sys).toContain('`done(path)` after the final mutation');
+    expect(sys).toContain('call `done(path)` as the final self-check');
     expect(sys).toContain('stop after 3 error rounds');
     expect(sys).not.toContain('text_editor.create(');
     expect(sys).not.toContain('view("index.html"');
