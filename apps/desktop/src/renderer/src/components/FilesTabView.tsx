@@ -2,11 +2,21 @@ import { useT } from '@open-codesign/i18n';
 import { buildPreviewDocument, isRenderablePath } from '@open-codesign/runtime';
 import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
 import { FileCode2, FileText, Folder, FolderOpen } from 'lucide-react';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type AnchorHTMLAttributes,
+  lazy,
+  type MouseEvent,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { WorkspaceDocumentPreviewResult } from '../../../preload';
 import { type DesignFileEntry, type DesignFileKind, useDesignFiles } from '../hooks/useDesignFiles';
+import { classifyMarkdownHref } from '../lib/markdown-links';
 import { workspacePathComparisonKey } from '../lib/workspace-path';
 import {
   formatIframeError,
@@ -41,6 +51,38 @@ function escapeHtmlText(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function MarkdownLink({
+  href,
+  children,
+  node: _node,
+  ...props
+}: AnchorHTMLAttributes<HTMLAnchorElement> & { node?: unknown }) {
+  const action = classifyMarkdownHref(href);
+
+  if (action.kind === 'anchor') {
+    return (
+      <a {...props} href={action.href}>
+        {children}
+      </a>
+    );
+  }
+
+  if (action.kind === 'external') {
+    const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      void window.codesign?.openExternal?.(action.url).catch(() => undefined);
+    };
+
+    return (
+      <a {...props} href={action.url} rel={props.rel ?? 'noreferrer'} onClick={handleClick}>
+        {children}
+      </a>
+    );
+  }
+
+  return <span>{children}</span>;
 }
 
 function WorkspaceSection() {
@@ -541,7 +583,9 @@ function TextFilePreview({
                 </pre>
               </details>
             ) : null}
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown.body}</ReactMarkdown>
+            <ReactMarkdown components={{ a: MarkdownLink }} remarkPlugins={[remarkGfm]}>
+              {markdown.body}
+            </ReactMarkdown>
           </article>
         ) : (
           <pre

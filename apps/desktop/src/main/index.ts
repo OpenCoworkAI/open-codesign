@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BRAND } from '@open-codesign/shared';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
@@ -21,6 +21,7 @@ import { getPendingUpdate, setupAutoUpdater } from './ipc/update';
 import { registerLocaleIpc } from './locale-ipc';
 import { getLogger, initLogger } from './logger';
 import { registerMemoryIpc } from './memory-ipc';
+import { isTrustedMainWindowNavigationUrl } from './navigation-policy';
 import { loadConfigOnBoot, registerOnboardingIpc } from './onboarding-ipc';
 import { isAllowedExternalUrl } from './open-external';
 import { readPersisted as readPreferences, registerPreferencesIpc } from './preferences-ipc';
@@ -63,7 +64,26 @@ if (storageLocations.dataDir !== undefined) {
   app.setPath('userData', storageLocations.dataDir);
 }
 
+type NavigationEvent = { preventDefault: () => void };
+
+function handleMainWindowNavigation(
+  event: NavigationEvent,
+  url: string,
+  trustedAppUrl: string,
+): void {
+  if (isTrustedMainWindowNavigationUrl(url, trustedAppUrl)) return;
+
+  event.preventDefault();
+  if (isAllowedExternalUrl(url)) {
+    void shell.openExternal(url);
+  }
+}
+
 function createWindow(): void {
+  const rendererEntryPath = join(__dirname, '../renderer/index.html');
+  const rendererUrlOverride = process.env['ELECTRON_RENDERER_URL'];
+  const rendererEntryUrl = rendererUrlOverride || pathToFileURL(rendererEntryPath).href;
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -101,6 +121,17 @@ function createWindow(): void {
     return { action: 'deny' };
   });
 
+  mainWindow.webContents.on('will-navigate', (event: NavigationEvent, url: string) => {
+    handleMainWindowNavigation(event, url, rendererEntryUrl);
+  });
+
+  mainWindow.webContents.on(
+    'will-redirect',
+    (event: NavigationEvent, url: string, _isInPlace: boolean, isMainFrame: boolean) => {
+      if (isMainFrame) handleMainWindowNavigation(event, url, rendererEntryUrl);
+    },
+  );
+
   // Replay any update event that fired before this window was ready
   // (macOS: user closed window, triggered a manual Check for Updates from
   // the app menu, then reopened — the event would otherwise be lost).
@@ -111,10 +142,10 @@ function createWindow(): void {
     }
   });
 
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
+  if (rendererUrlOverride) {
+    void mainWindow.loadURL(rendererEntryUrl);
   } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    void mainWindow.loadFile(rendererEntryPath);
   }
 }
 
