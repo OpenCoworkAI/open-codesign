@@ -5,6 +5,10 @@
  *   - `/releases/...`  — update banner → release notes
  *   - `/issues/...`    — Report flow → prefilled bug issue
  *
+ * Local preview controls may also open explicit loopback HTTP(S) URLs. Those
+ * URLs are configured or detected by the user and only opened from direct UI
+ * actions, so remote hosts and non-HTTP schemes still stay out of scope.
+ *
  * Anything else (different host, different repo, different path) is rejected
  * so a compromised renderer can't coerce the main process into opening an
  * attacker-controlled URL via `shell.openExternal`.
