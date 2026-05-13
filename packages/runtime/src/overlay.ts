@@ -31,6 +31,34 @@ export const OVERLAY_SCRIPT = `(function() {
   var watchedSelectors = [];
   var rectsFrameHandle = 0;
 
+  function resolveBodyRelativePath(sel) {
+    var parts = String(sel || '').slice(1).split('/');
+    var current = document.body;
+    if (!current || !parts.length) return null;
+    for (var i = 0; i < parts.length; i++) {
+      var match = /^([a-zA-Z][a-zA-Z0-9-]*)\\[(\\d+)\\]$/.exec(parts[i]);
+      if (!match) return null;
+      var tag = String(match[1]).toUpperCase();
+      var targetIndex = Number(match[2]);
+      if (!targetIndex || !current.children) return null;
+      var seen = 0;
+      var next = null;
+      for (var j = 0; j < current.children.length; j++) {
+        var child = current.children[j];
+        if (child && child.tagName === tag) {
+          seen++;
+          if (seen === targetIndex) {
+            next = child;
+            break;
+          }
+        }
+      }
+      if (!next) return null;
+      current = next;
+    }
+    return current;
+  }
+
   function resolveSelector(sel) {
     if (!sel || typeof sel !== 'string') return null;
     try {
@@ -38,7 +66,8 @@ export const OVERLAY_SCRIPT = `(function() {
       if (c === '#' || c === '[' || c === '.') return document.querySelector(sel);
       if (c === '/') {
         var res = document.evaluate(sel, document, null, 9, null);
-        return res && res.singleNodeValue ? res.singleNodeValue : null;
+        if (res && res.singleNodeValue) return res.singleNodeValue;
+        return resolveBodyRelativePath(sel);
       }
       return document.querySelector(sel);
     } catch (_) { return null; }
@@ -95,6 +124,20 @@ export const OVERLAY_SCRIPT = `(function() {
     pinned = null;
   }
 
+  function pinElement(el, selector) {
+    if (!el || !el.style) return;
+    if (pinned && pinned !== el) {
+      try { pinned.style.outline = ''; } catch (_) {}
+    }
+    pinned = el;
+    try { el.style.outline = PINNED_OUTLINE; } catch (_) {}
+    if (selector && watchedSelectors.indexOf(selector) === -1) watchedSelectors.push(selector);
+    try {
+      if (el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    } catch (_) { /* noop */ }
+    scheduleRectsBroadcast();
+  }
+
 
   function getXPath(el) {
     if (el.dataset && el.dataset.codesignId) return '[data-codesign-id="' + el.dataset.codesignId + '"]';
@@ -132,16 +175,11 @@ export const OVERLAY_SCRIPT = `(function() {
       var el = e.target;
       // Pin the clicked element — its outline will persist until parent
       // sends CLEAR_PIN (bubble closed).
-      if (pinned && pinned !== el) {
-        try { pinned.style.outline = ''; } catch (_) {}
-      }
-      pinned = el;
-      try { el.style.outline = PINNED_OUTLINE; } catch (_) {}
       var rect = el.getBoundingClientRect();
       var selector = getXPath(el);
       // Auto-watch the freshly-pinned element so scroll/resize immediately
       // keep its rect live, without waiting for a parent→iframe round-trip.
-      if (watchedSelectors.indexOf(selector) === -1) watchedSelectors.push(selector);
+      pinElement(el, selector);
       var parentHtml = '';
       try {
         if (el.parentElement && el.parentElement.outerHTML) {
@@ -201,6 +239,12 @@ export const OVERLAY_SCRIPT = `(function() {
     }
     if (data.type === 'CLEAR_PIN') {
       clearPinned();
+      return;
+    }
+    if (data.type === 'PIN_SELECTOR') {
+      var targetSelector = typeof data.selector === 'string' ? data.selector : '';
+      var target = resolveSelector(targetSelector);
+      if (target) pinElement(target, targetSelector);
       return;
     }
     if (data.type === 'WATCH_SELECTORS') {

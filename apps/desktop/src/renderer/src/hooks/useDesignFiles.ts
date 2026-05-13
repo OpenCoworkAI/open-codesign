@@ -73,6 +73,15 @@ function currentWorkspaceListFailureToastIds(): string[] {
     .map((toast) => toast.id);
 }
 
+export function isRecoverableFileWatcherSubscribeError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes('Failed to watch workspace files') ||
+    message.includes('ENOENT') ||
+    message.includes('ENOTDIR')
+  );
+}
+
 export function handleWorkspaceListErrorToast(input: WorkspaceListErrorToastInput): void {
   if (input.state.key === input.key) return;
   if (input.state.toastId !== null) {
@@ -280,6 +289,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
       | undefined;
     if (!filesApi?.subscribe || !filesApi.unsubscribe || !filesApi.onChanged) return;
     void filesApi.subscribe(designId).catch((err: unknown) => {
+      if (isRecoverableFileWatcherSubscribeError(err)) return;
       pushToast({
         variant: 'error',
         title: tr('canvas.workspace.updateFailed'),
@@ -552,6 +562,7 @@ export function useLazyDesignFileTree(designId: string | null): UseLazyDesignFil
       | undefined;
     if (!filesApi?.subscribe || !filesApi.unsubscribe || !filesApi.onChanged) return;
     void filesApi.subscribe(designId).catch((err: unknown) => {
+      if (isRecoverableFileWatcherSubscribeError(err)) return;
       pushToast({
         variant: 'error',
         title: tr('canvas.workspace.updateFailed'),

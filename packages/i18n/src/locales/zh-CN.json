@@ -826,8 +826,8 @@
     "title": "批注元素",
     "close": "关闭批注气泡",
     "placeholder": "描述想要的改动，或留一条笔记给自己…",
-    "saveNote": "仅标注",
-    "sendToClaude": "交给 Claude",
+    "saveNote": "保存评论",
+    "sendToChat": "添加到聊天",
     "saving": "保存中…",
     "sending": "发送中…",
     "scope": {
@@ -860,6 +860,8 @@
       "close": "关闭评论面板",
       "empty": "还没有评论。在画布上点击元素留下评论。",
       "delete": "删除评论",
+      "sendToChat": "添加到聊天",
+      "addedToChat": "已在聊天中",
       "untitled": "（无内容）",
       "status": {
         "pending": "待处理",

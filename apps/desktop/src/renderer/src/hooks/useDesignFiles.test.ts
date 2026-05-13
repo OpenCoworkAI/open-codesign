@@ -3,6 +3,7 @@ import type { DesignFileEntry } from './useDesignFiles';
 import {
   handleWorkspaceListErrorToast,
   handleWorkspaceListSuccessToast,
+  isRecoverableFileWatcherSubscribeError,
   isWorkspaceListFailureToast,
   previewSourceFallbackFile,
   type WorkspaceListErrorToastState,
@@ -51,6 +52,25 @@ describe('useDesignFiles helpers', () => {
   it('returns no files when neither workspace rows nor previewSource exist', () => {
     expect(withPreviewSourceFallback([], null)).toEqual([]);
     expect(withPreviewSourceFallback([], '')).toEqual([]);
+  });
+});
+
+describe('workspace watcher subscribe errors', () => {
+  it('treats missing-workspace watcher failures as recoverable', () => {
+    expect(
+      isRecoverableFileWatcherSubscribeError(
+        new Error(
+          "Error invoking remote method 'codesign:files:v1:subscribe': CodesignError: Failed to watch workspace files",
+        ),
+      ),
+    ).toBe(true);
+    expect(isRecoverableFileWatcherSubscribeError(new Error('ENOENT: missing workspace'))).toBe(
+      true,
+    );
+  });
+
+  it('does not swallow unrelated watcher errors', () => {
+    expect(isRecoverableFileWatcherSubscribeError(new Error('Design not found'))).toBe(false);
   });
 });
 

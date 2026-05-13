@@ -826,8 +826,8 @@
     "title": "Comment on",
     "close": "Close comment bubble",
     "placeholder": "Describe the change, or leave a note for yourself…",
-    "saveNote": "Comment",
-    "sendToClaude": "Send to Claude",
+    "saveNote": "Save comment",
+    "sendToChat": "Add to chat",
     "saving": "Saving…",
     "sending": "Sending…",
     "scope": {
@@ -860,6 +860,8 @@
       "close": "Close comments panel",
       "empty": "No comments yet. Click any element on the canvas to leave one.",
       "delete": "Delete comment",
+      "sendToChat": "Add to chat",
+      "addedToChat": "Already in chat",
       "untitled": "(no text)",
       "status": {
         "pending": "Pending",

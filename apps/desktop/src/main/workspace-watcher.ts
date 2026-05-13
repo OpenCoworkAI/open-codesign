@@ -50,6 +50,10 @@ interface ActiveWatcher {
   pollBusy: boolean;
 }
 
+type WatcherStartResult =
+  | { ok: true; entry: ActiveWatcher }
+  | { ok: false; reason: 'workspace-unavailable' | 'watch-failed' };
+
 const watchers = new Map<string, ActiveWatcher>();
 
 function isIgnored(rel: string): boolean {
@@ -64,6 +68,11 @@ function toForwardSlashes(path: string): string {
 function isPermissionWatchError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException).code;
   return code === 'EPERM' || code === 'EACCES';
+}
+
+function isWorkspaceUnavailableWatchError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
 async function pollWorkspaceSignature(root: string): Promise<string> {
@@ -151,7 +160,7 @@ function startWatcher(
   designId: string,
   workspacePath: string,
   getWin: () => BrowserWindow | null,
-): ActiveWatcher | null {
+): WatcherStartResult {
   const entry: ActiveWatcher = {
     watcher: null,
     workspacePath,
@@ -177,9 +186,12 @@ function startWatcher(
     if (isPermissionWatchError(err)) {
       watchers.set(designId, entry);
       startPolling(designId, entry, getWin);
-      return entry;
+      return { ok: true, entry };
     }
-    return null;
+    if (isWorkspaceUnavailableWatchError(err)) {
+      return { ok: false, reason: 'workspace-unavailable' };
+    }
+    return { ok: false, reason: 'watch-failed' };
   }
   entry.watcher = watcher;
   watcher.on('error', (err) => {
@@ -196,7 +208,7 @@ function startWatcher(
     startPolling(designId, active, getWin);
   });
   watchers.set(designId, entry);
-  return entry;
+  return { ok: true, entry };
 }
 
 function stopWatcher(designId: string): void {
@@ -242,10 +254,14 @@ export function registerFilesWatcherIpc(db: Database, getWin: () => BrowserWindo
         return { ok: true };
       }
     }
-    const entry = startWatcher(designId, workspacePath, getWin);
-    if (!entry) {
+    const result = startWatcher(designId, workspacePath, getWin);
+    if (!result.ok) {
+      if (result.reason === 'workspace-unavailable') {
+        return { ok: true };
+      }
       throw new CodesignError('Failed to watch workspace files', 'IPC_DB_ERROR');
     }
+    const { entry } = result;
     entry.refCount = 1;
     return { ok: true };
   });

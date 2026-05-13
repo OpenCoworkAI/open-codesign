@@ -142,6 +142,25 @@ describe('files-watcher subscribe / unsubscribe', () => {
     expect(watchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('does not reject when the bound workspace folder is missing', () => {
+    reset();
+    const err = Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+    watchMock.mockImplementation(() => {
+      throw err;
+    });
+    getDesignMock.mockReturnValue({
+      id: 'd1',
+      workspacePath: tempWorkspace('codesign-watch-missing'),
+    });
+    registerFilesWatcherIpc({} as never, () => null);
+    const sub = getHandler('codesign:files:v1:subscribe');
+
+    expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
+
+    expect(watchMock).toHaveBeenCalledTimes(1);
+    expect(__test.watchers.has('d1')).toBe(false);
+  });
+
   it('falls back to polling when native watch is denied by permissions', () => {
     reset();
     const err = Object.assign(new Error('operation not permitted'), { code: 'EPERM' });

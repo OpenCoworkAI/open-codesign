@@ -8,6 +8,7 @@ export interface AgentFsUpdate {
 export interface AgentFsUpdateScheduler {
   schedule(update: AgentFsUpdate): void;
   flushGeneration(generationId: string): void;
+  clearGeneration(generationId: string): void;
   clear(): void;
   clearAll(): void;
 }
@@ -72,6 +73,16 @@ export function createAgentFsUpdateScheduler<TimerId = ReturnType<typeof setTime
           options.clearTimer(slot.timer);
         }
         flushSlot(key, slot);
+      }
+    },
+
+    clearGeneration(generationId) {
+      for (const [key, slot] of [...slots.entries()]) {
+        if (!key.startsWith(`${generationId}\u0000`)) continue;
+        if (slot.timer !== null) {
+          options.clearTimer(slot.timer);
+        }
+        slots.delete(key);
       }
     },
 

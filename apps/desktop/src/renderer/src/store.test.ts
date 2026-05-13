@@ -55,6 +55,7 @@ function resetStore() {
     activeGenerationId: null,
     generatingDesignId: null,
     generationStage: 'idle',
+    cancelledGenerationIds: new Set(),
     errorMessage: null,
     lastError: null,
     config: READY_CONFIG,
@@ -62,6 +63,7 @@ function resetStore() {
     toastMessage: null,
     iframeErrors: [],
     toasts: [],
+    queuedCommentIds: [],
   });
 }
 
@@ -122,6 +124,26 @@ function mockCommentsApi() {
     update: vi.fn(async (_designId: string, _id: string, _patch: CommentUpdateInput) => null),
     remove: vi.fn(async (_designId: string, _id: string) => ({ removed: false })),
     markApplied: vi.fn(async (_designId: string, _ids: string[], _snapshotId: string) => []),
+  };
+}
+
+function commentRow(overrides: Partial<CommentRow> = {}): CommentRow {
+  return {
+    schemaVersion: 1,
+    id: overrides.id ?? 'comment-1',
+    designId: overrides.designId ?? DEFAULT_DESIGN.id,
+    snapshotId: overrides.snapshotId ?? 'snapshot-current',
+    kind: overrides.kind ?? 'edit',
+    selector: overrides.selector ?? '#hero',
+    tag: overrides.tag ?? 'section',
+    outerHTML: overrides.outerHTML ?? '<section id="hero">Hero</section>',
+    rect: overrides.rect ?? { top: 1, left: 2, width: 3, height: 4 },
+    text: overrides.text ?? 'Make it stronger',
+    status: overrides.status ?? 'pending',
+    createdAt: overrides.createdAt ?? '2026-05-12T00:00:00.000Z',
+    appliedInSnapshotId: overrides.appliedInSnapshotId ?? null,
+    ...(overrides.scope ? { scope: overrides.scope } : {}),
+    ...(overrides.parentOuterHTML ? { parentOuterHTML: overrides.parentOuterHTML } : {}),
   };
 }
 
@@ -277,6 +299,350 @@ describe('useCodesignStore streaming assistant text', () => {
 });
 
 describe('useCodesignStore inline comments', () => {
+  it('saves a comment without starting generation', async () => {
+    const row = commentRow({ id: 'saved-comment', text: 'Keep this note' });
+    const generate = vi.fn();
+    const comments = {
+      ...mockCommentsApi(),
+      add: vi.fn(async () => row),
+    };
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        chat: mockChatApi(),
+        comments,
+        snapshots: {
+          ...mockSnapshotsApi(),
+          list: vi.fn(async () => [{ id: row.snapshotId }]),
+        },
+      },
+    });
+
+    setWorkspaceBackedDesign();
+
+    const saved = await useCodesignStore.getState().submitComment({
+      kind: 'edit',
+      selector: row.selector,
+      tag: row.tag,
+      outerHTML: row.outerHTML,
+      rect: row.rect,
+      text: row.text,
+      scope: 'element',
+    });
+
+    expect(saved).toMatchObject({ id: row.id, status: 'pending' });
+    expect(generate).not.toHaveBeenCalled();
+    expect(useCodesignStore.getState().comments).toEqual([row]);
+    expect(useCodesignStore.getState().queuedCommentIds).toEqual([]);
+  });
+
+  it('updates the existing pending comment for the same snapshot and selector', async () => {
+    const existing = commentRow({
+      id: 'same-selector-comment',
+      selector: '#hero',
+      text: 'First saved note',
+    });
+    const updated = { ...existing, text: 'First saved note\nSecond note' };
+    const add = vi.fn(async () => {
+      throw new Error('should not create duplicate comment');
+    });
+    const update = vi.fn(async () => updated);
+
+    vi.stubGlobal('window', {
+      codesign: {
+        chat: mockChatApi(),
+        comments: {
+          ...mockCommentsApi(),
+          add,
+          update,
+        },
+        snapshots: mockSnapshotsApi(),
+      },
+    });
+
+    setWorkspaceBackedDesign();
+    useCodesignStore.setState({
+      comments: [existing],
+      currentSnapshotId: existing.snapshotId,
+    });
+
+    const saved = await useCodesignStore.getState().submitComment({
+      kind: 'edit',
+      selector: existing.selector,
+      tag: existing.tag,
+      outerHTML: existing.outerHTML,
+      rect: existing.rect,
+      text: updated.text,
+      scope: 'element',
+    });
+
+    expect(saved).toEqual(updated);
+    expect(add).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith(DEFAULT_DESIGN.id, existing.id, { text: updated.text });
+    expect(useCodesignStore.getState().comments).toEqual([updated]);
+  });
+
+  it('updates the existing pending comment for the same selector when the current snapshot is unavailable', async () => {
+    const existing = commentRow({
+      id: 'same-selector-no-current-snapshot',
+      snapshotId: 'snapshot-stale',
+      selector: '#hero',
+      text: 'First saved note',
+    });
+    const updated = { ...existing, text: 'First saved note\nSecond note' };
+    const add = vi.fn(async () => {
+      throw new Error('should not create duplicate comment');
+    });
+    const update = vi.fn(async () => updated);
+
+    vi.stubGlobal('window', {
+      codesign: {
+        chat: mockChatApi(),
+        comments: {
+          ...mockCommentsApi(),
+          add,
+          update,
+        },
+        snapshots: mockSnapshotsApi(),
+      },
+    });
+
+    setWorkspaceBackedDesign();
+    useCodesignStore.setState({
+      comments: [existing],
+      currentSnapshotId: null,
+    });
+
+    const saved = await useCodesignStore.getState().submitComment({
+      kind: 'edit',
+      selector: existing.selector,
+      tag: existing.tag,
+      outerHTML: existing.outerHTML,
+      rect: existing.rect,
+      text: updated.text,
+      scope: 'element',
+    });
+
+    expect(saved).toEqual(updated);
+    expect(add).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith(DEFAULT_DESIGN.id, existing.id, { text: updated.text });
+    expect(useCodesignStore.getState().comments).toEqual([updated]);
+  });
+
+  it('closes the open bubble when its saved comment is deleted', async () => {
+    const existing = commentRow({
+      id: 'delete-active-comment',
+      selector: '#hero',
+      text: 'Delete me while open',
+    });
+    const remove = vi.fn(async () => {});
+
+    vi.stubGlobal('window', {
+      codesign: {
+        chat: mockChatApi(),
+        comments: {
+          ...mockCommentsApi(),
+          remove,
+        },
+        snapshots: mockSnapshotsApi(),
+      },
+    });
+
+    setWorkspaceBackedDesign();
+    useCodesignStore.setState({
+      comments: [existing],
+      selectedElement: {
+        selector: existing.selector,
+        tag: existing.tag,
+        outerHTML: existing.outerHTML,
+        rect: existing.rect,
+      },
+      commentBubble: {
+        selector: existing.selector,
+        tag: existing.tag,
+        outerHTML: existing.outerHTML,
+        rect: existing.rect,
+        existingCommentId: existing.id,
+        initialText: existing.text,
+      },
+    });
+
+    await useCodesignStore.getState().removeComment(existing.id);
+
+    expect(remove).toHaveBeenCalledWith(DEFAULT_DESIGN.id, existing.id);
+    expect(useCodesignStore.getState().comments).toEqual([]);
+    expect(useCodesignStore.getState().commentBubble).toBeNull();
+    expect(useCodesignStore.getState().selectedElement).toBeNull();
+  });
+
+  it('sends only the requested pending comment when commentIds is provided', async () => {
+    const generatePayloads: Array<Record<string, unknown>> = [];
+    const generate = vi.fn((payload: Record<string, unknown>) => {
+      generatePayloads.push(payload);
+      return Promise.resolve({
+        artifacts: [{ content: '<html>ok</html>' }],
+        message: 'Applied.',
+      });
+    });
+    const nextSnapshot = {
+      schemaVersion: 1 as const,
+      id: 'snapshot-next',
+      designId: DEFAULT_DESIGN.id,
+      parentId: null,
+      type: 'edit' as const,
+      prompt: null,
+      artifactType: 'html' as const,
+      artifactSource: '<html>ok</html>',
+      createdAt: new Date().toISOString(),
+      message: null,
+    };
+    const target = commentRow({
+      id: 'comment-target',
+      selector: '#target',
+      outerHTML: '<section id="target">Target</section>',
+      text: 'Make only this target warmer',
+    });
+    const other = commentRow({
+      id: 'comment-other',
+      selector: '#other',
+      outerHTML: '<section id="other">Other</section>',
+      text: 'Do not send this one yet',
+    });
+    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) =>
+      ids.map((id) => ({
+        ...(id === target.id ? target : other),
+        status: 'applied' as const,
+        appliedInSnapshotId: snapshotId,
+      })),
+    );
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        chat: mockChatApi(),
+        comments: { ...mockCommentsApi(), markApplied },
+        snapshots: {
+          ...mockSnapshotsApi(),
+          list: vi.fn(async () => [nextSnapshot]),
+        },
+      },
+    });
+
+    setWorkspaceBackedDesign();
+    useCodesignStore.setState({
+      comments: [target, other],
+      currentSnapshotId: 'snapshot-current',
+    });
+
+    await useCodesignStore.getState().sendPrompt({ prompt: '', commentIds: [target.id] });
+
+    expect(generate).toHaveBeenCalledOnce();
+    const generatedPrompt = String(generatePayloads[0]?.['prompt'] ?? '');
+    expect(generatedPrompt).toContain(target.selector);
+    expect(generatedPrompt).toContain(target.text);
+    expect(generatedPrompt).not.toContain(other.selector);
+    expect(generatedPrompt).not.toContain(other.text);
+    expect(markApplied).toHaveBeenCalledWith(DEFAULT_DESIGN.id, [target.id], nextSnapshot.id);
+  });
+
+  it('keeps Apply sending every queued pending comment', async () => {
+    const generatePayloads: Array<Record<string, unknown>> = [];
+    const generate = vi.fn((payload: Record<string, unknown>) => {
+      generatePayloads.push(payload);
+      return Promise.resolve({
+        artifacts: [{ content: '<html>ok</html>' }],
+        message: 'Applied.',
+      });
+    });
+    const nextSnapshot = {
+      schemaVersion: 1 as const,
+      id: 'snapshot-all',
+      designId: DEFAULT_DESIGN.id,
+      parentId: null,
+      type: 'edit' as const,
+      prompt: null,
+      artifactType: 'html' as const,
+      artifactSource: '<html>ok</html>',
+      createdAt: new Date().toISOString(),
+      message: null,
+    };
+    const first = commentRow({ id: 'comment-a', selector: '#a', text: 'Edit A' });
+    const second = commentRow({ id: 'comment-b', selector: '#b', text: 'Edit B' });
+    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) =>
+      ids.map((id) => ({
+        ...(id === first.id ? first : second),
+        status: 'applied' as const,
+        appliedInSnapshotId: snapshotId,
+      })),
+    );
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        chat: mockChatApi(),
+        comments: { ...mockCommentsApi(), markApplied },
+        snapshots: {
+          ...mockSnapshotsApi(),
+          list: vi.fn(async () => [nextSnapshot]),
+        },
+      },
+    });
+
+    setWorkspaceBackedDesign();
+    useCodesignStore.setState({ comments: [first, second] });
+    useCodesignStore.getState().queueCommentForPrompt(first.id);
+    useCodesignStore.getState().queueCommentForPrompt(second.id);
+
+    await useCodesignStore.getState().sendPrompt({ prompt: '' });
+
+    const generatedPrompt = String(generatePayloads[0]?.['prompt'] ?? '');
+    expect(generatedPrompt).toContain(first.text);
+    expect(generatedPrompt).toContain(second.text);
+    expect(markApplied).toHaveBeenCalledWith(
+      DEFAULT_DESIGN.id,
+      [first.id, second.id],
+      nextSnapshot.id,
+    );
+    expect(useCodesignStore.getState().queuedCommentIds).toEqual([]);
+  });
+
+  it('does not send saved-only pending comments until they are queued for chat', async () => {
+    const generatePayloads: Array<Record<string, unknown>> = [];
+    const generate = vi.fn((payload: Record<string, unknown>) => {
+      generatePayloads.push(payload);
+      return Promise.resolve({
+        artifacts: [{ content: '<html>ok</html>' }],
+        message: 'Applied.',
+      });
+    });
+    const queued = commentRow({ id: 'comment-queued', selector: '#queued', text: 'Send this' });
+    const savedOnly = commentRow({
+      id: 'comment-saved',
+      selector: '#saved',
+      text: 'Keep this in comments only',
+    });
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+        snapshots: mockSnapshotsApi(),
+      },
+    });
+
+    setWorkspaceBackedDesign();
+    useCodesignStore.setState({ comments: [queued, savedOnly] });
+    useCodesignStore.getState().queueCommentForPrompt(queued.id);
+
+    await useCodesignStore.getState().sendPrompt({ prompt: 'Apply my queued feedback' });
+
+    const generatedPrompt = String(generatePayloads[0]?.['prompt'] ?? '');
+    expect(generatedPrompt).toContain(queued.text);
+    expect(generatedPrompt).not.toContain(savedOnly.text);
+  });
+
   it('routes inline comment edits through the main generate path with scoped prompt context', async () => {
     const generatePayloads: Array<Record<string, unknown>> = [];
     const generate = vi.fn((payload: Record<string, unknown>) => {
@@ -447,6 +813,43 @@ describe('useCodesignStore generation cancellation', () => {
     expect(useCodesignStore.getState().isGenerating).toBe(false);
   });
 
+  it('does not resurrect a stopped generation from late stream status events', async () => {
+    const cancelGeneration = vi.fn(() => Promise.resolve());
+
+    vi.stubGlobal('window', {
+      codesign: {
+        cancelGeneration,
+        chat: mockChatApi(),
+        snapshots: mockSnapshotsApi(),
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({
+      currentDesignId: DEFAULT_DESIGN.id,
+      generationByDesign: {
+        [DEFAULT_DESIGN.id]: { generationId: 'gen-stop-me', stage: 'streaming' },
+      },
+      isGenerating: true,
+      activeGenerationId: 'gen-stop-me',
+      generatingDesignId: DEFAULT_DESIGN.id,
+      generationStage: 'streaming',
+    });
+
+    useCodesignStore.getState().cancelGeneration();
+
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
+    expect(useCodesignStore.getState().activeGenerationId).toBeNull();
+
+    useCodesignStore
+      .getState()
+      .markGenerationRunning(DEFAULT_DESIGN.id, 'gen-stop-me', 'streaming');
+
+    expect(useCodesignStore.getState().generationByDesign).toEqual({});
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
+    expect(cancelGeneration).toHaveBeenCalledWith('gen-stop-me');
+  });
+
   it('refreshes main-process generation status before accepting a resubmit for the same design', async () => {
     const generate = vi.fn(async () => ({
       artifacts: [{ content: '<html></html>' }],
@@ -562,6 +965,52 @@ describe('useCodesignStore view navigation', () => {
     useCodesignStore.getState().setView('settings');
     useCodesignStore.getState().setView('workspace');
     expect(useCodesignStore.getState().view).toBe('workspace');
+  });
+
+  it('leaves comment mode and closes comment UI when navigating away from workspace', () => {
+    const selection: SelectedElement = {
+      selector: '#hero',
+      tag: 'section',
+      outerHTML: '<section id="hero">Hero</section>',
+      rect: { top: 0, left: 0, width: 10, height: 10 },
+    };
+    useCodesignStore.setState({
+      view: 'workspace',
+      interactionMode: 'comment',
+      selectedElement: selection,
+      commentBubble: selection,
+    });
+
+    useCodesignStore.getState().setView('hub');
+
+    expect(useCodesignStore.getState()).toMatchObject({
+      view: 'hub',
+      interactionMode: 'default',
+      selectedElement: null,
+      commentBubble: null,
+    });
+  });
+
+  it('leaves comment mode when opening settings directly', () => {
+    useCodesignStore.setState({
+      view: 'workspace',
+      interactionMode: 'comment',
+      commentBubble: {
+        selector: '#hero',
+        tag: 'section',
+        outerHTML: '<section id="hero">Hero</section>',
+        rect: { top: 0, left: 0, width: 10, height: 10 },
+      },
+    });
+
+    useCodesignStore.getState().openSettingsTab('diagnostics');
+
+    expect(useCodesignStore.getState()).toMatchObject({
+      view: 'settings',
+      settingsTab: 'diagnostics',
+      interactionMode: 'default',
+      commentBubble: null,
+    });
   });
 });
 

@@ -40,6 +40,37 @@ export function postModeToPreviewWindow(
   }
 }
 
+export function postPinSelectorToPreviewWindow(
+  win: Window | null | undefined,
+  selector: string,
+  onError: (message: string) => void,
+): boolean {
+  if (!win) return false;
+  try {
+    win.postMessage({ __codesign: true, type: 'PIN_SELECTOR', selector }, '*');
+    return true;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    onError(`PIN_SELECTOR postMessage failed: ${reason}`);
+    return false;
+  }
+}
+
+export function postClearPinToPreviewWindow(
+  win: Window | null | undefined,
+  onError: (message: string) => void,
+): boolean {
+  if (!win) return false;
+  try {
+    win.postMessage({ __codesign: true, type: 'CLEAR_PIN' }, '*');
+    return true;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    onError(`CLEAR_PIN postMessage failed: ${reason}`);
+    return false;
+  }
+}
+
 export function scaleRectForZoom(
   rect: { top: number; left: number; width: number; height: number },
   zoomPercent: number,

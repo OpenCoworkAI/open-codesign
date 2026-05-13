@@ -1,6 +1,11 @@
 import { useT } from '@open-codesign/i18n';
 import { buildPreviewDocument, isRenderablePath } from '@open-codesign/runtime';
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY, type PreviewMode } from '@open-codesign/shared';
+import {
+  type CommentRow,
+  DEFAULT_SOURCE_ENTRY,
+  LEGACY_SOURCE_ENTRY,
+  type PreviewMode,
+} from '@open-codesign/shared';
 import {
   ChevronRight,
   ExternalLink,
@@ -41,7 +46,9 @@ import {
   handlePreviewMessage,
   isTrustedPreviewMessageSource,
   type PreviewMessageHandlers,
+  postClearPinToPreviewWindow,
   postModeToPreviewWindow,
+  postPinSelectorToPreviewWindow,
   scaleRectForZoom,
   stablePreviewSourceKey,
 } from '../preview/helpers';
@@ -783,6 +790,12 @@ export function shouldShowTweakPanelForFile(input: {
   );
 }
 
+export function shouldEnableWorkspaceFilePreviewInteractions(input: {
+  previewKind: FilePreviewKind | null;
+}): boolean {
+  return input.previewKind === 'runtime';
+}
+
 export function shouldUseDesignPreviewResolverForFile(input: {
   path: string;
   previewKind: FilePreviewKind;
@@ -924,14 +937,40 @@ interface WorkspaceFilePreviewProps {
 
 interface WorkspaceFilePreviewMessageHandlerInput {
   previewZoom: number;
+  comments?: CommentRow[] | undefined;
+  currentSnapshotId?: string | null | undefined;
   selectCanvasElement: ReturnType<typeof useCodesignStore.getState>['selectCanvasElement'];
   openCommentBubble: ReturnType<typeof useCodesignStore.getState>['openCommentBubble'];
   applyLiveRects: ReturnType<typeof useCodesignStore.getState>['applyLiveRects'];
   pushIframeError: ReturnType<typeof useCodesignStore.getState>['pushIframeError'];
 }
 
+export function findReusableWorkspaceFileCommentForSelector(input: {
+  comments: CommentRow[];
+  currentSnapshotId: string | null;
+  selector: string;
+}): CommentRow | null {
+  let fallback: CommentRow | null = null;
+  for (let index = input.comments.length - 1; index >= 0; index--) {
+    const comment = input.comments[index];
+    if (
+      comment?.kind === 'edit' &&
+      comment.status === 'pending' &&
+      comment.selector === input.selector
+    ) {
+      if (input.currentSnapshotId !== null && comment.snapshotId === input.currentSnapshotId) {
+        return comment;
+      }
+      fallback ??= comment;
+    }
+  }
+  return fallback;
+}
+
 export function createWorkspaceFilePreviewMessageHandlers({
   previewZoom,
+  comments = [],
+  currentSnapshotId = null,
   selectCanvasElement,
   openCommentBubble,
   applyLiveRects,
@@ -946,11 +985,19 @@ export function createWorkspaceFilePreviewMessageHandlers({
         outerHTML: msg.outerHTML,
         rect: scaled,
       });
+      const existingComment = findReusableWorkspaceFileCommentForSelector({
+        comments,
+        currentSnapshotId,
+        selector: msg.selector,
+      });
       openCommentBubble({
         selector: msg.selector,
         tag: msg.tag,
         outerHTML: msg.outerHTML,
         rect: scaled,
+        ...(existingComment
+          ? { existingCommentId: existingComment.id, initialText: existingComment.text }
+          : {}),
         ...(typeof msg.parentOuterHTML === 'string' && msg.parentOuterHTML.length > 0
           ? { parentOuterHTML: msg.parentOuterHTML }
           : {}),
@@ -1431,6 +1478,9 @@ export function WorkspaceFilePreview({
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
   const openCommentBubble = useCodesignStore((s) => s.openCommentBubble);
   const applyLiveRects = useCodesignStore((s) => s.applyLiveRects);
+  const comments = useCodesignStore((s) => s.comments);
+  const currentSnapshotId = useCodesignStore((s) => s.currentSnapshotId);
+  const commentBubble = useCodesignStore((s) => s.commentBubble);
   const { files: observedFiles } = useDesignFiles(files ? null : currentDesignId);
   const workspaceFiles = files ?? observedFiles;
   const currentDesign = designs.find((d) => d.id === currentDesignId);
@@ -1481,6 +1531,8 @@ export function WorkspaceFilePreview({
         event.data,
         createWorkspaceFilePreviewMessageHandlers({
           previewZoom,
+          comments,
+          currentSnapshotId,
           selectCanvasElement: (selection) => {
             if (interactive) selectCanvasElement(selection);
           },
@@ -1500,6 +1552,8 @@ export function WorkspaceFilePreview({
   }, [
     pushIframeError,
     previewZoom,
+    comments,
+    currentSnapshotId,
     selectCanvasElement,
     openCommentBubble,
     applyLiveRects,
@@ -1513,6 +1567,19 @@ export function WorkspaceFilePreview({
       pushIframeError,
     );
   }, [interactionMode, pushIframeError, interactive]);
+
+  useEffect(() => {
+    if (!interactive) return;
+    if (commentBubble && interactionMode === 'comment') {
+      postPinSelectorToPreviewWindow(
+        iframeRef.current?.contentWindow,
+        commentBubble.selector,
+        pushIframeError,
+      );
+      return;
+    }
+    postClearPinToPreviewWindow(iframeRef.current?.contentWindow, pushIframeError);
+  }, [commentBubble, interactionMode, interactive, pushIframeError]);
 
   useEffect(() => {
     // Re-read when the file watcher reports changed metadata for either the
@@ -1728,6 +1795,9 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
   const externalFallbackFile = externalFallbackPath
     ? (files.find((f) => f.path === externalFallbackPath) ?? null)
     : null;
+  const externalFallbackPreviewKind = externalFallbackPath
+    ? previewKindForFile(externalFallbackPath, externalFallbackFile?.kind)
+    : null;
   const usesExternalPreview =
     effectivePreviewMode === 'connected-url' || effectivePreviewMode === 'external-app';
   const showPreviewHeaderAction =
@@ -1812,7 +1882,9 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
             path={externalFallbackPath}
             file={externalFallbackFile}
             files={files}
-            interactive={isDedicatedFileTab}
+            interactive={shouldEnableWorkspaceFilePreviewInteractions({
+              previewKind: externalFallbackPreviewKind,
+            })}
           />
         );
       }
@@ -1829,7 +1901,9 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
             path={selectedPath}
             file={selectedFile}
             files={files}
-            interactive={isDedicatedFileTab}
+            interactive={shouldEnableWorkspaceFilePreviewInteractions({
+              previewKind: previewKindForFile(selectedPath, selectedFile.kind),
+            })}
           />
         );
       }
@@ -1841,7 +1915,9 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
           path={selectedPath}
           file={selectedFile}
           files={files}
-          interactive={isDedicatedFileTab}
+          interactive={shouldEnableWorkspaceFilePreviewInteractions({
+            previewKind: previewKindForFile(selectedPath, selectedFile?.kind),
+          })}
         />
       );
     }

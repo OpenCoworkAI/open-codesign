@@ -732,8 +732,8 @@
     "title": "Comentar em",
     "close": "Fechar balão de comentário",
     "placeholder": "Descreva a mudança ou deixe uma nota para você…",
-    "saveNote": "Comentar",
-    "sendToClaude": "Enviar para o Claude",
+    "saveNote": "Salvar comentário",
+    "sendToChat": "Adicionar ao chat",
     "saving": "Salvando…",
     "sending": "Enviando…",
     "scope": {
@@ -766,6 +766,8 @@
       "close": "Fechar painel de comentários",
       "empty": "Nenhum comentário ainda. Clique em qualquer elemento do canvas para deixar um.",
       "delete": "Excluir comentário",
+      "sendToChat": "Adicionar ao chat",
+      "addedToChat": "Já está no chat",
       "untitled": "(sem texto)",
       "status": {
         "pending": "Pendente",

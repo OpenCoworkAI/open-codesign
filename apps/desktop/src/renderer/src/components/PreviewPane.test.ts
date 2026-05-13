@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { useCodesignStore } from '../store';
 import {
   computeFitPreviewZoom,
+  findReusablePendingCommentForSelector,
   handlePreviewMessage,
   isPreviewPaneWelcomeState,
   isTrustedPreviewMessageSource,
+  postClearPinToPreviewWindow,
   postModeToPreviewWindow,
+  postPinSelectorToPreviewWindow,
   previewArtboardFrameClass,
   previewArtboardStyle,
   previewPaneLayoutClasses,
@@ -13,6 +16,21 @@ import {
   scaleRectForZoom,
   stablePreviewSourceKey,
 } from './PreviewPane';
+
+const COMMENT_BASE = {
+  schemaVersion: 1 as const,
+  designId: 'design-1',
+  snapshotId: 'snapshot-1',
+  kind: 'edit' as const,
+  selector: '#hero',
+  tag: 'section',
+  outerHTML: '<section id="hero">Hero</section>',
+  rect: { top: 0, left: 0, width: 100, height: 80 },
+  text: 'Make it softer',
+  status: 'pending' as const,
+  createdAt: '2026-05-13T00:00:00.000Z',
+  appliedInSnapshotId: null,
+};
 
 describe('isTrustedPreviewMessageSource', () => {
   it('accepts only messages from the active preview iframe window', () => {
@@ -123,6 +141,45 @@ describe('preview pane welcome state', () => {
         designHasContent: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe('findReusablePendingCommentForSelector', () => {
+  it('reuses the pending comment already attached to the same selector', () => {
+    const comment = { ...COMMENT_BASE, id: 'comment-1' };
+
+    expect(
+      findReusablePendingCommentForSelector({
+        comments: [comment],
+        currentSnapshotId: 'snapshot-1',
+        selector: '#hero',
+      }),
+    ).toBe(comment);
+  });
+
+  it('ignores applied comments and comments from another selector', () => {
+    expect(
+      findReusablePendingCommentForSelector({
+        comments: [
+          { ...COMMENT_BASE, id: 'other-selector', selector: '#other' },
+          { ...COMMENT_BASE, id: 'applied', status: 'applied' as const },
+        ],
+        currentSnapshotId: 'snapshot-1',
+        selector: '#hero',
+      }),
+    ).toBeNull();
+  });
+
+  it('falls back to the latest pending comment for the same selector when snapshots drift', () => {
+    const stale = { ...COMMENT_BASE, id: 'stale', snapshotId: 'snapshot-old' };
+
+    expect(
+      findReusablePendingCommentForSelector({
+        comments: [stale],
+        currentSnapshotId: 'snapshot-1',
+        selector: '#hero',
+      }),
+    ).toBe(stale);
   });
 });
 
@@ -300,6 +357,33 @@ describe('postModeToPreviewWindow', () => {
   it('returns false silently when the window handle is missing', () => {
     const onError = vi.fn();
     expect(postModeToPreviewWindow(null, 'comment', onError)).toBe(false);
+    expect(onError).not.toHaveBeenCalled();
+  });
+});
+
+describe('preview pin postMessage helpers', () => {
+  it('posts PIN_SELECTOR for saved-comment selections', () => {
+    const onError = vi.fn();
+    const post = vi.fn();
+    const win = { postMessage: post } as unknown as Window;
+
+    expect(postPinSelectorToPreviewWindow(win, '#hero', onError)).toBe(true);
+
+    expect(post).toHaveBeenCalledWith(
+      { __codesign: true, type: 'PIN_SELECTOR', selector: '#hero' },
+      '*',
+    );
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('posts CLEAR_PIN for closed comment bubbles', () => {
+    const onError = vi.fn();
+    const post = vi.fn();
+    const win = { postMessage: post } as unknown as Window;
+
+    expect(postClearPinToPreviewWindow(win, onError)).toBe(true);
+
+    expect(post).toHaveBeenCalledWith({ __codesign: true, type: 'CLEAR_PIN' }, '*');
     expect(onError).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
-import { Send, X } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { Check, Send, X } from 'lucide-react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface CommentBubbleProps {
@@ -13,8 +13,8 @@ export interface CommentBubbleProps {
    *  unsent draft keyed by anchor id. Without this, switching to a different
    *  chip / element silently discarded the current text. */
   onDraftChange?: (text: string) => void;
-  onClose: () => void;
-  onSendToClaude: (text: string) => Promise<void> | void;
+  onSaveAndClose: (text: string) => Promise<void> | void;
+  onSaveAndSend: (text: string) => Promise<void> | void;
 }
 
 /** English fallback text for each quick action id — sent to the LLM. */
@@ -35,15 +35,38 @@ export function CommentBubble({
   rect,
   initialText,
   onDraftChange,
-  onClose,
-  onSendToClaude,
+  onSaveAndClose,
+  onSaveAndSend,
 }: CommentBubbleProps) {
   const t = useT();
   const [draft, setDraft] = useState(initialText ?? '');
-  const [pending, setPending] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'save' | 'send' | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleId = useId();
+  const pending = pendingAction !== null;
+
+  const runAction = useCallback(
+    async (action: 'save' | 'send', handler: (text: string) => Promise<void> | void) => {
+      const text = draft.trim();
+      if ((action === 'send' && !text) || pendingAction) return;
+      setPendingAction(action);
+      try {
+        await handler(text);
+      } finally {
+        setPendingAction(null);
+      }
+    },
+    [draft, pendingAction],
+  );
+
+  const handleSaveAndClose = useCallback(async () => {
+    await runAction('save', onSaveAndClose);
+  }, [onSaveAndClose, runAction]);
+
+  const handleSaveAndSend = useCallback(async () => {
+    await runAction('send', onSaveAndSend);
+  }, [onSaveAndSend, runAction]);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -56,24 +79,13 @@ export function CommentBubble({
     // frustrating failure mode. Explicit close mirrors how chat / dialog UIs
     // treat in-progress text.
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') void handleSaveAndClose();
     }
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
-
-  async function handleSubmit() {
-    const text = draft.trim();
-    if (!text || pending) return;
-    setPending(true);
-    try {
-      await onSendToClaude(text);
-    } finally {
-      setPending(false);
-    }
-  }
+  }, [handleSaveAndClose]);
 
   // Truncated element preview — just the tag + key attributes
   const tagPreview = (() => {
@@ -106,7 +118,8 @@ export function CommentBubble({
         </span>
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => void handleSaveAndClose()}
+          disabled={pending}
           className="rounded-full p-[3px] text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
           aria-label={t('commentBubble.close')}
         >
@@ -131,20 +144,31 @@ export function CommentBubble({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
-                void handleSubmit();
+                void handleSaveAndSend();
               }
             }}
             placeholder={t('commentBubble.placeholder')}
             rows={2}
             disabled={pending}
-            className="block w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-[var(--space-3)] py-[var(--space-2)] pr-[40px] text-[13px] leading-[1.5] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[border-color,box-shadow] duration-150"
+            className="block w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-[var(--space-3)] py-[var(--space-2)] pr-[72px] text-[13px] leading-[1.5] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[border-color,box-shadow] duration-150"
           />
           <button
             type="button"
-            onClick={() => void handleSubmit()}
+            onClick={() => void handleSaveAndClose()}
+            disabled={pending}
+            className="absolute right-[42px] bottom-[8px] rounded-lg bg-[var(--color-surface)] p-[6px] text-[var(--color-text-primary)] shadow-sm transition-all duration-150 hover:bg-[var(--color-surface-hover)] active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+            aria-label={t('commentBubble.saveNote')}
+            title={t('commentBubble.saveNote')}
+          >
+            <Check className="w-[14px] h-[14px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSaveAndSend()}
             disabled={!draft.trim() || pending}
             className="absolute right-[8px] bottom-[8px] rounded-lg bg-[var(--color-accent)] p-[6px] text-white shadow-sm transition-all duration-150 hover:bg-[var(--color-accent-hover)] hover:shadow-md active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
-            aria-label={t('commentBubble.sendToClaude')}
+            aria-label={t('commentBubble.sendToChat')}
+            title={t('commentBubble.sendToChat')}
           >
             <Send className="w-[14px] h-[14px]" />
           </button>

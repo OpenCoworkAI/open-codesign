@@ -195,6 +195,10 @@ export interface CodesignState {
   // Workstream D — comments
   comments: CommentRow[];
   commentsLoaded: boolean;
+  /** Renderer-only queue of saved pending comments that the user explicitly
+   *  moved into the chat composer. Saved comments not in this queue stay in
+   *  the Comments panel only and are not sent to the agent. */
+  queuedCommentIds: string[];
   commentBubble: CommentBubbleAnchor | null;
   /** Id of the snapshot currently visible in the preview — pins filter by it. */
   currentSnapshotId: string | null;
@@ -257,6 +261,8 @@ export interface CodesignState {
     attachments?: LocalInputFile[] | undefined;
     referenceUrl?: string | undefined;
     pendingEdits?: PendingEditEnrichment[] | undefined;
+    /** When set, only these saved pending comments are injected/applied. */
+    commentIds?: string[] | undefined;
     /** Silent prompts skip the user chat bubble and the auto-rename trigger.
      *  Used by the auto-polish flow so the injected "deepen" request isn't
      *  visible as a user message — the agent still receives it and responds
@@ -278,6 +284,10 @@ export interface CodesignState {
    *  if the condition is met (first round succeeded, no prior polish). Call
    *  from useAgentStream's agent_end handler. */
   tryAutoPolish: (designId: string, locale: string) => void;
+  /** Generation ids the user explicitly stopped. Late stream events for
+   *  these ids are ignored so the renderer cannot flip back to "running". */
+  cancelledGenerationIds: Set<string>;
+  forgetCancelledGeneration: (generationId: string) => void;
   cancelGeneration: () => void;
   retryLastPrompt: () => Promise<void>;
   applyInlineComment: (comment: string) => Promise<void>;
@@ -390,6 +400,8 @@ export interface CodesignState {
   loadCommentsForCurrentDesign: () => Promise<void>;
   openCommentBubble: (anchor: CommentBubbleAnchor) => void;
   closeCommentBubble: () => void;
+  queueCommentForPrompt: (id: string) => void;
+  unqueueCommentForPrompt: (id: string) => void;
   addComment: (input: {
     kind: CommentKind;
     selector: string;
@@ -453,6 +465,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   toastMessage: null,
   autoPolishEnabled: false,
   autoPolishFired: new Set<string>(),
+  cancelledGenerationIds: new Set<string>(),
 
   theme: readInitialTheme(),
   view: 'hub' as AppView,
@@ -485,6 +498,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   comments: [],
   commentsLoaded: false,
+  queuedCommentIds: [],
   commentBubble: null,
   currentSnapshotId: null,
   liveRects: {},
@@ -700,7 +714,13 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   setView(view: AppView) {
     const prev = get().view;
-    set({ view, previousView: prev === view ? get().previousView : prev });
+    set({
+      view,
+      previousView: prev === view ? get().previousView : prev,
+      ...(view !== 'workspace'
+        ? { interactionMode: 'default' as const, selectedElement: null, commentBubble: null }
+        : {}),
+    });
   },
 
   openSettingsTab(tab: SettingsTab) {
@@ -709,6 +729,9 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       view: 'settings',
       previousView: prev === 'settings' ? get().previousView : prev,
       settingsTab: tab,
+      interactionMode: 'default',
+      selectedElement: null,
+      commentBubble: null,
     });
   },
 

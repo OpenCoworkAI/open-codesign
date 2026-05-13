@@ -9,12 +9,13 @@ import { useCodesignStore } from '../../store';
  *
  * Click a chip body → reopen the bubble for that comment.
  * Click the × → delete the comment (pin disappears too).
- * Click Apply → fire sendPrompt with empty prompt so staged edits get
+ * Click Apply → fire sendPrompt with empty prompt so queued edits get
  * flushed via buildEnrichedPrompt in one batch.
  */
 export function CommentChipBar() {
   const t = useT();
   const comments = useCodesignStore((s) => s.comments);
+  const queuedCommentIds = useCodesignStore((s) => s.queuedCommentIds);
   const openCommentBubble = useCodesignStore((s) => s.openCommentBubble);
   const removeComment = useCodesignStore((s) => s.removeComment);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
@@ -25,7 +26,10 @@ export function CommentChipBar() {
     (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
   );
 
-  const pending = comments.filter((c) => c != null && c.kind === 'edit' && c.status === 'pending');
+  const queued = new Set(queuedCommentIds);
+  const pending = comments.filter(
+    (c) => c != null && c.kind === 'edit' && c.status === 'pending' && queued.has(c.id),
+  );
   if (pending.length === 0) return null;
 
   const isReady =

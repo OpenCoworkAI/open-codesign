@@ -1,5 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { buildPreviewDocument } from '@open-codesign/runtime';
+import type { CommentRow } from '@open-codesign/shared';
 import {
   type CSSProperties,
   type DragEvent,
@@ -19,7 +20,9 @@ import {
   formatIframeError,
   handlePreviewMessage,
   isTrustedPreviewMessageSource,
+  postClearPinToPreviewWindow,
   postModeToPreviewWindow,
+  postPinSelectorToPreviewWindow,
   scaleRectForZoom,
   stablePreviewSourceKey,
 } from '../preview/helpers';
@@ -44,7 +47,9 @@ export {
   formatIframeError,
   handlePreviewMessage,
   isTrustedPreviewMessageSource,
+  postClearPinToPreviewWindow,
   postModeToPreviewWindow,
+  postPinSelectorToPreviewWindow,
   scaleRectForZoom,
   stablePreviewSourceKey,
 } from '../preview/helpers';
@@ -122,6 +127,28 @@ export function computeFitPreviewZoom(input: {
   const availableHeight = Math.max(1, input.containerHeight - PREVIEW_FRAME_PADDING_PX);
   const fit = Math.min(availableWidth / frame.width, availableHeight / frame.height) * 100;
   return Math.min(100, Math.max(25, Math.floor(fit)));
+}
+
+export function findReusablePendingCommentForSelector(input: {
+  comments: CommentRow[];
+  currentSnapshotId: string | null;
+  selector: string;
+}): CommentRow | null {
+  let fallback: CommentRow | null = null;
+  for (let index = input.comments.length - 1; index >= 0; index--) {
+    const comment = input.comments[index];
+    if (
+      comment?.kind === 'edit' &&
+      comment.status === 'pending' &&
+      comment.selector === input.selector
+    ) {
+      if (input.currentSnapshotId !== null && comment.snapshotId === input.currentSnapshotId) {
+        return comment;
+      }
+      fallback ??= comment;
+    }
+  }
+  return fallback;
 }
 
 export function previewArtboardStyle(viewport: FramedPreviewViewport): CSSProperties {
@@ -287,6 +314,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const previewSource = useCodesignStore((s) => s.previewSource);
   const previewSourceByDesign = useCodesignStore((s) => s.previewSourceByDesign);
   const recentDesignIds = useCodesignStore((s) => s.recentDesignIds);
+  const view = useCodesignStore((s) => s.view);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
   const chatMessages = useCodesignStore((s) => s.chatMessages);
@@ -309,6 +337,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const openCommentBubble = useCodesignStore((s) => s.openCommentBubble);
   const closeCommentBubble = useCodesignStore((s) => s.closeCommentBubble);
   const submitComment = useCodesignStore((s) => s.submitComment);
+  const queueCommentForPrompt = useCodesignStore((s) => s.queueCommentForPrompt);
   const applyLiveRects = useCodesignStore((s) => s.applyLiveRects);
   const clearLiveRects = useCodesignStore((s) => s.clearLiveRects);
   const liveRects = useCodesignStore((s) => s.liveRects);
@@ -451,11 +480,19 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             outerHTML: msg.outerHTML,
             rect: scaled,
           });
+          const existingComment = findReusablePendingCommentForSelector({
+            comments,
+            currentSnapshotId,
+            selector: msg.selector,
+          });
           openCommentBubble({
             selector: msg.selector,
             tag: msg.tag,
             outerHTML: msg.outerHTML,
             rect: scaled,
+            ...(existingComment
+              ? { existingCommentId: existingComment.id, initialText: existingComment.text }
+              : {}),
             ...(typeof msg.parentOuterHTML === 'string' && msg.parentOuterHTML.length > 0
               ? { parentOuterHTML: msg.parentOuterHTML }
               : {}),
@@ -475,7 +512,15 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [pushIframeError, selectCanvasElement, openCommentBubble, previewZoom, applyLiveRects]);
+  }, [
+    pushIframeError,
+    selectCanvasElement,
+    openCommentBubble,
+    previewZoom,
+    comments,
+    currentSnapshotId,
+    applyLiveRects,
+  ]);
 
   // Pool entries: active design first (using the freshest in-memory
   // previewSource), then any other recently-visited designs that still have a
@@ -503,6 +548,20 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   }, [currentDesignId, previewSource, previewSourceByDesign, recentDesignIds]);
 
   const activeTab = canvasTabs[activeCanvasTab];
+
+  useEffect(() => {
+    if (activeTab?.kind === 'files' || activeTab?.kind === 'file') return;
+    if (commentBubble && interactionMode === 'comment') {
+      postPinSelectorToPreviewWindow(
+        iframeRef.current?.contentWindow,
+        commentBubble.selector,
+        pushIframeError,
+      );
+      return;
+    }
+    postClearPinToPreviewWindow(iframeRef.current?.contentWindow, pushIframeError);
+  }, [activeTab?.kind, commentBubble, interactionMode, pushIframeError]);
+
   const showCommentUi = interactionMode === 'comment';
   const snapshotComments = currentSnapshotId
     ? comments.filter((c) => c.snapshotId === currentSnapshotId)
@@ -639,7 +698,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         >
           {body}
         </div>
-        {commentBubble && interactionMode === 'comment'
+        {commentBubble && interactionMode === 'comment' && view === 'workspace'
           ? (() => {
               const liveForBubble = liveRects[commentBubble.selector];
               const scaled = liveForBubble
@@ -655,6 +714,33 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
               // when the user clicks another chip and comes back.
               const stashed = bubbleDraftsRef.current.get(bubbleKey);
               const initialText = stashed ?? commentBubble.initialText;
+              const clearPinAndClose = () => {
+                postClearPinToPreviewWindow(iframeRef.current?.contentWindow, pushIframeError);
+                closeCommentBubble();
+              };
+              const persistComment = async (text: string) => {
+                const trimmed = text.trim();
+                if (!trimmed && !existingId) {
+                  bubbleDraftsRef.current.delete(bubbleKey);
+                  return { row: null };
+                }
+                const row = await submitComment({
+                  kind: 'edit',
+                  selector: commentBubble.selector,
+                  tag: commentBubble.tag,
+                  outerHTML: commentBubble.outerHTML,
+                  rect: commentBubble.rect,
+                  text: trimmed,
+                  scope: 'element',
+                  ...(existingId ? { existingCommentId: existingId } : {}),
+                  ...(commentBubble.parentOuterHTML
+                    ? { parentOuterHTML: commentBubble.parentOuterHTML }
+                    : {}),
+                });
+                if (!row) return null;
+                bubbleDraftsRef.current.delete(bubbleKey);
+                return { row };
+              };
               return (
                 <CommentBubble
                   key={bubbleKey}
@@ -667,49 +753,18 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
                     if (text.length === 0) bubbleDraftsRef.current.delete(bubbleKey);
                     else bubbleDraftsRef.current.set(bubbleKey, text);
                   }}
-                  onClose={() => {
-                    const win = iframeRef.current?.contentWindow;
-                    if (win) {
-                      try {
-                        win.postMessage({ __codesign: true, type: 'CLEAR_PIN' }, '*');
-                      } catch {
-                        /* noop */
-                      }
-                    }
-                    closeCommentBubble();
+                  onSaveAndClose={async (text: string) => {
+                    const result = await persistComment(text);
+                    if (result === null) return;
+                    clearPinAndClose();
                   }}
-                  onSendToClaude={async (text: string) => {
-                    const row = await submitComment({
-                      kind: 'edit',
-                      selector: commentBubble.selector,
-                      tag: commentBubble.tag,
-                      outerHTML: commentBubble.outerHTML,
-                      rect: commentBubble.rect,
-                      text,
-                      scope: 'element',
-                      ...(existingId ? { existingCommentId: existingId } : {}),
-                      ...(commentBubble.parentOuterHTML
-                        ? { parentOuterHTML: commentBubble.parentOuterHTML }
-                        : {}),
-                    });
-                    // On failure (no snapshot, IPC error, duplicate) keep the
-                    // bubble open so the user's draft survives. A toast has
-                    // already been surfaced by the store layer.
-                    if (!row) return;
-                    // Persisted — wipe the stashed draft so the next open
-                    // starts clean (a reopened chip re-reads from DB).
-                    bubbleDraftsRef.current.delete(bubbleKey);
-                    const win = iframeRef.current?.contentWindow;
-                    if (win) {
-                      try {
-                        win.postMessage({ __codesign: true, type: 'CLEAR_PIN' }, '*');
-                      } catch {
-                        /* noop */
-                      }
+                  onSaveAndSend={async (text: string) => {
+                    const result = await persistComment(text);
+                    if (result === null) return;
+                    clearPinAndClose();
+                    if (result.row) {
+                      queueCommentForPrompt(result.row.id);
                     }
-                    closeCommentBubble();
-                    // Stage only — user clicks the "Apply" button on the chip bar
-                    // to send all accumulated edits in one go.
                   }}
                 />
               );

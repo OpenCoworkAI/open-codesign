@@ -1,3 +1,4 @@
+import type { CommentRow } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { openFileTab } from '../store/slices/tabs';
 import {
@@ -8,12 +9,14 @@ import {
   detectedPreviewTarget,
   effectivePreviewModeForDesign,
   externalAppManagedFallbackPath,
+  findReusableWorkspaceFileCommentForSelector,
   htmlRequiresWorkspaceDevServer,
   isMarkdownPreviewFile,
   isPreviewSourceUsableForSelectedPath,
   isRenderableDesignFileKind,
   previewKindForFile,
   resolveReferencedWorkspacePreviewPath,
+  shouldEnableWorkspaceFilePreviewInteractions,
   shouldShowTweakPanelForFile,
   shouldUseDesignPreviewResolverForFile,
   splitMarkdownFrontmatter,
@@ -23,6 +26,24 @@ import {
 } from './FilesTabView';
 
 describe('FilesTabView preview helpers', () => {
+  const commentRow = (overrides: Partial<CommentRow> = {}): CommentRow => ({
+    schemaVersion: 1,
+    id: overrides.id ?? 'comment-1',
+    designId: overrides.designId ?? 'design-1',
+    snapshotId: overrides.snapshotId ?? 'snapshot-1',
+    kind: overrides.kind ?? 'edit',
+    selector: overrides.selector ?? '#hero',
+    tag: overrides.tag ?? 'section',
+    outerHTML: overrides.outerHTML ?? '<section id="hero">Hello</section>',
+    rect: overrides.rect ?? { top: 10, left: 20, width: 100, height: 50 },
+    text: overrides.text ?? 'Saved note',
+    status: overrides.status ?? 'pending',
+    createdAt: overrides.createdAt ?? '2026-05-13T00:00:00.000Z',
+    appliedInSnapshotId: overrides.appliedInSnapshotId ?? null,
+    ...(overrides.scope ? { scope: overrides.scope } : {}),
+    ...(overrides.parentOuterHTML ? { parentOuterHTML: overrides.parentOuterHTML } : {}),
+  });
+
   it('clamps the file browser splitter width to usable bounds', () => {
     expect(clampFileBrowserWidth(120, 1280)).toBe(260);
     expect(clampFileBrowserWidth(480.4, 1280)).toBe(480);
@@ -145,6 +166,52 @@ describe('FilesTabView preview helpers', () => {
     });
   });
 
+  it('prefills the existing pending comment when reselecting the same file preview element', () => {
+    const existing = commentRow({ id: 'comment-existing', text: 'Keep the saved note visible' });
+    const selectCanvasElement = vi.fn();
+    const openCommentBubble = vi.fn();
+    const applyLiveRects = vi.fn();
+    const pushIframeError = vi.fn();
+    const handlers = createWorkspaceFilePreviewMessageHandlers({
+      previewZoom: 100,
+      comments: [existing],
+      currentSnapshotId: existing.snapshotId,
+      selectCanvasElement,
+      openCommentBubble,
+      applyLiveRects,
+      pushIframeError,
+    });
+
+    handlers.onElementSelected({
+      __codesign: true,
+      type: 'ELEMENT_SELECTED',
+      selector: existing.selector,
+      tag: existing.tag,
+      outerHTML: existing.outerHTML,
+      rect: existing.rect,
+    });
+
+    expect(openCommentBubble).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selector: existing.selector,
+        existingCommentId: existing.id,
+        initialText: existing.text,
+      }),
+    );
+  });
+
+  it('falls back to a pending comment for the same selector when the file preview has no current snapshot', () => {
+    const existing = commentRow({ id: 'comment-existing', snapshotId: 'snapshot-stale' });
+
+    expect(
+      findReusableWorkspaceFileCommentForSelector({
+        comments: [existing],
+        currentSnapshotId: null,
+        selector: existing.selector,
+      }),
+    ).toBe(existing);
+  });
+
   it('marks html/jsx/tsx files as renderable', () => {
     expect(isRenderableDesignFileKind('html')).toBe(true);
     expect(isRenderableDesignFileKind('jsx')).toBe(true);
@@ -217,6 +284,12 @@ describe('FilesTabView preview helpers', () => {
         hasPreviewSource: false,
       }),
     ).toBe(false);
+  });
+
+  it('keeps local workspace runtime previews interactive outside dedicated file tabs', () => {
+    expect(shouldEnableWorkspaceFilePreviewInteractions({ previewKind: 'runtime' })).toBe(true);
+    expect(shouldEnableWorkspaceFilePreviewInteractions({ previewKind: 'markdown' })).toBe(false);
+    expect(shouldEnableWorkspaceFilePreviewInteractions({ previewKind: null })).toBe(false);
   });
 
   it('uses the design-level resolver only for generated preview fallbacks', () => {

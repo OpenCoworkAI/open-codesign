@@ -771,8 +771,8 @@
     "title": "Comentar en",
     "close": "Cerrar burbuja de comentario",
     "placeholder": "Describe el cambio, o deja una nota para ti mismo…",
-    "saveNote": "Comentar",
-    "sendToClaude": "Enviar a Claude",
+    "saveNote": "Guardar comentario",
+    "sendToChat": "Agregar al chat",
     "saving": "Guardando…",
     "sending": "Enviando…",
     "scope": {
@@ -805,6 +805,8 @@
       "close": "Cerrar panel de comentarios",
       "empty": "Sin comentarios aún. Haz clic en cualquier elemento del lienzo para dejar uno.",
       "delete": "Eliminar comentario",
+      "sendToChat": "Agregar al chat",
+      "addedToChat": "Ya está en el chat",
       "untitled": "(sin texto)",
       "status": {
         "pending": "Pendiente",

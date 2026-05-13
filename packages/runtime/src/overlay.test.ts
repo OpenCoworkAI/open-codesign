@@ -204,6 +204,15 @@ interface RectHarness {
   postedToParent: Array<Record<string, unknown>>;
   runRaf: () => void;
   registerElement: (selector: string, rect: DOMRect) => void;
+  registerBodyPath: (selector: string, rect: DOMRect) => void;
+}
+
+interface FakeElement {
+  tagName: string;
+  children: FakeElement[];
+  getBoundingClientRect: () => DOMRect;
+  scrollIntoView: () => void;
+  style: { outline?: string };
 }
 
 function runOverlayForRects(): RectHarness {
@@ -211,10 +220,25 @@ function runOverlayForRects(): RectHarness {
   const windowListeners = new Map<string, (e: unknown) => void>();
   const posted: Array<Record<string, unknown>> = [];
   const parent = { postMessage: (msg: unknown) => posted.push(msg as Record<string, unknown>) };
-  const elements = new Map<string, { getBoundingClientRect: () => DOMRect }>();
+  const elements = new Map<
+    string,
+    {
+      getBoundingClientRect: () => DOMRect;
+      scrollIntoView: () => void;
+      style: { outline?: string };
+    }
+  >();
+  const makeElement = (tagName: string, rect = makeRect(0, 0, 0, 0)): FakeElement => ({
+    tagName,
+    children: [],
+    getBoundingClientRect: () => rect,
+    scrollIntoView: () => {},
+    style: {},
+  });
+  const body = makeElement('BODY');
 
   const fakeDocument = {
-    body: {},
+    body,
     addEventListener: (type: string, fn: (e: unknown) => void) => {
       documentListeners.set(type, fn);
     },
@@ -254,7 +278,40 @@ function runOverlayForRects(): RectHarness {
       if (fn) fn();
     },
     registerElement: (selector, rect) => {
-      elements.set(selector, { getBoundingClientRect: () => rect });
+      elements.set(selector, {
+        getBoundingClientRect: () => rect,
+        scrollIntoView: () => {},
+        style: {},
+      });
+    },
+    registerBodyPath: (selector, rect) => {
+      const parts = selector.slice(1).split('/');
+      let current = body;
+      for (const part of parts) {
+        const match = /^([a-zA-Z][a-zA-Z0-9-]*)\[(\d+)\]$/.exec(part);
+        if (!match) throw new Error(`Invalid test selector: ${selector}`);
+        const tag = String(match[1]).toUpperCase();
+        const index = Number(match[2]);
+        let seen = 0;
+        let next: FakeElement | undefined;
+        for (const child of current.children) {
+          if (child.tagName === tag) {
+            seen += 1;
+            if (seen === index) {
+              next = child;
+              break;
+            }
+          }
+        }
+        while (!next) {
+          const created = makeElement(tag);
+          current.children.push(created);
+          seen += 1;
+          if (seen === index) next = created;
+        }
+        current = next;
+      }
+      current.getBoundingClientRect = () => rect;
     },
   };
 }
@@ -358,5 +415,56 @@ describe('OVERLAY_SCRIPT rect broadcast', () => {
     const entries = rectMsg?.['entries'] as Array<{ selector: string }>;
     expect(entries).toHaveLength(1);
     expect(entries[0]?.selector).toBe('#live');
+  });
+
+  it('pins and watches a selector sent from the parent', () => {
+    const h = runOverlayForRects();
+    h.registerElement('#saved-comment-target', makeRect(12, 24, 48, 96));
+
+    h.windowListeners.get('message')?.({
+      source: h.parent,
+      data: {
+        __codesign: true,
+        type: 'PIN_SELECTOR',
+        selector: '#saved-comment-target',
+      },
+    });
+    h.runRaf();
+
+    const rectMsg = h.postedToParent.find((m) => m['type'] === 'ELEMENT_RECTS');
+    expect(rectMsg).toBeDefined();
+    const entries = rectMsg?.['entries'] as Array<{
+      selector: string;
+      rect: Record<string, number>;
+    }>;
+    expect(entries[0]).toMatchObject({
+      selector: '#saved-comment-target',
+      rect: { top: 12, left: 24, width: 48, height: 96 },
+    });
+  });
+
+  it('resolves body-relative XPath selectors saved by click selection', () => {
+    const h = runOverlayForRects();
+    h.registerBodyPath('/div[1]/span[1]', makeRect(20, 30, 40, 50));
+
+    h.windowListeners.get('message')?.({
+      source: h.parent,
+      data: {
+        __codesign: true,
+        type: 'PIN_SELECTOR',
+        selector: '/div[1]/span[1]',
+      },
+    });
+    h.runRaf();
+
+    const rectMsg = h.postedToParent.find((m) => m['type'] === 'ELEMENT_RECTS');
+    const entries = rectMsg?.['entries'] as Array<{
+      selector: string;
+      rect: Record<string, number>;
+    }>;
+    expect(entries[0]).toMatchObject({
+      selector: '/div[1]/span[1]',
+      rect: { top: 20, left: 30, width: 40, height: 50 },
+    });
   });
 });

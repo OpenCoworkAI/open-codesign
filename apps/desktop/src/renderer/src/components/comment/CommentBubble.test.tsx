@@ -12,8 +12,8 @@ describe('CommentBubble module', () => {
       tag: 'div',
       outerHTML: '<div/>',
       rect: { top: 0, left: 0, width: 1, height: 1 },
-      onClose: () => {},
-      onSendToClaude: () => {},
+      onSaveAndClose: () => {},
+      onSaveAndSend: () => {},
     };
     expect(props.rect.top).toBe(0);
   });
@@ -25,8 +25,8 @@ describe('CommentBubble module', () => {
       outerHTML: '<div/>',
       rect: { top: 0, left: 0, width: 1, height: 1 },
       initialText: 'make it bigger',
-      onClose: () => {},
-      onSendToClaude: (_text: string) => {},
+      onSaveAndClose: () => {},
+      onSaveAndSend: (_text: string) => {},
     };
     expect(props.initialText).toBe('make it bigger');
   });

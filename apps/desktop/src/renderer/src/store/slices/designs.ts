@@ -72,6 +72,7 @@ function buildSelectedDesignState(
     pendingToolCalls: [],
     comments: [],
     commentsLoaded: false,
+    queuedCommentIds: [],
     commentBubble: null,
     currentSnapshotId: null,
     canvasTabs:
@@ -104,6 +105,7 @@ function buildFreshDesignState(state: CodesignState, designId: string): Partial<
     pendingToolCalls: [],
     comments: [],
     commentsLoaded: false,
+    queuedCommentIds: [],
     commentBubble: null,
     currentSnapshotId: null,
     canvasTabs: DEFAULT_CANVAS_TABS,

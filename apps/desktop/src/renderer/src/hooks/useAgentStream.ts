@@ -52,6 +52,7 @@ export function useAgentStream(): void {
   const persistAgentRunSnapshot = useCodesignStore((s) => s.persistAgentRunSnapshot);
   const renameDesign = useCodesignStore((s) => s.renameDesign);
   const markGenerationRunning = useCodesignStore((s) => s.markGenerationRunning);
+  const forgetCancelledGeneration = useCodesignStore((s) => s.forgetCancelledGeneration);
   const inFlight = useRef<Map<string, InFlightTurn>>(new Map());
 
   const FS_THROTTLE_MS = 250;
@@ -63,6 +64,9 @@ export function useAgentStream(): void {
       setTimer: (callback, delayMs) => setTimeout(callback, delayMs),
       clearTimer: (timer) => clearTimeout(timer),
       flush(update) {
+        if (useCodesignStore.getState().cancelledGenerationIds.has(update.generationId)) {
+          return;
+        }
         setPreviewSourceFromAgent({
           designId: update.designId,
           content: update.content,
@@ -370,7 +374,21 @@ export function useAgentStream(): void {
       }, 1200);
     };
 
+    const ignoreIfCancelled = (event: AgentStreamEvent): boolean => {
+      if (!useCodesignStore.getState().cancelledGenerationIds.has(event.generationId)) {
+        return false;
+      }
+      fsScheduler.clearGeneration(event.generationId);
+      inFlight.current.delete(event.generationId);
+      setStreamingAssistantText({ designId: event.designId, text: '' });
+      if (event.type === 'agent_end' || event.type === 'error') {
+        forgetCancelledGeneration(event.generationId);
+      }
+      return true;
+    };
+
     const off = window.codesign.chat.onAgentEvent((event: AgentStreamEvent) => {
+      if (ignoreIfCancelled(event)) return;
       switch (event.type) {
         case 'turn_start':
           handleTurnStart(event);
@@ -410,5 +428,6 @@ export function useAgentStream(): void {
     persistAgentRunSnapshot,
     renameDesign,
     markGenerationRunning,
+    forgetCancelledGeneration,
   ]);
 }

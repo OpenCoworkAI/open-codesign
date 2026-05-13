@@ -684,6 +684,7 @@ interface GenerationSliceActions {
   sendPrompt: CodesignState['sendPrompt'];
   syncGenerationStatus: CodesignState['syncGenerationStatus'];
   markGenerationRunning: CodesignState['markGenerationRunning'];
+  forgetCancelledGeneration: CodesignState['forgetCancelledGeneration'];
   cancelGeneration: CodesignState['cancelGeneration'];
   retryLastPrompt: CodesignState['retryLastPrompt'];
   applyInlineComment: CodesignState['applyInlineComment'];
@@ -696,11 +697,25 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
     async syncGenerationStatus() {
       if (!window.codesign?.generationStatus) return;
       const status = await window.codesign.generationStatus();
-      reconcileGenerationStatus(set, status.running);
+      const cancelled = get().cancelledGenerationIds;
+      reconcileGenerationStatus(
+        set,
+        status.running.filter((run) => !cancelled.has(run.generationId)),
+      );
     },
 
     markGenerationRunning(designId, generationId, stage = 'thinking') {
+      if (get().cancelledGenerationIds.has(generationId)) return;
       markGenerationRunningForDesign(set, designId, generationId, stage);
+    },
+
+    forgetCancelledGeneration(generationId) {
+      set((state) => {
+        if (!state.cancelledGenerationIds.has(generationId)) return {};
+        const cancelledGenerationIds = new Set(state.cancelledGenerationIds);
+        cancelledGenerationIds.delete(generationId);
+        return { cancelledGenerationIds };
+      });
     },
 
     async sendPrompt(input) {
@@ -734,8 +749,12 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         return;
       }
 
+      const commentIdFilter =
+        input.commentIds !== undefined
+          ? new Set(input.commentIds)
+          : new Set(get().queuedCommentIds);
       const pendingEdits = get().comments.filter(
-        (c) => c.kind === 'edit' && c.status === 'pending',
+        (c) => c.kind === 'edit' && c.status === 'pending' && commentIdFilter.has(c.id),
       );
       const injectedPendingEdits = input.pendingEdits ?? [];
       const trimmedInput = input.prompt.trim();
@@ -875,10 +894,15 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
                 pendingEditIds,
                 appliedIn,
               );
-              if (get().currentDesignId === designIdAtStart && updated.length > 0) {
+              if (updated.length > 0) {
                 set((s) => ({
-                  comments: s.comments.map((c) => updated.find((u) => u.id === c.id) ?? c),
-                  currentSnapshotId: appliedIn,
+                  ...(s.currentDesignId === designIdAtStart
+                    ? {
+                        comments: s.comments.map((c) => updated.find((u) => u.id === c.id) ?? c),
+                        currentSnapshotId: appliedIn,
+                      }
+                    : {}),
+                  queuedCommentIds: s.queuedCommentIds.filter((id) => !pendingEditIds.includes(id)),
                 }));
               }
             }
@@ -914,13 +938,21 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         return;
       }
 
+      set((state) => {
+        const cancelledGenerationIds = new Set(state.cancelledGenerationIds);
+        cancelledGenerationIds.add(id);
+        return { cancelledGenerationIds };
+      });
+      finishGenerationForDesign(set, designId, id, 'idle');
+      if (get().currentDesignId === designId) {
+        clearStreamingForDesign(set, designId);
+      }
+
       void window.codesign
         .cancelGeneration(id)
         .then(() => {
-          finishGenerationForDesign(set, designId, id, 'idle');
-          if (get().currentDesignId === designId) {
-            clearStreamingForDesign(set, designId);
-          }
+          // The renderer already stopped optimistically. Main-process late
+          // events are filtered until the terminal event arrives.
         })
         .catch((err) => {
           const msg = err instanceof Error ? err.message : tr('errors.unknown');

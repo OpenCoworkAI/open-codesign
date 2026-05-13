@@ -10,6 +10,8 @@ interface CommentsSliceActions {
   loadCommentsForCurrentDesign: CodesignState['loadCommentsForCurrentDesign'];
   openCommentBubble: CodesignState['openCommentBubble'];
   closeCommentBubble: CodesignState['closeCommentBubble'];
+  queueCommentForPrompt: CodesignState['queueCommentForPrompt'];
+  unqueueCommentForPrompt: CodesignState['unqueueCommentForPrompt'];
   applyLiveRects: CodesignState['applyLiveRects'];
   clearLiveRects: CodesignState['clearLiveRects'];
   addComment: CodesignState['addComment'];
@@ -51,6 +53,19 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
 
     closeCommentBubble() {
       set({ commentBubble: null });
+    },
+
+    queueCommentForPrompt(id) {
+      set((s) => {
+        if (s.queuedCommentIds.includes(id)) return {};
+        return { queuedCommentIds: [...s.queuedCommentIds, id] };
+      });
+    },
+
+    unqueueCommentForPrompt(id) {
+      set((s) => ({
+        queuedCommentIds: s.queuedCommentIds.filter((queuedId) => queuedId !== id),
+      }));
     },
 
     applyLiveRects(entries) {
@@ -131,6 +146,9 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
         if (!updated) return null;
         set((s) => ({
           comments: s.comments.map((c) => (c.id === id ? updated : c)),
+          ...(updated.kind !== 'edit' || updated.status !== 'pending'
+            ? { queuedCommentIds: s.queuedCommentIds.filter((queuedId) => queuedId !== id) }
+            : {}),
         }));
         return updated;
       } catch (err) {
@@ -147,10 +165,32 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
     async submitComment(input) {
       // Route by presence of existingCommentId. The anchor on a reopened chip
       // carries the id, so editing text hits updateComment (no duplicate row);
-      // a fresh click in comment mode falls through to addComment. Both return
-      // the row on success so the bubble can decide whether to close.
+      // a fresh click in comment mode can still reuse an existing pending row
+      // for the same snapshot + selector, then falls through to addComment
+      // only when this is genuinely a new anchor. Both return the row on
+      // success so the bubble can decide whether to close.
       if (input.existingCommentId) {
         return get().updateComment(input.existingCommentId, { text: input.text });
+      }
+      const snapshotId = get().currentSnapshotId;
+      const comments = get().comments;
+      let existingForSelector: CodesignState['comments'][number] | null = null;
+      for (let index = comments.length - 1; index >= 0; index--) {
+        const comment = comments[index];
+        if (
+          comment?.kind === 'edit' &&
+          comment.status === 'pending' &&
+          comment.selector === input.selector
+        ) {
+          if (snapshotId !== null && comment.snapshotId === snapshotId) {
+            existingForSelector = comment;
+            break;
+          }
+          existingForSelector ??= comment;
+        }
+      }
+      if (existingForSelector !== null) {
+        return get().updateComment(existingForSelector.id, { text: input.text });
       }
       const payload: Parameters<CodesignState['addComment']>[0] = {
         kind: input.kind,
@@ -171,7 +211,13 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
       if (!designId) return;
       try {
         await window.codesign.comments.remove(designId, id);
-        set((s) => ({ comments: s.comments.filter((c) => c.id !== id) }));
+        set((s) => ({
+          comments: s.comments.filter((c) => c.id !== id),
+          queuedCommentIds: s.queuedCommentIds.filter((queuedId) => queuedId !== id),
+          ...(s.commentBubble?.existingCommentId === id
+            ? { commentBubble: null, selectedElement: null }
+            : {}),
+        }));
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
         get().pushToast({
