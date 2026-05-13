@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "id": "npm-supply-chain-guard-2026-05-13",
+    "sourcePath": "~/.openclaw/workspace-shiori/knowledge/security/npm-supply-chain-guard-2026-05-13.md",
+    "incident": "Mini Shai-Hulud May 2026 second wave"
+  },
+  "compromisedPackages": [
+    {
+      "name": "@tanstack/react-router",
+      "versions": ["1.169.5", "1.169.8"]
+    },
+    {
+      "name": "@tanstack/router-core",
+      "versions": ["1.169.5", "1.169.8"]
+    },
+    {
+      "name": "@tanstack/router-plugin",
+      "versions": ["1.167.38", "1.167.41"]
+    },
+    {
+      "name": "@tanstack/react-start",
+      "versions": ["1.167.68", "1.167.71"]
+    },
+    {
+      "name": "@mistralai/mistralai",
+      "versions": ["2.2.2", "2.2.3", "2.2.4"]
+    },
+    {
+      "name": "@mistralai/mistralai-azure",
+      "versions": ["1.7.1", "1.7.2", "1.7.3"]
+    },
+    {
+      "name": "@mistralai/mistralai-gcp",
+      "versions": ["1.7.1", "1.7.2", "1.7.3"]
+    }
+  ],
+  "minimumBlockedVersions": [
+    {
+      "name": "@mistralai/mistralai",
+      "minimumVersion": "2.2.2",
+      "reason": "open-codesign currently carries 2.2.1 transitively; 2.2.2 or newer requires blocking until cleared."
+    }
+  ],
+  "affectedPackages": [
+    { "name": "@tanstack/react-router" },
+    { "name": "@tanstack/vue-router" },
+    { "name": "@tanstack/solid-router" },
+    { "name": "@tanstack/router-core" },
+    { "name": "@tanstack/router-utils" },
+    { "name": "@tanstack/router-plugin" },
+    { "name": "@tanstack/router-generator" },
+    { "name": "@tanstack/router-cli" },
+    { "name": "@tanstack/router-vite-plugin" },
+    { "name": "@tanstack/react-start" },
+    { "name": "@tanstack/vue-start" },
+    { "name": "@tanstack/solid-start" },
+    { "pattern": "@tanstack/*router*" },
+    { "pattern": "@tanstack/*start*" },
+    { "name": "@mistralai/mistralai" },
+    { "name": "@mistralai/mistralai-azure" },
+    { "name": "@mistralai/mistralai-gcp" },
+    { "pattern": "@uipath/*" },
+    { "pattern": "@draftlab/*" },
+    { "pattern": "@draftauth/*" },
+    { "pattern": "@squawk/*" },
+    { "pattern": "@tallyui/*" },
+    { "name": "@beproduct/nestjs-auth" },
+    { "name": "@taskflow-corp/cli" },
+    { "name": "@tolka/cli" },
+    { "pattern": "@ml-toolkit-ts/*" },
+    { "pattern": "@mesadev/*" },
+    { "name": "@dirigible-ai/sdk" },
+    { "pattern": "@supersurkhet/*" },
+    { "name": "safe-action" },
+    { "name": "ts-dna" },
+    { "name": "cross-stitch" },
+    { "name": "cmux-agent-mcp" },
+    { "name": "agentwork-cli" },
+    { "name": "git-branch-selector" },
+    { "name": "wot-api" },
+    { "name": "git-git-git" },
+    { "name": "nextmove-mcp" },
+    { "name": "ml-toolkit-ts" }
+  ],
+  "iocMarkers": [
+    { "marker": "router_init.js" },
+    { "marker": "router_runtime.js" },
+    { "marker": "tanstack_runner.js" },
+    { "marker": "@tanstack/setup" },
+    { "marker": "github:tanstack/router#79ac49eedf774dd4b0cfa308722bc463cfe5885c" },
+    { "marker": "bun run tanstack_runner.js" },
+    { "marker": "getsession.org" },
+    { "marker": "OhNoWhatsGoingOnWithGitHub" },
+    { "marker": "A Mini Shai-Hulud has Appeared" }
+  ],
+  "workflowRisk": {
+    "flagPullRequestTargetChanges": true,
+    "flagIdTokenWriteChanges": true,
+    "flagCacheChanges": true,
+    "flagNpmCiChanges": true,
+    "blockCodeqlSecretsDump": true
+  }
+}

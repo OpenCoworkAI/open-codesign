@@ -31,7 +31,8 @@
     "smoke": "tsx scripts/smoke-models.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "turbo run build && changeset publish"
+    "release": "turbo run build && changeset publish",
+    "security:npm-supply-chain": "node scripts/security/npm-supply-chain-blocklist.js"
   },
   "pnpm": {
     "overrides": {
