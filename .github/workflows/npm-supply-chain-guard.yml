@@ -1,0 +1,56 @@
+name: npm Supply-chain Guard
+
+on:
+  pull_request:
+    branches: [main, dev/v0.2]
+    paths:
+      - pnpm-lock.yaml
+      - package-lock.json
+      - yarn.lock
+      - "**/package.json"
+      - .github/workflows/**
+      - scripts/security/npm-supply-chain-blocklist.js
+      - scripts/security/npm-supply-chain-blocklist.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Blocklist scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          path: repo
+
+      - name: Checkout base guard
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base-guard
+
+      - name: Run npm supply-chain guard
+        working-directory: repo
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ] && \
+            [ -f ../base-guard/scripts/security/npm-supply-chain-blocklist.js ] && \
+            [ -f ../base-guard/scripts/security/npm-supply-chain-blocklist.json ]; then
+            node ../base-guard/scripts/security/npm-supply-chain-blocklist.js --repo . --base "$BASE_SHA" --head HEAD
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            node scripts/security/npm-supply-chain-blocklist.js --repo . --base "$BASE_SHA" --head HEAD
+          else
+            node scripts/security/npm-supply-chain-blocklist.js --repo .
+          fi
