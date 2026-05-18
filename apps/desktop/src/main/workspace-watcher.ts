@@ -65,9 +65,9 @@ function toForwardSlashes(path: string): string {
   return sep === '/' ? path : path.split(sep).join('/');
 }
 
-function isPermissionWatchError(err: unknown): boolean {
+function shouldFallbackToPolling(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException).code;
-  return code === 'EPERM' || code === 'EACCES';
+  return code === 'EPERM' || code === 'EACCES' || code === 'EISDIR';
 }
 
 function isWorkspaceUnavailableWatchError(err: unknown): boolean {
@@ -183,7 +183,7 @@ function startWatcher(
       workspacePath,
       error: err instanceof Error ? err.message : String(err),
     });
-    if (isPermissionWatchError(err)) {
+    if (shouldFallbackToPolling(err)) {
       watchers.set(designId, entry);
       startPolling(designId, entry, getWin);
       return { ok: true, entry };
@@ -196,7 +196,7 @@ function startWatcher(
   entry.watcher = watcher;
   watcher.on('error', (err) => {
     log.warn('files.watch.error', { designId, error: String(err) });
-    if (!isPermissionWatchError(err)) return;
+    if (!shouldFallbackToPolling(err)) return;
     const active = watchers.get(designId);
     if (!active || active.watcher !== watcher) return;
     try {

@@ -161,15 +161,18 @@ describe('files-watcher subscribe / unsubscribe', () => {
     expect(__test.watchers.has('d1')).toBe(false);
   });
 
-  it('falls back to polling when native watch is denied by permissions', () => {
+  it.each([
+    ['permission denial', 'EPERM'],
+    ['unsupported directory watch', 'EISDIR'],
+  ])('falls back to polling when native watch fails from %s', (_reason, code) => {
     reset();
-    const err = Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+    const err = Object.assign(new Error('watch unavailable'), { code });
     watchMock.mockImplementation(() => {
       throw err;
     });
     getDesignMock.mockReturnValue({
       id: 'd1',
-      workspacePath: tempWorkspace('codesign-watch-eperm'),
+      workspacePath: tempWorkspace(`codesign-watch-${code.toLowerCase()}`),
     });
     registerFilesWatcherIpc({} as never, () => null);
     const sub = getHandler('codesign:files:v1:subscribe');
