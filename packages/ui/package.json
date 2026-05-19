@@ -16,7 +16,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "peerDependencies": {
-    "react": "^19.0.0",
+    "react": "^19.2.6",
     "tailwindcss": "^4.0.0"
   },
   "dependencies": {
@@ -30,8 +30,8 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "happy-dom": "^20.9.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
