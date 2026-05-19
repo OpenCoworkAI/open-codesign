@@ -15,6 +15,15 @@ export function chatSessionsForWorkspace(designs: Design[], currentDesign: Desig
   );
 }
 
+export function fallbackChatAfterClose(
+  chatSessions: Design[],
+  currentDesignId: string | null,
+  targetId: string,
+): Design | null {
+  if (targetId !== currentDesignId) return null;
+  return chatSessions.find((design) => design.id !== targetId) ?? null;
+}
+
 export function ChatSessionTabBar() {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
@@ -45,10 +54,7 @@ export function ChatSessionTabBar() {
   async function handleConfirmCloseChat() {
     if (conversationToClose === null) return;
     const target = conversationToClose;
-    const fallback =
-      target.id === currentDesignId
-        ? (chatSessions.find((design) => design.id !== target.id) ?? null)
-        : null;
+    const fallback = fallbackChatAfterClose(chatSessions, currentDesignId, target.id);
 
     setConversationToClose(null);
     if (fallback !== null) {

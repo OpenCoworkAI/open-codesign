@@ -1,5 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { Plus } from 'lucide-react';
+import { workspacePathComparisonKey } from '../../lib/workspace-path';
 import { useCodesignStore } from '../../store';
 import { DesignGrid } from './DesignGrid';
 
@@ -47,8 +48,7 @@ function workspaceGroupKey(design: {
 }): string {
   const raw = design.workspacePath?.trim();
   if (!raw) return `design:${design.id}`;
-  const normalized = raw.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-  return normalized ? `workspace:${normalized}` : `design:${design.id}`;
+  return `workspace:${workspacePathComparisonKey(raw)}`;
 }
 
 export function RecentTab() {

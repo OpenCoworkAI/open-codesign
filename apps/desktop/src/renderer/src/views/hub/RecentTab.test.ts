@@ -75,6 +75,16 @@ describe('buildRecentDesigns', () => {
     ).toEqual(['old-working-session']);
   });
 
+  it('does not collapse Windows root workspaces with empty paths', () => {
+    expect(
+      collapseWorkspaceDesigns([
+        design('root-session', '2026-05-05T11:00:00.000Z', 'C:/'),
+        design('same-root-session', '2026-05-05T10:00:00.000Z', 'c:/'),
+        design('blank', '2026-05-05T09:00:00.000Z'),
+      ]).map((d) => d.id),
+    ).toEqual(['root-session', 'blank']);
+  });
+
   it('does not collapse designs without a workspace path', () => {
     expect(
       collapseWorkspaceDesigns([

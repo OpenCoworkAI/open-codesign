@@ -1,6 +1,6 @@
 import type { Design } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
-import { chatSessionsForWorkspace } from './ChatSessionTabBar';
+import { chatSessionsForWorkspace, fallbackChatAfterClose } from './ChatSessionTabBar';
 
 function design(input: Pick<Design, 'id' | 'name' | 'workspacePath'>): Design {
   return {
@@ -32,5 +32,14 @@ describe('chatSessionsForWorkspace', () => {
     const other = design({ id: 'b', name: 'Chat B', workspacePath: null });
 
     expect(chatSessionsForWorkspace([current, other], current)).toEqual([current]);
+  });
+
+  it('selects a fallback only when closing the active chat', () => {
+    const current = design({ id: 'a', name: 'Chat A', workspacePath: 'C:/Work/Project' });
+    const fallback = design({ id: 'b', name: 'Chat B', workspacePath: 'C:/Work/Project' });
+
+    expect(fallbackChatAfterClose([current, fallback], 'a', 'a')).toBe(fallback);
+    expect(fallbackChatAfterClose([current, fallback], 'a', 'b')).toBeNull();
+    expect(fallbackChatAfterClose([current], 'a', 'a')).toBeNull();
   });
 });
