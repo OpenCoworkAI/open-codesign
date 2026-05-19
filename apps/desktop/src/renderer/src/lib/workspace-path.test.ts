@@ -19,6 +19,15 @@ describe('workspacePathComparisonKey', () => {
     );
   });
 
+  it('folds case for Windows-shaped paths without navigator.platform', () => {
+    expect(workspacePathComparisonKey('C:/Work/Project')).toBe(
+      workspacePathComparisonKey('c:/work/project/'),
+    );
+    expect(workspacePathComparisonKey('//wsl$/Ubuntu/home/mad/Project')).toBe(
+      workspacePathComparisonKey('//WSL$/Ubuntu/home/mad/Project/'),
+    );
+  });
+
   it('preserves root paths when stripping trailing slashes', () => {
     expect(workspacePathComparisonKey('C:/', 'Win32')).toBe('c:/');
     expect(workspacePathComparisonKey('/', 'Linux')).toBe('/');
