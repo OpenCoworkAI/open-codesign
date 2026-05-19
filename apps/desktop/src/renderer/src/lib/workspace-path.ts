@@ -9,7 +9,13 @@ function isWindowsPlatform(platform: string): boolean {
   return platform.toLowerCase().includes('win');
 }
 
-export function workspacePathComparisonKey(path: string, platform = navigator.platform): string {
+function isWindowsPath(path: string): boolean {
+  return /^[A-Za-z]:\//.test(path) || /^\/\/[^/]+\/[^/]+/.test(path);
+}
+
+export function workspacePathComparisonKey(path: string, platform?: string): string {
   const normalized = stripTrailingSlash(path.replaceAll('\\', '/'));
-  return isWindowsPlatform(platform) ? normalized.toLowerCase() : normalized;
+  return (platform === undefined ? isWindowsPath(normalized) : isWindowsPlatform(platform))
+    ? normalized.toLowerCase()
+    : normalized;
 }

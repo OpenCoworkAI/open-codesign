@@ -4,6 +4,7 @@ import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { useCodesignStore } from '../store';
 import { AskModal } from './AskModal';
+import { ChatSessionTabBar } from './ChatSessionTabBar';
 import { AddMenu } from './chat/AddMenu';
 import { ChatMessageList } from './chat/ChatMessageList';
 import { CommentChipBar } from './chat/CommentChipBar';
@@ -141,8 +142,7 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
       style={{ minHeight: 0, minWidth: 0 }}
       aria-label={t('sidebar.ariaLabel')}
     >
-      {/* Header — clean, no collapse */}
-      <div className="h-[var(--space-3)] shrink-0" />
+      <ChatSessionTabBar />
 
       {/* Chat scroll area */}
       <div className="codesign-scroll-area flex-1 overflow-y-auto px-[var(--space-4)] py-[var(--space-4)]">

@@ -11,17 +11,12 @@ import {
   listDesigns,
   updateDesignWorkspace,
 } from './snapshots-db';
-import { normalizeWorkspacePath } from './workspace-path';
+import { normalizeWorkspacePath, workspacePathComparisonKey } from './workspace-path';
 import { listWorkspaceFilesAt, resolveSafeWorkspaceChildPath } from './workspace-reader';
 
 export { normalizeWorkspacePath } from './workspace-path';
 
 const logger = getLogger('design-workspace');
-
-function workspacePathComparisonKey(p: string): string {
-  const normalized = normalizeWorkspacePath(p);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
-}
 
 export async function pickWorkspaceFolder(win: BrowserWindow): Promise<string | null> {
   const result = await dialog.showOpenDialog(win, {
@@ -146,6 +141,7 @@ export async function bindWorkspace(
   workspacePath: string | null,
   migrateFiles: boolean,
   workspaceMode?: WorkspaceMode,
+  options?: { allowExistingWorkspaceBinding?: boolean },
 ): Promise<Design> {
   const current = requireDesign(db, designId);
 
@@ -169,7 +165,7 @@ export async function bindWorkspace(
     return current;
   }
   const conflict = findWorkspaceConflict(db, designId, normalizedPath);
-  if (conflict !== null) {
+  if (conflict !== null && options?.allowExistingWorkspaceBinding !== true) {
     throw new Error(workspaceConflictMessage(conflict));
   }
   await assertExistingWorkspaceDirectory(normalizedPath);

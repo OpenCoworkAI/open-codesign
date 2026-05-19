@@ -66,6 +66,7 @@
       }
     },
     "tabsAriaLabel": "Open files",
+    "previewTabsAriaLabel": "Open previews",
     "closeTab": "Close {{name}}",
     "files": {
       "sectionTitle": "Design files",
@@ -253,6 +254,14 @@
     "ariaLabel": "Chat pane",
     "noDesign": "No design",
     "newChat": "New chat",
+    "closeChat": "Close {{name}}",
+    "chatTabsAriaLabel": "Workspace chats",
+    "deleteChat": {
+      "title": "Delete chat?",
+      "body": "This will remove “{{name}}” from this workspace. The workspace files stay untouched.",
+      "cancel": "Cancel",
+      "confirm": "Delete chat"
+    },
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar",
     "chat": {
@@ -953,6 +962,7 @@
       "currentLabel": "Current design",
       "menuLabel": "Switch design",
       "newDesign": "New design",
+      "newConversationForWorkspace": "New conversation for this workspace",
       "renameCurrent": "Rename",
       "viewAll": "View all designs…",
       "recent": "Recent",
