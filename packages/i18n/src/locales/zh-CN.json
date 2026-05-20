@@ -630,6 +630,8 @@
       "timeout": "生成超时",
       "timeoutHint": "超过该秒数后会中止生成请求。",
       "timeoutSeconds": "{{value}} 秒",
+      "proxy": "HTTP 代理",
+      "proxyHint": "将出站网络与 LLM API 请求通过此代理转发（例如 http://127.0.0.1:7890）。留空表示禁用。即时生效，无需重启。",
       "devtools": "开发者工具",
       "devtoolsHint": "打开渲染进程的 Chromium DevTools 面板。",
       "toggleDevtools": "切换 DevTools",

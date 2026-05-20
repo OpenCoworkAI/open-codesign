@@ -24,7 +24,11 @@ import { registerMemoryIpc } from './memory-ipc';
 import { isTrustedMainWindowNavigationUrl } from './navigation-policy';
 import { loadConfigOnBoot, registerOnboardingIpc } from './onboarding-ipc';
 import { isAllowedExternalUrl } from './open-external';
-import { readPersisted as readPreferences, registerPreferencesIpc } from './preferences-ipc';
+import {
+  applyProxyConfig,
+  readPersisted as readPreferences,
+  registerPreferencesIpc,
+} from './preferences-ipc';
 import { cleanupStaleTmps } from './reported-fingerprints';
 import { type Database, pruneDiagnosticEvents, safeInitSnapshotsDb } from './snapshots-db';
 import {
@@ -232,6 +236,16 @@ if (!IS_VITEST) {
       const aborted = await maybeAbortIfRunningFromDmg();
       if (aborted) return;
       await loadConfigOnBoot();
+      // Apply any user-configured outbound proxy to Chromium + Node before
+      // anything reaches out to provider endpoints or the update feed.
+      try {
+        const prefs = await readPreferences();
+        await applyProxyConfig(prefs.proxyUrl);
+      } catch (err) {
+        getLogger('main:boot').warn('preferences.proxy.apply.boot.fail', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
       // Seed `<userData>/templates/` from the bundled resources if it does
       // not already exist. After the first boot the user owns the tree —
       // edits to scaffolds, skills, brand-refs, frames, or design-skills

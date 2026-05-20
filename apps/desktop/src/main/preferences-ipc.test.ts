@@ -4,8 +4,16 @@ import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock electron and logger before importing the module under test.
+const { setProxyMock } = vi.hoisted(() => ({
+  setProxyMock: vi.fn<(config: { proxyRules: string }) => Promise<void>>(async () => {}),
+}));
 vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
+  session: {
+    defaultSession: {
+      setProxy: (config: { proxyRules: string }) => setProxyMock(config),
+    },
+  },
 }));
 
 vi.mock('electron-log/main', () => ({
@@ -34,7 +42,7 @@ vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(async () => {}),
 }));
 
-import { readPersisted, registerPreferencesIpc } from './preferences-ipc';
+import { applyProxyConfig, readPersisted, registerPreferencesIpc } from './preferences-ipc';
 
 describe('readPersisted()', () => {
   beforeEach(() => {
@@ -57,6 +65,7 @@ describe('readPersisted()', () => {
       memoryEnabled: true,
       workspaceMemoryAutoUpdate: true,
       userMemoryAutoUpdate: false,
+      proxyUrl: '',
     });
   });
 
@@ -232,7 +241,7 @@ describe('readPersisted()', () => {
       schemaVersion: number;
       diagnosticsLastReadTs: number;
     };
-    expect(written.schemaVersion).toBe(8);
+    expect(written.schemaVersion).toBe(9);
     expect(written.diagnosticsLastReadTs).toBe(result.diagnosticsLastReadTs);
     expect(written.diagnosticsLastReadTs).toBeGreaterThanOrEqual(before);
     expect(written.diagnosticsLastReadTs).toBeLessThanOrEqual(after);
@@ -352,9 +361,75 @@ describe('preferences memory schema fields', () => {
       workspaceMemoryAutoUpdate: boolean;
       userMemoryAutoUpdate: boolean;
     };
-    expect(written.schemaVersion).toBe(8);
+    expect(written.schemaVersion).toBe(9);
     expect(written.memoryEnabled).toBe(false);
     expect(written.workspaceMemoryAutoUpdate).toBe(false);
     expect(written.userMemoryAutoUpdate).toBe(true);
+  });
+
+  it('round-trips proxyUrl through preferences:v1:update and re-applies the proxy', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({
+        schemaVersion: 9,
+        updateChannel: 'stable',
+        generationTimeoutSec: 1200,
+        checkForUpdatesOnStartup: false,
+        dismissedUpdateVersion: '',
+        diagnosticsLastReadTs: 1,
+        memoryEnabled: true,
+        workspaceMemoryAutoUpdate: true,
+        userMemoryAutoUpdate: false,
+        proxyUrl: '',
+      }),
+    );
+    setProxyMock.mockClear();
+    const updated = await (
+      handlers['preferences:v1:update'] as (_e: null, raw: unknown) => Promise<unknown>
+    )(null, { proxyUrl: 'http://127.0.0.1:7890' });
+
+    expect((updated as { proxyUrl: string }).proxyUrl).toBe('http://127.0.0.1:7890');
+    const lastCall = writeFileMock.mock.calls.at(-1);
+    if (!lastCall) throw new Error('writeFile was not called');
+    const written = JSON.parse(lastCall[1] as string) as { proxyUrl: string };
+    expect(written.proxyUrl).toBe('http://127.0.0.1:7890');
+    expect(setProxyMock).toHaveBeenCalledWith({ proxyRules: 'http://127.0.0.1:7890' });
+  });
+
+  it('rejects non-string proxyUrl updates', async () => {
+    await expect(
+      (handlers['preferences:v1:update'] as (_e: null, raw: unknown) => Promise<unknown>)(null, {
+        proxyUrl: 42,
+      }),
+    ).rejects.toThrow(/proxyUrl must be a string/);
+  });
+});
+
+describe('applyProxyConfig()', () => {
+  beforeEach(() => {
+    setProxyMock.mockClear();
+    delete process.env['HTTP_PROXY'];
+    delete process.env['HTTPS_PROXY'];
+  });
+
+  it('sets HTTP(S)_PROXY env vars and Chromium proxy when a URL is provided', async () => {
+    await applyProxyConfig('http://10.0.0.1:8080');
+    expect(process.env['HTTP_PROXY']).toBe('http://10.0.0.1:8080');
+    expect(process.env['HTTPS_PROXY']).toBe('http://10.0.0.1:8080');
+    expect(setProxyMock).toHaveBeenCalledWith({ proxyRules: 'http://10.0.0.1:8080' });
+  });
+
+  it('clears env vars and Chromium proxy when the URL is empty', async () => {
+    process.env['HTTP_PROXY'] = 'http://stale';
+    process.env['HTTPS_PROXY'] = 'http://stale';
+    await applyProxyConfig('');
+    expect(process.env['HTTP_PROXY']).toBeUndefined();
+    expect(process.env['HTTPS_PROXY']).toBeUndefined();
+    expect(setProxyMock).toHaveBeenCalledWith({ proxyRules: '' });
+  });
+
+  it('trims surrounding whitespace before applying', async () => {
+    await applyProxyConfig('   http://10.0.0.1:8080   ');
+    expect(process.env['HTTP_PROXY']).toBe('http://10.0.0.1:8080');
+    expect(setProxyMock).toHaveBeenCalledWith({ proxyRules: 'http://10.0.0.1:8080' });
   });
 });

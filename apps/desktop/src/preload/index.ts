@@ -250,6 +250,7 @@ export interface Preferences {
   memoryEnabled: boolean;
   workspaceMemoryAutoUpdate: boolean;
   userMemoryAutoUpdate: boolean;
+  proxyUrl: string;
 }
 
 export interface MemoryFileRead {

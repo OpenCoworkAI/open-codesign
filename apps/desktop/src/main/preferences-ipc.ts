@@ -11,13 +11,13 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
-import { ipcMain } from 'electron';
+import { ipcMain, session } from 'electron';
 import { configDir } from './config';
 import { getLogger } from './logger';
 
 const logger = getLogger('preferences-ipc');
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 // v1 → v2: raise the abandoned 120s timeout default (which aborted real
 // agentic runs mid-loop) to 600s. Values that happen to equal the old
 // default are treated as unmigrated defaults, not user intent.
@@ -44,6 +44,9 @@ export interface Preferences {
   memoryEnabled: boolean;
   workspaceMemoryAutoUpdate: boolean;
   userMemoryAutoUpdate: boolean;
+  /** HTTP/HTTPS proxy URL applied to Chromium and Node outbound traffic.
+   *  Empty string disables the proxy. */
+  proxyUrl: string;
 }
 
 interface PreferencesFile extends Preferences {
@@ -63,6 +66,7 @@ const DEFAULTS: Preferences = {
   memoryEnabled: true,
   workspaceMemoryAutoUpdate: true,
   userMemoryAutoUpdate: false,
+  proxyUrl: '',
 };
 
 const PREFERENCE_UPDATE_FIELDS = [
@@ -74,6 +78,7 @@ const PREFERENCE_UPDATE_FIELDS = [
   'memoryEnabled',
   'workspaceMemoryAutoUpdate',
   'userMemoryAutoUpdate',
+  'proxyUrl',
 ] as const;
 
 function assertKnownPreferenceFields(r: Record<string, unknown>): void {
@@ -145,7 +150,7 @@ function readPersistedBoolean(
 
 function readPersistedString(
   r: Record<string, unknown>,
-  key: 'dismissedUpdateVersion',
+  key: 'dismissedUpdateVersion' | 'proxyUrl',
   defaultValue: string,
 ): string {
   const value = r[key];
@@ -218,6 +223,7 @@ function parsePersistedFile(rawJson: unknown): Preferences {
       'userMemoryAutoUpdate',
       DEFAULTS.userMemoryAutoUpdate,
     ),
+    proxyUrl: readPersistedString(parsed, 'proxyUrl', DEFAULTS.proxyUrl),
   };
 }
 
@@ -335,6 +341,15 @@ function readDismissedVersion(r: Record<string, unknown>): string | undefined {
   return value;
 }
 
+function readProxyUrl(r: Record<string, unknown>): string | undefined {
+  const value = r['proxyUrl'];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') {
+    throw new CodesignError('proxyUrl must be a string', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  return value;
+}
+
 function readDiagnosticsTs(r: Record<string, unknown>): number | undefined {
   const value = r['diagnosticsLastReadTs'];
   if (value === undefined) return undefined;
@@ -372,7 +387,30 @@ function parsePreferences(raw: unknown): Partial<Preferences> {
     out.workspaceMemoryAutoUpdate = workspaceMemoryAutoUpdate;
   const userMemoryAutoUpdate = readMemoryAutoUpdate(r, 'userMemoryAutoUpdate');
   if (userMemoryAutoUpdate !== undefined) out.userMemoryAutoUpdate = userMemoryAutoUpdate;
+  const proxyUrl = readProxyUrl(r);
+  if (proxyUrl !== undefined) out.proxyUrl = proxyUrl;
   return out;
+}
+
+/**
+ * Apply the configured proxy to Chromium's network stack and Node's
+ * HTTP(S)_PROXY env vars so both renderer fetches and main-process outbound
+ * traffic route through it. Empty `proxyUrl` clears any previously set proxy.
+ * Safe to call before `session.defaultSession` is ready — the Electron side
+ * is then skipped and re-applied at boot once the app is ready.
+ */
+export async function applyProxyConfig(proxyUrl: string): Promise<void> {
+  const cleanUrl = proxyUrl.trim();
+  if (cleanUrl.length > 0) {
+    process.env['HTTP_PROXY'] = cleanUrl;
+    process.env['HTTPS_PROXY'] = cleanUrl;
+  } else {
+    delete process.env['HTTP_PROXY'];
+    delete process.env['HTTPS_PROXY'];
+  }
+  if (session?.defaultSession) {
+    await session.defaultSession.setProxy({ proxyRules: cleanUrl });
+  }
 }
 
 export function registerPreferencesIpc(): void {
@@ -385,6 +423,15 @@ export function registerPreferencesIpc(): void {
     const current = await readPersisted();
     const next: Preferences = { ...current, ...patch };
     await writePersisted(next);
+    if (patch.proxyUrl !== undefined) {
+      try {
+        await applyProxyConfig(next.proxyUrl);
+      } catch (err) {
+        logger.warn('preferences.proxy.apply.fail', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
     return next;
   });
 }
