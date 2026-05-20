@@ -397,19 +397,34 @@ function parsePreferences(raw: unknown): Partial<Preferences> {
  * HTTP(S)_PROXY env vars so both renderer fetches and main-process outbound
  * traffic route through it. Empty `proxyUrl` clears any previously set proxy.
  * Safe to call before `session.defaultSession` is ready — the Electron side
- * is then skipped and re-applied at boot once the app is ready.
+ * is then skipped (with a warning) and re-applied at boot once the app is
+ * ready.
+ *
+ * Both uppercase and lowercase env var spellings are written: Node's `http`
+ * module prefers lowercase when both are set, so leaving `http_proxy`
+ * untouched would let a stale shell value silently override the user's
+ * in-app choice.
  */
 export async function applyProxyConfig(proxyUrl: string): Promise<void> {
   const cleanUrl = proxyUrl.trim();
   if (cleanUrl.length > 0) {
     process.env['HTTP_PROXY'] = cleanUrl;
     process.env['HTTPS_PROXY'] = cleanUrl;
+    process.env['http_proxy'] = cleanUrl;
+    process.env['https_proxy'] = cleanUrl;
   } else {
     delete process.env['HTTP_PROXY'];
     delete process.env['HTTPS_PROXY'];
+    delete process.env['http_proxy'];
+    delete process.env['https_proxy'];
   }
   if (session?.defaultSession) {
     await session.defaultSession.setProxy({ proxyRules: cleanUrl });
+  } else {
+    logger.warn('preferences.proxy.apply.noSession', {
+      message:
+        'session.defaultSession is unavailable; Chromium-side proxy not applied. Will retry at app.whenReady().',
+    });
   }
 }
 

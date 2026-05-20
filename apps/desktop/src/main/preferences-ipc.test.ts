@@ -409,6 +409,8 @@ describe('applyProxyConfig()', () => {
     setProxyMock.mockClear();
     delete process.env['HTTP_PROXY'];
     delete process.env['HTTPS_PROXY'];
+    delete process.env['http_proxy'];
+    delete process.env['https_proxy'];
   });
 
   it('sets HTTP(S)_PROXY env vars and Chromium proxy when a URL is provided', async () => {
@@ -418,18 +420,33 @@ describe('applyProxyConfig()', () => {
     expect(setProxyMock).toHaveBeenCalledWith({ proxyRules: 'http://10.0.0.1:8080' });
   });
 
-  it('clears env vars and Chromium proxy when the URL is empty', async () => {
+  it('mirrors the URL into lowercase env var spellings so Node http picks it up', async () => {
+    // Pre-seed lowercase to a stale value; the upper-only write would have left
+    // this in place and Node's http module would have preferred it.
+    process.env['http_proxy'] = 'http://stale-shell-value';
+    process.env['https_proxy'] = 'http://stale-shell-value';
+    await applyProxyConfig('http://10.0.0.1:8080');
+    expect(process.env['http_proxy']).toBe('http://10.0.0.1:8080');
+    expect(process.env['https_proxy']).toBe('http://10.0.0.1:8080');
+  });
+
+  it('clears env vars (both cases) and Chromium proxy when the URL is empty', async () => {
     process.env['HTTP_PROXY'] = 'http://stale';
     process.env['HTTPS_PROXY'] = 'http://stale';
+    process.env['http_proxy'] = 'http://stale';
+    process.env['https_proxy'] = 'http://stale';
     await applyProxyConfig('');
     expect(process.env['HTTP_PROXY']).toBeUndefined();
     expect(process.env['HTTPS_PROXY']).toBeUndefined();
+    expect(process.env['http_proxy']).toBeUndefined();
+    expect(process.env['https_proxy']).toBeUndefined();
     expect(setProxyMock).toHaveBeenCalledWith({ proxyRules: '' });
   });
 
   it('trims surrounding whitespace before applying', async () => {
     await applyProxyConfig('   http://10.0.0.1:8080   ');
     expect(process.env['HTTP_PROXY']).toBe('http://10.0.0.1:8080');
+    expect(process.env['http_proxy']).toBe('http://10.0.0.1:8080');
     expect(setProxyMock).toHaveBeenCalledWith({ proxyRules: 'http://10.0.0.1:8080' });
   });
 });
