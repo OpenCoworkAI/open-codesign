@@ -1036,6 +1036,27 @@ export function ModelsTab() {
             }}
           />
         </div>
+        <div className="flex items-center gap-2 mt-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setCustomProviderPreset({
+                name: 'Gemini (Google)',
+                baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+                wire: 'openai-chat',
+                defaultModel: 'models/gemini-2.0-pro', // puedes customizar según preferencias actuales de Gemini
+              });
+              setShowAddCustom(true);
+            }}
+            data-testid="add-gemini-provider"
+          >
+            Añadir Gemini (Google)
+          </Button>
+          <span className="text-[var(--text-xs)] text-[var(--color-text-muted)]">
+            Añade tu clave Gemini API para usar modelos Google Gemini OpenAI-compat.
+          </span>
+        </div>
 
         {loading && (
           <div className="flex items-center gap-2 py-4 text-[var(--text-sm)] text-[var(--color-text-muted)]">

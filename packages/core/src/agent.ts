@@ -232,6 +232,15 @@ function openAIChatCompatForBaseUrl(
       maxTokensField: 'max_tokens',
     };
   }
+  if (host === 'generativelanguage.googleapis.com') {
+    return {
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      supportsStore: false,
+      supportsStrictMode: false,
+      maxTokensField: 'max_tokens',
+    };
+  }
   if (!supportsOpenAIDeveloperRole(wire, baseUrl)) {
     return { supportsDeveloperRole: false };
   }
