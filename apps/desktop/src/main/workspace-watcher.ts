@@ -25,7 +25,7 @@ import { isIgnoredWorkspacePath } from './workspace-reader';
  * are coalesced into a single emit per 250ms so a `pnpm install` in the
  * workspace doesn't spam IPC.
  *
- * Uses `node:fs.watch({recursive: true})` — works on macOS (FSEvents) and
+ * Uses `node:fs.watch({recursive: true})` -- works on macOS (FSEvents) and
  * Linux (recent kernel). No chokidar dep; Windows recursive coverage is
  * weaker but we're macOS-first.
  */
@@ -36,7 +36,7 @@ const log = getLogger('files-watcher');
 const COALESCE_MS = 250;
 /** Keep an idle watcher alive briefly so quick tab-switches don't churn. */
 const IDLE_TEARDOWN_MS = 5 * 60_000;
-/** Permission-constrained Windows folders can reject recursive fs.watch. */
+/** Some workspace roots reject recursive fs.watch, especially Windows UNC paths. */
 const POLL_INTERVAL_MS = 2_000;
 
 interface ActiveWatcher {
@@ -65,14 +65,23 @@ function toForwardSlashes(path: string): string {
   return sep === '/' ? path : path.split(sep).join('/');
 }
 
-function shouldFallbackToPolling(err: unknown): boolean {
+function watchErrorCode(err: unknown): string | null {
   const code = (err as NodeJS.ErrnoException).code;
-  return code === 'EPERM' || code === 'EACCES' || code === 'EISDIR';
+  return typeof code === 'string' && code.length > 0 ? code : null;
+}
+
+function shouldFallbackToPolling(err: unknown): boolean {
+  const code = watchErrorCode(err);
+  return code !== null && !isWorkspaceUnavailableWatchErrorCode(code);
+}
+
+function isWorkspaceUnavailableWatchErrorCode(code: string): boolean {
+  return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
 function isWorkspaceUnavailableWatchError(err: unknown): boolean {
-  const code = (err as NodeJS.ErrnoException).code;
-  return code === 'ENOENT' || code === 'ENOTDIR';
+  const code = watchErrorCode(err);
+  return code !== null && isWorkspaceUnavailableWatchErrorCode(code);
 }
 
 async function pollWorkspaceSignature(root: string): Promise<string> {
