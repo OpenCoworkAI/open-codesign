@@ -392,6 +392,16 @@
         "save": "Guardar y continuar",
         "saveEdit": "Guardar cambios"
       },
+      "tlsRejectUnauthorized": {
+        "label": "Desactivar verificación TLS (inseguro — solo para endpoints internos)",
+        "description": "Omitir la verificación del certificado para este proveedor. Úsalo solo con endpoints internos que usan certificados autofirmados o de una CA privada.",
+        "confirmTitle": "¿Desactivar la verificación TLS?",
+        "confirmBody": "Las solicitudes HTTPS salientes hacia este proveedor no verificarán el certificado del servidor. Cualquiera con acceso a la ruta de red entre tú y este endpoint podría interceptarlo o suplantarlo. Actívalo solo en redes internas de confianza.",
+        "confirmAccept": "Sí, desactivar la verificación",
+        "confirmCancel": "Cancelar",
+        "badge": "TLS sin verificar",
+        "badgeTooltip": "La verificación del certificado TLS está desactivada para este proveedor. Se usa para conectar con endpoints internos que tienen certificados autofirmados o de una CA privada. Aumenta la superficie de ataque — actívalo solo en redes de confianza."
+      },
       "import": {
         "action": "Importar",
         "dismiss": "Descartar",
@@ -973,7 +983,7 @@
       "hostUnreachable": "No se puede alcanzar el host — revisa dominio, puerto o VPN.",
       "timedOut": "Tiempo de espera de la solicitud agotado — revisa el cortafuegos o VPN.",
       "corsError": "Error de CORS (no debería pasar en el proceso principal). Esto es un error.",
-      "sslError": "Error de SSL / certificado (¿certificado autofirmado en la retransmisión?).",
+      "sslError": "Error de SSL / certificado (¿certificado autofirmado o CA privada?). Actívalo en Ajustes → Proveedores → este proveedor → Desactivar verificación TLS para conectarte a endpoints internos de confianza.",
       "gatewayIncompatible": "La pasarela aceptó la conexión pero no implementa la API de este proveedor. Intenta cambiar de protocolo (ej. openai-chat).",
       "gatewayWafBlocked": "La pasarela o el proxy inverso bloqueó la generación antes de llegar al modelo. Test Connection puede pasar porque solo prueba el endpoint /models.",
       "openaiResponsesMisconfigured": "El punto final rechazó la forma de la solicitud. El protocolo puede ser incorrecto — intenta cambiar a openai-chat.",

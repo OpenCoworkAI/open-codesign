@@ -214,6 +214,7 @@ export async function runAddCustomProvider(
     ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
     ...(input.queryParams !== undefined ? { queryParams: input.queryParams } : {}),
     ...(input.envKey !== undefined ? { envKey: input.envKey } : {}),
+    ...(input.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
   };
   const secretRef = buildSecretRef(input.apiKey);
   const nextProviders = { ...(cachedConfig?.providers ?? {}), [entry.id]: entry };
@@ -267,6 +268,15 @@ export async function runUpdateProvider(input: UpdateProviderInput): Promise<Onb
     updated.reasoningLevel = undefined;
   } else if (input.reasoningLevel !== undefined) {
     updated.reasoningLevel = input.reasoningLevel;
+  }
+  // tlsRejectUnauthorized tri-state: null clears the field (back to strict
+  // TLS), true persists the opt-out, false also clears (omit-when-default).
+  // Builtin providers force-ignore the flag at the connect / generate paths,
+  // but we still let the field round-trip on disk for forward compatibility.
+  if (input.tlsRejectUnauthorized === null || input.tlsRejectUnauthorized === false) {
+    updated.tlsRejectUnauthorized = undefined;
+  } else if (input.tlsRejectUnauthorized === true) {
+    updated.tlsRejectUnauthorized = true;
   }
   // Secret rotation: only touch secrets when the caller explicitly supplied
   // an apiKey field. Empty string clears the secret (keyless providers);

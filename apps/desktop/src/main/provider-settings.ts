@@ -29,6 +29,9 @@ export interface ProviderRow {
   defaultModel: string;
   hasKey: boolean;
   reasoningLevel?: ReasoningLevel;
+  /** Per-provider TLS verification opt-out (#229). Only surfaced for
+   *  custom / imported providers; the runtime force-ignores it on built-ins. */
+  tlsRejectUnauthorized?: boolean;
   error?: 'decryption_failed' | string;
 }
 
@@ -158,6 +161,7 @@ export function toProviderRows(
       // declare keyless mode in their ProviderEntry/capabilities.
       hasKey: ref !== undefined || isKeylessProviderAllowed(provider, entry),
       ...(entry?.reasoningLevel !== undefined ? { reasoningLevel: entry.reasoningLevel } : {}),
+      ...(entry?.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
       ...(rowError !== undefined ? { error: rowError } : {}),
     });
   }

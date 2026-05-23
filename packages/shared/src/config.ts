@@ -180,6 +180,16 @@ export const ProviderEntrySchema = z
      */
     reasoningLevel: ReasoningLevelSchema.optional(),
     capabilities: ProviderCapabilitiesSchema.optional(),
+    /**
+     * Per-provider opt-in to skip TLS certificate verification on outbound
+     * HTTPS requests for this provider. Intended for users on corporate
+     * networks whose internal OpenAI-compatible gateways are served with
+     * self-signed or private-CA certificates that Node's default trust
+     * store rejects. Built-in providers force-ignore this flag at runtime
+     * (see apps/desktop/src/main/connection-ipc.ts and
+     * apps/desktop/src/main/ipc/generate.ts). See issue #229.
+     */
+    tlsRejectUnauthorized: z.boolean().optional(),
   })
   .strict();
 export type ProviderEntry = z.infer<typeof ProviderEntrySchema>;

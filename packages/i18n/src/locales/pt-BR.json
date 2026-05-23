@@ -357,6 +357,16 @@
         "switchToDropdown": "Escolher da lista",
         "switchToManual": "Digitar manualmente"
       },
+      "tlsRejectUnauthorized": {
+        "label": "Desativar verificação TLS (inseguro — apenas para endpoints internos)",
+        "description": "Pula a verificação do certificado deste provedor. Use apenas em endpoints internos com certificados autoassinados ou emitidos por uma CA privada.",
+        "confirmTitle": "Desativar a verificação TLS?",
+        "confirmBody": "As requisições HTTPS para este provedor não verificarão mais o certificado do servidor. Qualquer pessoa com acesso ao caminho de rede entre você e este endpoint poderia interceptá-lo ou se passar por ele. Ative apenas em redes internas confiáveis.",
+        "confirmAccept": "Sim, desativar a verificação",
+        "confirmCancel": "Cancelar",
+        "badge": "TLS sem verificação",
+        "badgeTooltip": "A verificação do certificado TLS está desativada para este provedor. Usada para conectar a endpoints internos com certificados autoassinados ou de CA privada. Aumenta a superfície de ataque — ative apenas em redes confiáveis."
+      },
       "import": {
         "action": "Importar",
         "dismiss": "Dispensar",
@@ -934,7 +944,7 @@
       "hostUnreachable": "Não foi possível acessar o host — verifique domínio, porta ou VPN.",
       "timedOut": "Tempo da requisição esgotado — verifique firewall ou VPN.",
       "corsError": "Erro de CORS (não deveria acontecer no processo principal). Isso é um bug.",
-      "sslError": "Erro de SSL / certificado (certificado autoassinado no relay?).",
+      "sslError": "Erro de SSL / certificado (certificado autoassinado ou CA privada?). Ative em Configurações → Provedores → este provedor → Desativar verificação TLS para conectar a endpoints internos confiáveis.",
       "endpointNotFound": "A URL base já contém um caminho de versão, mas o provedor não expôs esta rota.",
       "gatewayIncompatible": "O gateway aceitou a conexão, mas não implementa a API deste provedor. Tente trocar o wire, por exemplo para openai-chat.",
       "gatewayWafBlocked": "O gateway ou proxy reverso bloqueou a geração antes de ela chegar ao modelo. Test Connection ainda pode passar porque só verifica o endpoint /models.",

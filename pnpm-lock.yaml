@@ -59,6 +59,9 @@ importers:
       puppeteer-core:
         specifier: ^24.42.0
         version: 24.42.0
+      undici:
+        specifier: ^7.25.0
+        version: 7.25.0
     devDependencies:
       '@mariozechner/pi-agent-core':
         specifier: ^0.72.1

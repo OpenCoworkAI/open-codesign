@@ -5,6 +5,14 @@ vi.mock('./electron-runtime', () => ({
   ipcMain: { handle: vi.fn() },
 }));
 
+// Mock the TLS-bypass wrapper so tests can assert the enabled flag passed to
+// it without actually swapping the global undici dispatcher mid-test. The
+// pass-through impl preserves the existing fetch path so all other suites in
+// this file (which rely on installFakeFetch) keep working unchanged.
+vi.mock('./tls-override', () => ({
+  withTlsBypass: vi.fn(async (_enabled: boolean, fn: () => Promise<unknown>) => fn()),
+}));
+
 import { createHash } from 'node:crypto';
 import {
   _clearModelsCache,
@@ -23,6 +31,7 @@ import {
   normalizeOllamaBaseUrl,
   runProviderTest,
 } from './connection-ipc';
+import { withTlsBypass } from './tls-override';
 
 // ---------------------------------------------------------------------------
 // Thin test-only handler that exercises the same fetch/parse/cache path
@@ -1381,6 +1390,159 @@ describe('config:v1:test-endpoint response parsing', () => {
         error: 'bad-input',
         message: 'apiKey must be a non-empty string',
       });
+    } finally {
+      restore();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TLS bypass plumbing — every outbound HTTP entrypoint must (a) consult
+// withTlsBypass exactly once and (b) gate the `enabled` arg by the
+// `builtin !== true && tlsRejectUnauthorized === true` rule so a tampered
+// config can never weaken TLS for built-in providers.
+// ---------------------------------------------------------------------------
+
+describe('TLS bypass routing', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    vi.mocked(withTlsBypass).mockClear();
+  });
+
+  function lastBypassEnabled(): boolean | undefined {
+    const calls = vi.mocked(withTlsBypass).mock.calls;
+    const last = calls.at(-1);
+    return last?.[0];
+  }
+
+  it('runProviderTest: built-in provider with tlsRejectUnauthorized=true is forced to enabled=false', async () => {
+    const { restore } = installFakeFetch(() => ({ status: 200, body: { data: [] } }));
+    try {
+      const res = await runProviderTest({
+        provider: 'anthropic',
+        wire: 'anthropic',
+        apiKey: 'sk-ant-test',
+        baseUrl: 'https://api.anthropic.com',
+        builtin: true,
+        tlsRejectUnauthorized: true,
+      });
+      expect(res.ok).toBe(true);
+      expect(vi.mocked(withTlsBypass)).toHaveBeenCalledTimes(1);
+      expect(lastBypassEnabled()).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('runProviderTest: non-built-in provider with tlsRejectUnauthorized=true → enabled=true', async () => {
+    const { restore } = installFakeFetch(() => ({ status: 200, body: { data: [] } }));
+    try {
+      const res = await runProviderTest({
+        provider: 'internal-gateway',
+        wire: 'openai-chat',
+        apiKey: 'sk-test',
+        baseUrl: 'https://internal.example.corp/v1',
+        builtin: false,
+        tlsRejectUnauthorized: true,
+      });
+      expect(res.ok).toBe(true);
+      expect(vi.mocked(withTlsBypass)).toHaveBeenCalledTimes(1);
+      expect(lastBypassEnabled()).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('runProviderTest: non-built-in with tlsRejectUnauthorized=false → enabled=false', async () => {
+    const { restore } = installFakeFetch(() => ({ status: 200, body: { data: [] } }));
+    try {
+      const res = await runProviderTest({
+        provider: 'internal-gateway',
+        wire: 'openai-chat',
+        apiKey: 'sk-test',
+        baseUrl: 'https://internal.example.corp/v1',
+        builtin: false,
+        tlsRejectUnauthorized: false,
+      });
+      expect(res.ok).toBe(true);
+      expect(lastBypassEnabled()).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('runProviderTest: non-built-in with tlsRejectUnauthorized=undefined → enabled=false', async () => {
+    const { restore } = installFakeFetch(() => ({ status: 200, body: { data: [] } }));
+    try {
+      const res = await runProviderTest({
+        provider: 'internal-gateway',
+        wire: 'openai-chat',
+        apiKey: 'sk-test',
+        baseUrl: 'https://internal.example.corp/v1',
+        builtin: false,
+      });
+      expect(res.ok).toBe(true);
+      expect(lastBypassEnabled()).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('handleConfigV1TestEndpoint: payload with tlsRejectUnauthorized=true → enabled=true', async () => {
+    const { restore } = installFakeFetch(() => ({
+      status: 200,
+      body: { data: [{ id: 'gpt-x' }] },
+    }));
+    try {
+      const res = await handleConfigV1TestEndpoint({
+        wire: 'openai-chat',
+        baseUrl: 'https://internal.example.corp/v1',
+        apiKey: 'sk-test',
+        tlsRejectUnauthorized: true,
+      });
+      expect(res).toEqual({ ok: true, modelCount: 1, models: ['gpt-x'] });
+      expect(vi.mocked(withTlsBypass)).toHaveBeenCalledTimes(1);
+      expect(lastBypassEnabled()).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('handleConfigV1TestEndpoint: missing tlsRejectUnauthorized → enabled=false', async () => {
+    const { restore } = installFakeFetch(() => ({
+      status: 200,
+      body: { data: [{ id: 'gpt-x' }] },
+    }));
+    try {
+      await handleConfigV1TestEndpoint({
+        wire: 'openai-chat',
+        baseUrl: 'https://internal.example.corp/v1',
+        apiKey: 'sk-test',
+      });
+      expect(lastBypassEnabled()).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('handleConfigV1TestEndpoint: rejects non-boolean tlsRejectUnauthorized before fetch', async () => {
+    const { restore } = installFakeFetch(() => {
+      throw new Error('fetch should not be called');
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://provider.example/v1',
+          apiKey: 'sk-test',
+          tlsRejectUnauthorized: 'yes',
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: 'bad-input',
+        message: 'tlsRejectUnauthorized must be a boolean',
+      });
+      expect(vi.mocked(withTlsBypass)).not.toHaveBeenCalled();
     } finally {
       restore();
     }

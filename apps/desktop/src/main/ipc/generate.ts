@@ -25,6 +25,7 @@ import {
   ApplyCommentPayload,
   CancelGenerationPayloadV1,
   CodesignError,
+  type Config,
   deriveResourceStateFromChatRows,
   GeneratePayloadV1,
 } from '@open-codesign/shared';
@@ -70,6 +71,7 @@ import {
   type SessionChatStoreOptions,
 } from '../session-chat';
 import { type Database, getDesign, recordDiagnosticEvent } from '../snapshots-db';
+import { withTlsBypass } from '../tls-override';
 import { withStableWorkspacePath } from '../workspace-path-lock';
 import { listWorkspaceFilesAt, readWorkspaceFilesAt } from '../workspace-reader';
 import { finalAssistantTextForTurn } from './assistant-text';
@@ -83,6 +85,17 @@ export function contextWindowForContextPack(model: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? value
     : DEFAULT_CONTEXT_WINDOW_FOR_CONTEXT_PACK;
+}
+
+/**
+ * Whether outbound pi-ai requests for the given provider should bypass TLS
+ * certificate verification. True only for non-built-in providers whose
+ * persisted entry opts in via `tlsRejectUnauthorized: true`. Built-in
+ * providers force-ignore the flag (security floor — see issue #229).
+ */
+function resolveTlsBypassFor(cfg: Config, providerId: string): boolean {
+  const entry = cfg.providers?.[providerId];
+  return entry !== undefined && entry.builtin !== true && entry.tlsRejectUnauthorized === true;
 }
 
 export function shouldRunUserMemoryCandidateCapture(prefs: {
@@ -773,6 +786,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           coreLogger.info('[generate] step=validate_provider.ok', {
             provider: active.model.provider,
           });
+          const tlsBypass = resolveTlsBypassFor(cfg, active.model.provider);
 
           const prefs = await readPreferences();
           const { designId, workspaceRoot, promptContext, memoryContext, memoryLoadWarning } =
@@ -863,25 +877,27 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               hasReferenceUrl: promptContext.referenceUrl !== null,
               hasDesignSystem: promptContext.designSystem !== null,
             };
-            const routedPreferences = await routeRunPreferences({
-              prompt: payload.prompt,
-              existingPreferences: existingRunPreferences,
-              recentHistory: recentHistoryForRunPreferenceRouter(chatRows),
-              workspaceState,
-              designBrief: existingBrief ? JSON.stringify(existingBrief) : null,
-              userMemory: memoryContext?.userMemory?.content ?? null,
-              workspaceMemory: memoryContext?.workspaceMemory?.content ?? null,
-              model: active.model,
-              apiKey,
-              ...(baseUrl !== undefined ? { baseUrl } : {}),
-              wire: active.wire,
-              ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-              ...(active.reasoningLevel !== undefined
-                ? { reasoningLevel: active.reasoningLevel }
-                : {}),
-              ...(allowKeyless ? { allowKeyless: true } : {}),
-              logger: coreLogger,
-            });
+            const routedPreferences = await withTlsBypass(tlsBypass, () =>
+              routeRunPreferences({
+                prompt: payload.prompt,
+                existingPreferences: existingRunPreferences,
+                recentHistory: recentHistoryForRunPreferenceRouter(chatRows),
+                workspaceState,
+                designBrief: existingBrief ? JSON.stringify(existingBrief) : null,
+                userMemory: memoryContext?.userMemory?.content ?? null,
+                workspaceMemory: memoryContext?.workspaceMemory?.content ?? null,
+                model: active.model,
+                apiKey,
+                ...(baseUrl !== undefined ? { baseUrl } : {}),
+                wire: active.wire,
+                ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+                ...(active.reasoningLevel !== undefined
+                  ? { reasoningLevel: active.reasoningLevel }
+                  : {}),
+                ...(allowKeyless ? { allowKeyless: true } : {}),
+                logger: coreLogger,
+              }),
+            );
             let runPreferences = routedPreferences.preferences;
             const runProtocolPreflight = buildRunProtocolPreflight({
               prompt: payload.prompt,
@@ -1000,50 +1016,52 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               generationId: id,
               ...contextPack.trace,
             });
-            const result = await runGenerate(
-              {
-                prompt: payload.prompt,
-                history: contextPack.history,
-                model: active.model,
-                apiKey,
-                ...(isCodex
-                  ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
-                  : {}),
-                attachments: promptContext.attachments,
-                referenceUrl: promptContext.referenceUrl,
-                designSystem: promptContext.designSystem ?? null,
-                sessionContext: [
-                  ...contextPack.contextSections,
-                  ...formatRunProtocolPreflightAnswers(preflightAnswers),
-                ],
-                ...(memoryContext !== undefined ? { memoryContext: memoryContext.sections } : {}),
-                projectContext: promptContext.projectContext,
-                currentDesignName,
-                initialResourceState: resourceState,
-                runPreferences,
-                ...(baseUrl !== undefined ? { baseUrl } : {}),
-                wire: active.wire,
-                ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-                ...(active.reasoningLevel !== undefined
-                  ? { reasoningLevel: active.reasoningLevel }
-                  : {}),
-                ...(allowKeyless ? { allowKeyless: true } : {}),
-                signal: controller.signal,
-                logger: coreLogger,
-              },
-              id,
-              designId,
-              payload.previousSource ?? null,
-              workspaceRoot,
-              promptContext.attachments,
-              {
-                onAggressivePrune: () => {
-                  aggressivePruneDetected = true;
+            const result = await withTlsBypass(tlsBypass, () =>
+              runGenerate(
+                {
+                  prompt: payload.prompt,
+                  history: contextPack.history,
+                  model: active.model,
+                  apiKey,
+                  ...(isCodex
+                    ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
+                    : {}),
+                  attachments: promptContext.attachments,
+                  referenceUrl: promptContext.referenceUrl,
+                  designSystem: promptContext.designSystem ?? null,
+                  sessionContext: [
+                    ...contextPack.contextSections,
+                    ...formatRunProtocolPreflightAnswers(preflightAnswers),
+                  ],
+                  ...(memoryContext !== undefined ? { memoryContext: memoryContext.sections } : {}),
+                  projectContext: promptContext.projectContext,
+                  currentDesignName,
+                  initialResourceState: resourceState,
+                  runPreferences,
+                  ...(baseUrl !== undefined ? { baseUrl } : {}),
+                  wire: active.wire,
+                  ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+                  ...(active.reasoningLevel !== undefined
+                    ? { reasoningLevel: active.reasoningLevel }
+                    : {}),
+                  ...(allowKeyless ? { allowKeyless: true } : {}),
+                  signal: controller.signal,
+                  logger: coreLogger,
                 },
-                onComplete: (messages) => {
-                  capturedMessages = messages;
+                id,
+                designId,
+                payload.previousSource ?? null,
+                workspaceRoot,
+                promptContext.attachments,
+                {
+                  onAggressivePrune: () => {
+                    aggressivePruneDetected = true;
+                  },
+                  onComplete: (messages) => {
+                    capturedMessages = messages;
+                  },
                 },
-              },
+              ),
             );
             logIpc.info('generate.ok', {
               generationId: id,
@@ -1069,26 +1087,28 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 prefs.memoryEnabled === true && prefs.workspaceMemoryAutoUpdate === true
                   ? (() => {
                       const startedAt = Date.now();
-                      return triggerWorkspaceMemoryUpdate({
-                        workspacePath: memoryWorkspaceRoot,
-                        workspaceName: workspaceNameFromPath(memoryWorkspaceRoot),
-                        designId,
-                        designName,
-                        conversationMessages: messagesForMemory,
-                        userMemory: memoryContext?.userMemory?.content ?? null,
-                        designMdSummary: designMdSummaryForMemory(promptContext.projectContext),
-                        model: active.model,
-                        apiKey,
-                        ...(baseUrl !== undefined ? { baseUrl } : {}),
-                        wire: active.wire,
-                        ...(active.httpHeaders !== undefined
-                          ? { httpHeaders: active.httpHeaders }
-                          : {}),
-                        ...(active.reasoningLevel !== undefined
-                          ? { reasoningLevel: active.reasoningLevel }
-                          : {}),
-                        ...(allowKeyless ? { allowKeyless: true } : {}),
-                      })
+                      return withTlsBypass(tlsBypass, () =>
+                        triggerWorkspaceMemoryUpdate({
+                          workspacePath: memoryWorkspaceRoot,
+                          workspaceName: workspaceNameFromPath(memoryWorkspaceRoot),
+                          designId,
+                          designName,
+                          conversationMessages: messagesForMemory,
+                          userMemory: memoryContext?.userMemory?.content ?? null,
+                          designMdSummary: designMdSummaryForMemory(promptContext.projectContext),
+                          model: active.model,
+                          apiKey,
+                          ...(baseUrl !== undefined ? { baseUrl } : {}),
+                          wire: active.wire,
+                          ...(active.httpHeaders !== undefined
+                            ? { httpHeaders: active.httpHeaders }
+                            : {}),
+                          ...(active.reasoningLevel !== undefined
+                            ? { reasoningLevel: active.reasoningLevel }
+                            : {}),
+                          ...(allowKeyless ? { allowKeyless: true } : {}),
+                        }),
+                      )
                         .then((workspaceMemory) => {
                           if (
                             workspaceMemory !== null &&
@@ -1154,29 +1174,31 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               const briefUpdate = prefs.memoryEnabled
                 ? workspaceMemoryUpdate
                     .then((workspaceMemory) =>
-                      updateDesignSessionBrief({
-                        existingBrief,
-                        conversationMessages: messagesForMemory,
-                        designId,
-                        designName,
-                        userMemory: memoryContext?.userMemory?.content ?? null,
-                        workspaceMemory: workspaceMemory?.content ?? null,
-                        sourceUserMemoryHash: memoryContext?.userMemory?.hash,
-                        sourceWorkspaceMemoryHash: workspaceMemory?.hash,
-                        sourceMemoryUpdatedAt:
-                          workspaceMemory?.updatedAt ?? memoryContext?.userMemory?.updatedAt,
-                        model: active.model,
-                        apiKey,
-                        ...(baseUrl !== undefined ? { baseUrl } : {}),
-                        wire: active.wire,
-                        ...(active.httpHeaders !== undefined
-                          ? { httpHeaders: active.httpHeaders }
-                          : {}),
-                        ...(active.reasoningLevel !== undefined
-                          ? { reasoningLevel: active.reasoningLevel }
-                          : {}),
-                        ...(allowKeyless ? { allowKeyless: true } : {}),
-                      }),
+                      withTlsBypass(tlsBypass, () =>
+                        updateDesignSessionBrief({
+                          existingBrief,
+                          conversationMessages: messagesForMemory,
+                          designId,
+                          designName,
+                          userMemory: memoryContext?.userMemory?.content ?? null,
+                          workspaceMemory: workspaceMemory?.content ?? null,
+                          sourceUserMemoryHash: memoryContext?.userMemory?.hash,
+                          sourceWorkspaceMemoryHash: workspaceMemory?.hash,
+                          sourceMemoryUpdatedAt:
+                            workspaceMemory?.updatedAt ?? memoryContext?.userMemory?.updatedAt,
+                          model: active.model,
+                          apiKey,
+                          ...(baseUrl !== undefined ? { baseUrl } : {}),
+                          wire: active.wire,
+                          ...(active.httpHeaders !== undefined
+                            ? { httpHeaders: active.httpHeaders }
+                            : {}),
+                          ...(active.reasoningLevel !== undefined
+                            ? { reasoningLevel: active.reasoningLevel }
+                            : {}),
+                          ...(allowKeyless ? { allowKeyless: true } : {}),
+                        }),
+                      ),
                     )
                     .then((briefResult) => {
                       const opts = chatStoreOptions();
@@ -1201,19 +1223,21 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                     userMessages: extractUserMessagesForMemory(messagesForMemory),
                   })
                     .then(() => {
-                      return triggerUserMemoryConsolidation({
-                        model: active.model,
-                        apiKey,
-                        ...(baseUrl !== undefined ? { baseUrl } : {}),
-                        wire: active.wire,
-                        ...(active.httpHeaders !== undefined
-                          ? { httpHeaders: active.httpHeaders }
-                          : {}),
-                        ...(active.reasoningLevel !== undefined
-                          ? { reasoningLevel: active.reasoningLevel }
-                          : {}),
-                        ...(allowKeyless ? { allowKeyless: true } : {}),
-                      });
+                      return withTlsBypass(tlsBypass, () =>
+                        triggerUserMemoryConsolidation({
+                          model: active.model,
+                          apiKey,
+                          ...(baseUrl !== undefined ? { baseUrl } : {}),
+                          wire: active.wire,
+                          ...(active.httpHeaders !== undefined
+                            ? { httpHeaders: active.httpHeaders }
+                            : {}),
+                          ...(active.reasoningLevel !== undefined
+                            ? { reasoningLevel: active.reasoningLevel }
+                            : {}),
+                          ...(allowKeyless ? { allowKeyless: true } : {}),
+                        }),
+                      );
                     })
                     .catch((err) => {
                       logIpc.warn('user-memory.maintenance.fail', {
@@ -1443,23 +1467,28 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       const allowKeyless = active.allowKeyless;
       const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
       const baseUrl = active.baseUrl ?? undefined;
+      const tlsBypass = resolveTlsBypassFor(cfg, active.model.provider);
       const titleLogger: CoreLogger = {
         info: (event, data) => logIpc.info(event, data),
         warn: (event, data) => logIpc.warn(event, data),
         error: (event, data) => logIpc.error(event, data),
       };
       try {
-        return await generateTitle({
-          prompt,
-          model: active.model,
-          apiKey,
-          ...(baseUrl !== undefined ? { baseUrl } : {}),
-          wire: active.wire,
-          ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-          ...(active.reasoningLevel !== undefined ? { reasoningLevel: active.reasoningLevel } : {}),
-          ...(allowKeyless ? { allowKeyless: true } : {}),
-          logger: titleLogger,
-        });
+        return await withTlsBypass(tlsBypass, () =>
+          generateTitle({
+            prompt,
+            model: active.model,
+            apiKey,
+            ...(baseUrl !== undefined ? { baseUrl } : {}),
+            wire: active.wire,
+            ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+            ...(active.reasoningLevel !== undefined
+              ? { reasoningLevel: active.reasoningLevel }
+              : {}),
+            ...(allowKeyless ? { allowKeyless: true } : {}),
+            logger: titleLogger,
+          }),
+        );
       } catch (err) {
         logIpc.error('[title] generate-title.fail', {
           provider: active.model.provider,

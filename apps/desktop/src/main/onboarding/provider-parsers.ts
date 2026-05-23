@@ -37,6 +37,9 @@ export interface AddCustomProviderInput {
   httpHeaders?: Record<string, string>;
   queryParams?: Record<string, string>;
   envKey?: string;
+  /** Per-provider TLS verification opt-out (#229). Built-in providers
+   *  force-ignore this flag at runtime. */
+  tlsRejectUnauthorized?: boolean;
   setAsActive: boolean;
 }
 
@@ -53,6 +56,9 @@ export interface UpdateProviderInput {
    *  Empty string means "clear stored secret" for providers that became
    *  keyless (e.g. switched to local Ollama). `undefined` means "leave alone". */
   apiKey?: string;
+  /** Tri-state: `true`/`false` writes the field; `null` clears it back to
+   *  the default (strict TLS); `undefined` leaves the existing value alone. */
+  tlsRejectUnauthorized?: boolean | null;
 }
 
 const SAVE_KEY_FIELDS = ['provider', 'apiKey', 'modelPrimary', 'baseUrl'] as const;
@@ -67,6 +73,7 @@ const ADD_PROVIDER_FIELDS = [
   'httpHeaders',
   'queryParams',
   'envKey',
+  'tlsRejectUnauthorized',
   'setAsActive',
 ] as const;
 const UPDATE_PROVIDER_FIELDS = [
@@ -79,6 +86,7 @@ const UPDATE_PROVIDER_FIELDS = [
   'wire',
   'reasoningLevel',
   'apiKey',
+  'tlsRejectUnauthorized',
 ] as const;
 
 function assertKnownFields(
@@ -308,6 +316,12 @@ export function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
     }
     out.envKey = r['envKey'].trim();
   }
+  if (r['tlsRejectUnauthorized'] !== undefined) {
+    if (typeof r['tlsRejectUnauthorized'] !== 'boolean') {
+      throw new CodesignError('tlsRejectUnauthorized must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+    }
+    out.tlsRejectUnauthorized = r['tlsRejectUnauthorized'];
+  }
   return out;
 }
 
@@ -372,6 +386,17 @@ export function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
       throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
     }
     out.apiKey = r['apiKey'];
+  }
+  if (r['tlsRejectUnauthorized'] === null) {
+    out.tlsRejectUnauthorized = null;
+  } else if (r['tlsRejectUnauthorized'] !== undefined) {
+    if (typeof r['tlsRejectUnauthorized'] !== 'boolean') {
+      throw new CodesignError(
+        'tlsRejectUnauthorized must be a boolean or null',
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+    out.tlsRejectUnauthorized = r['tlsRejectUnauthorized'];
   }
   return out;
 }

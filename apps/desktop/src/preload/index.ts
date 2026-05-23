@@ -199,6 +199,10 @@ export interface ProviderRow {
   defaultModel: string;
   hasKey: boolean;
   reasoningLevel?: ReasoningLevel;
+  /** Per-provider opt-in to skip TLS verification on outbound HTTPS.
+   *  Built-in providers force-ignore this flag at runtime; only surfaced
+   *  for custom/imported providers. See #229. */
+  tlsRejectUnauthorized?: boolean;
   error?: 'decryption_failed' | string;
 }
 
@@ -519,6 +523,7 @@ const api = {
       httpHeaders?: Record<string, string>;
       queryParams?: Record<string, string>;
       envKey?: string;
+      tlsRejectUnauthorized?: boolean;
       setAsActive: boolean;
     }) => ipcRenderer.invoke('config:v1:add-provider', input) as Promise<OnboardingState>,
     updateProvider: (input: {
@@ -535,6 +540,9 @@ const api = {
       /** Non-empty string rotates the stored secret; empty string clears it
        *  (keyless providers); omit to leave the existing secret untouched. */
       apiKey?: string;
+      /** Per-provider TLS verification opt-out (#229). Omit to leave
+       *  untouched; `false`/`true` writes the field through. */
+      tlsRejectUnauthorized?: boolean;
     }) => ipcRenderer.invoke('config:v1:update-provider', input) as Promise<OnboardingState>,
     removeProvider: (id: string) =>
       ipcRenderer.invoke('config:v1:remove-provider', id) as Promise<OnboardingState>,
@@ -549,6 +557,7 @@ const api = {
       apiKey: string;
       httpHeaders?: Record<string, string>;
       allowPrivateNetwork?: boolean;
+      tlsRejectUnauthorized?: boolean;
     }) => ipcRenderer.invoke('config:v1:test-endpoint', input) as Promise<TestEndpointResponse>,
     listEndpointModels: (input: { wire: WireApi; baseUrl: string; apiKey: string }) =>
       ipcRenderer.invoke('config:v1:list-endpoint-models', input) as Promise<
