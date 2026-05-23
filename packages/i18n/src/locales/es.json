@@ -585,6 +585,8 @@
       "timeout": "Tiempo de espera de generación",
       "timeoutHint": "Segundos antes de que una solicitud de generación se aborte.",
       "timeoutSeconds": "{{value}} s",
+      "proxy": "Proxy HTTP",
+      "proxyHint": "Enruta el tráfico de red y las solicitudes a la API del LLM a través de este proxy (p. ej., http://127.0.0.1:7890). Deja en blanco para desactivar. Se aplica al instante, sin reinicio.",
       "devtools": "Herramientas de desarrollador",
       "devtoolsHint": "Abrir el panel de Chromium DevTools para el renderizador.",
       "toggleDevtools": "Alternar DevTools",

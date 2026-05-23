@@ -25,6 +25,39 @@ export function resolveTimeoutOptions(currentSec: number): number[] {
   return base;
 }
 
+/** Commit-on-blur input — avoids saving (and re-applying the proxy) on every
+ *  keystroke while still updating the underlying preference when focus leaves
+ *  the field or the user presses Enter. */
+function ProxyUrlInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  return (
+    <input
+      type="text"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== value) onCommit(draft);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.currentTarget.blur();
+        } else if (e.key === 'Escape') {
+          setDraft(value);
+          e.currentTarget.blur();
+        }
+      }}
+      placeholder="http://127.0.0.1:7890"
+      spellCheck={false}
+      autoCapitalize="off"
+      autoCorrect="off"
+      className="h-7 w-full max-w-md px-2.5 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-sm)] text-[var(--text-sm)] text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-accent)] transition-colors"
+    />
+  );
+}
+
 export function AdvancedTab() {
   const t = useT();
   const pushToast = useCodesignStore((s) => s.pushToast);
@@ -37,6 +70,7 @@ export function AdvancedTab() {
     memoryEnabled: true,
     workspaceMemoryAutoUpdate: true,
     userMemoryAutoUpdate: false,
+    proxyUrl: '',
   });
 
   useEffect(() => {
@@ -117,6 +151,10 @@ export function AdvancedTab() {
             label: t('settings.advanced.timeoutSeconds', { value: sec }),
           }))}
         />
+      </Row>
+
+      <Row label={t('settings.advanced.proxy')} hint={t('settings.advanced.proxyHint')}>
+        <ProxyUrlInput value={prefs.proxyUrl} onCommit={(v) => void updatePref({ proxyUrl: v })} />
       </Row>
 
       <Row label={t('settings.advanced.devtools')} hint={t('settings.advanced.devtoolsHint')}>

@@ -14,6 +14,7 @@ const DEFAULT_PREFS: Preferences = {
   memoryEnabled: true,
   workspaceMemoryAutoUpdate: true,
   userMemoryAutoUpdate: false,
+  proxyUrl: '',
 };
 
 export function MemoryTab() {

@@ -640,6 +640,8 @@
       "timeout": "Generation timeout",
       "timeoutHint": "Seconds before a generation request is aborted.",
       "timeoutSeconds": "{{value}} s",
+      "proxy": "HTTP proxy",
+      "proxyHint": "Route outbound network and LLM API requests through this proxy (e.g., http://127.0.0.1:7890). Leave blank to disable. Applied immediately — no restart needed.",
       "devtools": "Developer tools",
       "devtoolsHint": "Open the Chromium DevTools panel for the renderer.",
       "toggleDevtools": "Toggle DevTools",
