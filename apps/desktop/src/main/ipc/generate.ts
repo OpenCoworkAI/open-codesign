@@ -1329,6 +1329,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           const allowKeyless = active.allowKeyless;
           const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
           const baseUrl = active.baseUrl ?? undefined;
+          const tlsBypass = resolveTlsBypassFor(cfg, active.model.provider);
 
           const { workspaceRoot, promptContext } = await withStableWorkspacePath(
             payload.designId,
@@ -1376,38 +1377,40 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             );
             clearTimeoutGuard = await armTimeout(id, controller);
             const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
-            const result = await runGenerate(
-              {
-                prompt: userPrompt,
-                systemPrompt,
-                history: [],
-                model: active.model,
-                apiKey,
-                ...(isCodex
-                  ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
-                  : {}),
-                attachments: promptContext.attachments,
-                referenceUrl: promptContext.referenceUrl,
-                designSystem: promptContext.designSystem ?? null,
-                projectContext: promptContext.projectContext,
-                initialResourceState: deriveResourceStateFromChatRows(
-                  chatRowsForDesign(payload.designId),
-                ),
-                ...(baseUrl !== undefined ? { baseUrl } : {}),
-                wire: active.wire,
-                ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-                ...(active.reasoningLevel !== undefined
-                  ? { reasoningLevel: active.reasoningLevel }
-                  : {}),
-                ...(allowKeyless ? { allowKeyless: true } : {}),
-                signal: controller.signal,
-                logger: coreLogger,
-              },
-              id,
-              payload.designId,
-              payload.artifactSource,
-              workspaceRoot,
-              promptContext.attachments,
+            const result = await withTlsBypass(tlsBypass, () =>
+              runGenerate(
+                {
+                  prompt: userPrompt,
+                  systemPrompt,
+                  history: [],
+                  model: active.model,
+                  apiKey,
+                  ...(isCodex
+                    ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
+                    : {}),
+                  attachments: promptContext.attachments,
+                  referenceUrl: promptContext.referenceUrl,
+                  designSystem: promptContext.designSystem ?? null,
+                  projectContext: promptContext.projectContext,
+                  initialResourceState: deriveResourceStateFromChatRows(
+                    chatRowsForDesign(payload.designId),
+                  ),
+                  ...(baseUrl !== undefined ? { baseUrl } : {}),
+                  wire: active.wire,
+                  ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+                  ...(active.reasoningLevel !== undefined
+                    ? { reasoningLevel: active.reasoningLevel }
+                    : {}),
+                  ...(allowKeyless ? { allowKeyless: true } : {}),
+                  signal: controller.signal,
+                  logger: coreLogger,
+                },
+                id,
+                payload.designId,
+                payload.artifactSource,
+                workspaceRoot,
+                promptContext.attachments,
+              ),
             );
             logIpc.info('applyComment.ok', {
               generationId: id,
