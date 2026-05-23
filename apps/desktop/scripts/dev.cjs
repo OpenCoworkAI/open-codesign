@@ -10,6 +10,14 @@ const env = { ...process.env };
 // so Electron behaves like Node. The desktop dev app must launch real Electron.
 env.ELECTRON_RUN_AS_NODE = undefined;
 
+// Electron exits fatally when launched as uid 0 unless --no-sandbox is passed.
+// Containers, dev VMs, and CI runners commonly run as root; without this they
+// can never `pnpm dev` at all. electron-vite reads NO_SANDBOX=1 and forwards
+// --no-sandbox to the spawned Electron process (see electron-vite/dist startElectron).
+if (process.getuid && process.getuid() === 0 && !env.NO_SANDBOX) {
+  env.NO_SANDBOX = '1';
+}
+
 const child = spawn(process.execPath, [electronViteBin, 'dev', ...process.argv.slice(2)], {
   env,
   stdio: ['inherit', 'inherit', 'pipe'],

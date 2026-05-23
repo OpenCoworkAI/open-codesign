@@ -118,6 +118,10 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
         // dialogs that would otherwise stall the launch handshake.
         '--no-first-run',
         '--no-default-browser-check',
+        // Chrome's zygote refuses to start as uid 0 without this. Containers,
+        // dev VMs, and CI runners frequently run as root; gating to root keeps
+        // the production launch path unchanged on macOS/Windows/user-mode Linux.
+        ...(process.getuid?.() === 0 ? ['--no-sandbox'] : []),
       ],
     });
     page = await browser.newPage();
