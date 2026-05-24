@@ -16,6 +16,7 @@ import {
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
 import { getCodexTokenStore } from './codex-oauth-ipc';
 import { ipcMain } from './electron-runtime';
+import { resolveImageGenerationTestCredentials } from './image-generation-settings';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from './onboarding-ipc';
 import { isKeylessProviderAllowed } from './provider-settings';
 import { withTlsBypass } from './tls-override';
@@ -806,6 +807,10 @@ export function registerConnectionIpc(): void {
     handleConnectionV1TestProvider(raw),
   );
 
+  // Tests the currently configured image-generation provider using its own
+  // (possibly separate) key + baseUrl. No payload — resolved from settings.
+  ipcMain.handle('connection:v1:test-image-provider', () => handleConnectionV1TestImageProvider());
+
   // Fetch available models for a stored provider by ID — credentials resolved
   // from the encrypted config so the renderer never touches plaintext keys.
   ipcMain.handle('models:v1:list-for-provider', (_e, raw: unknown) =>
@@ -914,6 +919,36 @@ async function handleConnectionV1TestProvider(raw: unknown): Promise<ConnectionT
   const creds = resolveCredentialsForProvider(raw);
   if (!('provider' in creds)) return creds;
   return runProviderTest(creds);
+}
+
+// Image generation providers live in their own config slice (cfg.imageGeneration)
+// with independent baseUrl, credential mode, and (for custom mode) a separate
+// stored key. The probe still hits GET /models on the image baseUrl, so once we
+// resolve the credentials we hand off to the shared runProviderTest with a
+// synthesized ActiveProviderCredentials. chatgpt-codex stays on its OAuth path.
+async function handleConnectionV1TestImageProvider(): Promise<ConnectionTestResponse> {
+  const cfg = getCachedConfig();
+  const resolved = await resolveImageGenerationTestCredentials(cfg);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: resolved.message,
+      hint:
+        resolved.code === 'IMAGE_GEN_DISABLED'
+          ? 'Configure an image generation provider in Settings → Image generation first.'
+          : 'Add an API key for the image generation provider in Settings → Image generation, or sign in to ChatGPT.',
+    };
+  }
+  const wire: WireApi =
+    resolved.provider === 'chatgpt-codex' ? 'openai-codex-responses' : 'openai-chat';
+  return runProviderTest({
+    provider: resolved.provider,
+    wire,
+    apiKey: resolved.apiKey,
+    baseUrl: resolved.baseUrl,
+    builtin: true,
+  });
 }
 
 type ResolvedProviderForListing = { providerId: string; entry: ProviderEntry };

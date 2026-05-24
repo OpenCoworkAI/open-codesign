@@ -618,6 +618,10 @@ const api = {
       ipcRenderer.invoke('connection:v1:test-provider', providerId) as Promise<
         ConnectionTestResult | ConnectionTestError
       >,
+    testImageProvider: () =>
+      ipcRenderer.invoke('connection:v1:test-image-provider') as Promise<
+        ConnectionTestResult | ConnectionTestError
+      >,
   },
   models: {
     list: (input: { provider: SupportedOnboardingProvider; apiKey: string; baseUrl: string }) =>
