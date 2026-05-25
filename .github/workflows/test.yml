@@ -31,8 +31,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run unit and fast integration tests
-        run: pnpm run test:unit
+      - name: Run tests
+        run: pnpm run test
   e2e:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
