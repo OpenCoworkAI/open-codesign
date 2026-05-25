@@ -300,7 +300,7 @@ function buildPiModel(
     input: supportsImageInput(wire, effectiveModelId) ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
-    maxTokens: 32000,
+    maxTokens: /^gpt-4o/i.test(effectiveModelId) ? 16384 : 32000,
   };
   const compat = openAIChatCompatForBaseUrl(wire, canonicalBase);
   if (compat !== undefined) out.compat = compat;
