@@ -298,7 +298,7 @@ export function AddCustomProviderModal({
         if (!editTarget.builtin) {
           const previous = editTarget.tlsRejectUnauthorized === true;
           if (previous !== tlsRejectUnauthorized) {
-            update.tlsRejectUnauthorized = tlsRejectUnauthorized ? true : false;
+            update.tlsRejectUnauthorized = !!tlsRejectUnauthorized;
           }
         }
         await window.codesign.config.updateProvider(update);

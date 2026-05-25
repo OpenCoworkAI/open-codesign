@@ -18,6 +18,13 @@ if (process.getuid && process.getuid() === 0 && !env.NO_SANDBOX) {
   env.NO_SANDBOX = '1';
 }
 
+if (process.env.REMOTE_DEBUGGING_PORT) {
+  env.ELECTRON_CLI_ARGS = JSON.stringify([
+    `--remote-debugging-port=${process.env.REMOTE_DEBUGGING_PORT}`,
+    '--remote-allow-origins=*',
+  ]);
+}
+
 const child = spawn(process.execPath, [electronViteBin, 'dev', ...process.argv.slice(2)], {
   env,
   stdio: ['inherit', 'inherit', 'pipe'],
