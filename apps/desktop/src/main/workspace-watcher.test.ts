@@ -124,10 +124,10 @@ describe('files-watcher subscribe / unsubscribe', () => {
     expect(watchMock).not.toHaveBeenCalled();
   });
 
-  it('rejects when the watcher cannot start', () => {
+  it('rejects when the watcher throws a non-system error', () => {
     reset();
     watchMock.mockImplementation(() => {
-      throw new Error('watch denied');
+      throw new Error('watcher implementation bug');
     });
     getDesignMock.mockReturnValue({
       id: 'd1',
@@ -136,21 +136,24 @@ describe('files-watcher subscribe / unsubscribe', () => {
     registerFilesWatcherIpc({} as never, () => null);
     const sub = getHandler('codesign:files:v1:subscribe');
 
-    const err = captureError(() => sub(null, { schemaVersion: 1, designId: 'd1' }));
+    const caught = captureError(() => sub(null, { schemaVersion: 1, designId: 'd1' }));
 
-    expect(err).toMatchObject({ name: 'CodesignError', code: 'IPC_DB_ERROR' });
+    expect(caught).toMatchObject({ name: 'CodesignError', code: 'IPC_DB_ERROR' });
     expect(watchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('does not reject when the bound workspace folder is missing', () => {
+  it.each([
+    'ENOENT',
+    'ENOTDIR',
+  ])('does not reject when the bound workspace is unavailable with %s', (code) => {
     reset();
-    const err = Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+    const err = Object.assign(new Error('workspace unavailable'), { code });
     watchMock.mockImplementation(() => {
       throw err;
     });
     getDesignMock.mockReturnValue({
       id: 'd1',
-      workspacePath: tempWorkspace('codesign-watch-missing'),
+      workspacePath: tempWorkspace(`codesign-watch-${code.toLowerCase()}`),
     });
     registerFilesWatcherIpc({} as never, () => null);
     const sub = getHandler('codesign:files:v1:subscribe');
@@ -162,11 +165,15 @@ describe('files-watcher subscribe / unsubscribe', () => {
   });
 
   it.each([
-    ['permission denial', 'EPERM'],
-    ['unsupported directory watch', 'EISDIR'],
-  ])('falls back to polling when native watch fails from %s', (_reason, code) => {
+    'EPERM',
+    'EACCES',
+    'EISDIR',
+    'EINVAL',
+    'ENOSPC',
+    'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM',
+  ])('falls back to polling when native watch fails with %s', (code) => {
     reset();
-    const err = Object.assign(new Error('watch unavailable'), { code });
+    const err = Object.assign(new Error('native watch unavailable'), { code });
     watchMock.mockImplementation(() => {
       throw err;
     });

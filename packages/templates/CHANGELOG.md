@@ -1,5 +1,17 @@
 # @open-codesign/templates
 
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [7a1977d]
+- Updated dependencies [8ea4bff]
+- Updated dependencies [6cbb639]
+- Updated dependencies [bf86fea]
+- Updated dependencies [7a1977d]
+  - @open-codesign/shared@0.3.0
+  - @open-codesign/i18n@0.2.1
+
 ## 0.1.5
 
 ### Patch Changes

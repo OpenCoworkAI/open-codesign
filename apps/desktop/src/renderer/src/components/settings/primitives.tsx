@@ -360,6 +360,15 @@ export function ProviderCard({
               {t('settings.providers.missingKey')}
             </span>
           ) : null}
+          {row.builtin !== true && row.tlsRejectUnauthorized === true && (
+            <span
+              title={t('settings.providers.tlsRejectUnauthorized.badgeTooltip')}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-[var(--color-warning)] text-[var(--color-warning)] bg-[color-mix(in_oklab,var(--color-warning)_12%,transparent)] text-[var(--font-size-badge)] font-medium leading-none"
+            >
+              <AlertTriangle className="w-2.5 h-2.5" />
+              {t('settings.providers.tlsRejectUnauthorized.badge')}
+            </span>
+          )}
           {row.baseUrl && (
             <span className="flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)] min-w-0">
               <Globe className="w-3 h-3 shrink-0" />

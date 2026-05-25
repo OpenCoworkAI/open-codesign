@@ -18,6 +18,7 @@ import { getCodexTokenStore } from './codex-oauth-ipc';
 import { ipcMain } from './electron-runtime';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from './onboarding-ipc';
 import { isKeylessProviderAllowed } from './provider-settings';
+import { withTlsBypass } from './tls-override';
 
 // Re-export so existing importers (tests, other main-process modules) keep
 // working after the helpers moved to `./auth-headers` to break a circular
@@ -48,6 +49,7 @@ const TEST_ENDPOINT_FIELDS = [
   'apiKey',
   'httpHeaders',
   'allowPrivateNetwork',
+  'tlsRejectUnauthorized',
 ] as const;
 
 function assertKnownFields(
@@ -479,6 +481,16 @@ export interface ActiveProviderCredentials {
   apiKey: string;
   baseUrl: string;
   httpHeaders?: Record<string, string>;
+  /**
+   * True when the provider entry came from BUILTIN_PROVIDERS rather than user
+   * config. Built-ins force-ignore `tlsRejectUnauthorized` so a tampered
+   * config can never weaken outbound TLS for official endpoints. Optional so
+   * that test fixtures can omit it (treated as non-builtin, which is the safe
+   * default — the flag is checked against `!== true` everywhere).
+   */
+  builtin?: boolean;
+  /** Opt-in TLS verification bypass; only honored when `builtin === false`. */
+  tlsRejectUnauthorized?: boolean;
 }
 
 function resolveCredentialsForProvider(
@@ -525,7 +537,11 @@ function resolveCredentialsForProvider(
     wire: entry.wire,
     apiKey,
     baseUrl: entry.baseUrl,
+    builtin: entry.builtin === true,
     ...(entry.httpHeaders !== undefined ? { httpHeaders: entry.httpHeaders } : {}),
+    ...(entry.tlsRejectUnauthorized !== undefined
+      ? { tlsRejectUnauthorized: entry.tlsRejectUnauthorized }
+      : {}),
   };
 }
 
@@ -590,57 +606,63 @@ export async function runProviderTest(
     return testChatGPTCodexOAuth();
   }
 
-  const { url, normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
-  const headers = buildAuthHeadersForWire(
-    creds.wire,
-    creds.apiKey,
-    creds.httpHeaders,
-    creds.baseUrl,
-  );
+  // Bypass is the per-provider opt-in, force-gated so a tampered config can
+  // never weaken TLS for built-in providers. Wrapping the whole body covers
+  // both the GET /models probe and the inner POST inside tryDegradeProbe.
+  const bypass = creds.builtin !== true && creds.tlsRejectUnauthorized === true;
+  return withTlsBypass(bypass, async () => {
+    const { url, normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
+    const headers = buildAuthHeadersForWire(
+      creds.wire,
+      creds.apiKey,
+      creds.httpHeaders,
+      creds.baseUrl,
+    );
 
-  let res: Response;
-  try {
-    res = await fetchWithTimeout(url, { method: 'GET', headers });
-  } catch (err) {
-    const { code, hint } = classifyNetworkError(err);
-    return {
-      ok: false,
-      code,
-      message: err instanceof Error ? err.message : 'Network request failed',
-      hint,
-      compatibility: 'incompatible',
-      reasonCategory: code === 'ECONNREFUSED' ? 'network-unreachable' : 'unknown',
-    };
-  }
-  if (!res.ok) {
-    // Some OpenAI-compatible gateways (Zhipu GLM, a handful of self-hosted
-    // proxies) don't expose /models but their /chat/completions works fine.
-    // If the primary probe 404s on those wires, degrade-probe with a tiny
-    // chat request before declaring the endpoint dead. We intentionally do
-    // not degrade anthropic — its /v1/models is standard, and skipping it
-    // would mask real path-shape mistakes.
-    if (
-      res.status === 404 &&
-      (creds.wire === 'openai-chat' ||
-        creds.wire === 'openai-responses' ||
-        creds.wire === 'anthropic')
-    ) {
-      const degraded = await tryDegradeProbe(creds.wire, normalizedBaseUrl, headers);
-      if (degraded !== null) return degraded;
-      // Inference endpoint also 404'd (or the network dropped) — fall through
-      // and report the original /models 404.
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(url, { method: 'GET', headers });
+    } catch (err) {
+      const { code, hint } = classifyNetworkError(err);
+      return {
+        ok: false,
+        code,
+        message: err instanceof Error ? err.message : 'Network request failed',
+        hint,
+        compatibility: 'incompatible',
+        reasonCategory: code === 'ECONNREFUSED' ? 'network-unreachable' : 'unknown',
+      };
     }
-    const { code, hint } = classifyHttpError(res.status);
-    return {
-      ok: false,
-      code,
-      message: `HTTP ${res.status}`,
-      hint,
-      compatibility: 'incompatible',
-      reasonCategory: connectionCategoryForStatus(res.status, normalizedBaseUrl),
-    };
-  }
-  return { ok: true, probeMethod: 'models', compatibility: 'compatible' };
+    if (!res.ok) {
+      // Some OpenAI-compatible gateways (Zhipu GLM, a handful of self-hosted
+      // proxies) don't expose /models but their /chat/completions works fine.
+      // If the primary probe 404s on those wires, degrade-probe with a tiny
+      // chat request before declaring the endpoint dead. We intentionally do
+      // not degrade anthropic — its /v1/models is standard, and skipping it
+      // would mask real path-shape mistakes.
+      if (
+        res.status === 404 &&
+        (creds.wire === 'openai-chat' ||
+          creds.wire === 'openai-responses' ||
+          creds.wire === 'anthropic')
+      ) {
+        const degraded = await tryDegradeProbe(creds.wire, normalizedBaseUrl, headers);
+        if (degraded !== null) return degraded;
+        // Inference endpoint also 404'd (or the network dropped) — fall through
+        // and report the original /models 404.
+      }
+      const { code, hint } = classifyHttpError(res.status);
+      return {
+        ok: false,
+        code,
+        message: `HTTP ${res.status}`,
+        hint,
+        compatibility: 'incompatible',
+        reasonCategory: connectionCategoryForStatus(res.status, normalizedBaseUrl),
+      };
+    }
+    return { ok: true, probeMethod: 'models', compatibility: 'compatible' };
+  });
 }
 
 async function tryDegradeProbe(
@@ -971,10 +993,13 @@ async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListRe
   const { url } = buildEndpointForWire(entry.wire, entry.baseUrl);
   const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.httpHeaders, entry.baseUrl);
 
-  const result = await fetchModelListResponse(url, headers, {
-    message: 'Unexpected models response shape',
-    hint: 'Check provider /models endpoint compatibility',
-  });
+  const bypass = entry.builtin !== true && entry.tlsRejectUnauthorized === true;
+  const result = await withTlsBypass(bypass, () =>
+    fetchModelListResponse(url, headers, {
+      message: 'Unexpected models response shape',
+      hint: 'Check provider /models endpoint compatibility',
+    }),
+  );
   if (result.ok) setCachedModels(providerId, entry.baseUrl, apiKey, result.models);
   return result;
 }
@@ -1065,9 +1090,15 @@ export async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndp
     payload.baseUrl,
   );
 
+  // This endpoint is only reachable for custom (non-built-in) providers — the
+  // onboarding test path covers built-ins — so trust the payload flag directly.
+  // There is no `builtin` field on the entry yet because the user hasn't saved
+  // it; gating on the source instead of the entry is the right layer here.
   let res: Response;
   try {
-    res = await fetchWithTimeout(url, { method: 'GET', headers });
+    res = await withTlsBypass(payload.tlsRejectUnauthorized === true, () =>
+      fetchWithTimeout(url, { method: 'GET', headers }),
+    );
   } catch (err) {
     return {
       ok: false,
@@ -1222,6 +1253,7 @@ interface TestEndpointPayload {
   apiKey: string;
   httpHeaders?: Record<string, string>;
   allowPrivateNetwork?: boolean;
+  tlsRejectUnauthorized?: boolean;
 }
 
 export type TestEndpointResponse =
@@ -1257,6 +1289,12 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
       throw new CodesignError('allowPrivateNetwork must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
     }
     out.allowPrivateNetwork = r['allowPrivateNetwork'];
+  }
+  if (r['tlsRejectUnauthorized'] !== undefined) {
+    if (typeof r['tlsRejectUnauthorized'] !== 'boolean') {
+      throw new CodesignError('tlsRejectUnauthorized must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+    }
+    out.tlsRejectUnauthorized = r['tlsRejectUnauthorized'];
   }
   const headers = parseTestEndpointHttpHeaders(r['httpHeaders']);
   if (headers !== undefined) out.httpHeaders = headers;

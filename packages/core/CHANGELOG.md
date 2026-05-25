@@ -1,5 +1,15 @@
 # @open-codesign/core
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [7a1977d]
+- Updated dependencies [6cbb639]
+- Updated dependencies [7a1977d]
+  - @open-codesign/providers@0.2.1
+  - @open-codesign/shared@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

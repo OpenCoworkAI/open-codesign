@@ -230,6 +230,75 @@ describe('config v3 schema', () => {
       }),
     ).toThrow();
   });
+
+  it('accepts an optional tlsRejectUnauthorized flag', () => {
+    const base = {
+      version: 3 as const,
+      activeProvider: 'anthropic',
+      activeModel: 'claude-sonnet-4-6',
+      secrets: {},
+      providers: {
+        anthropic: BUILTIN_PROVIDERS.anthropic,
+        'corp-bedrock': {
+          id: 'corp-bedrock',
+          name: 'Corp Bedrock',
+          builtin: false,
+          wire: 'openai-chat' as const,
+          baseUrl: 'https://gateway.corp.internal/v1',
+          defaultModel: 'anthropic.claude-sonnet-4',
+          tlsRejectUnauthorized: true,
+        },
+      },
+    };
+    const parsed = ConfigV3Schema.parse(base);
+    expect(parsed.providers['corp-bedrock']?.tlsRejectUnauthorized).toBe(true);
+  });
+
+  it('rejects non-boolean tlsRejectUnauthorized', () => {
+    expect(() =>
+      ConfigV3Schema.parse({
+        version: 3,
+        activeProvider: 'anthropic',
+        activeModel: 'claude-sonnet-4-6',
+        secrets: {},
+        providers: {
+          anthropic: BUILTIN_PROVIDERS.anthropic,
+          'corp-bedrock': {
+            id: 'corp-bedrock',
+            name: 'Corp Bedrock',
+            builtin: false,
+            wire: 'openai-chat',
+            baseUrl: 'https://gateway.corp.internal/v1',
+            defaultModel: 'anthropic.claude-sonnet-4',
+            tlsRejectUnauthorized: 'yes',
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it('round-trips a tlsRejectUnauthorized provider through toPersistedV3', () => {
+    const cfg = ConfigV3Schema.parse({
+      version: 3,
+      activeProvider: 'corp-bedrock',
+      activeModel: 'anthropic.claude-sonnet-4',
+      secrets: {},
+      providers: {
+        'corp-bedrock': {
+          id: 'corp-bedrock',
+          name: 'Corp Bedrock',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://gateway.corp.internal/v1',
+          defaultModel: 'anthropic.claude-sonnet-4',
+          tlsRejectUnauthorized: true,
+        },
+      },
+    });
+    const hydrated = hydrateConfig(cfg);
+    const persisted = toPersistedV3(hydrated);
+    expect(persisted.providers['corp-bedrock']?.tlsRejectUnauthorized).toBe(true);
+  });
 });
 
 describe('migrateLegacyToV3', () => {

@@ -1,5 +1,25 @@
 # @open-codesign/desktop
 
+## 0.2.1
+
+### Patch Changes
+
+- 6cbb639: feat(desktop): add per-provider "Disable TLS verification" toggle for custom and imported providers. Unblocks connections to corporate gateways with self-signed or private-CA certificates that Node 22's built-in fetch cannot otherwise accept. Built-in providers (Anthropic, OpenAI, OpenRouter, Ollama) remain unaffected. (#229)
+- 7a1977d: Add workspace-backed design creation, file browsing, project rebinding, and local preview modes, including a packaged preview runtime dependency fix so desktop builds include `ms` for `puppeteer-core`/`debug`.
+- bf86fea: Add an HTTP proxy field to Settings → Advanced. The configured URL is applied to both Chromium's network stack and Node's HTTP(S)\_PROXY env vars, takes effect immediately, and persists across restarts.
+- 7a1977d: Allow image generation to use the signed-in ChatGPT subscription OAuth path.
+
+  The image asset provider list now includes ChatGPT subscription alongside
+  OpenAI API and OpenRouter. When selected, `generate_image_asset` calls the
+  ChatGPT Codex Responses backend with the stored OAuth bearer token instead of
+  requiring an OpenAI API key.
+
+- 8ea4bff: Update comment mode copy for saving comments and adding saved comments to chat.
+- 8efd7e3: Harden desktop navigation so workspace Markdown links cannot replace the app window.
+- f2bc0cd: Harden the workspace files watcher: fall back to polling for any filesystem watch error (previously only EPERM / EACCES / EISDIR), explicitly covering EINVAL, ENOSPC, and ERR_FEATURE_UNAVAILABLE_ON_PLATFORM that surface on Windows UNC paths, full disks, and Bun runtimes. Unknown FS errors now degrade gracefully instead of breaking the Files panel. (#352)
+- Fix `pnpm dev` and Puppeteer preview spawns failing immediately when launched as uid 0 (root) — common inside containers, dev VMs, and CI runners. Both call sites now pass `--no-sandbox` to the spawned Chromium process when `process.getuid() === 0`, leaving the macOS / Windows / non-root Linux launch paths unchanged. (#356)
+- 7a1977d: Refresh v0.2 user-facing copy for ChatGPT subscription sign-in and current provider support.
+
 ## 0.2.0
 
 ### Minor Changes

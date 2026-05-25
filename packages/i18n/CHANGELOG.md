@@ -1,5 +1,20 @@
 # @open-codesign/i18n
 
+## 0.2.1
+
+### Patch Changes
+
+- 7a1977d: Allow image generation to use the signed-in ChatGPT subscription OAuth path.
+
+  The image asset provider list now includes ChatGPT subscription alongside
+  OpenAI API and OpenRouter. When selected, `generate_image_asset` calls the
+  ChatGPT Codex Responses backend with the stored OAuth bearer token instead of
+  requiring an OpenAI API key.
+
+- 8ea4bff: Update comment mode copy for saving comments and adding saved comments to chat.
+- bf86fea: Add an HTTP proxy field to Settings → Advanced. The configured URL is applied to both Chromium's network stack and Node's HTTP(S)\_PROXY env vars, takes effect immediately, and persists across restarts.
+- 7a1977d: Refresh v0.2 user-facing copy for ChatGPT subscription sign-in and current provider support.
+
 ## 0.2.0
 
 ### Minor Changes

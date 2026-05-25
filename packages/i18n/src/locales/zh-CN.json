@@ -445,6 +445,16 @@
         "save": "保存并继续",
         "saveEdit": "保存修改"
       },
+      "tlsRejectUnauthorized": {
+        "label": "禁用 TLS 校验（不安全 — 仅用于内网端点）",
+        "description": "跳过该服务商的证书校验。仅在自签名或私有 CA 颁发证书的内网端点上使用。",
+        "confirmTitle": "确认禁用 TLS 校验？",
+        "confirmBody": "向该服务商发出的 HTTPS 请求将不再验证服务器证书。处于网络路径上的任何人都可能拦截或冒充该端点。请只在可信内网环境下启用。",
+        "confirmAccept": "确认禁用",
+        "confirmCancel": "取消",
+        "badge": "TLS 校验已关",
+        "badgeTooltip": "已为该服务商关闭 TLS 证书校验。用于连接使用自签名或私有 CA 证书的内网端点；会扩大攻击面，仅建议在可信网络中启用。"
+      },
       "import": {
         "action": "导入",
         "dismiss": "忽略",
@@ -630,6 +640,8 @@
       "timeout": "生成超时",
       "timeoutHint": "超过该秒数后会中止生成请求。",
       "timeoutSeconds": "{{value}} 秒",
+      "proxy": "HTTP 代理",
+      "proxyHint": "将出站网络与 LLM API 请求通过此代理转发（例如 http://127.0.0.1:7890）。留空表示禁用。即时生效，无需重启。",
       "devtools": "开发者工具",
       "devtoolsHint": "打开渲染进程的 Chromium DevTools 面板。",
       "toggleDevtools": "切换 DevTools",
@@ -1024,7 +1036,7 @@
       "hostUnreachable": "无法连接到主机——检查域名、端口或 VPN。",
       "timedOut": "请求超时——检查防火墙或 VPN。",
       "corsError": "CORS 跨域错误（主进程中不应出现此错误，这是一个 Bug）。",
-      "sslError": "SSL / 证书错误（中转服务使用了自签证书？）。",
+      "sslError": "SSL / 证书错误（自签名或私有 CA 证书？）。可在「设置 → 服务商 → 该条目 → 禁用 TLS 校验」启用对可信内网端点的连接。",
       "endpointNotFound": "Base URL 已包含版本路径，但 Provider 没有暴露这个接口路径。",
       "gatewayIncompatible": "网关接受了连接但没有实现该 Provider 的 API。尝试切换 wire（例如改为 openai-chat）。",
       "gatewayWafBlocked": "网关或反代在请求到达模型前拦截了生成请求。测试连接可能仍然通过，因为它只探测 /models 端点。",

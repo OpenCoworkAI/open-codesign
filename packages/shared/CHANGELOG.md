@@ -1,5 +1,17 @@
 # @open-codesign/shared
 
+## 0.2.1
+
+### Patch Changes
+
+- 6cbb639: feat(desktop): add per-provider "Disable TLS verification" toggle for custom and imported providers. Unblocks connections to corporate gateways with self-signed or private-CA certificates that Node 22's built-in fetch cannot otherwise accept. Built-in providers (Anthropic, OpenAI, OpenRouter, Ollama) remain unaffected. (#229)
+- 7a1977d: Allow image generation to use the signed-in ChatGPT subscription OAuth path.
+
+  The image asset provider list now includes ChatGPT subscription alongside
+  OpenAI API and OpenRouter. When selected, `generate_image_asset` calls the
+  ChatGPT Codex Responses backend with the stored OAuth bearer token instead of
+  requiring an OpenAI API key.
+
 ## 0.2.0
 
 ### Minor Changes

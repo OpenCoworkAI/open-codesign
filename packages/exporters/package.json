@@ -1,6 +1,6 @@
 {
   "name": "@open-codesign/exporters",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -25,7 +25,7 @@
     "zip-lib": "^1.0.4"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.19.19",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
   }
