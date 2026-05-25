@@ -1,1 +1,3 @@
-pnpm lint
+#!/bin/sh
+# pnpm lint
+# pnpm test:unit
