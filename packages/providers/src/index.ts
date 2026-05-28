@@ -302,13 +302,35 @@ function openAIChatCompatForBaseUrl(
  * (DeepSeek, Ollama, LiteLLM, Azure, …) route to the correct pi-ai adapter
  * without being in pi-ai's model registry.
  */
+function supportsImageInputFromModelId(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  // OpenAI family (including o-series with vision)
+  if (lower.includes('gpt-4o') || lower.includes('gpt-4-turbo') || lower.includes('gpt-5')) return true;
+  // Anthropic family
+  if (lower.includes('claude-3') || lower.includes('claude-sonnet-4') || lower.includes('claude-opus-4')) return true;
+  // Google Gemini family
+  if (lower.includes('gemini')) return true;
+  // Qwen family (most recent models are multimodal)
+  if (lower.includes('qwen')) return true;
+  // Meta Llama 4 / Llama Scout vision models
+  if (lower.includes('llama-4') || lower.includes('llama-3.2-vision') || lower.includes('llama-scout')) return true;
+  // Mistral vision-capable models
+  if (lower.includes('pixtral')) return true;
+  // Generic vision markers
+  if (lower.includes('vision') || lower.includes('vl') || lower.includes('multimodal')) return true;
+  return false;
+}
+
 function synthesizeWireModel(
   provider: string,
   modelId: string,
   wire: GenerateOptions['wire'],
   baseUrl: string | undefined,
 ): PiModel {
-  const supportsImageInput = wire === 'openai-codex-responses';
+  const supportsImageInput = wire === 'openai-codex-responses'
+    || wire === 'anthropic'
+    || wire === 'openai-responses'
+    || supportsImageInputFromModelId(modelId);
   const api =
     wire === 'anthropic'
       ? 'anthropic-messages'

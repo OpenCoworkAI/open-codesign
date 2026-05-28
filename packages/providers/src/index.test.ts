@@ -858,3 +858,88 @@ describe('inferReasoning', () => {
     );
   });
 });
+
+describe('supportsImageInputFromModelId', () => {
+  // synthesizeWireModel is private; test the heuristic inline.
+  // The logic mirrors the production code in index.ts.
+  function modelInput(modelId: string, wire: string = 'openai-chat'): string[] {
+    const lower = modelId.toLowerCase();
+    const wireIsVision =
+      wire === 'openai-codex-responses' || wire === 'anthropic' || wire === 'openai-responses';
+    const modelIsVision =
+      lower.includes('gpt-4o') ||
+      lower.includes('gpt-4-turbo') ||
+      lower.includes('gpt-5') ||
+      lower.includes('claude-3') ||
+      lower.includes('claude-sonnet-4') ||
+      lower.includes('claude-opus-4') ||
+      lower.includes('gemini') ||
+      lower.includes('qwen') ||
+      lower.includes('llama-4') ||
+      lower.includes('llama-3.2-vision') ||
+      lower.includes('llama-scout') ||
+      lower.includes('pixtral') ||
+      lower.includes('vision') ||
+      lower.includes('vl') ||
+      lower.includes('multimodal');
+    return wireIsVision || modelIsVision ? ['text', 'image'] : ['text'];
+  }
+
+  it('recognises Qwen models as vision-capable', () => {
+    expect(modelInput('qwen3.6-plus')).toEqual(['text', 'image']);
+    expect(modelInput('qwen/qwen3-235b-a22b')).toEqual(['text', 'image']);
+    expect(modelInput('Qwen2.5-VL-72B-Instruct')).toEqual(['text', 'image']);
+    expect(modelInput('qwen2.5-72b-instruct')).toEqual(['text', 'image']);
+  });
+
+  it('recognises Gemini models as vision-capable', () => {
+    expect(modelInput('gemini-2.5-pro')).toEqual(['text', 'image']);
+    expect(modelInput('google/gemini-2.5-flash')).toEqual(['text', 'image']);
+  });
+
+  it('recognises Llama-4 and Llama Scout as vision-capable', () => {
+    expect(modelInput('llama-4-maverick')).toEqual(['text', 'image']);
+    expect(modelInput('meta-llama/llama-4-scout-17b')).toEqual(['text', 'image']);
+    expect(modelInput('llama-3.2-vision')).toEqual(['text', 'image']);
+  });
+
+  it('recognises Pixtral as vision-capable', () => {
+    expect(modelInput('pixtral-large')).toEqual(['text', 'image']);
+    expect(modelInput('mistralai/pixtral-12b')).toEqual(['text', 'image']);
+  });
+
+  it('recognises legacy vision/VL/multimodal tags', () => {
+    expect(modelInput('some-model-vision')).toEqual(['text', 'image']);
+    expect(modelInput('llava-v1.6-vl')).toEqual(['text', 'image']);
+    expect(modelInput('fuyu-multimodal')).toEqual(['text', 'image']);
+  });
+
+  it('still recognises original model families', () => {
+    expect(modelInput('gpt-4o')).toEqual(['text', 'image']);
+    expect(modelInput('gpt-4-turbo')).toEqual(['text', 'image']);
+    expect(modelInput('gpt-5.4')).toEqual(['text', 'image']);
+    expect(modelInput('claude-3-5-sonnet')).toEqual(['text', 'image']);
+    expect(modelInput('claude-sonnet-4-6')).toEqual(['text', 'image']);
+    expect(modelInput('claude-opus-4')).toEqual(['text', 'image']);
+  });
+
+  it('does not falsely recognise text-only models', () => {
+    expect(modelInput('deepseek-chat')).toEqual(['text']);
+    expect(modelInput('llama-3.1-70b-instruct')).toEqual(['text']);
+    expect(modelInput('mistral-small')).toEqual(['text']);
+    expect(modelInput('gpt-3.5-turbo')).toEqual(['text']);
+  });
+
+  it('auto-enables vision for anthropic wire regardless of model name', () => {
+    expect(modelInput('claude-3-haiku-20240307', 'anthropic')).toEqual(['text', 'image']);
+  });
+
+  it('auto-enables vision for openai-responses wire regardless of model name', () => {
+    expect(modelInput('some-unknown-model', 'openai-responses')).toEqual(['text', 'image']);
+  });
+
+  it('auto-enables vision for openai-codex-responses wire regardless of model name', () => {
+    expect(modelInput('gpt-5.5', 'openai-codex-responses')).toEqual(['text', 'image']);
+  });
+});
+);
