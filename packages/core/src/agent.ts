@@ -239,20 +239,26 @@ function openAIChatCompatForBaseUrl(
 }
 
 function supportsImageInput(wire: WireApi | undefined, modelId: string): boolean {
+  // Wire formats that universally support image input.
   if (wire === 'anthropic' || wire === 'openai-responses' || wire === 'openai-codex-responses') {
     return true;
   }
   const lower = modelId.toLowerCase();
-  return (
-    lower.includes('vision') ||
-    lower.includes('vl') ||
-    lower.includes('multimodal') ||
-    lower.includes('gpt-4o') ||
-    lower.includes('gpt-5') ||
-    lower.includes('claude-3') ||
-    lower.includes('claude-sonnet-4') ||
-    lower.includes('claude-opus-4')
-  );
+  // OpenAI family (including o-series with vision)
+  if (lower.includes('gpt-4o') || lower.includes('gpt-4-turbo') || lower.includes('gpt-5')) return true;
+  // Anthropic family
+  if (lower.includes('claude-3') || lower.includes('claude-sonnet-4') || lower.includes('claude-opus-4')) return true;
+  // Google Gemini family
+  if (lower.includes('gemini')) return true;
+  // Qwen family (most recent models are multimodal)
+  if (lower.includes('qwen')) return true;
+  // Meta Llama 4 / Llama Scout vision models
+  if (lower.includes('llama-4') || lower.includes('llama-3.2-vision') || lower.includes('llama-scout')) return true;
+  // Mistral vision-capable models
+  if (lower.includes('pixtral')) return true;
+  // Generic vision markers
+  if (lower.includes('vision') || lower.includes('vl') || lower.includes('multimodal')) return true;
+  return false;
 }
 
 const BUILTIN_PUBLIC_BASE_URLS: Record<string, string> = {
