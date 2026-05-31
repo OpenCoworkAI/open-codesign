@@ -361,6 +361,57 @@ describe('complete', () => {
     expect(result.content).toBe('ok');
   });
 
+  it('keeps image inputs for synthesized openai-chat models', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (model, context) => {
+      expect(model).toMatchObject({
+        api: 'openai-completions',
+        input: ['text', 'image'],
+        baseUrl: 'https://gateway.example.test/v1',
+      });
+      expect(context.messages).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'use this screenshot' },
+            { type: 'image', data: 'AAAA', mimeType: 'image/png' },
+          ],
+          timestamp: 1,
+        },
+      ]);
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'custom-openai',
+        model: 'local-text-or-vision-model',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    const result = await complete(
+      { provider: 'custom-openai', modelId: 'local-text-or-vision-model' },
+      [{ role: 'user', content: 'use this screenshot' }],
+      {
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://gateway.example.test/v1',
+        userImages: [{ data: 'AAAA', mimeType: 'image/png' }],
+      },
+    );
+
+    expect(result.content).toBe('ok');
+  });
+
   it('synthesizes openai-chat PiModel with reasoning=false for Qwen DashScope (#183)', async () => {
     getModelMock.mockReturnValue(undefined);
     completeSimpleMock.mockImplementationOnce(async (model) => {

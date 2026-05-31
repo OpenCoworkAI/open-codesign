@@ -242,6 +242,9 @@ function supportsImageInput(wire: WireApi | undefined, modelId: string): boolean
   if (wire === 'anthropic' || wire === 'openai-responses' || wire === 'openai-codex-responses') {
     return true;
   }
+  if (wire === 'openai-chat') {
+    return true;
+  }
   const lower = modelId.toLowerCase();
   return (
     lower.includes('vision') ||

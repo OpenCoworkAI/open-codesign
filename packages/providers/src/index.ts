@@ -308,7 +308,11 @@ function synthesizeWireModel(
   wire: GenerateOptions['wire'],
   baseUrl: string | undefined,
 ): PiModel {
-  const supportsImageInput = wire === 'openai-codex-responses';
+  const supportsImageInput =
+    wire === 'anthropic' ||
+    wire === 'openai-chat' ||
+    wire === 'openai-responses' ||
+    wire === 'openai-codex-responses';
   const api =
     wire === 'anthropic'
       ? 'anthropic-messages'

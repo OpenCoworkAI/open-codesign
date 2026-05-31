@@ -1156,6 +1156,33 @@ describe('generateViaAgent()', () => {
     );
   });
 
+  it('passes image attachments through openai-compatible agent models', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent(
+      {
+        prompt: 'replicate this screenshot',
+        history: [],
+        model: { provider: 'custom-openai', modelId: 'local-text-or-vision-model' },
+        apiKey: 'sk-test',
+        wire: 'openai-chat',
+        baseUrl: 'https://gateway.example.test/v1',
+        attachments: [
+          {
+            name: 'shot.png',
+            path: 'references/shot.png',
+            mediaType: 'image/png',
+            imageDataUrl: 'data:image/png;base64,aW1n',
+          },
+        ],
+      },
+      { fs: makeStubFs({}) },
+    );
+
+    expect(agentCalls[0]?.prompts[0]?.images).toEqual([
+      { type: 'image', data: 'aW1n', mimeType: 'image/png' },
+    ]);
+  });
+
   it('blocks preview and done until set_todos has run for fresh multi-step work', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent(
