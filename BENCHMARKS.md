@@ -2,7 +2,7 @@
 
 How `decompose_to_ui_kit` + `verify_ui_kit_parity` (deterministic) + `verify_ui_kit_visual_parity` (vision LLM judge with boolean rubric) perform across model tiers, on the same input image, with full audit trails.
 
-**Scope of issue closed:** [#225 — image → componentized → handoff bundle](https://github.com/OpenCoworkAI/open-codesign/issues/225).
+**Scope of issue:** Refs [#225 — image → componentized → handoff bundle](https://github.com/OpenCoworkAI/open-codesign/issues/225), Phase 1 only.
 
 ---
 
