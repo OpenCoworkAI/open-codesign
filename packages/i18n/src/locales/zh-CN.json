@@ -66,6 +66,7 @@
       }
     },
     "tabsAriaLabel": "已打开文件",
+    "previewTabsAriaLabel": "已打开预览",
     "closeTab": "关闭 {{name}}",
     "files": {
       "sectionTitle": "设计文件",
@@ -262,6 +263,14 @@
     "ariaLabel": "对话面板",
     "noDesign": "暂无设计",
     "newChat": "新对话",
+    "closeChat": "关闭 {{name}}",
+    "chatTabsAriaLabel": "工作区对话",
+    "deleteChat": {
+      "title": "删除对话？",
+      "body": "这会从此工作区移除“{{name}}”。工作区文件不会被修改。",
+      "cancel": "取消",
+      "confirm": "删除对话"
+    },
     "collapse": "收起侧边栏",
     "expand": "展开侧边栏",
     "chat": {
@@ -974,6 +983,7 @@
       "currentLabel": "当前设计",
       "menuLabel": "切换设计",
       "newDesign": "新建设计",
+      "newConversationForWorkspace": "为此工作区新建对话",
       "renameCurrent": "重命名",
       "viewAll": "查看全部设计…",
       "recent": "最近",

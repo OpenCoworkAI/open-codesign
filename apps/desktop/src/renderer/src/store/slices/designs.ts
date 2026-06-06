@@ -33,6 +33,7 @@ interface DesignsSliceActions {
   openNewDesignDialog: CodesignState['openNewDesignDialog'];
   closeNewDesignDialog: CodesignState['closeNewDesignDialog'];
   createNewDesign: CodesignState['createNewDesign'];
+  createNewConversationForCurrentWorkspace: CodesignState['createNewConversationForCurrentWorkspace'];
   switchDesign: CodesignState['switchDesign'];
   renameCurrentDesign: CodesignState['renameCurrentDesign'];
   renameDesign: CodesignState['renameDesign'];
@@ -160,6 +161,35 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       const name = nextUntitledDesignName(get().designs);
       try {
         const design = await window.codesign.snapshots.createDesign(name, workspacePath);
+        set((state) => buildFreshDesignState(state, design.id));
+        await get().loadDesigns();
+        void get().loadChatForCurrentDesign();
+        void get().loadCommentsForCurrentDesign();
+        return design;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : tr('errors.unknown');
+        get().pushToast({
+          variant: 'error',
+          title: tr('projects.notifications.createFailed'),
+          description: msg,
+        });
+        return null;
+      }
+    },
+
+    async createNewConversationForCurrentWorkspace() {
+      if (!window.codesign) return null;
+      const currentDesignId = get().currentDesignId;
+      const currentDesign =
+        currentDesignId === null ? undefined : get().designs.find((d) => d.id === currentDesignId);
+      const workspacePath = currentDesign?.workspacePath;
+      if (!workspacePath) return null;
+
+      const name = nextUntitledDesignName(get().designs);
+      try {
+        const design = await window.codesign.snapshots.createDesign(name, workspacePath, {
+          workspaceReuse: 'fresh-conversation',
+        });
         set((state) => buildFreshDesignState(state, design.id));
         await get().loadDesigns();
         void get().loadChatForCurrentDesign();

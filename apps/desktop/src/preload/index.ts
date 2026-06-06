@@ -170,6 +170,10 @@ export interface RenameDesignOptions {
   renameWorkspace?: boolean;
 }
 
+export interface CreateDesignOptions {
+  workspaceReuse?: 'fresh-conversation';
+}
+
 export interface ExportInvokeResponse {
   status: 'saved' | 'cancelled';
   path?: string;
@@ -698,11 +702,14 @@ const api = {
   snapshots: {
     listDesigns: () =>
       ipcRenderer.invoke('snapshots:v1:list-designs', { schemaVersion: 1 }) as Promise<Design[]>,
-    createDesign: (name: string, workspacePath?: string | null) =>
+    createDesign: (name: string, workspacePath?: string | null, options?: CreateDesignOptions) =>
       ipcRenderer.invoke('snapshots:v1:create-design', {
         schemaVersion: 1,
         name,
         ...(workspacePath !== undefined ? { workspacePath } : {}),
+        ...(options?.workspaceReuse !== undefined
+          ? { workspaceReuse: options.workspaceReuse }
+          : {}),
       }) as Promise<Design>,
     getDesign: (id: string) =>
       ipcRenderer.invoke('snapshots:v1:get-design', {

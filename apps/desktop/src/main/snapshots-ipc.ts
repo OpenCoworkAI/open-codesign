@@ -211,6 +211,18 @@ function parseCreateDesignWorkspacePath(r: Record<string, unknown>): string | un
   }
 }
 
+function parseCreateDesignWorkspaceReuse(
+  r: Record<string, unknown>,
+): 'fresh-conversation' | undefined {
+  const raw = r['workspaceReuse'];
+  if (raw === undefined) return undefined;
+  if (raw === 'fresh-conversation') return raw;
+  throw new CodesignError(
+    'workspaceReuse must be fresh-conversation when provided',
+    'IPC_BAD_INPUT',
+  );
+}
+
 function translateWorkspaceBindError(err: unknown, fallbackMessage: string): CodesignError {
   if (err instanceof CodesignError) return err;
   if (err instanceof Error && err.message.includes('already bound')) {
@@ -1265,6 +1277,13 @@ export function registerSnapshotsIpc(db: Database): void {
       }
       const name = (r['name'] as string).trim();
       const requestedWorkspacePath = parseCreateDesignWorkspacePath(r);
+      const workspaceReuse = parseCreateDesignWorkspaceReuse(r);
+      if (workspaceReuse !== undefined && requestedWorkspacePath === undefined) {
+        throw new CodesignError(
+          'workspaceReuse requires an explicit workspacePath',
+          'IPC_BAD_INPUT',
+        );
+      }
       const design = runDb('create-design', () => createDesign(db, name));
       // v0.2: every design MUST have a workspace — per docs/v0.2-plan.md §2.3.
       // When the user hasn't picked one explicitly, seed
@@ -1282,6 +1301,7 @@ export function registerSnapshotsIpc(db: Database): void {
           workspacePath,
           false,
           requestedWorkspacePath === undefined ? 'blank-canvas' : 'work-on-project',
+          { allowExistingWorkspaceBinding: workspaceReuse === 'fresh-conversation' },
         );
       } catch (err) {
         if (autoWorkspacePath !== null) {

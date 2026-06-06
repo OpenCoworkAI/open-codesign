@@ -66,6 +66,7 @@
       }
     },
     "tabsAriaLabel": "Archivos abiertos",
+    "previewTabsAriaLabel": "Vistas previas abiertas",
     "closeTab": "Cerrar {{name}}",
     "files": {
       "sectionTitle": "Archivos de diseño",
@@ -253,6 +254,14 @@
     "ariaLabel": "Panel de chat",
     "noDesign": "Sin diseño",
     "newChat": "Nuevo chat",
+    "closeChat": "Cerrar {{name}}",
+    "chatTabsAriaLabel": "Chats del espacio de trabajo",
+    "deleteChat": {
+      "title": "¿Eliminar chat?",
+      "body": "Esto quitará “{{name}}” de este espacio de trabajo. Los archivos del workspace no se modifican.",
+      "cancel": "Cancelar",
+      "confirm": "Eliminar chat"
+    },
     "collapse": "Contraer barra lateral",
     "expand": "Expandir barra lateral",
     "chat": {
@@ -910,6 +919,7 @@
       "currentLabel": "Diseño actual",
       "menuLabel": "Cambiar diseño",
       "newDesign": "Nuevo diseño",
+      "newConversationForWorkspace": "Nueva conversación para este espacio de trabajo",
       "renameCurrent": "Renombrar",
       "viewAll": "Ver todos los diseños…",
       "recent": "Recientes",

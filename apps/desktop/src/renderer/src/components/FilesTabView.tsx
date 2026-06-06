@@ -59,6 +59,7 @@ import {
   resolveDesignPreviewSource,
 } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
+import { CanvasFileTabBar } from './CanvasTabBar';
 
 export { resolveReferencedWorkspacePreviewPath } from '../preview/workspace-source';
 
@@ -1799,6 +1800,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
   const openFileTab = useCodesignStore((s) => s.openCanvasFileTab);
   const setActiveCanvasTab = useCodesignStore((s) => s.setActiveCanvasTab);
   const currentPreviewSource = useCodesignStore((s) => s.previewSource);
+  const canvasTabs = useCodesignStore((s) => s.canvasTabs);
   const { files, tree: fileTree, loadDirectory } = useLazyDesignFileTree(currentDesignId);
 
   const defaultPath = useMemo(() => defaultWorkspacePreviewPath(files), [files]);
@@ -1839,6 +1841,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
   const showPreviewHeaderAction =
     (effectivePreviewMode === 'managed-file' && selectedPath !== null) ||
     (usesExternalPreview && connectedPreviewUrl !== null);
+  const hasOpenFileTabs = canvasTabs.some((tab) => tab.kind === 'file');
 
   const handleOpenPreviewTarget = useCallback(async () => {
     if (usesExternalPreview && connectedPreviewUrl) {
@@ -2155,17 +2158,20 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
         title="Resize files"
       />
       <div className="flex-1 min-w-0 h-full bg-[var(--color-background-secondary)] flex flex-col min-h-0">
-        {showPreviewHeaderAction ? (
-          <div className="flex h-[36px] shrink-0 items-center justify-end border-b border-[var(--color-border-muted)] bg-[var(--color-background)] px-[var(--space-4)]">
-            <button
-              type="button"
-              onClick={handleOpenPreviewTarget}
-              className="text-[11px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-accent)]"
-            >
-              {usesExternalPreview
-                ? t('canvas.workspace.preview.openConnected')
-                : t('canvas.openInTab')}
-            </button>
+        {hasOpenFileTabs || showPreviewHeaderAction ? (
+          <div className="flex h-[36px] shrink-0 items-center gap-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-background)] pl-[var(--space-2)] pr-[var(--space-4)]">
+            <CanvasFileTabBar />
+            {showPreviewHeaderAction ? (
+              <button
+                type="button"
+                onClick={handleOpenPreviewTarget}
+                className="ml-auto shrink-0 text-[11px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-accent)]"
+              >
+                {usesExternalPreview
+                  ? t('canvas.workspace.preview.openConnected')
+                  : t('canvas.openInTab')}
+              </button>
+            ) : null}
           </div>
         ) : null}
         <div className="flex-1 min-h-0 bg-[var(--color-background-secondary)]">

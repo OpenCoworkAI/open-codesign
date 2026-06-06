@@ -1462,6 +1462,58 @@ describe('useCodesignStore design management', () => {
     expect(updateWorkspace).not.toHaveBeenCalled();
   });
 
+  it('creates a fresh conversation for the current workspace with clean UI state', async () => {
+    const existing = { ...DEFAULT_DESIGN, id: 'design-a', workspacePath: '/tmp/shared' };
+    const created = {
+      ...DEFAULT_DESIGN,
+      id: 'design-b',
+      name: 'Untitled design 1',
+      workspacePath: '/tmp/shared',
+    };
+    const createDesign = vi.fn(() => Promise.resolve(created));
+
+    vi.stubGlobal('window', {
+      codesign: {
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+        snapshots: {
+          createDesign,
+          listDesigns: vi.fn(() => Promise.resolve([existing, created])),
+          list: vi.fn(() => Promise.resolve([])),
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({
+      designs: [existing],
+      currentDesignId: existing.id,
+      previewSource: '<main>old</main>',
+      chatMessages: [
+        {
+          schemaVersion: 1 as const,
+          id: 1,
+          designId: existing.id,
+          seq: 0,
+          kind: 'user',
+          payload: { text: 'old context' },
+          snapshotId: null,
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const result = await useCodesignStore.getState().createNewConversationForCurrentWorkspace();
+
+    expect(result?.id).toBe('design-b');
+    expect(createDesign).toHaveBeenCalledWith('Untitled design 1', '/tmp/shared', {
+      workspaceReuse: 'fresh-conversation',
+    });
+    expect(useCodesignStore.getState().currentDesignId).toBe('design-b');
+    expect(useCodesignStore.getState().previewSource).toBeNull();
+    expect(useCodesignStore.getState().chatMessages).toEqual([]);
+  });
+
   it('imports picked files into the workspace and attaches imported paths to the prompt', async () => {
     const imported = [
       {
