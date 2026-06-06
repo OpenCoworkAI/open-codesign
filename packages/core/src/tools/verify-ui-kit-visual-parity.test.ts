@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TextEditorFsCallbacks } from './text-editor.js';
 import {
   type JudgeVisualParityFn,
+  makeVerifyUiKitVisualParityTool,
   type RenderUiKitFn,
   STANDARD_VISUAL_PARITY_CHECKS,
-  makeVerifyUiKitVisualParityTool,
   visualParityStatusFromChecks,
 } from './verify-ui-kit-visual-parity.js';
 

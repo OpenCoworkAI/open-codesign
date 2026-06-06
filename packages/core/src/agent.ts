@@ -114,8 +114,8 @@ import { makeTweaksTool } from './tools/tweaks.js';
 import { makeVerifyUiKitParityTool } from './tools/verify-ui-kit-parity.js';
 import {
   type JudgeVisualParityFn,
-  type RenderUiKitFn,
   makeVerifyUiKitVisualParityTool,
+  type RenderUiKitFn,
 } from './tools/verify-ui-kit-visual-parity.js';
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via

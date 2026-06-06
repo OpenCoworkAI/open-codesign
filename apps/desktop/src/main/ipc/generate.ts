@@ -545,7 +545,6 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
           ...(input.wire ? { wire: input.wire } : {}),
           ...(input.httpHeaders ? { httpHeaders: input.httpHeaders } : {}),
-          ...(input.capabilities ? { capabilities: input.capabilities } : {}),
           ...(judgeSignal ? { signal: judgeSignal } : {}),
         };
         const result = await complete(input.model, judgeMessages, judgeOpts);
