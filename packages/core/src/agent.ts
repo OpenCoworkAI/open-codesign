@@ -97,6 +97,7 @@ import {
 import { buildRunProtocolPreflight, type RunProtocolState } from './run-protocol.js';
 import { availableToolNames } from './tool-manifest.js';
 import { makeAskTool } from './tools/ask.js';
+import { makeDecomposeToUiKitTool } from './tools/decompose-to-ui-kit.js';
 import { type DoneDetails, type DoneRuntimeVerifier, makeDoneTool } from './tools/done.js';
 import {
   type GenerateImageAssetFn,
@@ -110,6 +111,12 @@ import { makeSetTodosTool } from './tools/set-todos.js';
 import { makeSkillTool } from './tools/skill.js';
 import { makeTextEditorTool, type TextEditorFsCallbacks } from './tools/text-editor.js';
 import { makeTweaksTool } from './tools/tweaks.js';
+import { makeVerifyUiKitParityTool } from './tools/verify-ui-kit-parity.js';
+import {
+  type JudgeVisualParityFn,
+  makeVerifyUiKitVisualParityTool,
+  type RenderUiKitFn,
+} from './tools/verify-ui-kit-visual-parity.js';
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via
  *  pi-ai). Declared here so this file does not take a direct dependency on
@@ -952,6 +959,21 @@ export interface GenerateViaAgentDeps {
    * poster/background asset is worth generating.
    */
   generateImageAsset?: GenerateImageAssetFn | undefined;
+  /**
+   * Optional vision-LLM judge for ui_kit visual parity. When provided alongside
+   * `renderUiKit`, the default toolset adds `verify_ui_kit_visual_parity`.
+   * Without these, the agent has the deterministic verifier only.
+   *
+   * The judge is host-injected (mirrors `generateImageAsset`) so the core
+   * package stays free of provider SDK imports.
+   */
+  judgeVisualParity?: JudgeVisualParityFn | undefined;
+  /**
+   * Optional headless renderer that loads ui_kit HTML in a hidden window and
+   * returns a screenshot data URL. Paired with `judgeVisualParity` — both must
+   * be present for the visual-parity tool to register.
+   */
+  renderUiKit?: RenderUiKitFn | undefined;
   /** Called when aggressive context pruning triggers (context > 200KB). */
   onAggressivePrune?: (() => void) | undefined;
   /** Called after the agent finishes with the full conversation messages. */
@@ -1132,6 +1154,34 @@ export async function generateViaAgent(
         runProtocolState,
       ),
     );
+    defaultToolsByName.set(
+      'decompose_to_ui_kit',
+      wrapPlanningGate(
+        makeDecomposeToUiKitTool(trackedFs, log) as unknown as AgentTool<TSchema, unknown>,
+        runProtocolState,
+      ),
+    );
+    defaultToolsByName.set(
+      'verify_ui_kit_parity',
+      wrapPlanningGate(
+        makeVerifyUiKitParityTool(trackedFs, log) as unknown as AgentTool<TSchema, unknown>,
+        runProtocolState,
+      ),
+    );
+    if (deps.renderUiKit && deps.judgeVisualParity) {
+      defaultToolsByName.set(
+        'verify_ui_kit_visual_parity',
+        wrapPlanningGate(
+          makeVerifyUiKitVisualParityTool(
+            trackedFs,
+            deps.renderUiKit,
+            deps.judgeVisualParity,
+            log,
+          ) as unknown as AgentTool<TSchema, unknown>,
+          runProtocolState,
+        ),
+      );
+    }
   }
   if (input.runPreview) {
     const vision = piModel.input?.includes('image') === true;

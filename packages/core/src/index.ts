@@ -149,6 +149,18 @@ export {
   type TweakFileInput,
   type TweaksDetails,
 } from './tools/tweaks.js';
+export {
+  type JudgeVisualParityFn,
+  makeVerifyUiKitVisualParityTool,
+  type RenderUiKitFn,
+  STANDARD_VISUAL_PARITY_CHECKS,
+  type VisualParityCheck,
+  type VisualParityGap,
+  type VisualParityImageRef,
+  type VisualParityReport,
+  type VisualParityStatus,
+  visualParityStatusFromChecks,
+} from './tools/verify-ui-kit-visual-parity.js';
 export type { PromptComposeOptions };
 
 export interface AttachmentContext {

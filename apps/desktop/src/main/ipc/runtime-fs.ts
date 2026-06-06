@@ -99,6 +99,13 @@ function attachmentViewContent(attachment: AttachmentContext): string | null {
   ].join('\n');
 }
 
+function firstImageAttachmentDataUrl(attachments: ReadonlyArray<AttachmentContext>): string | null {
+  return (
+    attachments.find((attachment) => attachment.mediaType?.startsWith('image/') === true)
+      ?.imageDataUrl ?? null
+  );
+}
+
 export function createRuntimeTextEditorFs({
   db,
   generationId,
@@ -126,6 +133,11 @@ export function createRuntimeTextEditorFs({
     const content = attachmentViewContent(attachment);
     if (content === null) continue;
     fsMap.set(normalizeDesignFilePath(attachment.path), content);
+  }
+  const sourceImageDataUrl = firstImageAttachmentDataUrl(attachments);
+  const currentSourcePng = fsMap.get('source.png');
+  if (sourceImageDataUrl !== null && currentSourcePng?.startsWith('data:') !== true) {
+    fsMap.set('source.png', sourceImageDataUrl);
   }
   if (
     previousSource &&

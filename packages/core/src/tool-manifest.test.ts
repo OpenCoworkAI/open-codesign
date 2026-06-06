@@ -11,6 +11,9 @@ describe('tool-manifest', () => {
       'scaffold',
       'inspect_workspace',
       'str_replace_based_edit_tool',
+      'decompose_to_ui_kit',
+      'verify_ui_kit_parity',
+      'verify_ui_kit_visual_parity',
       'done',
       'preview',
       'generate_image_asset',
@@ -53,6 +56,9 @@ describe('tool-manifest', () => {
       'skill',
       'scaffold',
       'str_replace_based_edit_tool',
+      'decompose_to_ui_kit',
+      'verify_ui_kit_parity',
+      'verify_ui_kit_visual_parity',
       'done',
     ]);
   });

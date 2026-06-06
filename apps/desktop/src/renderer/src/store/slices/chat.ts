@@ -105,6 +105,12 @@ function compactToolResultForUi(result: unknown): unknown {
   };
 }
 
+function parityDetailsForToast(result: unknown): Record<string, unknown> | null {
+  if (!isRecord(result)) return null;
+  const details = result['details'];
+  return isRecord(details) ? details : result;
+}
+
 function compactChatRowForUi(row: ChatMessageRow): ChatMessageRow {
   if (row.kind === 'tool_call') {
     const payload = isRecord(row.payload) ? (row.payload as unknown as ChatToolCallPayload) : null;
@@ -256,6 +262,29 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
             ...(durationMs !== undefined ? { durationMs } : {}),
           },
         });
+      }
+      if (toolName === 'verify_ui_kit_visual_parity') {
+        const details = parityDetailsForToast(result);
+        const passCount = typeof details?.['passCount'] === 'number' ? details['passCount'] : 0;
+        const totalChecks =
+          typeof details?.['totalChecks'] === 'number' ? details['totalChecks'] : 0;
+        const judgeCostUsd =
+          typeof details?.['judgeCostUsd'] === 'number' ? details['judgeCostUsd'] : 0;
+        const status = typeof details?.['status'] === 'string' ? details['status'] : 'unknown';
+        if (totalChecks > 0) {
+          const ok = status === 'verified' || status === 'needs_review';
+          get().pushToast({
+            variant: ok ? 'success' : 'info',
+            title: tr('sidebar.decomposeJudgeResultTitle', {
+              passed: passCount,
+              total: totalChecks,
+              status,
+            }),
+            description: tr('sidebar.decomposeJudgeResultDescription', {
+              cost: `$${judgeCostUsd.toFixed(4)}`,
+            }),
+          });
+        }
       }
     },
 

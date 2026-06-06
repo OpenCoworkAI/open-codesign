@@ -20,7 +20,7 @@ import {
   routeRunPreferences,
   updateDesignSessionBrief,
 } from '@open-codesign/core';
-import { detectProviderFromKey, generateImage } from '@open-codesign/providers';
+import { complete, detectProviderFromKey, generateImage } from '@open-codesign/providers';
 import {
   ApplyCommentPayload,
   CancelGenerationPayloadV1,
@@ -46,6 +46,7 @@ import {
 } from '../generation-ipc';
 import { resolveGenerationWorkspaceRoot } from '../generation-workspace';
 import { resolveImageGenerationConfig, toGenerateImageOptions } from '../image-generation-settings';
+import { makeJudgeVisualParity } from '../judge-visual-parity';
 import { getLogger } from '../logger';
 import {
   loadMemoryContext,
@@ -60,6 +61,7 @@ import { runPreview } from '../preview-runtime';
 import { preparePromptContext } from '../prompt-context';
 import { createProviderContextStore } from '../provider-context';
 import { resolveActiveModel } from '../provider-settings';
+import { makeUiKitRenderer } from '../render-ui-kit';
 import { resolveActiveApiKey, resolveCredentialForProvider } from '../resolve-api-key';
 import { withRun } from '../runContext';
 import {
@@ -529,6 +531,26 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     let deltaCount = 0;
     let turnTextBuffer = '';
     let toolCount = 0;
+    const renderUiKit = makeUiKitRenderer();
+    const judgeVisualParity = makeJudgeVisualParity(
+      async ({ systemPrompt, userText, userImages, maxTokens, signal: judgeSignal }) => {
+        const judgeMessages = [
+          { role: 'system' as const, content: systemPrompt },
+          { role: 'user' as const, content: userText },
+        ];
+        const judgeOpts: Parameters<typeof complete>[2] = {
+          apiKey: input.apiKey ?? '',
+          maxTokens,
+          userImages,
+          ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
+          ...(input.wire ? { wire: input.wire } : {}),
+          ...(input.httpHeaders ? { httpHeaders: input.httpHeaders } : {}),
+          ...(judgeSignal ? { signal: judgeSignal } : {}),
+        };
+        const result = await complete(input.model, judgeMessages, judgeOpts);
+        return { content: result.content, costUsd: result.costUsd };
+      },
+    );
 
     return generateViaAgent(
       {
@@ -557,6 +579,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       {
         fs,
         runtimeVerify,
+        renderUiKit,
+        judgeVisualParity,
         ...(generateImageAsset !== undefined ? { generateImageAsset } : {}),
         ...(memoryCallbacks?.onAggressivePrune !== undefined
           ? { onAggressivePrune: memoryCallbacks.onAggressivePrune }
