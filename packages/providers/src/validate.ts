@@ -67,6 +67,19 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
         headers: () => ({}),
       };
     }
+    case 'zai': {
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://api.z.ai/api/anthropic';
+      return {
+        url: `${root}/v1/models`,
+        headers: (apiKey) => {
+          const auth: Record<string, string> = {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          };
+          return withClaudeCodeIdentity('anthropic', baseUrl, auth);
+        },
+      };
+    }
   }
 }
 
