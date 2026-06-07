@@ -357,13 +357,14 @@ describe('MiniMax builtin provider', () => {
     expect(BUILTIN_PROVIDERS.minimax.baseUrl).toBe('https://api.minimax.io/v1');
   });
 
-  it('uses static-hint model discovery with M2.7 models', () => {
+  it('uses static-hint model discovery with M3 + M2.7 models', () => {
     expect(BUILTIN_PROVIDERS.minimax.capabilities?.modelDiscoveryMode).toBe('static-hint');
     expect(BUILTIN_PROVIDERS.minimax.modelsHint).toEqual([
+      'MiniMax-M3',
       'MiniMax-M2.7',
       'MiniMax-M2.7-highspeed',
     ]);
-    expect(BUILTIN_PROVIDERS.minimax.defaultModel).toBe('MiniMax-M2.7');
+    expect(BUILTIN_PROVIDERS.minimax.defaultModel).toBe('MiniMax-M3');
   });
 
   it('reads MINIMAX_API_KEY env var', () => {

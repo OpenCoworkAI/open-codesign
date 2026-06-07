@@ -335,8 +335,8 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     wire: 'openai-chat',
     baseUrl: 'https://api.minimax.io/v1',
     envKey: 'MINIMAX_API_KEY',
-    defaultModel: 'MiniMax-M2.7',
-    modelsHint: ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed'],
+    defaultModel: 'MiniMax-M3',
+    modelsHint: ['MiniMax-M3', 'MiniMax-M2.7', 'MiniMax-M2.7-highspeed'],
     capabilities: {
       supportsKeyless: false,
       supportsModelsEndpoint: false,
@@ -547,8 +547,8 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     provider: 'minimax',
     label: 'MiniMax',
     keyHelpUrl: 'https://platform.minimax.io/user-center/basic-information/interface-key',
-    primary: ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed'],
-    defaultPrimary: 'MiniMax-M2.7',
+    primary: ['MiniMax-M3', 'MiniMax-M2.7', 'MiniMax-M2.7-highspeed'],
+    defaultPrimary: 'MiniMax-M3',
   },
 };
 

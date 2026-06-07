@@ -212,12 +212,18 @@ describe('pingProvider', () => {
       const headers = (init?.headers ?? {}) as Record<string, string>;
       expect(headers['authorization']).toBe('Bearer mm-test-key');
       return new Response(
-        JSON.stringify({ data: [{ id: 'MiniMax-M2.7' }, { id: 'MiniMax-M2.7-highspeed' }] }),
+        JSON.stringify({
+          data: [
+            { id: 'MiniMax-M3' },
+            { id: 'MiniMax-M2.7' },
+            { id: 'MiniMax-M2.7-highspeed' },
+          ],
+        }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     });
     const result = await pingProvider('minimax', 'mm-test-key');
-    expect(result).toEqual({ ok: true, modelCount: 2 });
+    expect(result).toEqual({ ok: true, modelCount: 3 });
   });
 
   it('returns 401 code for MiniMax invalid key', async () => {
@@ -230,7 +236,7 @@ describe('pingProvider', () => {
   it('respects custom baseUrl for MiniMax', async () => {
     mockFetch(async (url) => {
       expect(url).toBe('https://api.minimaxi.com/v1/models');
-      return new Response(JSON.stringify({ data: [{ id: 'MiniMax-M2.7' }] }), { status: 200 });
+      return new Response(JSON.stringify({ data: [{ id: 'MiniMax-M3' }] }), { status: 200 });
     });
     const result = await pingProvider('minimax', 'mm-test-key', 'https://api.minimaxi.com/v1');
     expect(result).toEqual({ ok: true, modelCount: 1 });
