@@ -6,7 +6,10 @@ import {
   type OnboardingState,
 } from '@open-codesign/shared';
 import { ipcMain } from '../electron-runtime';
-import { readClaudeCodeSettings } from '../imports/claude-code-config';
+import {
+  PARSE_REASON_NOT_JSON_OBJECT,
+  readClaudeCodeSettings,
+} from '../imports/claude-code-config';
 import { readCodexConfig } from '../imports/codex-config';
 import { readGeminiCliConfig } from '../imports/gemini-cli-config';
 import { readOpencodeConfig } from '../imports/opencode-config';
@@ -234,6 +237,17 @@ export function registerOnboardingIpc(): void {
     // that case and shows the subscription-warning banner — a generic
     // "no config found" swallows the nuance.
     if (imported.provider === null && imported.userType !== 'oauth-only') {
+      if (imported.userType === 'parse-error') {
+        const rawReason = imported.warnings[0] ?? 'unknown reason';
+        const reason =
+          rawReason === PARSE_REASON_NOT_JSON_OBJECT
+            ? 'top-level value is not a JSON object'
+            : rawReason;
+        throw new CodesignError(
+          `Claude Code settings at ${imported.settingsPath} could not be parsed: ${reason}`,
+          ERROR_CODES.CONFIG_PARSE_FAILED,
+        );
+      }
       throw new CodesignError(
         'No Claude Code settings found at ~/.claude/settings.json',
         ERROR_CODES.CONFIG_MISSING,
