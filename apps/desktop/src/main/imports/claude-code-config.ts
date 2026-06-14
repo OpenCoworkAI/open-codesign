@@ -48,7 +48,7 @@ export interface ClaudeCodeImport {
 }
 
 type ClaudeCodeSettings = {
-  env?: Record<string, string>;
+  env?: Record<string, unknown>;
   apiKeyHelper?: string;
 };
 
@@ -64,6 +64,12 @@ export interface ParseClaudeCodeOptions {
 }
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
+const IMPORTED_ENV_KEYS = new Set([
+  'ANTHROPIC_AUTH_TOKEN',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_MODEL',
+]);
 
 function baseUrlHost(url: string): string | null {
   try {
@@ -108,9 +114,10 @@ function validateSettingsShape(parsed: Record<string, unknown>): ParsedSettings 
   const env = parsed['env'];
   if (env !== undefined) {
     if (!isRecord(env)) {
-      return { kind: 'error', warning: 'settings.env must be an object of string values' };
+      return { kind: 'error', warning: 'settings.env must be an object' };
     }
     for (const [key, value] of Object.entries(env)) {
+      if (!IMPORTED_ENV_KEYS.has(key)) continue;
       if (typeof value !== 'string') {
         return { kind: 'error', warning: `settings.env.${key} must be a string` };
       }
@@ -165,12 +172,14 @@ function buildUnusableImport(
 // that Electron inherits shell env only when launched from a terminal —
 // GUI launches on macOS will have a sparse process.env.
 function resolveApiKey(
-  settingsEnv: Record<string, string>,
+  settingsEnv: Record<string, unknown>,
   shellEnv: NodeJS.ProcessEnv,
 ): { apiKey: string | null; apiKeySource: 'settings-json' | 'shell-env' | 'none' } {
-  const settingsToken = settingsEnv['ANTHROPIC_AUTH_TOKEN'] ?? settingsEnv['ANTHROPIC_API_KEY'];
-  if (typeof settingsToken === 'string' && settingsToken.trim().length > 0) {
-    return { apiKey: settingsToken.trim(), apiKeySource: 'settings-json' };
+  const settingsToken =
+    readOptionalEnvSetting(settingsEnv, 'ANTHROPIC_AUTH_TOKEN') ??
+    readOptionalEnvSetting(settingsEnv, 'ANTHROPIC_API_KEY');
+  if (settingsToken !== undefined) {
+    return { apiKey: settingsToken, apiKeySource: 'settings-json' };
   }
   const shellToken = shellEnv['ANTHROPIC_AUTH_TOKEN'] ?? shellEnv['ANTHROPIC_API_KEY'];
   if (typeof shellToken === 'string' && shellToken.trim().length > 0) {
@@ -179,7 +188,7 @@ function resolveApiKey(
   return { apiKey: null, apiKeySource: 'none' };
 }
 
-function readOptionalEnvSetting(env: Record<string, string>, key: string): string | undefined {
+function readOptionalEnvSetting(env: Record<string, unknown>, key: string): string | undefined {
   const value = env[key];
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();

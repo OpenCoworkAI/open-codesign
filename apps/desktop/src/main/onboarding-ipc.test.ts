@@ -112,6 +112,7 @@ vi.mock('./imports/codex-config', () => ({
 }));
 
 vi.mock('./imports/claude-code-config', () => ({
+  PARSE_REASON_NOT_JSON_OBJECT: '__parse_reason_not_json_object__',
   readClaudeCodeSettings: vi.fn(async () => null),
 }));
 
@@ -920,6 +921,28 @@ describe('config:v1:import-codex-config empty env handling', () => {
 });
 
 describe('config:v1:import-claude-code-config — user-type branching', () => {
+  it('throws CONFIG_PARSE_FAILED for malformed Claude Code settings', async () => {
+    await registerIpcForTest();
+    const { readClaudeCodeSettings } = await import('./imports/claude-code-config');
+    vi.mocked(readClaudeCodeSettings).mockResolvedValueOnce({
+      provider: null,
+      apiKey: null,
+      apiKeySource: 'none',
+      userType: 'parse-error',
+      hasOAuthEvidence: false,
+      activeModel: null,
+      settingsPath: '/tmp/.claude/settings.json',
+      warnings: ['settings.env.ANTHROPIC_AUTH_TOKEN must be a string'],
+    });
+
+    const handler = handlers.get('config:v1:import-claude-code-config');
+    expect(handler).toBeDefined();
+    await expect(handler?.({} as unknown)).rejects.toMatchObject({
+      code: 'CONFIG_PARSE_FAILED',
+      message: expect.stringContaining('ANTHROPIC_AUTH_TOKEN'),
+    });
+  });
+
   it('throws CLAUDE_CODE_OAUTH_ONLY for oauth-only users without touching config', async () => {
     const { readClaudeCodeSettings } = await import('./imports/claude-code-config');
     const { writeConfig } = await import('./config');

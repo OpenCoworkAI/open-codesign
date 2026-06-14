@@ -40,6 +40,20 @@ describe('parseClaudeCodeSettings', () => {
     expect(out.userType).toBe('has-api-key');
   });
 
+  it('ignores non-string Claude Code env flags that are unrelated to import', () => {
+    const json = JSON.stringify({
+      env: {
+        ANTHROPIC_AUTH_TOKEN: 'sk-ant-test',
+        ANTHROPIC_BASE_URL: 'https://gateway.example.com',
+        CLAUDE_CODE_DISABLE_1M_CONTEXT: true,
+      },
+    });
+    const out = parseClaudeCodeSettings(json, { env: {} });
+    expect(out.userType).toBe('has-api-key');
+    expect(out.apiKey).toBe('sk-ant-test');
+    expect(out.provider?.baseUrl).toBe('https://gateway.example.com');
+  });
+
   it('attaches envKey: ANTHROPIC_AUTH_TOKEN as import metadata', () => {
     const json = JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 'k' } });
     const out = parseClaudeCodeSettings(json, { env: {} });
