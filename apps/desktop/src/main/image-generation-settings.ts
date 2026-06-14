@@ -246,6 +246,71 @@ export async function resolveImageGenerationConfig(
   };
 }
 
+export type ResolvedImageGenerationTestCredentials =
+  | {
+      ok: true;
+      provider: ImageGenerationProvider;
+      apiKey: string;
+      baseUrl: string;
+    }
+  | { ok: false; code: 'IMAGE_GEN_DISABLED' | 'PROVIDER_KEY_MISSING'; message: string };
+
+export async function resolveImageGenerationTestCredentials(
+  cfg: Config | null,
+): Promise<ResolvedImageGenerationTestCredentials> {
+  if (cfg === null || cfg.imageGeneration === undefined) {
+    return {
+      ok: false,
+      code: 'IMAGE_GEN_DISABLED',
+      message: 'Image generation is not configured.',
+    };
+  }
+  const parsed = ImageGenerationSettingsSchema.parse(cfg.imageGeneration);
+  const baseUrl = parsed.baseUrl ?? defaultImageBaseUrl(parsed.provider);
+
+  if (parsed.provider === CHATGPT_CODEX_PROVIDER_ID) {
+    let apiKey: string;
+    try {
+      apiKey = await getCodexTokenStore().getValidAccessToken();
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'PROVIDER_KEY_MISSING',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+    return { ok: true, provider: parsed.provider, apiKey, baseUrl };
+  }
+
+  if (parsed.credentialMode === 'custom') {
+    if (parsed.apiKey === undefined) {
+      return {
+        ok: false,
+        code: 'PROVIDER_KEY_MISSING',
+        message: `No custom image API key stored for "${parsed.provider}".`,
+      };
+    }
+    return {
+      ok: true,
+      provider: parsed.provider,
+      apiKey: decryptSecret(parsed.apiKey.ciphertext),
+      baseUrl,
+    };
+  }
+
+  let apiKey: string;
+  try {
+    apiKey = getApiKeyForProvider(parsed.provider);
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'PROVIDER_KEY_MISSING',
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+  return { ok: true, provider: parsed.provider, apiKey, baseUrl };
+}
+
 export async function isGenerateImageAssetEnabled(cfg: Config): Promise<boolean> {
   return (await resolveImageGenerationConfig(cfg)) !== null;
 }

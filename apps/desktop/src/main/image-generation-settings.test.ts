@@ -13,6 +13,7 @@ import {
   isGenerateImageAssetEnabled,
   parseImageGenerationUpdate,
   resolveImageGenerationConfig,
+  resolveImageGenerationTestCredentials,
   updateImageGenerationSettings,
 } from './image-generation-settings';
 
@@ -403,6 +404,92 @@ describe('image generation enablement', () => {
       size: '1024x1024',
       outputFormat: 'png',
       apiKey: ' sk-test ',
+    });
+  });
+});
+
+describe('resolveImageGenerationTestCredentials', () => {
+  afterEach(() => {
+    mocks.cachedConfig = null;
+    getApiKeyForProviderMock.mockReset();
+    mocks.codexGetValidAccessToken.mockReset();
+  });
+
+  it('returns IMAGE_GEN_DISABLED when no imageGeneration config exists', async () => {
+    const result = await resolveImageGenerationTestCredentials(null);
+    expect(result).toMatchObject({ ok: false, code: 'IMAGE_GEN_DISABLED' });
+  });
+
+  it('resolves inherited credentials even when image generation is disabled', async () => {
+    getApiKeyForProviderMock.mockReturnValue('sk-openai');
+    const cfg = makeConfig(false);
+    const result = await resolveImageGenerationTestCredentials(cfg);
+    expect(result).toMatchObject({
+      ok: true,
+      provider: 'openai',
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+  });
+
+  it('returns PROVIDER_KEY_MISSING when inherited credential cannot be read', async () => {
+    getApiKeyForProviderMock.mockImplementation(() => {
+      throw new CodesignError('missing key', ERROR_CODES.PROVIDER_KEY_MISSING);
+    });
+    const cfg = makeConfig(true);
+    const result = await resolveImageGenerationTestCredentials(cfg);
+    expect(result).toMatchObject({ ok: false, code: 'PROVIDER_KEY_MISSING' });
+  });
+
+  it('decrypts custom-mode key when one is stored', async () => {
+    const baseCfg = makeConfig(true);
+    const cfg = hydrateConfig({
+      version: 3,
+      activeProvider: baseCfg.activeProvider,
+      activeModel: baseCfg.activeModel,
+      providers: baseCfg.providers,
+      secrets: baseCfg.secrets,
+      imageGeneration: {
+        schemaVersion: IMAGE_GENERATION_SCHEMA_VERSION,
+        enabled: true,
+        provider: 'openai',
+        credentialMode: 'custom',
+        model: 'gpt-image-2',
+        quality: 'high',
+        size: '1536x1024',
+        outputFormat: 'png',
+        apiKey: { ciphertext: 'sk-custom-image', mask: 'sk-…age' },
+      },
+    });
+    const result = await resolveImageGenerationTestCredentials(cfg);
+    expect(result).toMatchObject({ ok: true, provider: 'openai', apiKey: 'sk-custom-image' });
+  });
+
+  it('uses ChatGPT OAuth access token for chatgpt-codex provider', async () => {
+    mocks.codexGetValidAccessToken.mockResolvedValue('codex-token-abc');
+    const baseCfg = makeConfig(true);
+    const cfg = hydrateConfig({
+      version: 3,
+      activeProvider: baseCfg.activeProvider,
+      activeModel: baseCfg.activeModel,
+      providers: baseCfg.providers,
+      secrets: baseCfg.secrets,
+      imageGeneration: {
+        schemaVersion: IMAGE_GENERATION_SCHEMA_VERSION,
+        enabled: true,
+        provider: 'chatgpt-codex',
+        credentialMode: 'inherit',
+        model: 'gpt-5.5',
+        quality: 'high',
+        size: '1536x1024',
+        outputFormat: 'png',
+      },
+    });
+    const result = await resolveImageGenerationTestCredentials(cfg);
+    expect(result).toMatchObject({
+      ok: true,
+      provider: 'chatgpt-codex',
+      apiKey: 'codex-token-abc',
     });
   });
 });

@@ -351,10 +351,14 @@
         "needsChatgptLogin": "Needs ChatGPT sign-in",
         "disabled": "Disabled"
       },
+      "testConnection": "Test connection",
+      "testing": "Testing…",
       "toast": {
         "loadFailed": "Failed to load image generation settings",
         "saved": "Image generation settings saved",
-        "saveFailed": "Failed to save image generation settings"
+        "saveFailed": "Failed to save image generation settings",
+        "connectionOk": "Image provider connection OK",
+        "connectionFailed": "Image provider connection failed"
       }
     },
     "memory": {

@@ -313,10 +313,14 @@
         "needsChatgptLogin": "Necesita iniciar sesión en ChatGPT",
         "disabled": "Deshabilitado"
       },
+      "testConnection": "Probar conexión",
+      "testing": "Probando…",
       "toast": {
         "loadFailed": "Error al cargar la configuración de generación de imágenes",
         "saved": "Configuración de generación de imágenes guardada",
-        "saveFailed": "Error al guardar la configuración de generación de imágenes"
+        "saveFailed": "Error al guardar la configuración de generación de imágenes",
+        "connectionOk": "Conexión con el proveedor de imágenes OK",
+        "connectionFailed": "Falló la conexión con el proveedor de imágenes"
       }
     },
     "shell": {

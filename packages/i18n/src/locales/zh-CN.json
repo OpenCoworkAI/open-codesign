@@ -351,10 +351,14 @@
         "needsChatgptLogin": "需要登录 ChatGPT",
         "disabled": "未启用"
       },
+      "testConnection": "测试连接",
+      "testing": "测试中…",
       "toast": {
         "loadFailed": "加载图像生成设置失败",
         "saved": "图像生成设置已保存",
-        "saveFailed": "保存图像生成设置失败"
+        "saveFailed": "保存图像生成设置失败",
+        "connectionOk": "图像服务连接正常",
+        "connectionFailed": "图像服务连接失败"
       }
     },
     "memory": {

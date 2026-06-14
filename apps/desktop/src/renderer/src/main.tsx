@@ -3,8 +3,13 @@ import '@open-codesign/ui/fonts';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { installBrowserShim } from './browser-shim';
 import './index.css';
 import { installRendererLogBridge } from './lib/renderer-logger';
+
+// In browser-only mode (no Electron), provide an in-memory IPC shim
+// so the full UI renders and design CRUD works.
+installBrowserShim();
 
 // Install as early as possible so errors during bootstrap are captured.
 installRendererLogBridge();
