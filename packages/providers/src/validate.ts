@@ -67,6 +67,15 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
         headers: () => ({}),
       };
     }
+    case 'atlascloud': {
+      // Atlas Cloud — OpenAI-compatible aggregator. Bearer auth, /v1/models
+      // discovery, same shape as openai/openrouter.
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://api.atlascloud.ai';
+      return {
+        url: `${root}/v1/models`,
+        headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+      };
+    }
   }
 }
 

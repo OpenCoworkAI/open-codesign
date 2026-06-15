@@ -21,6 +21,7 @@ export const SUPPORTED_ONBOARDING_PROVIDERS = [
   'openai',
   'openrouter',
   'ollama',
+  'atlascloud',
 ] as const;
 export type SupportedOnboardingProvider = (typeof SUPPORTED_ONBOARDING_PROVIDERS)[number];
 
@@ -294,6 +295,21 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
       modelDiscoveryMode: 'models',
     },
   },
+  atlascloud: {
+    id: 'atlascloud',
+    name: 'Atlas Cloud',
+    builtin: true,
+    wire: 'openai-chat',
+    baseUrl: 'https://api.atlascloud.ai/v1',
+    defaultModel: 'anthropic/claude-sonnet-4',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsReasoning: true,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
+  },
 } as const;
 
 // ── ConfigSchema v3 — canonical on-disk shape ────────────────────────────────
@@ -514,6 +530,20 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     primary: [OLLAMA_DEFAULT_MODEL, 'llama3.1', 'qwen2.5'],
     defaultPrimary: OLLAMA_DEFAULT_MODEL,
   },
+  atlascloud: {
+    provider: 'atlascloud',
+    label: 'Atlas Cloud',
+    keyHelpUrl: 'https://www.atlascloud.ai/console',
+    primary: [
+      'anthropic/claude-sonnet-4',
+      'anthropic/claude-opus-4',
+      'anthropic/claude-haiku-4-5',
+      'openai/gpt-4o',
+      'deepseek-ai/deepseek-v4-pro',
+      'google/gemini-2.5-pro',
+    ],
+    defaultPrimary: 'anthropic/claude-sonnet-4',
+  },
 };
 
 export function isSupportedOnboardingProvider(p: string): p is SupportedOnboardingProvider {
@@ -527,6 +557,7 @@ export function isSupportedOnboardingProvider(p: string): p is SupportedOnboardi
 export function detectWireFromBaseUrl(baseUrl: string): WireApi {
   const lower = baseUrl.toLowerCase();
   if (lower.includes('anthropic')) return 'anthropic';
+  if (lower.includes('atlascloud')) return 'openai-chat';
   let host = '';
   try {
     host = new URL(baseUrl).hostname.toLowerCase();
