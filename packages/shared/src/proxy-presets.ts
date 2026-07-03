@@ -39,6 +39,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay',
   },
   {
+    id: 'requesty',
+    label: 'Requesty',
+    provider: 'openai',
+    baseUrl: 'https://router.requesty.ai/v1',
+    notes: 'Multi-model relay',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
