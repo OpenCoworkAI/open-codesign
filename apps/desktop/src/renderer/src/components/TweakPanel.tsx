@@ -29,6 +29,7 @@ export function shouldSyncPreviewSourceAfterTweakPersist(result: { wrote: boolea
   return !result.wrote;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function TokenRow({
   tokenKey,
   value,

@@ -208,6 +208,7 @@ function inIpv4Range(ip: string, base: string, bits: number): boolean {
   return (value & mask) === (baseValue & mask);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function classifyNetworkTarget(rawBaseUrl: string): NetworkTargetClass {
   let parsed: URL;
   try {
@@ -610,6 +611,7 @@ export async function runProviderTest(
   // never weaken TLS for built-in providers. Wrapping the whole body covers
   // both the GET /models probe and the inner POST inside tryDegradeProbe.
   const bypass = creds.builtin !== true && creds.tlsRejectUnauthorized === true;
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   return withTlsBypass(bypass, async () => {
     const { url, normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
     const headers = buildAuthHeadersForWire(
@@ -714,6 +716,7 @@ type ProbeResult =
  * request body is intentionally minimal; if the gateway rejects the payload
  * shape with a 4xx we still know the route exists.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 async function probeInferenceEndpoint(
   wire: 'openai-chat' | 'openai-responses' | 'anthropic',
   normalizedBaseUrl: string,

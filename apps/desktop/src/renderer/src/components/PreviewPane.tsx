@@ -205,6 +205,7 @@ function ScaledPreviewFrame({
 // out — survives design switches. That's the whole point of the pool. The
 // srcDocStableKey trick is per-slot so token-only tweaks via postMessage
 // don't rebuild the document (~300-500ms blank on JSX cards).
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function PreviewSlot({
   designId,
   source,
@@ -309,6 +310,7 @@ function PreviewSlot({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const t = useT();
   const previewSource = useCodesignStore((s) => s.previewSource);
@@ -526,6 +528,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // previewSource), then any other recently-visited designs that still have a
   // cached preview. Store-side LRU bounds the size; we just render what's
   // handed to us.
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   const poolEntries = useMemo(() => {
     const seen = new Set<string>();
     const out: Array<{ id: string; source: string }> = [];
@@ -718,6 +721,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
                 postClearPinToPreviewWindow(iframeRef.current?.contentWindow, pushIframeError);
                 closeCommentBubble();
               };
+              // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
               const persistComment = async (text: string) => {
                 const trimmed = text.trim();
                 if (!trimmed && !existingId) {

@@ -51,6 +51,7 @@ const RUNTIME_FONT_PATH_PREFIXES = [
   '/s/jetbrainsmono/',
 ] as const;
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult> {
   const absWorkspace = resolve(opts.workspaceRoot);
   let source: string;
@@ -215,6 +216,7 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
           classList: { length: number } & Iterable<string>;
           children: Iterable<El>;
         }
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
         function outline(el: El, depth: number, maxDepth: number): string {
           const indent = '  '.repeat(depth);
           const tag = el.tagName.toLowerCase();

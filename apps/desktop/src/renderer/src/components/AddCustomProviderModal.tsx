@@ -99,6 +99,7 @@ export function buildEndpointDiscoveryPayload(
  * Deliberately barebones (native form + FormData-ish accessors, no schema),
  * per the v3 brief. Advanced headers/queryParams defer to a later pass.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function AddCustomProviderModal({
   onSave,
   onClose,
@@ -271,6 +272,7 @@ export function AddCustomProviderModal({
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function handleSave() {
     if (!window.codesign?.config) return;
     setSaving(true);

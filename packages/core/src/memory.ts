@@ -35,6 +35,7 @@ function extractTextFromContent(content: unknown): string {
   return parts.join('\n');
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function serializeMessagesForMemory(messages: AgentMessage[]): string {
   const lines: string[] = [];
   for (const msg of messages) {

@@ -186,6 +186,7 @@ function stringRecord(
   return Object.keys(map).length > 0 ? map : null;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function parseProviderBlock(
   id: string,
   rawBlock: unknown,

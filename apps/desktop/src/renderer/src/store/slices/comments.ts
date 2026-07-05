@@ -83,6 +83,7 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
       set({ liveRects: {} });
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async addComment(input) {
       if (!window.codesign) return null;
       const designId = get().currentDesignId;
@@ -162,6 +163,7 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
       }
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async submitComment(input) {
       // Route by presence of existingCommentId. The anchor on a reopened chip
       // carries the id, so editing text hits updateComment (no duplicate row);

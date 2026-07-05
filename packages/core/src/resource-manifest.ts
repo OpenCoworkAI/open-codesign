@@ -216,6 +216,7 @@ export function formatResourceManifestForPrompt(manifest: ResourceManifestV1): s
   ].join('\n');
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function collectResourceManifest(input: {
   log: CoreLogger;
   providerId: string;

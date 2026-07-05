@@ -53,9 +53,9 @@
       "recommended": true,
       "suspicious": {
         "noExplicitAny": "error",
-        "noArrayIndexKey": "off",
-        "noAssignInExpressions": "off",
-        "noPrototypeBuiltins": "off",
+        "noArrayIndexKey": "error",
+        "noAssignInExpressions": "error",
+        "noPrototypeBuiltins": "error",
         "noDuplicateObjectKeys": "warn",
         "useIterableCallbackReturn": "off"
       },
@@ -65,10 +65,10 @@
         "useLiteralEnumMembers": "off"
       },
       "complexity": {
-        "noExcessiveCognitiveComplexity": "off",
-        "noForEach": "off",
+        "noExcessiveCognitiveComplexity": "error",
+        "noForEach": "error",
         "useLiteralKeys": "off",
-        "noCommaOperator": "off"
+        "noCommaOperator": "error"
       },
       "correctness": {
         "useExhaustiveDependencies": "warn",
@@ -77,12 +77,12 @@
         "noUnusedVariables": "warn"
       },
       "a11y": {
-        "useButtonType": "off",
-        "useFocusableInteractive": "off",
-        "useSemanticElements": "off",
-        "noSvgWithoutTitle": "off",
-        "useKeyWithClickEvents": "off",
-        "useValidAnchor": "off",
+        "useButtonType": "error",
+        "useFocusableInteractive": "error",
+        "useSemanticElements": "error",
+        "noSvgWithoutTitle": "error",
+        "useKeyWithClickEvents": "error",
+        "useValidAnchor": "error",
         "useAriaPropsForRole": "off",
         "useAriaPropsSupportedByRole": "off",
         "noStaticElementInteractions": "off"

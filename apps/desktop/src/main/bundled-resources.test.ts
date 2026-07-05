@@ -40,6 +40,7 @@ function classifyTemplateSource(raw: string): 'html' | 'jsx' | 'css' | 'design-m
 }
 
 describe('bundled scaffold resources', () => {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   it('keeps scaffold manifest paths aligned with source format', async () => {
     const manifest = JSON.parse(
       await readFile(join(scaffoldsRoot, 'manifest.json'), 'utf8'),

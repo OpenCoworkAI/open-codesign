@@ -518,6 +518,7 @@ function responseDisallowsEmbeddedPreview(headers: Headers): boolean {
   return frameAncestors.includes("'none'") || frameAncestors.includes("'self'");
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 async function probePreviewCandidate(
   candidate: PreviewCandidateSpec,
   options: { nativeRuntimeRequired: boolean },
@@ -1025,6 +1026,7 @@ function parseToolStatusInput(raw: unknown): ChatToolStatusUpdate {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function parseCommentCreateInput(raw: unknown): CommentCreateInput {
   if (typeof raw !== 'object' || raw === null) {
     throw new CodesignError('comments:v1:add expects a comment object', 'IPC_BAD_INPUT');
@@ -1251,6 +1253,7 @@ export function registerSnapshotsIpc(db: Database): void {
 
   ipcMain.handle(
     'snapshots:v1:create-design',
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async (_e: unknown, raw: unknown): Promise<Design> => {
       if (typeof raw !== 'object' || raw === null) {
         throw new CodesignError(
@@ -1327,6 +1330,7 @@ export function registerSnapshotsIpc(db: Database): void {
       const designId = r['id'] as string;
       const name = r['name'] as string;
       const renameWorkspace = parseRenameWorkspaceOption(r);
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
       return await runWithWorkspaceRenameQueue(designId, async () => {
         const before = runDb('rename-design.lookup', () => getDesign(db, designId));
         if (before === null) {
@@ -1401,6 +1405,7 @@ export function registerSnapshotsIpc(db: Database): void {
 
   ipcMain.handle(
     'snapshots:v1:duplicate-design',
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async (_e: unknown, raw: unknown): Promise<Design> => {
       if (typeof raw !== 'object' || raw === null) {
         throw new CodesignError(
@@ -1462,6 +1467,7 @@ export function registerSnapshotsIpc(db: Database): void {
 
   ipcMain.handle(
     'snapshots:v1:preview:update',
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async (_e: unknown, raw: unknown): Promise<Design> => {
       if (typeof raw !== 'object' || raw === null) {
         throw new CodesignError(
@@ -1662,6 +1668,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
 
   ipcMain.handle(
     'snapshots:v1:workspace:update',
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async (_e: unknown, raw: unknown): Promise<Design> => {
       if (typeof raw !== 'object' || raw === null) {
         throw new CodesignError(
@@ -1710,6 +1717,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
 
   ipcMain.handle(
     'snapshots:v1:workspace:open',
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async (_e: unknown, raw: unknown): Promise<void> => {
       if (typeof raw !== 'object' || raw === null) {
         throw new CodesignError(
@@ -2046,6 +2054,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       const content = r['content'] as string;
       const designId = r['designId'] as string;
       const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
       return withStableWorkspacePath(designId, async () => {
         const currentDesign = await getDesignAfterPendingWorkspaceRename(
           db,
@@ -2116,6 +2125,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
 
   ipcMain.handle(
     'codesign:files:v1:import-to-workspace',
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async (_e: unknown, raw: unknown): Promise<WorkspaceImportResult[]> => {
       if (typeof raw !== 'object' || raw === null) {
         throw new CodesignError(

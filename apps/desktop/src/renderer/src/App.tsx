@@ -152,6 +152,7 @@ export function App() {
       },
       {
         combo: 'escape',
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
         handler: () => {
           if (designToDelete) {
             requestDeleteDesign(null);
@@ -239,6 +240,8 @@ export function App() {
               {isResizing && <div className="absolute inset-0 z-20 cursor-col-resize" />}
               <div className="relative shrink-0" style={{ width: sidebarWidth }}>
                 <Sidebar prefillPrompt={prefillPrompt} />
+                {/* biome-ignore lint/a11y/useSemanticElements: resize drag handle, not a document separator */}
+                {/* biome-ignore lint/a11y/useFocusableInteractive: resize is mouse-only drag interaction */}
                 <div
                   role="separator"
                   aria-orientation="vertical"

@@ -251,6 +251,7 @@ function extractUpstreamHttpStatus(err: unknown): number | undefined {
   return undefined;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function normalizeGenerationFailure(opts: {
   err: unknown;
   signal: AbortSignal;
@@ -352,6 +353,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
    * would double-count the same failure with two distinct fingerprints. */
   const coreLoggerFor = (id: string): CoreLogger => ({
     info: (event, data) => logIpc.info(event, { generationId: id, ...(data ?? {}) }),
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     warn: (event, data) => {
       logIpc.warn(event, { generationId: id, ...(data ?? {}) });
       if (event === 'provider.error' && db !== null) {
@@ -588,6 +590,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         ...(memoryCallbacks?.onComplete !== undefined
           ? { onComplete: memoryCallbacks.onComplete }
           : {}),
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
         onEvent: (event: AgentEvent) => {
           if (event.type === 'turn_start') {
             deltaCount = 0;
@@ -754,6 +757,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         inFlight,
         inFlightByDesign,
         controller,
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
         async () => {
           const coreLogger = coreLoggerFor(id);
 
@@ -814,6 +818,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
 
           const prefs = await readPreferences();
           const { designId, workspaceRoot, promptContext, memoryContext, memoryLoadWarning } =
+            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
             await withStableWorkspacePath(payload.designId, async () => {
               const { designId, workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
               const promptContext = await preparePromptContext({
@@ -901,6 +906,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               hasReferenceUrl: promptContext.referenceUrl !== null,
               hasDesignSystem: promptContext.designSystem !== null,
             };
+            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
             const routedPreferences = await withTlsBypass(tlsBypass, () =>
               routeRunPreferences({
                 prompt: payload.prompt,
@@ -1040,6 +1046,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               generationId: id,
               ...contextPack.trace,
             });
+            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
             const result = await withTlsBypass(tlsBypass, () =>
               runGenerate(
                 {
@@ -1111,81 +1118,85 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 prefs.memoryEnabled === true && prefs.workspaceMemoryAutoUpdate === true
                   ? (() => {
                       const startedAt = Date.now();
-                      return withTlsBypass(tlsBypass, () =>
-                        triggerWorkspaceMemoryUpdate({
-                          workspacePath: memoryWorkspaceRoot,
-                          workspaceName: workspaceNameFromPath(memoryWorkspaceRoot),
-                          designId,
-                          designName,
-                          conversationMessages: messagesForMemory,
-                          userMemory: memoryContext?.userMemory?.content ?? null,
-                          designMdSummary: designMdSummaryForMemory(promptContext.projectContext),
-                          model: active.model,
-                          apiKey,
-                          ...(baseUrl !== undefined ? { baseUrl } : {}),
-                          wire: active.wire,
-                          ...(active.httpHeaders !== undefined
-                            ? { httpHeaders: active.httpHeaders }
-                            : {}),
-                          ...(active.reasoningLevel !== undefined
-                            ? { reasoningLevel: active.reasoningLevel }
-                            : {}),
-                          ...(allowKeyless ? { allowKeyless: true } : {}),
-                        }),
-                      )
-                        .then((workspaceMemory) => {
-                          if (
-                            workspaceMemory !== null &&
-                            workspaceMemory.hash !== previousWorkspaceMemoryHash
-                          ) {
-                            const command =
-                              previousWorkspaceMemoryHash === null ? 'create' : 'update';
+                      return (
+                        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
+                        withTlsBypass(tlsBypass, () =>
+                          triggerWorkspaceMemoryUpdate({
+                            workspacePath: memoryWorkspaceRoot,
+                            workspaceName: workspaceNameFromPath(memoryWorkspaceRoot),
+                            designId,
+                            designName,
+                            conversationMessages: messagesForMemory,
+                            userMemory: memoryContext?.userMemory?.content ?? null,
+                            designMdSummary: designMdSummaryForMemory(promptContext.projectContext),
+                            model: active.model,
+                            apiKey,
+                            ...(baseUrl !== undefined ? { baseUrl } : {}),
+                            wire: active.wire,
+                            ...(active.httpHeaders !== undefined
+                              ? { httpHeaders: active.httpHeaders }
+                              : {}),
+                            ...(active.reasoningLevel !== undefined
+                              ? { reasoningLevel: active.reasoningLevel }
+                              : {}),
+                            ...(allowKeyless ? { allowKeyless: true } : {}),
+                          }),
+                        )
+                          // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
+                          .then((workspaceMemory) => {
+                            if (
+                              workspaceMemory !== null &&
+                              workspaceMemory.hash !== previousWorkspaceMemoryHash
+                            ) {
+                              const command =
+                                previousWorkspaceMemoryHash === null ? 'create' : 'update';
+                              sendHostActivity({
+                                designId,
+                                generationId: id,
+                                toolName: 'workspace_memory',
+                                command,
+                                args: { path: 'MEMORY.md' },
+                                status: 'done',
+                                durationMs: Date.now() - startedAt,
+                                verbGroup: 'Memory',
+                                result: {
+                                  content: [
+                                    {
+                                      type: 'text',
+                                      text: `${command === 'create' ? 'Created' : 'Updated'} workspace memory at MEMORY.md.`,
+                                    },
+                                  ],
+                                  details: {
+                                    path: 'MEMORY.md',
+                                    bytes: workspaceMemory.content.length,
+                                    source: workspaceMemory.source,
+                                    status: command === 'create' ? 'created' : 'updated',
+                                  },
+                                },
+                              });
+                            }
+                            return workspaceMemory;
+                          })
+                          .catch((err) => {
+                            const message = err instanceof Error ? err.message : String(err);
                             sendHostActivity({
                               designId,
                               generationId: id,
                               toolName: 'workspace_memory',
-                              command,
+                              command: 'update',
                               args: { path: 'MEMORY.md' },
-                              status: 'done',
+                              status: 'error',
                               durationMs: Date.now() - startedAt,
                               verbGroup: 'Memory',
+                              message,
                               result: {
-                                content: [
-                                  {
-                                    type: 'text',
-                                    text: `${command === 'create' ? 'Created' : 'Updated'} workspace memory at MEMORY.md.`,
-                                  },
-                                ],
-                                details: {
-                                  path: 'MEMORY.md',
-                                  bytes: workspaceMemory.content.length,
-                                  source: workspaceMemory.source,
-                                  status: command === 'create' ? 'created' : 'updated',
-                                },
+                                content: [{ type: 'text', text: message }],
+                                details: { path: 'MEMORY.md', status: 'error' },
                               },
                             });
-                          }
-                          return workspaceMemory;
-                        })
-                        .catch((err) => {
-                          const message = err instanceof Error ? err.message : String(err);
-                          sendHostActivity({
-                            designId,
-                            generationId: id,
-                            toolName: 'workspace_memory',
-                            command: 'update',
-                            args: { path: 'MEMORY.md' },
-                            status: 'error',
-                            durationMs: Date.now() - startedAt,
-                            verbGroup: 'Memory',
-                            message,
-                            result: {
-                              content: [{ type: 'text', text: message }],
-                              details: { path: 'MEMORY.md', status: 'error' },
-                            },
-                          });
-                          throw err;
-                        });
+                            throw err;
+                          })
+                      );
                     })().catch((err) => {
                       logIpc.warn('workspace-memory.update.fail', {
                         generationId: id,
@@ -1198,6 +1209,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               const briefUpdate = prefs.memoryEnabled
                 ? workspaceMemoryUpdate
                     .then((workspaceMemory) =>
+                      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
                       withTlsBypass(tlsBypass, () =>
                         updateDesignSessionBrief({
                           existingBrief,
@@ -1247,6 +1259,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                     userMessages: extractUserMessagesForMemory(messagesForMemory),
                   })
                     .then(() => {
+                      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
                       return withTlsBypass(tlsBypass, () =>
                         triggerUserMemoryConsolidation({
                           model: active.model,
@@ -1335,6 +1348,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         inFlight,
         inFlightByDesign,
         controller,
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
         async () => {
           const coreLogger = coreLoggerFor(id);
 
@@ -1401,6 +1415,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             );
             clearTimeoutGuard = await armTimeout(id, controller);
             const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
+            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
             const result = await withTlsBypass(tlsBypass, () =>
               runGenerate(
                 {
@@ -1477,6 +1492,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
 
   ipcMain.handle('codesign:v1:generate-title', async (_e, raw: unknown): Promise<string> => {
     const runId = crypto.randomUUID();
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     return withRun(runId, async () => {
       if (typeof raw !== 'object' || raw === null) {
         throw new CodesignError('generate-title expects an object payload', 'IPC_BAD_INPUT');
@@ -1501,6 +1517,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         error: (event, data) => logIpc.error(event, data),
       };
       try {
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
         return await withTlsBypass(tlsBypass, () =>
           generateTitle({
             prompt,

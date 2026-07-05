@@ -185,6 +185,7 @@ function parseStatusUpdate(value: unknown): StoredToolStatusUpdate | null {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function parseCommentEvent(value: unknown): StoredCommentEvent | null {
   if (!isRecord(value)) return null;
   if (value['schemaVersion'] !== 1) return null;
@@ -269,6 +270,7 @@ function applyStatusUpdate(row: ChatMessageRow, update: StoredToolStatusUpdate):
   return { ...row, payload: nextPayload };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function replayEntries(designId: string, entries: unknown[]): ChatMessageRow[] {
   const rows: ChatMessageRow[] = [];
   for (const raw of entries) {
@@ -316,6 +318,7 @@ export function listSessionChatMessages(
   return replayEntries(designId, manager.getEntries());
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function replayCommentEvents(designId: string, entries: unknown[]): CommentRow[] {
   const rows = new Map<string, CommentRow>();
   for (const raw of entries) {

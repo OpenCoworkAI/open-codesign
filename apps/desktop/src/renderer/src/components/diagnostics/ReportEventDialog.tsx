@@ -105,6 +105,7 @@ export interface PreviewLabels {
  * provider-scope events. Exported so the shape can be unit-tested without
  * mounting the dialog — the dialog just wraps this output in <pre>.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function formatPreview(
   error: ReportableError,
   opts: RedactOpts,
@@ -243,6 +244,7 @@ export function ReportEventDialog({ localId, onClose }: ReportEventDialogProps) 
     if (localId === null) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Tab') return;
       if (!dialog) return;
@@ -264,6 +266,7 @@ export function ReportEventDialog({ localId, onClose }: ReportEventDialogProps) 
 
   if (localId === null || !error) return null;
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function submit(kind: 'open' | 'copy') {
     if (!error) return;
     if (!validateNotes(notes)) {

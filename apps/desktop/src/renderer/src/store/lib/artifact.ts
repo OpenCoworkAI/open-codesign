@@ -1,5 +1,6 @@
 import { findArtifactSourceReference } from '@open-codesign/runtime';
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function delimiterDeltaOutsideStrings(src: string, open: string, close: string): number {
   let delta = 0;
   let inStr: '"' | "'" | '`' | null = null;

@@ -74,6 +74,7 @@ export function createArtifactParser() {
     return out;
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   function* feed(delta: string): Generator<ArtifactEvent> {
     state.buffer += delta;
 
@@ -175,6 +176,7 @@ export function createArtifactParser() {
  *                 must hold back from `start` and wait for more input
  *   - `none`:     no candidate; caller may flush the entire buffer as text
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function findOpenTag(buffer: string): OpenTagMatch {
   let from = 0;
   while (from <= buffer.length) {

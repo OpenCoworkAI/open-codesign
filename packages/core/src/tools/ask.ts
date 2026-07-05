@@ -142,6 +142,7 @@ function assertKnownQuestionFields(
     : { ok: false, reason: `unsupported field: ${unsupported}` };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function validateAskQuestion(
   question: unknown,
 ): { ok: true; id: string } | { ok: false; reason: string } {

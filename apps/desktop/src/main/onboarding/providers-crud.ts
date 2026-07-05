@@ -237,6 +237,7 @@ export async function runAddCustomProvider(
   return toState(next);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function runUpdateProvider(input: UpdateProviderInput): Promise<OnboardingState> {
   const cfg = getCachedConfig();
   if (cfg === null) {
@@ -364,6 +365,7 @@ function parseEndpointBaseUrl(
   return { ok: true, baseUrl };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function runListEndpointModels(raw: unknown): Promise<ListEndpointModelsResponse> {
   if (typeof raw !== 'object' || raw === null) {
     return { ok: false, error: 'expected an object payload' };

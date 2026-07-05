@@ -123,6 +123,7 @@ function compactAssistant(
   };
   if (!Array.isArray(original.content)) return m;
   let changed = false;
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   const nextContent = original.content.map((block) => {
     const type = block?.['type'];
     if (type === 'text') {

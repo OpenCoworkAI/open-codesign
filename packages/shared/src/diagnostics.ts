@@ -116,6 +116,7 @@ function stripModelsPrefix(modelId: string): string {
  * Map an ErrorCode + context to one or more DiagnosticHypothesis items.
  * The first item is the "most likely" cause; subsequent items are alternatives.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypothesis[] {
   // Normalise the code — some callers pass the HTTP status as a string like "404"
   const normalised = String(code).toUpperCase();
@@ -332,6 +333,7 @@ function mentionsModelsPrefix(message: string): boolean {
   return /\bmodels\/[-._:/a-z0-9]+\b/i.test(message);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function diagnoseGenerateFailure(ctx: GenerateFailureContext): DiagnosticHypothesis[] {
   const message = (ctx.message ?? '').toLowerCase();
   const status = ctx.status;

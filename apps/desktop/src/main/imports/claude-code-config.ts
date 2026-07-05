@@ -198,6 +198,7 @@ function validateAnthropicBaseUrl(value: string): string | null {
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function parseClaudeCodeSettings(
   json: string,
   options: ParseClaudeCodeOptions = {},

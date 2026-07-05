@@ -98,6 +98,7 @@ export function formatReferenceUrl(
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function buildContextSections(input: {
   sessionContext?: string[] | undefined;
   designSystem?: StoredDesignSystem | null | undefined;

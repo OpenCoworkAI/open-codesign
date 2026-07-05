@@ -204,6 +204,7 @@ async function resolvePublicReferenceAddresses(
   });
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function isPrivateIpv4(hostname: string): boolean {
   const parts = hostname.split('.').map((part) => Number(part));
   if (
@@ -231,6 +232,7 @@ function isPrivateIpv4(hostname: string): boolean {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function isPrivateIpv6(hostname: string): boolean {
   if (hostname === '::' || hostname === '::1') return true;
   if (hostname.startsWith('fc') || hostname.startsWith('fd')) return true;
@@ -497,6 +499,7 @@ async function openAttachment(
   throw lastError;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 async function readAttachment(
   file: LocalInputFile,
   workspaceRoot: string | undefined,
@@ -711,6 +714,7 @@ async function defaultFetchReference(
         lookup,
         signal,
       },
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
       (res) => {
         const headers = new Headers();
         for (const [key, value] of Object.entries(res.headers)) {

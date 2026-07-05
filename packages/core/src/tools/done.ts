@@ -304,6 +304,7 @@ function shouldStartStringLiteral(src: string, index: number): boolean {
  * Only fires for JSX-shaped artifacts. Pure HTML (legacy pastes, tests) is
  * skipped — those have their own checks via findUnclosedTags etc.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function findJsxStructuralIssues(src: string): DoneError[] {
   // Plain HTML files are first-class for legacy sources and imported files.
   // New generated designs default to App.jsx, but HTML should not be coerced
@@ -465,6 +466,7 @@ export function makeDoneTool(
       'remain with a valid artifact after those repair rounds, the host may ' +
       'keep the latest artifact but will surface warnings to the user.',
     parameters: DoneParams,
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async execute(_id, params): Promise<AgentToolResult<DoneDetails>> {
       const path = resolveDonePath(fs, params.path);
       const file = fs.view(path);

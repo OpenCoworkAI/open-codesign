@@ -129,6 +129,7 @@ export function makeGenerateImageAssetTool(
       `so prefer batching all needed assets in one assistant turn before writing ${DEFAULT_SOURCE_ENTRY}. ` +
       'The tool returns a local assets/... path to reference.',
     parameters: GenerateImageAssetParams,
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async execute(
       _toolCallId,
       params,

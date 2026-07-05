@@ -59,6 +59,7 @@ const DEFAULT_VIEWPORT = { width: 1280, height: 800 } as const;
  * avoid Puppeteer's full distribution (~150 MB Chromium download) — `puppeteer-core`
  * connects to the system Chrome we discover at runtime. PRINCIPLES §1 + §10.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function exportPdf(
   artifactSource: string,
   destinationPath: string,

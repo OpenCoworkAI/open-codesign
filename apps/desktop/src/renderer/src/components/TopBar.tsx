@@ -74,6 +74,7 @@ export function TopBar() {
             className="flex h-full min-w-max items-center gap-[var(--space-1)]"
             aria-label={t('hub.tabs.all')}
           >
+            {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118 */}
             {HUB_TABS.map((tab) => {
               const active = tab === hubTab;
               return (

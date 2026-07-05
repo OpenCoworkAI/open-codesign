@@ -179,6 +179,7 @@ async function scheduleStartupUpdateCheck(): Promise<void> {
 if (!IS_VITEST) {
   registerWorkspaceScheme();
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   void app.whenReady().then(async () => {
     // Extracted so the outer try/catch AND post-init listeners (whose callbacks
     // fire outside this block) can route failures through the same boot-fallback

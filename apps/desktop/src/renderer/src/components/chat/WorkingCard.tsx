@@ -150,27 +150,30 @@ function ActivityLedger({ rows }: { rows: ActivityRow[] }) {
 function extractTodos(call: ChatToolCallPayload): TodoItem[] {
   const raw = (call.args?.['todos'] as unknown) ?? (call.args?.['items'] as unknown) ?? null;
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map((it): TodoItem | null => {
-      if (typeof it !== 'object' || it === null) return null;
-      const o = it as Record<string, unknown>;
-      const text =
-        typeof o['content'] === 'string'
-          ? (o['content'] as string)
-          : typeof o['text'] === 'string'
-            ? (o['text'] as string)
-            : null;
-      if (text === null) return null;
-      const rawStatus = o['status'];
-      const status: TodoItem['status'] =
-        rawStatus === 'completed' || rawStatus === 'in_progress' || rawStatus === 'pending'
-          ? rawStatus
-          : o['checked'] === true
-            ? 'completed'
-            : 'pending';
-      return { text, status };
-    })
-    .filter((x): x is TodoItem => x !== null);
+  return (
+    raw
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
+      .map((it): TodoItem | null => {
+        if (typeof it !== 'object' || it === null) return null;
+        const o = it as Record<string, unknown>;
+        const text =
+          typeof o['content'] === 'string'
+            ? (o['content'] as string)
+            : typeof o['text'] === 'string'
+              ? (o['text'] as string)
+              : null;
+        if (text === null) return null;
+        const rawStatus = o['status'];
+        const status: TodoItem['status'] =
+          rawStatus === 'completed' || rawStatus === 'in_progress' || rawStatus === 'pending'
+            ? rawStatus
+            : o['checked'] === true
+              ? 'completed'
+              : 'pending';
+        return { text, status };
+      })
+      .filter((x): x is TodoItem => x !== null)
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -400,6 +403,7 @@ function pushGenericToolRow(rows: ActivityRow[], call: ChatToolCallPayload, inde
   });
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function buildActivityRows(calls: ChatToolCallPayload[]): ActivityRow[] {
   const rows: ActivityRow[] = [];
   let lastFileRowIdx = -1;
@@ -610,9 +614,9 @@ function ActivityTodoBlock({ row }: { row: ActivityRow }) {
           />
         </div>
         <div className="space-y-[2px]">
-          {todos.map((todo, index) => (
+          {todos.map((todo) => (
             <div
-              key={`${index}-${todo.text.slice(0, 16)}`}
+              key={todo.text}
               className="grid grid-cols-[14px_minmax(0,1fr)] gap-[var(--space-2)] text-[12px] leading-[1.4]"
             >
               {todo.status === 'completed' ? (

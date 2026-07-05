@@ -184,6 +184,7 @@ function validateColors(findings: DesignMdFinding[], value: unknown): void {
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function validateTypography(findings: DesignMdFinding[], value: unknown): void {
   if (!isRecord(value)) {
     findings.push(

@@ -110,6 +110,7 @@ export function registerOnboardingIpc(): void {
 
   ipcMain.handle(
     'config:v1:detect-external-configs',
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async (): Promise<ExternalConfigsDetection> => {
       // Log non-ENOENT failures so an unreadable config (EACCES, EISDIR,
       // corrupted file) leaves a diagnostic trail instead of silently

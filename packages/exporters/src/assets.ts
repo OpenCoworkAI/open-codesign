@@ -102,6 +102,7 @@ export async function collectLocalAssetsFromHtml(
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function rewriteHtmlLocalAssetReferences(
   html: string,
   opts: LocalAssetOptions = {},

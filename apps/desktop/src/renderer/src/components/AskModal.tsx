@@ -252,6 +252,7 @@ export function AskModal() {
   }
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: section with group role for non-form content grouping is semantically correct
     <section
       ref={panelRef}
       aria-labelledby="ask-title"

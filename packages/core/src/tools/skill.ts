@@ -75,6 +75,7 @@ function rootForEntry(entry: SkillManifestEntry, roots: SkillRoots): string | nu
   return roots.brandRefsRoot ?? null;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function listSkillManifest(roots: SkillRoots): Promise<SkillManifestEntry[]> {
   const out: SkillManifestEntry[] = [];
 
@@ -241,6 +242,7 @@ export function makeSkillTool(
       'does not copy scaffold files. One call per skill per session; repeat ' +
       'calls return a short already-loaded response.',
     parameters: SkillParams,
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async execute(_toolCallId, params): Promise<AgentToolResult<SkillDetails>> {
       const name = params.name;
       const result = await invokeSkill({

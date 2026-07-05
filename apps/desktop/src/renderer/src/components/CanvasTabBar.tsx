@@ -69,6 +69,7 @@ export function CanvasTabBar() {
       aria-label={t('canvas.tabsAriaLabel')}
       className="codesign-scroll-x flex min-w-0 items-stretch overflow-x-auto overflow-y-hidden"
     >
+      {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118 */}
       {tabs.map((tab, index) => {
         const isActive = index === active;
         const isFilesTab = tab.kind === 'files';
@@ -80,6 +81,7 @@ export function CanvasTabBar() {
             <div
               role="tab"
               aria-selected={isActive}
+              tabIndex={isActive ? 0 : -1}
               className={`group relative flex shrink-0 items-center gap-[var(--space-2)] px-[var(--space-3)] py-[7px] text-[12px] transition-colors duration-[var(--duration-faster)] ${
                 isFilesTab
                   ? 'mr-[var(--space-1)] rounded-t-[var(--radius-sm)] bg-[var(--color-background)]'

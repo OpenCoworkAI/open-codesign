@@ -53,6 +53,7 @@ export async function findSystemChrome(deps: ChromeDiscoveryDeps = {}): Promise<
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function locate(d: {
   platform: NodeJS.Platform;
   env: NodeJS.ProcessEnv;

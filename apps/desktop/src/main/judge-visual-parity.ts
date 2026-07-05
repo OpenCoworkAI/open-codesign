@@ -69,6 +69,7 @@ function stripCodeFences(text: string): string {
     .trim();
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function extractFirstJsonObject(text: string): string {
   const start = text.indexOf('{');
   if (start === -1) return text;

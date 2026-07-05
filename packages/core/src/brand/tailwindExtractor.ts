@@ -60,6 +60,7 @@ function extractAllSectionBodies(source: string, sectionKey: string): string[] {
 // Extract the body of a `{` brace at position `bracePos` in `text`.
 // Quote- and comment-aware so braces inside strings or comments do not
 // terminate blocks early.
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function extractBodyAt(text: string, bracePos: number): string | null {
   if (text[bracePos] !== '{') return null;
 
@@ -149,6 +150,7 @@ function leafValueFromMatch(m: RegExpMatchArray): string | undefined {
 
 // Walk object literal text and collect leaf key→value pairs.
 // Only extracts simple string literals and string arrays; skips functions and spreads.
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function collectLeafPairs(body: string, prefix: string): Array<{ name: string; value: string }> {
   const results: Array<{ name: string; value: string }> = [];
 

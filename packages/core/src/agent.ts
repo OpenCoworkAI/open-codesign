@@ -847,6 +847,7 @@ function sourceCandidates(
     .slice(0, 8);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function buildWorkspaceBrief(
   input: GenerateInput,
   fs: TextEditorFsCallbacks | undefined,
@@ -985,6 +986,7 @@ export interface GenerateViaAgentDeps {
  * tool surface. Events are emitted so the desktop shell can stream progress,
  * tool calls, and file updates while preserving the GenerateOutput boundary.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function generateViaAgent(
   input: GenerateInput,
   deps: GenerateViaAgentDeps = {},

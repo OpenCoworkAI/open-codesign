@@ -74,6 +74,7 @@ export function FilesPanel() {
       });
   }, [currentDesignId, workspacePath, t]);
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function handlePickWorkspace() {
     if (!window.codesign?.snapshots.pickWorkspaceFolder) return;
     if (isCurrentDesignGenerating) {
@@ -126,6 +127,7 @@ export function FilesPanel() {
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function handleDrop(e: DragEvent<HTMLDivElement>): Promise<void> {
     if (!workspacePath || isCurrentDesignGenerating) return;
     const files = dataTransferFilesToWorkspaceFiles(e.dataTransfer);

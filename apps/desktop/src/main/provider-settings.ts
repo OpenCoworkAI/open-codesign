@@ -95,6 +95,7 @@ function resolveEntryFor(cfg: Config, id: string): ProviderEntry | null {
   return null;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function toProviderRows(
   cfg: Config | null,
   decrypt: (ciphertext: string) => string,

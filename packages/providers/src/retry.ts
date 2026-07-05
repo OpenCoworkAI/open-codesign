@@ -306,6 +306,7 @@ export interface BackoffOptions {
  * when you need first-turn retry semantics around an arbitrary transient-prone
  * async op (e.g. `agent.prompt()` in the pi-agent-core path).
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function withBackoff<T>(fn: () => Promise<T>, opts: BackoffOptions = {}): Promise<T> {
   const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
   const baseDelayMs = opts.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;

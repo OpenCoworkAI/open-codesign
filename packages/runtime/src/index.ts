@@ -147,6 +147,7 @@ function isIdentifierBoundary(ch: string | undefined): boolean {
   return ch === undefined || !/[A-Za-z0-9_$]/u.test(ch);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function containsNamedDeclaration(source: string, name: 'App' | '_App'): boolean {
   for (const keyword of ['function', 'const', 'let']) {
     let index = source.indexOf(keyword);

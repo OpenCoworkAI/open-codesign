@@ -238,7 +238,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function hasOwn(value: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(value, key);
+  return Object.hasOwn(value, key);
 }
 
 function optionalNumber(value: Record<string, unknown>, key: string): number | null | undefined {
@@ -251,6 +251,7 @@ function isStringArray(value: unknown[]): value is string[] {
   return value.every((option) => typeof option === 'string');
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function validateEntry(value: unknown): TokenSchemaEntry | null {
   if (!isPlainObject(value)) return null;
   const kind = value['kind'];

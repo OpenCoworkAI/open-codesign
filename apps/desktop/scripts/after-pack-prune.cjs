@@ -84,6 +84,7 @@ function unpackedNodeModulesDirs(context) {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function koffiTriplet(platform, arch) {
   if (platform === 'darwin') {
     if (arch === 'arm64') return 'darwin_arm64';

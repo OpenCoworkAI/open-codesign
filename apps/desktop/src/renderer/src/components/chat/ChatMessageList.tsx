@@ -28,6 +28,7 @@ interface RenderItem {
  * by a plain assistant prose bubble. Session-replayed history obeys the same
  * grouping because rows are read back in `seq` order.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function ChatMessageList({
   messages,
   loading,

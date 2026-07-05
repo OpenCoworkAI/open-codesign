@@ -57,6 +57,7 @@ This bundle was exported from [open-codesign](https://github.com/OpenCoworkAI/op
  * MIT, zero deps, and handles streamed writes without buffering the whole
  * archive in memory (PRINCIPLES §1).
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function exportZip(
   artifactSource: string,
   destinationPath: string,

@@ -60,6 +60,7 @@ function activeModelForImport(
     : activeEntry.defaultModel;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
   if (imported.providers.length === 0) {
     throw new CodesignError(

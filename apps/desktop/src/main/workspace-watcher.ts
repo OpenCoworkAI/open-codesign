@@ -87,6 +87,7 @@ function isWorkspaceUnavailableWatchError(err: unknown): boolean {
 async function pollWorkspaceSignature(root: string): Promise<string> {
   const rows: string[] = [];
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function walk(dir: string): Promise<void> {
     let entries: Dirent[] = [];
     try {
@@ -235,6 +236,7 @@ function stopWatcher(designId: string): void {
 }
 
 export function registerFilesWatcherIpc(db: Database, getWin: () => BrowserWindow | null): void {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   ipcMain.handle('codesign:files:v1:subscribe', (_e: unknown, raw: unknown): { ok: true } => {
     const designId = parseDesignId(raw, 'subscribe');
     const design = getDesign(db, designId);

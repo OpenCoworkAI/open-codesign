@@ -147,6 +147,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function normalizeQuestions(raw: unknown): AskInput['questions'] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const questions: AskInput['questions'] = [];
@@ -228,6 +229,7 @@ export function normalizeRunPreferencesRouterResult(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function applyRunPreferenceAnswers(
   base: DesignRunPreferencesV1,
   answers: Array<{ questionId: string; value: string | number | string[] | null }>,
@@ -272,6 +274,7 @@ export function runPreferencesFromJson(
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function routeRunPreferences(
   input: RouteRunPreferencesInput,
 ): Promise<RouteRunPreferencesResult> {

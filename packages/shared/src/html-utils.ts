@@ -69,6 +69,7 @@ export function decodeHtmlEntities(input: string): string {
   return out;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function stripHtmlTags(input: string): string {
   let out = '';
   let inTag = false;
@@ -197,6 +198,7 @@ export function extractHtmlElementInner(html: string, tagName: string): string |
   return html.slice(openEnd, closeStart);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function getHtmlAttribute(tagAttrs: string, attrName: string): string | null {
   const name = attrName.toLowerCase();
   let index = 0;

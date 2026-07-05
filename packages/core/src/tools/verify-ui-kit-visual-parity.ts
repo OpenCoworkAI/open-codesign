@@ -262,6 +262,7 @@ export function makeVerifyUiKitVisualParityTool(
       'decompose_to_ui_kit addressing the failed-check reasons. If this tool ' +
       'returns status="unavailable", proceed with the deterministic verifier alone.',
     parameters: VerifyParams,
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async execute(_toolCallId, params, signal): Promise<AgentToolResult<VisualParityReport>> {
       const startedAt = Date.now();
       const decomposedPath = `ui_kits/${params.slug}/index.html`;

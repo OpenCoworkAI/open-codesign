@@ -149,6 +149,7 @@ export function useAgentStream(): void {
       if (current) current.textBuffer = '';
     };
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     const handleToolCallStart = (event: AgentStreamEvent) => {
       const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
@@ -230,6 +231,7 @@ export function useAgentStream(): void {
       const result = event.result;
       const durationMs = event.durationMs;
       const finalStatus = event.status === 'error' ? 'error' : 'done';
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
       void pending.seqPromise.then((seq) => {
         if (seq === null) return;
         void updateChatToolStatus({
@@ -245,6 +247,7 @@ export function useAgentStream(): void {
       });
     };
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     const handleFsUpdated = (event: AgentStreamEvent) => {
       markGenerationRunning(event.designId, event.generationId, 'streaming');
       // Live mirror of the agent edit tool's mutations into the iframe.
@@ -280,6 +283,7 @@ export function useAgentStream(): void {
       }
     };
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     const handleError = (event: AgentStreamEvent) => {
       const current = inFlight.current.get(event.generationId);
       // TODO: replace with rendererLogger once renderer-logger lands
@@ -322,6 +326,7 @@ export function useAgentStream(): void {
       }
     };
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     const handleAgentEnd = (event: AgentStreamEvent) => {
       // Flush only this generation's pending preview updates before persisting
       // the final snapshot so concurrent background runs stay isolated.

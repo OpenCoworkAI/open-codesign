@@ -101,6 +101,7 @@ function canContainEditmodeBlock(filePath: string): boolean {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 async function repairLegacyEditmodeBlocks(sourceDir: string, destDir: string): Promise<number> {
   if (!existsSync(sourceDir) || !existsSync(destDir)) return 0;
   let repaired = 0;
@@ -154,6 +155,7 @@ function patchStringField(
   return true;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 async function repairScaffoldManifest(sourcePath: string, destPath: string): Promise<number> {
   if (!existsSync(sourcePath) || !existsSync(destPath)) return 0;
 

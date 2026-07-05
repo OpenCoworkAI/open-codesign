@@ -108,6 +108,7 @@ vi.mock('@mariozechner/pi-agent-core', () => {
       this.call.listeners.push((e) => listener(e));
       return () => {};
     }
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async prompt(message: unknown, images?: unknown[]): Promise<void> {
       this.call.prompts.push({ message, images });
       const callIndex = agentCalls.indexOf(this.call);

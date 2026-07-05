@@ -104,6 +104,7 @@ export async function generateImage(options: GenerateImageOptions): Promise<Gene
   return generateOpenAIImage({ ...options, prompt });
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 async function generateOpenAIImage(
   options: GenerateImageOptions & { prompt: string },
 ): Promise<GenerateImageResult> {
@@ -300,6 +301,7 @@ async function postChatGPTCodexImageStream(
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function parseChatGPTCodexImageStream(
   text: string,
 ): { base64: string; revisedPrompt?: string | undefined } | null {
@@ -450,6 +452,7 @@ function resolveCodexResponsesEndpoint(baseUrl: string): string {
   return `${normalized}/codex/responses`;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function extractChatGPTAccountId(token: string): string {
   const claims = decodeJwtClaims(token);
   const topLevel = readNonEmptyString(claims?.['chatgpt_account_id']);

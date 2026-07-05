@@ -79,6 +79,7 @@ export async function readWorkspaceFilesAt(
   const out: WorkspaceFile[] = [];
   let totalBytes = 0;
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function walk(dir: string): Promise<void> {
     if (out.length >= MAX_FILES || totalBytes >= MAX_BYTES) return;
     let entries: Dirent[] = [];
@@ -269,6 +270,7 @@ export function assertWorkspacePathVisible(path: string): void {
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function classifyWorkspaceFileKind(path: string): WorkspaceFileKind {
   const lower = path.toLowerCase();
   const ext = extname(lower);
@@ -362,6 +364,7 @@ export async function listWorkspaceFilesAt(
   const out: WorkspaceFileEntry[] = [];
   const maxFiles = opts.maxFiles ?? LIST_MAX_FILES;
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function walk(dir: string): Promise<void> {
     if (out.length >= maxFiles) return;
     let entries: Dirent[] = [];
@@ -411,6 +414,7 @@ export async function listWorkspaceFilesAt(
   return out;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function listWorkspaceDirectoryAt(
   root: string,
   dirPath = '.',
@@ -468,6 +472,7 @@ export async function listWorkspaceDirectoryAt(
 /** Tiny glob → regex. Supports `**` (any including slashes), `*` (no slash),
  * `?` (single non-slash char), and character classes `[...]`. Good enough for
  * extension filters like `**\/*.html` and `*.md`. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function globToRegExp(pattern: string): RegExp {
   let re = '^';
   let i = 0;

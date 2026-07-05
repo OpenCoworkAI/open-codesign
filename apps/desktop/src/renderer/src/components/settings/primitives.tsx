@@ -553,6 +553,7 @@ export function ReasoningDepthSelector({
   }, [value]);
   const saveSeq = useRef(0);
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function handleChange(next: ReasoningOption) {
     if (!window.codesign?.config?.updateProvider) return;
     const prev = current;
@@ -708,11 +709,9 @@ export function WarningsList({ warnings }: { warnings: string[] }) {
   const overflow = warnings.length - shown.length;
   return (
     <ul className="space-y-1 pl-1 pt-1">
-      {shown.map((w, i) => (
-        // Index-qualified key so two byte-identical warnings don't collide.
-        // eslint-disable-next-line react/no-array-index-key
+      {shown.map((w) => (
         <li
-          key={`${i}-${w.slice(0, 32)}`}
+          key={w}
           className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-relaxed break-words line-clamp-2"
         >
           ⚠️ {w}

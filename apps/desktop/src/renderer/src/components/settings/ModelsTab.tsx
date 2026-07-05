@@ -297,6 +297,7 @@ function AddProviderMenu({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function ModelsTab() {
   const t = useT();
   const config = useCodesignStore((s) => s.config);
@@ -373,6 +374,7 @@ export function ModelsTab() {
       .finally(() => setLoading(false));
     void window.codesign.config
       .detectExternalConfigs()
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
       .then((detected) => {
         const dismissedCodex = readDismissed('codex');
         const dismissedClaudeCode = readDismissed('claudeCode');
@@ -549,6 +551,7 @@ export function ModelsTab() {
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function handleImportOpencode() {
     if (!window.codesign) return;
     // Skipped-entry summary: OpenCode often has OAuth entries we skip; users
@@ -634,6 +637,7 @@ export function ModelsTab() {
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function handleDelete(provider: string) {
     if (!window.codesign) return;
     try {
@@ -882,6 +886,7 @@ export function ModelsTab() {
                   );
                 })()}
               {externalConfigs.claudeCode !== undefined &&
+                // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
                 (() => {
                   const cc = externalConfigs.claudeCode;
                   const displayBaseUrl = maskBaseUrlCreds(cc.baseUrl);

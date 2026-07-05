@@ -122,6 +122,7 @@ export async function persistArtifactSnapshot(
  * only snapshot-era user prompts get backfilled. Falls back to [] when designId
  * is null or IPC is unavailable (renderer tests).
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function buildHistoryFromChat(designId: string | null): Promise<ChatMessage[]> {
   if (!designId || !window.codesign) return [];
   try {

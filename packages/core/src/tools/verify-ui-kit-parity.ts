@@ -210,6 +210,7 @@ export function makeVerifyUiKitParityTool(
       '0.85, re-call decompose_to_ui_kit with adjustments that address the gaps list ' +
       'returned by this tool. No LLM judge involved — the result is reproducible.',
     parameters: VerifyParams,
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async execute(_toolCallId, params, _signal): Promise<AgentToolResult<ParityReport>> {
       const sourcePath = params.sourcePath ?? 'index.html';
       const decomposedPath = `ui_kits/${params.slug}/index.html`;

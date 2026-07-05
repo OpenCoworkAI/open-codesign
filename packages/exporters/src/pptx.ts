@@ -57,6 +57,7 @@ const DEFAULT_FALLBACK_SLIDE_SELECTOR: string =
  * keeping pptxgenjs' default `wrap=square` and explicitly enabling
  * `fit: 'shrink'` (emits `normAutofit`). Verified with PowerPoint Mac.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function exportPptx(
   artifactSource: string,
   destinationPath: string,
@@ -135,6 +136,7 @@ export async function exportPptx(
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 async function renderSlideScreenshots(
   artifactSource: string,
   opts: ExportPptxOptions,
@@ -267,27 +269,33 @@ const PARAGRAPH_RE = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
 
 export function extractSlides(html: string): SlideContent[] {
   const sections: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = SECTION_RE.exec(html)) !== null) sections.push(m[1] ?? '');
+  let m = SECTION_RE.exec(html);
+  while (m !== null) {
+    sections.push(m[1] ?? '');
+    m = SECTION_RE.exec(html);
+  }
   if (sections.length === 0) sections.push(html);
   return sections.map(parseSlide);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function parseSlide(fragment: string): SlideContent {
   const headingMatch = HEADING_RE.exec(fragment);
   const title = headingMatch ? stripHtml(headingMatch[1] ?? '') : '';
 
   const bullets: string[] = [];
-  let li: RegExpExecArray | null;
-  while ((li = LIST_ITEM_RE.exec(fragment)) !== null) {
+  let li = LIST_ITEM_RE.exec(fragment);
+  while (li !== null) {
     const text = stripHtml(li[1] ?? '');
     if (text) bullets.push(text);
+    li = LIST_ITEM_RE.exec(fragment);
   }
   if (bullets.length === 0) {
-    let p: RegExpExecArray | null;
-    while ((p = PARAGRAPH_RE.exec(fragment)) !== null) {
+    let p = PARAGRAPH_RE.exec(fragment);
+    while (p !== null) {
       const text = stripHtml(p[1] ?? '');
       if (text) bullets.push(text);
+      p = PARAGRAPH_RE.exec(fragment);
     }
   }
   if (bullets.length === 0 && !title) {

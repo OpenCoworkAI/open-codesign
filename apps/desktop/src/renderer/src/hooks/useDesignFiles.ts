@@ -151,6 +151,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
       ? 'workspace'
       : 'snapshots';
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   const refetch = useCallback(async () => {
     const seq = ++refetchSeqRef.current;
     const isCurrent = () => refetchSeqRef.current === seq;
@@ -426,6 +427,7 @@ export function useLazyDesignFileTree(designId: string | null): UseLazyDesignFil
     [backend, designId, dismissToast, pushToast, updateDirectories, workspacePath],
   );
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   const reloadLoadedDirectories = useCallback(async () => {
     const seq = ++refetchSeqRef.current;
     const isCurrent = () => refetchSeqRef.current === seq;

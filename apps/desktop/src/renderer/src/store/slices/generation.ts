@@ -542,6 +542,7 @@ function buildGenerateReportContext(
   return Object.keys(context).length > 0 ? context : undefined;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function buildGenerateFixAction(
   get: GetState,
   set: SetState,
@@ -718,6 +719,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       });
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async sendPrompt(input) {
       recordAction({
         type: 'prompt.submit',
@@ -1040,6 +1042,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       });
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async exportActive(format: ExportFormat) {
       recordAction({ type: 'design.export', data: { format } });
       const source = get().previewSource;

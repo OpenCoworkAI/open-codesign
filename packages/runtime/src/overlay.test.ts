@@ -284,6 +284,7 @@ function runOverlayForRects(): RectHarness {
         style: {},
       });
     },
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     registerBodyPath: (selector, rect) => {
       const parts = selector.slice(1).split('/');
       let current = body;

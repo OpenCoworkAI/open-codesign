@@ -68,6 +68,7 @@ export function makeDiagnosticsSlice(set: SetState, get: GetState): DiagnosticsS
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     reportableErrorToast(spec) {
       if (spec.reportable === false) {
         return get().pushToast({
@@ -150,6 +151,7 @@ export function makeDiagnosticsSlice(set: SetState, get: GetState): DiagnosticsS
       });
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     createReportableError(partial) {
       const localId = newId();
       const ts = Date.now();

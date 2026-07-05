@@ -342,6 +342,7 @@ function parseSharedStrings(sharedStringsXml: string | null): string[] {
   return items.map((item) => cleanLine(textRuns(item).join(''))).filter((line) => line.length > 0);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function parseWorksheetRows(xml: string, sharedStrings: string[]): string[] {
   const rows = localElementContents(xml, 'row');
   const out: string[] = [];

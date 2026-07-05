@@ -169,6 +169,7 @@ export function makeTextEditorTool(
       'to read only a slice of the file — strongly preferred over full-file views after the file has grown past ~100 lines. ' +
       'Without view_range, repeated `view` of the same path within a single run returns only a short summary to protect context.',
     parameters: TextEditorParams,
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async execute(_toolCallId, params): Promise<AgentToolResult<TextEditorDetails>> {
       const path = normalizeToolPath(params.path);
       switch (params.command) {

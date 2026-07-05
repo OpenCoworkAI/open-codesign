@@ -26,6 +26,7 @@ import {
 } from './FilesTabView';
 
 describe('FilesTabView preview helpers', () => {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   const commentRow = (overrides: Partial<CommentRow> = {}): CommentRow => ({
     schemaVersion: 1,
     id: overrides.id ?? 'comment-1',

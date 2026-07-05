@@ -344,6 +344,7 @@ function synthesizeWireModel(
  *
  * Lazy-imports pi-ai so the bundle is not loaded at app startup.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function complete(
   model: ModelRef,
   messages: ChatMessage[],

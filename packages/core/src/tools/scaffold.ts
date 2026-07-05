@@ -48,6 +48,7 @@ function parseStringArray(value: unknown, field: string): string[] {
   return out;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function parseScaffoldManifest(value: unknown): ScaffoldManifest {
   if (!isRecord(value)) {
     throw new Error('manifest must be an object');
@@ -183,6 +184,7 @@ function destinationPathForSource(destPath: string, sourcePath: string): string 
   return path.posix.join(parsed.dir, `${parsed.name}${sourceExt}`);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult> {
   let manifest: ScaffoldManifest;
   try {
@@ -289,6 +291,7 @@ export function makeScaffoldTool(
     description:
       "Copy a concrete starter/source asset into the current workspace. kind: one of the keys in <userData>/templates/scaffolds/manifest.json (device-frame / browser / app-shell / dev-mockup / ui-primitive / background / surface / deck / report / design-system / landing). destPath: workspace-relative path. Example: scaffold({kind: 'iphone-16-pro-frame', destPath: 'frames/iphone.jsx'}). The tool preserves the source extension.",
     parameters: ScaffoldParams,
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async execute(_toolCallId, params): Promise<AgentToolResult<ScaffoldDetails>> {
       const workspaceRoot = getWorkspaceRoot();
       if (!workspaceRoot) {

@@ -347,6 +347,7 @@ export function parseImageGenerationUpdate(raw: unknown): ImageGenerationUpdateI
   return out;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function updateImageGenerationSettings(
   patch: ImageGenerationUpdateInput,
 ): Promise<ImageGenerationSettingsView> {

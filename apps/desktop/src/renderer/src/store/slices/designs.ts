@@ -181,6 +181,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       const state = get();
       if (state.currentDesignId === id) {
         set({ designsViewOpen: false });
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
         void (async () => {
           try {
             const snapshots = await window.codesign?.snapshots.list(id);
@@ -245,6 +246,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
         );
         void get().loadChatForCurrentDesign();
         void get().loadCommentsForCurrentDesign();
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
         void (async () => {
           try {
             const snapshots = await window.codesign?.snapshots.list(id);
@@ -289,6 +291,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       );
       void get().loadChatForCurrentDesign();
       void get().loadCommentsForCurrentDesign();
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
       void (async () => {
         try {
           const snapshots = await window.codesign?.snapshots.list(id);
@@ -388,6 +391,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       }
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async softDeleteDesign(id: string) {
       if (!window.codesign) return;
       if (get().generationByDesign[id] !== undefined) {

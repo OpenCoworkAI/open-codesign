@@ -238,6 +238,7 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
       set((s) => ({ pendingToolCalls: [...s.pendingToolCalls, call] }));
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     resolvePendingToolCall(designId, toolName, result, durationMs) {
       const s = get();
       const idx = s.pendingToolCalls.findIndex(
@@ -309,6 +310,7 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
       if (get().currentDesignId !== designId) return;
       set((s) => ({
         chatMessages: compactChatRowsForUi(
+          // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
           s.chatMessages.map((m) => {
             if (m.designId !== designId || m.seq !== seq || m.kind !== 'tool_call') return m;
             const prev = (m.payload as ChatToolCallPayload | null) ?? null;
@@ -375,6 +377,7 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
       });
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async persistAgentRunSnapshot({ designId, finalText }) {
       if (!window.codesign) return;
       const state = get();

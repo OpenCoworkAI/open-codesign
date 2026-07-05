@@ -71,6 +71,7 @@ export interface ExportResponse {
   bytes?: number;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function parseRequest(raw: unknown): ExportRequest {
   if (raw === null || typeof raw !== 'object') {
     throw new CodesignError('export expects an object payload', ERROR_CODES.IPC_BAD_INPUT);
@@ -152,6 +153,7 @@ export function buildDefaultExportPath(input: {
   return path.join(input.downloadsPath, filename);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function resolveExportSource(
   req: ExportRequest,
   deps: { db?: Database | null } = {},

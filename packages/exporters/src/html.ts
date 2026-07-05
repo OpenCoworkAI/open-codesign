@@ -125,6 +125,7 @@ function injectIntoHead(html: string, tag: string): string {
  * reflows indentation. We deliberately avoid pulling in `prettier` /
  * `js-beautify` (would blow the dep budget) — Tier 2 can swap this out.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function prettifyHtml(html: string): string {
   const protectedHtml = protectRawTextBlocks(html);
   const tokens = protectedHtml.html.replace(/>\s+</g, '><').replace(/></g, '>\n<').split('\n');

@@ -261,6 +261,7 @@ export function parseSetProviderAndModels(raw: unknown): SetProviderAndModelsInp
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
   if (typeof raw !== 'object' || raw === null) {
     throw new CodesignError('config:v1:add-provider expects an object', ERROR_CODES.IPC_BAD_INPUT);
@@ -325,6 +326,7 @@ export function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
   return out;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
   if (typeof raw !== 'object' || raw === null) {
     throw new CodesignError(

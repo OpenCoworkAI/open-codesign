@@ -152,6 +152,7 @@ interface CommentItemProps {
   onRemove: () => void;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function CommentItem({
   index,
   comment,

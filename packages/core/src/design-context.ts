@@ -254,6 +254,7 @@ function historyBudgetChars(input: BuildDesignContextPackInput): number {
   return DEFAULT_HISTORY_BUDGET_CHARS;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function selectBudgetedHistory(
   messages: ChatMessage[],
   budget: number,
@@ -392,6 +393,7 @@ function stripJsonFence(raw: string): string {
   return fenced?.[1]?.trim() ?? trimmed;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export async function updateDesignSessionBrief(
   input: UpdateDesignSessionBriefInput,
 ): Promise<UpdateDesignSessionBriefResult> {

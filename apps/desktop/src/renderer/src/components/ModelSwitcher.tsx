@@ -76,6 +76,7 @@ export function filterModels(models: string[], query: string): string[] {
   return models.filter((m) => m.toLowerCase().includes(q));
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function ModelSwitcher({ variant }: ModelSwitcherProps) {
   const t = useT();
   const config = useCodesignStore((s) => s.config);

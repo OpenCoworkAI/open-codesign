@@ -110,6 +110,7 @@ function addUnique(target: string[], value: string): void {
   if (!target.includes(value)) target.push(value);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function applyToolCallToResourceState(
   state: ResourceStateV1,
   call: ChatToolCallPayload,
@@ -182,6 +183,7 @@ export function applyToolCallToResourceState(
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function deriveResourceStateFromChatRows(rows: readonly ChatMessageRow[]): ResourceStateV1 {
   const state = createEmptyResourceState();
   for (const row of rows) {

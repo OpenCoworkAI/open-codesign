@@ -257,6 +257,7 @@ function MarkdownLink({
   return <span>{children}</span>;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 function WorkspaceSection({ files }: { files: DesignFileEntry[] }) {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
@@ -329,6 +330,7 @@ function WorkspaceSection({ files }: { files: DesignFileEntry[] }) {
   }, []);
 
   const savePreviewMode = useCallback(
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async (mode: PreviewMode, rawUrl = previewUrlInput, options: { quiet?: boolean } = {}) => {
       if (!currentDesignId || !window.codesign?.snapshots.updatePreview) return;
       const trimmedUrl = rawUrl.trim();
@@ -395,6 +397,7 @@ function WorkspaceSection({ files }: { files: DesignFileEntry[] }) {
   }
 
   const handleDetectPreview = useCallback(
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
     async (options: { quiet?: boolean } = {}) => {
       if (!currentDesignId || !window.codesign?.snapshots.detectPreview) return;
       try {
@@ -446,6 +449,7 @@ function WorkspaceSection({ files }: { files: DesignFileEntry[] }) {
     savedPreviewUrl,
   ]);
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   async function handlePickWorkspace() {
     if (!window.codesign?.snapshots.pickWorkspaceFolder) return;
     if (isCurrentDesignGenerating) {
@@ -1307,6 +1311,7 @@ function DocumentFilePreview({
                     </h4>
                     <div className="space-y-[var(--space-3)] text-[14px] leading-[1.82] text-[var(--color-text-primary)]">
                       {section.lines.map((line, index) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: static document reading, lines never reorder
                         <p key={`${section.title}:${index}`} className="m-0 break-words">
                           {line}
                         </p>
@@ -1498,6 +1503,7 @@ function ExternalAppPreviewPlaceholder({ url }: { url: string | null }) {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function WorkspaceFilePreview({
   path,
   file,
@@ -1792,6 +1798,7 @@ export function WorkspaceFilePreview({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function FilesTabView({ activePath = null }: { activePath?: string | null }) {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
@@ -1903,6 +1910,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
     }
   }, [fileBrowserWidth]);
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   function renderPreviewPane() {
     if (effectivePreviewMode === 'connected-url') {
       return connectedPreviewUrl ? (
@@ -1994,6 +2002,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
     });
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
   function renderFileTreeNode(node: FileTreeNode, depth: number): ReactNode {
     if (node.type === 'directory') {
       const isExpanded = expandedDirs.has(node.path);
@@ -2103,6 +2112,8 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
             {t('canvas.filesTabEmpty')}
           </div>
         </aside>
+        {/* biome-ignore lint/a11y/useSemanticElements: resize drag handle, not a document separator */}
+        {/* biome-ignore lint/a11y/useFocusableInteractive: resize is mouse-only drag interaction */}
         <div
           role="separator"
           aria-orientation="vertical"
@@ -2147,6 +2158,8 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
           </p>
         </div>
       </aside>
+      {/* biome-ignore lint/a11y/useSemanticElements: resize drag handle, not a document separator */}
+      {/* biome-ignore lint/a11y/useFocusableInteractive: resize is mouse-only drag interaction */}
       <div
         role="separator"
         aria-orientation="vertical"
