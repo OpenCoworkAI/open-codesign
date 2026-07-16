@@ -127,6 +127,20 @@ describe('pingProvider', () => {
     expect(result).toEqual({ ok: true, modelCount: 0 });
   });
 
+  it('uses the Atlas Cloud OpenAI-compatible models endpoint and Bearer auth', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toBe('https://api.atlascloud.ai/v1/models');
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['authorization']).toBe('Bearer apikey-test');
+      return new Response(JSON.stringify({ data: [{ id: 'qwen/qwen3.5-flash' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const result = await pingProvider('atlascloud', 'apikey-test');
+    expect(result).toEqual({ ok: true, modelCount: 1 });
+  });
+
   it('respects custom baseUrl without /v1 suffix', async () => {
     mockFetch(async (url) => {
       expect(url).toBe('https://proxy.example/v1/models');

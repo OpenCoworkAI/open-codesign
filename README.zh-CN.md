@@ -188,7 +188,7 @@ scoop install opencoworkai/open-codesign
 首次启动时，Open CoDesign 会直接打开设置页。按你已有的模型入口选择即可：
 
 - **ChatGPT 订阅登录**：直接登录 ChatGPT，使用 Codex 模型，无需粘贴 API Key。
-- **API Key**：粘贴 Anthropic（`sk-ant-...`）、OpenAI（`sk-...`）、Google Gemini、OpenRouter、SiliconFlow、DeepSeek 或其他支持的 provider key。
+- **API Key**：粘贴 Anthropic（`sk-ant-...`）、OpenAI（`sk-...`）、Atlas Cloud、Google Gemini、OpenRouter、SiliconFlow、DeepSeek 或其他支持的 provider key。
 - **本地 / Keyless**：使用 Ollama，或使用 IP 白名单的 OpenAI 兼容网关。
 
 凭证会保存在 `~/.config/open-codesign/config.toml`，ChatGPT OAuth token 会保存在应用配置目录下的 token store 中。除非你选择的模型入口本身需要联网，请求内容不会额外离开你的机器。
@@ -220,7 +220,7 @@ scoop install opencoworkai/open-codesign
 ## 你能得到什么
 
 ### 模型与提供商
-- **统一的 provider 抽象**：支持 Anthropic、OpenAI、Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama，以及任意 OpenAI-compatible relay；同时支持无 key 的 IP 白名单代理
+- **统一的 provider 抽象**：支持 Anthropic、OpenAI、Atlas Cloud、Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama，以及任意 OpenAI-compatible relay；同时支持无 key 的 IP 白名单代理
 - **一键导入和登录**：Claude Code / Codex 的 API key provider 配置可以直接带进来，也可以用 ChatGPT 订阅登录使用 Codex 模型
 - **动态模型选择器**：每个 provider 都会展示真实模型列表，而不是一小撮写死的选项
 

@@ -218,7 +218,7 @@ export function parseValidateKey(raw: unknown): ValidateKeyInput {
   const providerId = provider.trim();
   if (!isSupportedOnboardingProvider(providerId)) {
     throw new CodesignError(
-      `Provider "${providerId}" is not supported. Only anthropic, openai, openrouter, ollama.`,
+      `Provider "${providerId}" is not supported. Only anthropic, openai, atlascloud, openrouter, ollama.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }

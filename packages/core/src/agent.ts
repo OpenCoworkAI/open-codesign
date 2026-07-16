@@ -268,6 +268,7 @@ function supportsImageInput(wire: WireApi | undefined, modelId: string): boolean
 const BUILTIN_PUBLIC_BASE_URLS: Record<string, string> = {
   anthropic: 'https://api.anthropic.com',
   openai: 'https://api.openai.com/v1',
+  atlascloud: 'https://api.atlascloud.ai/v1',
   openrouter: 'https://openrouter.ai/api/v1',
 };
 

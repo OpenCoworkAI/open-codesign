@@ -190,7 +190,7 @@ After each stable tag push, CI syncs SHAs back into `packaging/` and publishes d
 On first launch, Open CoDesign opens the Settings page. Pick the path that matches how you already use models:
 
 - **ChatGPT subscription** — sign in with ChatGPT to use Codex models without pasting an API key.
-- **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
+- **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Atlas Cloud, Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
 - **Local / keyless** — use Ollama or an IP-allowlisted OpenAI-compatible gateway.
 
 Credentials stay in `~/.config/open-codesign/config.toml` and the ChatGPT OAuth token store under the app config directory. Nothing leaves your machine unless your chosen model route requires it.
@@ -222,7 +222,7 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 ## What you get
 
 ### Models and providers
-- **Unified provider model** — Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
+- **Unified provider model** — Anthropic, OpenAI, Atlas Cloud, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
 - **One-click import and sign-in** — bring Claude Code / Codex API-key provider configs across, or sign in with ChatGPT subscription for Codex models
 - **Dynamic model picker** — every provider exposes its real model catalogue, not a hardcoded shortlist
 

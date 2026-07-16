@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const ProviderId = z.enum([
   'anthropic',
   'openai',
+  'atlascloud',
   'google',
   'openrouter',
   'groq',
