@@ -292,7 +292,7 @@ v0.2 已经把 Open CoDesign 从一次性生成器升级成一个本地设计 ag
 
 ## Star 历史
 
-[![Star History Chart](https://api.star-history.com/svg?repos=OpenCoworkAI/open-codesign&type=Date)](https://star-history.com/#OpenCoworkAI/open-codesign&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=OpenCoworkAI/open-codesign&type=Date)](https://star-history.dera.page/#OpenCoworkAI/open-codesign&Date)
 
 ---
 
