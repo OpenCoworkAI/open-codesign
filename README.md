@@ -295,10 +295,10 @@ Have a different priority in mind? [Open an issue](https://github.com/OpenCowork
 ## Star History
 
 <p align="center">
-  <a href="https://star-history.com/#OpenCoworkAI/open-codesign&Date">
+  <a href="https://star-history.dera.page/#OpenCoworkAI/open-codesign&Date">
     <img
       alt="Star History Chart"
-      src="https://api.star-history.com/image?repos=OpenCoworkAI/open-codesign&type=Date"
+      src="https://star-history.dera.page/image?repos=OpenCoworkAI/open-codesign&type=Date"
       width="720"
     />
   </a>
