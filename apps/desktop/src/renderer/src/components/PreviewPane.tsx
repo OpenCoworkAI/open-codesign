@@ -167,6 +167,18 @@ export function previewArtboardFrameClass(): string {
   return ARTBOARD_FRAME_CLASS;
 }
 
+export function scaledPreviewFrameStyle(
+  viewport: PreviewSlotProps['viewport'],
+  zoom: number,
+): CSSProperties {
+  const frame = previewViewportDimensions(viewport);
+  const scale = zoom / 100;
+  const width = `${Math.round(frame.width * scale)}px`;
+  const height = `${Math.round(frame.height * scale)}px`;
+
+  return { width, height, minWidth: width, minHeight: height };
+}
+
 function ScaledPreviewFrame({
   viewport,
   zoom,
@@ -179,13 +191,7 @@ function ScaledPreviewFrame({
   const frame = previewViewportDimensions(viewport);
   const scale = zoom / 100;
   return (
-    <div
-      className="relative flex-shrink-0"
-      style={{
-        width: `${frame.width * scale}px`,
-        height: `${frame.height * scale}px`,
-      }}
-    >
+    <div className="relative flex-shrink-0" style={scaledPreviewFrameStyle(viewport, zoom)}>
       <div
         className="origin-top-left"
         style={{
