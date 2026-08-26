@@ -13,6 +13,7 @@ import {
   previewArtboardStyle,
   previewPaneLayoutClasses,
   previewViewportDimensions,
+  scaledPreviewFrameStyle,
   scaleRectForZoom,
   stablePreviewSourceKey,
 } from './PreviewPane';
@@ -115,6 +116,15 @@ describe('preview artboard frame', () => {
         viewport: 'desktop',
       }),
     ).toBe(100);
+  });
+
+  it('preserves scaled desktop dimensions as minimum scroll bounds', () => {
+    expect(scaledPreviewFrameStyle('desktop', 150)).toEqual({
+      width: '2160px',
+      height: '1350px',
+      minWidth: '2160px',
+      minHeight: '1350px',
+    });
   });
 });
 
