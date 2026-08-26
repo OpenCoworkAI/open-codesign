@@ -170,7 +170,7 @@ jobs:
 
       - name: Run Codex for PR Review
         id: run_codex
-        if: steps.check_bot.outputs.has_review_for_current_head != 'true' && (steps.review_config.outputs.is_deepseek != 'true' || steps.run_deepseek.outcome == 'failure')
+        if: always() && steps.check_bot.outputs.has_review_for_current_head != 'true' && (steps.review_config.outputs.is_deepseek != 'true' || steps.run_deepseek.outcome == 'failure')
         uses: openai/codex-action@e0fdf01220eb9a88167c4898839d273e3f2609d1 # v1
         env:
           GH_TOKEN: ${{ github.token }}
