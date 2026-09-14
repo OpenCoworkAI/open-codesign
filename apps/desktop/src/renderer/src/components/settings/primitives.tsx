@@ -31,6 +31,7 @@ import { recordAction } from '../../lib/action-timeline';
 import { connectionFailureText } from '../../lib/connection-failure-text';
 import { useCodesignStore } from '../../store';
 import { ConnectionDiagnosticPanel } from '../ConnectionDiagnosticPanel';
+import { connectionTestToastKind } from './connection-test-toast';
 
 /**
  * Electron IPC wraps thrown errors as
@@ -361,15 +362,40 @@ export function ProviderCard({
     }
     try {
       const res = await window.codesign.connection.testProvider(row.provider);
-      recordAction({ type: 'connection.test', data: { provider: row.provider, ok: res.ok } });
-      if (res.ok) {
-        setConnectionDiag(null);
+      recordAction({
+        type: 'connection.test',
+        data: {
+          provider: row.provider,
+          ok: res.ok,
+          compatibility: 'compatibility' in res ? res.compatibility : undefined,
+          invokeParity: 'invokeParity' in res ? res.invokeParity : undefined,
+        },
+      });
+      const kind = connectionTestToastKind(res);
+      if (kind === 'ok') {
+        pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
+      } else if (kind === 'degraded') {
         pushToast({
-          variant: res.compatibility === 'degraded' ? 'info' : 'success',
-          title:
-            res.compatibility === 'degraded'
-              ? t('settings.providers.toast.connectionOkDegraded')
-              : t('settings.providers.toast.connectionOk'),
+          variant: 'info',
+          title: t('settings.providers.toast.connectionDegraded'),
+          description: t('settings.providers.toast.connectionDegradedBody'),
+        });
+      } else if (kind === 'diverges') {
+        reportableErrorToast({
+          code: 'CONNECTION_TEST_DIVERGED',
+          scope: 'settings',
+          title: t('settings.providers.toast.connectionDiverges'),
+          description:
+            res.ok === false
+              ? res.hint || res.message
+              : t('settings.providers.toast.connectionDivergesBody'),
+          context: {
+            provider: row.provider,
+            invokeParity: res.invokeParity,
+            ...(res.ok === false && res.invokeContract !== undefined
+              ? { invokeUrl: res.invokeContract.invokeUrl }
+              : {}),
+          },
         });
       } else {
         setConnectionDiag({
