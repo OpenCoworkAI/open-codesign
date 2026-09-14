@@ -1,6 +1,10 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { ProviderEntry, WireApi } from '@open-codesign/shared';
+import {
+  capabilitiesForImportedProvider,
+  type ProviderEntry,
+  type WireApi,
+} from '@open-codesign/shared';
 import { safeReadImportFile } from './safe-read';
 
 /**
@@ -365,6 +369,7 @@ function parseAuthBlock(providerId: string, entry: unknown): ParsedAuthEntry {
       baseUrl: mapping.baseUrl,
       defaultModel: mapping.defaultModel,
       envKey: mapping.envKey,
+      capabilities: capabilitiesForImportedProvider('opencode', { baseUrl: mapping.baseUrl }),
     },
     apiKey: auth.key.trim(),
   };

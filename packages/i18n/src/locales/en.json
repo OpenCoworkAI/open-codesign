@@ -499,6 +499,7 @@
         "discoveryFailed": "Could not auto-discover models",
         "test": "Test connection",
         "testOk": "OK — {{count}} models available",
+        "testOkNoListing": "No model listing — enter a model ID. Inference can still work.",
         "save": "Save & continue",
         "saveEdit": "Save changes"
       },
@@ -591,7 +592,14 @@
         "reasoningSaved": "Reasoning depth saved",
         "reasoningSaveFailed": "Failed to save reasoning depth",
         "connectionOk": "Connection OK",
+        "connectionOkDegraded": "Connected — model listing is unavailable; inference still works",
         "connectionFailed": "Connection failed"
+      },
+      "discovery": {
+        "manualHint": "Model IDs are entered manually for this provider.",
+        "inferOnlyHint": "This provider does not list models — enter a model ID. Inference can still work.",
+        "staticHint": "Known models for this provider. You can still enter another ID.",
+        "enterModelId": "model-id"
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
@@ -1102,6 +1110,7 @@
       "corsError": "CORS error (should not happen in main process). This is a bug.",
       "sslError": "SSL / certificate error (self-signed or private-CA cert?). Enable Settings → Providers → <provider> → Disable TLS verification to connect to trusted internal endpoints.",
       "endpointNotFound": "The endpoint path exists in the Base URL but the provider did not expose this route.",
+      "modelsListingNotApplicable": "This provider does not expose a model listing endpoint. That is expected — enter a model ID and use inference instead of treating missing /models as a hard failure.",
       "gatewayIncompatible": "The gateway accepted the connection but does not implement this provider's API. Try switching wire (e.g. openai-chat).",
       "gatewayWafBlocked": "The gateway or reverse proxy blocked the generation request before it reached the model. Test Connection can still pass because it only probes the /models endpoint.",
       "openaiResponsesMisconfigured": "The endpoint rejected the request shape. The wire may be wrong — try switching to openai-chat.",
