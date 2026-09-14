@@ -1,16 +1,23 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
+import { openaiChatShouldProbeDeveloperRole } from '@open-codesign/providers';
 import {
   BUILTIN_PROVIDERS,
   CodesignError,
+  type ConnectionCapabilityReason,
   canonicalBaseUrl,
+  capabilityReason,
+  classifyInferenceProbe,
   type DiagnosticCategory,
   ERROR_CODES,
   ensureVersionedBase,
   isSupportedOnboardingProvider,
+  modelDiscoveryReason,
   type ProviderEntry,
   type SupportedOnboardingProvider,
+  skippedReason,
   stripInferenceEndpointSuffix,
+  summarizeConnectionCapabilities,
   type WireApi,
 } from '@open-codesign/shared';
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
@@ -83,8 +90,10 @@ export interface ConnectionTestResult {
     | 'chat_completion_degraded'
     | 'responses_degraded'
     | 'anthropic_messages_degraded';
-  compatibility?: 'compatible' | 'degraded';
+  compatibility?: 'compatible' | 'degraded-compatible';
   reasonCategory?: DiagnosticCategory;
+  /** Layered capability reasons for the renderer. Always set by runProviderTest. */
+  reasons?: ConnectionCapabilityReason[];
 }
 
 export interface ConnectionTestError {
@@ -94,6 +103,7 @@ export interface ConnectionTestError {
   hint: string;
   compatibility?: 'incompatible';
   reasonCategory?: DiagnosticCategory;
+  reasons?: ConnectionCapabilityReason[];
 }
 
 export type ConnectionTestResponse = ConnectionTestResult | ConnectionTestError;
@@ -559,6 +569,82 @@ function resolveActiveCredentials(): ActiveProviderCredentials | ConnectionTestE
   return resolveCredentialsForProvider(active);
 }
 
+type InferenceWire = 'openai-chat' | 'openai-responses' | 'anthropic';
+
+function isInferenceWire(wire: WireApi): wire is InferenceWire {
+  return wire === 'openai-chat' || wire === 'openai-responses' || wire === 'anthropic';
+}
+
+function passReason(
+  layer: ConnectionCapabilityReason['layer'],
+  source: ConnectionCapabilityReason['source'],
+  detail: string,
+): ConnectionCapabilityReason {
+  return capabilityReason({
+    layer,
+    status: 'pass',
+    category: 'unknown',
+    cause: 'diagnostics.cause.capabilityPass',
+    source,
+    detail,
+  });
+}
+
+function authFailReason(detail: string): ConnectionCapabilityReason {
+  return capabilityReason({
+    layer: 'authentication',
+    status: 'fail',
+    category: 'auth',
+    cause: 'diagnostics.cause.keyInvalid',
+    source: 'shared-contract',
+    detail,
+  });
+}
+
+function degradedProbeMethod(
+  wire: InferenceWire,
+): NonNullable<ConnectionTestResult['probeMethod']> {
+  if (wire === 'openai-responses') return 'responses_degraded';
+  if (wire === 'anthropic') return 'anthropic_messages_degraded';
+  return 'chat_completion_degraded';
+}
+
+function successFromReport(
+  report: ReturnType<typeof summarizeConnectionCapabilities>,
+  probeMethod: ConnectionTestResult['probeMethod'],
+): ConnectionTestResult {
+  const compatibility =
+    report.compatibility === 'incompatible' ? 'degraded-compatible' : report.compatibility;
+  return {
+    ok: true,
+    ...(probeMethod !== undefined ? { probeMethod } : {}),
+    compatibility,
+    ...(report.primary !== undefined ? { reasonCategory: report.primary.category } : {}),
+    reasons: report.reasons,
+  };
+}
+
+function failureFromReport(
+  report: ReturnType<typeof summarizeConnectionCapabilities>,
+  fields: Pick<ConnectionTestError, 'code' | 'message' | 'hint'>,
+): ConnectionTestError {
+  return {
+    ok: false,
+    ...fields,
+    compatibility: 'incompatible',
+    ...(report.primary !== undefined ? { reasonCategory: report.primary.category } : {}),
+    reasons: report.reasons,
+  };
+}
+
+function parseJsonBody(bodyText: string): unknown {
+  try {
+    return JSON.parse(bodyText) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 async function testChatGPTCodexOAuth(): Promise<ConnectionTestResponse> {
   let stored: Awaited<ReturnType<ReturnType<typeof getCodexTokenStore>['read']>>;
   try {
@@ -572,26 +658,35 @@ async function testChatGPTCodexOAuth(): Promise<ConnectionTestResponse> {
     };
   }
   if (stored === null) {
-    return {
-      ok: false,
-      code: '401',
-      message: 'No ChatGPT OAuth token stored',
-      hint: 'ChatGPT 订阅未登录，请到 Settings 登录',
-      compatibility: 'incompatible',
-      reasonCategory: 'auth',
-    };
+    return failureFromReport(
+      summarizeConnectionCapabilities([authFailReason('No ChatGPT OAuth token stored')]),
+      {
+        code: '401',
+        message: 'No ChatGPT OAuth token stored',
+        hint: 'ChatGPT 订阅未登录，请到 Settings 登录',
+      },
+    );
   }
   if (stored.expiresAt < Date.now()) {
-    return {
-      ok: false,
-      code: '401',
-      message: 'ChatGPT OAuth token expired',
-      hint: 'ChatGPT 订阅登录已过期，请重新登录',
-      compatibility: 'incompatible',
-      reasonCategory: 'auth',
-    };
+    return failureFromReport(
+      summarizeConnectionCapabilities([authFailReason('ChatGPT OAuth token expired')]),
+      {
+        code: '401',
+        message: 'ChatGPT OAuth token expired',
+        hint: 'ChatGPT 订阅登录已过期，请重新登录',
+      },
+    );
   }
-  return { ok: true, compatibility: 'compatible' };
+  return successFromReport(
+    summarizeConnectionCapabilities([
+      passReason(
+        'authentication',
+        'shared-contract',
+        'ChatGPT OAuth token is present and unexpired',
+      ),
+    ]),
+    undefined,
+  );
 }
 
 export async function runProviderTest(
@@ -624,100 +719,369 @@ export async function runProviderTest(
       res = await fetchWithTimeout(url, { method: 'GET', headers });
     } catch (err) {
       const { code, hint } = classifyNetworkError(err);
-      return {
-        ok: false,
-        code,
-        message: err instanceof Error ? err.message : 'Network request failed',
-        hint,
-        compatibility: 'incompatible',
-        reasonCategory: code === 'ECONNREFUSED' ? 'network-unreachable' : 'unknown',
-      };
+      return failureFromReport(
+        summarizeConnectionCapabilities([
+          skippedReason('authentication', 'No HTTP response to classify auth'),
+          capabilityReason({
+            layer: 'endpoint-shape',
+            status: 'fail',
+            category: code === 'ECONNREFUSED' ? 'network-unreachable' : 'unknown',
+            cause: 'diagnostics.cause.hostUnreachable',
+            source: 'probe-only',
+            detail: err instanceof Error ? err.message : String(err),
+          }),
+        ]),
+        {
+          code,
+          message: err instanceof Error ? err.message : 'Network request failed',
+          hint,
+        },
+      );
     }
-    if (!res.ok) {
-      // Some OpenAI-compatible gateways (Zhipu GLM, a handful of self-hosted
-      // proxies) don't expose /models but their /chat/completions works fine.
-      // If the primary probe 404s on those wires, degrade-probe with a tiny
-      // chat request before declaring the endpoint dead. We intentionally do
-      // not degrade anthropic — its /v1/models is standard, and skipping it
-      // would mask real path-shape mistakes.
-      if (
-        res.status === 404 &&
-        (creds.wire === 'openai-chat' ||
-          creds.wire === 'openai-responses' ||
-          creds.wire === 'anthropic')
-      ) {
-        const degraded = await tryDegradeProbe(creds.wire, normalizedBaseUrl, headers);
-        if (degraded !== null) return degraded;
-        // Inference endpoint also 404'd (or the network dropped) — fall through
-        // and report the original /models 404.
+
+    if (res.status === 401 || res.status === 403) {
+      const { code, hint } = classifyHttpError(res.status);
+      return failureFromReport(
+        summarizeConnectionCapabilities([
+          authFailReason(`GET /models returned HTTP ${res.status}`),
+        ]),
+        { code, message: `HTTP ${res.status}`, hint },
+      );
+    }
+
+    const modelsOk = res.ok;
+    const models404 = res.status === 404;
+    if (!modelsOk && !models404) {
+      const { code, hint } = classifyHttpError(res.status);
+      return failureFromReport(
+        summarizeConnectionCapabilities([
+          passReason(
+            'authentication',
+            'shared-contract',
+            'Non-auth HTTP status from GET /models using runtime auth headers',
+          ),
+          capabilityReason({
+            layer: 'endpoint-shape',
+            status: 'fail',
+            category: connectionCategoryForStatus(res.status, normalizedBaseUrl),
+            cause: 'diagnostics.cause.serverError',
+            source: 'probe-only',
+            detail: `GET /models returned HTTP ${res.status}`,
+          }),
+        ]),
+        { code, message: `HTTP ${res.status}`, hint },
+      );
+    }
+
+    if (!isInferenceWire(creds.wire)) {
+      if (modelsOk) {
+        return successFromReport(
+          summarizeConnectionCapabilities([
+            passReason('authentication', 'shared-contract', 'GET /models accepted runtime auth'),
+            passReason('endpoint-shape', 'shared-contract', 'GET /models succeeded'),
+            modelDiscoveryReason({ modelsAvailable: true, inferenceAlive: false }),
+          ]),
+          'models',
+        );
       }
       const { code, hint } = classifyHttpError(res.status);
-      return {
-        ok: false,
-        code,
-        message: `HTTP ${res.status}`,
-        hint,
-        compatibility: 'incompatible',
-        reasonCategory: connectionCategoryForStatus(res.status, normalizedBaseUrl),
-      };
+      return failureFromReport(
+        summarizeConnectionCapabilities([
+          passReason('authentication', 'shared-contract', 'Non-auth HTTP from GET /models'),
+          capabilityReason({
+            layer: 'endpoint-shape',
+            status: 'fail',
+            category: connectionCategoryForStatus(res.status, normalizedBaseUrl),
+            cause: 'diagnostics.cause.endpointNotFound',
+            source: 'probe-only',
+          }),
+        ]),
+        { code, message: `HTTP ${res.status}`, hint },
+      );
     }
-    return { ok: true, probeMethod: 'models', compatibility: 'compatible' };
+
+    return assessInferenceCapabilities({
+      wire: creds.wire,
+      baseUrl: creds.baseUrl,
+      normalizedBaseUrl,
+      headers,
+      modelsOk,
+    });
   });
 }
 
-async function tryDegradeProbe(
-  wire: 'openai-chat' | 'openai-responses' | 'anthropic',
-  normalizedBaseUrl: string,
-  headers: Record<string, string>,
-): Promise<ConnectionTestResponse | null> {
-  const probe = await probeInferenceEndpoint(wire, normalizedBaseUrl, headers);
-  if (probe.kind === 'pass') {
-    return {
-      ok: true,
-      probeMethod:
-        wire === 'openai-responses'
-          ? 'responses_degraded'
-          : wire === 'anthropic'
-            ? 'anthropic_messages_degraded'
-            : 'chat_completion_degraded',
-      compatibility: 'degraded',
-      reasonCategory: 'model-discovery-degraded',
-    };
+async function assessInferenceCapabilities(input: {
+  wire: InferenceWire;
+  baseUrl: string;
+  normalizedBaseUrl: string;
+  headers: Record<string, string>;
+  modelsOk: boolean;
+}): Promise<ConnectionTestResponse> {
+  const { wire, normalizedBaseUrl, headers, modelsOk } = input;
+  const developerRoleProbed = openaiChatShouldProbeDeveloperRole(wire, input.baseUrl);
+  const probe = await probeInferenceEndpoint(wire, normalizedBaseUrl, headers, {
+    includeDeveloperRole: developerRoleProbed,
+  });
+
+  if (probe.kind === 'network') {
+    if (modelsOk) {
+      return successFromReport(
+        summarizeConnectionCapabilities([
+          passReason('authentication', 'shared-contract', 'GET /models accepted runtime auth'),
+          passReason('endpoint-shape', 'shared-contract', 'GET /models succeeded'),
+          skippedReason('wire-support', `Inference probe network error: ${probe.message}`),
+          modelDiscoveryReason({ modelsAvailable: true, inferenceAlive: false }),
+        ]),
+        'models',
+      );
+    }
+    return modelsCatalogFailure(normalizedBaseUrl, 404);
   }
-  if (probe.kind === 'http' && probe.status !== 404) {
+
+  let classified = classifyInferenceProbe({
+    wire,
+    status: probe.status,
+    bodyText: probe.bodyText,
+    developerRoleProbed,
+    anthropicErrorShape: hasAnthropicApiErrorShape(parseJsonBody(probe.bodyText)),
+  });
+
+  if (classified.roleCompatibility === 'fail' && developerRoleProbed) {
+    const retry = await probeInferenceEndpoint(wire, normalizedBaseUrl, headers, {
+      includeDeveloperRole: false,
+    });
+    if (retry.kind === 'response') {
+      const retryClass = classifyInferenceProbe({
+        wire,
+        status: retry.status,
+        bodyText: retry.bodyText,
+        developerRoleProbed: false,
+        anthropicErrorShape: hasAnthropicApiErrorShape(parseJsonBody(retry.bodyText)),
+      });
+      classified = { ...retryClass, roleCompatibility: 'fail' };
+    }
+  }
+
+  if (classified.authentication === 'fail') {
     const { code, hint } = classifyHttpError(probe.status);
-    return {
-      ok: false,
-      code,
-      message: `HTTP ${probe.status}`,
-      hint,
-      compatibility: 'incompatible',
-      reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
-    };
+    return failureFromReport(
+      summarizeConnectionCapabilities([
+        authFailReason(`Inference probe returned HTTP ${probe.status}`),
+      ]),
+      { code, message: `HTTP ${probe.status}`, hint },
+    );
   }
-  return null;
+
+  if (classified.tryAlternateWire) {
+    const alt =
+      wire === 'openai-responses'
+        ? 'openai-chat'
+        : wire === 'openai-chat'
+          ? 'openai-responses'
+          : null;
+    if (alt !== null) {
+      const altProbe = await probeInferenceEndpoint(alt, normalizedBaseUrl, headers, {
+        includeDeveloperRole: false,
+      });
+      if (altProbe.kind === 'response') {
+        const altClass = classifyInferenceProbe({
+          wire: alt,
+          status: altProbe.status,
+          bodyText: altProbe.bodyText,
+          developerRoleProbed: false,
+        });
+        if (altClass.wireSupport === 'pass') {
+          const suggestedWire = classified.suggestedWire ?? alt;
+          return failureFromReport(
+            summarizeConnectionCapabilities([
+              passReason(
+                'authentication',
+                'shared-contract',
+                'Non-auth HTTP using runtime auth headers',
+              ),
+              passReason(
+                'endpoint-shape',
+                'probe-only',
+                'Alternate OpenAI wire is reachable; selected wire is not',
+              ),
+              capabilityReason({
+                layer: 'wire-support',
+                status: 'fail',
+                category: 'wrong-wire',
+                cause:
+                  wire === 'openai-responses'
+                    ? 'diagnostics.cause.wireMismatchResponses'
+                    : 'diagnostics.cause.wireMismatchChat',
+                source: 'probe-only',
+                detail: `Selected ${wire} failed; ${alt} responded as a live inference route`,
+                suggestedWire,
+                suggestedFixKind: 'switchWire',
+              }),
+              modelDiscoveryReason({ modelsAvailable: modelsOk, inferenceAlive: false }),
+            ]),
+            {
+              code: '404',
+              message: `HTTP ${probe.status}`,
+              hint:
+                wire === 'openai-responses'
+                  ? 'This gateway speaks /chat/completions, not /responses. Switch the provider wire to openai-chat.'
+                  : 'This gateway speaks /responses, not /chat/completions. Switch the provider wire to openai-responses.',
+            },
+          );
+        }
+      }
+    }
+  }
+
+  if (classified.wireSupport === 'fail') {
+    if (!modelsOk) {
+      if (probe.status !== 404) {
+        const { code, hint } = classifyHttpError(probe.status);
+        return failureFromReport(
+          summarizeConnectionCapabilities([
+            passReason(
+              'authentication',
+              'shared-contract',
+              'Non-auth HTTP using runtime auth headers',
+            ),
+            capabilityReason({
+              layer: 'wire-support',
+              status: 'fail',
+              category: classified.category,
+              cause: classified.cause,
+              source: 'probe-only',
+            }),
+            modelDiscoveryReason({ modelsAvailable: false, inferenceAlive: false }),
+          ]),
+          { code, message: `HTTP ${probe.status}`, hint },
+        );
+      }
+      return modelsCatalogFailure(normalizedBaseUrl, 404);
+    }
+    if (probe.status >= 500) {
+      return successFromReport(
+        summarizeConnectionCapabilities([
+          passReason('authentication', 'shared-contract', 'GET /models accepted runtime auth'),
+          passReason('endpoint-shape', 'shared-contract', 'GET /models succeeded'),
+          skippedReason(
+            'wire-support',
+            `Inference probe returned HTTP ${probe.status}; treating as unknown because /models succeeded`,
+          ),
+          modelDiscoveryReason({ modelsAvailable: true, inferenceAlive: false }),
+        ]),
+        'models',
+      );
+    }
+    const { code, hint } = classifyHttpError(probe.status);
+    return failureFromReport(
+      summarizeConnectionCapabilities([
+        passReason('authentication', 'shared-contract', 'Non-auth HTTP using runtime auth headers'),
+        capabilityReason({
+          layer: 'wire-support',
+          status: 'fail',
+          category: classified.category,
+          cause: classified.cause,
+          source: 'probe-only',
+          ...(classified.suggestedWire !== undefined
+            ? { suggestedWire: classified.suggestedWire, suggestedFixKind: 'switchWire' as const }
+            : {}),
+        }),
+        modelDiscoveryReason({ modelsAvailable: modelsOk, inferenceAlive: false }),
+      ]),
+      { code, message: `HTTP ${probe.status}`, hint },
+    );
+  }
+
+  const observations: ConnectionCapabilityReason[] = [
+    passReason('authentication', 'shared-contract', 'Non-auth HTTP using runtime auth headers'),
+    passReason('endpoint-shape', 'shared-contract', 'Selected-wire inference route is reachable'),
+    passReason('wire-support', 'probe-only', 'Selected-wire inference probe reached the route'),
+    modelDiscoveryReason({ modelsAvailable: modelsOk, inferenceAlive: true }),
+  ];
+  if (classified.roleCompatibility === 'fail') {
+    observations.push(
+      capabilityReason({
+        layer: 'role-compatibility',
+        status: 'fail',
+        category: 'unsupported-role',
+        cause: 'diagnostics.cause.unsupportedRole',
+        source: 'probe-only',
+        detail: 'Probe-only: request included a developer role message',
+        suggestedFixKind: 'switchWire',
+        suggestedWire: 'openai-chat',
+      }),
+    );
+  } else if (classified.roleCompatibility === 'pass') {
+    observations.push(
+      passReason('role-compatibility', 'probe-only', 'Developer role was not rejected'),
+    );
+  }
+  if (classified.reasoningCompatibility === 'fail') {
+    observations.push(
+      capabilityReason({
+        layer: 'reasoning-compatibility',
+        status: 'fail',
+        category: 'reasoning-policy',
+        cause: 'diagnostics.cause.reasoningPolicy',
+        source: 'probe-only',
+        suggestedFixKind: 'setReasoning',
+      }),
+    );
+  } else {
+    observations.push(
+      skippedReason(
+        'reasoning-compatibility',
+        'Connection probe does not send reasoning knobs; generate-time diagnostics still classify reasoning failures',
+      ),
+    );
+  }
+
+  const report = summarizeConnectionCapabilities(observations);
+  return successFromReport(report, modelsOk ? 'models' : degradedProbeMethod(wire));
+}
+
+function modelsCatalogFailure(
+  normalizedBaseUrl: string,
+  modelsStatus: number,
+): ConnectionTestError {
+  const { code, hint } = classifyHttpError(modelsStatus);
+  const category = connectionCategoryForStatus(modelsStatus, normalizedBaseUrl);
+  return failureFromReport(
+    summarizeConnectionCapabilities([
+      passReason('authentication', 'shared-contract', 'Non-auth HTTP from GET /models'),
+      capabilityReason({
+        layer: 'endpoint-shape',
+        status: 'fail',
+        category,
+        cause:
+          category === 'missing-base-v1'
+            ? 'diagnostics.cause.missingV1'
+            : 'diagnostics.cause.endpointNotFound',
+        source: 'probe-only',
+        ...(category === 'missing-base-v1'
+          ? { suggestedFixKind: 'baseUrlTransform' as const }
+          : {}),
+      }),
+      modelDiscoveryReason({ modelsAvailable: false, inferenceAlive: false }),
+    ]),
+    { code, message: `HTTP ${modelsStatus}`, hint },
+  );
 }
 
 type ProbeResult =
-  | { kind: 'pass' }
-  | { kind: 'http'; status: number }
+  | { kind: 'response'; status: number; bodyText: string }
   | { kind: 'network'; message: string };
 
 /**
- * POST a minimal inference request to verify the endpoint is alive when GET
- * /models returned 404. We dispatch by wire so that providers on the
- * Responses API (which may not implement /chat/completions at all) can't
- * false-positive via a gateway that only speaks the other shape. A 2xx
- * response or any API-originated 4xx (400 model_unknown, 402 insufficient
- * credits, 422, 429 — and 401/403 too, which we surface as auth) counts as
- * "endpoint reachable". Only 404 and 5xx count as a real failure. The
- * request body is intentionally minimal; if the gateway rejects the payload
- * shape with a 4xx we still know the route exists.
+ * POST a minimal inference request. Dispatched by wire so a chat-only gateway
+ * cannot false-positive for openai-responses (and vice versa). `developer`
+ * role is included only for third-party openai-chat probes.
  */
 async function probeInferenceEndpoint(
-  wire: 'openai-chat' | 'openai-responses' | 'anthropic',
+  wire: InferenceWire,
   normalizedBaseUrl: string,
   headers: Record<string, string>,
+  options: { includeDeveloperRole?: boolean } = {},
 ): Promise<ProbeResult> {
   const url =
     wire === 'anthropic'
@@ -725,11 +1089,15 @@ async function probeInferenceEndpoint(
       : wire === 'openai-responses'
         ? `${normalizedBaseUrl}/responses`
         : `${normalizedBaseUrl}/chat/completions`;
+  const userMessage = { role: 'user', content: 'ping' };
+  const chatMessages = options.includeDeveloperRole
+    ? [{ role: 'developer', content: 'ping' }, userMessage]
+    : [userMessage];
   const body =
     wire === 'anthropic'
       ? JSON.stringify({
           model: 'probe',
-          messages: [{ role: 'user', content: 'ping' }],
+          messages: [userMessage],
           max_tokens: 1,
           stream: false,
         })
@@ -742,7 +1110,7 @@ async function probeInferenceEndpoint(
           })
         : JSON.stringify({
             model: 'probe',
-            messages: [{ role: 'user', content: 'ping' }],
+            messages: chatMessages,
             max_tokens: 1,
             stream: false,
           });
@@ -756,27 +1124,8 @@ async function probeInferenceEndpoint(
   } catch (err) {
     return { kind: 'network', message: err instanceof Error ? err.message : String(err) };
   }
-  if (res.ok) return { kind: 'pass' };
-  if (res.status === 404 || res.status >= 500) return { kind: 'http', status: res.status };
-  // 401/403 — endpoint alive but auth rejected; surface as auth error so the
-  // diagnostics panel shows the key-invalid hint instead of the 404 one.
-  if (res.status === 401 || res.status === 403) return { kind: 'http', status: res.status };
-  if (wire === 'anthropic') {
-    const body = await responseJson(res);
-    return hasAnthropicApiErrorShape(body)
-      ? { kind: 'pass' }
-      : { kind: 'http', status: res.status };
-  }
-  // 400/402/422/429 etc. — endpoint alive, request-level rejection.
-  return { kind: 'pass' };
-}
-
-async function responseJson(res: Response): Promise<unknown> {
-  try {
-    return await res.json();
-  } catch {
-    return null;
-  }
+  const bodyText = await res.text().catch(() => '');
+  return { kind: 'response', status: res.status, bodyText };
 }
 
 function isJsonRecord(value: unknown): value is Record<string, unknown> {
@@ -1082,7 +1431,7 @@ export async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndp
     };
   }
 
-  const { url } = buildEndpointForWire(payload.wire, payload.baseUrl);
+  const { url, normalizedBaseUrl } = buildEndpointForWire(payload.wire, payload.baseUrl);
   const headers = buildAuthHeadersForWire(
     payload.wire,
     payload.apiKey,
@@ -1104,6 +1453,35 @@ export async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndp
       ok: false,
       error: 'network',
       message: err instanceof Error ? err.message : 'Network request failed',
+    };
+  }
+
+  if (res.status === 404 && isInferenceWire(payload.wire)) {
+    const inferenceWire = payload.wire;
+    const assessed = await withTlsBypass(payload.tlsRejectUnauthorized === true, () =>
+      assessInferenceCapabilities({
+        wire: inferenceWire,
+        baseUrl: payload.baseUrl,
+        normalizedBaseUrl,
+        headers,
+        modelsOk: false,
+      }),
+    );
+    if (assessed.ok) {
+      return {
+        ok: true,
+        modelCount: 0,
+        models: [],
+        compatibility: assessed.compatibility ?? 'degraded-compatible',
+        ...(assessed.reasons !== undefined ? { reasons: assessed.reasons } : {}),
+      };
+    }
+    return {
+      ok: false,
+      error: assessed.reasonCategory === 'wrong-wire' ? 'wrong-wire' : 'not-a-model-endpoint',
+      message: assessed.hint,
+      compatibility: 'incompatible',
+      ...(assessed.reasons !== undefined ? { reasons: assessed.reasons } : {}),
     };
   }
 
@@ -1257,8 +1635,20 @@ interface TestEndpointPayload {
 }
 
 export type TestEndpointResponse =
-  | { ok: true; modelCount: number; models: string[] }
-  | { ok: false; error: string; message: string };
+  | {
+      ok: true;
+      modelCount: number;
+      models: string[];
+      compatibility?: 'compatible' | 'degraded-compatible';
+      reasons?: ConnectionCapabilityReason[];
+    }
+  | {
+      ok: false;
+      error: string;
+      message: string;
+      compatibility?: 'incompatible';
+      reasons?: ConnectionCapabilityReason[];
+    };
 
 function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   if (typeof raw !== 'object' || raw === null) {

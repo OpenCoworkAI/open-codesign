@@ -1,4 +1,5 @@
 import { useT } from '@open-codesign/i18n';
+import type { ConnectionCapabilityReason } from '@open-codesign/shared';
 import { canonicalBaseUrl, detectWireFromBaseUrl, type WireApi } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
 import { AlertCircle, Check, CheckCircle, Loader2, X } from 'lucide-react';
@@ -48,8 +49,8 @@ interface Props {
 type TestState =
   | { kind: 'idle' }
   | { kind: 'testing' }
-  | { kind: 'ok'; modelCount: number }
-  | { kind: 'error'; message: string };
+  | { kind: 'ok'; modelCount: number; degraded?: boolean; reasons?: ConnectionCapabilityReason[] }
+  | { kind: 'error'; message: string; reasons?: ConnectionCapabilityReason[] };
 
 type DiscoveryState =
   | { kind: 'idle' }
@@ -264,8 +265,25 @@ export function AddCustomProviderModal({
         allowPrivateNetwork,
         ...(tlsRejectUnauthorized ? { tlsRejectUnauthorized: true } : {}),
       });
-      if (res.ok) setTest({ kind: 'ok', modelCount: res.modelCount });
-      else setTest({ kind: 'error', message: res.message });
+      if (res.ok) {
+        setTest({
+          kind: 'ok',
+          modelCount: res.modelCount,
+          ...(res.compatibility === 'degraded-compatible' ? { degraded: true } : {}),
+          ...(res.reasons !== undefined ? { reasons: res.reasons } : {}),
+        });
+      } else {
+        const visible = (res.reasons ?? []).filter(
+          (reason) => reason.status === 'fail' || reason.status === 'degraded',
+        );
+        const message =
+          visible.length > 0 ? visible.map((reason) => t(reason.cause)).join(' ') : res.message;
+        setTest({
+          kind: 'error',
+          message,
+          ...(res.reasons !== undefined ? { reasons: res.reasons } : {}),
+        });
+      }
     } catch (err) {
       setTest({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
     }
@@ -561,8 +579,12 @@ export function AddCustomProviderModal({
             {t('settings.providers.custom.test')}
           </button>
           {test.kind === 'ok' && (
-            <span className="text-[var(--text-xs)] text-[var(--color-success)]">
-              {t('settings.providers.custom.testOk', { count: test.modelCount })}
+            <span
+              className={`text-[var(--text-xs)] ${test.degraded === true ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}
+            >
+              {test.degraded === true
+                ? t('settings.providers.custom.testDegraded')
+                : t('settings.providers.custom.testOk', { count: test.modelCount })}
             </span>
           )}
           {test.kind === 'error' && (

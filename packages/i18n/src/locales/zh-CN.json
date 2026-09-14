@@ -451,6 +451,7 @@
         "discoveryFailed": "无法自动发现模型",
         "test": "测试连接",
         "testOk": "正常 — 共 {{count}} 个模型",
+        "testDegraded": "已连接（受限）— 模型目录不可用",
         "save": "保存并继续",
         "saveEdit": "保存修改"
       },
@@ -543,6 +544,7 @@
         "reasoningSaved": "已保存推理深度",
         "reasoningSaveFailed": "保存推理深度失败",
         "connectionOk": "连接正常",
+        "connectionDegraded": "已连接（受限）",
         "connectionFailed": "连接失败"
       },
       "cliProxyApi": {
@@ -1034,9 +1036,27 @@
   },
   "diagnostics": {
     "title": "连接失败",
+    "titleDegraded": "已连接（受限）",
     "status": "状态：{{status}}",
     "attempted": "我们尝试了：{{url}}",
     "mostLikelyCause": "最可能的原因：",
+    "layersHeading": "能力分层",
+    "probeOnlyNote": "由连接探测推断；真实生成调用仍可能不同。",
+    "layer": {
+      "authentication": "鉴权",
+      "endpoint-shape": "端点",
+      "wire-support": "Wire",
+      "model-discovery": "模型发现",
+      "role-compatibility": "Role 兼容",
+      "reasoning-compatibility": "Reasoning"
+    },
+    "capability": {
+      "pass": "通过",
+      "fail": "失败",
+      "degraded": "降级",
+      "skipped": "未探测",
+      "unknown": "未知"
+    },
     "cause": {
       "keyInvalid": "API Key 无效或已被撤销。",
       "balanceEmpty": "账户余额不足。",
@@ -1061,6 +1081,13 @@
       "referenceUrlTimeout": "抓取 Reference URL 超时。",
       "referenceUrlTooLarge": "Reference URL 内容太大，无法纳入上下文。",
       "serverError": "上游服务错误。可能是暂时性的，稍后重试。",
+      "modelDiscoveryDegraded": "/models 目录不可用，但所选 wire 上的推理仍然可用。",
+      "modelDiscoveryOk": "/models 目录可用。",
+      "wireMismatchResponses": "此端点实现的是 chat/completions，而不是 Responses API。请将 provider wire 切换为 openai-chat。",
+      "wireMismatchChat": "此端点实现的是 Responses API，而不是 chat/completions。请将 provider wire 切换为 openai-responses。",
+      "wireUnsupported": "所选 wire 未被此端点实现。",
+      "capabilityPass": "这一层检测通过。",
+      "capabilitySkipped": "这一层未被探测。",
       "unknown": "未知错误——请查看完整日志以获取详情。"
     },
     "fix": {

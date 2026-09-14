@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diagnose, diagnoseGenerateFailure } from './diagnostics';
+import { diagnose, diagnoseGenerateFailure, looksLikeReasoningRejection } from './diagnostics';
 
 const baseCtx = {
   provider: 'openai',
@@ -383,5 +383,14 @@ describe('diagnoseGenerateFailure', () => {
       });
       expect(result[0]?.cause).toBe('diagnostics.cause.relayStreamingBug');
     });
+  });
+});
+
+describe('looksLikeReasoningRejection', () => {
+  it('matches unknown/unexpected field phrasing without regex backtracking', () => {
+    expect(looksLikeReasoningRejection('Unknown field: reasoning')).toBe(true);
+    expect(looksLikeReasoningRejection('Unexpected parameter reasoning_effort')).toBe(true);
+    expect(looksLikeReasoningRejection('does not support thinking')).toBe(true);
+    expect(looksLikeReasoningRejection('model_not_found')).toBe(false);
   });
 });

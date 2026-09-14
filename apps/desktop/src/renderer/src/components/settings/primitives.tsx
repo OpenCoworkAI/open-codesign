@@ -1,5 +1,11 @@
 import { getCurrentLocale, useT } from '@open-codesign/i18n';
-import type { OnboardingState, ReasoningLevel } from '@open-codesign/shared';
+import type {
+  ConnectionCapabilityReason,
+  ConnectionCompatibility,
+  DiagnosticFix,
+  OnboardingState,
+  ReasoningLevel,
+} from '@open-codesign/shared';
 import {
   AlertTriangle,
   CheckCircle,
@@ -17,6 +23,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProviderRow } from '../../../../preload/index';
 import { recordAction } from '../../lib/action-timeline';
 import { useCodesignStore } from '../../store';
+import { ConnectionDiagnosticPanel } from '../ConnectionDiagnosticPanel';
 
 /**
  * Electron IPC wraps thrown errors as
@@ -297,6 +304,12 @@ export function ProviderCard({
   const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const label = row.label ?? row.provider;
   const hasError = row.error !== undefined;
+  const [connectionDiag, setConnectionDiag] = useState<{
+    errorCode?: string;
+    httpStatus?: string;
+    compatibility?: ConnectionCompatibility;
+    reasons?: ConnectionCapabilityReason[];
+  } | null>(null);
 
   const stateClass = hasError
     ? 'border-[var(--color-error)] bg-[var(--color-surface)]'
@@ -317,15 +330,40 @@ export function ProviderCard({
     try {
       const res = await window.codesign.connection.testProvider(row.provider);
       recordAction({ type: 'connection.test', data: { provider: row.provider, ok: res.ok } });
-      if (res.ok) {
+      const visibleReasons = (res.reasons ?? []).filter(
+        (reason) => reason.status === 'fail' || reason.status === 'degraded',
+      );
+      const reasonText =
+        visibleReasons.length > 0
+          ? visibleReasons.map((reason) => t(reason.cause)).join(' ')
+          : undefined;
+      if (res.ok && res.compatibility === 'degraded-compatible') {
+        pushToast({
+          variant: 'info',
+          title: t('settings.providers.toast.connectionDegraded'),
+          ...(reasonText !== undefined ? { description: reasonText } : {}),
+        });
+        setConnectionDiag({
+          compatibility: res.compatibility,
+          ...(res.reasons !== undefined ? { reasons: res.reasons } : {}),
+          ...(res.probeMethod !== undefined ? { httpStatus: res.probeMethod } : {}),
+        });
+      } else if (res.ok) {
         pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
+        setConnectionDiag(null);
       } else {
         reportableErrorToast({
           code: 'CONNECTION_TEST_FAILED',
           scope: 'settings',
           title: t('settings.providers.toast.connectionFailed'),
-          description: res.hint || res.message,
+          description: reasonText ?? (res.hint || res.message),
           context: { provider: row.provider },
+        });
+        setConnectionDiag({
+          errorCode: res.code,
+          httpStatus: res.message,
+          compatibility: 'incompatible',
+          ...(res.reasons !== undefined ? { reasons: res.reasons } : {}),
         });
       }
     } catch (err) {
@@ -412,6 +450,75 @@ export function ProviderCard({
           value={row.reasoningLevel}
           onUpdated={onRowChanged}
         />
+      )}
+      {connectionDiag !== null && (
+        <div className="mt-[var(--space-2)]">
+          <ConnectionDiagnosticPanel
+            {...(connectionDiag.errorCode !== undefined
+              ? { errorCode: connectionDiag.errorCode }
+              : {})}
+            {...(connectionDiag.httpStatus !== undefined
+              ? { httpStatus: connectionDiag.httpStatus }
+              : {})}
+            baseUrl={row.baseUrl ?? ''}
+            provider={row.provider}
+            {...(connectionDiag.reasons !== undefined ? { reasons: connectionDiag.reasons } : {})}
+            {...(connectionDiag.compatibility !== undefined
+              ? { compatibility: connectionDiag.compatibility }
+              : {})}
+            onApplyFix={(nextBaseUrl) => {
+              void (async () => {
+                if (!window.codesign?.config?.updateProvider) return;
+                try {
+                  await window.codesign.config.updateProvider({
+                    id: row.provider,
+                    baseUrl: nextBaseUrl,
+                  });
+                  onRowChanged({ ...row, baseUrl: nextBaseUrl });
+                } catch (err) {
+                  reportableErrorToast({
+                    code: 'CONNECTION_FIX_APPLY_FAILED',
+                    scope: 'settings',
+                    title: t('settings.providers.toast.saveFailed'),
+                    description: cleanIpcError(err) || t('settings.common.unknownError'),
+                  });
+                }
+              })();
+            }}
+            onApplySuggestedFix={(fix: DiagnosticFix) => {
+              void (async () => {
+                if (!window.codesign?.config?.updateProvider) return;
+                try {
+                  if (fix.kind === 'switchWire' && fix.wire !== undefined) {
+                    await window.codesign.config.updateProvider({
+                      id: row.provider,
+                      wire: fix.wire,
+                    });
+                    onRowChanged({ ...row, wire: fix.wire });
+                  } else if (fix.kind === 'setReasoning') {
+                    const nextLevel = fix.reasoningLevel ?? 'off';
+                    await window.codesign.config.updateProvider({
+                      id: row.provider,
+                      reasoningLevel: nextLevel,
+                    });
+                    onRowChanged({ ...row, reasoningLevel: nextLevel });
+                  }
+                } catch (err) {
+                  reportableErrorToast({
+                    code: 'CONNECTION_FIX_APPLY_FAILED',
+                    scope: 'settings',
+                    title: t('settings.providers.toast.saveFailed'),
+                    description: cleanIpcError(err) || t('settings.common.unknownError'),
+                  });
+                }
+              })();
+            }}
+            onTestAgain={() => {
+              void handleTestConnection();
+            }}
+            onDismiss={() => setConnectionDiag(null)}
+          />
+        </div>
       )}
     </div>
   );

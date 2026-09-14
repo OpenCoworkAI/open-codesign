@@ -11,6 +11,9 @@
  * lines is fine", the duplication is intentional.
  */
 
+import type { ConnectionCapabilityLayer, WireApi } from '@open-codesign/shared';
+import { classifyGatewayIncompatibility } from './gateway-compat';
+
 const API_KEY_RE =
   /(sk-[A-Za-z0-9-_]{20,}|AIzaSy[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|[A-Za-z0-9+/]{43}=|[A-Fa-f0-9]{32,}|Bearer\s+[A-Za-z0-9._~+/=-]+)/g;
 const REDACTION = '***REDACTED***';
@@ -161,6 +164,17 @@ function extractErrorName(err: unknown, errRec: Record<string, unknown>): string
     }
   }
   return 'UnknownError';
+}
+
+/**
+ * Map a flattened upstream error onto the #213 capability layer so auth /
+ * wire / role / reasoning failures stay distinguishable after SDK wrapping.
+ */
+export function capabilityLayerFromNormalizedError(
+  err: NormalizedProviderError,
+  wire?: WireApi,
+): ConnectionCapabilityLayer | undefined {
+  return classifyGatewayIncompatibility(err.upstream_status, err.upstream_message, wire)?.layer;
 }
 
 export function normalizeProviderError(

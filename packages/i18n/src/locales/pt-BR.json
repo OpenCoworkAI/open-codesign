@@ -352,6 +352,7 @@
         "compatibilityHintBody": "Alguns coding plans, relays e gateways compatíveis com OpenAI só permitem clientes específicos, como Claude Code, openclaw ou Hermes. Mesmo que a API pareça compatível, o Open CoDesign ainda pode ser bloqueado por uma lista de apps permitidos.",
         "test": "Testar conexão",
         "testOk": "OK — {{count}} modelos disponíveis",
+        "testDegraded": "Conectado com limitações — catálogo de modelos indisponível",
         "save": "Salvar e continuar",
         "saveEdit": "Salvar alterações",
         "switchToDropdown": "Escolher da lista",
@@ -445,6 +446,7 @@
         "reasoningSaved": "Profundidade de raciocínio salva",
         "reasoningSaveFailed": "Falha ao salvar a profundidade de raciocínio",
         "connectionOk": "Conexão OK",
+        "connectionDegraded": "Conectado com limitações",
         "connectionFailed": "Falha na conexão",
         "saveFailed": "Falha ao salvar o provedor"
       },
@@ -935,9 +937,27 @@
   },
   "diagnostics": {
     "title": "Falha na conexão",
+    "titleDegraded": "Conectado com limitações",
     "status": "Status: {{status}}",
     "attempted": "O que tentamos: {{url}}",
     "mostLikelyCause": "Causa mais provável:",
+    "layersHeading": "Camadas de capacidade",
+    "probeOnlyNote": "Inferido pelo teste de conexão; uma geração real ainda pode diferir.",
+    "layer": {
+      "authentication": "Autenticação",
+      "endpoint-shape": "Endpoint",
+      "wire-support": "Wire",
+      "model-discovery": "Descoberta de modelos",
+      "role-compatibility": "Compatibilidade de role",
+      "reasoning-compatibility": "Reasoning"
+    },
+    "capability": {
+      "pass": "Passou",
+      "fail": "Falhou",
+      "degraded": "Degradado",
+      "skipped": "Ignorado",
+      "unknown": "Desconhecido"
+    },
     "cause": {
       "keyInvalid": "Chave de API inválida ou revogada.",
       "balanceEmpty": "O saldo da conta está vazio.",
@@ -962,6 +982,13 @@
       "referenceUrlTimeout": "A busca da URL de referência excedeu o tempo limite.",
       "referenceUrlTooLarge": "O conteúdo da URL de referência é grande demais para incluir.",
       "serverError": "Erro do servidor upstream. Pode ser temporário; tente novamente.",
+      "modelDiscoveryDegraded": "O catálogo /models está ausente, mas a inferência no wire selecionado ainda funciona.",
+      "modelDiscoveryOk": "O catálogo /models está disponível.",
+      "wireMismatchResponses": "Este endpoint fala chat/completions, não a API Responses. Mude o wire do provedor para openai-chat.",
+      "wireMismatchChat": "Este endpoint fala a API Responses, não chat/completions. Mude o wire do provedor para openai-responses.",
+      "wireUnsupported": "O wire selecionado não é implementado por este endpoint.",
+      "capabilityPass": "Esta camada foi bem-sucedida.",
+      "capabilitySkipped": "Esta camada não foi sondada.",
       "unknown": "Erro desconhecido — veja o log completo para detalhes."
     },
     "fix": {

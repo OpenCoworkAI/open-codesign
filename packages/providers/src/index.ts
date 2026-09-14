@@ -584,7 +584,17 @@ export {
   shouldForceClaudeCodeIdentity,
   withClaudeCodeIdentity,
 } from './claude-code-compat';
-export { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
+export type { GatewayIncompatibility } from './gateway-compat';
+export {
+  classifyGatewayIncompatibility,
+  isOfficialOpenAIBaseUrl,
+  looksLikeGatewayDeveloperRoleRejection,
+  looksLikeGatewayMissingMessagesApi,
+  looksLikeGatewayReasoningRejection,
+  looksLikeGatewayResponsesWireMismatch,
+  looksLikeGatewayStubbedApi,
+  openaiChatShouldProbeDeveloperRole,
+} from './gateway-compat';
 export { isGeminiOpenAICompat, normalizeGeminiModelId } from './gemini-compat';
 export type {
   GenerateImageOptions,

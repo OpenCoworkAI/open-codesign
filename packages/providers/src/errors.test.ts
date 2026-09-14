@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { type NormalizedProviderError, normalizeProviderError } from './errors';
+import {
+  capabilityLayerFromNormalizedError,
+  type NormalizedProviderError,
+  normalizeProviderError,
+} from './errors';
 
 describe('normalizeProviderError', () => {
   it('extracts status, request id, and message from OpenAI-style error', () => {
@@ -103,5 +107,34 @@ describe('normalizeProviderError', () => {
       expect(result.upstream_message).not.toContain('AIzaSy0000');
       expect(result.upstream_message).not.toContain('AKIA0000');
     }
+  });
+});
+
+describe('capabilityLayerFromNormalizedError', () => {
+  it('maps 401 to authentication', () => {
+    const result = normalizeProviderError({ status: 401, message: 'invalid key' }, 'openai', 0);
+    expect(capabilityLayerFromNormalizedError(result)).toBe('authentication');
+  });
+
+  it('maps developer-role rejection to role-compatibility', () => {
+    const result = normalizeProviderError(
+      {
+        status: 400,
+        message:
+          'Invalid input: messages.0.role Input should be system, user, assistant or tool; input "developer"',
+      },
+      'openai',
+      0,
+    );
+    expect(capabilityLayerFromNormalizedError(result, 'openai-chat')).toBe('role-compatibility');
+  });
+
+  it('maps responses instructions rejection to wire-support', () => {
+    const result = normalizeProviderError(
+      { status: 400, message: 'Unknown parameter: instructions' },
+      'openai',
+      0,
+    );
+    expect(capabilityLayerFromNormalizedError(result, 'openai-responses')).toBe('wire-support');
   });
 });

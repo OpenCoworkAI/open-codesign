@@ -923,7 +923,7 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(res.ok).toBe(true);
       if (res.ok) {
         expect(res.probeMethod).toBe('chat_completion_degraded');
-        expect(res.compatibility).toBe('degraded');
+        expect(res.compatibility).toBe('degraded-compatible');
         expect(res.reasonCategory).toBe('model-discovery-degraded');
       }
       expect(calls).toHaveLength(2);
@@ -1021,7 +1021,7 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
     }
   });
 
-  it('openai-chat: /models 200 → no degrade probe, probeMethod=models', async () => {
+  it('openai-chat: /models 200 still reports probeMethod=models after selected-wire verification', async () => {
     const { calls, restore } = installFakeFetch(() => ({ status: 200, body: { data: [] } }));
     try {
       const res = await runProviderTest({
@@ -1034,9 +1034,17 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       if (res.ok) {
         expect(res.probeMethod).toBe('models');
         expect(res.compatibility).toBe('compatible');
+        expect(res.reasons?.some((r) => r.layer === 'authentication' && r.status === 'pass')).toBe(
+          true,
+        );
+        expect(res.reasons?.some((r) => r.layer === 'wire-support' && r.status === 'pass')).toBe(
+          true,
+        );
       }
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2);
       expect(calls[0]?.method).toBe('GET');
+      expect(calls[1]?.method).toBe('POST');
+      expect(calls[1]?.url).toMatch(/\/chat\/completions$/);
     } finally {
       restore();
     }
@@ -1084,7 +1092,7 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(res.ok).toBe(true);
       if (res.ok) {
         expect(res.probeMethod).toBe('anthropic_messages_degraded');
-        expect(res.compatibility).toBe('degraded');
+        expect(res.compatibility).toBe('degraded-compatible');
       }
       expect(calls).toHaveLength(2);
       expect(calls[0]?.url).toMatch(/\/v1\/models$/);
@@ -1138,7 +1146,7 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(res.ok).toBe(true);
       if (res.ok) {
         expect(res.probeMethod).toBe('responses_degraded');
-        expect(res.compatibility).toBe('degraded');
+        expect(res.compatibility).toBe('degraded-compatible');
         expect(res.reasonCategory).toBe('model-discovery-degraded');
       }
       expect(calls).toHaveLength(2);
@@ -1155,16 +1163,13 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
     }
   });
 
-  it('openai-responses: /models 404 + /responses 404 → preserves original 404 (no /chat/completions false-positive)', async () => {
-    // Regression: the previous implementation probed /chat/completions for
-    // every OpenAI-compat wire. A gateway that only implements /chat/completions
-    // would then report the connection healthy even though real inference (on
-    // /responses) would 404 at generate-time. We want the opposite: if the
-    // wire's real endpoint is dead, the test must fail.
+  it('openai-responses: /models 404 + /responses 404 + /chat/completions 200 → incompatible wrong-wire, not a false healthy', async () => {
+    // A gateway that only implements /chat/completions must not report the
+    // openai-responses connection as healthy. It SHOULD probe the alternate
+    // wire so the renderer can show an explicit responses vs chat mismatch.
     const { calls, restore } = installFakeFetch((url) => {
       if (url.endsWith('/models')) return { status: 404 };
       if (url.endsWith('/responses')) return { status: 404 };
-      // A gateway that only has /chat/completions — must not be consulted.
       if (url.endsWith('/chat/completions')) return { status: 200, body: { id: 'wrong-probe' } };
       return { status: 500 };
     });
@@ -1178,10 +1183,106 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(res.ok).toBe(false);
       if (!res.ok) {
         expect(res.code).toBe('404');
-        expect(res.message).toBe('HTTP 404');
+        expect(res.compatibility).toBe('incompatible');
+        expect(res.reasonCategory).toBe('wrong-wire');
+        expect(res.reasons?.some((r) => r.layer === 'wire-support' && r.status === 'fail')).toBe(
+          true,
+        );
+        expect(res.reasons?.find((r) => r.layer === 'wire-support')?.cause).toBe(
+          'diagnostics.cause.wireMismatchResponses',
+        );
+        expect(res.reasons?.find((r) => r.layer === 'wire-support')?.suggestedWire).toBe(
+          'openai-chat',
+        );
+        expect(res.reasons?.find((r) => r.layer === 'wire-support')?.source).toBe('probe-only');
       }
-      // /chat/completions must NOT have been probed for an openai-responses wire.
-      expect(calls.some((c) => c.url.endsWith('/chat/completions'))).toBe(false);
+      expect(calls.some((c) => c.url.endsWith('/chat/completions'))).toBe(true);
+      expect(calls.some((c) => c.url.endsWith('/responses'))).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('openai-chat: GET /models 401 is an authentication failure, not a wire failure', async () => {
+    const { restore } = installFakeFetch(() => ({ status: 401, body: { error: 'invalid' } }));
+    try {
+      const res = await runProviderTest({
+        provider: 'openai',
+        wire: 'openai-chat',
+        apiKey: 'sk-bad',
+        baseUrl: 'https://api.openai.com/v1',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe('401');
+        expect(res.reasonCategory).toBe('auth');
+        expect(res.reasons?.find((r) => r.layer === 'authentication')?.status).toBe('fail');
+        expect(res.reasons?.find((r) => r.layer === 'authentication')?.source).toBe(
+          'shared-contract',
+        );
+        expect(
+          res.reasons?.every((r) => r.layer !== 'wire-support' || r.status === 'skipped'),
+        ).toBe(true);
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it('openai-chat: developer-role 400 then user-role 200 is degraded-compatible', async () => {
+    const { calls, restore } = installFakeFetch((url, init) => {
+      if (url.endsWith('/models')) return { status: 200, body: { data: [] } };
+      const body = typeof init.body === 'string' ? init.body : '';
+      if (body.includes('"developer"')) {
+        return {
+          status: 400,
+          body: {
+            error: {
+              message:
+                'Invalid input: messages.0.role Input should be system, user, assistant or tool; input "developer"',
+            },
+          },
+        };
+      }
+      return { status: 200, body: { id: 'ok' } };
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'glm',
+        wire: 'openai-chat',
+        apiKey: 'sk-glm-test',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      });
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.compatibility).toBe('degraded-compatible');
+        expect(res.reasons?.find((r) => r.layer === 'role-compatibility')?.status).toBe('fail');
+        expect(res.reasons?.find((r) => r.layer === 'wire-support')?.status).toBe('pass');
+        expect(res.reasons?.find((r) => r.layer === 'role-compatibility')?.source).toBe(
+          'probe-only',
+        );
+      }
+      expect(calls.filter((c) => c.url.endsWith('/chat/completions')).length).toBeGreaterThan(1);
+    } finally {
+      restore();
+    }
+  });
+
+  it('openai-responses: /models 404 + /responses 404 + /chat/completions 404 stays endpoint-not-found', async () => {
+    const { restore } = installFakeFetch(() => ({ status: 404 }));
+    try {
+      const res = await runProviderTest({
+        provider: 'dead-gateway',
+        wire: 'openai-responses',
+        apiKey: 'sk-test',
+        baseUrl: 'https://gateway.example.com/v1',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe('404');
+        expect(res.reasonCategory).toBe('endpoint-not-found');
+        expect(res.reasons?.find((r) => r.layer === 'endpoint-shape')?.status).toBe('fail');
+      }
     } finally {
       restore();
     }
@@ -1191,6 +1292,31 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
 describe('config:v1:test-endpoint response parsing', () => {
   beforeEach(() => {
     vi.useRealTimers();
+  });
+
+  it('treats /models 404 with a live inference route as degraded-compatible', async () => {
+    const { restore } = installFakeFetch((url) => {
+      if (url.endsWith('/models')) return { status: 404 };
+      if (url.endsWith('/chat/completions')) return { status: 200, body: { id: 'ok' } };
+      return { status: 500 };
+    });
+    try {
+      const res = await handleConfigV1TestEndpoint({
+        wire: 'openai-chat',
+        baseUrl: 'https://provider.example/v1',
+        apiKey: 'sk-test',
+      });
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.modelCount).toBe(0);
+        expect(res.compatibility).toBe('degraded-compatible');
+        expect(
+          res.reasons?.some((r) => r.layer === 'model-discovery' && r.status === 'degraded'),
+        ).toBe(true);
+      }
+    } finally {
+      restore();
+    }
   });
 
   it('returns a parse error when the provider response shape has no model ids', async () => {

@@ -1,6 +1,13 @@
 import { useT } from '@open-codesign/i18n';
-import type { ErrorCode } from '@open-codesign/shared';
-import { type DiagnoseContext, type DiagnosticHypothesis, diagnose } from '@open-codesign/shared';
+import type {
+  ConnectionCapabilityReason,
+  ConnectionCompatibility,
+  DiagnoseContext,
+  DiagnosticFix,
+  DiagnosticHypothesis,
+  ErrorCode,
+} from '@open-codesign/shared';
+import { diagnose, hypothesesFromCapabilityReasons } from '@open-codesign/shared';
 import { AlertCircle, ExternalLink, FileText, RefreshCw, X } from 'lucide-react';
 import { useState } from 'react';
 import { useCodesignStore } from '../store';
@@ -54,9 +61,22 @@ export function shouldShowGatewayAllowlistHint(
   return !isOfficialProviderHost(hostname);
 }
 
+export function selectConnectionHypotheses(
+  errorCode: ErrorCode | undefined,
+  ctx: DiagnoseContext,
+  reasons?: ConnectionCapabilityReason[],
+): DiagnosticHypothesis[] {
+  if (reasons !== undefined && reasons.length > 0) {
+    const fromReasons = hypothesesFromCapabilityReasons(reasons);
+    if (fromReasons.length > 0) return fromReasons;
+  }
+  if (errorCode === undefined) return [];
+  return diagnose(errorCode, ctx);
+}
+
 export interface ConnectionDiagnosticPanelProps {
   /** The error code returned by connection.test or generate */
-  errorCode: ErrorCode;
+  errorCode?: ErrorCode;
   /** HTTP status string such as "HTTP 404", if available */
   httpStatus?: string;
   /** The URL that was attempted */
@@ -65,8 +85,13 @@ export interface ConnectionDiagnosticPanelProps {
   baseUrl: string;
   /** Provider ID for context */
   provider: string;
+  /** Structured capability reasons from the main-process connection test. */
+  reasons?: ConnectionCapabilityReason[];
+  compatibility?: ConnectionCompatibility;
   /** Called when the user clicks "Apply this fix" with a baseUrl transform */
   onApplyFix: (newBaseUrl: string) => void;
+  /** Called for wire / reasoning fixes that cannot be expressed as a baseUrl change. */
+  onApplySuggestedFix?: (fix: DiagnosticFix) => void;
   /** Called when the user clicks "Test again" */
   onTestAgain: () => void;
   /** Called when the user dismisses the panel */
@@ -81,7 +106,10 @@ export function ConnectionDiagnosticPanel({
   attemptedUrl,
   baseUrl,
   provider,
+  reasons,
+  compatibility,
   onApplyFix,
+  onApplySuggestedFix,
   onTestAgain,
   onDismiss,
   logsPath,
@@ -91,21 +119,34 @@ export function ConnectionDiagnosticPanel({
   const [fixApplied, setFixApplied] = useState(false);
 
   const ctx: DiagnoseContext = { provider, baseUrl };
-  const hypotheses: DiagnosticHypothesis[] = diagnose(errorCode, ctx);
+  const hypotheses: DiagnosticHypothesis[] = selectConnectionHypotheses(errorCode, ctx, reasons);
   const primary = hypotheses[0];
   const fix = primary?.suggestedFix;
+  const degraded = compatibility === 'degraded-compatible';
+  const probeOnly = reasons?.some(
+    (reason) =>
+      (reason.status === 'fail' || reason.status === 'degraded') && reason.source === 'probe-only',
+  );
 
   const canTransformBaseUrl = isAbsoluteHttpUrl(baseUrl);
   const suggestedUrl =
     fix?.baseUrlTransform !== undefined && canTransformBaseUrl
       ? fix.baseUrlTransform(baseUrl)
       : undefined;
-  const canApplyFix = suggestedUrl !== undefined || fix?.externalUrl !== undefined;
-  const showGatewayAllowlistHint = shouldShowGatewayAllowlistHint(errorCode, baseUrl, attemptedUrl);
+  const canApplyNonUrlFix =
+    onApplySuggestedFix !== undefined &&
+    (fix?.kind === 'switchWire' || fix?.kind === 'setReasoning');
+  const canApplyFix =
+    suggestedUrl !== undefined || fix?.externalUrl !== undefined || canApplyNonUrlFix;
+  const showGatewayAllowlistHint =
+    errorCode !== undefined && shouldShowGatewayAllowlistHint(errorCode, baseUrl, attemptedUrl);
 
   function handleApplyFix() {
     if (suggestedUrl !== undefined) {
       onApplyFix(suggestedUrl);
+      setFixApplied(true);
+    } else if (canApplyNonUrlFix && fix !== undefined && onApplySuggestedFix !== undefined) {
+      onApplySuggestedFix(fix);
       setFixApplied(true);
     } else if (fix?.externalUrl !== undefined) {
       window.open(fix.externalUrl, '_blank', 'noopener,noreferrer');
@@ -128,18 +169,22 @@ export function ConnectionDiagnosticPanel({
     }
   }
 
-  const displayStatus = httpStatus ?? errorCode;
+  const displayStatus = httpStatus ?? errorCode ?? compatibility ?? '';
+  const toneClass = degraded
+    ? 'border-[var(--color-warning)] bg-[var(--color-warning-soft,var(--color-surface))]'
+    : 'border-[var(--color-error)] bg-[var(--color-error-soft,var(--color-surface))]';
+  const titleClass = degraded ? 'text-[var(--color-warning)]' : 'text-[var(--color-error)]';
 
   return (
     <div
       role="alert"
-      className="rounded-[var(--radius-lg)] border border-[var(--color-error)] bg-[var(--color-error-soft,var(--color-surface))] p-4 space-y-3 text-[var(--text-sm)]"
+      className={`rounded-[var(--radius-lg)] border ${toneClass} p-4 space-y-3 text-[var(--text-sm)]`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 text-[var(--color-error)] font-semibold">
+        <div className={`flex items-center gap-2 ${titleClass} font-semibold`}>
           <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{t('diagnostics.title')}</span>
+          <span>{degraded ? t('diagnostics.titleDegraded') : t('diagnostics.title')}</span>
         </div>
         {onDismiss !== undefined && (
           <button
@@ -154,7 +199,7 @@ export function ConnectionDiagnosticPanel({
       </div>
 
       {/* Divider */}
-      <hr className="border-[var(--color-error)]" />
+      <hr className={degraded ? 'border-[var(--color-warning)]' : 'border-[var(--color-error)]'} />
 
       {/* Details */}
       <div className="space-y-1.5 text-[var(--color-text-secondary)]">
@@ -174,6 +219,36 @@ export function ConnectionDiagnosticPanel({
               {t('diagnostics.mostLikelyCause')}{' '}
             </span>
             {t(primary.cause)}
+          </p>
+        )}
+        {hypotheses.slice(1).map((hypothesis) => (
+          <p key={hypothesis.cause} className="text-[var(--text-xs)]">
+            {t(hypothesis.cause)}
+          </p>
+        ))}
+        {reasons !== undefined && reasons.length > 0 && (
+          <div className="mt-2 space-y-1">
+            <p className="font-medium text-[var(--color-text-primary)]">
+              {t('diagnostics.layersHeading')}
+            </p>
+            <ul className="space-y-0.5">
+              {reasons.map((reason) => (
+                <li
+                  key={reason.layer}
+                  className="flex items-baseline justify-between gap-3 text-[var(--text-xs)]"
+                >
+                  <span>{t(`diagnostics.layer.${reason.layer}`)}</span>
+                  <span className="text-[var(--color-text-muted)]">
+                    {t(`diagnostics.capability.${reason.status}`)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {probeOnly === true && (
+          <p className="mt-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
+            {t('diagnostics.probeOnlyNote')}
           </p>
         )}
         {suggestedUrl !== undefined && (

@@ -334,6 +334,27 @@ export {
   toPersistedV3,
   WireApiSchema,
 } from './config';
+export type {
+  CapabilityConclusionSource,
+  ConnectionCapabilityLayer,
+  ConnectionCapabilityReason,
+  ConnectionCapabilityReport,
+  ConnectionCapabilityStatus,
+  ConnectionCompatibility,
+  InferenceProbeClassification,
+} from './connection-capabilities';
+export {
+  alternateOpenAiWire,
+  CONNECTION_CAPABILITY_LAYERS,
+  capabilityReason,
+  classifyInferenceProbe,
+  ensureAllCapabilityLayers,
+  hypothesesFromCapabilityReasons,
+  modelDiscoveryReason,
+  skippedReason,
+  summarizeConnectionCapabilities,
+  visibleCapabilityReasons,
+} from './connection-capabilities';
 export type { DesignToken } from './design-token';
 export { DesignTokenSet, DesignTokenV1 } from './design-token';
 export type {
@@ -354,7 +375,15 @@ export type {
   ErrorCode,
   GenerateFailureContext,
 } from './diagnostics';
-export { diagnose, diagnoseGenerateFailure } from './diagnostics';
+export {
+  diagnose,
+  diagnoseGenerateFailure,
+  looksLikeDeveloperRoleRejection,
+  looksLikeGatewayNotImplemented,
+  looksLikeReasoningContentRejection,
+  looksLikeReasoningRejection,
+  looksLikeResponsesShapeRejection,
+} from './diagnostics';
 export type { CodesignErrorCode } from './error-codes';
 export { ERROR_CODE_DESCRIPTIONS, ERROR_CODES } from './error-codes';
 // NOTE: fingerprint.ts imports node:crypto and is intentionally NOT re-exported

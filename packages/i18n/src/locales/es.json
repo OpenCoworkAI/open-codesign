@@ -389,6 +389,7 @@
         "discoveryFailed": "No se pudieron auto-descubrir los modelos",
         "test": "Probar conexión",
         "testOk": "OK — {{count}} modelos disponibles",
+        "testDegraded": "Conectado con limitaciones — catálogo de modelos no disponible",
         "save": "Guardar y continuar",
         "saveEdit": "Guardar cambios"
       },
@@ -481,6 +482,7 @@
         "reasoningSaved": "Profundidad de razonamiento guardada",
         "reasoningSaveFailed": "Error al guardar la profundidad de razonamiento",
         "connectionOk": "Conexión OK",
+        "connectionDegraded": "Conectado con limitaciones",
         "connectionFailed": "Conexión fallida"
       },
       "cliProxyApi": {
@@ -974,9 +976,27 @@
   },
   "diagnostics": {
     "title": "Conexión fallida",
+    "titleDegraded": "Conectado con limitaciones",
     "status": "Estado: {{status}}",
     "attempted": "Lo que intentamos: {{url}}",
     "mostLikelyCause": "Causa más probable:",
+    "layersHeading": "Capas de capacidad",
+    "probeOnlyNote": "Inferido de la prueba de conexión; una generación real aún puede diferir.",
+    "layer": {
+      "authentication": "Autenticación",
+      "endpoint-shape": "Endpoint",
+      "wire-support": "Wire",
+      "model-discovery": "Descubrimiento de modelos",
+      "role-compatibility": "Compatibilidad de rol",
+      "reasoning-compatibility": "Reasoning"
+    },
+    "capability": {
+      "pass": "Correcto",
+      "fail": "Fallo",
+      "degraded": "Degradado",
+      "skipped": "Omitido",
+      "unknown": "Desconocido"
+    },
     "cause": {
       "keyInvalid": "Clave API inválida o revocada.",
       "balanceEmpty": "El saldo de la cuenta está vacío.",
@@ -1000,6 +1020,13 @@
       "referenceUrlTimeout": "La obtención de la URL de referencia agotó el tiempo de espera.",
       "referenceUrlTooLarge": "El contenido de la URL de referencia es demasiado grande para incluirlo.",
       "serverError": "Error del servidor ascendente. Puede ser transitorio — intenta de nuevo.",
+      "modelDiscoveryDegraded": "Falta el catálogo /models, pero la inferencia en el protocolo seleccionado sigue funcionando.",
+      "modelDiscoveryOk": "El catálogo /models está disponible.",
+      "wireMismatchResponses": "Este endpoint habla chat/completions, no la API Responses. Cambia el wire del proveedor a openai-chat.",
+      "wireMismatchChat": "Este endpoint habla la API Responses, no chat/completions. Cambia el wire del proveedor a openai-responses.",
+      "wireUnsupported": "El wire seleccionado no está implementado en este endpoint.",
+      "capabilityPass": "Esta capa se completó correctamente.",
+      "capabilitySkipped": "Esta capa no se sondeó.",
       "unknown": "Error desconocido — revisa el registro completo para más detalles."
     },
     "fix": {

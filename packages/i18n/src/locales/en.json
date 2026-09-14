@@ -451,6 +451,7 @@
         "discoveryFailed": "Could not auto-discover models",
         "test": "Test connection",
         "testOk": "OK — {{count}} models available",
+        "testDegraded": "Connected with limitations — model catalog unavailable",
         "save": "Save & continue",
         "saveEdit": "Save changes"
       },
@@ -543,6 +544,7 @@
         "reasoningSaved": "Reasoning depth saved",
         "reasoningSaveFailed": "Failed to save reasoning depth",
         "connectionOk": "Connection OK",
+        "connectionDegraded": "Connected with limitations",
         "connectionFailed": "Connection failed"
       },
       "cliProxyApi": {
@@ -1038,9 +1040,27 @@
   },
   "diagnostics": {
     "title": "Connection failed",
+    "titleDegraded": "Connected with limitations",
     "status": "Status: {{status}}",
     "attempted": "What we tried: {{url}}",
     "mostLikelyCause": "Most likely cause:",
+    "layersHeading": "Capability layers",
+    "probeOnlyNote": "Inferred from the connection probe; a real generate call may still differ.",
+    "layer": {
+      "authentication": "Authentication",
+      "endpoint-shape": "Endpoint",
+      "wire-support": "Wire",
+      "model-discovery": "Model discovery",
+      "role-compatibility": "Role compatibility",
+      "reasoning-compatibility": "Reasoning"
+    },
+    "capability": {
+      "pass": "Pass",
+      "fail": "Fail",
+      "degraded": "Degraded",
+      "skipped": "Skipped",
+      "unknown": "Unknown"
+    },
     "cause": {
       "keyInvalid": "API key invalid or revoked.",
       "balanceEmpty": "Account balance is empty.",
@@ -1065,6 +1085,13 @@
       "referenceUrlTimeout": "Fetching the reference URL timed out.",
       "referenceUrlTooLarge": "The reference URL content is too large to include.",
       "serverError": "Upstream server error. May be transient — try again.",
+      "modelDiscoveryDegraded": "The /models catalog is missing, but inference on the selected wire still works.",
+      "modelDiscoveryOk": "The /models catalog is available.",
+      "wireMismatchResponses": "This endpoint speaks chat/completions, not the Responses API. Switch the provider wire to openai-chat.",
+      "wireMismatchChat": "This endpoint speaks the Responses API, not chat/completions. Switch the provider wire to openai-responses.",
+      "wireUnsupported": "The selected wire is not implemented by this endpoint.",
+      "capabilityPass": "This layer succeeded.",
+      "capabilitySkipped": "This layer was not probed.",
       "unknown": "Unknown error — check the full log for details."
     },
     "fix": {
