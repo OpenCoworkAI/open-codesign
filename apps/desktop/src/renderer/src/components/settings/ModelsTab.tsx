@@ -773,6 +773,9 @@ export function ModelsTab() {
             lockEndpoint: editingRow.builtin,
             ...(editingRow.maskedKey.length > 0 ? { keyMask: editingRow.maskedKey } : {}),
             ...(editingRow.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
+            ...(editingRow.modelDiscoveryMode !== undefined
+              ? { modelDiscoveryMode: editingRow.modelDiscoveryMode }
+              : {}),
           }}
           initialSetAsActive={false}
         />

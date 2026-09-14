@@ -3,6 +3,8 @@ import {
   CodesignError,
   ERROR_CODES,
   isSupportedOnboardingProvider,
+  type ProviderModelDiscoveryMode,
+  ProviderModelDiscoveryModeSchema,
   type ReasoningLevel,
   ReasoningLevelSchema,
   type SupportedOnboardingProvider,
@@ -40,6 +42,7 @@ export interface AddCustomProviderInput {
   /** Per-provider TLS verification opt-out (#229). Built-in providers
    *  force-ignore this flag at runtime. */
   tlsRejectUnauthorized?: boolean;
+  modelDiscoveryMode?: ProviderModelDiscoveryMode;
   setAsActive: boolean;
 }
 
@@ -59,6 +62,7 @@ export interface UpdateProviderInput {
   /** Tri-state: `true`/`false` writes the field; `null` clears it back to
    *  the default (strict TLS); `undefined` leaves the existing value alone. */
   tlsRejectUnauthorized?: boolean | null;
+  modelDiscoveryMode?: ProviderModelDiscoveryMode;
 }
 
 const SAVE_KEY_FIELDS = ['provider', 'apiKey', 'modelPrimary', 'baseUrl'] as const;
@@ -74,6 +78,7 @@ const ADD_PROVIDER_FIELDS = [
   'queryParams',
   'envKey',
   'tlsRejectUnauthorized',
+  'modelDiscoveryMode',
   'setAsActive',
 ] as const;
 const UPDATE_PROVIDER_FIELDS = [
@@ -87,6 +92,7 @@ const UPDATE_PROVIDER_FIELDS = [
   'reasoningLevel',
   'apiKey',
   'tlsRejectUnauthorized',
+  'modelDiscoveryMode',
 ] as const;
 
 function assertKnownFields(
@@ -146,6 +152,18 @@ function validOptionalUrl(value: unknown, field: string): string | undefined {
   }
   if (value.trim().length === 0) return undefined;
   return validUrl(value, field);
+}
+
+function parseOptionalDiscoveryMode(value: unknown): ProviderModelDiscoveryMode | undefined {
+  if (value === undefined) return undefined;
+  const parsed = ProviderModelDiscoveryModeSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new CodesignError(
+      `Unsupported modelDiscoveryMode: ${String(value)}`,
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  return parsed.data;
 }
 
 function validRequiredUrl(value: unknown, field: string): string {
@@ -322,6 +340,8 @@ export function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
     }
     out.tlsRejectUnauthorized = r['tlsRejectUnauthorized'];
   }
+  const discoveryMode = parseOptionalDiscoveryMode(r['modelDiscoveryMode']);
+  if (discoveryMode !== undefined) out.modelDiscoveryMode = discoveryMode;
   return out;
 }
 
@@ -398,5 +418,7 @@ export function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
     }
     out.tlsRejectUnauthorized = r['tlsRejectUnauthorized'];
   }
+  const discoveryMode = parseOptionalDiscoveryMode(r['modelDiscoveryMode']);
+  if (discoveryMode !== undefined) out.modelDiscoveryMode = discoveryMode;
   return out;
 }

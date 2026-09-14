@@ -112,6 +112,10 @@ describe('readGeminiCliConfig', () => {
     expect(out.provider.baseUrl).toBe(GEMINI_OPENAI_COMPAT_BASE_URL);
     expect(out.provider.defaultModel).toBe(GEMINI_DEFAULT_MODEL);
     expect(out.provider.envKey).toBe('GEMINI_API_KEY');
+    expect(out.provider.capabilities).toMatchObject({
+      modelDiscoveryMode: 'models',
+      supportsModelsEndpoint: true,
+    });
     expect(out.warnings).toEqual([]);
   });
 

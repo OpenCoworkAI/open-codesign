@@ -389,6 +389,7 @@
         "discoveryFailed": "No se pudieron auto-descubrir los modelos",
         "test": "Probar conexión",
         "testOk": "OK — {{count}} modelos disponibles",
+        "testOkNoListing": "Sin listado de modelos — introduce un ID. La inferencia puede seguir funcionando.",
         "save": "Guardar y continuar",
         "saveEdit": "Guardar cambios"
       },
@@ -481,7 +482,14 @@
         "reasoningSaved": "Profundidad de razonamiento guardada",
         "reasoningSaveFailed": "Error al guardar la profundidad de razonamiento",
         "connectionOk": "Conexión OK",
+        "connectionOkDegraded": "Conectado — no hay listado de modelos; la inferencia sigue funcionando",
         "connectionFailed": "Conexión fallida"
+      },
+      "discovery": {
+        "manualHint": "Los ID de modelo se introducen manualmente para este proveedor.",
+        "inferOnlyHint": "Este proveedor no lista modelos — introduce un ID. La inferencia puede seguir funcionando.",
+        "staticHint": "Modelos conocidos de este proveedor. Aún puedes introducir otro ID.",
+        "enterModelId": "model-id"
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
@@ -986,6 +994,7 @@
       "timedOut": "Tiempo de espera de la solicitud agotado — revisa el cortafuegos o VPN.",
       "corsError": "Error de CORS (no debería pasar en el proceso principal). Esto es un error.",
       "sslError": "Error de SSL / certificado (¿certificado autofirmado o CA privada?). Actívalo en Ajustes → Proveedores → este proveedor → Desactivar verificación TLS para conectarte a endpoints internos de confianza.",
+      "modelsListingNotApplicable": "Este proveedor no expone un endpoint de listado de modelos. Es esperado: introduce un ID y usa la inferencia en lugar de tratar la ausencia de /models como un fallo duro.",
       "gatewayIncompatible": "La pasarela aceptó la conexión pero no implementa la API de este proveedor. Intenta cambiar de protocolo (ej. openai-chat).",
       "gatewayWafBlocked": "La pasarela o el proxy inverso bloqueó la generación antes de llegar al modelo. Test Connection puede pasar porque solo prueba el endpoint /models.",
       "openaiResponsesMisconfigured": "El punto final rechazó la forma de la solicitud. El protocolo puede ser incorrecto — intenta cambiar a openai-chat.",

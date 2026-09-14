@@ -5,6 +5,7 @@ import {
   ERROR_CODES,
   hydrateConfig,
   isSupportedOnboardingProvider,
+  mergeDiscoveryMode,
   modelsEndpointUrl,
   type OnboardingState,
   type ProviderEntry,
@@ -215,6 +216,9 @@ export async function runAddCustomProvider(
     ...(input.queryParams !== undefined ? { queryParams: input.queryParams } : {}),
     ...(input.envKey !== undefined ? { envKey: input.envKey } : {}),
     ...(input.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
+    ...(input.modelDiscoveryMode !== undefined
+      ? { capabilities: mergeDiscoveryMode(undefined, input.modelDiscoveryMode) }
+      : {}),
   };
   const secretRef = buildSecretRef(input.apiKey);
   const nextProviders = { ...(cachedConfig?.providers ?? {}), [entry.id]: entry };
@@ -277,6 +281,9 @@ export async function runUpdateProvider(input: UpdateProviderInput): Promise<Onb
     updated.tlsRejectUnauthorized = undefined;
   } else if (input.tlsRejectUnauthorized === true) {
     updated.tlsRejectUnauthorized = true;
+  }
+  if (input.modelDiscoveryMode !== undefined) {
+    updated.capabilities = mergeDiscoveryMode(updated.capabilities, input.modelDiscoveryMode);
   }
   // Secret rotation: only touch secrets when the caller explicitly supplied
   // an apiKey field. Empty string clears the secret (keyless providers);

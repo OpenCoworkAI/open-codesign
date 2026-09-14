@@ -7,6 +7,7 @@ import {
   type ModelRef,
   PROVIDER_SHORTLIST,
   type ProviderEntry,
+  type ProviderModelDiscoveryMode,
   type ReasoningLevel,
   resolveProviderCapabilities,
   type WireApi,
@@ -32,6 +33,11 @@ export interface ProviderRow {
   /** Per-provider TLS verification opt-out (#229). Only surfaced for
    *  custom / imported providers; the runtime force-ignores it on built-ins. */
   tlsRejectUnauthorized?: boolean;
+  /** How this provider discovers model IDs. Drives Settings picker UX and
+   *  whether `models:v1:list-for-provider` hits GET /models. */
+  modelDiscoveryMode: ProviderModelDiscoveryMode;
+  /** Static catalog used when `modelDiscoveryMode` is `static-hint`. */
+  modelsHint?: string[];
   error?: 'decryption_failed' | string;
 }
 
@@ -160,6 +166,11 @@ export function toProviderRows(
       // Missing secrets count as configured only for providers that explicitly
       // declare keyless mode in their ProviderEntry/capabilities.
       hasKey: ref !== undefined || isKeylessProviderAllowed(provider, entry),
+      modelDiscoveryMode: resolveProviderCapabilities(provider, entry ?? { wire: 'openai-chat' })
+        .modelDiscoveryMode,
+      ...(entry?.modelsHint !== undefined && entry.modelsHint.length > 0
+        ? { modelsHint: entry.modelsHint }
+        : {}),
       ...(entry?.reasoningLevel !== undefined ? { reasoningLevel: entry.reasoningLevel } : {}),
       ...(entry?.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
       ...(rowError !== undefined ? { error: rowError } : {}),

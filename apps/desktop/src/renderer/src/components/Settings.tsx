@@ -14,7 +14,7 @@ export { resolveTimeoutOptions, TIMEOUT_OPTION_SECONDS } from './settings/Advanc
 // Re-exports so Settings.test.ts keeps its public entry points. The actual
 // implementations live in the per-tab modules.
 export { applyLocaleChange } from './settings/AppearanceTab';
-export { computeModelOptions } from './settings/primitives';
+export { computeModelOptions, settingsModelPickerState } from './settings/primitives';
 
 type Tab = 'models' | 'images' | 'appearance' | 'workspace' | 'memory' | 'diagnostics' | 'advanced';
 

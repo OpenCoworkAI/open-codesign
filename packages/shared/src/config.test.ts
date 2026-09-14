@@ -498,4 +498,55 @@ describe('provider capability helpers', () => {
     expect(caps.supportsModelsEndpoint).toBe(false);
     expect(caps.modelDiscoveryMode).toBe('manual');
   });
+
+  it('accepts infer-only as a declared discovery mode', () => {
+    const parsed = ConfigV3Schema.parse({
+      version: 3,
+      activeProvider: 'glm',
+      activeModel: 'glm-4.6',
+      secrets: {},
+      providers: {
+        glm: {
+          id: 'glm',
+          name: 'GLM',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+          defaultModel: 'glm-4.6',
+          capabilities: {
+            supportsModelsEndpoint: false,
+            modelDiscoveryMode: 'infer-only',
+          },
+        },
+      },
+    });
+    expect(parsed.providers['glm']?.capabilities?.modelDiscoveryMode).toBe('infer-only');
+  });
+
+  it('derives infer-only when listing is explicitly disabled without a hint', () => {
+    const caps = resolveProviderCapabilities('custom-proxy', {
+      wire: 'openai-chat',
+      capabilities: { supportsModelsEndpoint: false },
+    });
+    expect(caps.modelDiscoveryMode).toBe('infer-only');
+    expect(caps.supportsModelsEndpoint).toBe(false);
+  });
+
+  it('derives static-hint for openai-codex-responses even without modelsHint', () => {
+    const caps = defaultProviderCapabilities('chatgpt-codex', {
+      wire: 'openai-codex-responses',
+      requiresApiKey: false,
+    });
+    expect(caps.modelDiscoveryMode).toBe('static-hint');
+    expect(caps.supportsModelsEndpoint).toBe(false);
+  });
+
+  it('syncs supportsModelsEndpoint when only modelDiscoveryMode is overridden', () => {
+    const caps = resolveProviderCapabilities('custom-lite', {
+      wire: 'openai-chat',
+      capabilities: { modelDiscoveryMode: 'infer-only' },
+    });
+    expect(caps.modelDiscoveryMode).toBe('infer-only');
+    expect(caps.supportsModelsEndpoint).toBe(false);
+  });
 });

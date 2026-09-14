@@ -30,6 +30,10 @@ wire_api = "chat"
     expect(entry?.baseUrl).toBe('https://api.deepseek.com/v1');
     expect(entry?.envKey).toBe('DEEPSEEK_API_KEY');
     expect(entry?.defaultModel).toBe('deepseek-chat');
+    expect(entry?.capabilities).toMatchObject({
+      modelDiscoveryMode: 'infer-only',
+      supportsModelsEndpoint: false,
+    });
     expect(out.activeProvider).toBe('codex-deepseek');
     expect(out.activeModel).toBe('deepseek-chat');
   });
