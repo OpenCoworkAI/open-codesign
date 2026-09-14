@@ -2,7 +2,7 @@ import { useT } from '@open-codesign/i18n';
 import { canonicalBaseUrl, detectWireFromBaseUrl, type WireApi } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
 import { AlertCircle, Check, CheckCircle, Loader2, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Props {
   onSave: () => void;
@@ -19,6 +19,12 @@ interface Props {
     baseUrl?: string;
     wire?: WireApi;
     defaultModel?: string;
+    /** When 'litellm', show LiteLLM-specific proxy-key / keyless help copy. */
+    helpPreset?: 'litellm';
+    /** Allow saving without an API key (keyless / IP-allowlist gateways). */
+    supportsKeyless?: boolean;
+    /** Pre-check the private-network confirmation for localhost presets. */
+    allowPrivateNetwork?: boolean;
   };
   /**
    * Edit-mode: pre-fill every field from an existing provider and save via
@@ -78,6 +84,7 @@ export function buildEndpointDiscoveryPayload(
   baseUrl: string,
   allowPrivateNetwork: boolean,
   tlsRejectUnauthorized = false,
+  apiKey = '',
 ): {
   wire: WireApi;
   baseUrl: string;
@@ -88,7 +95,7 @@ export function buildEndpointDiscoveryPayload(
   return {
     wire,
     baseUrl: baseUrl.trim(),
-    apiKey: '',
+    apiKey: apiKey.trim(),
     allowPrivateNetwork,
     ...(tlsRejectUnauthorized ? { tlsRejectUnauthorized: true } : {}),
   };
@@ -124,7 +131,9 @@ export function AddCustomProviderModal({
   const [test, setTest] = useState<TestState>({ kind: 'idle' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [allowPrivateNetwork, setAllowPrivateNetwork] = useState(false);
+  const [allowPrivateNetwork, setAllowPrivateNetwork] = useState(
+    initialValues?.allowPrivateNetwork === true,
+  );
   // Per-provider TLS verification opt-out. Gated to non-builtin entries
   // because connection-ipc / generate.ts force-ignore the flag for builtins.
   const [tlsRejectUnauthorized, setTlsRejectUnauthorized] = useState(
@@ -139,6 +148,11 @@ export function AddCustomProviderModal({
   const [manualModel, setManualModel] = useState(false);
   // Track whether user has explicitly typed/picked a model so auto-pick doesn't override it.
   const userPickedModel = useRef(false);
+  const supportsKeyless = initialValues?.supportsKeyless === true;
+  const isLiteLLMPreset =
+    initialValues?.helpPreset === 'litellm' ||
+    (editTarget?.id.toLowerCase().includes('litellm') ?? false) ||
+    (editTarget?.name.toLowerCase().includes('litellm') ?? false);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discoverySeq = useRef(0);
@@ -147,6 +161,7 @@ export function AddCustomProviderModal({
     currentBaseUrl: string,
     currentWire: WireApi,
     privateNetworkAllowed = allowPrivateNetwork,
+    currentApiKey = apiKey,
   ) {
     if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
     if (!currentBaseUrl.trim().match(/^https?:\/\//)) {
@@ -155,7 +170,7 @@ export function AddCustomProviderModal({
       return;
     }
     debounceTimer.current = setTimeout(() => {
-      void runDiscovery(currentBaseUrl, currentWire, privateNetworkAllowed);
+      void runDiscovery(currentBaseUrl, currentWire, privateNetworkAllowed, currentApiKey);
     }, 500);
   }
 
@@ -163,6 +178,7 @@ export function AddCustomProviderModal({
     currentBaseUrl: string,
     currentWire: WireApi,
     privateNetworkAllowed = allowPrivateNetwork,
+    currentApiKey = apiKey,
   ) {
     if (!window.codesign?.config) return;
     const seq = ++discoverySeq.current;
@@ -174,6 +190,7 @@ export function AddCustomProviderModal({
           currentBaseUrl,
           privateNetworkAllowed,
           tlsRejectUnauthorized,
+          currentApiKey,
         ),
       );
       if (seq !== discoverySeq.current) return;
@@ -200,7 +217,19 @@ export function AddCustomProviderModal({
 
   function handleApiKeyChange(v: string) {
     setApiKey(v);
+    setTest({ kind: 'idle' });
+    scheduleDiscovery(baseUrl, wire, allowPrivateNetwork, v);
   }
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: preset-prefilled URLs should discover models on open
+  useEffect(() => {
+    if (baseUrl.trim().match(/^https?:\/\//)) {
+      scheduleDiscovery(baseUrl, wire);
+    }
+    return () => {
+      if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
+    };
+  }, []);
 
   function handleWireChange(v: WireApi) {
     setWire(v);
@@ -314,6 +343,7 @@ export function AddCustomProviderModal({
           defaultModel: defaultModel.trim(),
           setAsActive: initialSetAsActive,
           ...(tlsRejectUnauthorized ? { tlsRejectUnauthorized: true } : {}),
+          ...(supportsKeyless ? { requiresApiKey: false } : {}),
         });
       }
       onSave();
@@ -327,12 +357,11 @@ export function AddCustomProviderModal({
   const canTest = baseUrl.trim().length > 0 && test.kind !== 'testing';
   const canSave = (() => {
     if (saving) return false;
-    if (isEdit) {
-      // In edit mode, require at least the mandatory fields still hold values
-      // — but don't require the user to re-enter the API key.
-      return baseUrl.trim().length > 0 && defaultModel.trim().length > 0 && name.trim().length > 0;
-    }
-    return canTest && defaultModel.trim().length > 0 && name.trim().length > 0;
+    const hasBasics =
+      baseUrl.trim().length > 0 && defaultModel.trim().length > 0 && name.trim().length > 0;
+    if (isEdit) return hasBasics;
+    if (!supportsKeyless && apiKey.trim().length === 0) return false;
+    return hasBasics;
   })();
 
   const title = isEdit
@@ -371,6 +400,15 @@ export function AddCustomProviderModal({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {isLiteLLMPreset && (
+          <div className="rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3 py-2 text-[var(--text-xs)] text-[var(--color-text-secondary)]">
+            <p className="font-medium text-[var(--color-text-primary)]">
+              {t('settings.providers.litellmGateway.helpTitle')}
+            </p>
+            <p className="mt-1 leading-5">{t('settings.providers.litellmGateway.helpBody')}</p>
+          </div>
+        )}
 
         {!lockEndpoint && (
           <Field label={t('settings.providers.custom.wire')}>
@@ -475,9 +513,16 @@ export function AddCustomProviderModal({
                 ? t('settings.providers.custom.apiKeyEditPlaceholder', {
                     mask: editTarget.keyMask,
                   })
-                : 'sk-...'
+                : isLiteLLMPreset
+                  ? t('settings.providers.litellmGateway.apiKeyPlaceholder')
+                  : 'sk-...'
             }
           />
+          {isLiteLLMPreset && (
+            <p className="mt-1.5 text-[var(--text-xs)] text-[var(--color-text-muted)] leading-5">
+              {t('settings.providers.litellmGateway.apiKeyOptional')}
+            </p>
+          )}
         </Field>
 
         <Field

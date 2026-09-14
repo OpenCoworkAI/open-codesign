@@ -123,6 +123,35 @@ describe('diagnose', () => {
     expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.disableTls');
   });
 
+  it('maps LiteLLM 401/403 to proxy-key vs keyless allowlist hints', () => {
+    const result = diagnose('401', {
+      provider: 'custom-litellm-gateway-ab12',
+      baseUrl: 'http://localhost:4000/v1',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.litellmAuth');
+    expect(result[0]?.category).toBe('auth');
+    expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.litellmCheckKeyOrAllowlist');
+  });
+
+  it('maps LiteLLM ECONNREFUSED to a start-gateway hint', () => {
+    const result = diagnose('ECONNREFUSED', {
+      provider: 'openai',
+      baseUrl: 'http://127.0.0.1:4000/v1',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.litellmUnreachable');
+    expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.litellmStartGateway');
+  });
+
+  it('maps LiteLLM /v1 404 to models-disabled rather than add-/v1', () => {
+    const result = diagnose('404', {
+      provider: 'custom-litellm-gateway-ab12',
+      baseUrl: 'http://localhost:4000/v1',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.litellmModelsDisabled');
+    expect(result[0]?.category).toBe('model-discovery-degraded');
+    expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.litellmEnterModelManually');
+  });
+
   it('maps unknown codes to generic unknown cause', () => {
     const result = diagnose('SOME_UNKNOWN_CODE', baseCtx);
     expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
@@ -144,6 +173,16 @@ describe('diagnose', () => {
 
 describe('diagnoseGenerateFailure', () => {
   const ctx = { provider: 'openai', baseUrl: 'https://relay.example.com' };
+
+  it('maps LiteLLM generate 401 onto the gateway-specific auth hint', () => {
+    const result = diagnoseGenerateFailure({
+      provider: 'custom-litellm-gateway-ab12',
+      baseUrl: 'http://localhost:4000/v1',
+      status: 401,
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.litellmAuth');
+    expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.litellmCheckKeyOrAllowlist');
+  });
 
   it('maps 404 to missingV1 with an /v1 baseUrl transform', () => {
     const result = diagnoseGenerateFailure({ ...ctx, status: 404 });

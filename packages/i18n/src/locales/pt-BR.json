@@ -468,6 +468,14 @@
         "discoveringModels": "Descobrindo modelos...",
         "discoveredModels": "{{count}} modelos encontrados",
         "discoveryFailed": "Não foi possível conectar ao CPA"
+      },
+      "litellmGateway": {
+        "presetName": "LiteLLM Gateway",
+        "presetDescription": "Gateway compatível com OpenAI — chave de proxy ou sem chave / lista de IPs",
+        "helpTitle": "Conecte-se a um gateway LiteLLM existente",
+        "helpBody": "O Open CoDesign não inclui o LiteLLM. Aponte este preset para um gateway que você já hospeda. O wire padrão é OpenAI Chat em http://localhost:4000/v1; edite a URL para um deploy remoto. Cole uma chave de proxy (master ou virtual) se o gateway exigir, ou deixe vazia para deploys sem chave / lista de IPs. Se /models estiver disponível, escolha um modelo descoberto; senão, informe o id manualmente.",
+        "apiKeyOptional": "Opcional. Deixe vazio para LiteLLM sem chave ou com lista de IPs. Cole LITELLM_MASTER_KEY ou uma chave virtual quando o gateway exigir autenticação.",
+        "apiKeyPlaceholder": "Chave de proxy (opcional)"
       }
     },
     "appearance": {
@@ -940,14 +948,17 @@
     "mostLikelyCause": "Causa mais provável:",
     "cause": {
       "keyInvalid": "Chave de API inválida ou revogada.",
+      "litellmAuth": "O LiteLLM rejeitou a solicitação. Se este gateway usa uma chave de proxy, cole LITELLM_MASTER_KEY ou uma chave virtual. Se for sem chave / lista de IPs, deixe a chave vazia e confirme que este app está na lista de permissão.",
       "balanceEmpty": "O saldo da conta está vazio.",
       "missingV1": "O caminho da URL base provavelmente não tem o sufixo /v1.",
       "rateLimit": "Limite de requisições excedido.",
       "hostUnreachable": "Não foi possível acessar o host — verifique domínio, porta ou VPN.",
+      "litellmUnreachable": "Não foi possível acessar o gateway LiteLLM. O LiteLLM não está incluído — inicie o proxy que você já hospeda (padrão http://localhost:4000) ou atualize a URL base.",
       "timedOut": "Tempo da requisição esgotado — verifique firewall ou VPN.",
       "corsError": "Erro de CORS (não deveria acontecer no processo principal). Isso é um bug.",
       "sslError": "Erro de SSL / certificado (certificado autoassinado ou CA privada?). Ative em Configurações → Provedores → este provedor → Desativar verificação TLS para conectar a endpoints internos confiáveis.",
       "endpointNotFound": "A URL base já contém um caminho de versão, mas o provedor não expôs esta rota.",
+      "litellmModelsDisabled": "Este gateway LiteLLM não expôs /models. Informe um id de modelo conhecido ou habilite a listagem de modelos no gateway.",
       "gatewayIncompatible": "O gateway aceitou a conexão, mas não implementa a API deste provedor. Tente trocar o wire, por exemplo para openai-chat.",
       "gatewayWafBlocked": "O gateway ou proxy reverso bloqueou a geração antes de ela chegar ao modelo. Test Connection ainda pode passar porque só verifica o endpoint /models.",
       "openaiResponsesMisconfigured": "O endpoint rejeitou o formato da requisição. O wire pode estar errado; tente openai-chat.",
@@ -966,6 +977,9 @@
     },
     "fix": {
       "updateKey": "Atualizar chave",
+      "litellmCheckKeyOrAllowlist": "Verificar chave de proxy ou lista de IPs",
+      "litellmStartGateway": "Iniciar LiteLLM ou atualizar URL",
+      "litellmEnterModelManually": "Informar um id de modelo",
       "addCredits": "Adicionar créditos →",
       "addCreditsGeneric": "Veja a página de faturamento do seu provedor",
       "addV1": "Adicionar /v1",
@@ -990,6 +1004,8 @@
     "showLogFailed": "Falha ao abrir a pasta de logs",
     "gatewayAllowlistHintTitle": "Este endpoint pode restringir quais apps podem se conectar",
     "gatewayAllowlistHintBody": "Alguns coding plans e gateways de conversão de protocolo mantêm uma lista de apps permitidos. Mesmo anunciando uma API compatível com OpenAI, eles ainda podem recusar o Open CoDesign se este app não estiver explicitamente liberado.",
+    "litellmHintTitle": "Notas do gateway LiteLLM",
+    "litellmHintBody": "O LiteLLM não está incluído. Use uma chave de proxy (master/virtual) quando o gateway exigir autenticação, ou deixe vazia para deploys sem chave / lista de IPs. A descoberta de modelos usa GET /v1/models quando o gateway expõe isso; senão, informe o id manualmente.",
     "dismiss": "Dispensar",
     "report": {
       "title": "Reportar um bug",

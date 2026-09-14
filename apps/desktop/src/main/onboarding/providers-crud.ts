@@ -204,6 +204,7 @@ export async function runAddCustomProvider(
   input: AddCustomProviderInput,
 ): Promise<OnboardingState> {
   const cachedConfig = getCachedConfig();
+  const allowKeyless = input.requiresApiKey === false;
   const entry: ProviderEntry = {
     id: input.id,
     name: input.name,
@@ -215,10 +216,13 @@ export async function runAddCustomProvider(
     ...(input.queryParams !== undefined ? { queryParams: input.queryParams } : {}),
     ...(input.envKey !== undefined ? { envKey: input.envKey } : {}),
     ...(input.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
+    ...(allowKeyless ? { requiresApiKey: false } : {}),
   };
-  const secretRef = buildSecretRef(input.apiKey);
   const nextProviders = { ...(cachedConfig?.providers ?? {}), [entry.id]: entry };
-  const nextSecrets = { ...(cachedConfig?.secrets ?? {}), [entry.id]: secretRef };
+  const nextSecrets = { ...(cachedConfig?.secrets ?? {}) };
+  if (input.apiKey.length > 0) {
+    nextSecrets[entry.id] = buildSecretRef(input.apiKey);
+  }
   const shouldActivate = input.setAsActive || cachedConfig === null;
   const next = hydrateConfig({
     version: 3,

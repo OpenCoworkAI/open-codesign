@@ -222,7 +222,7 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 ## What you get
 
 ### Models and providers
-- **Unified provider model** — Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
+- **Unified provider model** — Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, LiteLLM Gateway, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
 - **One-click import and sign-in** — bring Claude Code / Codex API-key provider configs across, or sign in with ChatGPT subscription for Codex models
 - **Dynamic model picker** — every provider exposes its real model catalogue, not a hardcoded shortlist
 

@@ -1,6 +1,11 @@
 import { useT } from '@open-codesign/i18n';
-import type { ErrorCode } from '@open-codesign/shared';
-import { type DiagnoseContext, type DiagnosticHypothesis, diagnose } from '@open-codesign/shared';
+import {
+  type DiagnoseContext,
+  type DiagnosticHypothesis,
+  diagnose,
+  type ErrorCode,
+  looksLikeLiteLLMGateway,
+} from '@open-codesign/shared';
 import { AlertCircle, ExternalLink, FileText, RefreshCw, X } from 'lucide-react';
 import { useState } from 'react';
 import { useCodesignStore } from '../store';
@@ -40,6 +45,10 @@ function isOfficialProviderHost(hostname: string | null): boolean {
   return OFFICIAL_PROVIDER_HOST_SUFFIXES.some(
     (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
   );
+}
+
+export function shouldShowLiteLLMHint(provider: string, baseUrl: string): boolean {
+  return looksLikeLiteLLMGateway(provider, baseUrl);
 }
 
 export function shouldShowGatewayAllowlistHint(
@@ -102,6 +111,7 @@ export function ConnectionDiagnosticPanel({
       : undefined;
   const canApplyFix = suggestedUrl !== undefined || fix?.externalUrl !== undefined;
   const showGatewayAllowlistHint = shouldShowGatewayAllowlistHint(errorCode, baseUrl, attemptedUrl);
+  const showLiteLLMHint = shouldShowLiteLLMHint(provider, baseUrl);
 
   function handleApplyFix() {
     if (suggestedUrl !== undefined) {
@@ -180,6 +190,16 @@ export function ConnectionDiagnosticPanel({
           <p className="font-mono text-[var(--text-xs)] text-[var(--color-accent)] break-all">
             {t('diagnostics.fix.addV1')}: {suggestedUrl}
           </p>
+        )}
+        {showLiteLLMHint && (
+          <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2">
+            <p className="font-medium text-[var(--color-text-primary)]">
+              {t('diagnostics.litellmHintTitle')}
+            </p>
+            <p className="mt-1 text-[var(--text-xs)] leading-5">
+              {t('diagnostics.litellmHintBody')}
+            </p>
+          </div>
         )}
         {showGatewayAllowlistHint && (
           <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2">

@@ -489,6 +489,14 @@
         "apiKeyOptional": "Clave API solo requerida si configuraste `api-keys` en config.yaml de CPA",
         "thinkingHint": "Consejo: añade `(high)` / `(xhigh)` / `(8192)` al nombre del modelo para controlar el presupuesto de razonamiento"
       },
+      "litellmGateway": {
+        "presetName": "LiteLLM Gateway",
+        "presetDescription": "Pasarela compatible con OpenAI — clave proxy o sin clave / lista de IPs",
+        "helpTitle": "Conéctate a una pasarela LiteLLM existente",
+        "helpBody": "Open CoDesign no incluye LiteLLM. Apunta este ajuste a una pasarela que ya alojas. El protocolo predeterminado es OpenAI Chat en http://localhost:4000/v1; cambia la URL para un despliegue remoto. Pega una clave proxy (master o virtual) si la pasarela la exige, o déjala vacía para despliegues sin clave / lista de IPs. Si /models está disponible, elige un modelo descubierto; si no, introduce el id manualmente.",
+        "apiKeyOptional": "Opcional. Déjala vacía para LiteLLM sin clave o con lista de IPs. Pega LITELLM_MASTER_KEY o una clave virtual cuando la pasarela exija autenticación.",
+        "apiKeyPlaceholder": "Clave proxy (opcional)"
+      },
       "cpaDetection": {
         "title": "CLIProxyAPI detectado en tu máquina",
         "body": "Impórtalo como proveedor para usar tus cuentas de Claude / Codex / Gemini autenticadas por OAuth.",
@@ -979,13 +987,16 @@
     "mostLikelyCause": "Causa más probable:",
     "cause": {
       "keyInvalid": "Clave API inválida o revocada.",
+      "litellmAuth": "LiteLLM rechazó la solicitud. Si esta pasarela usa una clave proxy, pega LITELLM_MASTER_KEY o una clave virtual. Si es sin clave / lista de IPs, deja la clave vacía y confirma que esta app está permitida.",
       "balanceEmpty": "El saldo de la cuenta está vacío.",
       "missingV1": "Probablemente falte el sufijo /v1 en la ruta de la URL base.",
       "rateLimit": "Límite de tasa excedido.",
       "hostUnreachable": "No se puede alcanzar el host — revisa dominio, puerto o VPN.",
+      "litellmUnreachable": "No se puede alcanzar la pasarela LiteLLM. LiteLLM no está incluido — inicia tu proxy existente (predeterminado http://localhost:4000) o actualiza la URL base.",
       "timedOut": "Tiempo de espera de la solicitud agotado — revisa el cortafuegos o VPN.",
       "corsError": "Error de CORS (no debería pasar en el proceso principal). Esto es un error.",
       "sslError": "Error de SSL / certificado (¿certificado autofirmado o CA privada?). Actívalo en Ajustes → Proveedores → este proveedor → Desactivar verificación TLS para conectarte a endpoints internos de confianza.",
+      "litellmModelsDisabled": "Esta pasarela LiteLLM no expuso /models. Introduce un id de modelo conocido o habilita el listado de modelos en la pasarela.",
       "gatewayIncompatible": "La pasarela aceptó la conexión pero no implementa la API de este proveedor. Intenta cambiar de protocolo (ej. openai-chat).",
       "gatewayWafBlocked": "La pasarela o el proxy inverso bloqueó la generación antes de llegar al modelo. Test Connection puede pasar porque solo prueba el endpoint /models.",
       "openaiResponsesMisconfigured": "El punto final rechazó la forma de la solicitud. El protocolo puede ser incorrecto — intenta cambiar a openai-chat.",
@@ -1004,6 +1015,9 @@
     },
     "fix": {
       "updateKey": "Actualizar clave",
+      "litellmCheckKeyOrAllowlist": "Revisar clave proxy o lista de IPs",
+      "litellmStartGateway": "Iniciar LiteLLM o actualizar URL",
+      "litellmEnterModelManually": "Introducir un id de modelo",
       "addCredits": "Agregar créditos →",
       "addCreditsGeneric": "Revisa la página de facturación de tu proveedor",
       "addV1": "Agregar /v1",
@@ -1028,6 +1042,8 @@
     "showLogFailed": "Error al abrir la carpeta de registros",
     "gatewayAllowlistHintTitle": "Este punto final puede restringir qué aplicaciones pueden conectarse",
     "gatewayAllowlistHintBody": "Algunos planes de programación y pasarelas de conversión de protocolos mantienen una lista de aplicaciones permitidas. Incluso cuando anuncian una API compatible con OpenAI, podrían rechazar Open CoDesign a menos que esta app esté explícitamente permitida.",
+    "litellmHintTitle": "Notas de pasarela LiteLLM",
+    "litellmHintBody": "LiteLLM no está incluido. Usa una clave proxy (master/virtual) si la pasarela exige autenticación, o déjala vacía para despliegues sin clave / lista de IPs. El descubrimiento de modelos usa GET /v1/models cuando la pasarela lo expone; si no, introduce el id manualmente.",
     "dismiss": "Descartar",
     "report": {
       "title": "Reportar un error",

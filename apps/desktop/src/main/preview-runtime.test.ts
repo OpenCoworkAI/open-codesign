@@ -7,6 +7,7 @@ import {
   isPreviewFileUrlAllowed,
   isRuntimeConsoleNoise,
   isRuntimeOptionalFontUrl,
+  PREVIEW_CHROME_LAUNCH_TIMEOUT_MS,
   runPreview,
 } from './preview-runtime';
 
@@ -27,6 +28,10 @@ async function canRunChrome(): Promise<boolean> {
 const chromeAvailable = await canRunChrome();
 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
 const describeIfChrome = chromeAvailable ? describe : describe.skip;
+// Real Chrome (unlike the mocked exporter tests). Budget must exceed
+// puppeteer's launch timeout plus navigation/settle, or a cold CI start
+// is reported as "Test timed out" instead of a Chrome error.
+const CHROME_TEST_TIMEOUT_MS = 90_000;
 
 let tempDir = '';
 
@@ -39,6 +44,10 @@ afterAll(() => {
 });
 
 describe('runPreview path guards', () => {
+  it('keeps the Chrome test budget above the launch timeout', () => {
+    expect(CHROME_TEST_TIMEOUT_MS).toBeGreaterThan(PREVIEW_CHROME_LAUNCH_TIMEOUT_MS);
+  });
+
   it('refuses paths that escape the workspace', async () => {
     const result = await runPreview({
       path: '../etc/passwd',
@@ -187,164 +196,210 @@ describe('runtime noise filtering', () => {
 });
 
 describeIfChrome('runPreview with real Chrome', () => {
-  it('captures console errors from the rendered page', async () => {
-    const file = join(tempDir, 'boom.html');
-    writeFileSync(
-      file,
-      '<!doctype html><html><body><h1>Hi</h1><script>console.error("boom");</script></body></html>',
-      'utf8',
-    );
-    const result = await runPreview({
-      path: 'boom.html',
+  beforeAll(async () => {
+    const file = join(tempDir, '__chrome-warmup.html');
+    writeFileSync(file, '<!doctype html><title>warmup</title>', 'utf8');
+    await runPreview({
+      path: '__chrome-warmup.html',
       vision: false,
       workspaceRoot: tempDir,
     });
-    expect(result.consoleErrors.some((e) => /boom/.test(e.message))).toBe(true);
-    expect(result.metrics.nodes).toBeGreaterThan(0);
-  }, 30_000);
+  }, CHROME_TEST_TIMEOUT_MS);
 
-  it('returns a DOM outline (not a screenshot) when vision=false', async () => {
-    const file = join(tempDir, 'plain.html');
-    writeFileSync(
-      file,
-      '<!doctype html><html><body><main><section><p>A</p></section></main></body></html>',
-      'utf8',
-    );
-    const result = await runPreview({
-      path: 'plain.html',
-      vision: false,
-      workspaceRoot: tempDir,
-    });
-    expect(result.screenshot).toBeUndefined();
-    expect(typeof result.domOutline).toBe('string');
-    expect((result.domOutline ?? '').length).toBeGreaterThan(0);
-  }, 30_000);
+  it(
+    'captures console errors from the rendered page',
+    async () => {
+      const file = join(tempDir, 'boom.html');
+      writeFileSync(
+        file,
+        '<!doctype html><html><body><h1>Hi</h1><script>console.error("boom");</script></body></html>',
+        'utf8',
+      );
+      const result = await runPreview({
+        path: 'boom.html',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+      expect(result.consoleErrors.some((e) => /boom/.test(e.message))).toBe(true);
+      expect(result.metrics.nodes).toBeGreaterThan(0);
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it('resolves relative scripts from HTML files against the workspace', async () => {
-    writeFileSync(
-      join(tempDir, 'relative.html'),
-      '<!doctype html><html><body><div id="root"></div><script src="./relative.js"></script></body></html>',
-      'utf8',
-    );
-    writeFileSync(
-      join(tempDir, 'relative.js'),
-      'document.getElementById("root").innerHTML = "<main id=\\"relative-root\\">Relative</main>";',
-      'utf8',
-    );
-    const result = await runPreview({
-      path: 'relative.html',
-      vision: false,
-      workspaceRoot: tempDir,
-    });
-    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
-    expect(result.domOutline).toContain('main#relative-root');
-  }, 30_000);
+  it(
+    'returns a DOM outline (not a screenshot) when vision=false',
+    async () => {
+      const file = join(tempDir, 'plain.html');
+      writeFileSync(
+        file,
+        '<!doctype html><html><body><main><section><p>A</p></section></main></body></html>',
+        'utf8',
+      );
+      const result = await runPreview({
+        path: 'plain.html',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+      expect(result.screenshot).toBeUndefined();
+      expect(typeof result.domOutline).toBe('string');
+      expect((result.domOutline ?? '').length).toBeGreaterThan(0);
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it('renders standalone JSX files through the preview runtime', async () => {
-    writeFileSync(
-      join(tempDir, 'App.jsx'),
-      'function App() { return <main id="jsx-root">Hello JSX</main>; }',
-      'utf8',
-    );
-    const result = await runPreview({
-      path: 'App.jsx',
-      vision: false,
-      workspaceRoot: tempDir,
-    });
-    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
-    expect(result.domOutline).toContain('main#jsx-root');
-  }, 30_000);
+  it(
+    'resolves relative scripts from HTML files against the workspace',
+    async () => {
+      writeFileSync(
+        join(tempDir, 'relative.html'),
+        '<!doctype html><html><body><div id="root"></div><script src="./relative.js"></script></body></html>',
+        'utf8',
+      );
+      writeFileSync(
+        join(tempDir, 'relative.js'),
+        'document.getElementById("root").innerHTML = "<main id=\\"relative-root\\">Relative</main>";',
+        'utf8',
+      );
+      const result = await runPreview({
+        path: 'relative.html',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+      expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+      expect(result.domOutline).toContain('main#relative-root');
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it('renders JSX saved as HTML when it uses vendored runtime components', async () => {
-    writeFileSync(
-      join(tempDir, 'RuntimeFrame.html'),
-      [
-        'function App() {',
-        '  return <IOSDevice><main id="runtime-frame-root">Inside iOS frame</main></IOSDevice>;',
-        '}',
-        'ReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
-      ].join('\n'),
-      'utf8',
-    );
-    const result = await runPreview({
-      path: 'RuntimeFrame.html',
-      vision: false,
-      workspaceRoot: tempDir,
-    });
-    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
-    expect(result.metrics.nodes).toBeGreaterThan(20);
-  }, 30_000);
+  it(
+    'renders standalone JSX files through the preview runtime',
+    async () => {
+      writeFileSync(
+        join(tempDir, 'App.jsx'),
+        'function App() { return <main id="jsx-root">Hello JSX</main>; }',
+        'utf8',
+      );
+      const result = await runPreview({
+        path: 'App.jsx',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+      expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+      expect(result.domOutline).toContain('main#jsx-root');
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it('renders mixed HTML + inline JSX without relying on user-added CDN runtimes', async () => {
-    writeFileSync(
-      join(tempDir, 'Mixed.html'),
-      [
-        '<!doctype html><html><head>',
-        '<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>',
-        '<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>',
-        '<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>',
-        '</head><body><div id="root"></div>',
-        '<script>function App() { return <main id="mixed-jsx-root">Mixed JSX</main>; } ReactDOM.createRoot(document.getElementById("root")).render(<App/>);</script>',
-        '</body></html>',
-      ].join('\n'),
-      'utf8',
-    );
-    const result = await runPreview({
-      path: 'Mixed.html',
-      vision: false,
-      workspaceRoot: tempDir,
-    });
-    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
-    expect(result.domOutline).toContain('main#mixed-jsx-root');
-  }, 30_000);
+  it(
+    'renders JSX saved as HTML when it uses vendored runtime components',
+    async () => {
+      writeFileSync(
+        join(tempDir, 'RuntimeFrame.html'),
+        [
+          'function App() {',
+          '  return <IOSDevice><main id="runtime-frame-root">Inside iOS frame</main></IOSDevice>;',
+          '}',
+          'ReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
+        ].join('\n'),
+        'utf8',
+      );
+      const result = await runPreview({
+        path: 'RuntimeFrame.html',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+      expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+      expect(result.metrics.nodes).toBeGreaterThan(20);
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it('does not follow source-reference-looking strings inside JSX files', async () => {
-    writeFileSync(
-      join(tempDir, 'Marker.jsx'),
-      'const marker = "<!-- artifact source lives in missing.jsx -->";\nfunction App() { return <main id="marker-root">{marker}</main>; }',
-      'utf8',
-    );
-    const result = await runPreview({
-      path: 'Marker.jsx',
-      vision: false,
-      workspaceRoot: tempDir,
-    });
-    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
-    expect(result.domOutline).toContain('main#marker-root');
-  }, 30_000);
+  it(
+    'renders mixed HTML + inline JSX without relying on user-added CDN runtimes',
+    async () => {
+      writeFileSync(
+        join(tempDir, 'Mixed.html'),
+        [
+          '<!doctype html><html><head>',
+          '<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>',
+          '<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>',
+          '<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>',
+          '</head><body><div id="root"></div>',
+          '<script>function App() { return <main id="mixed-jsx-root">Mixed JSX</main>; } ReactDOM.createRoot(document.getElementById("root")).render(<App/>);</script>',
+          '</body></html>',
+        ].join('\n'),
+        'utf8',
+      );
+      const result = await runPreview({
+        path: 'Mixed.html',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+      expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+      expect(result.domOutline).toContain('main#mixed-jsx-root');
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it('renders placeholder HTML files through their referenced JSX source', async () => {
-    writeFileSync(
-      join(tempDir, 'index.html'),
-      '<!doctype html><html><body><!-- artifact source lives in index.jsx --></body></html>',
-      'utf8',
-    );
-    writeFileSync(
-      join(tempDir, 'index.jsx'),
-      'function App() { return <main id="placeholder-jsx-root">Placeholder JSX</main>; }',
-      'utf8',
-    );
-    const result = await runPreview({
-      path: 'index.html',
-      vision: false,
-      workspaceRoot: tempDir,
-    });
-    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
-    expect(result.domOutline).toContain('main#placeholder-jsx-root');
-  }, 30_000);
+  it(
+    'does not follow source-reference-looking strings inside JSX files',
+    async () => {
+      writeFileSync(
+        join(tempDir, 'Marker.jsx'),
+        'const marker = "<!-- artifact source lives in missing.jsx -->";\nfunction App() { return <main id="marker-root">{marker}</main>; }',
+        'utf8',
+      );
+      const result = await runPreview({
+        path: 'Marker.jsx',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+      expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+      expect(result.domOutline).toContain('main#marker-root');
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 
-  it('renders standalone TSX files through the preview runtime', async () => {
-    writeFileSync(
-      join(tempDir, 'App.tsx'),
-      'function App(): JSX.Element { const label: string = "Hello TSX"; return <main id="tsx-root">{label}</main>; }',
-      'utf8',
-    );
-    const result = await runPreview({
-      path: 'App.tsx',
-      vision: false,
-      workspaceRoot: tempDir,
-    });
-    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
-    expect(result.domOutline).toContain('main#tsx-root');
-  }, 30_000);
+  it(
+    'renders placeholder HTML files through their referenced JSX source',
+    async () => {
+      writeFileSync(
+        join(tempDir, 'index.html'),
+        '<!doctype html><html><body><!-- artifact source lives in index.jsx --></body></html>',
+        'utf8',
+      );
+      writeFileSync(
+        join(tempDir, 'index.jsx'),
+        'function App() { return <main id="placeholder-jsx-root">Placeholder JSX</main>; }',
+        'utf8',
+      );
+      const result = await runPreview({
+        path: 'index.html',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+      expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+      expect(result.domOutline).toContain('main#placeholder-jsx-root');
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'renders standalone TSX files through the preview runtime',
+    async () => {
+      writeFileSync(
+        join(tempDir, 'App.tsx'),
+        'function App(): JSX.Element { const label: string = "Hello TSX"; return <main id="tsx-root">{label}</main>; }',
+        'utf8',
+      );
+      const result = await runPreview({
+        path: 'App.tsx',
+        vision: false,
+        workspaceRoot: tempDir,
+      });
+      expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+      expect(result.domOutline).toContain('main#tsx-root');
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
 });

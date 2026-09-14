@@ -2,6 +2,31 @@ import { z } from 'zod';
 
 export const PROXY_PRESET_SCHEMA_VERSION = 1 as const;
 
+/** Default LiteLLM proxy listen address. LiteLLM is not bundled — users point
+ *  this preset at an already-running gateway. */
+export const LITELLM_DEFAULT_BASE_URL = 'http://localhost:4000/v1';
+export const LITELLM_DEFAULT_WIRE = 'openai-chat' as const;
+
+/**
+ * First-class LiteLLM Gateway preset. Used by Settings → Add provider and
+ * diagnostics. Does not ship or spawn LiteLLM; it only pre-fills an
+ * OpenAI-compatible custom provider that can run with a proxy key or keyless
+ * (IP-allowlist / `disable_auth`) deployments.
+ */
+export const LITELLM_GATEWAY_PRESET = {
+  id: 'litellm',
+  label: 'LiteLLM Gateway',
+  provider: 'openai',
+  wire: LITELLM_DEFAULT_WIRE,
+  baseUrl: LITELLM_DEFAULT_BASE_URL,
+  notes:
+    'Externally hosted LiteLLM gateway (OpenAI-compatible). Supports a proxy key or keyless IP-allowlist. LiteLLM is not bundled.',
+  supportsKeyless: true,
+  supportsModelsEndpoint: true,
+  modelDiscoveryMode: 'models' as const,
+  allowPrivateNetworkByDefault: true,
+} as const;
+
 export const PROXY_PRESETS = [
   {
     id: 'official-openai',
@@ -60,6 +85,13 @@ export const PROXY_PRESETS = [
     notes: '',
   },
   {
+    id: 'litellm',
+    label: LITELLM_GATEWAY_PRESET.label,
+    provider: LITELLM_GATEWAY_PRESET.provider,
+    baseUrl: LITELLM_GATEWAY_PRESET.baseUrl,
+    notes: LITELLM_GATEWAY_PRESET.notes,
+  },
+  {
     id: 'custom',
     label: 'Custom...',
     provider: 'openai',
@@ -84,4 +116,25 @@ export type ProxyPreset = z.infer<typeof ProxyPreset>;
 
 export function getPresetById(id: ProxyPresetId): (typeof PROXY_PRESETS)[number] | undefined {
   return PROXY_PRESETS.find((p) => p.id === id);
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+/**
+ * True when a stored provider or connection-test context is a LiteLLM gateway.
+ * Matches the first-class preset id, custom ids/names that contain "litellm",
+ * and the default localhost:4000 listen address.
+ */
+export function looksLikeLiteLLMGateway(provider: string, baseUrl?: string): boolean {
+  if (provider.toLowerCase().includes('litellm')) return true;
+  if (!baseUrl) return false;
+  try {
+    const url = new URL(baseUrl);
+    const host = url.hostname.toLowerCase();
+    if (host.includes('litellm')) return true;
+    const port = url.port === '' ? (url.protocol === 'https:' ? '443' : '80') : url.port;
+    return LOOPBACK_HOSTS.has(host) && port === '4000';
+  } catch {
+    return /\blitellm\b/i.test(baseUrl);
+  }
 }

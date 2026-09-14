@@ -35,6 +35,11 @@ export interface RunPreviewOptions {
 
 const LOAD_TIMEOUT_MS = 15_000;
 const SETTLE_AFTER_LOAD_MS = 800;
+// Puppeteer's launch default is 30s. The first headless Chrome start on a
+// busy CI runner can exceed that (fontconfig / crashpad / CPU contention
+// while Vitest is importing other files), which races the 30s test timeout
+// and surfaces as "Test timed out" instead of a launch error.
+export const PREVIEW_CHROME_LAUNCH_TIMEOUT_MS = 60_000;
 const MAX_CONSOLE_ENTRIES = 50;
 const MAX_ASSET_ERRORS = 20;
 const DEFAULT_VIEWPORT = { width: 1280, height: 800 } as const;
@@ -110,6 +115,7 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
       executablePath,
       headless: true,
       userDataDir,
+      timeout: PREVIEW_CHROME_LAUNCH_TIMEOUT_MS,
       args: [
         '--headless=new',
         '--disable-dev-shm-usage',

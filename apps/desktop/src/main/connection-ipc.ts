@@ -1275,14 +1275,12 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   if (typeof apiKey !== 'string') {
     throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
   }
-  const trimmedApiKey = apiKey.trim();
-  if (trimmedApiKey.length === 0) {
-    throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
-  }
+  // Empty apiKey is a keyless probe (LiteLLM IP-allowlist / disable_auth,
+  // CLIProxyAPI without api-keys). Auth headers already omit Bearer when empty.
   const out: TestEndpointPayload = {
     wire,
     baseUrl: parseHttpBaseUrl(baseUrl, 'baseUrl'),
-    apiKey: trimmedApiKey,
+    apiKey: apiKey.trim(),
   };
   if (r['allowPrivateNetwork'] !== undefined) {
     if (typeof r['allowPrivateNetwork'] !== 'boolean') {

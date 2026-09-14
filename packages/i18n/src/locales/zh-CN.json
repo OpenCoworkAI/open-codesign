@@ -551,6 +551,14 @@
         "apiKeyOptional": "仅当你在 CPA config.yaml 里配置了 api-keys 才需要填",
         "thinkingHint": "提示：在 model 名后加 `(high)` / `(xhigh)` / `(8192)` 可控制思考力度"
       },
+      "litellmGateway": {
+        "presetName": "LiteLLM Gateway",
+        "presetDescription": "OpenAI 兼容网关 — 支持代理 Key 或无 Key / IP 白名单",
+        "helpTitle": "连接到已有的 LiteLLM 网关",
+        "helpBody": "Open CoDesign 不会内置 LiteLLM。请指向你已经部署的网关。默认协议是 OpenAI Chat，地址 http://localhost:4000/v1；远程部署请改 URL。若网关需要鉴权，粘贴代理 Key（master 或 virtual key）；无 Key / IP 白名单部署可留空。若网关提供 /models，可从发现列表选择模型，否则手动填写模型 ID。",
+        "apiKeyOptional": "可选。无 Key 或 IP 白名单部署请留空。需要鉴权时粘贴 LITELLM_MASTER_KEY 或 virtual key。",
+        "apiKeyPlaceholder": "代理 Key（可选）"
+      },
       "cpaDetection": {
         "title": "检测到本机运行的 CLIProxyAPI",
         "body": "一键导入即可使用你已登录的 Claude / Codex / Gemini 订阅账号。",
@@ -1039,14 +1047,17 @@
     "mostLikelyCause": "最可能的原因：",
     "cause": {
       "keyInvalid": "API Key 无效或已被撤销。",
+      "litellmAuth": "LiteLLM 拒绝了请求。若网关使用代理 Key，请粘贴 LITELLM_MASTER_KEY 或 virtual key。若为无 Key / IP 白名单部署，请将 Key 留空并确认本应用在允许列表中。",
       "balanceEmpty": "账户余额不足。",
       "missingV1": "Base URL 路径可能缺少 /v1 后缀。",
       "rateLimit": "请求被限流，超过了速率限制。",
       "hostUnreachable": "无法连接到主机——检查域名、端口或 VPN。",
+      "litellmUnreachable": "无法连接到 LiteLLM 网关。应用不会内置 LiteLLM — 请先启动你已有的代理（默认 http://localhost:4000）或更新 Base URL。",
       "timedOut": "请求超时——检查防火墙或 VPN。",
       "corsError": "CORS 跨域错误（主进程中不应出现此错误，这是一个 Bug）。",
       "sslError": "SSL / 证书错误（自签名或私有 CA 证书？）。可在「设置 → 服务商 → 该条目 → 禁用 TLS 校验」启用对可信内网端点的连接。",
       "endpointNotFound": "Base URL 已包含版本路径，但 Provider 没有暴露这个接口路径。",
+      "litellmModelsDisabled": "该 LiteLLM 网关没有暴露 /models。请手动填写已知模型 ID，或在网关上启用模型列表。",
       "gatewayIncompatible": "网关接受了连接但没有实现该 Provider 的 API。尝试切换 wire（例如改为 openai-chat）。",
       "gatewayWafBlocked": "网关或反代在请求到达模型前拦截了生成请求。测试连接可能仍然通过，因为它只探测 /models 端点。",
       "openaiResponsesMisconfigured": "端点拒绝了请求格式。wire 可能配错了——尝试切换到 openai-chat。",
@@ -1065,6 +1076,9 @@
     },
     "fix": {
       "updateKey": "更新 Key",
+      "litellmCheckKeyOrAllowlist": "检查代理 Key 或 IP 白名单",
+      "litellmStartGateway": "启动 LiteLLM 或更新 URL",
+      "litellmEnterModelManually": "手动填写模型 ID",
       "addCredits": "充值 →",
       "addCreditsGeneric": "请前往你的 Provider 充值页面",
       "addV1": "添加 /v1",
@@ -1089,6 +1103,8 @@
     "showLogFailed": "无法打开日志文件夹",
     "gatewayAllowlistHintTitle": "\u8fd9\u4e2a\u7aef\u70b9\u53ef\u80fd\u9650\u5236\u53ef\u63a5\u5165\u7684\u5e94\u7528",
     "gatewayAllowlistHintBody": "\u90e8\u5206 coding plan \u548c\u534f\u8bae\u8f6c\u6362\u7f51\u5173\u4f1a\u914d\u7f6e\u5e94\u7528\u767d\u540d\u5355\u3002\u5b83\u4eec\u5373\u4f7f\u58f0\u79f0\u63d0\u4f9b OpenAI \u517c\u5bb9 API\uff0c\u4e5f\u53ef\u80fd\u5728\u6ca1\u6709\u663e\u5f0f\u5141\u8bb8 Open CoDesign \u7684\u60c5\u51b5\u4e0b\u62d2\u7edd\u8bf7\u6c42\u3002",
+    "litellmHintTitle": "LiteLLM 网关提示",
+    "litellmHintBody": "应用不会内置 LiteLLM。网关需要鉴权时使用代理 Key（master / virtual）；无 Key / IP 白名单部署请将 Key 留空。模型发现走 GET /v1/models（若网关提供）；否则手动填写模型 ID。",
     "dismiss": "关闭",
     "report": {
       "title": "上报问题",

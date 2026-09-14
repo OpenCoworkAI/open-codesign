@@ -40,6 +40,13 @@ export interface AddCustomProviderInput {
   /** Per-provider TLS verification opt-out (#229). Built-in providers
    *  force-ignore this flag at runtime. */
   tlsRejectUnauthorized?: boolean;
+  /**
+   * When false, an empty apiKey is allowed and the stored entry is marked
+   * keyless (LiteLLM IP-allowlist / `disable_auth` deployments). Omit or
+   * true keeps the existing "key required" contract for generic custom
+   * providers.
+   */
+  requiresApiKey?: boolean;
   setAsActive: boolean;
 }
 
@@ -74,6 +81,7 @@ const ADD_PROVIDER_FIELDS = [
   'queryParams',
   'envKey',
   'tlsRejectUnauthorized',
+  'requiresApiKey',
   'setAsActive',
 ] as const;
 const UPDATE_PROVIDER_FIELDS = [
@@ -287,7 +295,11 @@ export function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
   if (typeof apiKey !== 'string') {
     throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
   }
-  if (apiKey.trim().length === 0) {
+  if (r['requiresApiKey'] !== undefined && typeof r['requiresApiKey'] !== 'boolean') {
+    throw new CodesignError('requiresApiKey must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  const allowEmptyKey = r['requiresApiKey'] === false;
+  if (apiKey.trim().length === 0 && !allowEmptyKey) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof defaultModel !== 'string' || defaultModel.trim().length === 0) {
@@ -306,6 +318,7 @@ export function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
     defaultModel: defaultModel.trim(),
     setAsActive,
   };
+  if (r['requiresApiKey'] === false) out.requiresApiKey = false;
   const headers = stringMapFromOptional(r['httpHeaders'], 'httpHeaders');
   if (headers !== undefined && Object.keys(headers).length > 0) out.httpHeaders = headers;
   const qp = stringMapFromOptional(r['queryParams'], 'queryParams');

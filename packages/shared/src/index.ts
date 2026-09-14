@@ -364,6 +364,10 @@ export type { FingerprintInput } from './fingerprint';
 export type { ProxyPresetId } from './proxy-presets';
 export {
   getPresetById,
+  LITELLM_DEFAULT_BASE_URL,
+  LITELLM_DEFAULT_WIRE,
+  LITELLM_GATEWAY_PRESET,
+  looksLikeLiteLLMGateway,
   PROXY_PRESET_SCHEMA_VERSION,
   PROXY_PRESETS,
   ProxyPreset,

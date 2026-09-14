@@ -1,4 +1,5 @@
 import type { ReasoningLevel, WireApi } from './config';
+import { looksLikeLiteLLMGateway } from './proxy-presets';
 
 export type ErrorCode =
   | '401'
@@ -119,8 +120,23 @@ function stripModelsPrefix(modelId: string): string {
 export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypothesis[] {
   // Normalise the code — some callers pass the HTTP status as a string like "404"
   const normalised = String(code).toUpperCase();
+  const litellm = looksLikeLiteLLMGateway(ctx.provider, ctx.baseUrl);
 
   if (normalised === '401' || normalised === '403') {
+    if (litellm) {
+      return [
+        h({
+          cause: 'diagnostics.cause.litellmAuth',
+          category: 'auth',
+          severity: 'error',
+          suggestedFix: {
+            kind: 'openSettings',
+            label: 'diagnostics.fix.litellmCheckKeyOrAllowlist',
+            settingsTab: 'models',
+          },
+        }),
+      ];
+    }
     return [
       h({
         cause: 'diagnostics.cause.keyInvalid',
@@ -161,6 +177,20 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
     // hypothesis so the user isn't pushed into corrupting a correct baseUrl.
     const hasVersionSegment = /\/v\d+[a-z]*(?:\/|$)/i.test(ctx.baseUrl);
     if (hasVersionSegment) {
+      if (litellm) {
+        return [
+          h({
+            cause: 'diagnostics.cause.litellmModelsDisabled',
+            category: 'model-discovery-degraded',
+            severity: 'warning',
+            suggestedFix: {
+              kind: 'openSettings',
+              label: 'diagnostics.fix.litellmEnterModelManually',
+              settingsTab: 'models',
+            },
+          }),
+        ];
+      }
       return [
         h({
           cause: 'diagnostics.cause.endpointNotFound',
@@ -198,6 +228,20 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
   }
 
   if (normalised === 'ECONNREFUSED' || normalised === 'ENOTFOUND') {
+    if (litellm) {
+      return [
+        h({
+          cause: 'diagnostics.cause.litellmUnreachable',
+          category: 'network-unreachable',
+          severity: 'error',
+          suggestedFix: {
+            kind: 'openSettings',
+            label: 'diagnostics.fix.litellmStartGateway',
+            settingsTab: 'models',
+          },
+        }),
+      ];
+    }
     return [
       h({
         cause: 'diagnostics.cause.hostUnreachable',

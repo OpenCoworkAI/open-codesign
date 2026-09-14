@@ -525,6 +525,8 @@ const api = {
       queryParams?: Record<string, string>;
       envKey?: string;
       tlsRejectUnauthorized?: boolean;
+      /** When false, empty apiKey is stored as a keyless custom provider. */
+      requiresApiKey?: boolean;
       setAsActive: boolean;
     }) => ipcRenderer.invoke('config:v1:add-provider', input) as Promise<OnboardingState>,
     updateProvider: (input: {

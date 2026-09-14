@@ -1374,10 +1374,11 @@ describe('config:v1:test-endpoint response parsing', () => {
     }
   });
 
-  it('rejects empty API keys before attempting fetch', async () => {
-    const { restore } = installFakeFetch(() => {
-      throw new Error('fetch should not be called');
-    });
+  it('allows empty API keys so keyless gateways can be probed', async () => {
+    const { restore } = installFakeFetch(() => ({
+      status: 200,
+      body: { data: [{ id: 'gpt-4o' }] },
+    }));
     try {
       await expect(
         handleConfigV1TestEndpoint({
@@ -1385,11 +1386,7 @@ describe('config:v1:test-endpoint response parsing', () => {
           baseUrl: 'https://provider.example/v1',
           apiKey: '   ',
         }),
-      ).resolves.toEqual({
-        ok: false,
-        error: 'bad-input',
-        message: 'apiKey must be a non-empty string',
-      });
+      ).resolves.toEqual({ ok: true, modelCount: 1, models: ['gpt-4o'] });
     } finally {
       restore();
     }

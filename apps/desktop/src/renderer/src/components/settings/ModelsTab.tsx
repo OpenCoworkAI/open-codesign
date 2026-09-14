@@ -1,8 +1,9 @@
 import { useT } from '@open-codesign/i18n';
-import type { WireApi } from '@open-codesign/shared';
 import {
   isSupportedOnboardingProvider,
+  LITELLM_GATEWAY_PRESET,
   PROVIDER_SHORTLIST as SHORTLIST,
+  type WireApi,
 } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
 import { Check, Loader2, Plus, Zap } from 'lucide-react';
@@ -170,6 +171,7 @@ interface AddProviderMenuProps {
   onAddOllama: () => void;
   onAddCustom: () => void;
   onAddCliProxyApi: () => void;
+  onAddLiteLLM: () => void;
 }
 
 function AddProviderMenu({
@@ -182,6 +184,7 @@ function AddProviderMenu({
   onAddOllama,
   onAddCustom,
   onAddCliProxyApi,
+  onAddLiteLLM,
 }: AddProviderMenuProps) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -253,6 +256,17 @@ function AddProviderMenu({
       }),
       disabled: false,
       onClick: onAddCliProxyApi,
+    },
+    {
+      key: 'litellm',
+      label: t('settings.providers.litellmGateway.presetName', {
+        defaultValue: 'LiteLLM Gateway',
+      }),
+      desc: t('settings.providers.litellmGateway.presetDescription', {
+        defaultValue: 'OpenAI-compatible gateway — proxy key or keyless IP-allowlist',
+      }),
+      disabled: false,
+      onClick: onAddLiteLLM,
     },
   ];
 
@@ -347,6 +361,9 @@ export function ModelsTab() {
         baseUrl: string;
         wire: WireApi;
         defaultModel?: string;
+        helpPreset?: 'litellm';
+        supportsKeyless?: boolean;
+        allowPrivateNetwork?: boolean;
       }
     | undefined
   >(undefined);
@@ -1032,6 +1049,19 @@ export function ModelsTab() {
                 baseUrl: 'http://127.0.0.1:8317',
                 wire: 'anthropic',
                 defaultModel: '',
+              });
+              setShowAddCustom(true);
+            }}
+            onAddLiteLLM={() => {
+              setShowAddMenu(false);
+              setCustomProviderPreset({
+                name: LITELLM_GATEWAY_PRESET.label,
+                baseUrl: LITELLM_GATEWAY_PRESET.baseUrl,
+                wire: LITELLM_GATEWAY_PRESET.wire,
+                defaultModel: '',
+                helpPreset: 'litellm',
+                supportsKeyless: true,
+                allowPrivateNetwork: LITELLM_GATEWAY_PRESET.allowPrivateNetworkByDefault,
               });
               setShowAddCustom(true);
             }}

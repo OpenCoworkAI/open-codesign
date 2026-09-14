@@ -46,4 +46,50 @@ describe('AddCustomProviderModal', () => {
       allowPrivateNetwork: true,
     });
   });
+
+  it('includes a typed proxy key in the discovery payload', () => {
+    expect(
+      buildEndpointDiscoveryPayload(
+        'openai-chat',
+        'http://localhost:4000/v1',
+        true,
+        false,
+        ' sk-litellm-master ',
+      ),
+    ).toEqual({
+      wire: 'openai-chat',
+      baseUrl: 'http://localhost:4000/v1',
+      apiKey: 'sk-litellm-master',
+      allowPrivateNetwork: true,
+    });
+  });
+
+  it('shows LiteLLM-specific keyless and proxy-key help when opened from the preset', () => {
+    const html = renderToStaticMarkup(
+      <AddCustomProviderModal
+        onSave={() => undefined}
+        onClose={() => undefined}
+        initialValues={{
+          name: 'LiteLLM Gateway',
+          baseUrl: 'http://localhost:4000/v1',
+          wire: 'openai-chat',
+          helpPreset: 'litellm',
+          supportsKeyless: true,
+          allowPrivateNetwork: true,
+        }}
+      />,
+    );
+
+    expect(html).toContain('settings.providers.litellmGateway.helpTitle');
+    expect(html).toContain('settings.providers.litellmGateway.helpBody');
+    expect(html).toContain('settings.providers.litellmGateway.apiKeyOptional');
+    expect(html).toContain('settings.providers.litellmGateway.apiKeyPlaceholder');
+  });
+
+  it('does not show LiteLLM help on a generic custom provider form', () => {
+    const html = renderToStaticMarkup(
+      <AddCustomProviderModal onSave={() => undefined} onClose={() => undefined} />,
+    );
+    expect(html).not.toContain('settings.providers.litellmGateway.helpTitle');
+  });
 });

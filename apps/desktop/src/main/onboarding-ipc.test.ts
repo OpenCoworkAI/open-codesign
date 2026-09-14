@@ -469,6 +469,78 @@ describe('config:v1 provider mutations — fail-fast key handling', () => {
     expect(buildSecretRef).not.toHaveBeenCalled();
   });
 
+  it('lets LiteLLM-style custom providers save keyless without storing an empty secret', async () => {
+    const { readConfig, writeConfig } = await import('./config');
+    const { buildSecretRef } = await import('./keychain');
+    vi.mocked(readConfig).mockResolvedValueOnce(null);
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(buildSecretRef).mockClear();
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:add-provider');
+    if (!handler) throw new Error('handler missing');
+
+    const state = await handler({} as never, {
+      id: 'custom-litellm-gateway-ab12',
+      name: 'LiteLLM Gateway',
+      wire: 'openai-chat',
+      baseUrl: 'http://localhost:4000/v1',
+      apiKey: '',
+      defaultModel: 'gpt-4o',
+      setAsActive: true,
+      requiresApiKey: false,
+    });
+
+    expect(buildSecretRef).not.toHaveBeenCalled();
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.activeProvider).toBe('custom-litellm-gateway-ab12');
+    expect(written?.secrets['custom-litellm-gateway-ab12']).toBeUndefined();
+    expect(written?.providers['custom-litellm-gateway-ab12']).toMatchObject({
+      id: 'custom-litellm-gateway-ab12',
+      name: 'LiteLLM Gateway',
+      wire: 'openai-chat',
+      baseUrl: 'http://localhost:4000/v1',
+      defaultModel: 'gpt-4o',
+      requiresApiKey: false,
+    });
+    expect(state).toMatchObject({
+      hasKey: true,
+      provider: 'custom-litellm-gateway-ab12',
+    });
+  });
+
+  it('stores a LiteLLM proxy key while keeping the entry explicitly keyless-capable', async () => {
+    const { readConfig, writeConfig } = await import('./config');
+    const { buildSecretRef } = await import('./keychain');
+    vi.mocked(readConfig).mockResolvedValueOnce(null);
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(buildSecretRef).mockClear();
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:add-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await handler({} as never, {
+      id: 'custom-litellm-gateway-key',
+      name: 'LiteLLM Gateway',
+      wire: 'openai-chat',
+      baseUrl: 'https://litellm.internal.example/v1',
+      apiKey: 'sk-litellm-master',
+      defaultModel: 'gpt-4o',
+      setAsActive: true,
+      requiresApiKey: false,
+    });
+
+    expect(buildSecretRef).toHaveBeenCalledWith('sk-litellm-master');
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.secrets['custom-litellm-gateway-key']).toEqual(
+      expect.objectContaining({ ciphertext: 'enc:sk-litellm-master' }),
+    );
+    expect(written?.providers['custom-litellm-gateway-key']?.requiresApiKey).toBe(false);
+  });
+
   it('rejects malformed custom-provider header maps instead of dropping bad entries', async () => {
     const { registerOnboardingIpc } = await import('./onboarding-ipc');
     registerOnboardingIpc();

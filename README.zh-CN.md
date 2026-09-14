@@ -220,7 +220,7 @@ scoop install opencoworkai/open-codesign
 ## 你能得到什么
 
 ### 模型与提供商
-- **统一的 provider 抽象**：支持 Anthropic、OpenAI、Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama，以及任意 OpenAI-compatible relay；同时支持无 key 的 IP 白名单代理
+- **统一的 provider 抽象**：支持 Anthropic、OpenAI、Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama、LiteLLM Gateway，以及任意 OpenAI-compatible relay；同时支持无 key 的 IP 白名单代理
 - **一键导入和登录**：Claude Code / Codex 的 API key provider 配置可以直接带进来，也可以用 ChatGPT 订阅登录使用 Codex 模型
 - **动态模型选择器**：每个 provider 都会展示真实模型列表，而不是一小撮写死的选项
 
