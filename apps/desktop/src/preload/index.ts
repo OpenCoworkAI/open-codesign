@@ -1,6 +1,7 @@
 import type {
   ActiveRunMessageInputV1,
   ActiveRunMessageV1,
+  AskCancelledV1,
   CancelGenerationPayloadV1,
   ChatAppendInput,
   ChatMessage,
@@ -929,6 +930,11 @@ const api = {
       const listener = (_e: unknown, req: AskRequest) => cb(req);
       ipcRenderer.on('ask:request', listener);
       return () => ipcRenderer.removeListener('ask:request', listener);
+    },
+    onCancelled: (cb: (event: AskCancelledV1) => void) => {
+      const listener = (_e: unknown, event: AskCancelledV1) => cb(event);
+      ipcRenderer.on('ask:cancelled', listener);
+      return () => ipcRenderer.removeListener('ask:cancelled', listener);
     },
     resolve: (requestId: string, result: AskResult) =>
       ipcRenderer.invoke('ask:resolve', { requestId, ...result }) as Promise<void>,
