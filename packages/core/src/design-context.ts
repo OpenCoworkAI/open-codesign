@@ -1,5 +1,9 @@
 import type { AgentMessage } from '@mariozechner/pi-agent-core';
-import { completeWithRetry } from '@open-codesign/providers';
+import {
+  CompletionLengthError,
+  completeWithRetry,
+  type GenerateResult,
+} from '@open-codesign/providers';
 import type {
   ChatMessage,
   ChatMessageRow,
@@ -108,6 +112,7 @@ const BRIEF_MAX_ARRAY_ITEMS = 12;
 const BRIEF_MAX_FIELD_CHARS = 1_200;
 const BRIEF_MAX_ITEM_CHARS = 240;
 const BRIEF_MAX_OUTPUT_TOKENS = 2_000;
+const BRIEF_RETRY_OUTPUT_TOKENS = 4_000;
 
 export const DESIGN_BRIEF_SYSTEM_PROMPT = [
   'You maintain a compact structured brief for one Open CoDesign design session.',
@@ -135,7 +140,8 @@ export const DESIGN_BRIEF_SYSTEM_PROMPT = [
   '- Do not copy large source code, tool outputs, or full token tables.',
   '- Treat DESIGN.md as authoritative when mentioned; summarize decisions, not raw tokens.',
   "- Use the same language as the user's prompts when practical.",
-  '- Keep the whole JSON compact enough for a prompt brief.',
+  '- Keep the whole JSON below 600 words; use at most five short items per array.',
+  '- Use one short sentence per string field. Omit repetition and implementation details.',
 ].join('\n');
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -493,24 +499,40 @@ export async function updateDesignSessionBrief(
     conversationLen: conversation.length,
   });
   try {
-    const result = await completeWithRetry(
-      input.model,
-      messages,
-      {
-        apiKey: input.apiKey,
-        ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
-        ...(input.wire !== undefined ? { wire: input.wire } : {}),
-        ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
-        ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
-        ...(input.reasoningLevel !== undefined ? { reasoning: input.reasoningLevel } : {}),
-        maxTokens: BRIEF_MAX_OUTPUT_TOKENS,
-      },
-      {
-        logger: log,
-        provider: input.model.provider,
-        ...(input.wire !== undefined ? { wire: input.wire } : {}),
-      },
-    );
+    const summarize = (maxTokens: number) =>
+      completeWithRetry(
+        input.model,
+        messages,
+        {
+          apiKey: input.apiKey,
+          ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+          ...(input.wire !== undefined ? { wire: input.wire } : {}),
+          ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
+          ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
+          ...(input.reasoningLevel !== undefined ? { reasoning: input.reasoningLevel } : {}),
+          maxTokens,
+        },
+        {
+          logger: log,
+          provider: input.model.provider,
+          ...(input.wire !== undefined ? { wire: input.wire } : {}),
+        },
+      );
+    let result: GenerateResult;
+    let truncatedUsage: Omit<GenerateResult, 'content'> | undefined;
+    try {
+      result = await summarize(BRIEF_MAX_OUTPUT_TOKENS);
+    } catch (err) {
+      if (!(err instanceof CompletionLengthError)) throw err;
+      truncatedUsage = err.usage;
+      log.info('[design-brief] step=summarize.retry-length', {
+        designId: input.designId,
+        maxTokens: BRIEF_RETRY_OUTPUT_TOKENS,
+      });
+      // One bounded retry only. Never persist partial JSON or replace the
+      // previous brief when either completion/validation attempt fails.
+      result = await summarize(BRIEF_RETRY_OUTPUT_TOKENS);
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(stripJsonFence(result.content)) as unknown;
@@ -534,9 +556,9 @@ export async function updateDesignSessionBrief(
     });
     return {
       brief,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      costUsd: result.costUsd,
+      inputTokens: result.inputTokens + (truncatedUsage?.inputTokens ?? 0),
+      outputTokens: result.outputTokens + (truncatedUsage?.outputTokens ?? 0),
+      costUsd: result.costUsd + (truncatedUsage?.costUsd ?? 0),
     };
   } catch (err) {
     log.warn('[design-brief] step=summarize.fail', {
