@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path_module from 'node:path';
 import type { AttachmentContext, CoreLogger, GenerateImageAssetRequest } from '@open-codesign/core';
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import { CodesignError, DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
 import { withWorkspaceFileWriter } from '@open-codesign/shared/workspace-file-lock';
 import type { AgentStreamEvent } from '../../preload/index';
 import {
@@ -73,6 +73,7 @@ interface CreateRuntimeTextEditorFsOptions {
   logger: Pick<CoreLogger, 'error'>;
   frames?: ReadonlyArray<readonly [string, string]>;
   designSkills?: ReadonlyArray<readonly [string, string]>;
+  signal?: AbortSignal;
 }
 
 function dataUrlByteLength(dataUrl: string): number {
@@ -118,6 +119,7 @@ export function createRuntimeTextEditorFs({
   logger,
   frames = [],
   designSkills = [],
+  signal,
 }: CreateRuntimeTextEditorFsOptions) {
   const baseCtx = { designId: designId ?? '', generationId } as const;
   const fsMap = new Map<string, string>();
@@ -191,6 +193,7 @@ export function createRuntimeTextEditorFs({
     content: string,
     expectedContent?: string,
   ): Promise<string> {
+    signal?.throwIfAborted();
     const normalizedPath = normalizeDesignFilePath(filePath);
     assertWorkspacePathVisible(normalizedPath);
     const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
@@ -199,16 +202,19 @@ export function createRuntimeTextEditorFs({
       await withResolvedWorkspace(normalizedPath, async (_workspacePath, destinationPath) => {
         try {
           await withWorkspaceFileWriter(destinationPath, async () => {
+            signal?.throwIfAborted();
             if (expectedContent !== undefined) {
               const currentContent = await readFile(destinationPath, 'utf8');
               if (currentContent !== expectedContent) {
                 fsMap.set(normalizedPath, currentContent);
-                throw new Error(
+                throw new CodesignError(
                   'Workspace file changed before the edit could be saved. View its current source and retry.',
+                  'IPC_CONFLICT',
                 );
               }
             }
             await mkdir(path_module.dirname(destinationPath), { recursive: true });
+            signal?.throwIfAborted();
             if (typeof writeContent.diskContent === 'string') {
               await writeFile(destinationPath, writeContent.diskContent, 'utf8');
             } else {
@@ -222,10 +228,12 @@ export function createRuntimeTextEditorFs({
             filePath,
             message,
           });
+          if (err instanceof CodesignError && err.code === 'IPC_CONFLICT') throw err;
           throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
         }
       });
     } catch (err) {
+      if (err instanceof CodesignError && err.code === 'IPC_CONFLICT') throw err;
       const message = err instanceof Error ? err.message : String(err);
       if (message.startsWith('Workspace write-through failed for ')) throw err;
       if (

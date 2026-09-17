@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
-import { makeScaffoldTool } from '@open-codesign/core';
+import { makeScaffoldTool, makeTextEditorTool } from '@open-codesign/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRuntimeTextEditorFs } from './ipc/runtime-fs';
 import { createDesign, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
@@ -13,6 +13,7 @@ const control = vi.hoisted(() => ({
   handlers: new Map<string, Handler>(),
   beforeWrite: async (_content: unknown): Promise<void> => {},
   resolved: (_file: string): void => {},
+  afterMkdir: async (): Promise<void> => {},
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -22,6 +23,11 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     writeFile: vi.fn(async (...args: Parameters<typeof actual.writeFile>) => {
       await control.beforeWrite(args[1]);
       return actual.writeFile(...args);
+    }),
+    mkdir: vi.fn(async (...args: Parameters<typeof actual.mkdir>) => {
+      const result = await actual.mkdir(...args);
+      await control.afterMkdir();
+      return result;
     }),
   };
 });
@@ -60,6 +66,7 @@ describe('coordinated workspace publication', () => {
   afterEach(async () => {
     control.beforeWrite = async () => {};
     control.resolved = () => {};
+    control.afterMkdir = async () => {};
     control.handlers.clear();
     if (root) await rm(root, { recursive: true, force: true });
   });
@@ -306,5 +313,181 @@ describe('coordinated workspace publication', () => {
     );
     expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe('external revision');
     expect(fs.view('App.jsx')?.content).toBe('external revision');
+  });
+
+  for (const replacement of ['agent create', 'unguarded IPC'] as const) {
+    it(`preserves explicit ${replacement} replacement semantics after a guarded save`, async () => {
+      const { db, first, second, save } = await setup(true);
+      const { fs } = createRuntimeTextEditorFs({
+        db,
+        designId: second.id,
+        generationId: 'test-generation',
+        previousSource: null,
+        initialFiles: [{ file: 'App.jsx', contents: 'original' }],
+        sendEvent: vi.fn(),
+        logger: { error: vi.fn() },
+      });
+      const started = deferred();
+      const release = deferred();
+      const secondResolved = deferred();
+      control.beforeWrite = async (content) => {
+        if (content !== 'guarded revision') return;
+        started.resolve();
+        await release.promise;
+      };
+      const guardedSave = save(first.id, 'guarded revision');
+      await started.promise;
+      control.resolved = () => secondResolved.resolve();
+      const write = control.handlers.get('codesign:files:v1:write');
+      if (!write) throw new Error('Write IPC not registered');
+      const replacementSave =
+        replacement === 'agent create'
+          ? fs.create('App.jsx', 'explicit full replacement')
+          : write(null, {
+              schemaVersion: 1,
+              designId: second.id,
+              path: 'App.jsx',
+              content: 'explicit full replacement',
+            });
+      const results = Promise.allSettled([guardedSave, replacementSave]);
+      try {
+        await secondResolved.promise;
+        await setImmediate();
+      } finally {
+        release.resolve();
+      }
+      expect(await results).toMatchObject([
+        { status: 'fulfilled', value: { content: 'guarded revision' } },
+        { status: 'fulfilled' },
+      ]);
+      expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe('explicit full replacement');
+    });
+  }
+
+  for (const command of ['str_replace', 'insert'] as const) {
+    it(`offers same-generation view/retry through the actual ${command} tool after conflict`, async () => {
+      const { db, first, second, save } = await setup(true);
+      const { fs } = createRuntimeTextEditorFs({
+        db,
+        designId: second.id,
+        generationId: 'test-generation',
+        previousSource: null,
+        initialFiles: [{ file: 'App.jsx', contents: 'original' }],
+        sendEvent: vi.fn(),
+        logger: { error: vi.fn() },
+      });
+      const tool = makeTextEditorTool(fs);
+      await tool.execute('initial-view', { command: 'view', path: 'App.jsx' });
+      await save(first.id, 'editor revision');
+      const stale = await tool.execute('stale-edit', {
+        command,
+        path: 'App.jsx',
+        old_str: 'original',
+        new_str: 'stale agent',
+        insert_line: 1,
+      });
+      expect(stale.details.result).toMatchObject({ failed: true });
+      const message = stale.content[0]?.type === 'text' ? stale.content[0].text : '';
+      expect(message).toContain('Workspace file changed');
+      expect(message).toContain('retry');
+      expect(message).not.toContain('Stop retrying');
+      expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe('editor revision');
+      const fresh = await tool.execute('fresh-view', {
+        command: 'view',
+        path: 'App.jsx',
+        view_range: [1, -1],
+      });
+      expect(fresh.content[0]?.type === 'text' ? fresh.content[0].text : '').toContain(
+        'editor revision',
+      );
+      const retried = await tool.execute('explicit-retry', {
+        command,
+        path: 'App.jsx',
+        old_str: 'editor revision',
+        new_str: 'explicit retry',
+        insert_line: 1,
+      });
+      expect(retried.details.result).toEqual({ path: 'App.jsx' });
+      expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe(
+        command === 'str_replace' ? 'explicit retry' : 'editor revision\nexplicit retry',
+      );
+    });
+  }
+
+  it('does not publish a cancelled agent write queued behind another writer', async () => {
+    const { db, first, second, save } = await setup(true);
+    const controller = new AbortController();
+    const sendEvent = vi.fn();
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: second.id,
+      generationId: 'cancelled-generation',
+      previousSource: null,
+      initialFiles: [{ file: 'App.jsx', contents: 'original' }],
+      signal: controller.signal,
+      sendEvent,
+      logger: { error: vi.fn() },
+    });
+    const started = deferred();
+    const release = deferred();
+    const secondResolved = deferred();
+    control.beforeWrite = async (content) => {
+      if (content !== 'editor revision') return;
+      started.resolve();
+      await release.promise;
+    };
+    const editorSave = save(first.id, 'editor revision');
+    await started.promise;
+    control.resolved = () => secondResolved.resolve();
+    let queuedSettled = false;
+    const queued = fs.create('App.jsx', 'cancelled replacement').finally(() => {
+      queuedSettled = true;
+    });
+    const results = Promise.allSettled([editorSave, queued]);
+    try {
+      await secondResolved.promise;
+      controller.abort();
+      await setImmediate();
+      expect(queuedSettled).toBe(false);
+    } finally {
+      release.resolve();
+    }
+    expect(await results).toMatchObject([
+      { status: 'fulfilled' },
+      { status: 'rejected', reason: { message: expect.stringContaining('abort') } },
+    ]);
+    expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe('editor revision');
+    expect(sendEvent).not.toHaveBeenCalled();
+    expect(fs.view('App.jsx')?.content).toBe('original');
+    const write = control.handlers.get('codesign:files:v1:write');
+    await expect(
+      write?.(null, {
+        schemaVersion: 1,
+        designId: first.id,
+        path: 'App.jsx',
+        content: 'subsequent revision',
+        expectedContent: 'editor revision',
+      }),
+    ).resolves.toMatchObject({ content: 'subsequent revision' });
+  });
+
+  it('rechecks cancellation after mkdir and before starting an OS write', async () => {
+    const { db, first } = await setup(false);
+    const controller = new AbortController();
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: first.id,
+      generationId: 'cancelled-generation',
+      previousSource: null,
+      signal: controller.signal,
+      sendEvent: vi.fn(),
+      logger: { error: vi.fn() },
+    });
+    control.afterMkdir = async () => controller.abort();
+    await expect(fs.create('App.jsx', 'cancelled replacement')).rejects.toThrow(/abort/u);
+    expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe('original');
+    await expect(fs.create('App.jsx', 'another replacement')).rejects.toMatchObject({
+      name: 'AbortError',
+    });
   });
 });
