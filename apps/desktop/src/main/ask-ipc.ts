@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AskInput, AskResult } from '@open-codesign/core';
-import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import { type AskCancelledV1, CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type BrowserWindow, ipcMain } from 'electron';
 import { getLogger } from './logger';
 
@@ -21,6 +21,7 @@ interface PendingAsk {
   reject: (reason?: unknown) => void;
   sessionId: string;
   input: AskInput;
+  cancel: () => void;
 }
 
 const pending = new Map<string, PendingAsk>();
@@ -70,24 +71,67 @@ export function requestAsk(
   sessionId: string,
   input: AskInput,
   getMainWindow: () => BrowserWindow | null,
+  signal?: AbortSignal,
 ): Promise<AskResult> {
   const requestId = `ask-${randomUUID()}`;
   return new Promise<AskResult>((resolve, reject) => {
-    pending.set(requestId, { resolve, reject, sessionId, input });
     const win = getMainWindow();
-    if (!win || win.isDestroyed()) {
-      pending.delete(requestId);
+    if (signal?.aborted || !win || win.isDestroyed() || win.webContents.isDestroyed()) {
       log.warn('ask.request.no_window', { sessionId, requestId });
       resolve({ status: 'cancelled', answers: [] });
       return;
     }
+    const cleanup = () => {
+      pending.delete(requestId);
+      signal?.removeEventListener('abort', cancel);
+      win.removeListener('closed', cancel);
+      win.webContents.removeListener('destroyed', cancel);
+    };
+    const cancel = () => {
+      if (!pending.has(requestId)) return;
+      cleanup();
+      resolve({ status: 'cancelled', answers: [] });
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        const payload: AskCancelledV1 = { schemaVersion: 1, requestId, sessionId };
+        try {
+          win.webContents.send('ask:cancelled', payload);
+        } catch (error) {
+          log.warn('ask.cancel.delivery_failed', {
+            sessionId,
+            requestId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    };
+    pending.set(requestId, {
+      sessionId,
+      input,
+      cancel,
+      resolve: (result) => {
+        cleanup();
+        resolve(result);
+      },
+      reject: (reason) => {
+        cleanup();
+        reject(reason);
+      },
+    });
+    signal?.addEventListener('abort', cancel, { once: true });
+    win.once('closed', cancel);
+    win.webContents.once('destroyed', cancel);
     const payload: AskRequestPayload = { requestId, sessionId, input };
     log.info('ask.request.send', {
       sessionId,
       requestId,
       questions: input.questions.length,
     });
-    win.webContents.send('ask:request', payload);
+    try {
+      win.webContents.send('ask:request', payload);
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
   });
 }
 
@@ -100,10 +144,9 @@ export function listPendingAskRequests(): AskRequestPayload[] {
 }
 
 export function cancelPendingAskRequests(sessionId: string): void {
-  for (const [id, entry] of pending) {
+  for (const entry of pending.values()) {
     if (entry.sessionId !== sessionId) continue;
-    pending.delete(id);
-    entry.resolve({ status: 'cancelled', answers: [] });
+    entry.cancel();
   }
 }
 

@@ -271,7 +271,7 @@ function validateAskQuestion(
   }
 }
 
-export type AskBridge = (input: AskInput) => Promise<AskResult>;
+export type AskBridge = (input: AskInput, signal?: AbortSignal) => Promise<AskResult>;
 
 const MAX_ASK_VALUE_CHARS = 500;
 
@@ -317,7 +317,9 @@ export function makeAskTool(askBridge: AskBridge): AgentTool<typeof AskInput, As
       "Returns `{status: 'answered', answers}` or " +
       "`{status: 'cancelled', answers: []}`.",
     parameters: AskInput,
-    async execute(_toolCallId, params): Promise<AgentToolResult<AskResult>> {
+    executionMode: 'sequential',
+    async execute(_toolCallId, params, signal): Promise<AgentToolResult<AskResult>> {
+      signal?.throwIfAborted();
       const valid = validateAskInput(params);
       if (!valid.ok) {
         return {
@@ -325,7 +327,18 @@ export function makeAskTool(askBridge: AskBridge): AgentTool<typeof AskInput, As
           details: { status: 'cancelled', answers: [] },
         };
       }
-      const result = await askBridge(params);
+      let detachAbort: (() => void) | undefined;
+      const result = await new Promise<AskResult>((resolve, reject) => {
+        const abort = () => reject(signal?.reason ?? new Error('Ask cancelled'));
+        signal?.addEventListener('abort', abort, { once: true });
+        detachAbort = () => signal?.removeEventListener('abort', abort);
+        if (signal?.aborted) {
+          abort();
+          return;
+        }
+        Promise.resolve(askBridge(params, signal)).then(resolve, reject);
+      }).finally(() => detachAbort?.());
+      signal?.throwIfAborted();
       return {
         content: [{ type: 'text', text: summarizeAskResult(result) }],
         details: result,

@@ -435,8 +435,8 @@ function wrapTodosState<TParams extends TSchema, TDetails>(
 ): AgentTool<TParams, TDetails> {
   return {
     ...tool,
-    async execute(toolCallId, params) {
-      const result = await tool.execute(toolCallId, params);
+    async execute(...args) {
+      const result = await tool.execute(...args);
       state.todosSet = true;
       return result;
     },
@@ -452,15 +452,15 @@ function wrapPlanningGate<TParams extends TSchema, TDetails>(
 ): AgentTool<TParams, TDetails> {
   return {
     ...tool,
-    async execute(toolCallId, params) {
+    async execute(...args) {
       if (
         state.requiresTodosBeforeMutation &&
         !state.todosSet &&
-        options.allowBeforeTodos?.(params) !== true
+        options.allowBeforeTodos?.(args[1]) !== true
       ) {
         return todosRequiredResult(tool.name) as AgentToolResult<TDetails>;
       }
-      return await tool.execute(toolCallId, params);
+      return await tool.execute(...args);
     },
   };
 }
@@ -541,21 +541,25 @@ const MAX_TRANSPORT_RETRIES = 2;
 function trackFsMutations(
   fs: TextEditorFsCallbacks,
   resourceState: ResourceStateV1,
+  signal?: AbortSignal,
 ): TextEditorFsCallbacks {
   return {
     view: (path) => fs.view(path),
     listDir: (dir) => fs.listDir(dir),
     async create(path, content) {
+      signal?.throwIfAborted();
       const result = await fs.create(path, content);
       recordMutation(resourceState);
       return result;
     },
     async strReplace(path, oldStr, newStr) {
+      signal?.throwIfAborted();
       const result = await fs.strReplace(path, oldStr, newStr);
       recordMutation(resourceState);
       return result;
     },
     async insert(path, line, text) {
+      signal?.throwIfAborted();
       const result = await fs.insert(path, line, text);
       recordMutation(resourceState);
       return result;
@@ -569,8 +573,8 @@ function wrapSkillState(
 ): AgentTool<TSchema, unknown> {
   return {
     ...tool,
-    async execute(id, params, signal): Promise<AgentToolResult<unknown>> {
-      const result = await tool.execute(id, params, signal);
+    async execute(...args): Promise<AgentToolResult<unknown>> {
+      const result = await tool.execute(...args);
       const details = result.details as { name?: unknown; status?: unknown } | undefined;
       if (details?.status === 'loaded' && typeof details.name === 'string') {
         recordLoadedResource(resourceState, details.name);
@@ -586,8 +590,8 @@ function wrapScaffoldState(
 ): AgentTool<TSchema, unknown> {
   return {
     ...tool,
-    async execute(id, params, signal): Promise<AgentToolResult<unknown>> {
-      const result = await tool.execute(id, params, signal);
+    async execute(...args): Promise<AgentToolResult<unknown>> {
+      const result = await tool.execute(...args);
       const details = result.details as ScaffoldDetails | undefined;
       if (details && 'ok' in details && details.ok === true) {
         recordScaffold(resourceState, {
@@ -604,15 +608,14 @@ function wrapScaffoldState(
 function wrapDoneState(
   tool: AgentTool<TSchema, unknown>,
   resourceState: ResourceStateV1,
-  onRepairLimitReached?: (() => void) | undefined,
   onDone?: ((details: DoneDetails) => void) | undefined,
   progress = { errorRounds: 0 },
 ): AgentTool<TSchema, unknown> {
   return {
     ...tool,
     executionMode: 'sequential',
-    async execute(id, params, signal): Promise<AgentToolResult<unknown>> {
-      const result = await tool.execute(id, params, signal);
+    async execute(...args): Promise<AgentToolResult<unknown>> {
+      const result = await tool.execute(...args);
       const details = result.details as DoneDetails | undefined;
       if (details) {
         onDone?.(details);
@@ -626,7 +629,6 @@ function wrapDoneState(
         } else {
           progress.errorRounds += 1;
           if (progress.errorRounds >= MAX_DONE_ERROR_ROUNDS) {
-            onRepairLimitReached?.();
             return {
               ...result,
               content: [{ type: 'text', text: formatDoneRepairLimitText(details) }],
@@ -973,10 +975,15 @@ async function generateViaAgentInternal(
   log.info('[generate] step=build_request', ctx);
   const buildStart = Date.now();
   const resourceState = cloneResourceState(input.initialResourceState);
-  const trackedFs = deps.fs ? trackFsMutations(deps.fs, resourceState) : undefined;
-  let doneRepairLimitReached = false;
+  const trackedFs = deps.fs ? trackFsMutations(deps.fs, resourceState, input.signal) : undefined;
   let lastDoneDetails: DoneDetails | undefined;
   const doneProgress = { errorRounds: 0 };
+  const repairLimitReached = () => doneProgress.errorRounds >= MAX_DONE_ERROR_ROUNDS;
+  const assertNotCancelled = (signal?: AbortSignal): void => {
+    if (input.signal?.aborted || signal?.aborted) {
+      throw new CodesignError('Generation cancelled', ERROR_CODES.PROVIDER_ABORTED);
+    }
+  };
   const skillsBuiltinDir = input.templatesRoot
     ? path.join(input.templatesRoot, 'skills')
     : undefined;
@@ -1101,9 +1108,6 @@ async function generateViaAgentInternal(
             requireDesignMd: true,
           }) as unknown as AgentTool<TSchema, unknown>,
           resourceState,
-          () => {
-            doneRepairLimitReached = true;
-          },
           (details) => {
             lastDoneDetails = details;
           },
@@ -1196,7 +1200,13 @@ async function generateViaAgentInternal(
   })
     .map((name) => defaultToolsByName.get(name))
     .filter((tool): tool is AgentTool<TSchema, unknown> => tool !== undefined);
-  const tools = deps.tools ?? defaultTools;
+  const tools = (deps.tools ?? defaultTools).map((tool) => ({
+    ...tool,
+    async execute(...args: Parameters<typeof tool.execute>) {
+      assertNotCancelled(args[2]);
+      return tool.execute(...args);
+    },
+  }));
   const encourageToolUse = deps.encourageToolUse ?? tools.length > 0;
   const baseAgenticGuidance = agenticToolGuidance({
     inspectWorkspace: input.inspectWorkspace !== undefined,
@@ -1288,10 +1298,21 @@ async function generateViaAgentInternal(
             m.role === 'user' || m.role === 'assistant' || m.role === 'toolResult',
         ),
       transformContext: buildTransformContext(log, deps.onAggressivePrune),
+      beforeToolCall: async (_context, signal) => {
+        if (input.signal?.aborted || signal?.aborted) {
+          return { block: true, reason: 'Generation cancelled' };
+        }
+        if (repairLimitReached()) {
+          return { block: true, reason: 'Done repair limit reached; no further tools may run.' };
+        }
+        return undefined;
+      },
       getApiKey: input.getApiKey
         ? async () => {
             try {
+              assertNotCancelled();
               const key = await input.getApiKey?.();
+              assertNotCancelled();
               const trimmedKey = key?.trim() ?? '';
               if (trimmedKey.length > 0) return trimmedKey;
               if (input.allowKeyless === true) return initialApiKey || 'open-codesign-keyless';
@@ -1304,38 +1325,52 @@ async function generateViaAgentInternal(
               throw err;
             }
           }
-        : () => initialApiKey || 'open-codesign-keyless',
+        : () => {
+            assertNotCancelled();
+            return initialApiKey || 'open-codesign-keyless';
+          },
       ...(onPayload !== undefined ? { onPayload } : {}),
     });
     retryAgent.subscribe((event) => {
       deps.activeMessages?.handleEvent(event, () => {
         resourceState.lastDone = null;
         runProtocolState.todosSet = false;
-        doneRepairLimitReached = false;
         lastDoneDetails = undefined;
         doneProgress.errorRounds = 0;
       });
       deps.onEvent?.(event);
+      if (event.type === 'turn_end') {
+        assertNotCancelled();
+        // Agent does not expose the low-level shouldStopAfterTurn hook. Fail the
+        // settled batch at its native event boundary, before pi drains queues.
+        if (repairLimitReached()) {
+          throw new CodesignError('Done repair limit reached', ERROR_CODES.GENERATION_INCOMPLETE);
+        }
+      }
     });
     deps.activeMessages?.bind(retryAgent);
     return retryAgent;
   };
 
-  const attachAbortSignal = (target: Agent): void => {
-    if (!input.signal) return;
-    if (input.signal.aborted) {
-      target.abort();
-    } else {
-      input.signal.addEventListener('abort', () => target.abort(), { once: true });
+  let agent = createRetryAgent(historyAsAgentMessages);
+  const admitRun = async (run: () => Promise<void>): Promise<void> => {
+    assertNotCancelled();
+    const target = agent;
+    const abort = () => target.abort();
+    input.signal?.addEventListener('abort', abort, { once: true });
+    try {
+      assertNotCancelled();
+      await run();
+      await target.waitForIdle();
+      assertNotCancelled();
+    } finally {
+      input.signal?.removeEventListener('abort', abort);
     }
   };
 
-  let agent = createRetryAgent(historyAsAgentMessages);
-
-  attachAbortSignal(agent);
-
   log.info('[generate] step=send_request', ctx);
   const sendStart = Date.now();
+  assertNotCancelled();
   if (preflightTitle !== null) {
     emitPreflightSetTitle(deps.onEvent, preflightTitle);
   }
@@ -1356,8 +1391,7 @@ async function generateViaAgentInternal(
   const sendOnce = async (): Promise<void> => {
     const preLen = agent.state.messages.length;
     try {
-      await agent.prompt(userContent, promptImages);
-      await agent.waitForIdle();
+      await admitRun(() => agent.prompt(userContent, promptImages));
     } catch (err) {
       if (agent.state.messages.length > preLen) {
         const tagged = (err instanceof Error ? err : new Error(String(err))) as RetryBlockedError;
@@ -1411,7 +1445,7 @@ async function generateViaAgentInternal(
   while (true) {
     const checkMsg = findFinalAssistantMessage(agent.state.messages);
     if (!checkMsg || checkMsg.stopReason === 'stop') break;
-    if (input.signal?.aborted) break;
+    if (input.signal?.aborted || repairLimitReached()) break;
 
     const shouldRetryWithoutReasoning =
       !reasoningFallbackUsed &&
@@ -1434,12 +1468,10 @@ async function generateViaAgentInternal(
       const cleanMessages = stripTerminalAssistantFailure(agent.state.messages);
       capturedGetApiKeyError = null;
       agent = createRetryAgent(cleanMessages, 'off');
-      attachAbortSignal(agent);
 
       const retryStart = Date.now();
       try {
-        await agent.continue();
-        await agent.waitForIdle();
+        await admitRun(() => agent.continue());
       } catch (err) {
         log.error('[generate] step=reasoning_retry.fail', {
           ...ctx,
@@ -1478,12 +1510,10 @@ async function generateViaAgentInternal(
     const cleanMessages = stripTerminalAssistantFailure(agent.state.messages);
     capturedGetApiKeyError = null;
     agent = createRetryAgent(cleanMessages, reasoningFallbackUsed ? 'off' : thinkingLevel);
-    attachAbortSignal(agent);
 
     const retryStart = Date.now();
     try {
-      await agent.continue();
-      await agent.waitForIdle();
+      await admitRun(() => agent.continue());
     } catch (err) {
       log.error('[generate] step=transport_retry.fail', {
         ...ctx,
@@ -1499,8 +1529,7 @@ async function generateViaAgentInternal(
   if (!finalAssistant) {
     throw new CodesignError('Agent produced no assistant message', ERROR_CODES.PROVIDER_ERROR);
   }
-  const stoppedAfterDoneRepairLimit =
-    doneRepairLimitReached && finalAssistant.stopReason === 'toolUse';
+  const stoppedAfterDoneRepairLimit = repairLimitReached();
   if (finalAssistant.stopReason !== 'stop' && !stoppedAfterDoneRepairLimit) {
     // Prefer the original `getApiKey` throw (e.g. PROVIDER_AUTH_MISSING after
     // mid-run logout) over pi-agent-core's flattened plain-string failure,
@@ -1542,7 +1571,7 @@ async function generateViaAgentInternal(
       .join('\n');
     const message = [
       `Design verification failed for ${lastDoneDetails.path}.`,
-      ...(doneRepairLimitReached
+      ...(repairLimitReached()
         ? [`The repair limit was reached after ${MAX_DONE_ERROR_ROUNDS} done() error rounds.`]
         : []),
       'The workspace files have been kept, but the design is not ready. Fix the errors and retry.',
@@ -1554,7 +1583,7 @@ async function generateViaAgentInternal(
       ...ctx,
       path: lastDoneDetails.path,
       errorCount: lastDoneDetails.errors.length,
-      repairLimitReached: doneRepairLimitReached,
+      repairLimitReached: repairLimitReached(),
     });
     throw new CodesignError(message, ERROR_CODES.GENERATION_INCOMPLETE);
   }

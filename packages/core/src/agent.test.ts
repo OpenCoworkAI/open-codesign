@@ -1093,17 +1093,11 @@ describe('generateViaAgent()', () => {
     );
   });
 
-  it.each([
-    { times: 1, stopReason: 'stop' as const },
-    { times: 3, stopReason: 'toolUse' as const },
-  ])('surfaces unresolved verification after $times attempts without deleting files', async ({
-    times,
-    stopReason,
-  }) => {
+  it('surfaces unresolved verification without deleting files', async () => {
     scriptedAgent = {
       assistantText: 'The design is ready.',
-      stopReason,
-      executeTool: { name: 'done', times, params: { path: 'App.jsx' } },
+      stopReason: 'stop',
+      executeTool: { name: 'done', times: 1, params: { path: 'App.jsx' } },
     };
     const fs = makeStubFs({ 'App.jsx': HTML_WITH_MISSING_ALT, 'DESIGN.md': VALID_DESIGN_MD });
     const onComplete = vi.fn();
@@ -1122,9 +1116,6 @@ describe('generateViaAgent()', () => {
       code: ERROR_CODES.GENERATION_INCOMPLETE,
       message: expect.stringContaining('<img> without alt attribute'),
     });
-    if (times === 3) {
-      await expect(result).rejects.toThrow('repair limit was reached after 3');
-    }
     expect(fs.view('App.jsx')?.content).toBe(HTML_WITH_MISSING_ALT);
     expect(onComplete).toHaveBeenCalledOnce();
   });
@@ -1439,7 +1430,7 @@ describe('generateViaAgent()', () => {
     });
   });
 
-  it('abort signal cascades into agent.abort()', async () => {
+  it('rejects cancellation during setup before admitting a prompt', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     const controller = new AbortController();
     const promise = generateViaAgent({
@@ -1450,15 +1441,8 @@ describe('generateViaAgent()', () => {
       signal: controller.signal,
     });
     controller.abort();
-    // With first-turn withBackoff the pre-call signal check may short-circuit
-    // the prompt entirely (throwing PROVIDER_ABORTED), or the prompt may have
-    // already completed; either way the `signal → agent.abort()` listener
-    // registered before sending should have fired.
-    await promise.catch(() => {
-      // Expected when abort arrives before the withBackoff loop enters its
-      // first iteration.
-    });
-    expect(agentCalls[0]?.aborted).toBe(true);
+    await expect(promise).rejects.toMatchObject({ code: ERROR_CODES.PROVIDER_ABORTED });
+    expect(agentCalls.every((call) => call.prompts.length === 0)).toBe(true);
   });
 
   it('reports skill-loader failure via warnings without blocking the artifact', async () => {

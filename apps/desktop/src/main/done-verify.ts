@@ -22,6 +22,7 @@ import type { DoneError, DoneRuntimeVerifier } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
 import { buildSrcdoc } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, Page } from 'puppeteer-core';
+import { boundedPreview } from './preview-interactions';
 import { buildWorkspacePreviewDocument, isPreviewFileUrlAllowed } from './preview-runtime';
 
 const VERIFY_LOAD_TIMEOUT_MS = 15_000;
@@ -167,7 +168,9 @@ async function verifyWithSystemChrome(
   verifyUrl: string,
   verifyPath: string,
   workspaceRoot?: string,
+  signal?: AbortSignal,
 ): Promise<DoneError[]> {
+  signal?.throwIfAborted();
   const executablePath = await findSystemChrome();
   const puppeteer = (await import('puppeteer-core')).default;
   const userDataDir = await mkdtemp(join(tmpdir(), 'codesign-done-chrome-'));
@@ -177,10 +180,12 @@ async function verifyWithSystemChrome(
   let page: Page | null = null;
 
   try {
+    signal?.throwIfAborted();
     browser = await puppeteer.launch({
       executablePath,
       headless: true,
       userDataDir,
+      ...(signal ? { signal } : {}),
       args: [
         '--headless=new',
         '--disable-dev-shm-usage',
@@ -189,6 +194,7 @@ async function verifyWithSystemChrome(
         '--no-default-browser-check',
       ],
     });
+    signal?.throwIfAborted();
     page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
     await page.setRequestInterception(true);
@@ -218,12 +224,17 @@ async function verifyWithSystemChrome(
       );
     });
 
-    await page.goto(verifyUrl, {
-      waitUntil: 'domcontentloaded',
-      timeout: VERIFY_LOAD_TIMEOUT_MS,
-    });
-    await settleAfterLoad();
+    await boundedPreview(
+      page.goto(verifyUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: VERIFY_LOAD_TIMEOUT_MS,
+      }),
+      VERIFY_LOAD_TIMEOUT_MS,
+      signal,
+    );
+    await boundedPreview(settleAfterLoad(), SETTLE_AFTER_LOAD_MS + 100, signal);
   } catch (err) {
+    signal?.throwIfAborted();
     pushUniqueError(
       errors,
       seen,
@@ -241,6 +252,7 @@ async function verifyWithSystemChrome(
 
 export function makeRuntimeVerifier(options?: { workspaceRoot: string }): DoneRuntimeVerifier {
   return async (artifactSource, context): Promise<DoneError[]> => {
+    context?.signal?.throwIfAborted();
     const workspaceRoot = options ? resolve(options.workspaceRoot) : undefined;
     const srcdoc = workspaceRoot
       ? await buildWorkspacePreviewDocument(
@@ -255,7 +267,7 @@ export function makeRuntimeVerifier(options?: { workspaceRoot: string }): DoneRu
     const verifyUrl = pathToFileURL(verifyPath).href;
 
     try {
-      return await verifyWithSystemChrome(verifyUrl, verifyPath, workspaceRoot);
+      return await verifyWithSystemChrome(verifyUrl, verifyPath, workspaceRoot, context?.signal);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

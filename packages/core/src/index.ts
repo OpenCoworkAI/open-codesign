@@ -294,9 +294,7 @@ export interface GenerateInput {
    * an `ask` tool that pauses the turn, renders the questionnaire to the
    * user, and resumes with the collected answers.
    */
-  askBridge?:
-    | ((input: import('./tools/ask.js').AskInput) => Promise<import('./tools/ask.js').AskResult>)
-    | undefined;
+  askBridge?: import('./tools/ask.js').AskBridge | undefined;
 }
 
 export interface ApplyCommentInput {

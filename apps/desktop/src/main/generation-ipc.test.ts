@@ -51,7 +51,7 @@ describe('cancelGenerationRequest', () => {
 
     expect(target.abort).toHaveBeenCalledOnce();
     expect(other.abort).not.toHaveBeenCalled();
-    expect(inFlight.has('gen-1')).toBe(false);
+    expect(inFlight.has('gen-1')).toBe(true);
     expect(inFlight.has('gen-2')).toBe(true);
     expect(logIpc.info).toHaveBeenCalledWith('generate.cancelled', { id: 'gen-1' });
   });
@@ -194,7 +194,7 @@ describe('withInFlightGenerationForDesign', () => {
     ).resolves.toEqual(['one', 'two']);
   });
 
-  it('clears the design lock when cancellation removes the generation', async () => {
+  it('retains ownership until the cancelled run settles', async () => {
     const controller = makeController();
     const inFlight = new Map([['gen-1', controller]]);
     const inFlightByDesign = new Map([['design-1', { generationId: 'gen-1', startedAt: 1234 }]]);
@@ -205,9 +205,12 @@ describe('withInFlightGenerationForDesign', () => {
 
     cancelGenerationRequest('gen-1', inFlight, logIpc, inFlightByDesign, inFlightByWorkspace);
 
-    expect(inFlight.has('gen-1')).toBe(false);
-    expect(inFlightByDesign.has('design-1')).toBe(false);
-    expect(inFlightByWorkspace.has('/workspace')).toBe(false);
+    expect(inFlight.has('gen-1')).toBe(true);
+    expect(inFlightByDesign.has('design-1')).toBe(true);
+    expect(inFlightByWorkspace.has('/workspace')).toBe(true);
+    expect(() =>
+      acquireInFlightWorkspaceGeneration('replacement', '/workspace', inFlightByWorkspace),
+    ).toThrow(/already running/);
   });
 });
 

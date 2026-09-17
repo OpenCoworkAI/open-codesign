@@ -507,6 +507,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       designId,
       generationId: id,
       logger: logIpc,
+      ...(input.signal ? { signal: input.signal } : {}),
       previousSource,
       initialFiles: initialWorkspaceFiles,
       attachments: attachmentsForRuntimeFs ?? input.attachments,
@@ -618,7 +619,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       {
         ...input,
         templatesRoot,
-        askBridge: (askInput) => requestAsk(id, askInput, () => getMainWindow()),
+        askBridge: (askInput, signal) => requestAsk(id, askInput, () => getMainWindow(), signal),
         workspaceRoot,
         getWorkspaceRoot: currentWorkspaceRoot,
         onScaffolded: async (details) => {

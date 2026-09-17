@@ -139,7 +139,7 @@ function requiredDesignMdErrors(fs: TextEditorFsCallbacks, activePath: string): 
  *  load errors observed when the host actually executed it. */
 export type DoneRuntimeVerifier = (
   artifactSource: string,
-  context?: { path: string },
+  context?: { path: string; signal?: AbortSignal },
 ) => Promise<DoneError[]>;
 
 const VOID_ELEMENTS = new Set([
@@ -484,7 +484,8 @@ export function makeDoneTool(
       'remain with a valid artifact after those repair rounds, the host may ' +
       'keep the latest artifact but will surface warnings to the user.',
     parameters: DoneParams,
-    async execute(_id, params): Promise<AgentToolResult<DoneDetails>> {
+    async execute(_id, params, signal): Promise<AgentToolResult<DoneDetails>> {
+      signal?.throwIfAborted();
       const path = resolveDonePath(fs, params.path);
       const file = fs.view(path);
       if (file === null) {
@@ -529,9 +530,14 @@ export function makeDoneTool(
       ];
       if (runtimeVerify && isRenderableDesignSourcePath(path)) {
         try {
-          const runtimeErrors = await runtimeVerify(file.content, { path });
+          const runtimeErrors = await runtimeVerify(file.content, {
+            path,
+            ...(signal ? { signal } : {}),
+          });
+          signal?.throwIfAborted();
           errors.push(...runtimeErrors);
         } catch (err) {
+          signal?.throwIfAborted();
           errors.push({
             message: `Runtime verifier failed: ${err instanceof Error ? err.message : String(err)}`,
             source: 'runtime',
