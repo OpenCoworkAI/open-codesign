@@ -224,7 +224,7 @@ function TweakPanelEditor({
       useCodesignStore.getState().pushToast({
         variant: 'info',
         title: t('tweaks.title'),
-        description: event.data.message,
+        description: t('tweaks.compatibilityNotice'),
       });
     }
     window.addEventListener('message', onMessage);

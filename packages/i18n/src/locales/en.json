@@ -213,6 +213,7 @@
   },
   "tweaks": {
     "title": "Tweaks",
+    "compatibilityNotice": "Live tweak compatibility mode is active for this artifact. Updating tweaks reinitializes artifact state. To preserve interaction state, read tokens during rendering in non-memoized components.",
     "openLabel": "Open tweaks panel",
     "close": "Close",
     "reset": "Reset to defaults",

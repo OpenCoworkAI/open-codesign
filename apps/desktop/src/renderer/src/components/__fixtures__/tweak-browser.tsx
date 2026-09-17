@@ -30,7 +30,7 @@ Object.defineProperty(window, 'codesign', {
     } satisfies Pick<CodesignApi['files'], 'read' | 'write'>,
   },
 });
-await initI18n('en');
+await initI18n(new URLSearchParams(location.search).get('locale') ?? 'en');
 useCodesignStore.setState({ currentDesignId: 'first', generationByDesign: {} });
 const initialSource = await window.tweakRead('first', 'App.jsx');
 

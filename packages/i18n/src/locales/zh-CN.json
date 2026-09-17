@@ -213,6 +213,7 @@
   },
   "tweaks": {
     "title": "微调",
+    "compatibilityNotice": "此作品已启用微调兼容模式。更新微调值会重置作品的交互状态。若要保留交互状态，请在未使用记忆化优化的组件渲染时读取 token。",
     "openLabel": "打开微调面板",
     "close": "关闭",
     "reset": "恢复默认",

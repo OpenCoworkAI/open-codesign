@@ -314,6 +314,41 @@ root.render(<App/>);`,
     expect(await page.$eval('[data-runtime-errors]', (node) => node.textContent)).toBe('');
   }, 30_000);
 
+  it.each([
+    ['en', 'Open tweaks panel', 'Updating tweaks reinitializes artifact state.'],
+    ['zh-CN', '打开微调面板', '更新微调值会重置作品的交互状态。'],
+    ['es', 'Abrir panel de ajustes', 'Actualizar los ajustes reinicia su estado de interacción.'],
+    ['pt-BR', 'Abrir painel de ajustes', 'Atualizar os ajustes reinicia seu estado de interação.'],
+  ])(
+    'localizes the nonfatal compatibility notice in %s',
+    async (locale, label, message) => {
+      await writeFile(
+        file('first', 'App.jsx'),
+        `${source}
+const heading = TWEAK_DEFAULTS.heading;
+function App() { return <h1>{heading}</h1>; }`,
+      );
+      await page.goto(`${endpoint}?workspace=1&locale=${locale}`);
+      await page.waitForSelector('iframe');
+      const frame = await (await page.$('iframe'))?.contentFrame();
+      if (!frame) throw new Error('Missing runtime iframe');
+      await frame.waitForSelector('h1');
+      await page.click(`button[aria-label="${label}"]`);
+      await replace('fieldset input[type="text"]', 'Localized compatibility');
+      await expect.poll(async () => (await tokens())?.['heading']).toBe('Localized compatibility');
+      await frame.waitForFunction(
+        () => document.querySelector('h1')?.textContent === 'Localized compatibility',
+      );
+      expect(await page.$eval('output', (node) => node.textContent)).toContain(message);
+      expect(await page.$eval('[data-runtime-errors]', (node) => node.textContent)).toBe('');
+      if (locale !== 'en')
+        expect(await page.$eval('output', (node) => node.textContent)).not.toContain(
+          'Live tweak compatibility mode',
+        );
+    },
+    30_000,
+  );
+
   it('retains the heading DOM node through full keyboard replacement and guarded disk save', async () => {
     const input = await replace('fieldset input[type="text"]', 'Convergence v2 verified');
     await expect.poll(async () => (await tokens())?.['heading']).toBe('Convergence v2 verified');

@@ -213,6 +213,7 @@
   },
   "tweaks": {
     "title": "Ajustes",
+    "compatibilityNotice": "Este artefacto usa el modo de compatibilidad de ajustes en vivo. Actualizar los ajustes reinicia su estado de interacción. Para conservarlo, lee los tokens durante el renderizado en componentes sin memoización.",
     "openLabel": "Abrir panel de ajustes",
     "close": "Cerrar",
     "reset": "Restablecer valores predeterminados",

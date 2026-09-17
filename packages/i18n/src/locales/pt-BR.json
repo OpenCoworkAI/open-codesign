@@ -213,6 +213,7 @@
   },
   "tweaks": {
     "title": "Ajustes",
+    "compatibilityNotice": "Este artefato usa o modo de compatibilidade de ajustes ao vivo. Atualizar os ajustes reinicia seu estado de interação. Para preservá-lo, leia os tokens durante a renderização em componentes sem memoização.",
     "openLabel": "Abrir painel de ajustes",
     "close": "Fechar",
     "reset": "Restaurar padrões",
