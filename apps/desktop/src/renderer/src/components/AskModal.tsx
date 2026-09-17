@@ -1,4 +1,5 @@
 import { useT } from '@open-codesign/i18n';
+import type { AskCancelledV1 } from '@open-codesign/shared';
 import { Check, MessageCircleQuestion, X } from 'lucide-react';
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import type {
@@ -161,6 +162,17 @@ export function advanceAskQueue(state: AskQueueState): AskQueueState {
   return { active: next ?? null, queue: rest };
 }
 
+export function dismissAskRequest(
+  state: AskQueueState,
+  request: Pick<AskRequest, 'requestId' | 'sessionId'>,
+): AskQueueState {
+  const matches = (item: AskRequest) =>
+    item.requestId === request.requestId && item.sessionId === request.sessionId;
+  const queue = state.queue.filter((item) => !matches(item));
+  if (state.active && matches(state.active)) return advanceAskQueue({ active: null, queue });
+  return queue.length === state.queue.length ? state : { active: state.active, queue };
+}
+
 export function answerValueForImportedFiles(input: {
   importedPaths: readonly string[];
   selectedNames: readonly string[];
@@ -183,21 +195,38 @@ export function AskModal() {
 
   useEffect(() => {
     let disposed = false;
+    let replayCancellations: AskCancelledV1[] | null = [];
     const off = window.codesign?.ask?.onRequest?.((req) => {
       setAskQueue((prev) => enqueueAskRequest(prev, req));
+    });
+    const offCancelled = window.codesign?.ask?.onCancelled?.((event) => {
+      replayCancellations?.push(event);
+      setAskQueue((prev) => dismissAskRequest(prev, event));
     });
     void window.codesign?.ask
       ?.pending?.()
       .then((requests) => {
         if (disposed) return;
-        setAskQueue((prev) => enqueueAskRequests(prev, requests));
+        const live = requests.filter(
+          (request) =>
+            !replayCancellations?.some(
+              (event) =>
+                event.requestId === request.requestId && event.sessionId === request.sessionId,
+            ),
+        );
+        setAskQueue((prev) => enqueueAskRequests(prev, live));
       })
       .catch(() => {
         // The live IPC event remains the primary path; pending replay is recovery-only.
+      })
+      .finally(() => {
+        replayCancellations = null;
       });
     return () => {
       disposed = true;
+      replayCancellations = null;
       off?.();
+      offCancelled?.();
     };
   }, []);
 
@@ -215,14 +244,14 @@ export function AskModal() {
     return () => cancelAnimationFrame(frame);
   }, [pending, setSidebarCollapsed, setPreviewFullscreen]);
 
-  const resolve = useCallback((requestId: string, result: AskResult) => {
-    void window.codesign?.ask?.resolve?.(requestId, result);
-    setAskQueue((prev) => advanceAskQueue(prev));
+  const resolve = useCallback((request: AskRequest, result: AskResult) => {
+    void window.codesign?.ask?.resolve?.(request.requestId, result);
+    setAskQueue((prev) => dismissAskRequest(prev, request));
   }, []);
 
   const cancel = useCallback(() => {
     if (!pending) return;
-    resolve(pending.requestId, { status: 'cancelled', answers: [] });
+    resolve(pending, { status: 'cancelled', answers: [] });
   }, [pending, resolve]);
 
   useEffect(() => {
@@ -259,7 +288,7 @@ export function AskModal() {
       questionId: q.id,
       value: answers[q.id] ?? null,
     }));
-    resolve(pending.requestId, { status: 'answered', answers: collected });
+    resolve(pending, { status: 'answered', answers: collected });
   }
 
   function setValue(id: string, value: AnswerValue) {
