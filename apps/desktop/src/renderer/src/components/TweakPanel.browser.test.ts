@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { findSystemChrome } from '@open-codesign/exporters';
 import { parseEditmodeBlock } from '@open-codesign/shared';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
-import { createServer, type ViteDevServer } from 'vite';
+import { createServer, normalizePath, type ViteDevServer } from 'vite';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { WorkspacePreviewWrite } from '../preview/tweak-persistence';
 import type {} from './__fixtures__/tweak-browser';
@@ -35,6 +35,24 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
     server = await createServer({
       configFile: false,
       root: process.cwd(),
+      // The middleware HTML is not a disk entry. Scan its real module before
+      // serving Chrome, using a cold cache isolated from other Vite fixtures.
+      cacheDir: join(directory, 'vite-cache'),
+      optimizeDeps: {
+        entries: [
+          normalizePath(
+            join(
+              process.cwd(),
+              'src',
+              'renderer',
+              'src',
+              'components',
+              '__fixtures__',
+              'tweak-browser.tsx',
+            ),
+          ),
+        ],
+      },
       logLevel: 'error',
       esbuild: { jsx: 'automatic' },
       server: { host: '127.0.0.1', port: 0 },
@@ -43,6 +61,11 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
           name: 'tweak-browser-fixture',
           configureServer(vite) {
             vite.middlewares.use((req, res, next) => {
+              if (req.url === '/favicon.ico') {
+                res.statusCode = 204;
+                res.end();
+                return;
+              }
               if (req.url?.split('?')[0] !== '/tweak-fixture') return next();
               res.setHeader('Content-Type', 'text/html');
               res.end(
@@ -74,9 +97,26 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
     errors = [];
     await writeFile(file('first', 'App.jsx'), source);
     page = await browser.newPage();
+    const networkFailures: string[] = [];
+    const browserConsole: string[] = [];
+    const pendingRequests = new Set<string>();
     page.on('pageerror', (error) => errors.push(String(error)));
+    page.on('console', (message) => {
+      if (message.type() === 'error' || message.type() === 'warn')
+        browserConsole.push(`${message.type()}: ${message.text()}`);
+    });
+    page.on('requestfailed', (request) => {
+      pendingRequests.delete(request.url());
+      networkFailures.push(`${request.url()}: ${request.failure()?.errorText}`);
+    });
+    page.on('requestfinished', (request) => pendingRequests.delete(request.url()));
+    page.on('response', (response) => {
+      if (response.status() >= 400)
+        networkFailures.push(`${response.status()} ${response.statusText()}: ${response.url()}`);
+    });
     await page.setRequestInterception(true);
     page.on('request', (request) => {
+      pendingRequests.add(request.url());
       if (new URL(request.url()).origin === new URL(endpoint).origin) void request.continue();
       else {
         errors.push(`Unexpected network request: ${request.url()}`);
@@ -106,8 +146,39 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
       );
       return pending;
     });
-    await page.goto(endpoint);
-    await page.waitForSelector('fieldset input[type="text"]');
+    try {
+      await page.goto(endpoint);
+      await page.waitForSelector('fieldset input[type="text"]');
+      expect(networkFailures).toEqual([]);
+    } catch (cause) {
+      const [pageState] = await Promise.allSettled([
+        page.evaluate(() => ({
+          readyState: document.readyState,
+          root: document.getElementById('root')?.innerHTML.slice(0, 5_000),
+          text: document.body.innerText.slice(0, 5_000),
+          scripts: [...document.scripts].map((script) => script.src),
+          viteError: document
+            .querySelector('vite-error-overlay')
+            ?.shadowRoot?.textContent?.slice(0, 5_000),
+        })),
+      ]);
+      throw new Error(
+        `Tweak fixture failed to mount: ${JSON.stringify(
+          {
+            url: page.url(),
+            pageErrors: errors,
+            networkFailures,
+            pendingRequests: [...pendingRequests],
+            browserConsole,
+            document:
+              pageState?.status === 'fulfilled' ? pageState.value : String(pageState?.reason),
+          },
+          null,
+          2,
+        )}`,
+        { cause },
+      );
+    }
   }, 60_000);
 
   afterEach(async () => {
