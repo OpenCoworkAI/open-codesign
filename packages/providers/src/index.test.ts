@@ -1,9 +1,4 @@
-import {
-  type ChatMessage,
-  type CodesignError,
-  ERROR_CODES,
-  type ModelRef,
-} from '@open-codesign/shared';
+import { type ChatMessage, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const getModelMock = vi.fn();
@@ -163,9 +158,11 @@ describe('complete', () => {
     await expect(
       complete(MODEL, [{ role: 'user', content: 'hi' }], { apiKey: 'sk-test' }),
     ).rejects.toMatchObject({
+      name: 'CompletionLengthError',
       code: ERROR_CODES.PROVIDER_ERROR,
       message: expect.stringContaining('token limit'),
-    } satisfies Partial<CodesignError>);
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+    });
   });
 
   it('synthesizes a pass-through Model when openrouter id is missing from registry', async () => {

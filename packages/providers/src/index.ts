@@ -65,6 +65,18 @@ export interface GenerateResult {
   costUsd: number;
 }
 
+/** A length stop is not a successful completion. Keep usage, never partial
+ * content, so bounded callers can retry without under-reporting token cost. */
+export class CompletionLengthError extends CodesignError {
+  constructor(public readonly usage: Omit<GenerateResult, 'content'>) {
+    super(
+      'Provider stopped before completion because the response hit the token limit',
+      ERROR_CODES.PROVIDER_ERROR,
+    );
+    this.name = 'CompletionLengthError';
+  }
+}
+
 interface PiTextContent {
   type: 'text';
   text: string;
@@ -475,12 +487,17 @@ function assertCompleteStop(result: PiAssistantMessage): void {
       ERROR_CODES.PROVIDER_ABORTED,
     );
   }
+  if (result.stopReason === 'length') {
+    throw new CompletionLengthError({
+      inputTokens: result.usage?.input ?? 0,
+      outputTokens: result.usage?.output ?? 0,
+      costUsd: result.usage?.cost?.total ?? 0,
+    });
+  }
   const message =
-    result.stopReason === 'length'
-      ? 'Provider stopped before completion because the response hit the token limit'
-      : result.stopReason === 'toolUse'
-        ? 'Provider returned an unresolved tool call in a non-tool completion'
-        : (result.errorMessage ?? 'Provider returned an error');
+    result.stopReason === 'toolUse'
+      ? 'Provider returned an unresolved tool call in a non-tool completion'
+      : (result.errorMessage ?? 'Provider returned an error');
   throw new CodesignError(message, ERROR_CODES.PROVIDER_ERROR);
 }
 
