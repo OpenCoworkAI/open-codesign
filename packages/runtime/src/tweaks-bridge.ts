@@ -62,6 +62,15 @@ export const TWEAKS_BRIDGE_SETUP = `(function() {
     });
   }
   var origCreateElement = window.React.createElement;
+  // Cached closures can capture a token before the hook executes; observing
+  // factory reads alone cannot distinguish those from token-independent hooks.
+  ['useMemo', 'useCallback'].forEach(function(name) {
+    var original = window.React[name];
+    window.React[name] = function() {
+      state.replayReason = 'memoization hooks may capture live token values';
+      return original.apply(this, arguments);
+    };
+  });
   window.React.createElement = function(type) {
     if (type && (type.$$typeof === Symbol.for('react.memo') ||
         (type.prototype && (type.prototype.isPureReactComponent || type.prototype.shouldComponentUpdate)))) {

@@ -219,6 +219,26 @@ function App() {
 
   it.each([
     [
+      'cached useMemo token',
+      'function App() { const heading = React.useMemo(() => TWEAK_DEFAULTS.heading, []); return <h1>{heading}</h1>; }',
+    ],
+    [
+      'useMemo with an earlier captured token',
+      'function App() { const captured = TWEAK_DEFAULTS.heading; const heading = React.useMemo(() => captured, []); return <h1>{heading}</h1>; }',
+    ],
+    [
+      'useCallback with an earlier captured token',
+      'function App() { const captured = TWEAK_DEFAULTS.heading; const readHeading = React.useCallback(() => captured, []); return <h1>{readHeading()}</h1>; }',
+    ],
+    [
+      'useCallback with a live token read',
+      'function App() { const readHeading = React.useCallback(() => TWEAK_DEFAULTS.heading, []); return <h1>{readHeading()}</h1>; }',
+    ],
+    [
+      'callback with a memoized token snapshot',
+      'function App() { const readHeading = React.useMemo(() => { const heading = TWEAK_DEFAULTS.heading; return () => heading; }, []); return <h1>{readHeading()}</h1>; }',
+    ],
+    [
       'top-level derived token',
       'const heading = TWEAK_DEFAULTS.heading; function App() { return <h1>{heading}</h1>; }',
     ],
