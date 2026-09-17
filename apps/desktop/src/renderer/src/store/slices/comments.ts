@@ -140,15 +140,22 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
       if (!window.codesign) return null;
       const designId = get().currentDesignId;
       if (!designId) return null;
+      const wasQueued = get().queuedCommentIds.includes(id);
       try {
         const updated = await window.codesign.comments.update(designId, id, patch);
         if (!updated) return null;
-        set((s) => ({
-          comments: s.comments.map((c) => (c.id === id ? updated : c)),
-          ...(updated.kind !== 'edit' || updated.status !== 'pending'
-            ? { queuedCommentIds: s.queuedCommentIds.filter((queuedId) => queuedId !== id) }
-            : {}),
-        }));
+        set((s) =>
+          s.currentDesignId !== designId
+            ? {}
+            : {
+                comments: s.comments.map((c) => (c.id === id ? updated : c)),
+                ...(updated.kind !== 'edit' || updated.status !== 'pending'
+                  ? { queuedCommentIds: s.queuedCommentIds.filter((queuedId) => queuedId !== id) }
+                  : wasQueued && !s.queuedCommentIds.includes(id)
+                    ? { queuedCommentIds: [...s.queuedCommentIds, id] }
+                    : {}),
+              },
+        );
         return updated;
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');

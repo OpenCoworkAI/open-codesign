@@ -146,7 +146,7 @@ export interface CodesignState {
       startedAt?: number;
       awaitingResponse?: boolean;
       streamedAssistantText?: string;
-      submittedContext?: { referenceUrl?: string; commentIds: string[] };
+      submittedContext?: { referenceUrl?: string; comments: Record<string, string> };
     }
   >;
   isGenerating: boolean;

@@ -18,7 +18,10 @@ import type {
 import {
   ActiveRunMessageV1,
   CodesignError,
+  type CommentApplyResultV1,
+  type CommentContentExpectations,
   CommentRowV1,
+  commentContentFingerprint,
   DesignRunPreferencesV1 as DesignRunPreferencesV1Schema,
 } from '@open-codesign/shared';
 import { compactToolResultForHistory } from './ipc/tool-log';
@@ -64,6 +67,7 @@ interface StoredToolStatusUpdate {
   errorMessage?: string;
 }
 
+type StoredCommentPatch = CommentUpdateInput & { appliedInSnapshotId?: null };
 type StoredCommentEvent =
   | {
       schemaVersion: 1;
@@ -74,7 +78,7 @@ type StoredCommentEvent =
       schemaVersion: 1;
       action: 'update';
       id: string;
-      patch: CommentUpdateInput;
+      patch: StoredCommentPatch;
     }
   | {
       schemaVersion: 1;
@@ -200,7 +204,8 @@ function parseCommentEvent(value: unknown): StoredCommentEvent | null {
     if (typeof value['id'] !== 'string') return null;
     const patch = value['patch'];
     if (!isRecord(patch)) return null;
-    const nextPatch: CommentUpdateInput = {};
+    const nextPatch: StoredCommentPatch = {};
+    if (patch['appliedInSnapshotId'] === null) nextPatch.appliedInSnapshotId = null;
     if (typeof patch['text'] === 'string') nextPatch.text = patch['text'];
     if (
       patch['status'] === 'pending' ||
@@ -475,8 +480,12 @@ export function updateSessionComment(
 ): CommentRow | null {
   const existing = listSessionComments(opts, designId).find((row) => row.id === id);
   if (existing === undefined) return null;
-  appendCommentEvent(opts, designId, { schemaVersion: 1, action: 'update', id, patch });
-  return { ...existing, ...patch };
+  const nextPatch: StoredCommentPatch =
+    existing.kind === 'edit' && patch.text !== undefined && patch.text !== existing.text
+      ? { ...patch, status: 'pending', appliedInSnapshotId: null }
+      : patch;
+  appendCommentEvent(opts, designId, { schemaVersion: 1, action: 'update', id, patch: nextPatch });
+  return { ...existing, ...nextPatch };
 }
 
 export function removeSessionComment(
@@ -511,6 +520,35 @@ export function markSessionCommentsApplied(
   return listSessionComments(opts, designId).filter((row) => presentIds.includes(row.id));
 }
 
+export function markSessionCommentsAppliedIfUnchanged(
+  opts: SessionChatStoreOptions,
+  designId: string,
+  ids: string[],
+  snapshotId: string,
+  expectedContent: CommentContentExpectations,
+): CommentApplyResultV1 {
+  const rows = new Map(listSessionComments(opts, designId).map((row) => [row.id, row]));
+  const matched: string[] = [];
+  const conflictedIds: string[] = [];
+  for (const id of new Set(ids)) {
+    const row = rows.get(id);
+    if (
+      row?.kind === 'edit' &&
+      row.status === 'pending' &&
+      expectedContent[id] === commentContentFingerprint(row)
+    ) {
+      matched.push(id);
+    } else {
+      conflictedIds.push(id);
+    }
+  }
+  // The comparison and append are synchronous on the main-process event loop.
+  return {
+    schemaVersion: 1,
+    applied: markSessionCommentsApplied(opts, designId, matched, snapshotId),
+    conflictedIds,
+  };
+}
 export function appendSessionChatMessage(
   opts: SessionChatStoreOptions,
   input: ChatAppendInput,

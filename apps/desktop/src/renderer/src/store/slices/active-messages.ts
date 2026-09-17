@@ -1,4 +1,5 @@
 import type { ActiveRunMessageV1 } from '@open-codesign/shared';
+import { commentContentFingerprint } from '@open-codesign/shared';
 import type { CodesignState } from '../../store';
 import { newId, normalizeReferenceUrl, tr } from '../lib/locale';
 
@@ -56,7 +57,12 @@ export function makeActiveMessagesSlice(set: SetState, get: () => CodesignState)
         if (
           state.inputFiles.length ||
           (referenceUrl && referenceUrl !== run?.submittedContext?.referenceUrl) ||
-          state.queuedCommentIds.some((id) => !run?.submittedContext?.commentIds.includes(id))
+          state.queuedCommentIds.some((id) => {
+            const comment = state.comments.find((row) => row.id === id);
+            return (
+              !comment || run?.submittedContext?.comments[id] !== commentContentFingerprint(comment)
+            );
+          })
         ) {
           throw new Error(tr('activeMessages.textOnlyError'));
         }

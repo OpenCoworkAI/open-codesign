@@ -22,7 +22,14 @@ import type {
   PreviewMode,
   SnapshotCreateInput,
 } from '@open-codesign/shared';
-import { ChatMessageKind, CodesignError, CommentKind, CommentRect } from '@open-codesign/shared';
+import {
+  ChatMessageKind,
+  CodesignError,
+  type CommentApplyResultV1,
+  CommentContentExpectations,
+  CommentKind,
+  CommentRect,
+} from '@open-codesign/shared';
 import { withWorkspaceFileWriter } from '@open-codesign/shared/workspace-file-lock';
 import { isDemoInputId } from '@open-codesign/templates/demo-inputs';
 import type { BrowserWindow } from 'electron';
@@ -49,6 +56,7 @@ import {
   listSessionChatMessages,
   listSessionComments,
   markSessionCommentsApplied,
+  markSessionCommentsAppliedIfUnchanged,
   removeSessionComment,
   type SessionChatStoreOptions,
   seedSessionChatFromSnapshots,
@@ -1155,6 +1163,7 @@ function parseCommentMarkAppliedInput(raw: unknown): {
   designId: string;
   ids: string[];
   snapshotId: string;
+  expectedContent?: CommentContentExpectations;
 } {
   if (typeof raw !== 'object' || raw === null) {
     throw new CodesignError(
@@ -1173,7 +1182,22 @@ function parseCommentMarkAppliedInput(raw: unknown): {
   if (typeof r['snapshotId'] !== 'string' || r['snapshotId'].trim().length === 0) {
     throw new CodesignError('snapshotId must be a non-empty string', 'IPC_BAD_INPUT');
   }
-  return { designId: r['designId'], ids: r['ids'], snapshotId: r['snapshotId'] };
+  const expected =
+    r['expectedContent'] === undefined
+      ? undefined
+      : CommentContentExpectations.safeParse(r['expectedContent']);
+  if (expected && !expected.success) {
+    throw new CodesignError(
+      'expectedContent must map comment IDs to content fingerprints',
+      'IPC_BAD_INPUT',
+    );
+  }
+  return {
+    designId: r['designId'],
+    ids: r['ids'],
+    snapshotId: r['snapshotId'],
+    ...(expected?.success ? { expectedContent: expected.data } : {}),
+  };
 }
 
 function chatStoreOptions(db: Database): SessionChatStoreOptions {
@@ -1647,12 +1671,28 @@ export function registerSnapshotsIpc(db: Database): void {
     };
   });
 
-  ipcMain.handle('comments:v1:mark-applied', (_e: unknown, raw: unknown): CommentRow[] => {
-    const input = parseCommentMarkAppliedInput(raw);
-    return runDb('comments:mark-applied', () =>
-      markSessionCommentsApplied(chatStoreOptions(db), input.designId, input.ids, input.snapshotId),
-    );
-  });
+  ipcMain.handle(
+    'comments:v1:mark-applied',
+    (_e: unknown, raw: unknown): CommentRow[] | CommentApplyResultV1 => {
+      const input = parseCommentMarkAppliedInput(raw);
+      return runDb('comments:mark-applied', () =>
+        input.expectedContent
+          ? markSessionCommentsAppliedIfUnchanged(
+              chatStoreOptions(db),
+              input.designId,
+              input.ids,
+              input.snapshotId,
+              input.expectedContent,
+            )
+          : markSessionCommentsApplied(
+              chatStoreOptions(db),
+              input.designId,
+              input.ids,
+              input.snapshotId,
+            ),
+      );
+    },
+  );
 }
 
 export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow | null): void {

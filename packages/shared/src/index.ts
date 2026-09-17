@@ -6,6 +6,11 @@ export {
   ListActiveMessagesInputV1,
 } from './active-messages';
 export { AskCancelledV1 } from './ask';
+export {
+  CommentApplyResultV1,
+  CommentContentExpectations,
+  commentContentFingerprint,
+} from './comment-content';
 
 export const ProviderId = z.enum([
   'anthropic',

@@ -7,6 +7,8 @@ import type {
   ChatMessage,
   ChatMessageRow,
   ClaudeCodeUserType,
+  CommentApplyResultV1,
+  CommentContentExpectations,
   CommentCreateInput,
   CommentRow,
   CommentStatus,
@@ -879,6 +881,19 @@ const api = {
         ids,
         snapshotId,
       }) as Promise<CommentRow[]>,
+    markAppliedIfUnchanged: (
+      designId: string,
+      ids: string[],
+      snapshotId: string,
+      expectedContent: CommentContentExpectations,
+    ) =>
+      ipcRenderer.invoke('comments:v1:mark-applied', {
+        schemaVersion: 1,
+        designId,
+        ids,
+        snapshotId,
+        expectedContent,
+      }) as Promise<CommentApplyResultV1>,
   },
   diagnostics: {
     log: (entry: {

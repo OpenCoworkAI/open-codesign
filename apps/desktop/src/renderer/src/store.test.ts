@@ -124,6 +124,11 @@ function mockCommentsApi() {
     update: vi.fn(async (_designId: string, _id: string, _patch: CommentUpdateInput) => null),
     remove: vi.fn(async (_designId: string, _id: string) => ({ removed: false })),
     markApplied: vi.fn(async (_designId: string, _ids: string[], _snapshotId: string) => []),
+    markAppliedIfUnchanged: vi.fn(async () => ({
+      schemaVersion: 1,
+      applied: [],
+      conflictedIds: [],
+    })),
   };
 }
 
@@ -607,19 +612,21 @@ describe('useCodesignStore inline comments', () => {
       outerHTML: '<section id="other">Other</section>',
       text: 'Do not send this one yet',
     });
-    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) =>
-      ids.map((id) => ({
+    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) => ({
+      schemaVersion: 1,
+      conflictedIds: [],
+      applied: ids.map((id) => ({
         ...(id === target.id ? target : other),
         status: 'applied' as const,
         appliedInSnapshotId: snapshotId,
       })),
-    );
+    }));
 
     vi.stubGlobal('window', {
       codesign: {
         generate,
         chat: mockChatApi(),
-        comments: { ...mockCommentsApi(), markApplied },
+        comments: { ...mockCommentsApi(), markAppliedIfUnchanged: markApplied },
         snapshots: {
           ...mockSnapshotsApi(),
           list: vi.fn(async () => [nextSnapshot]),
@@ -641,7 +648,12 @@ describe('useCodesignStore inline comments', () => {
     expect(generatedPrompt).toContain(target.text);
     expect(generatedPrompt).not.toContain(other.selector);
     expect(generatedPrompt).not.toContain(other.text);
-    expect(markApplied).toHaveBeenCalledWith(DEFAULT_DESIGN.id, [target.id], nextSnapshot.id);
+    expect(markApplied).toHaveBeenCalledWith(
+      DEFAULT_DESIGN.id,
+      [target.id],
+      nextSnapshot.id,
+      expect.any(Object),
+    );
   });
 
   it('keeps Apply sending every queued pending comment', async () => {
@@ -667,19 +679,21 @@ describe('useCodesignStore inline comments', () => {
     };
     const first = commentRow({ id: 'comment-a', selector: '#a', text: 'Edit A' });
     const second = commentRow({ id: 'comment-b', selector: '#b', text: 'Edit B' });
-    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) =>
-      ids.map((id) => ({
+    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) => ({
+      schemaVersion: 1,
+      conflictedIds: [],
+      applied: ids.map((id) => ({
         ...(id === first.id ? first : second),
         status: 'applied' as const,
         appliedInSnapshotId: snapshotId,
       })),
-    );
+    }));
 
     vi.stubGlobal('window', {
       codesign: {
         generate,
         chat: mockChatApi(),
-        comments: { ...mockCommentsApi(), markApplied },
+        comments: { ...mockCommentsApi(), markAppliedIfUnchanged: markApplied },
         snapshots: {
           ...mockSnapshotsApi(),
           list: vi.fn(async () => [nextSnapshot]),
@@ -701,6 +715,7 @@ describe('useCodesignStore inline comments', () => {
       DEFAULT_DESIGN.id,
       [first.id, second.id],
       nextSnapshot.id,
+      expect.any(Object),
     );
     expect(useCodesignStore.getState().queuedCommentIds).toEqual([]);
   });

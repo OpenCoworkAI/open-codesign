@@ -174,18 +174,25 @@ it.each([
         createdAt: design.createdAt,
       },
     ]);
-    api.comments.markApplied = vi.fn(async (_designId, ids, appliedInSnapshotId) =>
-      get()
+    api.comments.markAppliedIfUnchanged = vi.fn(async (_designId, ids, appliedInSnapshotId) => ({
+      schemaVersion: 1 as const,
+      conflictedIds: [],
+      applied: get()
         .comments.filter((comment) => ids.includes(comment.id))
         .map((comment) => ({ ...comment, status: 'applied' as const, appliedInSnapshotId })),
-    );
+    }));
   }
   completion.resolve({ artifacts: [], message: '', inputTokens: 1, outputTokens: 1, costUsd: 0 });
   await generation;
   expect(get().generationByDesign['a']).toBeUndefined();
   expect(get().composerDrafts['a']).toBe('Retain me');
   if (context === 'comments') {
-    expect(api.comments.markApplied).toHaveBeenCalledWith('a', ['edit-a'], 'applied-snapshot');
+    expect(api.comments.markAppliedIfUnchanged).toHaveBeenCalledWith(
+      'a',
+      ['edit-a'],
+      'applied-snapshot',
+      expect.objectContaining({ 'edit-a': expect.any(String) }),
+    );
     expect(get().queuedCommentIds).toEqual(['new-edit']);
     expect(get().comments[0]?.status).toBe('applied');
   } else {

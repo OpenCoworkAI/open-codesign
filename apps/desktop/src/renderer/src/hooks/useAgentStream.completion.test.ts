@@ -363,7 +363,7 @@ describe('agent stream / IPC completion ordering', () => {
       expect(useCodesignStore.getState().generationByDesign[design.id]).toMatchObject({
         generationId,
         awaitingResponse: true,
-        submittedContext: { referenceUrl: 'https://example.com/reference', commentIds: [] },
+        submittedContext: { referenceUrl: 'https://example.com/reference', comments: {} },
       });
       throw new Error('400 unsupported reasoning');
     });

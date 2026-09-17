@@ -759,6 +759,7 @@
     "commentNeedsSnapshot": "Gere um design antes de deixar um comentário",
     "commentCreateFailed": "Não foi possível salvar o comentário",
     "commentUpdateFailed": "Não foi possível atualizar o comentário",
+    "commentsChangedDuringGeneration": "Os comentários mudaram durante a geração e continuam pendentes. Envie-os novamente para aplicar as alterações atualizadas.",
     "commentDeleteFailed": "Não foi possível excluir o comentário",
     "noDesignToExport": "Nenhum design para exportar ainda.",
     "exportedTo": "Exportado para {{path}}"

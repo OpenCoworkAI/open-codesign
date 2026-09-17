@@ -35,3 +35,27 @@ it('exposes a typed, unsubscribable host cancellation event without resolving th
   expect(electron.removeListener).toHaveBeenCalledExactlyOnceWith('ask:cancelled', listener);
   expect(electron.invoke).not.toHaveBeenCalled();
 });
+
+it('forwards immutable comment expectations without changing the legacy mark-applied payload', async () => {
+  const api = electron.exposeInMainWorld.mock.calls[0]?.[1];
+  if (!api) throw new Error('Missing exposed API');
+  const result = { schemaVersion: 1, applied: [], conflictedIds: ['edit'] };
+  electron.invoke.mockResolvedValueOnce(result);
+  expect(
+    await api.comments.markAppliedIfUnchanged('design', ['edit'], 'after', { edit: 'original' }),
+  ).toBe(result);
+  expect(electron.invoke).toHaveBeenLastCalledWith('comments:v1:mark-applied', {
+    schemaVersion: 1,
+    designId: 'design',
+    ids: ['edit'],
+    snapshotId: 'after',
+    expectedContent: { edit: 'original' },
+  });
+  await api.comments.markApplied('design', ['edit'], 'after');
+  expect(electron.invoke).toHaveBeenLastCalledWith('comments:v1:mark-applied', {
+    schemaVersion: 1,
+    designId: 'design',
+    ids: ['edit'],
+    snapshotId: 'after',
+  });
+});
