@@ -94,7 +94,7 @@ function inspectStep(step: PreviewStep): StepAttempt {
     return { ok: true };
   }
   if (!visible) return fail('Element is not visible', true);
-  if (element.disabled || element.closest('[inert], [aria-disabled="true"]')) {
+  if (element.matches(':disabled') || element.closest('[inert], [aria-disabled="true"]')) {
     return fail('Element is disabled or inert');
   }
   if (step.action === 'select') {
@@ -102,7 +102,6 @@ function inspectStep(step: PreviewStep): StepAttempt {
       return fail('select requires a native HTML select element');
     }
     if (element.multiple) return fail('select does not support multiple-selection controls');
-    if (element.matches(':disabled')) return fail('Select is disabled by its fieldset');
     const options = Array.from(element.options).filter((option) => option.value === step.value);
     if (options.length === 0) {
       return fail(`No option with value ${JSON.stringify(step.value)} exists`);

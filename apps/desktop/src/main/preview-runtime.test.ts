@@ -250,7 +250,7 @@ describeIfChrome('runPreview with real Chrome', () => {
     ['#not-select', 'work', /native HTML select/],
     ['#multiple', 'work', /multiple-selection/],
     ['#disabled', 'work', /disabled/],
-    ['#fieldset-select', 'work', /disabled by its fieldset/],
+    ['#fieldset-select', 'work', /disabled or inert/],
     ['#disabled-option', 'work', /Option.*disabled/],
     ['#disabled-group', 'work', /disabled optgroup/],
     ['#valid', 'missing', /No option.*missing.*exists/],
