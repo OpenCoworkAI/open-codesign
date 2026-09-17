@@ -26,10 +26,17 @@ function imported(name: string): WorkspaceImportResult {
 it.each(
   [false, true].flatMap((sameSession) =>
     [false, true].flatMap((reject) =>
-      [false, true].map((sameBatch) => ({ sameSession, reject, sameBatch })),
+      [false, true].flatMap((sameBatch) =>
+        ['file', 'freeform'].map((secondType) => ({ sameSession, reject, sameBatch, secondType })),
+      ),
     ),
   ),
-)('isolates cancelled imports and field state: %j', async ({ sameSession, reject, sameBatch }) => {
+)('isolates cancelled imports and field state: %j', async ({
+  sameSession,
+  reject,
+  sameBatch,
+  secondType,
+}) => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('requestAnimationFrame', () => 1);
   vi.stubGlobal('cancelAnimationFrame', () => {});
@@ -76,6 +83,9 @@ it.each(
   });
   const first = request('First upload', 'a');
   const second = request('Second upload', sameSession ? 'a' : 'b');
+  if (secondType === 'freeform') {
+    second.input.questions = [{ id: 'brief', type: 'freeform', prompt: 'Second upload' }];
+  }
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -105,10 +115,13 @@ it.each(
     });
     expect(container.textContent).toContain('Second upload');
     expect(container.querySelector('input[type="file"]')).not.toBe(firstField);
-    await upload('new.txt');
+    if (secondType === 'file') await upload('new.txt');
     if (!sameBatch) await act(async () => finish());
     expect(container.textContent).not.toContain('old.txt');
     expect(container.textContent).not.toContain('Could not import');
+    if (secondType === 'freeform') {
+      expect(container.querySelector<HTMLInputElement>('input[type="text"]')?.value).toBe('');
+    }
     const answer = [...container.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('Answer'),
     );
@@ -116,7 +129,7 @@ it.each(
     await act(async () => answer.click());
     expect(resolve).toHaveBeenCalledExactlyOnceWith(second.requestId, {
       status: 'answered',
-      answers: [{ questionId: 'brief', value: 'imports/new.txt' }],
+      answers: [{ questionId: 'brief', value: secondType === 'file' ? 'imports/new.txt' : null }],
     });
     expect(useCodesignStore.getState().composerDrafts).toEqual({
       a: 'Keep composer A',
