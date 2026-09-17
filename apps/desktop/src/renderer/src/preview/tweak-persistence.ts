@@ -25,32 +25,76 @@ export interface PersistTweakTokensResult {
   wrote: boolean;
 }
 
-export function createTweakPersistDebounce() {
+export function rebaseTweakDraft(
+  acceptedSource: string,
+  submitted: EditmodeTokens,
+  draft: EditmodeTokens,
+): EditmodeTokens {
+  const accepted = parseEditmodeBlock(acceptedSource);
+  if (!accepted) throw new Error('Accepted tweak source no longer contains an EDITMODE block.');
+  const tokens = { ...accepted.tokens };
+  for (const [key, value] of Object.entries(draft)) {
+    if (value !== submitted[key]) tokens[key] = value;
+  }
+  return tokens;
+}
+
+export function createTweakPersistDebounce(onIdle?: () => void) {
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let baseSource: string | null = null;
-  return {
-    hasPending: () => timer !== null,
-    cancel() {
-      if (timer !== null) clearTimeout(timer);
-      timer = null;
-      baseSource = null;
-    },
-    schedule(
+  let active = false;
+  let version = 0;
+  type Pending = {
+    source: string;
+    tokens: EditmodeTokens;
+    persist: (
       source: string,
       tokens: EditmodeTokens,
-      persist: (source: string, tokens: EditmodeTokens) => void,
-    ) {
+    ) => undefined | Promise<PersistTweakTokensResult | undefined>;
+  };
+  let pending: Pending | null = null;
+
+  async function flush(): Promise<void> {
+    if (active || timer !== null || !pending) return;
+    const job = pending;
+    const jobVersion = version;
+    pending = null;
+    active = true;
+    try {
+      const result = await job.persist(job.source, job.tokens);
+      if (jobVersion !== version) return;
+      if (pending && result) {
+        const next: Pending = pending;
+        next.tokens = rebaseTweakDraft(result.content, job.tokens, next.tokens);
+        next.source = result.content;
+      } else if (!result) {
+        controller.cancel();
+      }
+    } finally {
+      active = false;
+      if (pending) void flush();
+      else onIdle?.();
+    }
+  }
+
+  const controller = {
+    hasPending: () => active || pending !== null,
+    cancel() {
+      version++;
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+      pending = null;
+    },
+    schedule(source: string, tokens: EditmodeTokens, persist: Pending['persist']) {
       if (timer !== null) clearTimeout(timer);
       // A watcher may refresh source while the user is still typing.
-      const originalSource = baseSource ?? source;
-      baseSource = originalSource;
+      pending = { source: pending?.source ?? source, tokens, persist };
       timer = setTimeout(() => {
         timer = null;
-        baseSource = null;
-        persist(originalSource, tokens);
+        void flush();
       }, 400);
     },
   };
+  return controller;
 }
 
 export async function resolveTweakWriteTarget(input: {

@@ -8,6 +8,7 @@ import {
   createTweakPersistDebounce,
   mergeTweakTokenChanges,
   persistTweakTokensToWorkspace,
+  rebaseTweakDraft,
   resolveTweakWriteTarget,
   type WorkspacePreviewWrite,
 } from './tweak-persistence';
@@ -15,16 +16,114 @@ import type { WorkspacePreviewRead } from './workspace-source';
 
 const jsxSource = 'const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"accent":"#000000"}/*EDITMODE-END*/;';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
+
 describe('tweak save debounce', () => {
+  it('serializes slow saves, coalesces edits, and rebases only on the accepted own output', async () => {
+    vi.useFakeTimers();
+    try {
+      const base = 'const t = /*EDITMODE-BEGIN*/{"heading":"Original","gap":16}/*EDITMODE-END*/;';
+      const accepted = base.replace('Original', 'First').replace('"gap":16', '"gap":24');
+      const first = deferred<{ content: string; path: string; wrote: boolean }>();
+      const idle = vi.fn();
+      const debounce = createTweakPersistDebounce(idle);
+      const save = vi
+        .fn()
+        .mockReturnValueOnce(first.promise)
+        .mockResolvedValue({
+          content: accepted.replace('First', 'Final'),
+          path: 'App.jsx',
+          wrote: true,
+        });
+      debounce.schedule(base, { heading: 'First', gap: 16 }, save);
+      await vi.advanceTimersByTimeAsync(400);
+      debounce.schedule(base, { heading: 'Second', gap: 16 }, save);
+      await vi.advanceTimersByTimeAsync(400);
+      debounce.schedule(base, { heading: 'Final', gap: 16 }, save);
+      await vi.advanceTimersByTimeAsync(400);
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(debounce.hasPending()).toBe(true);
+      first.resolve({ content: accepted, path: 'App.jsx', wrote: true });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(save).toHaveBeenCalledTimes(2);
+      expect(save).toHaveBeenLastCalledWith(accepted, { heading: 'Final', gap: 24 });
+      expect(idle).toHaveBeenCalledOnce();
+      expect(debounce.hasPending()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not treat a queued return to the original value as unchanged from the saved edit', () => {
+    expect(
+      rebaseTweakDraft(
+        '/*EDITMODE-BEGIN*/{"heading":"First","gap":24}/*EDITMODE-END*/',
+        { heading: 'First', gap: 16 },
+        { heading: 'Original', gap: 16 },
+      ),
+    ).toEqual({ heading: 'Original', gap: 24 });
+  });
+
+  it('drops queued edits after a reported failure without retrying', async () => {
+    vi.useFakeTimers();
+    try {
+      const first = deferred<undefined>();
+      const debounce = createTweakPersistDebounce();
+      const save = vi.fn().mockReturnValue(first.promise);
+      debounce.schedule(jsxSource, { accent: '#123456' }, save);
+      await vi.advanceTimersByTimeAsync(400);
+      debounce.schedule(jsxSource, { accent: '#abcdef' }, save);
+      await vi.advanceTimersByTimeAsync(400);
+      first.resolve(undefined);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(debounce.hasPending()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never rebases a new identity with a cancelled save ACK', async () => {
+    vi.useFakeTimers();
+    try {
+      const first = deferred<{ content: string; path: string; wrote: boolean }>();
+      const debounce = createTweakPersistDebounce();
+      const save = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(undefined);
+      debounce.schedule(jsxSource, { accent: '#123456' }, save);
+      await vi.advanceTimersByTimeAsync(400);
+      debounce.cancel();
+      const other = jsxSource.replace('#000000', '#ffffff');
+      debounce.schedule(other, { accent: '#fedcba' }, save);
+      await vi.advanceTimersByTimeAsync(400);
+      first.resolve({
+        content: jsxSource.replace('#000000', '#123456'),
+        path: 'App.jsx',
+        wrote: true,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(save).toHaveBeenLastCalledWith(other, { accent: '#fedcba' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the first baseline during continuous typing across an external source refresh', async () => {
     vi.useFakeTimers();
     try {
       const base = 'const t = /*EDITMODE-BEGIN*/{"gap":16,"heading":"Lab"}/*EDITMODE-END*/;';
       const revised = base.replace('"gap":16', '"gap":26');
       const debounce = createTweakPersistDebounce();
-      const save = vi.fn((source: string, tokens: EditmodeTokens) =>
-        mergeTweakTokenChanges(revised, source, tokens),
-      );
+      const save = vi.fn(async (source: string, tokens: EditmodeTokens) => ({
+        content: mergeTweakTokenChanges(revised, source, tokens),
+        path: 'App.jsx',
+        wrote: true,
+      }));
       debounce.schedule(base, { gap: 16, heading: 'Lab1' }, save);
       await vi.advanceTimersByTimeAsync(300);
       debounce.schedule(revised, { gap: 16, heading: 'Lab12' }, save);
@@ -34,7 +133,9 @@ describe('tweak save debounce', () => {
       expect(save).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(1);
       expect(save).toHaveBeenCalledExactlyOnceWith(base, { gap: 16, heading: 'Lab123' });
-      expect(parseEditmodeBlock(save.mock.results[0]?.value)?.tokens).toEqual({
+      expect(
+        parseEditmodeBlock((await save.mock.results[0]?.value)?.content ?? '')?.tokens,
+      ).toEqual({
         gap: 26,
         heading: 'Lab123',
       });

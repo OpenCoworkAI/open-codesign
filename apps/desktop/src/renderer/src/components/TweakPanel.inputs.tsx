@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 
-const CSS_COLOR_RE =
-  /^(#([0-9a-f]{3}|[0-9a-f]{6})|(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\([^)]*\)|color\([^)]*\)|[a-z]+)$/i;
-
 export function isColorString(value: unknown): value is string {
-  return typeof value === 'string' && CSS_COLOR_RE.test(value.trim());
+  if (typeof value !== 'string') return false;
+  const color = value.trim();
+  // CSS-wide keywords and unresolved variables are not concrete color tokens.
+  if (/^(inherit|initial|unset|revert|revert-layer)$/i.test(color) || /\bvar\(/i.test(color))
+    return false;
+  return typeof CSS !== 'undefined'
+    ? CSS.supports('color', color)
+    : expandHexColor(color) !== null || rgbFunctionalColorToHex(color) !== null;
 }
 
 function clampChannel(value: number): number {
