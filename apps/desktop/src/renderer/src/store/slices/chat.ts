@@ -207,13 +207,12 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
         return;
       }
       const load = {
-        id: ++nextLoad,
+        id: 0,
         designId,
         epoch: get().chatViewEpoch,
         changes: [] as ChatChange[],
       };
-      pruneLoads();
-      pendingLoads.add(load);
+      const publicationBeforeSeed = publishedLoad;
       const canPublish = () =>
         get().currentDesignId === designId &&
         get().chatViewEpoch === load.epoch &&
@@ -221,6 +220,10 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
       try {
         // Seed existing designs' chat history from snapshots on first open.
         await window.codesign.chat.seedFromSnapshots(designId);
+        if (get().currentDesignId !== designId || get().chatViewEpoch !== load.epoch) return;
+        load.id = ++nextLoad;
+        pruneLoads();
+        pendingLoads.add(load);
         const rows = await window.codesign.chat.list(designId);
         if (!canPublish()) return;
         // Replay only writes acknowledged during this read, including patches to
@@ -232,7 +235,15 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
         console.warn('[open-codesign] loadChatForCurrentDesign failed:', msg);
-        if (canPublish()) set({ chatLoaded: true });
+        if (
+          canPublish() ||
+          (load.id === 0 &&
+            publishedLoad === publicationBeforeSeed &&
+            get().currentDesignId === designId &&
+            get().chatViewEpoch === load.epoch)
+        ) {
+          set({ chatLoaded: true });
+        }
       } finally {
         load.changes.length = 0;
         pendingLoads.delete(load);

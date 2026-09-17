@@ -231,6 +231,27 @@ it('does not let an older list hide a canonical delivered instruction', async ()
   expect(append).not.toHaveBeenCalled();
 });
 
+it('orders chat reads by dispatch after reversed seed completion', async () => {
+  const seed = deferred<void>();
+  const olderRead = deferred<ChatMessageRow[]>();
+  const api = window.codesign;
+  if (!api) throw new Error('Missing IPC');
+  api.chat.seedFromSnapshots = vi
+    .fn()
+    .mockReturnValueOnce(seed.promise)
+    .mockResolvedValue(undefined);
+  list.mockReturnValueOnce(olderRead.promise).mockResolvedValueOnce([row(1), row(2)]);
+  const first = get().loadChatForCurrentDesign();
+  const second = get().loadChatForCurrentDesign();
+  await vi.waitFor(() => expect(list).toHaveBeenCalledOnce());
+  seed.resolve();
+  await first;
+  expect(get().chatMessages).toEqual([row(1), row(2)]);
+  olderRead.resolve([row(1)]);
+  await second;
+  expect(get().chatMessages).toEqual([row(1), row(2)]);
+});
+
 it('reconciles initial history with intervening append and deduplicates a later list', async () => {
   const old = deferred<ChatMessageRow[]>();
   list.mockReturnValueOnce(old.promise);
