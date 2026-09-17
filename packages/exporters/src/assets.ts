@@ -122,7 +122,7 @@ export function rewriteHtmlLocalAssetReferences(
         replacements.push({
           start: valueStart,
           end: valueStart + raw.length,
-          value: `${resolved.archivePath}${resolved.suffix}`,
+          value: archiveAssetUrl(resolved),
         });
       }
     }
@@ -153,7 +153,7 @@ export function rewriteHtmlLocalAssetReferences(
       replacements.push({
         start,
         end: start + raw.length,
-        value: `${resolved.archivePath}${resolved.suffix}`,
+        value: archiveAssetUrl(resolved),
       });
     }
     css = urlRe.exec(html);
@@ -347,9 +347,23 @@ function rewriteSrcset(raw: string, root: ResolvedRoot, contextDir: string): str
   return parseSrcset(raw)
     .map((candidate) => {
       const ref = resolveAssetReference(candidate.url, root, contextDir);
-      return `${ref ? `${ref.archivePath}${ref.suffix}` : candidate.url}${candidate.descriptor}`;
+      return `${ref ? archiveAssetUrl(ref) : candidate.url}${candidate.descriptor}`;
     })
     .join(', ');
+}
+
+function archiveAssetUrl(ref: ResolvedAssetReference): string {
+  // Keep decoded filesystem names separate from URLs embedded in CSS, HTML, or JSX strings.
+  const urlPath = ref.archivePath
+    .split('/')
+    .map((segment) =>
+      encodeURIComponent(segment).replace(
+        /['()]/g,
+        (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+      ),
+    )
+    .join('/');
+  return `${urlPath}${ref.suffix}`;
 }
 
 function parseSrcset(raw: string): Array<{ url: string; descriptor: string }> {

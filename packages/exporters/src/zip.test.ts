@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { exportZip } from './zip';
 
@@ -169,6 +170,103 @@ describe('exportZip', () => {
 
     expect(readFileSync(join(extractDir, 'DESIGN.md'), 'utf8')).toContain('Zip Test');
   });
+
+  it.runIf(process.env['CODESIGN_EXPORT_BROWSER_TESTS'] === '1').each(['html', 'jsx'])(
+    'renders extracted %s ZIP assets with encoded spaces, quotes, and parentheses offline',
+    async (format) => {
+      const { findSystemChrome } = await import('./chrome-discovery');
+      const { default: puppeteer } = await import('puppeteer-core');
+      const { Unzip } = await import('zip-lib');
+      const filenames = ['space image.svg', "it's (local).svg"];
+      const assetDir = join(tempDir, 'assets', 'brand images');
+      mkdirSync(assetDir, { recursive: true });
+      for (const filename of filenames) {
+        writeFileSync(
+          join(assetDir, filename),
+          '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="blue"/></svg>',
+        );
+      }
+      const urls = [
+        'assets/brand%20images/space%20image.svg?v=1#icon',
+        'assets/brand%20images/it%27s%20%28local%29.svg?v=2#icon',
+      ];
+      const markup = urls
+        .map((url, index) =>
+          format === 'jsx'
+            ? `<div id="background-${index}" style={{backgroundImage:"url(../${url})",width:16,height:16}} /><img id="image-${index}" src="../${url}" />`
+            : `<div id="background-${index}" style="background-image:url(../${url});width:16px;height:16px"></div><img id="image-${index}" src="../${url}">`,
+        )
+        .join('');
+      const source =
+        format === 'jsx'
+          ? `function App() { return <main>${markup}</main>; }`
+          : `<!doctype html><html><body>${markup}</body></html>`;
+      const dest = join(tempDir, `encoded-${format}.zip`);
+      await exportZip(source, dest, {
+        sourcePath: `screens/App.${format}`,
+        assetBasePath: join(tempDir, 'screens'),
+        assetRootPath: tempDir,
+      });
+      const extractDir = join(tempDir, `encoded-${format}-extracted`);
+      await new Unzip().extract(dest, extractDir);
+      for (const filename of filenames) {
+        expect(existsSync(join(extractDir, 'assets', 'brand images', filename))).toBe(true);
+      }
+      expect(readFileSync(join(extractDir, 'source', 'screens', `App.${format}`), 'utf8')).toBe(
+        source,
+      );
+
+      const browser = await puppeteer.launch({
+        executablePath: await findSystemChrome(),
+        headless: true,
+        pipe: true,
+        userDataDir: join(tempDir, `browser-profile-${format}`),
+      });
+      try {
+        const page = await browser.newPage();
+        const errors: string[] = [];
+        const external: string[] = [];
+        page.on('pageerror', (error) => errors.push(String(error)));
+        page.on('request', (request) => {
+          if (/^https?:/.test(request.url())) external.push(request.url());
+        });
+        await page.setOfflineMode(true);
+        const indexUrl = pathToFileURL(join(extractDir, 'index.html')).href;
+        await page.goto(indexUrl);
+        await page.waitForSelector('#background-1');
+        for (const [index, url] of urls.entries()) {
+          const expectedUrl = new URL(url, indexUrl).href;
+          expect(
+            await page.$eval(
+              `#background-${index}`,
+              (node) => getComputedStyle(node).backgroundImage,
+            ),
+          ).toBe(`url("${expectedUrl}")`);
+          // Decode the browser-parsed CSS URL, not just an independently constructed fixture URL.
+          expect(
+            await page.$eval(`#background-${index}`, async (node) => {
+              const image = new Image();
+              image.src = getComputedStyle(node).backgroundImage.slice(5, -2);
+              await image.decode();
+              return image.naturalWidth;
+            }),
+          ).toBe(16);
+          expect(
+            await page.$eval(`#image-${index}`, async (node) => {
+              if (!(node instanceof HTMLImageElement)) return 0;
+              await node.decode();
+              return node.naturalWidth;
+            }),
+          ).toBe(16);
+        }
+        expect(errors).toEqual([]);
+        expect(external).toEqual([]);
+      } finally {
+        await browser.close();
+      }
+    },
+    JSX_ZIP_TIMEOUT_MS,
+  );
 
   it('throws EXPORTER_ZIP_FAILED when the destination cannot be written', async () => {
     // Pass a directory as the destination — zip-lib will fail to write a regular file there.

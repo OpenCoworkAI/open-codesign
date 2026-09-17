@@ -76,6 +76,31 @@ describe('local exporter assets', () => {
     expect(archive).toBe(source);
   });
 
+  it.each([
+    '"',
+    "'",
+  ])('encodes archive path segments without adding quotes inside %s JSX strings', (quote) => {
+    const asset = 'assets/brand%20images/it%27s%20%22local%22%20%28draft%29%25%23%3F.svg';
+    const suffix = '?version=2&name=some%20name#icon';
+    const source = `function App() { return <div style={{backgroundImage:${quote}url(../${asset}${suffix})${quote}}} />; }`;
+    const out = rewriteHtmlLocalAssetReferences(source, {
+      assetBasePath: join(tempDir, 'screens'),
+      assetRootPath: tempDir,
+    });
+
+    expect(out).toBe(source.replace(`../${asset}`, asset));
+    expect(rewriteHtmlLocalAssetReferences(out, { assetRootPath: tempDir })).toBe(out);
+  });
+
+  it('encodes archive attribute and srcset URLs while preserving descriptors and suffixes', () => {
+    const asset = 'assets/brand%20images/it%27s%20%28local%29.svg';
+    const source = `<img src="/${asset}?v=1#icon" srcset="/${asset} 1x, /${asset}?v=2 2x">`;
+
+    expect(rewriteHtmlLocalAssetReferences(source, { assetRootPath: tempDir })).toBe(
+      `<img src="${asset}?v=1#icon" srcset="${asset} 1x, ${asset}?v=2 2x">`,
+    );
+  });
+
   it('escapes text assets for single-quoted attributes and unquoted CSS URLs', async () => {
     writeFileSync(join(tempDir, 'assets', 'quoted.svg'), "<svg><title>It's (local)</title></svg>");
     const out = await inlineLocalAssetsInHtml("<img src='assets/quoted.svg'>", {
