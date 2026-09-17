@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import type { CodesignApi } from '../../../../preload';
 import type { WorkspacePreviewReadResult } from '../../preview/workspace-source';
 import { useCodesignStore } from '../../store';
+import { WorkspaceFilePreview } from '../FilesTabView';
 import { TweakPanel } from '../TweakPanel';
 import { isColorString } from '../TweakPanel.inputs';
 
@@ -16,6 +17,7 @@ declare global {
       replace: (designId: string, source: WorkspacePreviewReadResult) => void;
       generating: () => void;
       colors: (values: string[]) => boolean[];
+      refreshWorkspace: () => void;
     };
   }
 }
@@ -35,7 +37,9 @@ const initialSource = await window.tweakRead('first', 'App.jsx');
 function Fixture() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [source, setSource] = useState<WorkspacePreviewReadResult>(initialSource);
+  const [revision, setRevision] = useState(0);
   const toasts = useCodesignStore((state) => state.toasts);
+  const runtimeErrors = useCodesignStore((state) => state.iframeErrors);
   window.tweakFixture = {
     replace(designId, next) {
       useCodesignStore.setState({ currentDesignId: designId });
@@ -51,7 +55,22 @@ function Fixture() {
       });
     },
     colors: (values) => values.map(isColorString),
+    refreshWorkspace: () => setRevision((value) => value + 1),
   };
+  if (new URLSearchParams(location.search).has('workspace')) {
+    return (
+      <div style={{ height: 700 }}>
+        <WorkspaceFilePreview
+          path="App.jsx"
+          files={[
+            { path: 'App.jsx', kind: 'jsx', source: 'workspace', updatedAt: String(revision) },
+          ]}
+        />
+        <output>{toasts.map((toast) => toast.description).join('\n')}</output>
+        <output data-runtime-errors>{runtimeErrors.join('\n')}</output>
+      </div>
+    );
+  }
   return (
     <>
       <iframe

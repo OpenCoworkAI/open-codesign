@@ -34,6 +34,7 @@ export type { IframeErrorMessage } from './iframe-errors';
 export { isIframeErrorMessage } from './iframe-errors';
 export type { ElementRectsMessage, OverlayMessage } from './overlay';
 export { isElementRectsMessage, isOverlayMessage, OVERLAY_SCRIPT } from './overlay';
+export { isTweakCompatibilityNotice } from './tweaks-bridge';
 
 const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
 const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
@@ -299,43 +300,25 @@ function bindEditmodeTokensToRuntime(source: string): string {
   return source.replace(EDITMODE_MARKER_RE, 'window.__codesign_tweaks__.tokens');
 }
 
-function readsTweakDefaultsAfterDeclaration(source: string): boolean {
-  let count = 0;
-  let index = source.indexOf('TWEAK_DEFAULTS');
-  while (index >= 0) {
-    count += 1;
-    if (count > 1) return true;
-    index = source.indexOf('TWEAK_DEFAULTS', index + 'TWEAK_DEFAULTS'.length);
-  }
-  return false;
-}
-
 function compileAndRunScript(
   source: string,
   kind: 'jsx' | 'tsx',
   opts: { liveTweaks?: boolean } = {},
 ): string {
   const runtimeSource = opts.liveTweaks ? bindEditmodeTokensToRuntime(source) : source;
-  const registerRunner =
-    opts.liveTweaks === true && readsTweakDefaultsAfterDeclaration(source)
-      ? `
-    if (window.__codesign_tweaks__ && typeof window.__codesign_tweaks__.registerRunner === 'function') {
-      window.__codesign_tweaks__.registerRunner(runner);
-    }`
-      : '';
   const sourceLiteral = escapeForScriptLiteral(runtimeSource);
   const optionsLiteral = JSON.stringify(transformOptionsForKind(kind));
+  const execute = opts.liveTweaks
+    ? 'window.__codesign_tweaks__.runModule(function() { execute(window.React, window.ReactDOM); });'
+    : 'execute(window.React, window.ReactDOM);';
   return `<script>
 (function() {
   var source = ${sourceLiteral};
   var options = ${optionsLiteral};
   try {
     var compiled = window.Babel.transform(source, options).code;
-    var runner = function() {
-      new Function('React', 'ReactDOM', compiled)(window.React, window.ReactDOM);
-    };
-${registerRunner}
-    runner();
+    var execute = new Function('React', 'ReactDOM', compiled);
+    ${execute}
   } catch (err) {
     setTimeout(function() { throw err; }, 0);
   }

@@ -238,14 +238,15 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`;
     expect(out).not.toContain('originalScript');
   });
 
-  it('registers a cached live runner only when source reads TWEAK_DEFAULTS after declaration', () => {
+  it('runs the artifact module once and leaves live rerenders to the existing React root', () => {
     const out =
       buildSrcdoc(`const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"accent":"#000"}/*EDITMODE-END*/;
 function App() { return <main style={{ color: TWEAK_DEFAULTS.accent }}>hi</main>; }
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`);
 
     expect(out).toContain('window.__codesign_tweaks__.tokens');
-    expect(out).toContain('registerRunner(runner)');
+    expect(out).not.toContain('registerRunner(runner)');
+    expect(out).toContain('window.React.cloneElement(element)');
   });
 
   it('detects JSX via ReactDOM.createRoot signature even without EDITMODE', () => {

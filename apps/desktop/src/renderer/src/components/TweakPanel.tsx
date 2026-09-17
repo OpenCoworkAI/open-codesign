@@ -1,8 +1,10 @@
 import { useT } from '@open-codesign/i18n';
+import { isTweakCompatibilityNotice } from '@open-codesign/runtime';
 import type { EditmodeTokens, EditmodeTokenValue, TokenSchemaEntry } from '@open-codesign/shared';
 import { inspectTweakSource } from '@open-codesign/shared';
 import { RotateCcw, SlidersHorizontal, X } from 'lucide-react';
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { isTrustedPreviewMessageSource } from '../preview/helpers';
 import {
   createTweakPersistDebounce,
   persistTweakTokensToWorkspace,
@@ -209,6 +211,25 @@ function TweakPanelEditor({
       '*',
     );
   }, [iframeRef, liveTokens]);
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent<unknown>) {
+      if (
+        !mountedRef.current ||
+        useCodesignStore.getState().currentDesignId !== currentDesignId ||
+        !isTrustedPreviewMessageSource(event.source, iframeRef.current?.contentWindow) ||
+        !isTweakCompatibilityNotice(event.data)
+      )
+        return;
+      useCodesignStore.getState().pushToast({
+        variant: 'info',
+        title: t('tweaks.title'),
+        description: event.data.message,
+      });
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [currentDesignId, iframeRef, t]);
 
   // Debounced persist back to the artifact source so reload / snapshot / export
   // see the tweaked state. Live updates have already gone via postMessage.

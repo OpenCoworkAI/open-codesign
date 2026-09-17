@@ -43,7 +43,7 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
           name: 'tweak-browser-fixture',
           configureServer(vite) {
             vite.middlewares.use((req, res, next) => {
-              if (req.url !== '/tweak-fixture') return next();
+              if (req.url?.split('?')[0] !== '/tweak-fixture') return next();
               res.setHeader('Content-Type', 'text/html');
               res.end(
                 '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/renderer/src/components/__fixtures__/tweak-browser.tsx"></script></body></html>',
@@ -139,6 +139,180 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
   async function tokens(design = 'first', path = 'App.jsx') {
     return parseEditmodeBlock(await readFile(file(design, path), 'utf8'))?.tokens;
   }
+
+  it('preserves real runtime component state through live edits, disk ACK, and watcher refresh', async () => {
+    const artifact = `${source}
+window.moduleRuns = (window.moduleRuns || 0) + 1;
+function App() {
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => { window.effectRuns = (window.effectRuns || 0) + 1; }, []);
+  const copiedTokens = structuredClone(TWEAK_DEFAULTS);
+  return <main>
+    <h1 style={{color: TWEAK_DEFAULTS.accent}}>{copiedTokens.heading}</h1>
+    <button id="counter" onClick={() => setCount(n => n + 1)}>Count {count}</button>
+    <input id="artifact-input" />
+  </main>;
+}`;
+    await writeFile(file('first', 'App.jsx'), artifact);
+    await page.goto(`${endpoint}?workspace=1`);
+    await page.waitForSelector('iframe');
+    const frame = await (await page.$('iframe'))?.contentFrame();
+    if (!frame) throw new Error('Missing runtime iframe');
+    await frame.waitForSelector('#counter');
+    await frame.click('#counter');
+    await frame.type('#artifact-input', 'Retain through tweak');
+    await page.click('[aria-label="Open tweaks panel"]');
+    const heading = await replace('fieldset input[type="text"]', 'Convergence v2 verified');
+    await expect.poll(async () => (await tokens())?.['heading']).toBe('Convergence v2 verified');
+    await page.evaluate(() => window.tweakFixture.refreshWorkspace());
+    await frame.waitForFunction(
+      () => document.querySelector('h1')?.textContent === 'Convergence v2 verified',
+    );
+    expect(await frame.$eval('#counter', (node) => node.textContent)).toBe('Count 1');
+    expect(await frame.$eval('#artifact-input', (node) => (node as HTMLInputElement).value)).toBe(
+      'Retain through tweak',
+    );
+    expect(await frame.evaluate(() => Reflect.get(window, 'moduleRuns'))).toBe(1);
+    expect(await frame.evaluate(() => Reflect.get(window, 'effectRuns'))).toBe(1);
+    expect(await page.$eval('[data-runtime-errors]', (node) => node.textContent)).toBe('');
+    expect(await page.$eval('output', (node) => node.textContent)).toBe('');
+    expect(await heading.evaluate((node) => document.activeElement === node)).toBe(true);
+    await replace('fieldset label + input', '#abcdef');
+    await expect.poll(async () => (await tokens())?.['accent']).toBe('#abcdef');
+    await page.evaluate(() => window.tweakFixture.refreshWorkspace());
+    await frame.waitForFunction(() => {
+      const heading = document.querySelector('h1');
+      return heading && getComputedStyle(heading).color === 'rgb(171, 205, 239)';
+    });
+    expect(await frame.$eval('#counter', (node) => node.textContent)).toBe('Count 1');
+    const structural = (await readFile(file('first', 'App.jsx'), 'utf8')).replace(
+      '<main>',
+      '<main data-revision="external">',
+    );
+    await page.evaluate(() =>
+      Reflect.set(window, 'oldPreviewWindow', document.querySelector('iframe')?.contentWindow),
+    );
+    await writeFile(file('first', 'App.jsx'), structural);
+    await page.evaluate(() => window.tweakFixture.refreshWorkspace());
+    await page.waitForFunction(() =>
+      document.querySelector('iframe')?.srcdoc.includes('data-revision'),
+    );
+    const nextFrame = await (await page.$('iframe'))?.contentFrame();
+    if (!nextFrame) throw new Error('Missing revised runtime iframe');
+    await nextFrame.waitForSelector('[data-revision="external"]');
+    expect(await nextFrame.$eval('#counter', (node) => node.textContent)).toBe('Count 0');
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: Reflect.get(window, 'oldPreviewWindow'),
+          data: { type: 'codesign:tweaks:compatibility', message: 'Stale artifact notice' },
+        }),
+      );
+      window.postMessage(
+        { type: 'codesign:tweaks:compatibility', message: 'Wrong host notice' },
+        '*',
+      );
+    });
+    await pause(100);
+    expect(await page.$eval('output', (node) => node.textContent)).toBe('');
+  }, 30_000);
+
+  it.each([
+    [
+      'top-level derived token',
+      'const heading = TWEAK_DEFAULTS.heading; function App() { return <h1>{heading}</h1>; }',
+    ],
+    [
+      'top-level cloned tokens',
+      'const copied = structuredClone(TWEAK_DEFAULTS); function App() { return <h1>{copied.heading}</h1>; }',
+    ],
+    [
+      'static JSX root',
+      'ReactDOM.createRoot(document.getElementById("root")).render(<h1>{TWEAK_DEFAULTS.heading}</h1>);',
+    ],
+    [
+      'fragment root',
+      'function Heading() { return <h1>{TWEAK_DEFAULTS.heading}</h1>; } ReactDOM.createRoot(document.getElementById("root")).render(<><Heading/></>);',
+    ],
+    [
+      'memo root',
+      'const App = React.memo(function App() { return <h1>{TWEAK_DEFAULTS.heading}</h1>; });',
+    ],
+    [
+      'nested memo',
+      'const Heading = React.memo(() => <h1>{TWEAK_DEFAULTS.heading}</h1>); function App() { return <Heading />; }',
+    ],
+    [
+      'PureComponent root',
+      'class App extends React.PureComponent { render() { return <h1>{TWEAK_DEFAULTS.heading}</h1>; } } ReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
+    ],
+    [
+      'nested PureComponent',
+      'class Heading extends React.PureComponent { render() { return <h1>{TWEAK_DEFAULTS.heading}</h1>; } } function App() { return <Heading />; }',
+    ],
+  ])(
+    'keeps %s tweaks updating with a visible compatibility limitation',
+    async (_name, body) => {
+      await writeFile(file('first', 'App.jsx'), `${source}\n${body}`);
+      await page.goto(`${endpoint}?workspace=1`);
+      await page.waitForSelector('iframe');
+      const frame = await (await page.$('iframe'))?.contentFrame();
+      if (!frame) throw new Error('Missing runtime iframe');
+      await frame.waitForSelector('h1');
+      await page.click('[aria-label="Open tweaks panel"]');
+      await replace('fieldset input[type="text"]', 'Compatible updated heading');
+      await expect
+        .poll(async () => (await tokens())?.['heading'])
+        .toBe('Compatible updated heading');
+      await page.evaluate(() => window.tweakFixture.refreshWorkspace());
+      await frame.waitForFunction(
+        () => document.querySelector('h1')?.textContent === 'Compatible updated heading',
+      );
+      expect(await page.$eval('output', (node) => node.textContent)).toContain(
+        'Updating tweaks reinitializes artifact state',
+      );
+      expect(await page.$eval('[data-runtime-errors]', (node) => node.textContent)).toBe('');
+      expect(
+        await page.$eval(
+          'output',
+          (node) => node.textContent?.match(/Live tweak compatibility mode/g)?.length,
+        ),
+      ).toBe(1);
+    },
+    30_000,
+  );
+
+  it('replays the latest manual root render while keeping its component state and effects', async () => {
+    await writeFile(
+      file('first', 'App.jsx'),
+      `${source}
+const root = ReactDOM.createRoot(document.getElementById('root'));
+function Other() {
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => { window.effectRuns = (window.effectRuns || 0) + 1; }, []);
+  return <main><h1>{TWEAK_DEFAULTS.heading}</h1><button id="counter" onClick={() => setCount(n => n+1)}>Count {count}</button></main>;
+}
+function App() { return <button id="switch" onClick={() => root.render(<Other/>)}>Switch manually</button>; }
+root.render(<App/>);`,
+    );
+    await page.goto(`${endpoint}?workspace=1`);
+    await page.waitForSelector('iframe');
+    const frame = await (await page.$('iframe'))?.contentFrame();
+    if (!frame) throw new Error('Missing runtime iframe');
+    await frame.waitForSelector('#switch');
+    await frame.click('#switch');
+    await frame.click('#counter');
+    await page.click('[aria-label="Open tweaks panel"]');
+    await replace('fieldset input[type="text"]', 'Manual root updated');
+    await expect.poll(async () => (await tokens())?.['heading']).toBe('Manual root updated');
+    await page.evaluate(() => window.tweakFixture.refreshWorkspace());
+    await frame.waitForFunction(
+      () => document.querySelector('h1')?.textContent === 'Manual root updated',
+    );
+    expect(await frame.$eval('#counter', (node) => node.textContent)).toBe('Count 1');
+    expect(await frame.evaluate(() => Reflect.get(window, 'effectRuns'))).toBe(1);
+    expect(await page.$eval('[data-runtime-errors]', (node) => node.textContent)).toBe('');
+  }, 30_000);
 
   it('retains the heading DOM node through full keyboard replacement and guarded disk save', async () => {
     const input = await replace('fieldset input[type="text"]', 'Convergence v2 verified');
