@@ -128,7 +128,12 @@ function isCurrentGenerationForDesign(
   return state.generationByDesign[designId]?.generationId === generationId;
 }
 
-function startGenerationForDesign(set: SetState, designId: string, generationId: string): void {
+function startGenerationForDesign(
+  set: SetState,
+  designId: string,
+  generationId: string,
+  submittedContext: NonNullable<CodesignState['generationByDesign'][string]['submittedContext']>,
+): void {
   set((state) => {
     const generationByDesign = {
       ...state.generationByDesign,
@@ -137,6 +142,7 @@ function startGenerationForDesign(set: SetState, designId: string, generationId:
         stage: 'sending' as GenerationStage,
         startedAt: Date.now(),
         awaitingResponse: true,
+        submittedContext,
       },
     };
     return {
@@ -846,7 +852,10 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       }
 
       const generationId = newId();
-      startGenerationForDesign(set, designIdAtStart, generationId);
+      startGenerationForDesign(set, designIdAtStart, generationId, {
+        ...(request.referenceUrl ? { referenceUrl: request.referenceUrl } : {}),
+        commentIds: pendingEditIds,
+      });
       clearStreamingForDesign(set, designIdAtStart);
       set(() => ({
         errorMessage: null,

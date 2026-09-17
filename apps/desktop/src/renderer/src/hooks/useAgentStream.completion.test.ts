@@ -1,4 +1,9 @@
 import { initI18n } from '@open-codesign/i18n';
+import type {
+  ActiveRunMessageInputV1,
+  ChatAppendInput,
+  ChatMessageRow,
+} from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentStreamEvent } from '../../../preload/index';
 import { type CodesignState, useCodesignStore } from '../store';
@@ -120,6 +125,98 @@ afterEach(() => {
 });
 
 describe('agent stream / IPC completion ordering', () => {
+  it('keeps exactly one canonical active message through delivery, turn end and completion', async () => {
+    const get = useCodesignStore.getState;
+    const rows: ChatMessageRow[] = [];
+    const persist = (input: ChatAppendInput): ChatMessageRow => {
+      const row: ChatMessageRow = {
+        ...input,
+        schemaVersion: 1,
+        id: rows.length + 1,
+        seq: rows.length + 1,
+        snapshotId: input.snapshotId ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      rows.push(row);
+      return row;
+    };
+    const api = window.codesign;
+    if (!api) throw new Error('Missing test IPC');
+    api.chat.append = vi.fn(async (input) => persist(input));
+    const list = vi.fn(async () => [...rows]);
+    api.chat.list = list;
+    api.sendActiveMessage = vi.fn(async (input: ActiveRunMessageInputV1) => ({
+      ...input,
+      status: 'pending' as const,
+      createdAt: new Date().toISOString(),
+    }));
+    let finish!: () => void;
+    generate.mockImplementationOnce(
+      ({ generationId, referenceUrl }: { generationId: string; referenceUrl: string }) => {
+        expect(referenceUrl).toBe('https://example.com/reference');
+        emit('turn_start', generationId);
+        return new Promise((resolve) => {
+          finish = () =>
+            resolve({
+              artifacts: [],
+              message: 'Finished',
+              inputTokens: 1,
+              outputTokens: 1,
+              costUsd: 0,
+            });
+        });
+      },
+    );
+    get().setReferenceUrl('https://example.com/reference');
+    const generation = get().sendPrompt({ prompt: 'Start with the reference' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(generate).toHaveBeenCalledOnce();
+    const generationId = get().generationByDesign[design.id]?.generationId;
+    if (!generationId) throw new Error('Missing running generation');
+    get().setComposerDraft('Make it warmer');
+    await get().sendActiveMessage('Make it warmer', 'steer');
+    const pending = get().activeMessagesByDesign[design.id]?.[0];
+    if (!pending) throw new Error('Missing pending active message');
+    expect(get().chatMessages.map((row) => row.payload)).toEqual([
+      { text: 'Start with the reference' },
+    ]);
+    let resolveOld!: (rows: ChatMessageRow[]) => void;
+    const oldRows = [...rows];
+    list.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+    );
+    const oldLoad = get().loadChatForCurrentDesign();
+    await vi.advanceTimersByTimeAsync(0);
+    persist({ designId: design.id, kind: 'user', payload: { text: 'Make it warmer' } });
+    emit('active_message', generationId, {
+      activeMessage: { ...pending, status: 'delivered' },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(get().chatMessages).toEqual(rows);
+    persist({ designId: design.id, kind: 'assistant_text', payload: { text: 'Finished' } });
+    emit('turn_end', generationId, { finalText: 'Finished', chatPersisted: true });
+    emit('agent_end', generationId);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(get().generationByDesign[design.id]?.submittedContext?.referenceUrl).toBe(
+      'https://example.com/reference',
+    );
+    finish();
+    await generation;
+    resolveOld(oldRows);
+    await oldLoad;
+    expect(get().chatMessages).toEqual(rows);
+    expect(get().chatMessages.filter((row) => row.kind === 'user')).toHaveLength(2);
+    expect(get().chatMessages.filter((row) => row.kind === 'assistant_text')).toHaveLength(1);
+    expect(api.chat.append).toHaveBeenCalledOnce();
+    expect(get().activeMessagesByDesign[design.id]?.[0]?.status).toBe('delivered');
+    expect(get().generationByDesign[design.id]).toBeUndefined();
+    expect(get().referenceUrl).toBe('https://example.com/reference');
+    expect(get().isGenerating).toBe(false);
+  });
+
   it('keeps assistant fragments in memory across tool start until the host-persisted turn end', async () => {
     const reload = vi.fn(async () => {});
     useCodesignStore.setState({ loadChatForCurrentDesign: reload });
@@ -259,12 +356,14 @@ describe('agent stream / IPC completion ordering', () => {
     'agent_end',
     'error',
   ] as const)('shows the IPC failure even when %s arrives first', async (eventType) => {
+    useCodesignStore.getState().setReferenceUrl('https://example.com/reference');
     generate.mockImplementationOnce(async ({ generationId }: { generationId: string }) => {
       emit('turn_start', generationId);
       emit(eventType, generationId);
       expect(useCodesignStore.getState().generationByDesign[design.id]).toMatchObject({
         generationId,
         awaitingResponse: true,
+        submittedContext: { referenceUrl: 'https://example.com/reference', commentIds: [] },
       });
       throw new Error('400 unsupported reasoning');
     });
@@ -274,6 +373,8 @@ describe('agent stream / IPC completion ordering', () => {
     expect(useCodesignStore.getState().errorMessage).toContain('400 unsupported reasoning');
     expect(useCodesignStore.getState().generationStage).toBe('error');
     expect(useCodesignStore.getState().isGenerating).toBe(false);
+    expect(useCodesignStore.getState().generationByDesign[design.id]).toBeUndefined();
+    expect(useCodesignStore.getState().referenceUrl).toBe('https://example.com/reference');
     expect(append.mock.calls.filter(([row]) => row.kind === 'error')).toHaveLength(1);
     expect(useCodesignStore.getState().toasts).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1500);

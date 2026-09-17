@@ -146,6 +146,7 @@ export interface CodesignState {
       startedAt?: number;
       awaitingResponse?: boolean;
       streamedAssistantText?: string;
+      submittedContext?: { referenceUrl?: string; commentIds: string[] };
     }
   >;
   isGenerating: boolean;
@@ -204,6 +205,7 @@ export interface CodesignState {
   interactionMode: InteractionMode;
   // Sidebar v2 chat state
   chatMessages: ChatMessageRow[];
+  chatViewEpoch: number;
   chatLoaded: boolean;
   /** In-flight tool calls that haven't completed yet. Purely in-memory —
    *  only persisted to session JSONL when the result arrives (done/error). */
@@ -557,6 +559,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   previewFullscreen: false,
   interactionMode: 'default' as InteractionMode,
   chatMessages: [],
+  chatViewEpoch: 0,
   chatLoaded: false,
   sidebarCollapsed: false,
 
