@@ -2,6 +2,7 @@ import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
 import { normalizeLegacyEditmodeBlock } from '@open-codesign/shared';
+import { withWorkspaceFileWriter } from '@open-codesign/shared/workspace-file-lock';
 import { Type } from '@sinclair/typebox';
 
 /**
@@ -236,8 +237,10 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
       reason: reason.includes('outside root') ? 'destination outside workspace' : reason,
     };
   }
-  await mkdir(path.dirname(dest), { recursive: true });
-  await writeFile(dest, contents, 'utf8');
+  await withWorkspaceFileWriter(dest, async () => {
+    await mkdir(path.dirname(dest), { recursive: true });
+    await writeFile(dest, contents, 'utf8');
+  });
   return {
     ok: true,
     destPath: actualDestPath,

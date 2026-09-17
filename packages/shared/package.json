@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./design-md": "./src/design-md.ts",
     "./fingerprint": "./src/fingerprint.ts",
-    "./html-utils": "./src/html-utils.ts"
+    "./html-utils": "./src/html-utils.ts",
+    "./workspace-file-lock": "./src/workspace-file-lock.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
