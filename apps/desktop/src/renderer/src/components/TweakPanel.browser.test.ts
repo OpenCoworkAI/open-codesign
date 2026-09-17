@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findSystemChrome } from '@open-codesign/exporters';
 import { parseEditmodeBlock } from '@open-codesign/shared';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
-import { createServer, normalizePath, type ViteDevServer } from 'vite';
+import { build, type PreviewServer, preview } from 'vite';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { WorkspacePreviewWrite } from '../preview/tweak-persistence';
 import type {} from './__fixtures__/tweak-browser';
@@ -16,7 +16,7 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
   let browser: Browser;
-  let server: ViteDevServer;
+  let server: PreviewServer;
   let page: Page;
   let directory: string;
   let endpoint: string;
@@ -32,54 +32,69 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
   beforeAll(async () => {
     if (!chrome) throw new Error('System Chrome unavailable');
     directory = await mkdtemp(join(tmpdir(), 'codesign-tweak-browser-'));
-    server = await createServer({
+    const outDir = join(directory, 'site');
+    // Exercise the production module graph, not Vite's on-demand dependency
+    // optimizer, which can invalidate an already requested cold-start chunk.
+    await build({
       configFile: false,
       root: process.cwd(),
-      // The middleware HTML is not a disk entry. Scan its real module before
-      // serving Chrome, using a cold cache isolated from other Vite fixtures.
-      cacheDir: join(directory, 'vite-cache'),
-      optimizeDeps: {
-        entries: [
-          normalizePath(
-            join(
-              process.cwd(),
-              'src',
-              'renderer',
-              'src',
-              'components',
-              '__fixtures__',
-              'tweak-browser.tsx',
-            ),
-          ),
-        ],
-      },
       logLevel: 'error',
       esbuild: { jsx: 'automatic' },
-      server: { host: '127.0.0.1', port: 0 },
+      build: {
+        outDir,
+        target: 'esnext',
+        cssCodeSplit: false,
+        rollupOptions: {
+          input: join(
+            process.cwd(),
+            'src',
+            'renderer',
+            'src',
+            'components',
+            '__fixtures__',
+            'tweak-browser.tsx',
+          ),
+          output: { entryFileNames: 'fixture.js' },
+        },
+      },
+    });
+    const styles = (await readdir(join(outDir, 'assets'))).filter((name) => name.endsWith('.css'));
+    expect(styles.length).toBeGreaterThan(0);
+    for (const path of [
+      join(outDir, 'fixture.js'),
+      ...styles.map((name) => join(outDir, 'assets', name)),
+    ]) {
+      expect((await stat(path)).size, path).toBeGreaterThan(0);
+    }
+    await writeFile(
+      join(outDir, 'index.html'),
+      `<!doctype html><html><head>${styles.map((name) => `<link rel="stylesheet" href="/assets/${name}">`).join('')}</head><body><div id="root"></div><script type="module" src="/fixture.js"></script></body></html>`,
+    );
+    server = await preview({
+      configFile: false,
+      root: process.cwd(),
+      logLevel: 'error',
+      build: { outDir },
+      preview: { host: '127.0.0.1', port: 0 },
       plugins: [
         {
           name: 'tweak-browser-fixture',
-          configureServer(vite) {
+          configurePreviewServer(vite) {
             vite.middlewares.use((req, res, next) => {
               if (req.url === '/favicon.ico') {
                 res.statusCode = 204;
                 res.end();
                 return;
               }
-              if (req.url?.split('?')[0] !== '/tweak-fixture') return next();
-              res.setHeader('Content-Type', 'text/html');
-              res.end(
-                '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/renderer/src/components/__fixtures__/tweak-browser.tsx"></script></body></html>',
-              );
+              next();
             });
           },
         },
       ],
     });
-    await server.listen();
     const address = server.httpServer?.address();
     if (!address || typeof address === 'string') throw new Error('Fixture server unavailable');
-    endpoint = `http://127.0.0.1:${address.port}/tweak-fixture`;
+    endpoint = `http://127.0.0.1:${address.port}/`;
     expect((await fetch(endpoint)).ok).toBe(true);
     browser = await puppeteer.launch({
       executablePath: chrome,
@@ -189,7 +204,11 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
 
   afterAll(async () => {
     await browser?.close();
-    await server?.close();
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server.httpServer.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
     await rm(directory, { recursive: true, force: true });
   });
 
