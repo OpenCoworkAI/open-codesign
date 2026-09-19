@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProviderRow } from '../../../../preload/index';
 import { recordAction } from '../../lib/action-timeline';
 import { useCodesignStore } from '../../store';
+import { connectionTestToastKind } from './connection-test-toast';
 
 /**
  * Electron IPC wraps thrown errors as
@@ -316,15 +317,48 @@ export function ProviderCard({
     }
     try {
       const res = await window.codesign.connection.testProvider(row.provider);
-      recordAction({ type: 'connection.test', data: { provider: row.provider, ok: res.ok } });
-      if (res.ok) {
+      recordAction({
+        type: 'connection.test',
+        data: {
+          provider: row.provider,
+          ok: res.ok,
+          compatibility: 'compatibility' in res ? res.compatibility : undefined,
+          invokeParity: 'invokeParity' in res ? res.invokeParity : undefined,
+        },
+      });
+      const kind = connectionTestToastKind(res);
+      if (kind === 'ok') {
         pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
+      } else if (kind === 'degraded') {
+        pushToast({
+          variant: 'info',
+          title: t('settings.providers.toast.connectionDegraded'),
+          description: t('settings.providers.toast.connectionDegradedBody'),
+        });
+      } else if (kind === 'diverges') {
+        reportableErrorToast({
+          code: 'CONNECTION_TEST_DIVERGED',
+          scope: 'settings',
+          title: t('settings.providers.toast.connectionDiverges'),
+          description:
+            res.ok === false
+              ? res.hint || res.message
+              : t('settings.providers.toast.connectionDivergesBody'),
+          context: {
+            provider: row.provider,
+            invokeParity: res.invokeParity,
+            ...(res.ok === false && res.invokeContract !== undefined
+              ? { invokeUrl: res.invokeContract.invokeUrl }
+              : {}),
+          },
+        });
       } else {
         reportableErrorToast({
           code: 'CONNECTION_TEST_FAILED',
           scope: 'settings',
           title: t('settings.providers.toast.connectionFailed'),
-          description: res.hint || res.message,
+          description:
+            res.ok === false ? res.hint || res.message : t('settings.common.unknownError'),
           context: { provider: row.provider },
         });
       }

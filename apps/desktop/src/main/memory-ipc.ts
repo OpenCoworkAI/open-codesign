@@ -25,6 +25,7 @@ import {
   updateWorkspaceMemory,
 } from '@open-codesign/core';
 import { getCodexTokenStore } from './codex-oauth-ipc';
+import { canonicalInvokeBaseUrl } from './effective-provider-contract';
 import { app, ipcMain, shell } from './electron-runtime';
 import { getLogger } from './logger';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from './onboarding-ipc';
@@ -397,11 +398,12 @@ async function resolveUserMemoryConsolidationOptions(
     getApiKeyForProvider,
     hasApiKeyForProvider,
   });
+  const baseUrl = canonicalInvokeBaseUrl(active.baseUrl, active.wire);
   return {
     force,
     model: active.model,
     apiKey,
-    ...(active.baseUrl !== null ? { baseUrl: active.baseUrl } : {}),
+    ...(baseUrl !== undefined ? { baseUrl } : {}),
     wire: active.wire,
     ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
     ...(active.reasoningLevel !== undefined ? { reasoningLevel: active.reasoningLevel } : {}),

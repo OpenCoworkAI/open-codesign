@@ -574,6 +574,10 @@
         "reasoningSaved": "Reasoning depth saved",
         "reasoningSaveFailed": "Failed to save reasoning depth",
         "connectionOk": "Connection OK",
+        "connectionDegraded": "Connected, model list unavailable",
+        "connectionDegradedBody": "Generate will work. This endpoint does not expose /models; Open CoDesign confirmed the real inference path instead.",
+        "connectionDiverges": "Reachable, but generate would fail",
+        "connectionDivergesBody": "The /models endpoint responded, but the inference URL used at generate-time did not. Connection test and generate share the same invoke contract.",
         "connectionFailed": "Connection failed"
       },
       "cliProxyApi": {
@@ -1086,7 +1090,8 @@
       "sslError": "SSL / certificate error (self-signed or private-CA cert?). Enable Settings → Providers → <provider> → Disable TLS verification to connect to trusted internal endpoints.",
       "endpointNotFound": "The endpoint path exists in the Base URL but the provider did not expose this route.",
       "gatewayIncompatible": "The gateway accepted the connection but does not implement this provider's API. Try switching wire (e.g. openai-chat).",
-      "gatewayWafBlocked": "The gateway or reverse proxy blocked the generation request before it reached the model. Test Connection can still pass because it only probes the /models endpoint.",
+      "gatewayWafBlocked": "The gateway or reverse proxy blocked the generation request before it reached the model.",
+      "invokeContractDiverged": "The provider is reachable, but the inference endpoint used at generate-time failed. /models success is not enough — Open CoDesign generate uses this wire's real invoke URL.",
       "openaiResponsesMisconfigured": "The endpoint rejected the request shape. The wire may be wrong — try switching to openai-chat.",
       "unsupportedRole": "The endpoint rejected the role format sent to the model. This is usually a wire or model-policy mismatch.",
       "reasoningPolicy": "The endpoint rejected reasoning metadata for this model. Lower the reasoning depth and try again.",

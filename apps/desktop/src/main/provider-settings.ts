@@ -213,7 +213,7 @@ export function computeDeleteProviderResult(cfg: Config, toDelete: string): Dele
  * Result of resolving which provider/model to call against, given the canonical
  * cached config and the renderer's hint payload.
  */
-export interface ActiveModelResolution {
+export interface ProviderModelResolution {
   model: ModelRef;
   baseUrl: string | null;
   wire: WireApi;
@@ -221,8 +221,72 @@ export interface ActiveModelResolution {
   queryParams: Record<string, string> | undefined;
   reasoningLevel: ReasoningLevel | undefined;
   allowKeyless: boolean;
+  builtin: boolean;
+  tlsRejectUnauthorized: boolean | undefined;
+  supportsModelsEndpoint: boolean;
+  modelDiscoveryMode: import('@open-codesign/shared').ProviderModelDiscoveryMode;
+}
+
+/**
+ * Result of resolving which provider/model to call against, given the canonical
+ * cached config and the renderer's hint payload.
+ */
+export interface ActiveModelResolution extends ProviderModelResolution {
   /** True when the renderer-supplied hint provider didn't match the canonical active. */
   overridden: boolean;
+}
+
+function providerModelFromEntry(
+  providerId: string,
+  entry: ProviderEntry,
+  modelId: string,
+  cfg: Config,
+  missingSecretMessage: string,
+): ProviderModelResolution {
+  const allowKeyless = isKeylessProviderAllowed(providerId, entry);
+  if (cfg.secrets[providerId] === undefined && !allowKeyless) {
+    throw new CodesignError(missingSecretMessage, ERROR_CODES.PROVIDER_KEY_MISSING);
+  }
+  const caps = resolveProviderCapabilities(providerId, entry);
+  return {
+    model: { provider: providerId, modelId },
+    baseUrl: entry.baseUrl,
+    wire: entry.wire,
+    httpHeaders: entry.httpHeaders,
+    queryParams: entry.queryParams,
+    reasoningLevel: entry.reasoningLevel,
+    allowKeyless,
+    builtin: entry.builtin === true,
+    tlsRejectUnauthorized: entry.tlsRejectUnauthorized,
+    supportsModelsEndpoint: caps.supportsModelsEndpoint === true,
+    modelDiscoveryMode: caps.modelDiscoveryMode ?? 'models',
+  };
+}
+
+/**
+ * Resolve a stored provider the same way generate would if that provider were
+ * active — used by `connection:v1:test-provider`. Does not snap to
+ * `cfg.activeProvider`.
+ */
+export function resolveProviderModel(
+  cfg: Config,
+  providerId: string,
+  modelId?: string,
+): ProviderModelResolution {
+  const entry = resolveEntryFor(cfg, providerId);
+  if (entry === null) {
+    throw new CodesignError(
+      `Provider "${providerId}" has no provider entry on disk.`,
+      ERROR_CODES.PROVIDER_NOT_SUPPORTED,
+    );
+  }
+  return providerModelFromEntry(
+    providerId,
+    entry,
+    modelId ?? entry.defaultModel,
+    cfg,
+    `No API key stored for provider "${providerId}". Re-run onboarding to add one.`,
+  );
 }
 
 export function resolveActiveModel(
@@ -237,23 +301,16 @@ export function resolveActiveModel(
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
-  const allowKeyless = isKeylessProviderAllowed(activeId, entry);
-  if (cfg.secrets[activeId] === undefined && !allowKeyless) {
-    throw new CodesignError(
-      `No API key stored for active provider "${activeId}". Re-run onboarding to add one.`,
-      ERROR_CODES.PROVIDER_KEY_MISSING,
-    );
-  }
   const overridden = activeId !== hint.provider;
   const modelId = overridden ? cfg.activeModel : hint.modelId;
   return {
-    model: { provider: activeId, modelId },
-    baseUrl: entry.baseUrl,
-    wire: entry.wire,
-    httpHeaders: entry.httpHeaders,
-    queryParams: entry.queryParams,
-    reasoningLevel: entry.reasoningLevel,
-    allowKeyless,
+    ...providerModelFromEntry(
+      activeId,
+      entry,
+      modelId,
+      cfg,
+      `No API key stored for active provider "${activeId}". Re-run onboarding to add one.`,
+    ),
     overridden,
   };
 }

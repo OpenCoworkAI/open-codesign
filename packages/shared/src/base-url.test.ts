@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   canonicalBaseUrl,
   ensureVersionedBase,
+  inferenceEndpointUrl,
   modelsEndpointUrl,
+  modelsProbeRelationForProvider,
+  modelsProbeRelationForWire,
   stripInferenceEndpointSuffix,
 } from './base-url';
 
@@ -444,5 +447,58 @@ describe('modelsEndpointUrl', () => {
     expect(() =>
       modelsEndpointUrl('https://chatgpt.com/backend-api', 'openai-codex-responses'),
     ).toThrow(/modelsHint/);
+  });
+});
+
+describe('inferenceEndpointUrl', () => {
+  it('openai-chat: posts to /chat/completions on the canonical base', () => {
+    expect(inferenceEndpointUrl('https://api.openai.com', 'openai-chat')).toBe(
+      'https://api.openai.com/v1/chat/completions',
+    );
+    expect(
+      inferenceEndpointUrl('https://open.bigmodel.cn/api/paas/v4/chat/completions', 'openai-chat'),
+    ).toBe('https://open.bigmodel.cn/api/paas/v4/chat/completions');
+  });
+
+  it('openai-responses: posts to /responses, never /chat/completions', () => {
+    expect(inferenceEndpointUrl('https://api.openai.com/v1', 'openai-responses')).toBe(
+      'https://api.openai.com/v1/responses',
+    );
+  });
+
+  it('anthropic: posts to /v1/messages from the unversioned root', () => {
+    expect(inferenceEndpointUrl('https://api.anthropic.com/v1', 'anthropic')).toBe(
+      'https://api.anthropic.com/v1/messages',
+    );
+  });
+
+  it('openai-codex-responses: posts to /codex/responses from the bare ChatGPT base', () => {
+    expect(inferenceEndpointUrl('https://chatgpt.com/backend-api', 'openai-codex-responses')).toBe(
+      'https://chatgpt.com/backend-api/codex/responses',
+    );
+  });
+});
+
+describe('modelsProbeRelation', () => {
+  it('treats GET /models as optional discovery for HTTP wires used at generate-time', () => {
+    expect(modelsProbeRelationForWire('openai-chat')).toBe('optional-discovery');
+    expect(modelsProbeRelationForWire('openai-responses')).toBe('optional-discovery');
+    expect(modelsProbeRelationForWire('anthropic')).toBe('optional-discovery');
+  });
+
+  it('marks ChatGPT Codex /models as unavailable — generate never calls it', () => {
+    expect(modelsProbeRelationForWire('openai-codex-responses')).toBe('unavailable');
+  });
+
+  it('honors provider capability flags so static-hint listings skip /models', () => {
+    expect(
+      modelsProbeRelationForProvider('openai-chat', {
+        supportsModelsEndpoint: false,
+        modelDiscoveryMode: 'manual',
+      }),
+    ).toBe('unavailable');
+    expect(
+      modelsProbeRelationForProvider('openai-responses', { modelDiscoveryMode: 'static-hint' }),
+    ).toBe('unavailable');
   });
 });

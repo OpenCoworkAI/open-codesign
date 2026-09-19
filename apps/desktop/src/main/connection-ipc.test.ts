@@ -1021,7 +1021,7 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
     }
   });
 
-  it('openai-chat: /models 200 → no degrade probe, probeMethod=models', async () => {
+  it('openai-chat: /models 200 still confirms the generate invoke path', async () => {
     const { calls, restore } = installFakeFetch(() => ({ status: 200, body: { data: [] } }));
     try {
       const res = await runProviderTest({
@@ -1035,8 +1035,12 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
         expect(res.probeMethod).toBe('models');
         expect(res.compatibility).toBe('compatible');
       }
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2);
       expect(calls[0]?.method).toBe('GET');
+      expect(calls[0]?.url).toMatch(/\/models$/);
+      expect(calls[1]?.method).toBe('POST');
+      expect(calls[1]?.url).toMatch(/\/chat\/completions$/);
+      if (res.ok) expect(res.invokeParity).toBe('aligned');
     } finally {
       restore();
     }
@@ -1054,7 +1058,7 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(res.ok).toBe(false);
       if (!res.ok) expect(res.code).toBe('404');
       if (!res.ok) expect(res.compatibility).toBe('incompatible');
-      // Only /v1/models should have been probed — no /v1/messages degrade.
+      // Both /models (discovery) and /messages (invoke) are probed.
       expect(calls).toHaveLength(2);
       expect(calls[0]?.url).toMatch(/\/v1\/models$/);
       expect(calls[1]?.url).toMatch(/\/v1\/messages$/);
@@ -1150,6 +1154,115 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(body.max_output_tokens).toBe(1);
       expect(Array.isArray(body.input)).toBe(true);
       expect(body.messages).toBeUndefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it('openai-chat: /models 200 + invoke 404 is reachable but diverges from generate', async () => {
+    const { calls, restore } = installFakeFetch((url) => {
+      if (url.endsWith('/models')) return { status: 200, body: { data: [{ id: 'gpt-4o' }] } };
+      if (url.endsWith('/chat/completions')) return { status: 404 };
+      return { status: 500 };
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'responses-on-chat-gateway',
+        wire: 'openai-chat',
+        apiKey: 'sk-test',
+        baseUrl: 'https://gateway.example.com/v1',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.compatibility).toBe('diverges');
+        expect(res.invokeParity).toBe('diverged');
+        expect(res.reachableVia).toBe('models');
+        expect(res.code).toBe('INVOKE_DIVERGED');
+        expect(res.reasonCategory).toBe('invoke-contract-diverged');
+        expect(res.invokeContract?.invokeUrl).toBe(
+          'https://gateway.example.com/v1/chat/completions',
+        );
+      }
+      expect(calls.some((c) => c.url.endsWith('/models'))).toBe(true);
+      expect(calls.some((c) => c.url.endsWith('/chat/completions'))).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('openai-responses: /models 200 must not pass when /responses is missing (no chat false-positive)', async () => {
+    const { calls, restore } = installFakeFetch((url) => {
+      if (url.endsWith('/models')) return { status: 200, body: { data: [] } };
+      if (url.endsWith('/responses')) return { status: 404 };
+      if (url.endsWith('/chat/completions')) return { status: 200, body: { id: 'wrong-probe' } };
+      return { status: 500 };
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'chat-only-gateway',
+        wire: 'openai-responses',
+        apiKey: 'sk-test',
+        baseUrl: 'https://gateway.example.com/v1',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.compatibility).toBe('diverges');
+        expect(res.invokeParity).toBe('diverged');
+      }
+      expect(calls.some((c) => c.url.endsWith('/chat/completions'))).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('chatgpt codex: resolved OAuth token is treated as aligned invoke auth (no /models probe)', async () => {
+    const { calls, restore } = installFakeFetch(() => {
+      throw new Error('Codex connection test must not HTTP-probe /models or /codex/responses');
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'chatgpt-codex',
+        wire: 'openai-codex-responses',
+        apiKey: 'oauth-access-token',
+        baseUrl: 'https://chatgpt.com/backend-api',
+      });
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.probeMethod).toBe('codex_oauth');
+        expect(res.invokeParity).toBe('aligned');
+        expect(res.modelsProbeRelation).toBe('unavailable');
+        expect(res.invokeContract?.authMode).toBe('codex-oauth');
+        expect(res.invokeContract?.invokeUrl).toBe(
+          'https://chatgpt.com/backend-api/codex/responses',
+        );
+      }
+      expect(calls).toHaveLength(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('keyless openai-chat proxy: empty apiKey still probes invoke with no Authorization header', async () => {
+    const { calls, restore } = installFakeFetch((url) => {
+      if (url.endsWith('/models')) return { status: 404 };
+      if (url.endsWith('/chat/completions')) return { status: 200, body: { id: 'ok' } };
+      return { status: 500 };
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'local-proxy',
+        wire: 'openai-chat',
+        apiKey: '',
+        baseUrl: 'http://127.0.0.1:8317/v1',
+      });
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.compatibility).toBe('degraded');
+        expect(res.invokeParity).toBe('degraded-discovery');
+        expect(res.invokeContract?.authMode).toBe('keyless');
+        expect(res.invokeContract?.allowKeyless).toBe(true);
+      }
+      expect(calls[1]?.method).toBe('POST');
     } finally {
       restore();
     }
