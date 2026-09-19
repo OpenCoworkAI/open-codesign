@@ -402,6 +402,8 @@ function applyGenerateSuccess(
     outputTokens?: number;
     costUsd?: number;
     resourceState?: ResourceStateV1;
+    chatPersisted?: boolean;
+    snapshotId?: string;
   },
   designIdAtStart: string | null,
 ): void {
@@ -435,7 +437,12 @@ function applyGenerateSuccess(
           )
         : { cache: state.previewSourceByDesign, recent: state.recentDesignIds };
     return {
-      ...(isCurrentDesign ? { previewSource: nextSource } : {}),
+      ...(isCurrentDesign
+        ? {
+            previewSource: nextSource,
+            ...(result.snapshotId ? { currentSnapshotId: result.snapshotId } : {}),
+          }
+        : {}),
       previewSourceByDesign: pool.cache,
       recentDesignIds: pool.recent,
       generationByDesign,
@@ -454,7 +461,12 @@ function applyGenerateSuccess(
 
   const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
   if (artifact !== null) {
-    void persistDesignState(get, designId, firstArtifact?.content ?? null, artifact);
+    void persistDesignState(
+      get,
+      designId,
+      firstArtifact?.content ?? null,
+      result.snapshotId ? null : artifact,
+    );
   }
   // Sidebar v2: append chat rows for artifact delivery.
   // When agent runtime is active (tool_call rows exist), useAgentStream
@@ -468,6 +480,7 @@ function applyGenerateSuccess(
   // state, so dedupe against this run's stream rather than only visible rows.
   const streamedAssistantText = stateBefore.generationByDesign[designId]?.streamedAssistantText;
   if (
+    !result.chatPersisted &&
     !agentRuntimeActive &&
     assistantMessage.trim().length > 0 &&
     streamedAssistantText !== assistantMessage.trim()
@@ -478,7 +491,7 @@ function applyGenerateSuccess(
       payload: { text: assistantMessage },
     });
   }
-  if (deliveredPath) {
+  if (deliveredPath && !result.chatPersisted) {
     void get().appendChatMessage({
       designId,
       kind: 'artifact_delivered',
@@ -524,11 +537,16 @@ function applyGenerateError(
       lastError: displayMsg,
     });
   }
-  void get().appendChatMessage({
-    designId,
-    kind: 'error',
-    payload: { message: displayMsg },
-  });
+  if (
+    !stateBefore.generationByDesign[designId]?.chatPersisted &&
+    typeof window.codesign?.recoverRuns !== 'function'
+  ) {
+    void get().appendChatMessage({
+      designId,
+      kind: 'error',
+      payload: { message: displayMsg },
+    });
+  }
   const code = extractCodesignErrorCode(err) ?? 'GENERATION_FAILED';
   const upstream = extractUpstreamContext(err);
 
@@ -708,6 +726,8 @@ async function runGenerate(
       outputTokens?: number;
       costUsd?: number;
       resourceState?: ResourceStateV1;
+      chatPersisted?: boolean;
+      snapshotId?: string;
     },
     designIdAtStart,
   );
@@ -733,7 +753,10 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       const cancelled = get().cancelledGenerationIds;
       reconcileGenerationStatus(
         set,
-        status.running.filter((run) => !cancelled.has(run.generationId)),
+        status.running.filter(
+          (run) =>
+            !cancelled.has(run.generationId) && !get().settledGenerationIds.has(run.generationId),
+        ),
       );
       const currentDesignId = get().currentDesignId;
       await Promise.all(
@@ -748,7 +771,11 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
     },
 
     markGenerationRunning(designId, generationId, stage = 'thinking') {
-      if (get().cancelledGenerationIds.has(generationId)) return;
+      if (
+        get().cancelledGenerationIds.has(generationId) ||
+        get().settledGenerationIds.has(generationId)
+      )
+        return;
       markGenerationRunningForDesign(set, designId, generationId, stage);
     },
 

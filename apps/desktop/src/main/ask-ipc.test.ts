@@ -1,21 +1,26 @@
 import { EventEmitter } from 'node:events';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AskInput } from '@open-codesign/core';
-import { CodesignError } from '@open-codesign/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const handlers = new Map<string, (event: unknown, raw: unknown) => unknown>();
-
-vi.mock('electron', () => ({
-  ipcMain: {
-    handle: vi.fn((channel: string, handler: (event: unknown, raw: unknown) => unknown) => {
-      handlers.set(channel, handler);
-    }),
-  },
-  BrowserWindow: class {},
+const { handlers, windows, userData } = vi.hoisted(() => ({
+  handlers: new Map<string, (event: unknown, raw?: unknown) => unknown>(),
+  windows: [] as Electron.BrowserWindow[],
+  userData: vi.fn(),
 }));
-
+vi.mock('electron', () => ({
+  app: { getPath: userData },
+  ipcMain: {
+    handle: vi.fn((channel: string, handler: (event: unknown, raw?: unknown) => unknown) =>
+      handlers.set(channel, handler),
+    ),
+  },
+  BrowserWindow: { getAllWindows: () => windows },
+}));
 vi.mock('./logger', () => ({
-  getLogger: () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() }),
+  getLogger: () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn() }),
 }));
 
 import {
@@ -24,106 +29,189 @@ import {
   registerAskIpc,
   requestAsk,
 } from './ask-ipc';
+import { type AskRequestPayload, AskStore } from './ask-store';
 
 const sampleInput: AskInput = {
   questions: [{ id: 'q1', type: 'freeform', prompt: 'what style?' }],
 };
-
-function makeWindow(send = vi.fn()) {
-  const window = Object.assign(new EventEmitter(), {
+const answer = { status: 'answered', answers: [{ questionId: 'q1', value: 'quiet' }] };
+let directory: string;
+let path: string;
+function invoke(channel: string, raw?: unknown): Promise<unknown> {
+  const handler = handlers.get(channel);
+  if (!handler) throw new Error(`Missing handler: ${channel}`);
+  return Promise.resolve(handler(null, raw));
+}
+function makeWindow(send = vi.fn()): Electron.BrowserWindow {
+  const win = Object.assign(new EventEmitter(), {
     isDestroyed: vi.fn(() => false),
     webContents: Object.assign(new EventEmitter(), { send, isDestroyed: vi.fn(() => false) }),
-  });
-  return window as unknown as Electron.BrowserWindow;
+  }) as unknown as Electron.BrowserWindow;
+  windows.push(win);
+  return win;
+}
+async function firstPending(): Promise<AskRequestPayload> {
+  const entry = (await listPendingAskRequests())[0];
+  if (!entry) throw new Error('Missing pending question');
+  return entry;
 }
 
-describe('ask-ipc', () => {
-  it('resolves to cancelled when no main window is available', async () => {
-    const result = await requestAsk('session-a', sampleInput, () => null);
-    expect(result).toEqual({ status: 'cancelled', answers: [] });
+beforeEach(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'ask-ipc-'));
+  path = join(directory, 'questions.jsonl');
+  handlers.clear();
+  windows.length = 0;
+  registerAskIpc(path);
+});
+afterEach(async () => {
+  vi.restoreAllMocks();
+  for (const request of await listPendingAskRequests())
+    await cancelPendingAskRequests(request.sessionId);
+  await rm(directory, { recursive: true, force: true });
+});
+
+describe('durable ask IPC', () => {
+  it('retains questions without a window and exposes design/run scope for recovery', async () => {
+    const result = requestAsk('run-a', sampleInput, () => null, { designId: 'design-a' });
+    const entry = await firstPending();
+    expect(entry).toMatchObject({
+      sessionId: 'run-a',
+      runId: 'run-a',
+      designId: 'design-a',
+      input: sampleInput,
+    });
+    expect(await invoke('ask:list-pending')).toEqual([entry]);
+    await invoke('ask:resolve', { requestId: entry.requestId, ...answer });
+    await expect(result).resolves.toEqual(answer);
   });
 
-  it('sends ask:request and cancelPendingAskRequests resolves in-flight as cancelled', async () => {
-    const send = vi.fn();
-    const fakeWindow = makeWindow(send);
-    const inFlight = requestAsk('session-b', sampleInput, () => fakeWindow);
-    expect(send).toHaveBeenCalledWith(
-      'ask:request',
-      expect.objectContaining({ sessionId: 'session-b', input: sampleInput }),
+  it('appends before live delivery and before resolving the runtime; broadcasts to every window', async () => {
+    let deliveredJournal: Promise<string> | undefined;
+    const send = vi.fn((channel: string) => {
+      if (channel === 'ask:request') deliveredJournal = readFile(path, 'utf8');
+    });
+    const win = makeWindow(send);
+    const otherSend = vi.fn();
+    makeWindow(otherSend);
+    const result = requestAsk('run-order', sampleInput, () => win);
+    const entry = await firstPending();
+    expect(send).toHaveBeenCalledWith('ask:request', entry);
+    expect(await deliveredJournal).toContain('"status":"pending"');
+    const runtimeJournal = result.then(() => readFile(path, 'utf8'));
+    await invoke('ask:resolve', { requestId: entry.requestId, ...answer });
+    expect(await runtimeJournal).toContain('"status":"answered"');
+    expect(otherSend).toHaveBeenCalledWith(
+      'ask:resolved',
+      expect.objectContaining({ requestId: entry.requestId, status: 'answered' }),
     );
-    cancelPendingAskRequests('session-b');
-    await expect(inFlight).resolves.toEqual({ status: 'cancelled', answers: [] });
+    expect(await listPendingAskRequests()).toEqual([]);
   });
 
-  it('cancels every pending ask request for the same session', async () => {
-    const send = vi.fn();
-    const fakeWindow = makeWindow(send);
-    const first = requestAsk('session-many', sampleInput, () => fakeWindow);
-    const second = requestAsk('session-many', sampleInput, () => fakeWindow);
+  it('keeps requests recoverable when delivery throws or the window closes', async () => {
+    const win = makeWindow(
+      vi.fn(() => {
+        throw new Error('Window closed');
+      }),
+    );
+    const result = requestAsk('run-closed', sampleInput, () => win);
+    const entry = await firstPending();
+    expect(await invoke('ask:list-pending')).toHaveLength(1);
+    await invoke('ask:resolve', { requestId: entry.requestId, ...answer });
+    await expect(result).resolves.toEqual(answer);
+  });
 
-    cancelPendingAskRequests('session-many');
+  it.each([
+    { unexpected: true, answers: [] },
+    { answers: [{ questionId: 'q1', value: { bad: true } }] },
+    { answers: [{ questionId: 'q1', value: Number.NaN }] },
+    { answers: [{ questionId: 'wrong', value: 'quiet' }] },
+    { answers: [{ questionId: 'q1', value: 1 }] },
+    { answers: [] },
+  ])('rejects invalid submissions without rejecting or removing the original ask: %j', async (invalid) => {
+    const result = requestAsk('run-invalid', sampleInput, () => null);
+    const entry = await firstPending();
+    await expect(
+      invoke('ask:resolve', { requestId: entry.requestId, status: 'answered', ...invalid }),
+    ).rejects.toMatchObject({ code: 'IPC_BAD_INPUT' });
+    expect(await listPendingAskRequests()).toEqual([entry]);
+    await invoke('ask:resolve', { requestId: entry.requestId, ...answer });
+    await expect(result).resolves.toEqual(answer);
+  });
 
+  it('serializes duplicate answer retries and rejects conflicts without overwriting the answer', async () => {
+    const result = requestAsk('run-retry', sampleInput, () => null);
+    const entry = await firstPending();
+    await Promise.all([
+      invoke('ask:resolve', { requestId: entry.requestId, ...answer }),
+      invoke('ask:resolve', { requestId: entry.requestId, ...answer }),
+    ]);
+    await expect(
+      invoke('ask:resolve', { requestId: entry.requestId, status: 'cancelled', answers: [] }),
+    ).rejects.toMatchObject({ code: 'IPC_BAD_INPUT' });
+    await expect(result).resolves.toEqual(answer);
+    expect((await readFile(path, 'utf8')).trim().split('\n')).toHaveLength(2);
+    expect(await invoke('ask:history', { runId: 'run-retry' })).toEqual([
+      expect.objectContaining({ status: 'answered', result: answer }),
+    ]);
+  });
+
+  it('preserves a pending question on persistence failure and allows a retry', async () => {
+    const result = requestAsk('run-write-failed', sampleInput, () => null);
+    const entry = await firstPending();
+    vi.spyOn(AskStore.prototype, 'settle').mockRejectedValueOnce(new Error('Disk unavailable'));
+    await expect(invoke('ask:resolve', { requestId: entry.requestId, ...answer })).rejects.toThrow(
+      'Disk unavailable',
+    );
+    expect(await listPendingAskRequests()).toEqual([entry]);
+    await invoke('ask:resolve', { requestId: entry.requestId, ...answer });
+    await expect(result).resolves.toEqual(answer);
+  });
+
+  it('cancels every question in only the requested run, including before append completes', async () => {
+    const first = requestAsk('run-cancel', sampleInput, () => null);
+    const second = requestAsk('run-cancel', sampleInput, () => null);
+    const other = requestAsk('run-other', sampleInput, () => null);
+    await cancelPendingAskRequests('run-cancel');
     await expect(first).resolves.toEqual({ status: 'cancelled', answers: [] });
     await expect(second).resolves.toEqual({ status: 'cancelled', answers: [] });
-  });
-
-  it('lists pending ask requests so the renderer can recover a missed event', async () => {
-    handlers.clear();
-    registerAskIpc();
-    const send = vi.fn();
-    const fakeWindow = makeWindow(send);
-    const inFlight = requestAsk('session-recover', sampleInput, () => fakeWindow);
-    const listPending = handlers.get('ask:list-pending');
-    if (!listPending) throw new Error('ask:list-pending handler not registered');
-
-    const result = listPending(null, undefined);
-
-    expect(result).toEqual([
-      expect.objectContaining({ sessionId: 'session-recover', input: sampleInput }),
+    expect(await listPendingAskRequests()).toEqual([
+      expect.objectContaining({ sessionId: 'run-other' }),
     ]);
-    cancelPendingAskRequests('session-recover');
-    await expect(inFlight).resolves.toEqual({ status: 'cancelled', answers: [] });
+    await cancelPendingAskRequests('run-other');
+    await other;
+    expect(await invoke('ask:history', { runId: 'run-cancel' })).toEqual([
+      expect.objectContaining({ status: 'cancelled' }),
+      expect.objectContaining({ status: 'cancelled' }),
+    ]);
   });
 
-  it('rejects malformed answers for a known request instead of leaving it pending', async () => {
-    handlers.clear();
-    registerAskIpc();
-    const send = vi.fn();
-    const fakeWindow = makeWindow(send);
-    const inFlight = requestAsk('session-c', sampleInput, () => fakeWindow);
-    const payload = send.mock.calls[0]?.[1] as { requestId: string };
-    const handler = handlers.get('ask:resolve');
-    if (!handler) throw new Error('ask:resolve handler not registered');
-
-    expect(() =>
-      handler(null, {
-        requestId: payload.requestId,
-        status: 'answered',
-        unexpected: true,
-        answers: [],
-      }),
-    ).toThrow(CodesignError);
-    await expect(inFlight).rejects.toMatchObject({ code: 'IPC_BAD_INPUT' });
+  it.each([
+    false,
+    true,
+  ])('aborts durably and removes signal listeners (already aborted: %s)', async (early) => {
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    if (early) controller.abort();
+    const result = requestAsk('run-abort', sampleInput, () => null, { signal: controller.signal });
+    if (!early) {
+      await firstPending();
+      controller.abort();
+    }
+    await expect(result).resolves.toEqual({ status: 'cancelled', answers: [] });
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(await listPendingAskRequests()).toEqual([]);
+    expect(await invoke('ask:history')).toEqual([expect.objectContaining({ status: 'cancelled' })]);
   });
 
-  it('rejects malformed answer fields for a known request instead of leaving it pending', async () => {
-    handlers.clear();
-    registerAskIpc();
-    const send = vi.fn();
-    const fakeWindow = makeWindow(send);
-    const inFlight = requestAsk('session-d', sampleInput, () => fakeWindow);
-    const payload = send.mock.calls[0]?.[1] as { requestId: string };
-    const handler = handlers.get('ask:resolve');
-    if (!handler) throw new Error('ask:resolve handler not registered');
-
-    expect(() =>
-      handler(null, {
-        requestId: payload.requestId,
-        status: 'answered',
-        answers: [{ questionId: 'q1', value: { bad: true } }],
-      }),
-    ).toThrow(CodesignError);
-    await expect(inFlight).rejects.toMatchObject({ code: 'IPC_BAD_INPUT' });
+  it('rejects the runtime and removes listeners if the initial append fails', async () => {
+    vi.spyOn(AskStore.prototype, 'create').mockRejectedValueOnce(new Error('Disk full'));
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    await expect(
+      requestAsk('run-fail', sampleInput, () => null, { signal: controller.signal }),
+    ).rejects.toThrow('Disk full');
+    expect(remove).toHaveBeenCalled();
+    expect(await listPendingAskRequests()).toEqual([]);
   });
 
   it('aborts only the matching wait, removes listeners and emits its typed cancellation', async () => {
@@ -131,17 +219,17 @@ describe('ask-ipc', () => {
     const controller = new AbortController();
     const first = requestAsk('same-run', sampleInput, () => window, controller.signal);
     const other = requestAsk('same-run', sampleInput, () => window);
-    const [payload] = listPendingAskRequests();
+    const [payload] = await listPendingAskRequests();
     controller.abort();
     await expect(first).resolves.toEqual({ status: 'cancelled', answers: [] });
-    expect(listPendingAskRequests()).toHaveLength(1);
+    expect(await listPendingAskRequests()).toHaveLength(1);
     expect(window.webContents.send).toHaveBeenCalledWith('ask:cancelled', {
       schemaVersion: 1,
       requestId: payload?.requestId,
       sessionId: 'same-run',
     });
-    expect(window.listenerCount('closed')).toBe(1);
-    cancelPendingAskRequests('same-run');
+    expect(window.listenerCount('closed')).toBe(0);
+    await cancelPendingAskRequests('same-run');
     await other;
     expect(window.listenerCount('closed')).toBe(0);
     expect(window.webContents.listenerCount('destroyed')).toBe(0);
@@ -154,8 +242,8 @@ describe('ask-ipc', () => {
     await expect(
       requestAsk('aborted', sampleInput, () => window, controller.signal),
     ).resolves.toEqual({ status: 'cancelled', answers: [] });
-    expect(window.webContents.send).not.toHaveBeenCalled();
-    expect(listPendingAskRequests()).toEqual([]);
+    expect(window.webContents.send).not.toHaveBeenCalledWith('ask:request', expect.anything());
+    expect(await listPendingAskRequests()).toEqual([]);
   });
 
   it('still settles if the renderer disconnects while sending cancellation', async () => {
@@ -167,7 +255,7 @@ describe('ask-ipc', () => {
     const waiting = requestAsk('disconnect', sampleInput, () => window, controller.signal);
     controller.abort();
     await expect(waiting).resolves.toEqual({ status: 'cancelled', answers: [] });
-    expect(listPendingAskRequests()).toEqual([]);
+    expect(await listPendingAskRequests()).toEqual([]);
     expect(window.listenerCount('closed')).toBe(0);
   });
 
@@ -177,15 +265,16 @@ describe('ask-ipc', () => {
     const controller = new AbortController();
     const remove = vi.spyOn(controller.signal, 'removeEventListener');
     const waiting = requestAsk('answered', sampleInput, () => window, controller.signal);
-    const [payload] = listPendingAskRequests();
-    handlers.get('ask:resolve')?.(null, {
+    const [payload] = await listPendingAskRequests();
+    await invoke('ask:resolve', {
       requestId: payload?.requestId,
       status: 'answered',
       answers: [{ questionId: 'q1', value: 'green' }],
     });
     await waiting;
     controller.abort();
-    expect(window.webContents.send).toHaveBeenCalledTimes(1);
+    expect(window.webContents.send).toHaveBeenCalledTimes(2);
+    expect(window.webContents.send).not.toHaveBeenCalledWith('ask:cancelled', expect.anything());
     expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
     expect(window.listenerCount('closed')).toBe(0);
     expect(window.webContents.listenerCount('destroyed')).toBe(0);
@@ -194,9 +283,10 @@ describe('ask-ipc', () => {
   it.each([
     'closed',
     'destroyed',
-  ])('settles a %s window without orphaning its clarification', async (event) => {
+  ])('retains a %s window clarification for recovery until explicit cancellation', async (event) => {
     const window = makeWindow();
     const waiting = requestAsk('closed', sampleInput, () => window);
+    const payload = await firstPending();
     if (event === 'closed') {
       vi.mocked(window.isDestroyed).mockReturnValue(true);
       window.emit('closed');
@@ -204,8 +294,10 @@ describe('ask-ipc', () => {
       vi.mocked(window.webContents.isDestroyed).mockReturnValue(true);
       window.webContents.emit('destroyed');
     }
-    await expect(waiting).resolves.toEqual({ status: 'cancelled', answers: [] });
-    expect(listPendingAskRequests()).toEqual([]);
+    expect(await listPendingAskRequests()).toEqual([payload]);
     expect(window.webContents.send).toHaveBeenCalledTimes(1);
+    await cancelPendingAskRequests('closed');
+    await expect(waiting).resolves.toEqual({ status: 'cancelled', answers: [] });
+    expect(await listPendingAskRequests()).toEqual([]);
   });
 });

@@ -1,9 +1,17 @@
 import { EventEmitter } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AgentOptions, StreamFn } from '@mariozechner/pi-agent-core';
 import { type AssistantMessage, createAssistantMessageEventStream } from '@mariozechner/pi-ai';
 import { generateViaAgent } from '@open-codesign/core';
-import { describe, expect, it, vi } from 'vitest';
-import { listPendingAskRequests, requestAsk } from './ask-ipc';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  cancelPendingAskRequests,
+  listPendingAskRequests,
+  registerAskIpc,
+  requestAsk,
+} from './ask-ipc';
 import {
   acquireInFlightWorkspaceGeneration,
   cancelGenerationRequest,
@@ -12,7 +20,10 @@ import {
   withInFlightGenerationForDesign,
 } from './generation-ipc';
 
-const native = vi.hoisted(() => ({ stream: vi.fn<StreamFn>() }));
+const native = vi.hoisted(() => ({
+  stream: vi.fn<StreamFn>(),
+  windows: [] as Electron.BrowserWindow[],
+}));
 vi.mock('@mariozechner/pi-agent-core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@mariozechner/pi-agent-core')>();
   return {
@@ -24,8 +35,31 @@ vi.mock('@mariozechner/pi-agent-core', async (importOriginal) => {
     },
   };
 });
-vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }));
-vi.mock('./logger', () => ({ getLogger: () => ({ warn: vi.fn(), info: vi.fn() }) }));
+vi.mock('electron', () => ({
+  ipcMain: { handle: vi.fn() },
+  app: {
+    getPath: vi.fn(() => {
+      throw new Error('Native cancellation test must use its isolated ask store');
+    }),
+  },
+  BrowserWindow: { getAllWindows: () => native.windows },
+}));
+vi.mock('./logger', () => ({
+  getLogger: () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn() }),
+}));
+
+let directory: string;
+beforeEach(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'native-ask-cancel-'));
+  native.windows.length = 0;
+  registerAskIpc(join(directory, 'questions.jsonl'));
+});
+afterEach(async () => {
+  for (const request of await listPendingAskRequests())
+    await cancelPendingAskRequests(request.sessionId);
+  native.windows.length = 0;
+  await rm(directory, { recursive: true, force: true });
+});
 
 describe('native generation cancellation ownership', () => {
   it('settles real ask on cancel while retaining design/workspace ownership until host finally completes', async () => {
@@ -36,6 +70,7 @@ describe('native generation cancellation ownership', () => {
         send: vi.fn(),
       }),
     }) as unknown as Electron.BrowserWindow;
+    native.windows.push(window);
     const controllers = new Map<string, AbortController>();
     const designs = new Map<string, InFlightGeneration>();
     const workspaces = new Map<string, InFlightGeneration>();
@@ -136,11 +171,11 @@ describe('native generation cancellation ownership', () => {
       },
     );
     const rejected = expect(running).rejects.toMatchObject({ code: 'PROVIDER_ABORTED' });
-    await vi.waitFor(() => expect(listPendingAskRequests()).toHaveLength(1));
-    const requestId = listPendingAskRequests()[0]?.requestId;
+    await vi.waitFor(async () => expect(await listPendingAskRequests()).toHaveLength(1));
+    const requestId = (await listPendingAskRequests())[0]?.requestId;
     cancelGenerationRequest('old', controllers, { info: vi.fn() }, designs, workspaces);
     await vi.waitFor(() => expect(settledCore).toBe(true));
-    expect(listPendingAskRequests()).toEqual([]);
+    expect(await listPendingAskRequests()).toEqual([]);
     expect(window.webContents.send).toHaveBeenCalledWith('ask:cancelled', {
       schemaVersion: 1,
       sessionId: 'old',

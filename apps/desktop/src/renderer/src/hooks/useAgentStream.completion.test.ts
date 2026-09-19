@@ -90,6 +90,8 @@ beforeEach(() => {
     tryAutoPolish: vi.fn(),
   });
   vi.stubGlobal('window', {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
     setTimeout,
     codesign: {
       generate,
@@ -452,5 +454,196 @@ describe('agent stream / IPC completion ordering', () => {
     );
     expect(append.mock.calls.filter(([row]) => row.kind === 'assistant_text')).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1500);
+  });
+});
+
+describe('durable run refresh recovery', () => {
+  function durable(
+    type: AgentStreamEvent['type'],
+    seq: number,
+    extra: Partial<AgentStreamEvent> = {},
+  ): AgentStreamEvent {
+    return {
+      type,
+      seq,
+      schemaVersion: 1,
+      runId: 'durable',
+      generationId: 'durable',
+      designId: design.id,
+      chatPersisted: true,
+      ...extra,
+    };
+  }
+  async function remount(events: AgentStreamEvent[]) {
+    for (const cleanup of cleanups.splice(0)) cleanup();
+    const api = window.codesign;
+    if (!api) throw new Error('Missing API');
+    api.recoverRuns = vi.fn(async () => ({ schemaVersion: 1 as const, events }));
+    // biome-ignore lint/correctness/useHookAtTopLevel: React effects are mocked to exercise remount recovery.
+    useAgentStream();
+    await vi.advanceTimersByTimeAsync(0);
+  }
+
+  it('restores partial text and consumes only new deltas after refresh', async () => {
+    await remount([
+      durable('turn_start', 1),
+      durable('text_delta', 2, { delta: 'Before refresh. ' }),
+    ]);
+    expect(useCodesignStore.getState().streamingAssistantTextByDesign[design.id]).toBe(
+      'Before refresh. ',
+    );
+    listener?.(durable('text_delta', 2, { delta: 'duplicate' }));
+    listener?.(durable('text_delta', 3, { delta: 'After refresh.' }));
+    expect(useCodesignStore.getState().streamingAssistantTextByDesign[design.id]).toBe(
+      'Before refresh. After refresh.',
+    );
+    expect(append).not.toHaveBeenCalled();
+  });
+
+  it('replays persisted chat and terminal outcomes without duplicate writes or automatic generation', async () => {
+    useCodesignStore.setState({ previewSource: 'Edited after generation' });
+    await remount([
+      durable('turn_start', 1),
+      durable('tool_call_start', 2, { toolName: 'write', toolCallId: 'tool' }),
+      durable('tool_call_result', 3, { toolName: 'write', toolCallId: 'tool', status: 'done' }),
+      durable('fs_updated', 4, { path: 'App.jsx', content: 'Old source' }),
+      durable('turn_end', 5, { finalText: 'Done' }),
+      durable('agent_end', 6),
+      durable('run_settled', 7, {
+        outcome: 'completed',
+        response: { message: 'Done', artifacts: [], inputTokens: 10, outputTokens: 20, costUsd: 0 },
+      }),
+    ]);
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
+    expect(useCodesignStore.getState().generationStage).toBe('done');
+    expect(useCodesignStore.getState().lastUsage?.inputTokens).toBe(10);
+    expect(useCodesignStore.getState().previewSource).toBe('Edited after generation');
+    expect(append).not.toHaveBeenCalled();
+    expect(window.codesign?.chat.updateToolStatus).not.toHaveBeenCalled();
+    expect(useCodesignStore.getState().persistAgentRunSnapshot).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(useCodesignStore.getState().tryAutoPolish).not.toHaveBeenCalled();
+  });
+
+  it('refreshes repaired chat even when recovery only returns already-consumed events', async () => {
+    await remount([
+      durable('turn_start', 1),
+      durable('tool_call_start', 2, { toolName: 'read', toolCallId: 'repair' }),
+    ]);
+    await vi.advanceTimersByTimeAsync(60);
+    const api = window.codesign;
+    if (!api) throw new Error('Missing API');
+    const before = vi.mocked(api.chat.list).mock.calls.length;
+    vi.mocked(api.chat.list).mockResolvedValueOnce([
+      {
+        schemaVersion: 1,
+        id: 0,
+        seq: 0,
+        designId: design.id,
+        kind: 'tool_call',
+        snapshotId: null,
+        payload: {
+          toolName: 'read',
+          toolCallId: 'repair',
+          status: 'done',
+          result: 'Recovered result',
+        },
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    const focus = vi
+      .mocked(window.addEventListener)
+      .mock.calls.filter(([name]) => name === 'focus')
+      .at(-1)?.[1];
+    if (typeof focus !== 'function') throw new Error('Missing focus listener');
+    focus(new Event('focus'));
+    await vi.advanceTimersByTimeAsync(60);
+    expect(api.chat.list).toHaveBeenCalledTimes(before + 1);
+    expect(useCodesignStore.getState().chatMessages[0]?.payload).toMatchObject({
+      result: 'Recovered result',
+    });
+    expect(append).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the latest main-owned snapshot without creating another snapshot on reattachment', async () => {
+    await remount([durable('turn_start', 1)]);
+    const api = window.codesign;
+    if (!api) throw new Error('Missing API');
+    vi.mocked(api.snapshots.list).mockResolvedValueOnce([
+      {
+        schemaVersion: 1,
+        id: 'latest-snapshot',
+        designId: design.id,
+        parentId: null,
+        type: 'initial',
+        prompt: null,
+        artifactType: 'html',
+        artifactSource: '<main>Done</main>',
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    listener?.(
+      durable('run_settled', 2, {
+        outcome: 'completed',
+        response: {
+          snapshotId: 'generated-snapshot',
+          artifacts: [],
+          message: 'Done',
+          inputTokens: 1,
+          outputTokens: 2,
+          costUsd: 0,
+        },
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(60);
+    expect(useCodesignStore.getState().currentSnapshotId).toBe('latest-snapshot');
+    expect(api.snapshots.create).not.toHaveBeenCalled();
+    expect(useCodesignStore.getState().persistAgentRunSnapshot).not.toHaveBeenCalled();
+  });
+  it('does not let an older terminal event clear the newer run text', () => {
+    emit('turn_start', 'newer');
+    emit('text_delta', 'newer', { delta: 'New work' });
+    listener?.(durable('run_settled', 3, { outcome: 'failed', message: 'Old failure' }));
+    expect(useCodesignStore.getState().activeGenerationId).toBe('newer');
+    expect(useCodesignStore.getState().streamingAssistantTextByDesign[design.id]).toBe('New work');
+    expect(useCodesignStore.getState().errorMessage).toBeNull();
+  });
+
+  it('does not resurrect a terminal run from an older status snapshot', async () => {
+    await remount([
+      durable('turn_start', 1),
+      durable('run_settled', 2, { outcome: 'interrupted', message: 'Host restarted' }),
+    ]);
+    const api = window.codesign;
+    if (!api) throw new Error('Missing API');
+    api.generationStatus = vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      running: [{ designId: design.id, generationId: 'durable', startedAt: 1 }],
+    }));
+    await useCodesignStore.getState().syncGenerationStatus();
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
+    expect(useCodesignStore.getState().errorMessage).toBe('Host restarted');
+  });
+
+  it('does not duplicate durable errors during replay', async () => {
+    await remount([
+      durable('turn_start', 1),
+      durable('error', 2, { message: 'Failure' }),
+      durable('run_settled', 3, { outcome: 'failed', message: 'Failure' }),
+    ]);
+    expect(append).not.toHaveBeenCalled();
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
+  });
+
+  it('keeps the cancelled-run filter through agent_end until durable settlement', () => {
+    useCodesignStore.setState({ cancelledGenerationIds: new Set(['durable']) });
+    listener?.(durable('agent_end', 2));
+    listener?.(durable('text_delta', 3, { delta: 'late' }));
+    expect(useCodesignStore.getState().cancelledGenerationIds.has('durable')).toBe(true);
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
+    listener?.(durable('run_settled', 4, { outcome: 'cancelled' }));
+    expect(useCodesignStore.getState().cancelledGenerationIds.has('durable')).toBe(false);
+    listener?.(durable('turn_start', 5));
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
   });
 });

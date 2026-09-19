@@ -47,6 +47,7 @@ export interface ChatToolStatusUpdate {
   result?: unknown;
   durationMs?: number;
   errorMessage?: string;
+  runResultEventKey?: string;
 }
 
 interface StoredChatMessage {
@@ -65,6 +66,7 @@ interface StoredToolStatusUpdate {
   result?: unknown;
   durationMs?: number;
   errorMessage?: string;
+  runResultEventKey?: string;
 }
 
 type StoredCommentPatch = CommentUpdateInput & { appliedInSnapshotId?: null };
@@ -188,6 +190,9 @@ function parseStatusUpdate(value: unknown): StoredToolStatusUpdate | null {
     ...(value['result'] !== undefined ? { result: value['result'] } : {}),
     ...(typeof value['durationMs'] === 'number' ? { durationMs: value['durationMs'] } : {}),
     ...(typeof value['errorMessage'] === 'string' ? { errorMessage: value['errorMessage'] } : {}),
+    ...(typeof value['runResultEventKey'] === 'string'
+      ? { runResultEventKey: value['runResultEventKey'] }
+      : {}),
   };
 }
 
@@ -263,10 +268,18 @@ function parseStoredRunPreferences(value: unknown): StoredRunPreferences | null 
 
 function applyStatusUpdate(row: ChatMessageRow, update: StoredToolStatusUpdate): ChatMessageRow {
   if (row.kind !== 'tool_call') return row;
-  const prev = isRecord(row.payload) ? row.payload : {};
+  const prev = { ...(isRecord(row.payload) ? row.payload : {}) };
+  if (update.runResultEventKey !== undefined) {
+    // A committed tool result replaces errors inferred by run settlement.
+    delete prev['error'];
+    delete prev['errorMessage'];
+  }
   const nextPayload: ChatToolCallPayload = {
     ...(prev as unknown as ChatToolCallPayload),
     status: update.status,
+    ...(update.runResultEventKey !== undefined
+      ? { runResultEventKey: update.runResultEventKey }
+      : {}),
     ...(update.result !== undefined ? { result: update.result } : {}),
     ...(update.durationMs !== undefined ? { durationMs: update.durationMs } : {}),
     ...(update.errorMessage !== undefined
@@ -605,6 +618,9 @@ export function appendSessionToolStatus(
       : {}),
     ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
     ...(input.errorMessage !== undefined ? { errorMessage: input.errorMessage } : {}),
+    ...(input.runResultEventKey !== undefined
+      ? { runResultEventKey: input.runResultEventKey }
+      : {}),
   };
   const entryId = manager.appendCustomEntry(CHAT_TOOL_STATUS_CUSTOM_TYPE, stored);
   const entry = manager.getEntry(entryId);

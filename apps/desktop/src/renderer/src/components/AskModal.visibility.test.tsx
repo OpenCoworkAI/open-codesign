@@ -140,6 +140,7 @@ describe('clarification visibility in a collapsible sidebar', () => {
       },
     });
     useCodesignStore.setState({
+      currentDesignId: 'fixture-design',
       sidebarCollapsed: true,
       previewFullscreen: true,
       setSidebarCollapsed: revealChat,

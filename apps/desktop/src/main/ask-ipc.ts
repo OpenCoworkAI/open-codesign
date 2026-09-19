@@ -1,206 +1,243 @@
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { AskInput, AskResult } from '@open-codesign/core';
 import { type AskCancelledV1, CodesignError, ERROR_CODES } from '@open-codesign/shared';
-import { type BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import {
+  type AskHistoryEntry,
+  type AskHistoryFilter,
+  type AskRequestPayload,
+  AskStore,
+} from './ask-store';
 import { getLogger } from './logger';
 
-/**
- * Bridge for the core `ask` tool. Mirrors permission-ipc.ts:
- *   1. core's ask tool calls `requestAsk(sessionId, input, getMainWindow)`
- *   2. `requestAsk` issues a unique requestId, stores a resolver,
- *      and `webContents.send('ask:request', { requestId, sessionId, input })`
- *   3. renderer mounts <AskModal>, user submits or cancels
- *   4. renderer invokes `ask:resolve` with the requestId + result
- *   5. ipcMain handler resolves the pending promise
- */
+export type { AskRequestPayload } from './ask-store';
 
 const log = getLogger('ask-ipc');
-
 interface PendingAsk {
   resolve: (result: AskResult) => void;
   reject: (reason?: unknown) => void;
-  sessionId: string;
-  input: AskInput;
-  cancel: () => void;
+  payload: AskRequestPayload;
+  ready: Promise<AskHistoryEntry>;
+  cleanup: () => void;
+  cancelling: boolean;
 }
-
 const pending = new Map<string, PendingAsk>();
+let store: AskStore | undefined;
 
-export interface AskRequestPayload {
-  requestId: string;
-  sessionId: string;
-  input: AskInput;
+function getStore(): AskStore {
+  store ??= new AskStore(join(app.getPath('userData'), 'ask-journal.jsonl'));
+  return store;
 }
 
-export function registerAskIpc(): void {
+export function registerAskIpc(storePath?: string): void {
+  if (storePath !== undefined) {
+    if (pending.size > 0) throw new Error('Cannot replace ask store with live questions');
+    store = new AskStore(storePath);
+  }
   ipcMain.handle('ask:list-pending', () => listPendingAskRequests());
-
-  ipcMain.handle('ask:resolve', (_event, raw: unknown) => {
-    const requestId = readRequestId(raw, 'ask:resolve');
-    const entry = pending.get(requestId);
-    if (!entry) {
-      throw new CodesignError(
-        `ask:resolve called with unknown requestId "${requestId}"`,
-        ERROR_CODES.IPC_BAD_INPUT,
-      );
-    }
-    let parsed: {
-      requestId: string;
-      status: 'answered' | 'cancelled';
-      answers: AskResult['answers'];
-    };
-    try {
-      parsed = parseResolveInput(raw);
-    } catch (err) {
-      pending.delete(requestId);
-      entry.reject(err);
-      throw err;
-    }
-    pending.delete(requestId);
-    log.info('ask.resolve', {
-      sessionId: entry.sessionId,
-      requestId,
-      status: parsed.status,
-      answers: parsed.answers.length,
-    });
-    entry.resolve({ status: parsed.status, answers: parsed.answers });
+  ipcMain.handle('ask:history', (_event, filter: unknown) =>
+    getStore().history(parseHistoryFilter(filter)),
+  );
+  ipcMain.handle('ask:resolve', async (_event, raw: unknown) => {
+    // Invalid renderer submissions must not consume the runtime's original promise.
+    const { requestId, ...result } = parseResolveInput(raw);
+    await pending.get(requestId)?.ready;
+    const entry = await getStore().settle(requestId, result);
+    finish(entry);
   });
+}
+
+function finish(entry: AskHistoryEntry): void {
+  if (!entry.result) return;
+  const live = pending.get(entry.requestId);
+  pending.delete(entry.requestId);
+  live?.cleanup();
+  live?.resolve(entry.result);
+  log.info('ask.resolve', {
+    sessionId: entry.sessionId,
+    requestId: entry.requestId,
+    status: entry.status,
+  });
+  const payload = {
+    requestId: entry.requestId,
+    sessionId: entry.sessionId,
+    ...(entry.runId ? { runId: entry.runId } : {}),
+    ...(entry.designId ? { designId: entry.designId } : {}),
+    status: entry.status,
+  };
+  for (const win of BrowserWindow.getAllWindows()) {
+    try {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send('ask:resolved', payload);
+        if (entry.status === 'cancelled') {
+          const cancelled: AskCancelledV1 = {
+            schemaVersion: 1,
+            requestId: entry.requestId,
+            sessionId: entry.sessionId,
+          };
+          win.webContents.send('ask:cancelled', cancelled);
+        }
+      }
+    } catch (error) {
+      log.warn('ask.resolve.delivery_failed', { requestId: entry.requestId, error: String(error) });
+    }
+  }
+}
+
+async function cancelRequest(requestId: string): Promise<void> {
+  const live = pending.get(requestId);
+  if (!live) return;
+  live.cancelling = true;
+  try {
+    await live.ready;
+    const entry = await getStore().settle(requestId, { status: 'cancelled', answers: [] });
+    finish(entry);
+  } catch (error) {
+    if (pending.get(requestId) !== live) return;
+    pending.delete(requestId);
+    live.cleanup();
+    live.reject(error);
+    log.error('ask.cancel.failed', { requestId, error: String(error) });
+  }
+}
+
+export interface RequestAskOptions {
+  designId?: string;
+  signal?: AbortSignal;
 }
 
 export function requestAsk(
   sessionId: string,
   input: AskInput,
   getMainWindow: () => BrowserWindow | null,
-  signal?: AbortSignal,
+  optionsOrSignal: RequestAskOptions | AbortSignal = {},
 ): Promise<AskResult> {
+  const options: RequestAskOptions =
+    'aborted' in optionsOrSignal ? { signal: optionsOrSignal } : optionsOrSignal;
   const requestId = `ask-${randomUUID()}`;
+  const payload: AskRequestPayload = {
+    requestId,
+    sessionId,
+    runId: sessionId,
+    ...(options.designId ? { designId: options.designId } : {}),
+    input: structuredClone(input),
+  };
   return new Promise<AskResult>((resolve, reject) => {
-    const win = getMainWindow();
-    if (signal?.aborted || !win || win.isDestroyed() || win.webContents.isDestroyed()) {
-      log.warn('ask.request.no_window', { sessionId, requestId });
-      resolve({ status: 'cancelled', answers: [] });
-      return;
-    }
-    const cleanup = () => {
-      pending.delete(requestId);
-      signal?.removeEventListener('abort', cancel);
-      win.removeListener('closed', cancel);
-      win.webContents.removeListener('destroyed', cancel);
+    const onAbort = () => {
+      void cancelRequest(requestId);
     };
-    const cancel = () => {
-      if (!pending.has(requestId)) return;
-      cleanup();
-      resolve({ status: 'cancelled', answers: [] });
-      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-        const payload: AskCancelledV1 = { schemaVersion: 1, requestId, sessionId };
+    const live: PendingAsk = {
+      resolve,
+      reject,
+      payload,
+      ready: getStore().create(payload),
+      cleanup: () => options.signal?.removeEventListener('abort', onAbort),
+      cancelling: false,
+    };
+    pending.set(requestId, live);
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    if (options.signal?.aborted) onAbort();
+    void live.ready
+      .then(() => {
+        if (pending.get(requestId) !== live || live.cancelling) return;
+        // Window closure/reload is not cancellation: pending() replays after remount.
         try {
-          win.webContents.send('ask:cancelled', payload);
+          const win = getMainWindow();
+          if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+          win.webContents.send('ask:request', payload);
         } catch (error) {
-          log.warn('ask.cancel.delivery_failed', {
-            sessionId,
-            requestId,
-            message: error instanceof Error ? error.message : String(error),
-          });
+          log.warn('ask.request.delivery_failed', { requestId, error: String(error) });
         }
-      }
-    };
-    pending.set(requestId, {
-      sessionId,
-      input,
-      cancel,
-      resolve: (result) => {
-        cleanup();
-        resolve(result);
-      },
-      reject: (reason) => {
-        cleanup();
-        reject(reason);
-      },
-    });
-    signal?.addEventListener('abort', cancel, { once: true });
-    win.once('closed', cancel);
-    win.webContents.once('destroyed', cancel);
-    const payload: AskRequestPayload = { requestId, sessionId, input };
-    log.info('ask.request.send', {
-      sessionId,
-      requestId,
-      questions: input.questions.length,
-    });
-    try {
-      win.webContents.send('ask:request', payload);
-    } catch (error) {
-      cleanup();
-      reject(error);
-    }
+      })
+      .catch((error: unknown) => {
+        if (pending.get(requestId) !== live) return;
+        pending.delete(requestId);
+        live.cleanup();
+        reject(error);
+      });
   });
 }
 
-export function listPendingAskRequests(): AskRequestPayload[] {
-  return Array.from(pending, ([requestId, entry]) => ({
-    requestId,
-    sessionId: entry.sessionId,
-    input: entry.input,
-  }));
+export async function listPendingAskRequests(): Promise<AskRequestPayload[]> {
+  const history = await getStore().history();
+  return history
+    .filter((entry) => entry.status === 'pending' && pending.has(entry.requestId))
+    .map((entry) => ({
+      requestId: entry.requestId,
+      sessionId: entry.sessionId,
+      ...(entry.runId ? { runId: entry.runId } : {}),
+      ...(entry.designId ? { designId: entry.designId } : {}),
+      input: entry.input,
+    }));
 }
 
-export function cancelPendingAskRequests(sessionId: string): void {
-  for (const entry of pending.values()) {
-    if (entry.sessionId !== sessionId) continue;
-    entry.cancel();
+export async function cancelPendingAskRequests(sessionId: string): Promise<void> {
+  await Promise.all(
+    [...pending]
+      .filter(([, entry]) => entry.payload.sessionId === sessionId)
+      .map(([id]) => cancelRequest(id)),
+  );
+}
+
+function parseHistoryFilter(raw: unknown): AskHistoryFilter {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new CodesignError('ask:history expects a filter object', ERROR_CODES.IPC_BAD_INPUT);
   }
+  const filter = raw as Record<string, unknown>;
+  for (const [key, value] of Object.entries(filter)) {
+    if (!['runId', 'designId'].includes(key) || typeof value !== 'string' || !value.trim()) {
+      throw new CodesignError('ask:history invalid filter', ERROR_CODES.IPC_BAD_INPUT);
+    }
+  }
+  return filter as AskHistoryFilter;
 }
 
 function badResolvePayload(message: string): never {
   throw new CodesignError(`ask:resolve ${message}`, ERROR_CODES.IPC_BAD_INPUT);
 }
 
-function readRequestId(raw: unknown, channel: string): string {
-  if (!raw || typeof raw !== 'object') {
-    throw new CodesignError(`${channel} expects an object payload`, ERROR_CODES.IPC_BAD_INPUT);
-  }
-  const obj = raw as Record<string, unknown>;
-  const requestId = obj['requestId'];
-  if (typeof requestId !== 'string' || requestId.trim().length === 0) {
-    throw new CodesignError(`${channel} requires a non-empty requestId`, ERROR_CODES.IPC_BAD_INPUT);
-  }
+function readRequestId(raw: unknown): string {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    badResolvePayload('expects an object payload');
+  const requestId = (raw as Record<string, unknown>)['requestId'];
+  if (typeof requestId !== 'string' || requestId.trim().length === 0)
+    badResolvePayload('requires a non-empty requestId');
   return requestId;
 }
 
-function parseResolveInput(raw: unknown): {
-  requestId: string;
-  status: 'answered' | 'cancelled';
-  answers: AskResult['answers'];
-} {
-  const requestId = readRequestId(raw, 'ask:resolve');
+function parseResolveInput(raw: unknown): { requestId: string } & AskResult {
+  const requestId = readRequestId(raw);
   const obj = raw as Record<string, unknown>;
   assertKnownFields(obj, ['requestId', 'status', 'answers']);
   const status = obj['status'];
   const answers = obj['answers'];
-  if (status !== 'answered' && status !== 'cancelled') {
+  if (status !== 'answered' && status !== 'cancelled')
     badResolvePayload('status must be "answered" or "cancelled"');
-  }
   if (!Array.isArray(answers)) badResolvePayload('answers must be an array');
   const clean: AskResult['answers'] = [];
   for (const a of answers) {
-    if (!a || typeof a !== 'object') badResolvePayload('answers must contain objects');
+    if (!a || typeof a !== 'object' || Array.isArray(a))
+      badResolvePayload('answers must contain objects');
     const rec = a as Record<string, unknown>;
     assertKnownFields(rec, ['questionId', 'value']);
     const questionId = rec['questionId'];
     const value = rec['value'];
-    if (typeof questionId !== 'string') badResolvePayload('answer questionId must be a string');
+    if (typeof questionId !== 'string' || !questionId.trim())
+      badResolvePayload('answer questionId must be a non-empty string');
     if (
       value !== null &&
       typeof value !== 'string' &&
-      typeof value !== 'number' &&
+      !(typeof value === 'number' && Number.isFinite(value)) &&
       !(Array.isArray(value) && value.every((v) => typeof v === 'string'))
     ) {
-      badResolvePayload('answer value must be a string, number, string array, or null');
+      badResolvePayload('answer value must be a string, finite number, string array, or null');
     }
     clean.push({ questionId, value: value as string | number | string[] | null });
   }
   return { requestId, status, answers: clean };
 }
-
 function assertKnownFields(record: Record<string, unknown>, allowed: readonly string[]): void {
   const unsupported = Object.keys(record).find((key) => !allowed.includes(key));
   if (unsupported !== undefined) badResolvePayload(`contains unsupported field "${unsupported}"`);

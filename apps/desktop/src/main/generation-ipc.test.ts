@@ -51,7 +51,7 @@ describe('cancelGenerationRequest', () => {
 
     expect(target.abort).toHaveBeenCalledOnce();
     expect(other.abort).not.toHaveBeenCalled();
-    expect(inFlight.has('gen-1')).toBe(true);
+    expect(inFlight.get('gen-1')).toBe(target);
     expect(inFlight.has('gen-2')).toBe(true);
     expect(logIpc.info).toHaveBeenCalledWith('generate.cancelled', { id: 'gen-1' });
   });
@@ -194,27 +194,120 @@ describe('withInFlightGenerationForDesign', () => {
     ).resolves.toEqual(['one', 'two']);
   });
 
-  it('retains ownership until the cancelled run settles', async () => {
-    const controller = makeController();
+  it('retains design and workspace ownership until a cancelled worker actually settles', async () => {
+    const controller = new AbortController();
+    const inFlight = new Map<string, AbortController>();
+    const inFlightByDesign = new Map<string, { generationId: string; startedAt: number }>();
+    const inFlightByWorkspace = new Map<string, { generationId: string; startedAt: number }>();
+    let finishWorker!: () => void;
+    const workerDone = new Promise<void>((resolve) => {
+      finishWorker = resolve;
+    });
+    const first = withInFlightGenerationForDesign(
+      'gen-1',
+      'design-1',
+      inFlight,
+      inFlightByDesign,
+      controller,
+      async () => {
+        const release = acquireInFlightWorkspaceGeneration(
+          'gen-1',
+          '/workspace',
+          inFlightByWorkspace,
+        );
+        try {
+          await workerDone;
+        } finally {
+          release();
+        }
+      },
+    );
+    try {
+      cancelGenerationRequest(
+        'gen-1',
+        inFlight,
+        { info: vi.fn() },
+        inFlightByDesign,
+        inFlightByWorkspace,
+      );
+      expect(controller.signal.aborted).toBe(true);
+      expect(inFlight.get('gen-1')).toBe(controller);
+      expect(inFlightByDesign.get('design-1')?.generationId).toBe('gen-1');
+      expect(inFlightByWorkspace.get('/workspace')?.generationId).toBe('gen-1');
+      await expect(
+        withInFlightGenerationForDesign(
+          'gen-2',
+          'design-1',
+          inFlight,
+          inFlightByDesign,
+          new AbortController(),
+          async () => 'unexpected',
+        ),
+      ).rejects.toMatchObject({ code: 'GENERATION_ALREADY_RUNNING' });
+      expect(() =>
+        acquireInFlightWorkspaceGeneration('gen-2', '/workspace', inFlightByWorkspace),
+      ).toThrow(CodesignError);
+    } finally {
+      finishWorker();
+      await first;
+    }
+    expect(inFlight.size).toBe(0);
+    expect(inFlightByDesign.size).toBe(0);
+    expect(inFlightByWorkspace.size).toBe(0);
+  });
+
+  it('rejects an identical generation id without rerunning the same design', async () => {
+    const controller = new AbortController();
     const inFlight = new Map([['gen-1', controller]]);
     const inFlightByDesign = new Map([['design-1', { generationId: 'gen-1', startedAt: 1234 }]]);
-    const inFlightByWorkspace = new Map([
-      ['/workspace', { generationId: 'gen-1', startedAt: 1234 }],
-    ]);
-    const logIpc = { info: vi.fn() };
+    const duplicate = vi.fn(async () => 'unexpected');
+    await expect(
+      withInFlightGenerationForDesign(
+        'gen-1',
+        'design-1',
+        inFlight,
+        inFlightByDesign,
+        new AbortController(),
+        duplicate,
+      ),
+    ).rejects.toMatchObject({ code: 'GENERATION_ALREADY_RUNNING' });
+    expect(duplicate).not.toHaveBeenCalled();
+    expect(inFlight.get('gen-1')).toBe(controller);
+    expect(inFlightByDesign.get('design-1')).toEqual({ generationId: 'gen-1', startedAt: 1234 });
+  });
 
-    cancelGenerationRequest('gen-1', inFlight, logIpc, inFlightByDesign, inFlightByWorkspace);
-
-    expect(inFlight.has('gen-1')).toBe(true);
-    expect(inFlightByDesign.has('design-1')).toBe(true);
-    expect(inFlightByWorkspace.has('/workspace')).toBe(true);
-    expect(() =>
-      acquireInFlightWorkspaceGeneration('replacement', '/workspace', inFlightByWorkspace),
-    ).toThrow(/already running/);
+  it("rejects reusing another design's generation id without stealing cancellation ownership", async () => {
+    const controller = new AbortController();
+    const inFlight = new Map([['gen-1', controller]]);
+    const inFlightByDesign = new Map([['design-1', { generationId: 'gen-1', startedAt: 1234 }]]);
+    const duplicate = vi.fn(async () => 'unexpected');
+    await expect(
+      withInFlightGenerationForDesign(
+        'gen-1',
+        'design-2',
+        inFlight,
+        inFlightByDesign,
+        new AbortController(),
+        duplicate,
+      ),
+    ).rejects.toMatchObject({ code: 'GENERATION_ALREADY_RUNNING' });
+    expect(duplicate).not.toHaveBeenCalled();
+    expect(inFlight.get('gen-1')).toBe(controller);
+    expect(inFlightByDesign.has('design-2')).toBe(false);
   });
 });
 
 describe('acquireInFlightWorkspaceGeneration', () => {
+  it('rejects reacquiring the same workspace with the same generation id', () => {
+    const owners = new Map<string, { generationId: string; startedAt: number }>();
+    const release = acquireInFlightWorkspaceGeneration('gen-1', '/workspace', owners);
+    expect(() => acquireInFlightWorkspaceGeneration('gen-1', '/workspace', owners)).toThrow(
+      CodesignError,
+    );
+    expect(owners.get('/workspace')?.generationId).toBe('gen-1');
+    release();
+    expect(owners.size).toBe(0);
+  });
   it('rejects a second generation for the same workspace while the first is running', () => {
     const inFlightByWorkspace = new Map<string, { generationId: string; startedAt: number }>();
     const release = acquireInFlightWorkspaceGeneration('gen-1', '/workspace', inFlightByWorkspace);

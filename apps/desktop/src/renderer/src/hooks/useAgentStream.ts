@@ -17,7 +17,9 @@ import { useEffect, useRef } from 'react';
 import type { AgentStreamEvent } from '../../../preload/index';
 import { resolveReferencedWorkspacePreviewPath } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
+import { coerceUsageSnapshot } from '../store/slices/usage';
 import { createAgentFsUpdateScheduler } from './agent-stream-fs-scheduler';
+import { attachRunEvents } from './run-event-attachment';
 
 interface PendingPersist {
   /** Resolves to the persisted row's seq, or null if the append failed. */
@@ -164,7 +166,7 @@ export function useAgentStream(): void {
       if (current) current.textBuffer = '';
     };
 
-    const handleToolCallStart = (event: AgentStreamEvent) => {
+    const handleToolCallStart = (event: AgentStreamEvent, replay = false) => {
       const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
       const toolName = event.toolName ?? 'unknown';
@@ -183,7 +185,7 @@ export function useAgentStream(): void {
       });
       // set_title updates design metadata only. Moving the workspace folder
       // here can race with file reads/writes from the active generation.
-      if (toolName === 'set_title') {
+      if (toolName === 'set_title' && !replay) {
         const rawTitle = (event.args as { title?: unknown } | undefined)?.title;
         if (typeof rawTitle === 'string' && rawTitle.trim().length > 0) {
           const cleaned = rawTitle
@@ -198,6 +200,7 @@ export function useAgentStream(): void {
       // DB row rather than an in-memory shadow. Capture seq via promise so
       // the result handler can patch the same row even if it lands before
       // the append round-trip completes.
+      if (event.chatPersisted) return;
       const seqPromise = appendChatMessage({
         designId,
         kind: 'tool_call',
@@ -228,6 +231,7 @@ export function useAgentStream(): void {
 
     const handleToolCallResult = (event: AgentStreamEvent) => {
       markGenerationRunning(event.designId, event.generationId, 'streaming');
+      if (event.chatPersisted) return;
       const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
       if (!current) return;
@@ -312,14 +316,15 @@ export function useAgentStream(): void {
       // The IPC rejection owns local-run diagnostics; consuming its identity
       // here would make the subsequent error look like a stale response.
       if (currentRun?.generationId === event.generationId && currentRun.awaitingResponse) return;
-      void appendChatMessage({
-        designId: event.designId,
-        kind: 'error',
-        payload: {
-          message: event.message ?? 'Unknown error',
-          ...(event.code ? { code: event.code } : {}),
-        },
-      });
+      if (!event.chatPersisted)
+        void appendChatMessage({
+          designId: event.designId,
+          kind: 'error',
+          payload: {
+            message: event.message ?? 'Unknown error',
+            ...(event.code ? { code: event.code } : {}),
+          },
+        });
       // Defensive: clear generation flags so the UI never gets stuck showing
       // "running" if the IPC promise that drives sendPrompt hangs. Only clear
       // when the error belongs to the design the store thinks is generating.
@@ -341,6 +346,11 @@ export function useAgentStream(): void {
     };
 
     const handleAgentEnd = (event: AgentStreamEvent) => {
+      if (event.seq !== undefined) {
+        fsScheduler.flushGeneration(event.generationId);
+        setStreamingAssistantText({ designId: event.designId, text: '' });
+        return;
+      }
       // Flush only this generation's pending preview updates before persisting
       // the final snapshot so concurrent background runs stay isolated.
       fsScheduler.flushGeneration(event.generationId);
@@ -399,13 +409,116 @@ export function useAgentStream(): void {
       fsScheduler.clearGeneration(event.generationId);
       inFlight.current.delete(event.generationId);
       setStreamingAssistantText({ designId: event.designId, text: '' });
-      if (event.type === 'agent_end' || event.type === 'error') {
+      if (event.seq === undefined && (event.type === 'agent_end' || event.type === 'error')) {
         forgetCancelledGeneration(event.generationId);
       }
       return true;
     };
 
-    const off = window.codesign.chat.onAgentEvent((event: AgentStreamEvent) => {
+    let chatRefresh: ReturnType<typeof setTimeout> | undefined;
+    const refreshChat = (designId: string) => {
+      if (useCodesignStore.getState().currentDesignId !== designId) return;
+      if (chatRefresh !== undefined) clearTimeout(chatRefresh);
+      chatRefresh = setTimeout(() => {
+        chatRefresh = undefined;
+        if (useCodesignStore.getState().currentDesignId === designId)
+          void useCodesignStore.getState().loadChatForCurrentDesign();
+      }, 50);
+    };
+    const handleSettled = (event: AgentStreamEvent, replay: boolean) => {
+      useCodesignStore.setState((state) => ({
+        settledGenerationIds: new Set([...state.settledGenerationIds, event.generationId]),
+      }));
+      const owner = useCodesignStore.getState().generationByDesign[event.designId];
+      if (owner && owner.generationId !== event.generationId) {
+        fsScheduler.clearGeneration(event.generationId);
+        inFlight.current.delete(event.generationId);
+        return;
+      }
+      fsScheduler.flushGeneration(event.generationId);
+      inFlight.current.delete(event.generationId);
+      setStreamingAssistantText({ designId: event.designId, text: '' });
+      refreshChat(event.designId);
+      const state = useCodesignStore.getState();
+      const run = state.generationByDesign[event.designId];
+      if (run?.generationId !== event.generationId || run.awaitingResponse) return;
+      const generationByDesign = { ...state.generationByDesign };
+      delete generationByDesign[event.designId];
+      const visible = state.currentDesignId === event.designId;
+      const active = state.currentDesignId ? generationByDesign[state.currentDesignId] : undefined;
+      useCodesignStore.setState({
+        generationByDesign,
+        isGenerating: active !== undefined,
+        activeGenerationId: active?.generationId ?? null,
+        generatingDesignId: active ? state.currentDesignId : null,
+        generationStage:
+          active?.stage ??
+          (visible
+            ? event.outcome === 'completed'
+              ? 'done'
+              : event.outcome === 'cancelled'
+                ? 'idle'
+                : 'error'
+            : state.generationStage),
+        ...(event.response ? { lastUsage: coerceUsageSnapshot(event.response).usage } : {}),
+        ...(visible && event.message && event.outcome !== 'cancelled'
+          ? { errorMessage: event.message, lastError: event.message }
+          : {}),
+      });
+      if (event.outcome === 'completed' && event.response?.snapshotId) {
+        void useCodesignStore.getState().loadDesigns();
+        void window.codesign?.snapshots
+          .list(event.designId)
+          .then((snapshots) => {
+            const current = useCodesignStore.getState();
+            if (
+              current.currentDesignId === event.designId &&
+              !current.generationByDesign[event.designId]
+            ) {
+              useCodesignStore.setState({ currentSnapshotId: snapshots[0]?.id ?? null });
+            }
+          })
+          .catch((error: unknown) =>
+            console.warn('[open-codesign] snapshot refresh failed:', error),
+          );
+      }
+      if (!replay && event.response?.artifacts[0]?.content)
+        setPreviewSourceFromAgent({
+          designId: event.designId,
+          content: event.response.artifacts[0].content,
+        });
+    };
+    const consume = (event: AgentStreamEvent, replay = false) => {
+      if (event.chatPersisted) {
+        if (
+          ['turn_end', 'tool_call_start', 'tool_call_result', 'run_settled', 'error'].includes(
+            event.type,
+          )
+        )
+          refreshChat(event.designId);
+        useCodesignStore.setState((state) => {
+          const run = state.generationByDesign[event.designId];
+          if (run?.generationId !== event.generationId) return {};
+          return {
+            generationByDesign: {
+              ...state.generationByDesign,
+              [event.designId]: { ...run, chatPersisted: true },
+            },
+          };
+        });
+      }
+      if (event.type === 'run_settled') {
+        handleSettled(event, replay);
+        forgetCancelledGeneration(event.generationId);
+        return;
+      }
+      if (
+        event.seq !== undefined &&
+        useCodesignStore.getState().settledGenerationIds.has(event.generationId)
+      )
+        return;
+      const active = useCodesignStore.getState().generationByDesign[event.designId];
+      if (event.seq !== undefined && active && active.generationId !== event.generationId) return;
       // Delivery bookkeeping must survive Stop's late-generation event filter.
       if (event.type === 'active_message') {
         const message = event.activeMessage;
@@ -430,13 +543,13 @@ export function useAgentStream(): void {
           handleTurnEnd(event);
           return;
         case 'tool_call_start':
-          handleToolCallStart(event);
+          handleToolCallStart(event, replay);
           return;
         case 'tool_call_result':
           handleToolCallResult(event);
           return;
         case 'fs_updated':
-          handleFsUpdated(event);
+          if (!replay) handleFsUpdated(event);
           return;
         case 'agent_end':
           handleAgentEnd(event);
@@ -445,9 +558,39 @@ export function useAgentStream(): void {
           handleError(event);
           return;
       }
-    });
+    };
+    const api = window.codesign;
+    const attachment =
+      typeof api.recoverRuns === 'function'
+        ? attachRunEvents({
+            subscribe: (listener) => api.chat.onAgentEvent(listener),
+            recover: async (cursors) => {
+              const recovered = await api.recoverRuns(cursors);
+              // Repair may only return already-consumed cursors; refresh the repaired chat too.
+              const designId = useCodesignStore.getState().currentDesignId;
+              if (designId) refreshChat(designId);
+              return recovered;
+            },
+            consume,
+            onError: (error) => console.warn('[open-codesign] run recovery failed:', error),
+          })
+        : null;
+    const off = attachment ? () => attachment.dispose() : api.chat.onAgentEvent(consume);
+    const recover = () => {
+      void attachment?.recover();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') recover();
+    };
+    window.addEventListener?.('focus', recover);
+    if (typeof document !== 'undefined')
+      document.addEventListener('visibilitychange', onVisibility);
     return () => {
       off();
+      window.removeEventListener?.('focus', recover);
+      if (typeof document !== 'undefined')
+        document.removeEventListener('visibilitychange', onVisibility);
+      if (chatRefresh !== undefined) clearTimeout(chatRefresh);
       fsScheduler.clearAll();
     };
   }, [

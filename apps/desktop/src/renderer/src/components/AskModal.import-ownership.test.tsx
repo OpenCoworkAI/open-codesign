@@ -73,12 +73,14 @@ it.each(
     },
   });
   useCodesignStore.setState({
+    currentDesignId: 'fixture-design',
     importFilesToWorkspace: imports,
     composerDrafts: { a: 'Keep composer A', b: 'Keep composer B' },
   });
   const request = (requestId: string, sessionId: string): AskRequest => ({
     requestId,
     sessionId,
+    designId: 'fixture-design',
     input: { questions: [{ id: 'brief', type: 'file', prompt: requestId }] },
   });
   const first = request('First upload', 'a');

@@ -145,10 +145,12 @@ export interface CodesignState {
       stage: GenerationStage;
       startedAt?: number;
       awaitingResponse?: boolean;
+      chatPersisted?: boolean;
       streamedAssistantText?: string;
       submittedContext?: { referenceUrl?: string; comments: Record<string, string> };
     }
   >;
+  settledGenerationIds: Set<string>;
   isGenerating: boolean;
   activeGenerationId: string | null;
   /** Design id that owns the in-flight generation. Lets the user switch to
@@ -482,6 +484,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   previewSourceByDesign: {},
   recentDesignIds: [],
   generationByDesign: {},
+  settledGenerationIds: new Set(),
   isGenerating: false,
   activeGenerationId: null,
   generatingDesignId: null,
