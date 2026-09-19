@@ -903,6 +903,25 @@ describe('registerOnboardingIpc — validate-key passes baseUrl to pingProvider'
     expect(pingProvider).toHaveBeenCalledWith('anthropic', 'sk-ant-test', undefined);
   });
 
+  it('forwards Atlas Cloud validation to the provider validator', async () => {
+    const { pingProvider } = await import('@open-codesign/providers');
+    vi.mocked(pingProvider).mockClear();
+    const handler = handlers.get('onboarding:validate-key');
+    expect(handler).toBeDefined();
+
+    await handler?.({} as unknown, {
+      provider: 'atlascloud',
+      apiKey: 'apikey-test',
+      baseUrl: 'https://api.atlascloud.ai/v1',
+    });
+
+    expect(pingProvider).toHaveBeenCalledWith(
+      'atlascloud',
+      'apikey-test',
+      'https://api.atlascloud.ai/v1',
+    );
+  });
+
   it('allows explicitly keyless Ollama validation with an empty apiKey', async () => {
     const { pingProvider } = await import('@open-codesign/providers');
     vi.mocked(pingProvider).mockClear();

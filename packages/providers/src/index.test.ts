@@ -9,13 +9,19 @@ vi.mock('@mariozechner/pi-ai', () => ({
   completeSimple: (...args: unknown[]) => completeSimpleMock(...args),
 }));
 
-import { complete, inferReasoning } from './index';
+import { complete, detectProviderFromKey, inferReasoning } from './index';
 
 const MODEL: ModelRef = { provider: 'openai', modelId: 'gpt-4o' };
 
 afterEach(() => {
   getModelMock.mockReset();
   completeSimpleMock.mockReset();
+});
+
+describe('detectProviderFromKey', () => {
+  it('recognizes Atlas Cloud API keys', () => {
+    expect(detectProviderFromKey(' apikey-test ')).toBe('atlascloud');
+  });
 });
 
 describe('complete', () => {
