@@ -262,6 +262,7 @@ env_key  = "${envKey}"
     'DEEPSEEK_API_KEY',
     'XAI_API_KEY',
     'GROQ_API_KEY',
+    'MINIMAX_API_KEY',
   ])('accepts known provider env_key=%s', async (envKey) => {
     const toml = `
 [model_providers.p]

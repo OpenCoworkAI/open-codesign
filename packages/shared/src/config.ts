@@ -7,6 +7,7 @@ const ProviderIdEnum = z.enum([
   'openai',
   'google',
   'openrouter',
+  'minimax',
   'groq',
   'cerebras',
   'xai',
@@ -20,6 +21,7 @@ export const SUPPORTED_ONBOARDING_PROVIDERS = [
   'anthropic',
   'openai',
   'openrouter',
+  'minimax',
   'ollama',
 ] as const;
 export type SupportedOnboardingProvider = (typeof SUPPORTED_ONBOARDING_PROVIDERS)[number];
@@ -28,6 +30,84 @@ export type SupportedOnboardingProvider = (typeof SUPPORTED_ONBOARDING_PROVIDERS
  *  Ollama on a different host/port. */
 export const OLLAMA_DEFAULT_BASE_URL = 'http://localhost:11434/v1';
 export const OLLAMA_DEFAULT_MODEL = 'llama3.2';
+
+export const MINIMAX_ENDPOINTS = {
+  global_en: {
+    region: 'global_en',
+    openaiBaseUrl: 'https://api.minimax.io/v1',
+    anthropicBaseUrl: 'https://api.minimax.io/anthropic',
+    docsRoot: 'https://platform.minimax.io/docs',
+  },
+  cn_zh: {
+    region: 'cn_zh',
+    openaiBaseUrl: 'https://api.minimaxi.com/v1',
+    anthropicBaseUrl: 'https://api.minimaxi.com/anthropic',
+    docsRoot: 'https://platform.minimaxi.com/docs',
+  },
+} as const;
+
+export const MINIMAX_MODEL_CATALOG = [
+  {
+    modelId: 'MiniMax-M3',
+    contextWindow: 1_000_000,
+    pricingUsdPerMillionTokens: {
+      input: 0.6,
+      output: 2.4,
+      cacheRead: 0.12,
+      cacheWrite: null,
+    },
+    pricingTiersUsdPerMillionTokens: [
+      {
+        serviceTier: 'standard',
+        inputTokensLte: 512_000,
+        input: 0.3,
+        output: 1.2,
+        cacheRead: 0.06,
+        cacheWrite: null,
+      },
+      {
+        serviceTier: 'standard',
+        inputTokensGt: 512_000,
+        input: 0.6,
+        output: 2.4,
+        cacheRead: 0.12,
+        cacheWrite: null,
+      },
+      {
+        serviceTier: 'priority',
+        inputTokensLte: 512_000,
+        input: 0.45,
+        output: 1.8,
+        cacheRead: 0.09,
+        cacheWrite: null,
+      },
+      {
+        serviceTier: 'priority',
+        inputTokensGt: 512_000,
+        input: 0.9,
+        output: 3.6,
+        cacheRead: 0.18,
+        cacheWrite: null,
+      },
+    ],
+    inputModalities: ['text', 'image', 'video'],
+    thinking: ['adaptive', 'disabled'],
+  },
+  {
+    modelId: 'MiniMax-M2.7',
+    contextWindow: 204_800,
+    pricingUsdPerMillionTokens: {
+      input: 0.3,
+      output: 1.2,
+      cacheRead: 0.06,
+      cacheWrite: 0.375,
+    },
+    inputModalities: ['text'],
+    thinking: ['always_on'],
+  },
+] as const;
+
+export const MINIMAX_MODEL_IDS = MINIMAX_MODEL_CATALOG.map((model) => model.modelId);
 
 // ── Wire types (v3) ──────────────────────────────────────────────────────────
 
@@ -278,6 +358,23 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
       modelDiscoveryMode: 'models',
     },
   },
+  minimax: {
+    id: 'minimax',
+    name: 'MiniMax',
+    builtin: true,
+    wire: 'openai-chat',
+    baseUrl: MINIMAX_ENDPOINTS.global_en.openaiBaseUrl,
+    envKey: 'MINIMAX_API_KEY',
+    defaultModel: MINIMAX_MODEL_CATALOG[0].modelId,
+    modelsHint: MINIMAX_MODEL_IDS,
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: false,
+      supportsReasoning: false,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'static-hint',
+    },
+  },
   ollama: {
     id: 'ollama',
     name: 'Ollama (local)',
@@ -384,7 +481,7 @@ function cloneBuiltin(id: SupportedOnboardingProvider): ProviderEntry {
 }
 
 /**
- * Pure: migrate a validated v1/v2 config to v3. Seeds the three builtin
+ * Pure: migrate a validated v1/v2 config to v3. Seeds the supported builtin
  * providers and overlays any stored baseUrls onto them.
  */
 export function migrateLegacyToV3(legacy: LegacyConfig): ConfigV3 {
@@ -506,6 +603,13 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     keyHelpUrl: 'https://openrouter.ai/keys',
     primary: ['anthropic/claude-sonnet-4.6', 'openai/gpt-4o'],
     defaultPrimary: 'anthropic/claude-sonnet-4.6',
+  },
+  minimax: {
+    provider: 'minimax',
+    label: 'MiniMax',
+    keyHelpUrl: 'https://platform.minimax.io/docs/api-reference/api-overview',
+    primary: MINIMAX_MODEL_IDS,
+    defaultPrimary: MINIMAX_MODEL_CATALOG[0].modelId,
   },
   ollama: {
     provider: 'ollama',
