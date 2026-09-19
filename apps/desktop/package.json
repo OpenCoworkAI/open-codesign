@@ -1,6 +1,6 @@
 {
   "name": "@open-codesign/desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Prompt-to-design desktop app for HTML prototypes, decks, and marketing assets.",
   "author": "Open CoDesign Maintainers <maintainers@opencowork.ai>",

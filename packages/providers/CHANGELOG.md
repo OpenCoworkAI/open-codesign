@@ -1,5 +1,21 @@
 # @open-codesign/providers
 
+## 0.2.2
+
+### Patch Changes
+
+- 0db17ee: Use supported default reasoning for GPT-6 Astra, including custom Responses gateways and helper requests. Preserve locally submitted generation state until its IPC response arrives so early stream completion cannot hide errors, artifacts, or token usage.
+- b2d020d: Forward image attachments through OpenAI-compatible and Anthropic-style provider paths instead of only marking Codex synthesized models as image-capable.
+- e70430d: Recover a truncated design-session brief with one bounded larger-output retry, retaining the previous brief on failure and including reported usage from the truncated attempt. Keep length-stop errors typed without accepting partial completion content.
+- Updated dependencies [729e356]
+- Updated dependencies [f2a9dbb]
+- Updated dependencies [d199c75]
+- Updated dependencies [a3a08e6]
+- Updated dependencies [729e356]
+- Updated dependencies [ef5677c]
+- Updated dependencies [729e356]
+  - @open-codesign/shared@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes
