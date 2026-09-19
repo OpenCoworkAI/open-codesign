@@ -606,6 +606,12 @@ export {
   shouldForceClaudeCodeIdentity,
   withClaudeCodeIdentity,
 } from './claude-code-compat';
+export type { NormalizedProviderError, RecoveryCategory } from './errors';
+export {
+  classifyRecoveryCategory,
+  normalizeProviderError,
+  recoveryHintFor,
+} from './errors';
 export { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
 export { isGeminiOpenAICompat, normalizeGeminiModelId } from './gemini-compat';
 export type {
