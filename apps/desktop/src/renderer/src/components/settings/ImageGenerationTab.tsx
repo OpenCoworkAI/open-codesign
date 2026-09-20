@@ -20,8 +20,10 @@ function defaultImageBaseUrlFor(provider: ImageGenerationSettingsView['provider'
 function ImageGenerationPanel() {
   const t = useT();
   const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const [settings, setSettings] = useState<ImageGenerationSettingsView | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -45,6 +47,42 @@ function ImageGenerationPanel() {
         });
       });
   }, [pushToast, t]);
+
+  async function handleTestConnection() {
+    if (!window.codesign?.connection) return;
+    setTesting(true);
+    try {
+      const res = await window.codesign.connection.testImageProvider();
+      if (res.ok) {
+        pushToast({
+          variant: 'success',
+          title: t('settings.imageGen.toast.connectionOk', {
+            defaultValue: 'Image provider connection OK',
+          }),
+        });
+      } else {
+        reportableErrorToast({
+          code: 'CONNECTION_TEST_FAILED',
+          scope: 'settings',
+          title: t('settings.imageGen.toast.connectionFailed', {
+            defaultValue: 'Image provider connection failed',
+          }),
+          description: res.hint || res.message,
+        });
+      }
+    } catch (err) {
+      reportableErrorToast({
+        code: 'CONNECTION_TEST_FAILED',
+        scope: 'settings',
+        title: t('settings.imageGen.toast.connectionFailed', {
+          defaultValue: 'Image provider connection failed',
+        }),
+        description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
 
   async function save(patch: Partial<ImageGenerationSettingsView> & { apiKey?: string }) {
     if (!window.codesign?.imageGeneration) return;
@@ -252,7 +290,17 @@ function ImageGenerationPanel() {
         </Row>
       </div>
 
-      <div className="flex justify-end pt-[var(--space-1)] border-t border-[var(--color-border-muted)]">
+      <div className="flex justify-end gap-[var(--space-2)] pt-[var(--space-1)] border-t border-[var(--color-border-muted)]">
+        <button
+          type="button"
+          disabled={saving || testing || !keyAvailable}
+          onClick={() => void handleTestConnection()}
+          className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {testing
+            ? t('settings.imageGen.testing', { defaultValue: 'Testing…' })
+            : t('settings.imageGen.testConnection', { defaultValue: 'Test connection' })}
+        </button>
         <button
           type="button"
           disabled={
