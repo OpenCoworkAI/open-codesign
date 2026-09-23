@@ -126,7 +126,9 @@
   --size-input-height: 40px;
 
   /* Titlebar (Electron frameless window) */
-  --size-titlebar-height: 72px;
+  --size-titlebar-height: 56px;
+  --size-titlebar-model-min-width: 180px;
+  --size-titlebar-model-max-width: 340px;
   --size-titlebar-pad-left: 72px; /* clears macOS traffic-light buttons */
 
   /* Chip / file-token max width */
@@ -137,6 +139,7 @@
 
   /* Compact menu width (zoom dropdown, narrow option pickers) */
   --size-menu-compact: 6rem;
+  --size-menu-wide: 20rem;
 
   /* Hub sidebar (Designs hub left rail) */
   --size-hub-sidebar: 360px;

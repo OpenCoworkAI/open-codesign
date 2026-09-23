@@ -6,6 +6,7 @@ import { type HubTab, useCodesignStore } from '../store';
 import { LanguageToggle } from './LanguageToggle';
 import { ModelSwitcher } from './ModelSwitcher';
 import { ThemeToggle } from './ThemeToggle';
+import './TopBar.css';
 
 export const TOPBAR_DRAG_SPACER_TEST_ID = 'topbar-drag-spacer';
 
@@ -40,7 +41,8 @@ export function TopBar() {
 
   return (
     <header
-      className="h-[var(--size-titlebar-height)] shrink-0 flex items-center gap-[var(--space-3)] pr-[var(--space-5)] select-none"
+      className="codesign-topbar shrink-0 items-center pr-[var(--space-5)] select-none"
+      data-view={view}
       style={{
         ...dragStyle,
         paddingLeft: 'var(--size-titlebar-pad-left)',
@@ -48,11 +50,18 @@ export function TopBar() {
         background: 'var(--color-background)',
       }}
     >
-      <div className="flex items-center gap-[var(--space-6)] min-w-0 h-full">
-        <div className="shrink-0">
-          <Wordmark badge={`v${__APP_VERSION__}`} size="titlebar" />
-        </div>
+      <button
+        type="button"
+        className="codesign-topbar-brand inline-flex h-10 items-center rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+        onClick={() => setView('hub')}
+        aria-label={t('topbar.openMyDesigns')}
+        title={`Open CoDesign v${__APP_VERSION__}`}
+        style={noDragStyle}
+      >
+        <Wordmark badge={`v${__APP_VERSION__}`} size="titlebar" />
+      </button>
 
+      <div className="codesign-topbar-navigation min-w-0 h-full">
         {view === 'settings' ? (
           <div className="flex items-center gap-[var(--space-2)] min-w-0">
             <span style={{ color: 'oklch(0.22 0.025 50 / 0.2)' }}>/</span>
@@ -60,7 +69,7 @@ export function TopBar() {
               type="button"
               onClick={() => setView(previousView === 'settings' ? 'hub' : previousView)}
               aria-label={t('topbar.closeSettings')}
-              className={`${topbarButtonClass} gap-[6px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]`}
+              className={`${topbarButtonClass} min-w-0 gap-[6px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]`}
               style={{
                 ...noDragStyle,
               }}
@@ -71,7 +80,7 @@ export function TopBar() {
           </div>
         ) : view === 'hub' ? (
           <nav
-            className="flex h-full min-w-max items-center gap-[var(--space-1)]"
+            className="flex h-full min-w-0 flex-wrap items-center gap-[var(--space-1)]"
             aria-label={t('hub.tabs.all')}
           >
             {HUB_TABS.map((tab) => {
@@ -82,7 +91,7 @@ export function TopBar() {
                   type="button"
                   onClick={() => setHubTab(tab)}
                   aria-current={active ? 'page' : undefined}
-                  className={`${topbarButtonClass} relative font-medium`}
+                  className={`${topbarButtonClass} relative shrink-0 font-medium`}
                   style={{
                     ...noDragStyle,
                     color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
@@ -99,7 +108,7 @@ export function TopBar() {
                   {active ? (
                     <span
                       aria-hidden
-                      className="absolute left-[var(--space-2_5)] right-[var(--space-2_5)] bottom-[-18px] h-[2px] rounded-full"
+                      className="codesign-topbar-tab-indicator absolute left-[var(--space-2_5)] right-[var(--space-2_5)] h-[2px] rounded-full"
                       style={{ background: 'var(--color-accent)' }}
                     />
                   ) : null}
@@ -114,7 +123,7 @@ export function TopBar() {
               type="button"
               onClick={() => setView('hub')}
               aria-label={t('topbar.openMyDesigns')}
-              className={`${topbarButtonClass} max-w-[520px] gap-[6px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]`}
+              className={`${topbarButtonClass} min-w-0 max-w-[520px] gap-[6px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]`}
               style={{
                 ...noDragStyle,
               }}
@@ -130,14 +139,15 @@ export function TopBar() {
 
       <div
         data-testid={TOPBAR_DRAG_SPACER_TEST_ID}
-        className="min-w-[24px] flex-1 self-stretch"
+        className="codesign-topbar-drag min-w-[var(--space-6)] self-stretch"
         style={dragStyle}
       />
 
-      <div className="flex shrink-0 items-center gap-[var(--space-2)]">
-        <div style={noDragStyle}>
-          <ModelSwitcher variant="topbar" />
-        </div>
+      <div className="codesign-topbar-model min-w-0" style={noDragStyle}>
+        <ModelSwitcher variant="topbar" />
+      </div>
+
+      <div className="codesign-topbar-controls flex items-center gap-[var(--space-2)]">
         {unreadErrorCount > 0 ? (
           <button
             type="button"

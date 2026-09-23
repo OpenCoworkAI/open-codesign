@@ -1,9 +1,10 @@
 import { useT } from '@open-codesign/i18n';
-import { Check, Send, X } from 'lucide-react';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { Check, LoaderCircle, Send, X } from 'lucide-react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface CommentBubbleProps {
+  anchorFrame?: HTMLIFrameElement | null | undefined;
   selector: string;
   tag: string;
   outerHTML: string;
@@ -13,8 +14,55 @@ export interface CommentBubbleProps {
    *  unsent draft keyed by anchor id. Without this, switching to a different
    *  chip / element silently discarded the current text. */
   onDraftChange?: (text: string) => void;
-  onSaveAndClose: (text: string) => Promise<void> | void;
-  onSaveAndSend: (text: string) => Promise<void> | void;
+  onDismiss: () => void;
+  onSaveAndClose: (text: string) => Promise<boolean> | boolean;
+  onSaveAndSend: (text: string) => Promise<boolean> | boolean;
+}
+
+export function commentKeyAction(event: {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  isComposing: boolean;
+  keyCode?: number;
+}): 'send' | 'dismiss' | null {
+  if (event.isComposing || event.keyCode === 229) return null;
+  if (event.key === 'Escape') return 'dismiss';
+  return event.key === 'Enter' && (event.ctrlKey || event.metaKey) ? 'send' : null;
+}
+
+export function commentBubblePosition(
+  anchor: CommentBubbleProps['rect'],
+  bubble: { width: number; height: number },
+  viewport: { width: number; height: number },
+): { top: number; left: number } {
+  const below = anchor.top + anchor.height + 8;
+  const above = anchor.top - bubble.height - 8;
+  return {
+    top: Math.max(
+      12,
+      Math.min(
+        below + bubble.height <= viewport.height - 12 || above < 12 ? below : above,
+        viewport.height - bubble.height - 12,
+      ),
+    ),
+    left: Math.max(12, Math.min(anchor.left, viewport.width - bubble.width - 12)),
+  };
+}
+
+export function commentRectInWindow(
+  rect: CommentBubbleProps['rect'],
+  frame: { top: number; left: number; width: number; height: number },
+  viewport: { width: number; height: number },
+): CommentBubbleProps['rect'] {
+  const scaleX = viewport.width > 0 ? frame.width / viewport.width : 1;
+  const scaleY = viewport.height > 0 ? frame.height / viewport.height : 1;
+  return {
+    top: frame.top + rect.top * scaleY,
+    left: frame.left + rect.left * scaleX,
+    width: rect.width * scaleX,
+    height: rect.height * scaleY,
+  };
 }
 
 /** English fallback text for each quick action id — sent to the LLM. */
@@ -30,11 +78,13 @@ export const QUICK_ACTION_TEXT: Readonly<Record<string, string>> = {
 };
 
 export function CommentBubble({
+  anchorFrame,
   tag,
   outerHTML,
   rect,
   initialText,
   onDraftChange,
+  onDismiss,
   onSaveAndClose,
   onSaveAndSend,
 }: CommentBubbleProps) {
@@ -45,19 +95,63 @@ export function CommentBubble({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleId = useId();
   const pending = pendingAction !== null;
+  const submittingRef = useRef(false);
+  const composingRef = useRef(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [position, setPosition] = useState({ top: 12, left: 12 });
+
+  useLayoutEffect(() => {
+    const updatePosition = () => {
+      const anchor = anchorFrame
+        ? commentRectInWindow(rect, anchorFrame.getBoundingClientRect(), {
+            width: anchorFrame.clientWidth,
+            height: anchorFrame.clientHeight,
+          })
+        : rect;
+      const bubble = rootRef.current?.getBoundingClientRect();
+      const next = commentBubblePosition(
+        anchor,
+        { width: bubble?.width ?? 0, height: bubble?.height ?? 0 },
+        { width: window.innerWidth, height: window.innerHeight },
+      );
+      setPosition((previous) =>
+        previous.top === next.top && previous.left === next.left ? previous : next,
+      );
+    };
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updatePosition);
+    if (rootRef.current) observer?.observe(rootRef.current);
+    if (anchorFrame) observer?.observe(anchorFrame);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+      observer?.disconnect();
+    };
+  }, [anchorFrame, rect]);
 
   const runAction = useCallback(
-    async (action: 'save' | 'send', handler: (text: string) => Promise<void> | void) => {
+    async (action: 'save' | 'send', handler: CommentBubbleProps['onSaveAndClose']) => {
       const text = draft.trim();
-      if ((action === 'send' && !text) || pendingAction) return;
+      if (!text || submittingRef.current || composingRef.current) return;
+      submittingRef.current = true;
+      setSaveError(null);
       setPendingAction(action);
       try {
-        await handler(text);
+        if ((await handler(text)) === false) setSaveError(t('notifications.commentCreateFailed'));
+      } catch (error) {
+        console.warn('[CommentBubble] save failed', error);
+        setSaveError(
+          error instanceof Error ? error.message : t('notifications.commentCreateFailed'),
+        );
       } finally {
+        submittingRef.current = false;
         setPendingAction(null);
       }
     },
-    [draft, pendingAction],
+    [draft, t],
   );
 
   const handleSaveAndClose = useCallback(async () => {
@@ -73,19 +167,30 @@ export function CommentBubble({
   }, []);
 
   useEffect(() => {
-    // Esc + the × button are the only ways to close. The previous mousedown-
-    // outside handler silently discarded the user's draft whenever they
-    // clicked surrounding UI (toolbar, sidebar, preview) — the single most
-    // frustrating failure mode. Explicit close mirrors how chat / dialog UIs
-    // treat in-progress text.
+    if (saveError && !pending) textareaRef.current?.focus();
+  }, [saveError, pending]);
+
+  const dismiss = useCallback(() => {
+    if (submittingRef.current || composingRef.current) return;
+    onDismiss();
+    if (anchorFrame?.isConnected) anchorFrame.focus();
+  }, [onDismiss, anchorFrame]);
+
+  useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') void handleSaveAndClose();
+      if (e.key !== 'Escape') return;
+      // Keep the app-level Escape shortcut from leaving comment mode or
+      // discarding an IME candidate while this composer owns the interaction.
+      e.stopPropagation();
+      if (composingRef.current || commentKeyAction(e) !== 'dismiss') return;
+      e.preventDefault();
+      dismiss();
     }
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
     };
-  }, [handleSaveAndClose]);
+  }, [dismiss]);
 
   // Truncated element preview — just the tag + key attributes
   const tagPreview = (() => {
@@ -95,82 +200,116 @@ export function CommentBubble({
     return attrs ? `<${match[1]} ${attrs}…>` : `<${match[1]}>`;
   })();
 
-  const anchorTop = Math.max(rect.top + rect.height + 8, 12);
-  const anchorLeft = Math.max(rect.left, 12);
-
   return createPortal(
     <div
       ref={rootRef}
       role="dialog"
       aria-labelledby={titleId}
       aria-modal="false"
-      className="fixed z-[60] w-[min(320px,88vw)] overflow-hidden rounded-2xl border border-[var(--color-border-muted)] bg-[var(--color-surface-elevated)] shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)]"
-      style={{ top: `${anchorTop}px`, left: `${anchorLeft}px` }}
+      aria-busy={pending}
+      className="fixed z-[60] w-[min(360px,calc(100vw-24px))] max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[var(--radius-xl)] border border-[var(--color-border-muted)] bg-[var(--color-surface-elevated)] shadow-[var(--shadow-elevated)]"
+      style={{ top: `${position.top}px`, left: `${position.left}px` }}
     >
-      {/* Header — selected element + close */}
       <div className="flex items-center justify-between px-[var(--space-3)] py-[var(--space-2)] border-b border-[var(--color-border-muted)]">
         <span
           id={titleId}
-          className="font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[11px] text-[var(--color-text-muted)] truncate"
+          className="min-w-0 text-[var(--text-sm)] text-[var(--color-text-primary)] truncate"
           title={outerHTML.slice(0, 200)}
         >
-          {tagPreview}
+          {t('commentBubble.title')} <code>{tagPreview}</code>
         </span>
         <button
           type="button"
-          onClick={() => void handleSaveAndClose()}
+          onClick={dismiss}
           disabled={pending}
-          className="rounded-full p-[3px] text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-40"
           aria-label={t('commentBubble.close')}
         >
           <X className="w-[14px] h-[14px]" />
         </button>
       </div>
 
-      {/* Input + submit */}
-      <div className="p-[var(--space-3)]">
-        <div className="relative">
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(e) => {
-              const next = e.target.value;
-              setDraft(next);
-              onDraftChange?.(next);
-              const el = e.currentTarget;
-              el.style.height = 'auto';
-              el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                void handleSaveAndSend();
-              }
-            }}
-            placeholder={t('commentBubble.placeholder')}
-            rows={2}
-            disabled={pending}
-            className="block w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-[var(--space-3)] py-[var(--space-2)] pr-[72px] text-[13px] leading-[1.5] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:shadow-[0_0_0_3px_var(--color-focus-ring)] transition-[border-color,box-shadow] duration-150"
-          />
+      <div className="space-y-[var(--space-3)] p-[var(--space-3)]">
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => {
+            const next = e.target.value;
+            setDraft(next);
+            setSaveError(null);
+            onDraftChange?.(next);
+            const el = e.currentTarget;
+            el.style.height = 'auto';
+            el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+          }}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false;
+          }}
+          onKeyDown={(e) => {
+            if (!composingRef.current && commentKeyAction(e.nativeEvent) === 'send') {
+              e.preventDefault();
+              e.stopPropagation();
+              void handleSaveAndSend();
+            }
+          }}
+          placeholder={t('commentBubble.placeholder')}
+          aria-label={t('commentBubble.placeholder')}
+          rows={3}
+          disabled={pending}
+          className="block min-h-[88px] max-h-[160px] w-full resize-none rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-background)] px-[var(--space-3)] py-[var(--space-2)] text-[var(--text-sm)] leading-[1.5] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:shadow-[0_0_0_3px_var(--color-focus-ring)]"
+        />
+        {saveError ? (
+          <p
+            role="alert"
+            className="text-[var(--text-sm)] text-[var(--color-error)] [overflow-wrap:anywhere]"
+          >
+            {saveError} {t('commentBubble.retryHint')}
+          </p>
+        ) : null}
+        <div className="grid grid-cols-2 gap-[var(--space-2)]">
           <button
             type="button"
             onClick={() => void handleSaveAndClose()}
-            disabled={pending}
-            className="absolute right-[42px] bottom-[8px] rounded-lg bg-[var(--color-surface)] p-[6px] text-[var(--color-text-primary)] shadow-sm transition-all duration-150 hover:bg-[var(--color-surface-hover)] active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+            disabled={!draft.trim() || pending}
+            className="flex min-h-10 items-center justify-center gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] px-[var(--space-2)] py-[var(--space-2)] text-[var(--text-sm)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-40"
             aria-label={t('commentBubble.saveNote')}
             title={t('commentBubble.saveNote')}
           >
-            <Check className="w-[14px] h-[14px]" />
+            {pendingAction === 'save' ? (
+              <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <Check className="h-4 w-4 shrink-0" aria-hidden />
+            )}
+            {pendingAction === 'save' ? t('commentBubble.saving') : t('commentBubble.saveNote')}
           </button>
           <button
             type="button"
             onClick={() => void handleSaveAndSend()}
             disabled={!draft.trim() || pending}
-            className="absolute right-[8px] bottom-[8px] rounded-lg bg-[var(--color-accent)] p-[6px] text-white shadow-sm transition-all duration-150 hover:bg-[var(--color-accent-hover)] hover:shadow-md active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+            className="flex min-h-10 items-center justify-center gap-[var(--space-2)] rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--space-2)] py-[var(--space-2)] text-[var(--text-sm)] text-white hover:bg-[var(--color-accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-40"
             aria-label={t('commentBubble.sendToChat')}
             title={t('commentBubble.sendToChat')}
           >
-            <Send className="w-[14px] h-[14px]" />
+            {pendingAction === 'send' ? (
+              <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <Send className="h-4 w-4 shrink-0" aria-hidden />
+            )}
+            {pendingAction === 'send' ? t('commentBubble.sending') : t('commentBubble.sendToChat')}
+          </button>
+        </div>
+        <div className="flex items-center justify-between gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
+          <span>{t('commentBubble.keyboardHint')}</span>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={dismiss}
+            className="min-h-8 shrink-0 rounded-[var(--radius-md)] px-[var(--space-2)] hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-40"
+          >
+            {t('common.cancel')}
           </button>
         </div>
       </div>

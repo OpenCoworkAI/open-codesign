@@ -49,4 +49,33 @@ describe('TweakPanel', () => {
     expect(shouldSyncPreviewSourceAfterTweakPersist({ wrote: true })).toBe(false);
     expect(shouldSyncPreviewSourceAfterTweakPersist({ wrote: false })).toBe(true);
   });
+
+  it('shows the supplied active source instead of unrelated stored declarations', () => {
+    const html = renderToStaticMarkup(
+      <TweakPanel
+        iframeRef={createRef<HTMLIFrameElement>()}
+        presentation="inspector"
+        source={{ path: 'screens/Tasks.jsx', content: 'function App() { return null; }' }}
+      />,
+    );
+    expect(html).toContain('screens/Tasks.jsx');
+    expect(html).toContain('No controls yet');
+    expect(html).not.toContain('#f97316');
+  });
+
+  it('shows a protocol error inside the panel instead of throwing during render', () => {
+    const html = renderToStaticMarkup(
+      <TweakPanel
+        iframeRef={createRef<HTMLIFrameElement>()}
+        presentation="inspector"
+        source={{
+          path: 'App.jsx',
+          content: '/*EDITMODE-BEGIN*/{invalid:true}/*EDITMODE-END*/',
+        }}
+      />,
+    );
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('EDITMODE block contains invalid JSON');
+    expect(html).toContain('App.jsx');
+  });
 });

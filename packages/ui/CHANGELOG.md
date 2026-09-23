@@ -1,5 +1,12 @@
 # @open-codesign/ui
 
+## 0.1.6
+
+### Patch Changes
+
+- 67afb24: Reduce desktop chrome with a compact single-row workspace header and a shared workspace-path/preview summary row. Keep narrow layouts, full model and design identification, diagnostics, native dragging, and expandable preview configuration accessible without reducing control targets.
+- 8cc9e52: Keep header navigation and controls from overlapping at narrow desktop widths and increased zoom. Place navigation and the model picker on a second row when needed, preserve the native window drag strip, and truncate long design, provider, and model names within their available space.
+
 ## 0.1.5
 
 ### Patch Changes

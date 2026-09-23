@@ -39,13 +39,23 @@ export async function exportHtml(
   opts: ExportHtmlOptions = {},
 ): Promise<ExportResult> {
   const fs = await import('node:fs/promises');
-  let final = buildHtmlDocument(artifactSource, opts);
-  if (opts.inlineLocalAssets ?? true) {
-    final = await inlineLocalAssetsInHtml(final, opts);
-  }
+  const final = await buildInlineHtmlDocument(artifactSource, opts);
   await fs.writeFile(destinationPath, final, 'utf8');
   const stat = await fs.stat(destinationPath);
   return { bytes: stat.size, path: destinationPath };
+}
+
+export async function buildInlineHtmlDocument(
+  artifactSource: string,
+  opts: ExportHtmlOptions = {},
+): Promise<string> {
+  // JSX is serialized as a JavaScript string by the standalone runtime.
+  // Resolve source references before that encoding hides quoted attributes.
+  const source =
+    (opts.inlineLocalAssets ?? true)
+      ? await inlineLocalAssetsInHtml(artifactSource, opts)
+      : artifactSource;
+  return buildHtmlDocument(source, opts);
 }
 
 export function buildHtmlDocument(artifactSource: string, opts: ExportHtmlOptions = {}): string {
@@ -97,6 +107,7 @@ ${trimmed}
 function hasTailwindScript(html: string): boolean {
   let found = false;
   transformHtmlElementBlocks(html, 'script', ({ attrs, tag }) => {
+    if (found) return tag;
     const src = getHtmlAttribute(attrs, 'src');
     if (src !== null) {
       try {

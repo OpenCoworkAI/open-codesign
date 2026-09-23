@@ -1,12 +1,13 @@
 {
   "name": "@open-codesign/templates",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./demo-inputs": "./src/demo-inputs.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

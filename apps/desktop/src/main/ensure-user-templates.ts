@@ -1,8 +1,14 @@
-import { existsSync } from 'node:fs';
-import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { constants, existsSync } from 'node:fs';
+import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeLegacyEditmodeBlock } from '@open-codesign/shared';
+import { isMethodSkillName } from './method-skill-history';
+import {
+  isUnlinkedPath,
+  type MethodSkillUpgradeCounts,
+  upgradeMethodSkills,
+} from './method-skill-upgrades';
 
 export interface EnsureUserTemplatesResult {
   action: 'seeded' | 'merged' | 'skipped' | 'missing-source';
@@ -10,6 +16,7 @@ export interface EnsureUserTemplatesResult {
   dest: string;
   copiedFiles?: number;
   updatedFiles?: number;
+  methodSkills?: MethodSkillUpgradeCounts;
 }
 
 /**
@@ -40,8 +47,8 @@ export function resolveBundledTemplatesDir(
 
 /**
  * Copy bundled templates into `<userData>/templates` so the user owns the tree
- * afterwards. Existing files are never overwritten; upgrades only add new
- * bundled files that the user does not already have.
+ * afterwards. Only explicitly recognized, unedited method skills are upgraded;
+ * unknown/custom skills and other resource contents remain user-owned.
  */
 export async function ensureUserTemplates(
   userDataDir: string,
@@ -51,31 +58,63 @@ export async function ensureUserTemplates(
   if (sourceDir === null || !existsSync(sourceDir)) {
     return { action: 'missing-source', source: sourceDir ?? '', dest };
   }
-  if (!existsSync(dest)) {
-    await cp(sourceDir, dest, { recursive: true });
-    return { action: 'seeded', source: sourceDir, dest };
+  const fresh = !existsSync(dest);
+  // Recovery must run before copying a missing skill that might have a pending backup.
+  const methodSkills = await upgradeMethodSkills(dest, sourceDir);
+  if (!(await isUnlinkedPath(dest))) {
+    return {
+      action: 'skipped',
+      source: sourceDir,
+      dest,
+      copiedFiles: 0,
+      updatedFiles: 0,
+      methodSkills,
+    };
   }
-
   const copiedFiles = await copyMissingFiles(sourceDir, dest);
   const updatedFiles = await repairBundledManifests(sourceDir, dest);
-  return copiedFiles + updatedFiles > 0
-    ? { action: 'merged', source: sourceDir, dest, copiedFiles, updatedFiles }
-    : { action: 'skipped', source: sourceDir, dest, copiedFiles: 0, updatedFiles: 0 };
+  return {
+    action: fresh
+      ? 'seeded'
+      : copiedFiles + updatedFiles + methodSkills.installed + methodSkills.updated > 0
+        ? 'merged'
+        : 'skipped',
+    source: sourceDir,
+    dest,
+    copiedFiles: copiedFiles + methodSkills.installed,
+    updatedFiles: updatedFiles + methodSkills.updated,
+    methodSkills,
+  };
 }
 
-async function copyMissingFiles(sourceDir: string, destDir: string): Promise<number> {
+async function copyMissingFiles(
+  sourceDir: string,
+  destDir: string,
+  relative = '',
+): Promise<number> {
+  if (!(await isUnlinkedPath(sourceDir)) || !(await isUnlinkedPath(destDir))) return 0;
   await mkdir(destDir, { recursive: true });
   let copied = 0;
   for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
+    if (relative === 'skills' && isMethodSkillName(entry.name)) continue;
     const sourcePath = path.join(sourceDir, entry.name);
     const destPath = path.join(destDir, entry.name);
     if (entry.isDirectory()) {
-      copied += await copyMissingFiles(sourcePath, destPath);
+      copied += await copyMissingFiles(
+        sourcePath,
+        destPath,
+        relative ? `${relative}/${entry.name}` : entry.name,
+      );
       continue;
     }
-    if (!entry.isFile() || existsSync(destPath)) continue;
+    if (!entry.isFile() || existsSync(destPath) || !(await isUnlinkedPath(destPath))) continue;
     await mkdir(path.dirname(destPath), { recursive: true });
-    await cp(sourcePath, destPath, { recursive: false });
+    try {
+      await copyFile(sourcePath, destPath, constants.COPYFILE_EXCL);
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'EEXIST') continue;
+      throw error;
+    }
     copied++;
   }
   return copied;
@@ -102,6 +141,7 @@ function canContainEditmodeBlock(filePath: string): boolean {
 }
 
 async function repairLegacyEditmodeBlocks(sourceDir: string, destDir: string): Promise<number> {
+  if (!(await isUnlinkedPath(sourceDir)) || !(await isUnlinkedPath(destDir))) return 0;
   if (!existsSync(sourceDir) || !existsSync(destDir)) return 0;
   let repaired = 0;
   for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
@@ -155,6 +195,7 @@ function patchStringField(
 }
 
 async function repairScaffoldManifest(sourcePath: string, destPath: string): Promise<number> {
+  if (!(await isUnlinkedPath(sourcePath)) || !(await isUnlinkedPath(destPath))) return 0;
   if (!existsSync(sourcePath) || !existsSync(destPath)) return 0;
 
   let sourceManifest: unknown;

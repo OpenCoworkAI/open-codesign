@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 600">
+  <title>Make something together - original Common Ground workshop illustration</title>
+  <rect width="480" height="600" fill="#FAF3E7"/>
+  <text x="40" y="55" fill="#372B25" font-family="sans-serif" font-size="13" letter-spacing="3">COMMON GROUND / SEPTEMBER 2026</text>
+  <text x="40" y="124" fill="#372B25" font-family="Georgia,serif" font-size="48">Make something</text>
+  <text x="40" y="181" fill="#372B25" font-family="Georgia,serif" font-size="48">together.</text>
+  <circle cx="350" cy="276" r="61" fill="#E3B75D"/>
+  <path d="M90 291h162l-19 150H113z" fill="#A8432B"/>
+  <path d="M251 315h30c54 0 51 84-37 77" fill="none" stroke="#A8432B" stroke-width="19"/>
+  <path d="M310 450q-30-114 67-120-2 86-67 120" fill="#42644A"/>
+  <path d="M290 449q-80-18-78-86 71 6 78 86" fill="#42644A"/>
+  <path d="M55 477h370" stroke="#372B25" stroke-width="2"/>
+  <text x="40" y="522" fill="#372B25" font-family="sans-serif" font-size="19">Clay / print / stitch / bind</text>
+  <text x="40" y="556" fill="#69574A" font-family="sans-serif" font-size="13">Fictional workshop series. Original vector artwork.</text>
+</svg>
