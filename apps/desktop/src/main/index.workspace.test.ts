@@ -203,6 +203,33 @@ describe('createRuntimeTextEditorFs', () => {
     expect(listFsUpdatedEvents(sendEvent)).toHaveLength(0);
   });
 
+  it('seeds the first image attachment as source.png for visual parity checks', () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Visual Parity Source Workspace');
+    const sendEvent = vi.fn();
+    const logger = { error: vi.fn() };
+    const { fs } = createRuntimeTextEditorFs({
+      db,
+      designId: design.id,
+      generationId: 'gen-visual-source',
+      logger,
+      previousSource: null,
+      attachments: [
+        {
+          name: 'shot.png',
+          path: 'references/shot.png',
+          mediaType: 'image/png',
+          imageDataUrl: PNG_HEADER_DATA_URL,
+        },
+      ],
+      sendEvent,
+    });
+
+    expect(fs.view('source.png')?.content).toBe(PNG_HEADER_DATA_URL);
+    expect(fs.view('references/shot.png')?.content).toContain('Reference image: shot.png');
+    expect(listFsUpdatedEvents(sendEvent)).toHaveLength(0);
+  });
+
   it('seeds previous source into App.jsx when no workspace source exists yet', () => {
     const db = initInMemoryDb();
     const design = createDesign(db, 'Seed Previous Source');

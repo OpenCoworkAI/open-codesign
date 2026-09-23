@@ -13,7 +13,15 @@ import type { LocalAssetOptions } from './assets';
 export const EXPORTER_FORMATS = ['html', 'pdf', 'pptx', 'zip', 'markdown'] as const;
 export type ExporterFormat = (typeof EXPORTER_FORMATS)[number];
 
-export type ExportOptions = LocalAssetOptions;
+export type ExportOptions = LocalAssetOptions & { assets?: import('./zip').ZipAsset[] };
+
+export async function readResearchSlides(
+  source: string,
+  opts: LocalAssetOptions = {},
+): Promise<import('@open-codesign/shared').ResearchSlide[]> {
+  const mod = await import('./research-slides');
+  return mod.readResearchSlides(source, opts);
+}
 
 export interface ExportResult {
   bytes: number;

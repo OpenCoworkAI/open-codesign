@@ -599,7 +599,13 @@ export function useLazyDesignFileTree(designId: string | null): UseLazyDesignFil
         })
       : buildLazyFileTree(directories);
 
-  return { files, tree, loading, backend, loadDirectory };
+  return {
+    files,
+    tree,
+    loading: loading || directories['.']?.loading === true,
+    backend,
+    loadDirectory,
+  };
 }
 
 // Format an ISO timestamp as "22h ago" / "3d ago". Pure for testability.

@@ -1,16 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { EXAMPLES, getExample, getExamples } from './index';
+import { DEMO_INPUTS } from '../demo-inputs';
+import { EXAMPLE_FEATURES, EXAMPLES, getExample, getExamples } from './index';
 import { enExamples } from './locales/en';
 import { zhCNExamples } from './locales/zh-CN';
 
 describe('examples gallery', () => {
   it('ships the expanded curated example library', () => {
-    expect(EXAMPLES.length).toBe(84);
+    expect(EXAMPLES.length).toBe(87);
   });
 
   it('every example has a unique id', () => {
     const ids = EXAMPLES.map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('features three input packs first without changing existing IDs', () => {
+    expect(EXAMPLES.slice(0, 3).map((example) => example.id)).toEqual(Object.keys(DEMO_INPUTS));
+    expect(getExample('cosmic-animation')?.inputBundle).toBeUndefined();
+    for (const locale of ['en', 'zh-CN', 'es', 'pt-BR']) {
+      for (const example of getExamples(locale).slice(0, 3)) {
+        expect(example.inputBundle).toBeDefined();
+        if (!example.inputBundle) throw new Error('Expected bundle');
+        expect(example.inputFiles).toEqual(DEMO_INPUTS[example.inputBundle].files);
+        expect(example.features?.every((feature) => EXAMPLE_FEATURES.includes(feature))).toBe(true);
+        expect(new Set(example.features).size).toBe(example.features?.length);
+        expect(example.title).toBeTruthy();
+        for (const file of example.inputFiles ?? []) expect(example.prompt).toContain(file);
+      }
+    }
   });
 
   it('covers scaffold, skill, and brand-reference stress scenarios', () => {

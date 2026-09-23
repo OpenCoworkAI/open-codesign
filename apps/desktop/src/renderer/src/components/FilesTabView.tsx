@@ -1,5 +1,10 @@
 import { useT } from '@open-codesign/i18n';
-import { buildPreviewDocument, isRenderablePath } from '@open-codesign/runtime';
+import {
+  buildInteractivePreviewDocument,
+  INTERACTIVE_PREVIEW_SANDBOX,
+  isRenderablePath,
+  type SourceEditSelection,
+} from '@open-codesign/runtime';
 import {
   type CommentRow,
   DEFAULT_SOURCE_ENTRY,
@@ -14,6 +19,7 @@ import {
   Folder,
   FolderOpen,
   Globe2,
+  MousePointer2,
   RefreshCw,
 } from 'lucide-react';
 import {
@@ -26,6 +32,8 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -40,9 +48,11 @@ import {
   useDesignFiles,
   useLazyDesignFileTree,
 } from '../hooks/useDesignFiles';
+import { usePreviewErrorLifecycle } from '../hooks/usePreviewErrorLifecycle';
 import type { FileTreeNode } from '../lib/file-tree';
 import { classifyMarkdownHref } from '../lib/markdown-links';
 import { workspacePathComparisonKey } from '../lib/workspace-path';
+import { handlePreviewFullscreenEscape } from '../preview/fullscreen';
 import {
   formatIframeError,
   handlePreviewMessage,
@@ -51,14 +61,15 @@ import {
   postClearPinToPreviewWindow,
   postModeToPreviewWindow,
   postPinSelectorToPreviewWindow,
-  scaleRectForZoom,
   stablePreviewSourceKey,
 } from '../preview/helpers';
+import { useWorkspaceSourceEdit } from '../preview/useWorkspaceSourceEdit';
 import {
   readWorkspacePreviewSource,
   resolveDesignPreviewSource,
 } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
+import { SourceEditPanel } from './SourceEditPanel';
 
 export { resolveReferencedWorkspacePreviewPath } from '../preview/workspace-source';
 
@@ -272,6 +283,7 @@ function WorkspaceSection({ files }: { files: DesignFileEntry[] }) {
   const [detectingPreview, setDetectingPreview] = useState(false);
   const [detectResult, setDetectResult] = useState<PreviewDetectResult | null>(null);
   const [previewOptionsOpen, setPreviewOptionsOpen] = useState(false);
+  const previewOptionsId = useId();
   const autoDetectDesignRef = useRef<string | null>(null);
 
   const currentDesign = designs.find((d) => d.id === currentDesignId);
@@ -497,80 +509,112 @@ function WorkspaceSection({ files }: { files: DesignFileEntry[] }) {
   }
 
   return (
-    <div className="border-b border-[var(--color-border-muted)] px-[var(--space-4)] py-[var(--space-3)]">
-      <div className="flex min-w-0 items-center gap-[var(--space-2)]">
-        <span className="shrink-0 text-[10px] font-medium uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
-          {t('canvas.workspace.sectionTitle')}
-        </span>
-        <span
-          className="min-w-0 flex-1 truncate text-[10px] text-[var(--color-text-secondary)]"
-          title={workspacePath ?? undefined}
-          style={{ fontFamily: 'var(--font-mono)' }}
-        >
-          {workspacePath ? (
-            <>
-              {truncatePath(workspacePath)}
-              {folderExists === false && (
-                <span className="ml-1 text-[var(--color-text-warning,_theme(colors.amber.500))]">
-                  !
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="text-[var(--color-text-muted)] not-italic">
-              {t('canvas.workspace.default')}
-            </span>
-          )}
-        </span>
-        <div className="flex shrink-0 items-center gap-[var(--space-1)]">
-          <button
-            type="button"
-            onClick={handlePickWorkspace}
-            disabled={disabled}
-            className="inline-flex h-6 items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 text-[10px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-            title={workspacePath ? t('canvas.workspace.change') : t('canvas.workspace.choose')}
+    <div className="codesign-workspace-section border-b border-[var(--color-border-muted)] px-[var(--space-4)] py-[var(--space-2)]">
+      <div className="codesign-workspace-summary flex min-w-0 flex-wrap items-center gap-[var(--space-2)]">
+        <div className="flex min-w-0 flex-[1_1_14rem] items-center gap-[var(--space-2)]">
+          <span className="shrink-0 text-[var(--text-sm)] font-medium text-[var(--color-text-muted)]">
+            {t('canvas.workspace.sectionTitle')}
+          </span>
+          <span
+            className="min-w-0 flex-1 truncate text-[var(--text-sm)] text-[var(--color-text-secondary)]"
+            title={workspacePath ?? undefined}
+            style={{ fontFamily: 'var(--font-mono)' }}
           >
-            <Folder className="h-3 w-3" aria-hidden />
-            {workspacePath ? t('canvas.workspace.change') : t('canvas.workspace.choose')}
-          </button>
-          {workspacePath && (
+            {workspacePath ? (
+              <>
+                {truncatePath(workspacePath)}
+                {folderExists === false && (
+                  <span className="ml-1 text-[var(--color-text-warning,_theme(colors.amber.500))]">
+                    !
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-[var(--color-text-muted)] not-italic">
+                {t('canvas.workspace.default')}
+              </span>
+            )}
+          </span>
+          <div className="flex shrink-0 items-center gap-[var(--space-1)]">
             <button
               type="button"
-              onClick={handleOpenWorkspace}
-              disabled={picking}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[10px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-              title={t('canvas.workspace.open')}
+              onClick={handlePickWorkspace}
+              disabled={disabled}
+              className="inline-flex h-[var(--size-control-sm)] items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 text-[var(--text-sm)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+              title={
+                isCurrentDesignGenerating
+                  ? t('canvas.workspace.busyGenerating')
+                  : workspacePath
+                    ? t('canvas.workspace.change')
+                    : t('canvas.workspace.choose')
+              }
             >
-              <FolderOpen className="h-3 w-3" aria-hidden />
+              <Folder className="h-3 w-3" aria-hidden />
+              {workspacePath ? t('canvas.workspace.change') : t('canvas.workspace.choose')}
             </button>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-[var(--space-3)] rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface-raised)]">
-        <div className="flex min-w-0 items-center gap-[var(--space-2)] p-[var(--space-2)]">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border-muted)] text-[var(--color-text-muted)]">
-            <Globe2 className="h-3.5 w-3.5" aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-[var(--space-1)]">
-              <span className="text-[10px] font-medium uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
-                {t('canvas.workspace.preview.label')}
-              </span>
-              <span className="rounded-[var(--radius-pill)] border border-[var(--color-border-muted)] px-1.5 py-0.5 text-[9px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-secondary)]">
-                {previewConfigured
-                  ? t('canvas.workspace.preview.status.saved')
-                  : t('canvas.workspace.preview.status.auto')}
-                : {t(previewModeLabelKey(effectivePreviewMode))}
-              </span>
-            </div>
+            {workspacePath && (
+              <button
+                type="button"
+                onClick={handleOpenWorkspace}
+                disabled={picking}
+                className="inline-flex h-[var(--size-control-sm)] w-[var(--size-control-sm)] items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                title={t('canvas.workspace.open')}
+                aria-label={t('canvas.workspace.open')}
+              >
+                <FolderOpen className="h-3 w-3" aria-hidden />
+              </button>
+            )}
           </div>
+        </div>
+
+        <div className="flex max-w-full min-w-0 flex-[0_1_auto] items-center gap-[var(--space-1)]">
+          <button
+            type="button"
+            onClick={() => setPreviewOptionsOpen((open) => !open)}
+            aria-expanded={previewOptionsOpen}
+            aria-controls={previewOptionsId}
+            aria-busy={detectingPreview || savingPreview}
+            className="inline-flex min-h-[var(--size-control-sm)] min-w-0 items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border-muted)] bg-[var(--color-surface-raised)] px-[var(--space-2)] py-[var(--space-1)] text-left text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+            title={
+              detectingPreview
+                ? t('canvas.workspace.preview.summary.detecting')
+                : `${previewSummaryText} · ${previewOptionsOpen ? t('canvas.workspace.preview.actions.hideOptions') : t('canvas.workspace.preview.actions.showOptions')}`
+            }
+          >
+            <span className="shrink-0 text-[var(--color-text-muted)]">
+              <Globe2 className="h-3.5 w-3.5" aria-hidden />
+            </span>
+            <span className="min-w-0 break-words">
+              {t('canvas.workspace.preview.label')}
+              {' · '}
+              {detectingPreview ? (
+                t('canvas.workspace.preview.summary.detecting')
+              ) : (
+                <>
+                  {previewConfigured
+                    ? t('canvas.workspace.preview.status.saved')
+                    : t('canvas.workspace.preview.status.auto')}
+                  : {t(previewModeLabelKey(effectivePreviewMode))}
+                </>
+              )}
+            </span>
+            <ChevronRight
+              className={`h-3.5 w-3.5 shrink-0 transition-transform ${previewOptionsOpen ? 'rotate-90' : ''}`}
+              aria-hidden
+            />
+          </button>
           <button
             type="button"
             onClick={() => handleDetectPreview()}
             disabled={disabled || savingPreview || detectingPreview || !workspacePath}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 text-[10px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-            title={t('canvas.workspace.preview.detect')}
+            className="inline-flex h-[var(--size-control-sm)] shrink-0 items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 text-[var(--text-sm)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            title={
+              isCurrentDesignGenerating
+                ? t('canvas.workspace.busyGenerating')
+                : detectingPreview
+                  ? t('canvas.workspace.preview.summary.detecting')
+                  : t('canvas.workspace.preview.detect')
+            }
           >
             <RefreshCw
               className={`h-3 w-3 ${detectingPreview ? 'animate-spin' : ''}`}
@@ -578,97 +622,84 @@ function WorkspaceSection({ files }: { files: DesignFileEntry[] }) {
             />
             {t('canvas.workspace.preview.detect')}
           </button>
-          <button
-            type="button"
-            onClick={() => setPreviewOptionsOpen((open) => !open)}
-            aria-expanded={previewOptionsOpen}
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)]"
-            title={
-              previewOptionsOpen
-                ? t('canvas.workspace.preview.actions.hideOptions')
-                : t('canvas.workspace.preview.actions.showOptions')
-            }
-          >
-            <ChevronRight
-              className={`h-3.5 w-3.5 transition-transform ${previewOptionsOpen ? 'rotate-90' : ''}`}
-              aria-hidden
-            />
-          </button>
         </div>
-        {previewOptionsOpen ? (
-          <div className="border-t border-[var(--color-border-muted)] p-[var(--space-2)]">
-            <div className="grid gap-[var(--space-2)]">
-              <p
-                className="m-0 text-[10px] leading-[var(--leading-body)] text-[var(--color-text-muted)]"
-                title={detectResult?.message ?? previewSummaryText}
-              >
-                {detectingPreview
-                  ? t('canvas.workspace.preview.summary.detecting')
-                  : (detectResult?.message ?? previewSummaryText)}
-              </p>
-              <label className="grid gap-1 text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
-                {t('canvas.workspace.preview.mode.label')}
-                <select
-                  value={previewModeInput}
-                  onChange={handlePreviewModeChange}
-                  disabled={disabled || savingPreview}
-                  className="h-8 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-[11px] normal-case tracking-normal text-[var(--color-text-secondary)] outline-none transition-colors focus:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-                  title={t(previewModeLabelKey(effectivePreviewMode))}
-                >
-                  <option value="managed-file" disabled={integratedPreviewBlocked}>
-                    {t('canvas.workspace.preview.mode.integrated')}
-                  </option>
-                  <option value="connected-url">
-                    {t('canvas.workspace.preview.mode.connectedUrl')}
-                  </option>
-                  <option value="external-app">
-                    {t('canvas.workspace.preview.mode.externalApp')}
-                  </option>
-                  <option value="none">{t('canvas.workspace.preview.mode.off')}</option>
-                </select>
-              </label>
-              {previewNeedsUrl ? (
-                <label className="grid gap-1 text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
-                  {t('canvas.workspace.preview.urlLabel')}
-                  <div className="flex min-w-0 items-center gap-[var(--space-1)]">
-                    <input
-                      value={previewUrlInput}
-                      onChange={(event) => setPreviewUrlInput(event.currentTarget.value)}
-                      onBlur={() => {
-                        if (previewModeInput === 'external-app' || normalizedPreviewUrl) {
-                          void handlePreviewUrlApply();
-                        }
-                      }}
-                      onKeyDown={handlePreviewUrlKeyDown}
-                      placeholder={t('canvas.workspace.preview.urlPlaceholder')}
-                      disabled={disabled || savingPreview}
-                      className={`h-8 min-w-0 flex-1 rounded-[var(--radius-sm)] border bg-[var(--color-background)] px-2 text-[11px] normal-case tracking-normal text-[var(--color-text-secondary)] outline-none transition-colors focus:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50 ${
-                        previewUrlInvalid
-                          ? 'border-[var(--color-danger)]'
-                          : 'border-[var(--color-border)]'
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      onClick={handlePreviewUrlApply}
-                      disabled={disabled || savingPreview || previewUrlInvalid}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-                      title={t('canvas.workspace.preview.apply')}
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-                    </button>
-                  </div>
-                </label>
-              ) : null}
-              <p className="m-0 text-[10px] leading-[var(--leading-body)] text-[var(--color-text-muted)]">
-                {integratedPreviewBlocked
-                  ? t('canvas.workspace.preview.hint.appWorkspace')
-                  : t('canvas.workspace.preview.hint.simpleWorkspace')}
-              </p>
-            </div>
-          </div>
-        ) : null}
       </div>
+      {previewOptionsOpen ? (
+        <div
+          id={previewOptionsId}
+          className="mt-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border-muted)] p-[var(--space-2)]"
+        >
+          <div className="grid gap-[var(--space-2)]">
+            <p
+              className="m-0 text-[var(--text-sm)] leading-[var(--leading-body)] text-[var(--color-text-muted)]"
+              title={detectResult?.message ?? previewSummaryText}
+            >
+              {detectingPreview
+                ? t('canvas.workspace.preview.summary.detecting')
+                : (detectResult?.message ?? previewSummaryText)}
+            </p>
+            <label className="grid gap-1 text-[var(--text-sm)] text-[var(--color-text-muted)]">
+              {t('canvas.workspace.preview.mode.label')}
+              <select
+                value={previewModeInput}
+                onChange={handlePreviewModeChange}
+                disabled={disabled || savingPreview}
+                className="h-8 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-[var(--text-sm)] text-[var(--color-text-secondary)] outline-none transition-colors focus:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                title={t(previewModeLabelKey(effectivePreviewMode))}
+              >
+                <option value="managed-file" disabled={integratedPreviewBlocked}>
+                  {t('canvas.workspace.preview.mode.integrated')}
+                </option>
+                <option value="connected-url">
+                  {t('canvas.workspace.preview.mode.connectedUrl')}
+                </option>
+                <option value="external-app">
+                  {t('canvas.workspace.preview.mode.externalApp')}
+                </option>
+                <option value="none">{t('canvas.workspace.preview.mode.off')}</option>
+              </select>
+            </label>
+            {previewNeedsUrl ? (
+              <label className="grid gap-1 text-[var(--text-sm)] text-[var(--color-text-muted)]">
+                {t('canvas.workspace.preview.urlLabel')}
+                <div className="flex min-w-0 items-center gap-[var(--space-1)]">
+                  <input
+                    value={previewUrlInput}
+                    onChange={(event) => setPreviewUrlInput(event.currentTarget.value)}
+                    onBlur={() => {
+                      if (previewModeInput === 'external-app' || normalizedPreviewUrl) {
+                        void handlePreviewUrlApply();
+                      }
+                    }}
+                    onKeyDown={handlePreviewUrlKeyDown}
+                    placeholder={t('canvas.workspace.preview.urlPlaceholder')}
+                    disabled={disabled || savingPreview}
+                    className={`h-8 min-w-0 flex-1 rounded-[var(--radius-sm)] border bg-[var(--color-background)] px-2 text-[var(--text-sm)] text-[var(--color-text-secondary)] outline-none transition-colors focus:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50 ${
+                      previewUrlInvalid
+                        ? 'border-[var(--color-danger)]'
+                        : 'border-[var(--color-border)]'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePreviewUrlApply}
+                    disabled={disabled || savingPreview || previewUrlInvalid}
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                    title={t('canvas.workspace.preview.apply')}
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </div>
+              </label>
+            ) : null}
+            <p className="m-0 text-[var(--text-sm)] leading-[var(--leading-body)] text-[var(--color-text-muted)]">
+              {integratedPreviewBlocked
+                ? t('canvas.workspace.preview.hint.appWorkspace')
+                : t('canvas.workspace.preview.hint.simpleWorkspace')}
+            </p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -819,9 +850,7 @@ export function shouldShowTweakPanelForFile(input: {
   previewKind: FilePreviewKind;
   hasPreviewSource: boolean;
 }): boolean {
-  return (
-    input.hasPreviewSource && input.previewKind === 'runtime' && isMainDesignSourcePath(input.path)
-  );
+  return input.hasPreviewSource && input.previewKind === 'runtime';
 }
 
 export function shouldEnableWorkspaceFilePreviewInteractions(input: {
@@ -859,6 +888,19 @@ export function defaultWorkspacePreviewPath(files: DesignFileEntry[]): string | 
     files[0]?.path ??
     null
   );
+}
+
+type WorkspaceFileSelection = { designId: string | null; path: string };
+
+export function workspacePreviewPathForSelection(
+  files: DesignFileEntry[],
+  designId: string | null,
+  selection: WorkspaceFileSelection | null,
+): string | null {
+  if (selection?.designId === designId && files.some((file) => file.path === selection.path)) {
+    return selection.path;
+  }
+  return defaultWorkspacePreviewPath(files);
 }
 
 export function externalAppManagedFallbackPath(input: {
@@ -963,6 +1005,7 @@ export function isPreviewSourceUsableForSelectedPath(input: {
 }
 
 interface WorkspaceFilePreviewProps {
+  onFullscreenAvailable?: ((available: boolean) => void) | undefined;
   path: string;
   file?: DesignFileEntry | null | undefined;
   files?: DesignFileEntry[] | null | undefined;
@@ -970,7 +1013,10 @@ interface WorkspaceFilePreviewProps {
 }
 
 interface WorkspaceFilePreviewMessageHandlerInput {
-  previewZoom: number;
+  sourceEditMode?: boolean;
+  onSourceEditSelected?: (selection?: SourceEditSelection) => void;
+  onSelectionCleared?: (() => void) | undefined;
+  sourcePath?: string | undefined;
   comments?: CommentRow[] | undefined;
   currentSnapshotId?: string | null | undefined;
   selectCanvasElement: ReturnType<typeof useCodesignStore.getState>['selectCanvasElement'];
@@ -980,6 +1026,7 @@ interface WorkspaceFilePreviewMessageHandlerInput {
 }
 
 export function findReusableWorkspaceFileCommentForSelector(input: {
+  sourcePath?: string | undefined;
   comments: CommentRow[];
   currentSnapshotId: string | null;
   selector: string;
@@ -990,7 +1037,8 @@ export function findReusableWorkspaceFileCommentForSelector(input: {
     if (
       comment?.kind === 'edit' &&
       comment.status === 'pending' &&
-      comment.selector === input.selector
+      comment.selector === input.selector &&
+      comment.sourcePath === input.sourcePath
     ) {
       if (input.currentSnapshotId !== null && comment.snapshotId === input.currentSnapshotId) {
         return comment;
@@ -1002,7 +1050,10 @@ export function findReusableWorkspaceFileCommentForSelector(input: {
 }
 
 export function createWorkspaceFilePreviewMessageHandlers({
-  previewZoom,
+  sourceEditMode = false,
+  onSourceEditSelected,
+  onSelectionCleared,
+  sourcePath,
   comments = [],
   currentSnapshotId = null,
   selectCanvasElement,
@@ -1011,24 +1062,32 @@ export function createWorkspaceFilePreviewMessageHandlers({
   pushIframeError,
 }: WorkspaceFilePreviewMessageHandlerInput): PreviewMessageHandlers {
   return {
+    onPreviewEscape: handlePreviewFullscreenEscape,
+    onSelectionCleared: () => onSelectionCleared?.(),
     onElementSelected: (msg) => {
-      const scaled = scaleRectForZoom(msg.rect, previewZoom);
+      if (sourceEditMode) {
+        onSourceEditSelected?.(msg.sourceEdit);
+        return;
+      }
       selectCanvasElement({
+        ...(sourcePath ? { sourcePath } : {}),
         selector: msg.selector,
         tag: msg.tag,
         outerHTML: msg.outerHTML,
-        rect: scaled,
+        rect: msg.rect,
       });
       const existingComment = findReusableWorkspaceFileCommentForSelector({
         comments,
         currentSnapshotId,
         selector: msg.selector,
+        sourcePath,
       });
       openCommentBubble({
+        ...(sourcePath ? { sourcePath } : {}),
         selector: msg.selector,
         tag: msg.tag,
         outerHTML: msg.outerHTML,
-        rect: scaled,
+        rect: msg.rect,
         ...(existingComment
           ? { existingCommentId: existingComment.id, initialText: existingComment.text }
           : {}),
@@ -1044,6 +1103,7 @@ export function createWorkspaceFilePreviewMessageHandlers({
 }
 
 interface WorkspacePreviewSource {
+  workspaceDesignId?: string;
   content: string;
   path: string;
 }
@@ -1503,12 +1563,12 @@ export function WorkspaceFilePreview({
   file,
   files,
   interactive = true,
+  onFullscreenAvailable,
 }: WorkspaceFilePreviewProps) {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
   const currentPreviewSource = useCodesignStore((s) => s.previewSource);
-  const previewZoom = useCodesignStore((s) => s.previewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const pushIframeError = useCodesignStore((s) => s.pushIframeError);
   const selectCanvasElement = useCodesignStore((s) => s.selectCanvasElement);
@@ -1517,6 +1577,9 @@ export function WorkspaceFilePreview({
   const comments = useCodesignStore((s) => s.comments);
   const currentSnapshotId = useCodesignStore((s) => s.currentSnapshotId);
   const commentBubble = useCodesignStore((s) => s.commentBubble);
+  const previewFullscreen = useCodesignStore((s) => s.previewFullscreen);
+  const isGenerating = useCodesignStore((s) => s.isGenerating);
+  const generatingDesignId = useCodesignStore((s) => s.generatingDesignId);
   const { files: observedFiles } = useDesignFiles(files ? null : currentDesignId);
   const workspaceFiles = files ?? observedFiles;
   const currentDesign = designs.find((d) => d.id === currentDesignId);
@@ -1551,7 +1614,13 @@ export function WorkspaceFilePreview({
     previewSource?.path,
   );
   const [readError, setReadError] = useState<string | null>(null);
+  const [sourceReadPending, setSourceReadPending] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const previousPreview = useRef<{
+    designId: string | null;
+    path: string;
+    srcDoc: string | null;
+  } | null>(null);
   const activePreviewSource = isPreviewSourceUsableForSelectedPath({
     selectedPath: path,
     previewSourcePath: previewSource?.path,
@@ -1560,34 +1629,70 @@ export function WorkspaceFilePreview({
     ? previewSource
     : null;
 
-  useEffect(() => {
+  const sourceEdit = useWorkspaceSourceEdit({
+    designId: currentDesignId,
+    selectedPath: path,
+    source: activePreviewSource,
+    available: interactive && renderable,
+    loading: sourceReadPending,
+    generating: isGenerating && generatingDesignId === currentDesignId,
+    onPersist: setPreviewSource,
+    onSaved: (warnings) =>
+      useCodesignStore.getState().pushToast({
+        variant: 'success',
+        title: t('canvas.sourceEdit.saved'),
+        ...(warnings.length > 0 ? { description: warnings.join('\n') } : {}),
+      }),
+  });
+  const previewInteractionMode = sourceEdit.active
+    ? sourceEdit.sourceMode
+      ? 'default'
+      : 'comment'
+    : interactive
+      ? interactionMode
+      : 'default';
+
+  useLayoutEffect(() => {
     function onMessage(event: MessageEvent): void {
       if (!isTrustedPreviewMessageSource(event.source, iframeRef.current?.contentWindow)) return;
       handlePreviewMessage(
         event.data,
         createWorkspaceFilePreviewMessageHandlers({
-          previewZoom,
+          sourceEditMode: sourceEdit.active,
+          onSourceEditSelected: sourceEdit.select,
+          onSelectionCleared: () => {
+            sourceEdit.clearSelection();
+            if (interactive) useCodesignStore.getState().clearCanvasElement();
+          },
+          sourcePath: activePreviewSource?.path,
           comments,
           currentSnapshotId,
           selectCanvasElement: (selection) => {
-            if (interactive) selectCanvasElement(selection);
+            if (interactive && useCodesignStore.getState().interactionMode === 'comment')
+              selectCanvasElement(selection);
           },
           openCommentBubble: (bubble) => {
-            if (interactive) openCommentBubble(bubble);
+            if (interactive && useCodesignStore.getState().interactionMode === 'comment')
+              openCommentBubble(bubble);
           },
           applyLiveRects: (entries) => {
             if (interactive) applyLiveRects(entries);
           },
           pushIframeError,
         }),
+        sourceEdit.inspection ?? undefined,
       );
     }
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [
+    sourceEdit.active,
+    sourceEdit.select,
+    sourceEdit.clearSelection,
+    sourceEdit.inspection,
     pushIframeError,
-    previewZoom,
+    activePreviewSource?.path,
     comments,
     currentSnapshotId,
     selectCanvasElement,
@@ -1599,14 +1704,19 @@ export function WorkspaceFilePreview({
   useEffect(() => {
     postModeToPreviewWindow(
       iframeRef.current?.contentWindow,
-      interactive ? interactionMode : 'default',
+      previewInteractionMode,
       pushIframeError,
     );
-  }, [interactionMode, pushIframeError, interactive]);
+  }, [previewInteractionMode, pushIframeError]);
 
   useEffect(() => {
     if (!interactive) return;
-    if (commentBubble && interactionMode === 'comment') {
+    if (
+      !sourceEdit.active &&
+      commentBubble &&
+      commentBubble.sourcePath === activePreviewSource?.path &&
+      interactionMode === 'comment'
+    ) {
       postPinSelectorToPreviewWindow(
         iframeRef.current?.contentWindow,
         commentBubble.selector,
@@ -1615,18 +1725,27 @@ export function WorkspaceFilePreview({
       return;
     }
     postClearPinToPreviewWindow(iframeRef.current?.contentWindow, pushIframeError);
-  }, [commentBubble, interactionMode, interactive, pushIframeError]);
+  }, [
+    commentBubble,
+    activePreviewSource?.path,
+    interactionMode,
+    interactive,
+    pushIframeError,
+    sourceEdit.active,
+  ]);
 
   useEffect(() => {
     // Re-read when the file watcher reports changed metadata for either the
     // selected file or an HTML placeholder's resolved JSX/TSX source.
     void currentDesignUpdatedAt;
+    void currentDesign?.workspacePath;
     void previewDependencyKey;
     if ((!renderable && !textPreview) || !currentDesignId) {
       setPreviewSource(null);
       setReadError(null);
       return;
     }
+    setSourceReadPending(false);
     const read = window.codesign?.files?.read;
     if (useDesignPreviewResolver) {
       let cancelled = false;
@@ -1670,17 +1789,19 @@ export function WorkspaceFilePreview({
       return;
     }
     let cancelled = false;
-    setPreviewSource(null);
     setReadError(null);
+    setSourceReadPending(true);
     void readWorkspacePreviewSource({ designId: currentDesignId, path, read })
       .then((result) => {
         if (cancelled) return;
-        setPreviewSource(result);
+        setPreviewSource({ ...result, workspaceDesignId: currentDesignId });
+        setSourceReadPending(false);
       })
       .catch((err) => {
         if (cancelled) return;
         setPreviewSource(null);
         setReadError(err instanceof Error ? err.message : t('errors.unknown'));
+        setSourceReadPending(false);
       });
     return () => {
       cancelled = true;
@@ -1688,6 +1809,7 @@ export function WorkspaceFilePreview({
   }, [
     currentDesignId,
     currentDesignUpdatedAt,
+    currentDesign?.workspacePath,
     previewDependencyKey,
     path,
     currentPreviewSource,
@@ -1706,7 +1828,7 @@ export function WorkspaceFilePreview({
     Boolean(activePreviewSource?.path.toLowerCase().endsWith('.html')) &&
     htmlRequiresWorkspaceDevServer(activePreviewSource?.content ?? '');
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: previewSourceStableKey intentionally masks EDITMODE-only token changes so live tweaks can update via postMessage without rebuilding the iframe.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only the default preview masks tweak changes; source editing always uses exact bytes and a new inspected revision.
   const srcDoc = useMemo(() => {
     if (!activePreviewSource || !renderable || workspaceDevServerRequired) return null;
     try {
@@ -1715,9 +1837,10 @@ export function WorkspaceFilePreview({
         workspacePath: currentDesign?.workspacePath,
         filePath: activePreviewSource.path,
       });
-      return buildPreviewDocument(activePreviewSource.content, {
+      return buildInteractivePreviewDocument(activePreviewSource.content, {
         path: activePreviewSource.path,
         baseHref,
+        ...(sourceEdit.inspection ? { sourceEdit: sourceEdit.inspection } : {}),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1728,9 +1851,37 @@ export function WorkspaceFilePreview({
     currentDesignId,
     activePreviewSource?.path,
     previewSourceStableKey,
+    sourceEdit.active ? activePreviewSource?.content : null,
+    sourceEdit.inspection,
     renderable,
     workspaceDevServerRequired,
   ]);
+  usePreviewErrorLifecycle(srcDoc, `${currentDesignId}:${path}`);
+
+  // A WindowProxy survives srcdoc navigation. Discard anchors before the new
+  // document can reuse a selector for a different element.
+  useLayoutEffect(() => {
+    if (!interactive) return;
+    const previous = previousPreview.current;
+    previousPreview.current = { designId: currentDesignId, path, srcDoc };
+    const state = useCodesignStore.getState();
+    const anchor = state.commentBubble;
+    const openingSavedComment =
+      (!previous ||
+        previous.path !== path ||
+        previous.designId !== currentDesignId ||
+        previous.srcDoc === null) &&
+      anchor?.sourcePath === path &&
+      state.comments.some(
+        (c) => c.id === anchor.existingCommentId && c.designId === currentDesignId,
+      );
+    if (!openingSavedComment) state.clearCanvasElement();
+  }, [currentDesignId, path, srcDoc, interactive]);
+
+  useEffect(() => {
+    onFullscreenAvailable?.(renderable && Boolean(srcDoc) && !workspaceDevServerRequired);
+    return () => onFullscreenAvailable?.(false);
+  }, [renderable, srcDoc, workspaceDevServerRequired, onFullscreenAvailable]);
 
   if (nativePreview) {
     const url = workspaceUrlForFile({ designId: currentDesignId, filePath: path });
@@ -1771,44 +1922,144 @@ export function WorkspaceFilePreview({
   }
 
   return (
-    <>
-      <iframe
-        ref={iframeRef}
-        title={`design-preview-${path}`}
-        sandbox="allow-scripts"
-        srcDoc={srcDoc}
-        onLoad={() => {
-          const win = iframeRef.current?.contentWindow;
-          postModeToPreviewWindow(win, interactive ? interactionMode : 'default', pushIframeError);
-        }}
-        className="w-full h-full bg-white border-0 block"
-      />
-      {showTweakPanel ? (
-        <Suspense fallback={null}>
-          <TweakPanel iframeRef={iframeRef} />
-        </Suspense>
+    <div className="relative flex h-full min-h-0 flex-col">
+      {interactive && !previewFullscreen ? (
+        <div className="flex shrink-0 justify-end border-b border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-1)]">
+          <button
+            type="button"
+            aria-pressed={sourceEdit.active}
+            disabled={!sourceEdit.eligible}
+            title={
+              sourceEdit.eligible
+                ? t('canvas.sourceEdit.scope')
+                : t('canvas.sourceEdit.unavailable')
+            }
+            onClick={() => {
+              useCodesignStore.getState().clearCanvasElement();
+              sourceEdit.toggle();
+            }}
+            className="inline-flex min-h-[var(--size-control-sm)] items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-sm)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
+          >
+            <MousePointer2 className="size-[var(--space-4)]" aria-hidden />
+            {t('canvas.sourceEdit.toggle')}
+          </button>
+        </div>
       ) : null}
-    </>
+      <div className="relative flex min-h-0 flex-1">
+        <iframe
+          key={srcDoc}
+          ref={iframeRef}
+          title={`design-preview-${path}`}
+          sandbox={INTERACTIVE_PREVIEW_SANDBOX}
+          srcDoc={srcDoc}
+          onLoad={() => {
+            const win = iframeRef.current?.contentWindow;
+            postModeToPreviewWindow(win, previewInteractionMode, pushIframeError);
+            if (
+              interactive &&
+              !sourceEdit.active &&
+              commentBubble &&
+              commentBubble.sourcePath === activePreviewSource?.path
+            ) {
+              postPinSelectorToPreviewWindow(win, commentBubble.selector, pushIframeError);
+            }
+          }}
+          className="min-w-0 flex-1 h-full bg-white border-0 block"
+        />
+        <div hidden={previewFullscreen} className="min-h-0 shrink-0 max-w-[45%]">
+          {interactive ? (
+            <div
+              className={
+                sourceEdit.active
+                  ? 'flex h-full min-h-0 w-[var(--size-menu-wide)] max-w-full flex-col'
+                  : undefined
+              }
+            >
+              {sourceEdit.active && activePreviewSource ? (
+                <SourceEditPanel
+                  key={`${sourceEdit.inspection?.previewRevision}:${sourceEdit.selection?.id ?? ''}`}
+                  path={activePreviewSource.path}
+                  target={sourceEdit.selection}
+                  busy={sourceEdit.busy}
+                  message={sourceEdit.message}
+                  onApply={sourceEdit.apply}
+                  onClose={sourceEdit.toggle}
+                  sourceMode={sourceEdit.sourceMode}
+                  canSelectSource={sourceEdit.canSelectSource}
+                  onSourceMode={sourceEdit.enableSourceSelection}
+                  sourceTargets={sourceEdit.sourceTargets}
+                  source={activePreviewSource.content}
+                  onSelectSource={sourceEdit.selectSource}
+                />
+              ) : null}
+            </div>
+          ) : null}
+          {showTweakPanel && !sourceEdit.active ? (
+            <Suspense fallback={null}>
+              {activePreviewSource ? (
+                <TweakPanel
+                  key={`${currentDesignId}:${activePreviewSource.path}`}
+                  iframeRef={iframeRef}
+                  source={activePreviewSource}
+                  onPersist={(source) =>
+                    setPreviewSource({
+                      ...source,
+                      ...(activePreviewSource.workspaceDesignId
+                        ? { workspaceDesignId: activePreviewSource.workspaceDesignId }
+                        : {}),
+                    })
+                  }
+                />
+              ) : null}
+            </Suspense>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
-export function FilesTabView({ activePath = null }: { activePath?: string | null }) {
+export function EmptyWorkspacePreview({ loading }: { loading: boolean }) {
+  const t = useT();
+  return (
+    <div className="flex h-full min-h-0 flex-col items-center justify-center gap-[var(--space-3)] overflow-y-auto px-[var(--space-6)] py-[var(--space-4)] text-center">
+      <FileCode2
+        className="shrink-0 size-[var(--space-8)] text-[var(--color-text-muted)]"
+        aria-hidden
+      />
+      <p className="m-0 text-[var(--text-base)] text-[var(--color-text-secondary)]">
+        {loading ? t('common.loading') : t('canvas.filesTabEmpty')}
+      </p>
+      {!loading ? (
+        <p className="m-0 max-w-prose text-[var(--text-sm)] leading-[var(--leading-body)] text-[var(--color-text-muted)]">
+          {t('canvas.filesTabEmptyHint')}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function FilesTabView({
+  onFullscreenAvailable,
+}: {
+  onFullscreenAvailable?: ((available: boolean) => void) | undefined;
+}) {
   const t = useT();
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
   const openFileTab = useCodesignStore((s) => s.openCanvasFileTab);
-  const setActiveCanvasTab = useCodesignStore((s) => s.setActiveCanvasTab);
   const currentPreviewSource = useCodesignStore((s) => s.previewSource);
-  const { files, tree: fileTree, loadDirectory } = useLazyDesignFileTree(currentDesignId);
+  const previewFullscreen = useCodesignStore((s) => s.previewFullscreen);
+  const { files, tree: fileTree, loading, loadDirectory } = useLazyDesignFileTree(currentDesignId);
 
   const defaultPath = useMemo(() => defaultWorkspacePreviewPath(files), [files]);
 
-  const [selectedPath, setSelectedPath] = useState<string | null>(activePath ?? defaultPath);
+  const [fileSelection, setFileSelection] = useState<WorkspaceFileSelection | null>(null);
+  const selectedPath = workspacePreviewPathForSelection(files, currentDesignId, fileSelection);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [fileBrowserWidth, setFileBrowserWidth] = useState(initialFileBrowserWidth);
   const [isFileBrowserResizing, setIsFileBrowserResizing] = useState(false);
   const expandedDesignRef = useRef<string | null>(currentDesignId);
-  const isDedicatedFileTab = activePath !== null;
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const effectivePreviewMode = useMemo(
     () =>
@@ -1855,14 +2106,6 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
     }
     if (selectedPath) openFileTab(selectedPath);
   }, [connectedPreviewUrl, openFileTab, selectedPath, t, usesExternalPreview]);
-
-  const handleFileTreeFileClick = useCallback(
-    (path: string) => {
-      setSelectedPath(path);
-      if (isDedicatedFileTab) setActiveCanvasTab(0);
-    },
-    [isDedicatedFileTab, setActiveCanvasTab],
-  );
 
   const handleFileBrowserResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -1915,6 +2158,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
       if (externalFallbackPath) {
         return (
           <WorkspaceFilePreview
+            onFullscreenAvailable={onFullscreenAvailable}
             path={externalFallbackPath}
             file={externalFallbackFile}
             files={files}
@@ -1934,6 +2178,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
       ) {
         return (
           <WorkspaceFilePreview
+            onFullscreenAvailable={onFullscreenAvailable}
             path={selectedPath}
             file={selectedFile}
             files={files}
@@ -1948,6 +2193,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
     if (selectedPath) {
       return (
         <WorkspaceFilePreview
+          onFullscreenAvailable={onFullscreenAvailable}
           path={selectedPath}
           file={selectedFile}
           files={files}
@@ -1957,22 +2203,18 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
         />
       );
     }
-    return (
-      <div className="flex h-full items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
-        {t('canvas.filesTabEmpty')}
-      </div>
-    );
+    return <EmptyWorkspacePreview loading={loading} />;
   }
 
   useEffect(() => {
-    if (activePath) {
-      setSelectedPath(activePath);
-      return;
+    if (
+      fileSelection &&
+      (fileSelection.designId !== currentDesignId ||
+        !files.some((file) => file.path === fileSelection.path))
+    ) {
+      setFileSelection(null);
     }
-    if (!selectedPath || !files.find((f) => f.path === selectedPath)) {
-      setSelectedPath(defaultPath);
-    }
-  }, [activePath, defaultPath, files, selectedPath]);
+  }, [currentDesignId, files, fileSelection]);
 
   useEffect(() => {
     if (expandedDesignRef.current === currentDesignId) return;
@@ -2054,7 +2296,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
         ) : null}
         <button
           type="button"
-          onClick={() => handleFileTreeFileClick(f.path)}
+          onClick={() => setFileSelection({ designId: currentDesignId, path: f.path })}
           onDoubleClick={() => openFileTab(f.path)}
           title={f.path}
           aria-current={isActive ? 'page' : undefined}
@@ -2092,25 +2334,11 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
 
   if (files.length === 0 && fileTree.length === 0) {
     return (
-      <div className="relative flex h-full min-h-0">
-        {isFileBrowserResizing ? <div className="absolute inset-0 z-20 cursor-col-resize" /> : null}
-        <aside
-          className="shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] overflow-y-auto flex flex-col"
-          style={{ width: fileBrowserWidth }}
-        >
+      <div className="codesign-empty-workspace flex h-full min-h-0 min-w-0 flex-col">
+        <div hidden={previewFullscreen} className="shrink-0 bg-[var(--color-background)]">
           <WorkspaceSection files={files} />
-          <div className="flex-1 flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)] px-[var(--space-6)]">
-            {t('canvas.filesTabEmpty')}
-          </div>
-        </aside>
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          onMouseDown={handleFileBrowserResizeStart}
-          className="relative z-10 w-[5px] shrink-0 cursor-col-resize bg-[var(--color-background)] transition-colors duration-100 hover:bg-[var(--color-accent)]/15 active:bg-[var(--color-accent)]/25"
-          title="Resize files"
-        />
-        <div className="flex-1 min-w-0 h-full bg-[var(--color-background-secondary)]">
+        </div>
+        <div className="flex-1 min-h-0 min-w-0 bg-[var(--color-background-secondary)]">
           {renderPreviewPane()}
         </div>
       </div>
@@ -2121,6 +2349,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
     <div className="relative flex h-full min-h-0">
       {isFileBrowserResizing ? <div className="absolute inset-0 z-20 cursor-col-resize" /> : null}
       <aside
+        hidden={previewFullscreen}
         className="shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-background)] overflow-y-auto flex flex-col"
         style={{ width: fileBrowserWidth }}
       >
@@ -2149,6 +2378,7 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
       </aside>
       <div
         role="separator"
+        hidden={previewFullscreen}
         aria-orientation="vertical"
         onMouseDown={handleFileBrowserResizeStart}
         className="relative z-10 w-[5px] shrink-0 cursor-col-resize bg-[var(--color-background)] transition-colors duration-100 hover:bg-[var(--color-accent)]/15 active:bg-[var(--color-accent)]/25"
@@ -2156,7 +2386,10 @@ export function FilesTabView({ activePath = null }: { activePath?: string | null
       />
       <div className="flex-1 min-w-0 h-full bg-[var(--color-background-secondary)] flex flex-col min-h-0">
         {showPreviewHeaderAction ? (
-          <div className="flex h-[36px] shrink-0 items-center justify-end border-b border-[var(--color-border-muted)] bg-[var(--color-background)] px-[var(--space-4)]">
+          <div
+            hidden={previewFullscreen}
+            className="flex h-[36px] shrink-0 items-center justify-end border-b border-[var(--color-border-muted)] bg-[var(--color-background)] px-[var(--space-4)]"
+          >
             <button
               type="button"
               onClick={handleOpenPreviewTarget}

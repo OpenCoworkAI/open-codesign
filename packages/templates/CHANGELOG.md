@@ -1,5 +1,30 @@
 # @open-codesign/templates
 
+## 0.1.7
+
+### Patch Changes
+
+- a77bb4a: Add three original local-input demo packs, localized feature tags and inspectable
+  file lists to Examples. Seed references lazily into a fresh workspace before
+  prefilling the prompt, without overwriting existing files or automatically
+  submitting a generation.
+- Updated dependencies [a77bb4a]
+- Updated dependencies [c8a179f]
+- Updated dependencies [729e356]
+- Updated dependencies [631143d]
+- Updated dependencies [f2a9dbb]
+- Updated dependencies [71dbd2f]
+- Updated dependencies [a8de894]
+- Updated dependencies [d199c75]
+- Updated dependencies [a3a08e6]
+- Updated dependencies [778ee51]
+- Updated dependencies [346282c]
+- Updated dependencies [729e356]
+- Updated dependencies [ef5677c]
+- Updated dependencies [729e356]
+  - @open-codesign/i18n@0.2.2
+  - @open-codesign/shared@0.2.2
+
 ## 0.1.6
 
 ### Patch Changes

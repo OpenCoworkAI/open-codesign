@@ -37,6 +37,7 @@
 
 ## What's new
 
+- **`feat/decompose-to-ui-kit`** *(branch)* — Image -> componentized `ui_kits/<slug>/` bundle for coding-agent handoff · Boolean-per-dimension visual parity judge (12 standard checks) · Verify-and-iterate loop · Per-decompose cost row · See [BENCHMARKS.md](./BENCHMARKS.md). Refs [#225](https://github.com/OpenCoworkAI/open-codesign/issues/225).
 - **v0.2.0** *(2026-05-09)* — Agentic Design: workspace-backed sessions · permissioned local tools · Files panel upgrades · provider diagnostics · security hardening · `DESIGN.md` design systems
 - **v0.1.4** *(2026-04-23)* — AI image generation · ChatGPT Plus/Codex subscription support · CLIProxyAPI one-click import · API config hardening
 - **v0.1.3** *(2026-04-21)* — Gemini `models/` prefix fix · OpenAI-compatible relay "instructions required" fix · third-party relay SSE-truncation hint
@@ -55,6 +56,42 @@ Turn a prompt into a polished prototype, slide deck, or marketing asset, locally
 ---
 
 ## See it generate
+
+The **Examples** gallery also includes three editable, asset-backed starting
+points: **Daymark** (Todo brief, task/project JSON, original logo and design
+tokens), **Common Ground** (workshop brief, schedule CSV and original artwork),
+and **Trailhead** (an original low-fidelity SVG sketch, annotated brief and trip
+data). Selecting a pack creates a fresh workspace and copies its reference
+files before filling the composer; inspect or edit them in Files, then send
+when ready. Nothing is submitted automatically and no existing workspace is
+overwritten. These fictional MIT-licensed packs contain inputs, not prebuilt
+final interfaces. Tags describe supplied references and requested prototype
+behavior, not verified generation results. Bookings and other data are
+simulated; the sketch includes text annotations for models without image input.
+Preflight receives a bounded, non-exhaustive list of existing workspace file
+paths and recognizes local `DESIGN.md` guidance. An absent `App.jsx` does not
+mean reference inputs are missing; the agent can inspect them before building.
+Local CSV references are included in the bounded agent text-file scan alongside
+Markdown, JSX, JSON, and SVG inputs.
+Preview and final verification resolve local assets relative to the source file
+inside the bound workspace. Missing assets and paths outside that workspace
+remain verification errors.
+
+While a design is generating, **Queue follow-up** (Enter) adds a text request
+for when the agent would otherwise finish. **Steer next step** supplies it after
+the current assistant response and tool batch finish; it does not interrupt
+file writes, streaming tokens, permission decisions, or an unanswered agent
+question. The current run keeps its model, reasoning setting, and workspace.
+Queued requests are explicitly marked pending until the agent receives them.
+Stop, errors, or restarting the app leave undelivered requests recoverable,
+never automatically resent. Active-run messages are text-only: remove attached
+files, reference URLs, and queued comments before sending; those drafts are not
+silently included or discarded. Individual queue editing/removal is not supported.
+Delivery receipts use the existing local pi session JSONL, not a separate database.
+After sending, an empty composer stays compact; queue and steering actions appear
+only while composing another message. Delivery explanations are available on demand,
+not inserted into the draft. Long tool errors show a short reason with expandable,
+scrollable original diagnostics.
 
 From a blank prompt to a finished artifact, the agent plans, writes, self-checks, and ships something with hover states, tabs, and empty states already wired up:
 
@@ -192,11 +229,23 @@ On first launch, Open CoDesign opens the Settings page. Pick the path that match
 - **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
 - **Local / keyless** — use Ollama or an IP-allowlisted OpenAI-compatible gateway.
 
+For a custom endpoint that accepts requests without an API key, select **No API key required** in the custom-provider form. Choose the endpoint's wire protocol (including **OpenAI Responses** when appropriate), enter its base URL and default model, and leave the key empty. Local/private endpoint testing still requires the separate network confirmation. Automatic model discovery never sends API keys; for authenticated endpoints, enter a key and click **Test connection**. Switching an existing provider to keyless removes its stored key on save; switching back requires a stored or newly entered key.
+
+JSX previews and standalone exports use `system-ui` by default without downloading fonts. The runtime loads a supported Google Fonts family (Fraunces, DM Serif Display, DM Sans, or JetBrains Mono) only when the artifact explicitly references it. Use local/system fonts for offline-only designs; explicit remote font choices still require network access.
+
 Credentials stay in `~/.config/open-codesign/config.toml` and the ChatGPT OAuth token store under the app config directory. Nothing leaves your machine unless your chosen model route requires it.
 
 ### 3. Type your first prompt
 
 Pick one of **fifteen built-in demos** — landing page, dashboard, pitch slide, pricing, mobile app, chat UI, event calendar, blog article, receipt/invoice, portfolio, settings panel, and more — or describe your own. A sandboxed prototype appears in seconds.
+
+For app requests, the agent is guided to build a **bounded, connected local prototype**, not a collection of isolated screens: a core journey, working navigation and back paths, shared records, and relevant validation, empty, and success states. For example: “Build Daymark, a polished mobile Todo app for planning a day.” Adding, editing, completing, and filtering tasks should update related views and counts together. Explicit single-screen requests, decks, documents, and narrow revisions keep their original scope.
+
+Substantial fresh apps use a few runnable milestones: an early coherent frame with visual tokens and realistic initial content, connected journeys and shared-state actions, then integrated craft and responsive refinement. The agent edits complete, readable source at each checkpoint rather than holding back one giant file or showing generation placeholders. An early frame preview is progress, not completion; the final requested journeys still need to be implemented and checked. This is workflow guidance, not a guaranteed generation-speed improvement.
+
+When useful or requested, tweak controls focus on consequential choices such as brand, density, type scale, and implemented layout variants, rather than every pixel. Defaults should match the source, choices should affect the relevant screens, and later agent edits should preserve your selections. Checking a source variant in preview does not verify the separate host tweak panel or guarantee automatic updates to unbound files.
+
+These are interactive prototypes, not production services. Data and service actions are simulated; backend setup, real authentication, and payments are not implied. State is in memory by default and may reset on reload. The agent previews the result and, when supported by the preview tool, exercises a bounded journey at the target viewport, repairs concrete failures, and distinguishes runtime checks from interactions actually tested.
 
 ---
 
@@ -210,11 +259,19 @@ Already using Claude Code or Codex? API-key provider configs import in one click
 
 ## Built-in taste
 
-Generic AI tools tend to produce generic output. Open CoDesign ships with **twelve built-in design skill modules** — slide decks, dashboards, landing pages, SVG charts, glassmorphism, editorial typography, heroes, pricing, footers, chat UIs, data tables, and calendars — plus a built-in taste layer that steers the model toward considered typography, purposeful whitespace, and meaningful color.
+**Build first, clarify blockers.** Capability routing does not open a pre-generation questionnaire. The agent chooses reversible visual and layout details, notes material assumptions, and delivers a preview before optional refinement. It can still ask a compact batch for genuinely missing required facts or references, an output constraint that cannot be inferred, or your explicit request for a brief interview. Concept drafts may label nonessential event details as pending; official dates, sponsors, and legal claims must not be invented. Permission prompts remain separate and are not automatically approved.
 
-Every skill is available in every generation. Before the model writes a line of CSS, it selects the skills that fit the brief and reasons through layout intent, design-system coherence, and contrast, bringing higher-quality design behavior to whichever model you choose.
+Answered `ask` results already stored in the current design's session are reused as labelled data within the existing history budget, without displacing selected conversation or the design brief. Cancelled, empty, malformed, unmatched, or count-only results are not treated as answers or consent. Oversized answer groups are omitted intact rather than misleadingly truncated; facts that older preflight events never stored cannot be reconstructed.
 
-Add a `SKILL.md` to any project to teach the model your own taste.
+Open CoDesign combines shared design guidance with **on-demand method skills** for composition, app navigation, mobile layouts, accessibility, charts, decks, and design-system handoff. Visual direction comes from the brief and references, not a fixed font or palette blacklist. Existing designs keep their language unless a redesign is requested.
+
+The core prompt defines scope, workspace/runtime boundaries, and completion evidence. Selected skills provide focused techniques and examples, including source-backed tweak declarations and a `DESIGN.md` example checked against the app's validator. Resource indexes are available up front; full method bodies load only when requested by the agent.
+
+`DESIGN.md` component extensions with string values (such as `minHeight` or `borderRadius`) are preserved with non-blocking warnings, following the [pinned Google DESIGN.md consumer rules](https://github.com/google-labs-code/design.md/blob/9bf8eae67128b6cc55ad9bf86665767deb4c11cd/docs/spec.md#consumer-behavior-for-unknown-content). Completion reports these metadata warnings separately; malformed token types and runtime failures still block completion. This targeted compatibility rule does not imply full conformance with every evolving upstream feature.
+
+This approach synthesizes [OpenAI's current prompting guidance](https://developers.openai.com/api/docs/guides/prompt-guidance-gpt-5p6), [Claude prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices), and [skill-authoring guidance](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), reviewed on September 17, 2026. The [dated official frontend-design reference](https://github.com/anthropics/skills/blob/41bbe19d1a1a7eaab5e7bb9050a417e5c6cffc8f/skills/frontend-design/SKILL.md) informed an original rewrite; no external skill text is bundled. These are shared product rules, not assumptions that a private gateway model ID has a vendor's documented capabilities.
+
+Contract tests check loaded instructions, supported source examples, preference consistency, and size limits. They do not establish faster generation, visual quality, or working journeys in every model output; those require separate rendered evaluation. Existing profiles load their local template copies, so rebuilding the app alone does not replace older or customized method text. Template upgrades must preserve user-owned content.
 
 ---
 
@@ -232,11 +289,29 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 - **AI image generation** — opt-in bitmap assets for heroes, product shots, backgrounds, and illustrations via OpenAI, OpenRouter, or signed-in ChatGPT subscription
 - **AI-generated sliders** — the model emits the parameters worth tweaking (color, spacing, font)
 - **Comment mode** — click any element in the preview to drop a pin, leave a note, and let the model rewrite only that region
+- **Decompose to UI Kit** — one click in the chat sidebar emits a `ui_kits/<slug>/` folder (`index.html` + `components/*.tsx` + `tokens.css` + `manifest.json` + `README.md`) shaped for coding-agent handoff. Built-in deterministic + vision verifiers self-check parity using a 12-question boolean rubric (no floating-point arbitrary scores) and re-iterate on gaps. Per-decompose cost surfaces inline as a toast. See [BENCHMARKS.md](./BENCHMARKS.md).
+
+  ![Decompose to UI Kit — source image vs agent-emitted ui_kit, side-by-side parity check](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/screenshots/decompose-to-ui-kit.png)
+  <sub>Source image (gpt-image input) on the left, agent-emitted <code>ui_kit</code> rendered headlessly on the right. Parity score and status are derived deterministically — <code>parityScore = passCount / totalChecks</code> — from the 12-check boolean rubric. Numbers are from a real <code>e2e-opus-final</code> run, not a mock.</sub>
+
+  ![Iter-0 → iter-1 reconcile loop with honest score drift](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/decompose-iter-reel.gif)
+  <sub>4-frame reel from the <code>e2e-nodebench-iter</code> run: source → iter-0 (parityScore 0.82, 6 gaps) → iter-1 (parityScore 0.78, 5 gaps) → honest verdict. The agent fixed some gaps and introduced new layout drift; the boolean rubric exposes the regression instead of hiding it. <a href="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/decompose-iter-reel.mp4">MP4 version</a>.</sub>
 - **Generation cancellation** — stop mid-stream without losing prior turns
 
 ### Preview and workflow
+
+- **Source-backed tweaks** — the Tweaks panel reads the active preview file, not declarations in unrelated starters or previous tool results. A flat JSON object between `/*EDITMODE-BEGIN*/` and `/*EDITMODE-END*/` exposes values; optional `TWEAK_SCHEMA` chooses supported controls. Bind these values to the design (for example, `--ocd-tweak-card-radius` in CSS); discovering a declaration with `tweaks()` does not create a binding. Missing, intentionally empty, and invalid declarations have distinct explanations. Ask for useful controls in the current source rather than expecting a later generation to add them automatically. Saves merge only changed keys and reject conflicting source edits.
+
+  Conditional source saves compare the expected bytes with disk inside a per-canonical-file writer queue shared by the app's file IPC, agent text editor, scaffold, and import publications, including designs sharing a workspace. Agent replacements/inserts also check their cached source before writing and refresh the view on conflict for an explicit retry; explicit whole-file creation/replacement remains unconditional. Existing workspace rename leases are retained. This coordinates participating writers in one app process, not external editors, shell commands, other app processes, or hard-link aliases: an external change already visible at comparison is rejected, but an external write between comparison and publication cannot be made atomic by this in-process queue.
+
+- **Compact desktop chrome** — workspace and settings headers use one row from 1,000 CSS pixels, with a two-row fallback at narrower widths and extra room for gallery tabs. Design/model tooltips preserve full names. Workspace paths and preview status share a wrapping summary row; expand the preview summary for connection settings without changing the active preview mode.
+- **Fullscreen preview** — expand a runnable JSX/HTML preview within the app window without resizing sidebars manually. This works in Preview, a dedicated file tab such as `App.jsx`, and the Files tab's inline preview. Chat, file navigation, and tweak controls are temporarily hidden; the titlebar and **Exit fullscreen** remain available. Exit or press Escape to restore the previous layout without reloading the preview's forms or navigation state. Menus and artifact dialogs handle Escape first; changing designs or tabs leaves fullscreen. Other file types and connected URLs do not enable this mode.
+- **Readable preview controls** — Comment mode, zoom, and Export retain visible labels and wrap below file tabs when space is tight. Zoom and export menus stay inside the window; use arrow keys / Home / End to navigate, Enter to select, and Escape to close and return focus. Preview zoom changes the artifact's display scale, not the app's control sizes or the artifact's source dimensions.
 - **Phone / tablet / desktop preview** — true responsive frames, switch with one click
+- **Bounded interaction self-checks** — `preview` can exercise up to 16 declarative steps and report the final screen and per-step failures. For native single-selection dropdowns, use `{"action":"select","selector":"#category","value":"work"}`, then assert the control's exact `value` and linked summary text. Selectors must uniquely identify a visible control; disabled selects/fieldsets/options/optgroups, multiple selects, and missing or duplicate option values are rejected. Values are capped at 2,000 characters; the existing 2-second step and 20-second interaction budgets apply. This does not verify untested routes or persistence between preview calls.
+- **Recovering from an oversized preview call** — The 16-step limit counts actions **and assertions**. More than 16 rejects the entire call before rendering or executing any steps; the agent receives a recoverable validation error and can retry corrected arguments. Use independent short journeys, each starting from a fresh document and repeating its own required setup. Do not split a sequence into consecutive tails expecting browser state to carry over. Combine compatible assertions on the same selector where useful, preserve essential outcome/shared-state checks, and disclose untested paths rather than silently truncating them.
 - **Files panel** — inspect multi-file artifacts (HTML, CSS, JS) before export
+- **Collapsible chat** — fold the conversation into a narrow restore rail without resetting drafts, active generation, the previous panel width, or preview state.
 - **Instant design switching** — the last five designs keep their preview iframes alive, so Hub ↔ Workspace and sidebar navigation stay zero-delay
 - **Connection diagnostic panel** — one-click test for any provider, with actionable errors
 - **Per-generation token counter** — see exactly how many tokens each run cost in the sidebar
@@ -244,7 +319,9 @@ Add a `SKILL.md` to any project to teach the model your own taste.
 - **Light + dark themes**, **EN + 简体中文 UI** with live toggle
 
 ### Export and packaging
-- **Five export formats** — HTML (inlined CSS), PDF (local Chrome), PPTX, ZIP, Markdown
+
+- **Opt-in web research for slides** — Tavily search, public-page reading, saved evidence and separate Markdown sources alongside exports. See [Web Search configuration and usage](WEB_SEARCH.md).
+- **Five export formats** — HTML (inlined local assets), PDF (local Chrome), PPTX, ZIP, Markdown. Literal local image and CSS URL references in JSX/TSX are resolved before runtime encoding; ZIP also preserves the original editable source. Dynamically computed asset paths are not statically collected.
 - **GitHub Release pipeline** — unsigned DMG (macOS), EXE (Windows), AppImage (Linux). Code-signing lands in v0.5 along with opt-in auto-update
 
 ---
@@ -345,6 +422,8 @@ See also the Chinese README: [README.zh-CN.md#社群](./README.zh-CN.md#%E7%A4%B
 ## Contributing
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before writing code and run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
+Desktop tests use at most two workers on Windows so concurrent Chromium and
+filesystem integration suites do not exhaust the host during workspace-wide checks.
 
 ## License
 

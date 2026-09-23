@@ -1,4 +1,4 @@
-import { useT } from '@open-codesign/i18n';
+import { getCurrentLocale, useT, useTranslation } from '@open-codesign/i18n';
 import type { LocalInputFile, OnboardingState } from '@open-codesign/shared';
 import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
@@ -74,6 +74,8 @@ function ContextIcon({ icon }: { icon: ComposerContextItem['icon'] }) {
  */
 export function Sidebar({ prefillPrompt }: SidebarProps) {
   const t = useT();
+  const { i18n } = useTranslation();
+  const triggerDecompose = useCodesignStore((s) => s.triggerDecompose);
   const config = useCodesignStore((s) => s.config);
   const isGenerating = useCodesignStore(
     (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
@@ -99,6 +101,10 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
   const _sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
   const _setSidebarCollapsed = useCodesignStore((s) => s.setSidebarCollapsed);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
+  const sendActiveMessage = useCodesignStore((s) => s.sendActiveMessage);
+  const activeMessagesByDesign = useCodesignStore((s) => s.activeMessagesByDesign);
+  const recoverActiveMessage = useCodesignStore((s) => s.recoverActiveMessage);
+  const activeMessages = currentDesignId ? (activeMessagesByDesign[currentDesignId] ?? []) : [];
 
   const promptInputRef = useRef<PromptInputHandle>(null);
   const handlePickStarter = (starterPrompt: string): void => {
@@ -137,7 +143,7 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
 
   return (
     <aside
-      className="flex flex-col h-full overflow-x-hidden border-r border-[var(--color-border)] bg-[var(--color-background-secondary)]"
+      className="codesign-chat-sidebar flex flex-col h-full overflow-x-hidden border-r border-[var(--color-border)] bg-[var(--color-background-secondary)]"
       style={{ minHeight: 0, minWidth: 0 }}
       aria-label={t('sidebar.ariaLabel')}
     >
@@ -145,7 +151,7 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
       <div className="h-[var(--space-3)] shrink-0" />
 
       {/* Chat scroll area */}
-      <div className="codesign-scroll-area flex-1 overflow-y-auto px-[var(--space-4)] py-[var(--space-4)]">
+      <div className="codesign-scroll-area min-h-0 flex-1 overflow-y-auto px-[var(--space-4)] py-[var(--space-4)]">
         <ChatMessageList
           messages={chatMessages}
           loading={!chatLoaded}
@@ -157,14 +163,56 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
           empty={<EmptyState onPickStarter={handlePickStarter} />}
         />
         <AskModal />
+        <div aria-live="polite" className="space-y-[var(--space-2)]">
+          {activeMessages
+            .filter((message) => message.status !== 'delivered')
+            .map((message) => (
+              <div
+                key={message.messageId}
+                className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--space-3)] text-[var(--text-sm)]"
+              >
+                <p className="text-[var(--color-text-secondary)]">
+                  {t(message.mode === 'steer' ? 'activeMessages.steer' : 'activeMessages.queue')}
+                  {' · '}
+                  {t(
+                    message.status === 'pending'
+                      ? 'activeMessages.pending'
+                      : 'activeMessages.notDelivered',
+                  )}
+                </p>
+                <p className="whitespace-pre-wrap break-words text-[var(--color-text-primary)]">
+                  {message.text}
+                </p>
+                {message.reason ? (
+                  <p className="text-[var(--color-text-muted)]">{message.reason}</p>
+                ) : null}
+                <button
+                  type="button"
+                  className="mt-[var(--space-2)] text-[var(--color-text-secondary)] underline"
+                  onClick={() => {
+                    recoverActiveMessage(message.designId, message.messageId);
+                    promptInputRef.current?.focus();
+                  }}
+                >
+                  {t('activeMessages.recover')}
+                </button>
+                {message.status === 'pending' ? (
+                  <p className="text-[var(--color-text-muted)]">
+                    {t('activeMessages.recoverPending')}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+        </div>
       </div>
 
       {/* Skill chips + prompt input + model/tokens line */}
-      <div className="border-t border-[var(--color-border-subtle)] px-[var(--space-4)] pt-[var(--space-3)] pb-[var(--space-3)] space-y-[10px] bg-[var(--color-background-secondary)]">
+      <div className="codesign-sidebar-composer shrink-0 border-t border-[var(--color-border-subtle)] px-[var(--space-3)] pt-[var(--space-3)] pb-[var(--space-3)] space-y-[var(--space-2)] bg-[var(--color-background-secondary)]">
         <CommentChipBar />
         <PromptInput
           ref={promptInputRef}
           onSubmit={handleSubmit}
+          onActiveSubmit={sendActiveMessage}
           onCancel={cancelGeneration}
           isGenerating={isGenerating}
           onImportFiles={async (input) => {
@@ -176,16 +224,16 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
                 {inputFiles.map((file) => (
                   <span
                     key={file.path}
-                    className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
+                    className="inline-flex min-w-0 max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[var(--text-sm)] text-[var(--color-text-secondary)]"
                     title={file.path}
                   >
                     <ContextIcon icon="file" />
-                    <span className="truncate max-w-[180px]">{file.name}</span>
+                    <span className="min-w-0 truncate">{file.name}</span>
                     <button
                       type="button"
                       onClick={() => removeInputFile(file.path)}
                       aria-label={t('sidebar.removeFile', { name: file.name })}
-                      className="inline-flex items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                      className="inline-flex shrink-0 size-[var(--space-6)] items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
                     >
                       <X className="w-3 h-3" aria-hidden />
                     </button>
@@ -193,27 +241,27 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
                 ))}
                 {referenceUrl.trim() ? (
                   <span
-                    className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
+                    className="inline-flex min-w-0 max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[var(--text-sm)] text-[var(--color-text-secondary)]"
                     title={referenceUrl.trim()}
                   >
                     <ContextIcon icon="url" />
-                    <span className="truncate max-w-[220px]">{referenceUrl.trim()}</span>
+                    <span className="min-w-0 truncate">{referenceUrl.trim()}</span>
                   </span>
                 ) : null}
                 {designSystem ? (
                   <span
-                    className="inline-flex max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[11px] text-[var(--color-text-secondary)]"
+                    className="inline-flex min-w-0 max-w-full items-center gap-[6px] rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[10px] py-[5px] text-[var(--text-sm)] text-[var(--color-text-secondary)]"
                     title={designSystem.rootPath}
                   >
                     <ContextIcon icon="designSystem" />
-                    <span className="truncate max-w-[220px]">{designSystem.summary}</span>
+                    <span className="min-w-0 truncate">{designSystem.summary}</span>
                     <button
                       type="button"
                       onClick={() => {
                         void clearDesignSystem();
                       }}
                       aria-label={t('sidebar.clear')}
-                      className="inline-flex items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                      className="inline-flex shrink-0 size-[var(--space-6)] items-center justify-center rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
                     >
                       <X className="w-3 h-3" aria-hidden />
                     </button>
@@ -234,14 +282,22 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
               onReferenceUrlChange={setReferenceUrl}
               hasDesignSystem={Boolean(designSystem)}
               disabled={isGenerating}
+              onDecomposeToUiKit={
+                currentDesignId
+                  ? () => {
+                      triggerDecompose(currentDesignId, i18n.language || getCurrentLocale());
+                    }
+                  : undefined
+              }
+              canDecompose={Boolean(currentDesignId) && !isGenerating}
             />
           }
         />
-        <div className="flex flex-wrap items-center justify-between gap-x-[var(--space-2)] gap-y-[var(--space-1)] px-[2px]">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[var(--space-2)] px-[2px]">
           <ModelSwitcher variant="sidebar" />
           {lastTokens !== null ? (
             <span
-              className="shrink-0 tabular-nums text-[10.5px] text-[var(--color-text-muted)]"
+              className="shrink-0 tabular-nums text-[var(--text-sm)] text-[var(--color-text-muted)]"
               style={{ fontFamily: 'var(--font-mono)' }}
             >
               {t('sidebar.chat.tokensLine', { count: lastTokens })}

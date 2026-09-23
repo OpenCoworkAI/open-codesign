@@ -67,6 +67,7 @@ describe('loadSkillsFromDir()', () => {
     expect(ids).toContain('app-shell-navigation');
     expect(ids).toContain('accessibility-states');
     expect(ids).toContain('design-system-baton');
+    expect(ids).toContain('design-reference-to-html');
     expect(ids).toContain('responsive-layout');
     expect(ids).toContain('data-viz-recharts');
     expect(ids).toContain('mobile-mock');

@@ -43,6 +43,33 @@ describe('permission-ipc', () => {
     await expect(inFlight).resolves.toEqual({ scope: 'deny' });
   });
 
+  it('keeps authorization pending until its own decision and cancellation never allows a command', async () => {
+    registerPermissionIpc();
+    const send = vi.fn();
+    const window = {
+      isDestroyed: () => false,
+      webContents: { send },
+    } as unknown as Electron.BrowserWindow;
+    const execute = vi.fn();
+    const first = requestPermission('cancelled-run', 'pnpm test', () => window).then((decision) => {
+      if (decision.scope !== 'deny') execute('cancelled');
+      return decision;
+    });
+    const second = requestPermission('other-run', 'pnpm test', () => window).then((decision) => {
+      if (decision.scope !== 'deny') execute('approved');
+      return decision;
+    });
+    await Promise.resolve();
+    expect(execute).not.toHaveBeenCalled();
+    cancelPendingPermissionRequests('cancelled-run');
+    await expect(first).resolves.toEqual({ scope: 'deny' });
+    expect(execute).not.toHaveBeenCalled();
+    const requestId = (send.mock.calls[1]?.[1] as { requestId: string }).requestId;
+    handlers.get('permission:resolve')?.(null, { requestId, scope: 'once' });
+    await expect(second).resolves.toEqual({ scope: 'once' });
+    expect(execute.mock.calls).toEqual([['approved']]);
+  });
+
   it('rejects malformed resolver payloads for a known request instead of leaving it pending', async () => {
     handlers.clear();
     registerPermissionIpc();

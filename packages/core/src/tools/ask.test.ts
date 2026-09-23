@@ -62,9 +62,21 @@ describe('validateAskInput', () => {
 });
 
 describe('makeAskTool', () => {
-  it('describes optional tweak controls as a valid reason to ask', () => {
+  it('distinguishes blocking clarification from reversible design choices and permission', () => {
     const tool = makeAskTool(async () => ({ status: 'answered', answers: [] }));
-    expect(tool.description).toContain('optional work such as tweak controls');
+    for (const phrase of [
+      'genuinely blocking fact',
+      'ask-first / brief-interview',
+      'Read available files and prior answers first',
+      'build a preview before optional refinement',
+      'Batch related critical questions',
+      'Cancelled, empty, or partial answers are not consent',
+      'does not replace permission gates',
+    ]) {
+      expect(tool.description).toContain(phrase);
+    }
+    expect(tool.description).not.toContain('Use BEFORE implementing');
+    expect(tool.description).not.toContain('optional work such as tweak controls');
   });
 
   it('routes valid input through the bridge and surfaces the answers', async () => {

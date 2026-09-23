@@ -193,7 +193,12 @@ function validateTypography(findings: DesignMdFinding[], value: unknown): void {
   }
   for (const [tokenName, rawToken] of Object.entries(value)) {
     if (!isRecord(rawToken)) {
-      findings.push(error(`typography.${tokenName}`, 'Typography token must be an object'));
+      findings.push(
+        error(
+          `typography.${tokenName}`,
+          'Typography token must be an object, e.g. { fontFamily: "system-ui", fontSize: "16px" }; put descriptive prose in the Markdown body',
+        ),
+      );
       continue;
     }
     for (const key of Object.keys(rawToken)) {
@@ -271,16 +276,25 @@ function validateComponents(findings: DesignMdFinding[], value: unknown): void {
   for (const [componentName, rawComponent] of Object.entries(value)) {
     if (!isRecord(rawComponent)) {
       findings.push(
-        error(`components.${componentName}`, 'Component token group must be an object'),
+        error(
+          `components.${componentName}`,
+          'Component token group must be an object, e.g. { backgroundColor: "#ffffff", rounded: "8px" }; property values must be strings, with descriptions in the Markdown body',
+        ),
       );
       continue;
     }
     for (const [property, rawValue] of Object.entries(rawComponent)) {
       if (!COMPONENT_KEYS.has(property)) {
-        findings.push(
-          error(`components.${componentName}.${property}`, 'Unknown component property'),
-        );
-        continue;
+        // DESIGN.md alpha explicitly preserves unknown component properties with warnings.
+        // https://github.com/google-labs-code/design.md/blob/9bf8eae67128b6cc55ad9bf86665767deb4c11cd/docs/spec.md#consumer-behavior-for-unknown-content
+        if (typeof rawValue === 'string') {
+          findings.push({
+            severity: 'warning',
+            path: `components.${componentName}.${property}`,
+            message:
+              'Unknown component property preserved as an extension; portable properties: backgroundColor, textColor, typography, rounded, padding, size, height, width. Keep intentional extension semantics; put narrative descriptions in the Markdown body',
+          });
+        }
       }
       validateTokenReferenceOrString(findings, rawValue, `components.${componentName}.${property}`);
     }
