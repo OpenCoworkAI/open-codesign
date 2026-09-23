@@ -36,6 +36,7 @@ import type { AgentStreamEvent, GenerateResponse } from '../../preload/index';
 import { requestAsk } from '../ask-ipc';
 import { CHATGPT_CODEX_PROVIDER_ID, getCodexTokenStore } from '../codex-oauth-ipc';
 import { makeRuntimeVerifier } from '../done-verify';
+import { canonicalInvokeBaseUrl } from '../effective-provider-contract';
 import { app, ipcMain } from '../electron-runtime';
 import {
   acquireInFlightWorkspaceGeneration,
@@ -1121,8 +1122,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
           // Once we've snapped to the canonical active provider, the renderer-supplied
           // baseUrl can no longer be trusted — it may belong to a different (stale)
-          // provider. Always use the per-provider baseUrl from cached config.
-          const baseUrl = active.baseUrl ?? undefined;
+          // provider. Always use the per-provider baseUrl from cached config, then
+          // canonicalize it the same way connection tests and the agent runtime do.
+          const baseUrl = canonicalInvokeBaseUrl(active.baseUrl, active.wire);
           if (active.overridden) {
             payload.baseUrl = baseUrl;
           }
@@ -1633,7 +1635,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           const active = resolveActiveModel(cfg, hint);
           const allowKeyless = active.allowKeyless;
           const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
-          const baseUrl = active.baseUrl ?? undefined;
+          const baseUrl = canonicalInvokeBaseUrl(active.baseUrl, active.wire);
           const tlsBypass = resolveTlsBypassFor(cfg, active.model.provider);
 
           const { workspaceRoot, promptContext } = await withStableWorkspacePath(
@@ -1774,7 +1776,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       });
       const allowKeyless = active.allowKeyless;
       const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
-      const baseUrl = active.baseUrl ?? undefined;
+      const baseUrl = canonicalInvokeBaseUrl(active.baseUrl, active.wire);
       const tlsBypass = resolveTlsBypassFor(cfg, active.model.provider);
       const titleLogger: CoreLogger = {
         info: (event, data) => logIpc.info(event, data),

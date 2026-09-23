@@ -591,6 +591,10 @@
         "reasoningSaved": "已保存推理深度",
         "reasoningSaveFailed": "保存推理深度失败",
         "connectionOk": "连接正常",
+        "connectionDegraded": "已连通，但无法列出模型",
+        "connectionDegradedBody": "实际生成可以使用。该端点没有 /models；Open CoDesign 已改为确认真实推理路径。",
+        "connectionDiverges": "能连通，但实际生成会失败",
+        "connectionDivergesBody": "/models 有响应，但生成时使用的推理地址失败。测试连接与实际调用现在共用同一套 invoke contract。",
         "connectionFailed": "连接失败"
       },
       "cliProxyApi": {
@@ -1099,7 +1103,8 @@
       "sslError": "SSL / 证书错误（自签名或私有 CA 证书？）。可在「设置 → 服务商 → 该条目 → 禁用 TLS 校验」启用对可信内网端点的连接。",
       "endpointNotFound": "Base URL 已包含版本路径，但 Provider 没有暴露这个接口路径。",
       "gatewayIncompatible": "网关接受了连接但没有实现该 Provider 的 API。尝试切换 wire（例如改为 openai-chat）。",
-      "gatewayWafBlocked": "网关或反代在请求到达模型前拦截了生成请求。测试连接可能仍然通过，因为它只探测 /models 端点。",
+      "gatewayWafBlocked": "网关或反代在请求到达模型前拦截了生成请求。",
+      "invokeContractDiverged": "Provider 可连通，但生成时使用的推理端点失败。仅 /models 成功不够——Open CoDesign 的实际调用走该 wire 的真实 invoke URL。",
       "openaiResponsesMisconfigured": "端点拒绝了请求格式。wire 可能配错了——尝试切换到 openai-chat。",
       "unsupportedRole": "端点拒绝了发送给模型的 role 格式，通常是 wire 或模型策略不兼容。",
       "reasoningPolicy": "端点拒绝了该模型的 reasoning 元数据。请降低 reasoning 深度后重试。",

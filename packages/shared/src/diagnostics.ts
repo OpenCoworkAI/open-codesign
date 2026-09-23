@@ -33,6 +33,7 @@ export type DiagnosticCategory =
   | 'gateway-waf-blocked'
   | 'generation-timeout'
   | 'model-discovery-degraded'
+  | 'invoke-contract-diverged'
   | 'transport-interrupted'
   | 'upstream-server-error'
   | 'reference-url-invalid'
@@ -230,6 +231,21 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
         category: 'cors',
         severity: 'error',
         suggestedFix: { kind: 'openSettings', label: 'diagnostics.fix.reportBug' },
+      }),
+    ];
+  }
+
+  if (normalised === 'INVOKE_DIVERGED') {
+    return [
+      h({
+        cause: 'diagnostics.cause.invokeContractDiverged',
+        category: 'invoke-contract-diverged',
+        severity: 'warning',
+        suggestedFix: {
+          kind: 'openSettings',
+          label: 'diagnostics.fix.switchWire',
+          settingsTab: 'models',
+        },
       }),
     ];
   }

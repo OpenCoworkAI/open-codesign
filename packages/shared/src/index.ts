@@ -292,11 +292,14 @@ export const ProjectDraft = z.object({
 });
 export type ProjectDraft = z.infer<typeof ProjectDraft>;
 
-export type { CanonicalWire } from './base-url';
+export type { CanonicalWire, ModelsProbeRelation } from './base-url';
 export {
   canonicalBaseUrl,
   ensureVersionedBase,
+  inferenceEndpointUrl,
   modelsEndpointUrl,
+  modelsProbeRelationForProvider,
+  modelsProbeRelationForWire,
   stripInferenceEndpointSuffix,
 } from './base-url';
 export { CodesignError } from './codesign-error';
@@ -349,6 +352,15 @@ export {
   toPersistedV3,
   WireApiSchema,
 } from './config';
+export type {
+  ConnectionProbeMethod,
+  ConnectionTestError,
+  ConnectionTestResponse,
+  ConnectionTestResult,
+  InvokeAuthMode,
+  InvokeContractView,
+  InvokeParity,
+} from './connection-test';
 export type { DesignToken } from './design-token';
 export { DesignTokenSet, DesignTokenV1 } from './design-token';
 export type {

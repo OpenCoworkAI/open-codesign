@@ -302,6 +302,38 @@ describe('complete', () => {
     expect(result.content).toBe('ok');
   });
 
+  it('canonicalizes openai-chat baseUrl the same way generate and connection tests do', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (model, _context, opts) => {
+      expect(opts.baseUrl).toBe('https://gateway.example.com/v1');
+      expect(model.baseUrl).toBe('https://gateway.example.com/v1');
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'gateway',
+        model: 'gpt-4o',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete({ provider: 'gateway', modelId: 'gpt-4o' }, [{ role: 'user', content: 'hi' }], {
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://gateway.example.com',
+    });
+    expect(completeSimpleMock).toHaveBeenCalledTimes(1);
+  });
+
   it('appends image inputs to the final user turn for openai-codex-responses', async () => {
     getModelMock.mockReturnValue({
       id: 'gpt-5.4',
