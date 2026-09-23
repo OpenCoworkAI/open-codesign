@@ -364,7 +364,7 @@ export async function completeWithRetry(
     classify: (err) => {
       const decision = classifyError(err, retryOpts.wire);
       const retryCount = Math.max(0, attemptForLog - 1);
-      const normalized = normalizeProviderError(err, provider, retryCount);
+      const normalized = normalizeProviderError(err, provider, retryCount, retryOpts.wire);
       if (shouldStop(decision, attemptForLog, maxRetries)) {
         logger?.warn('provider.error.final', normalized as unknown as Record<string, unknown>);
       } else {
