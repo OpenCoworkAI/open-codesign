@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   elapsedSecondsSince,
   formatElapsedSeconds,
+  getPromptHeightLimit,
   getTextareaLineHeight,
   getTextareaVerticalPadding,
   shouldSubmitPromptKey,
@@ -68,6 +69,18 @@ describe('getTextareaVerticalPadding', () => {
     );
 
     expect(getTextareaVerticalPadding({} as HTMLTextAreaElement)).toBe(12);
+  });
+
+  describe('getPromptHeightLimit', () => {
+    it('reserves conversation space after accounting for composer controls and references', () => {
+      expect(getPromptHeightLimit(24, 8, 400, 100)).toBe(160);
+      expect(getPromptHeightLimit(24, 8, 400, 180)).toBe(80);
+    });
+
+    it('caps large windows at ten lines while keeping a usable row at short heights', () => {
+      expect(getPromptHeightLimit(24, 8, 1000, 100)).toBe(248);
+      expect(getPromptHeightLimit(24, 8, 200, 120)).toBe(32);
+    });
   });
 });
 

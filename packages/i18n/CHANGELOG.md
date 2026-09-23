@@ -1,5 +1,46 @@
 # @open-codesign/i18n
 
+## 0.2.2
+
+### Patch Changes
+
+- a77bb4a: Add three original local-input demo packs, localized feature tags and inspectable
+  file lists to Examples. Seed references lazily into a fresh workspace before
+  prefilling the prompt, without overwriting existing files or automatically
+  submitting a generation.
+- c8a179f: Keep the running composer compact with short queue/steer labels and an on-demand,
+  keyboard-accessible delivery explanation. Preserve 40px action targets and fix
+  ambiguous text-size utilities that caused inherited typography in the composer.
+  Do not show additional-message actions for an empty draft after normal submission.
+- 631143d: Add **Decompose to UI Kit** — opt-in sidebar action that emits a `ui_kits/<slug>/{index.html, components/*.tsx, tokens.css, manifest.json, README.md}` bundle shaped for downstream coding-agent handoff (Claude Code, Cursor). Decomposition is prompt-driven (no AST/parser deps); the orchestrator persists the structured plan to the virtual fs in a single atomic call. Output carries `schemaVersion: 1` so downstream consumers can evolve safely.
+
+  Three new agent tools in `packages/core/src/tools/`:
+
+  - `decompose_to_ui_kit` — orchestrator. Emits the full bundle from a source image + design brief.
+  - `verify_ui_kit_parity` — deterministic verifier (no LLM, no cost): element-count parity, visible-text coverage, token coverage. Returns `passCount/totalChecks` derived score (no fabricated floats).
+  - `verify_ui_kit_visual_parity` — vision-LLM judge wrapper. 12-check boolean rubric across 5 dimensions (layout / color / typography / content / components), anchor-calibrated reasoning-then-score chain-of-thought (WebDevJudge / Prometheus-Vision / Trust-but-Verify ICCV 2025). Host injects `renderUiKit` (headless screenshot) and `judgeVisualParity` (multimodal call) via the same deps interface as `generate_image_asset`. Without injections the tool returns `status: "unavailable"` and the agent proceeds with the deterministic verifier alone.
+
+  `decomposePrompt.ts` (EN + ZH) walks the agent through decompose → verify (both) → reconcile gaps → iterate (max 2) → done with HONEST cost summary. Per-decompose cost surfaces inline as a toast.
+
+  Refs #225 (Phase 1 of the requested image → componentization → prototype workflow). Phase 2 (cross-page flows, state machines, prototype orchestration) is tracked separately.
+
+- 71dbd2f: Add an explicit, localized no-API-key option for custom providers. Preserve key-required defaults, round-trip authentication mode through settings, discover opted-in keyless endpoints without credentials, and require a key when switching back to authenticated mode.
+- a8de894: Add window-local fullscreen preview for runnable JSX and HTML. Hide navigation panels without remounting the artifact, preserve form and navigation state, restore panels on exit, and forward unconsumed sandbox Escape events through the trusted preview bridge.
+- d199c75: Queue text follow-ups or steer the next safe processing step during generation using pi's native message queues. Preserve per-design drafts, delivery receipts, and recoverable undelivered messages in local session JSONL without bypassing permission or question gates.
+- 778ee51: Give the prompt composer a full-width, scrollable text surface with separate send and attachment controls. Bound its growth and attached references to preserve conversation space at smaller window sizes and higher zoom. Empty workspaces now show one getting-started preview without reserving a blank file-tree column.
+- 346282c: Make canvas comments easier to read and operate with labeled primary actions, larger click targets, responsive composer placement, and comment-list actions that do not cover comment text.
+
+  Cancel, close, and Escape now dismiss without saving, retaining the existing anchor-scoped draft. IME composition no longer triggers keyboard submission or dismissal. Saving prevents duplicate requests, shows progress and retry feedback, and returns focus after failure. A late save cannot close a newer comment anchor or queue its comment in a different design.
+
+- 729e356: Compare active-message context against the immutable comment content submitted to the running generation, not just comment IDs. Revised comments remain pending and drafts are retained.
+
+  Generation completion now uses an atomic expected-content check when marking comments applied. Only matching revisions are consumed; conflicts are reported without failing the completed generation. Late responses cannot overwrite newer visible edits, and editing an applied comment makes the new content pending. Existing explicit bulk marking remains compatible.
+
+- ef5677c: Explain missing, empty, or invalid tweak declarations for the active preview
+  source instead of promising automatic controls. Surface malformed declarations
+  without crashing the panel. Clarify that the tweaks scanner only discovers
+  declarations: unrelated starter values are not controls for the active preview.
+
 ## 0.2.1
 
 ### Patch Changes

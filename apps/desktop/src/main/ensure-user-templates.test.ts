@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -10,6 +10,7 @@ describe('ensureUserTemplates', () => {
   beforeEach(() => {
     root = path.join(tmpdir(), `codesign-seed-${process.pid}-${Date.now()}`);
     mkdirSync(root, { recursive: true });
+    root = realpathSync(root);
   });
 
   afterEach(() => {

@@ -28,6 +28,7 @@ export interface ProviderRow {
   wire: WireApi;
   defaultModel: string;
   hasKey: boolean;
+  requiresApiKey?: boolean;
   reasoningLevel?: ReasoningLevel;
   /** Per-provider TLS verification opt-out (#229). Only surfaced for
    *  custom / imported providers; the runtime force-ignores it on built-ins. */
@@ -160,6 +161,7 @@ export function toProviderRows(
       // Missing secrets count as configured only for providers that explicitly
       // declare keyless mode in their ProviderEntry/capabilities.
       hasKey: ref !== undefined || isKeylessProviderAllowed(provider, entry),
+      requiresApiKey: !isKeylessProviderAllowed(provider, entry),
       ...(entry?.reasoningLevel !== undefined ? { reasoningLevel: entry.reasoningLevel } : {}),
       ...(entry?.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
       ...(rowError !== undefined ? { error: rowError } : {}),

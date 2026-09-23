@@ -7,7 +7,7 @@
  * handlers.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Collect registered channel names via a mock ipcMain.
 const registeredChannels: string[] = [];
@@ -596,6 +596,218 @@ describe('config:v1 provider mutations — fail-fast key handling', () => {
         typoedField: 'would have been ignored',
       }),
     ).rejects.toThrow(/unsupported field "typoedField"/);
+  });
+});
+
+describe('config:v1 custom provider keyless opt-in', () => {
+  const provider = {
+    id: 'custom-coproxy',
+    name: 'CoProxy',
+    wire: 'openai-responses',
+    baseUrl: 'http://127.0.0.1:18537/v1',
+    apiKey: '',
+    requiresApiKey: false,
+    defaultModel: 'gpt-6-astra',
+    setAsActive: true,
+  };
+
+  async function invoke(channel: string, payload: unknown) {
+    const handler = handlers.get(channel);
+    if (!handler) throw new Error('handler missing');
+    return handler({}, payload);
+  }
+
+  beforeEach(async () => {
+    const { readConfig, writeConfig } = await import('./config');
+    const { buildSecretRef } = await import('./keychain');
+    const { loadConfigOnBoot } = await import('./onboarding-ipc');
+    vi.mocked(readConfig).mockResolvedValueOnce(null);
+    await loadConfigOnBoot();
+    await registerIpcForTest();
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(buildSecretRef).mockClear();
+  });
+
+  it('creates an active keyless provider without storing an empty or fake secret and round-trips its row', async () => {
+    const { writeConfig } = await import('./config');
+    const { buildSecretRef } = await import('./keychain');
+    await expect(invoke('config:v1:add-provider', provider)).resolves.toMatchObject({
+      hasKey: true,
+      provider: provider.id,
+      modelPrimary: 'gpt-6-astra',
+    });
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.providers[provider.id]).toMatchObject({
+      requiresApiKey: false,
+      wire: 'openai-responses',
+      defaultModel: 'gpt-6-astra',
+    });
+    expect(written?.secrets).toEqual({});
+    expect(buildSecretRef).not.toHaveBeenCalled();
+    await expect(invoke('settings:v1:list-providers', undefined)).resolves.toEqual([
+      expect.objectContaining({
+        provider: provider.id,
+        requiresApiKey: false,
+        hasKey: true,
+        maskedKey: '',
+      }),
+    ]);
+    await invoke('config:v1:update-provider', { id: provider.id, name: 'Renamed CoProxy' });
+    expect(
+      vi.mocked(writeConfig).mock.calls.at(-1)?.[0].providers[provider.id]?.requiresApiKey,
+    ).toBe(false);
+  });
+
+  it.each([
+    undefined,
+    true,
+  ])('keeps strict creation defaults (requiresApiKey=%s)', async (requiresApiKey) => {
+    const { writeConfig } = await import('./config');
+    await expect(invoke('config:v1:add-provider', { ...provider, requiresApiKey })).rejects.toThrow(
+      /apiKey must be a non-empty string/,
+    );
+    expect(writeConfig).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    null,
+    'false',
+    0,
+  ])('rejects malformed auth mode (%s) in add and update', async (requiresApiKey) => {
+    const { writeConfig } = await import('./config');
+    await expect(invoke('config:v1:add-provider', { ...provider, requiresApiKey })).rejects.toThrow(
+      /requiresApiKey must be a boolean/,
+    );
+    await expect(
+      invoke('config:v1:update-provider', { id: provider.id, requiresApiKey }),
+    ).rejects.toThrow(/requiresApiKey must be a boolean/);
+    expect(writeConfig).not.toHaveBeenCalled();
+  });
+
+  it('requires a stored or newly supplied key when switching back to keyed mode', async () => {
+    const { writeConfig } = await import('./config');
+    const { getCachedConfig } = await import('./onboarding/config-cache');
+    await invoke('config:v1:add-provider', provider);
+    vi.mocked(writeConfig).mockClear();
+    await expect(
+      invoke('config:v1:update-provider', {
+        id: provider.id,
+        requiresApiKey: true,
+      }),
+    ).rejects.toThrow(/No API key stored/);
+    expect(writeConfig).not.toHaveBeenCalled();
+    expect(getCachedConfig()?.providers[provider.id]?.requiresApiKey).toBe(false);
+    await expect(
+      invoke('config:v1:update-provider', {
+        id: provider.id,
+        requiresApiKey: true,
+        apiKey: '  ',
+      }),
+    ).rejects.toThrow(/Cannot clear API key/);
+    await invoke('config:v1:update-provider', {
+      id: provider.id,
+      requiresApiKey: true,
+      apiKey: ' sk-new ',
+    });
+    expect(getCachedConfig()?.providers[provider.id]?.requiresApiKey).toBe(true);
+    expect(getCachedConfig()?.secrets[provider.id]?.ciphertext).toBe('enc:sk-new');
+  });
+
+  it('preserves secrets when omitted and clears them only with an explicit empty key in keyless mode', async () => {
+    const { getCachedConfig } = await import('./onboarding/config-cache');
+    await invoke('config:v1:add-provider', {
+      ...provider,
+      requiresApiKey: true,
+      apiKey: 'sk-existing',
+    });
+    await invoke('config:v1:update-provider', { id: provider.id, requiresApiKey: false });
+    expect(getCachedConfig()?.secrets[provider.id]?.ciphertext).toBe('enc:sk-existing');
+    await invoke('config:v1:update-provider', { id: provider.id, requiresApiKey: true });
+    expect(getCachedConfig()?.secrets[provider.id]?.ciphertext).toBe('enc:sk-existing');
+    await invoke('config:v1:update-provider', {
+      id: provider.id,
+      requiresApiKey: false,
+      apiKey: '',
+    });
+    expect(getCachedConfig()?.secrets[provider.id]).toBeUndefined();
+    expect(getCachedConfig()?.providers[provider.id]?.requiresApiKey).toBe(false);
+  });
+
+  it('uses explicit auth edits instead of a conflicting imported capability override', async () => {
+    const { getCachedConfig, setCachedConfig } = await import('./onboarding/config-cache');
+    const { hydrateConfig } = await import('@open-codesign/shared');
+    await invoke('config:v1:add-provider', provider);
+    const cfg = getCachedConfig();
+    if (!cfg) throw new Error('missing config');
+    const entry = cfg.providers[provider.id];
+    if (!entry) throw new Error('missing provider');
+    setCachedConfig(
+      hydrateConfig({
+        ...cfg,
+        providers: {
+          [provider.id]: {
+            ...entry,
+            requiresApiKey: undefined,
+            capabilities: { supportsKeyless: true, supportsReasoning: true },
+          },
+        },
+      }),
+    );
+    await expect(invoke('settings:v1:list-providers', undefined)).resolves.toEqual([
+      expect.objectContaining({ requiresApiKey: false, hasKey: true }),
+    ]);
+    await invoke('config:v1:update-provider', {
+      id: provider.id,
+      requiresApiKey: true,
+      apiKey: 'sk-new',
+    });
+    expect(getCachedConfig()?.providers[provider.id]?.capabilities).toEqual({
+      supportsReasoning: true,
+    });
+    await expect(invoke('settings:v1:list-providers', undefined)).resolves.toEqual([
+      expect.objectContaining({ requiresApiKey: true }),
+    ]);
+    await expect(
+      invoke('config:v1:update-provider', { id: provider.id, apiKey: '' }),
+    ).rejects.toThrow(/Cannot clear API key/);
+  });
+
+  it('does not override built-in auth policies through add or update', async () => {
+    const { writeConfig } = await import('./config');
+    const { BUILTIN_PROVIDERS, CHATGPT_CODEX_PROVIDER_ID, hydrateConfig } = await import(
+      '@open-codesign/shared'
+    );
+    const { setCachedConfig } = await import('./onboarding/config-cache');
+    setCachedConfig(
+      hydrateConfig({
+        version: 3,
+        activeProvider: 'anthropic',
+        activeModel: 'claude-sonnet-4-6',
+        secrets: { anthropic: { ciphertext: 'enc:sk-existing' } },
+        providers: { anthropic: BUILTIN_PROVIDERS.anthropic, ollama: BUILTIN_PROVIDERS.ollama },
+      }),
+    );
+    await expect(
+      invoke('config:v1:add-provider', { ...provider, id: 'anthropic' }),
+    ).rejects.toThrow(/Cannot replace a built-in provider/);
+    await expect(
+      invoke('config:v1:add-provider', { ...provider, id: CHATGPT_CODEX_PROVIDER_ID }),
+    ).rejects.toThrow(/Cannot replace a built-in provider/);
+    await expect(
+      invoke('config:v1:update-provider', {
+        id: 'anthropic',
+        requiresApiKey: false,
+        apiKey: '',
+      }),
+    ).rejects.toThrow(/Cannot change authentication mode for a built-in provider/);
+    await expect(
+      invoke('config:v1:update-provider', {
+        id: 'ollama',
+        requiresApiKey: true,
+        apiKey: 'sk-new',
+      }),
+    ).rejects.toThrow(/Cannot change authentication mode for a built-in provider/);
+    expect(writeConfig).not.toHaveBeenCalled();
   });
 });
 
@@ -1518,5 +1730,142 @@ describe('detectChatgptSubscription — non-ENOENT failure handling', () => {
     const path = join(dir, 'auth.json');
     await writeFile(path, '{"auth_mode":', 'utf8');
     await expect(detectChatgptSubscription(path)).resolves.toBe(false);
+  });
+});
+
+describe('web search settings survive unrelated config saves', () => {
+  it.each([
+    true,
+    false,
+    undefined,
+  ])('preserves enabled=%s and custom limits through settings, imports and reload', async (enabled) => {
+    const { BUILTIN_PROVIDERS, hydrateConfig, parseConfigFlexible, toPersistedV3 } = await import(
+      '@open-codesign/shared'
+    );
+    const cache = await import('./onboarding/config-cache');
+    const crud = await import('./onboarding/providers-crud');
+    const imports = await import('./onboarding/external-imports');
+    const { writeConfig } = await import('./config');
+    const webSearch =
+      enabled === undefined
+        ? undefined
+        : { enabled, maxCalls: 7, timeoutMs: 23000, maxChars: 6000 };
+    const cfg = hydrateConfig({
+      version: 3,
+      activeProvider: 'openai',
+      activeModel: 'gpt-test',
+      providers: { openai: BUILTIN_PROVIDERS.openai, anthropic: BUILTIN_PROVIDERS.anthropic },
+      secrets: {
+        openai: { ciphertext: 'enc:openai-fixture' },
+        anthropic: { ciphertext: 'enc:anthropic-fixture' },
+        tavily: { ciphertext: 'enc:tavily-fixture' },
+      },
+      ...(webSearch ? { webSearch } : {}),
+    });
+    const imported = { ...BUILTIN_PROVIDERS.openai, id: 'imported-fixture', builtin: false };
+    const mutations: Record<string, () => Promise<unknown>> = {
+      switchModel: () =>
+        crud.runSetActiveProvider({ provider: 'openai', modelPrimary: 'another-model' }),
+      switchProvider: () =>
+        crud.runSetActiveProvider({ provider: 'anthropic', modelPrimary: 'claude-test' }),
+      updateProvider: () => crud.runUpdateProvider({ id: 'openai', name: 'Renamed' }),
+      saveProvider: () =>
+        crud.runSetProviderAndModels({
+          provider: 'openai',
+          modelPrimary: 'another-model',
+          apiKey: 'fixture-new-key',
+          setAsActive: true,
+        }),
+      addCustomProvider: () =>
+        crud.runAddCustomProvider({
+          id: 'new-fixture',
+          name: 'New fixture',
+          wire: 'openai-chat',
+          baseUrl: 'https://example.com/v1',
+          defaultModel: 'fixture-model',
+          apiKey: 'fixture-key',
+          setAsActive: false,
+        }),
+      deleteProvider: () => crud.runDeleteProvider('anthropic'),
+      clearDesignSystem: () => cache.setDesignSystem(null),
+      importCodex: () =>
+        imports.runImportCodex({
+          providers: [imported],
+          activeProvider: imported.id,
+          activeModel: imported.defaultModel,
+          envKeyMap: {},
+          apiKeyMap: { [imported.id]: 'fixture-key' },
+          warnings: [],
+        }),
+      importClaude: () =>
+        imports.runImportClaudeCode({
+          provider: imported,
+          apiKey: 'fixture-key',
+          apiKeySource: 'settings-json',
+          userType: 'has-api-key',
+          hasOAuthEvidence: false,
+          activeModel: imported.defaultModel,
+          settingsPath: '/fixture/settings.json',
+          warnings: [],
+        }),
+      importGemini: () =>
+        imports.runImportGemini({
+          kind: 'found',
+          provider: imported,
+          apiKey: 'fixture-key',
+          apiKeySource: 'shell-env',
+          keyPath: null,
+          warnings: [],
+        }),
+      importOpencode: () =>
+        imports.runImportOpencode({
+          providers: [imported],
+          apiKeyMap: { [imported.id]: 'fixture-key' },
+          activeProvider: imported.id,
+          activeModel: imported.defaultModel,
+          warnings: [],
+        }),
+    };
+    for (const [operation, mutate] of Object.entries(mutations)) {
+      cache.setCachedConfig(structuredClone(cfg));
+      vi.mocked(writeConfig).mockClear();
+      await mutate();
+      const saved = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+      expect(saved, operation).toBeDefined();
+      if (!saved) throw new Error(`Missing config for ${operation}`);
+      expect({ operation, webSearch: saved.webSearch }).toEqual({ operation, webSearch });
+      expect(cache.getCachedConfig()?.webSearch, operation).toEqual(webSearch);
+      expect(saved.secrets['tavily'], operation).toEqual(cfg.secrets['tavily']);
+      expect(parseConfigFlexible(toPersistedV3(saved)).webSearch, operation).toEqual(webSearch);
+    }
+  });
+
+  it('retains Tavily credentials and web settings when the last model provider is deleted', async () => {
+    const { BUILTIN_PROVIDERS, hydrateConfig } = await import('@open-codesign/shared');
+    const { getCachedConfig, setCachedConfig } = await import('./onboarding/config-cache');
+    const { runDeleteProvider } = await import('./onboarding/providers-crud');
+    const webSearch = { enabled: true, maxCalls: 12, timeoutMs: 15000, maxChars: 10000 };
+    setCachedConfig(
+      hydrateConfig({
+        version: 3,
+        activeProvider: 'openai',
+        activeModel: 'gpt-test',
+        providers: { openai: BUILTIN_PROVIDERS.openai },
+        secrets: {
+          openai: { ciphertext: 'enc:fixture-key' },
+          tavily: { ciphertext: 'enc:tavily-fixture' },
+        },
+        webSearch,
+      }),
+    );
+    await runDeleteProvider('openai');
+    expect(getCachedConfig()).toMatchObject({
+      activeProvider: '',
+      activeModel: '',
+      providers: {},
+      secrets: { tavily: { ciphertext: 'enc:tavily-fixture' } },
+      webSearch,
+    });
+    expect(getCachedConfig()?.secrets['openai']).toBeUndefined();
   });
 });

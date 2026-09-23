@@ -5,6 +5,7 @@ import {
   isIframeErrorMessage,
   isOverlayMessage,
   type OverlayMessage,
+  type SourceEditSelection,
 } from '@open-codesign/runtime';
 
 export function formatIframeError(
@@ -100,9 +101,16 @@ export function stablePreviewSourceKey(source: string): string {
     );
 }
 
-export type AllowedPreviewMessageType = 'ELEMENT_SELECTED' | 'IFRAME_ERROR' | 'ELEMENT_RECTS';
+export type AllowedPreviewMessageType =
+  | 'ELEMENT_SELECTED'
+  | 'ELEMENT_SELECTION_CLEARED'
+  | 'IFRAME_ERROR'
+  | 'ELEMENT_RECTS'
+  | 'PREVIEW_ESCAPE';
 
 export interface PreviewMessageHandlers {
+  onPreviewEscape?: () => void;
+  onSelectionCleared?: () => void;
   onElementSelected: (msg: OverlayMessage) => void;
   onIframeError: (msg: IframeErrorMessage) => void;
   onElementRects: (msg: ElementRectsMessage) => void;
@@ -110,11 +118,16 @@ export interface PreviewMessageHandlers {
 
 export type PreviewMessageOutcome =
   | { status: 'handled'; type: AllowedPreviewMessageType }
-  | { status: 'rejected'; reason: 'envelope' | 'unknown-type' | 'shape'; type?: string };
+  | {
+      status: 'rejected';
+      reason: 'envelope' | 'unknown-type' | 'shape' | 'stale-source-edit';
+      type?: string;
+    };
 
 export function handlePreviewMessage(
   data: unknown,
   handlers: PreviewMessageHandlers,
+  expectedSourceEditRevision?: Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>,
 ): PreviewMessageOutcome {
   if (typeof data !== 'object' || data === null) {
     return { status: 'rejected', reason: 'envelope' };
@@ -125,8 +138,24 @@ export function handlePreviewMessage(
   }
 
   switch (envelope.type) {
+    case 'PREVIEW_ESCAPE':
+      handlers.onPreviewEscape?.();
+      return { status: 'handled', type: envelope.type };
+    case 'ELEMENT_SELECTION_CLEARED':
+      handlers.onSelectionCleared?.();
+      return { status: 'handled', type: envelope.type };
     case 'ELEMENT_SELECTED':
       if (isOverlayMessage(data)) {
+        // WindowProxy survives document navigation. Same-frame messages are still
+        // candidate hints, and the main process must independently validate edits.
+        if (
+          data.sourceEdit &&
+          expectedSourceEditRevision &&
+          (data.sourceEdit.sourceHash !== expectedSourceEditRevision.sourceHash ||
+            data.sourceEdit.previewRevision !== expectedSourceEditRevision.previewRevision)
+        ) {
+          return { status: 'rejected', reason: 'stale-source-edit', type: envelope.type };
+        }
         handlers.onElementSelected(data);
         return { status: 'handled', type: 'ELEMENT_SELECTED' };
       }

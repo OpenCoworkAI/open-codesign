@@ -47,6 +47,7 @@ const TEST_ENDPOINT_FIELDS = [
   'wire',
   'baseUrl',
   'apiKey',
+  'requiresApiKey',
   'httpHeaders',
   'allowPrivateNetwork',
   'tlsRejectUnauthorized',
@@ -1251,6 +1252,7 @@ interface TestEndpointPayload {
   wire: WireApi;
   baseUrl: string;
   apiKey: string;
+  requiresApiKey?: boolean;
   httpHeaders?: Record<string, string>;
   allowPrivateNetwork?: boolean;
   tlsRejectUnauthorized?: boolean;
@@ -1276,13 +1278,18 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
     throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const trimmedApiKey = apiKey.trim();
-  if (trimmedApiKey.length === 0) {
+  const requiresApiKey = r['requiresApiKey'];
+  if (requiresApiKey !== undefined && typeof requiresApiKey !== 'boolean') {
+    throw new CodesignError('requiresApiKey must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  if (trimmedApiKey.length === 0 && requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const out: TestEndpointPayload = {
     wire,
     baseUrl: parseHttpBaseUrl(baseUrl, 'baseUrl'),
     apiKey: trimmedApiKey,
+    ...(requiresApiKey !== undefined ? { requiresApiKey } : {}),
   };
   if (r['allowPrivateNetwork'] !== undefined) {
     if (typeof r['allowPrivateNetwork'] !== 'boolean') {

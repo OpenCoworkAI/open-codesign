@@ -48,7 +48,13 @@ describe('tweaks tool', () => {
   it('returns empty details when reader yields no files', async () => {
     const tool = makeTweaksTool(async () => []);
     const res = await tool.execute('id', {});
-    expect(res.details).toEqual({ blocks: [], fileCount: 0 });
+    expect(res.details).toEqual({
+      blocks: [],
+      fileCount: 0,
+      scannedFileCount: 0,
+      missingFiles: [],
+      invalidFiles: [],
+    });
     expect(res.content).toEqual([{ type: 'text', text: 'no files matched' }]);
   });
 
@@ -60,7 +66,7 @@ describe('tweaks tool', () => {
     expect(res.details.fileCount).toBe(1);
     expect(res.content[0]).toEqual({
       type: 'text',
-      text: 'found 1 tweakable value(s) across 1 file(s)',
+      text: 'scanned 1 file(s); found 1 declared value(s) across 1 file(s): a.css. Missing declarations: none. Invalid declarations: none. The panel reads the active preview source; verify its rendered bindings separately.',
     });
   });
 
@@ -72,6 +78,53 @@ describe('tweaks tool', () => {
     });
     await tool.execute('id', { patterns: ['src/**/*.tsx'] });
     expect(captured).toEqual(['src/**/*.tsx']);
+  });
+
+  it('does not imply that unrelated starter controls are available in App.jsx', async () => {
+    const tool = makeTweaksTool(async () => [
+      { file: 'App.jsx', contents: 'function App() { return <main>Hello</main>; }' },
+      blockFile('starters/shell.jsx', '{"accent":"#27634c"}'),
+    ]);
+    const result = await tool.execute('id', {});
+    expect(result.details.blocks.map((block) => block.file)).toEqual(['starters/shell.jsx']);
+    expect(result.content[0]).toMatchObject({
+      text: expect.stringContaining('starters/shell.jsx'),
+    });
+    expect(result.content[0]).toMatchObject({
+      text: expect.stringContaining('active preview source'),
+    });
+  });
+
+  it('reports missing declarations rather than implying a successful registration', async () => {
+    const tool = makeTweaksTool(async () => [{ file: 'App.jsx', contents: 'const css = "";' }]);
+    const result = await tool.execute('id', {});
+    expect(result.details).toEqual({
+      blocks: [],
+      fileCount: 0,
+      scannedFileCount: 1,
+      missingFiles: ['App.jsx'],
+      invalidFiles: [],
+    });
+    expect(result.content[0]).toMatchObject({
+      text: expect.stringContaining('No EDITMODE declarations found'),
+    });
+  });
+  it('reports invalid files without losing valid declarations from other files', async () => {
+    const tool = makeTweaksTool(async () => [
+      blockFile('App.jsx', '{accent:"red"}'),
+      blockFile('Details.jsx', '{"radius":16}'),
+      { file: 'Empty.jsx', contents: '/*EDITMODE-BEGIN*/{}/*EDITMODE-END*/' },
+    ]);
+    const result = await tool.execute('id', {});
+    expect(result.details).toMatchObject({
+      scannedFileCount: 3,
+      fileCount: 2,
+      blocks: [
+        { file: 'Details.jsx', tokens: { radius: 16 } },
+        { file: 'Empty.jsx', tokens: {} },
+      ],
+      invalidFiles: [{ file: 'App.jsx', error: 'EDITMODE block contains invalid JSON' }],
+    });
   });
 
   it('defaults patterns to html/jsx/css/js when omitted', async () => {

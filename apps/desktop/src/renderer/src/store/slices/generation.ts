@@ -1,3 +1,4 @@
+import { i18n } from '@open-codesign/i18n';
 import type {
   CommentScope,
   LocalInputFile,
@@ -6,7 +7,11 @@ import type {
   ResourceStateV1,
   WireApi,
 } from '@open-codesign/shared';
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import {
+  commentContentFingerprint,
+  DEFAULT_SOURCE_ENTRY,
+  LEGACY_SOURCE_ENTRY,
+} from '@open-codesign/shared';
 import type { CodesignApi, ExportFormat } from '../../../../preload/index.js';
 import { recordAction } from '../../lib/action-timeline.js';
 import { redactUrls } from '../../lib/redact.js';
@@ -127,11 +132,22 @@ function isCurrentGenerationForDesign(
   return state.generationByDesign[designId]?.generationId === generationId;
 }
 
-function startGenerationForDesign(set: SetState, designId: string, generationId: string): void {
+function startGenerationForDesign(
+  set: SetState,
+  designId: string,
+  generationId: string,
+  submittedContext: NonNullable<CodesignState['generationByDesign'][string]['submittedContext']>,
+): void {
   set((state) => {
     const generationByDesign = {
       ...state.generationByDesign,
-      [designId]: { generationId, stage: 'sending' as GenerationStage, startedAt: Date.now() },
+      [designId]: {
+        generationId,
+        stage: 'sending' as GenerationStage,
+        startedAt: Date.now(),
+        awaitingResponse: true,
+        submittedContext,
+      },
     };
     return {
       generationByDesign,
@@ -158,6 +174,7 @@ function markGenerationRunningForDesign(
     const generationByDesign = {
       ...state.generationByDesign,
       [designId]: {
+        ...(current?.generationId === generationId ? current : {}),
         generationId,
         stage,
         startedAt: current?.startedAt ?? Date.now(),
@@ -180,6 +197,10 @@ function reconcileGenerationStatus(
 ): void {
   set((state) => {
     const next: CodesignState['generationByDesign'] = {};
+    // Main can remove a completed run before its IPC response reaches us.
+    for (const [designId, run] of Object.entries(state.generationByDesign)) {
+      if (run.awaitingResponse) next[designId] = run;
+    }
     for (const item of running) {
       const existing = state.generationByDesign[item.designId];
       next[item.designId] =
@@ -223,7 +244,7 @@ function updateGenerationStageById(
     if (current?.generationId !== generationId) return {};
     const generationByDesign = {
       ...state.generationByDesign,
-      [designId]: { generationId, stage, startedAt: current.startedAt ?? Date.now() },
+      [designId]: { ...current, stage, startedAt: current.startedAt ?? Date.now() },
     };
     return {
       generationByDesign,
@@ -290,6 +311,7 @@ function buildPromptRequest(
  * this mirrors that "pending changes accumulator" shape.
  */
 export interface PendingEditEnrichment {
+  sourcePath?: string | undefined;
   selector: string;
   tag: string;
   outerHTML: string;
@@ -309,6 +331,7 @@ function formatPendingEditTarget(
 ): string {
   const lines = [
     `Edit ${index + 1} target`,
+    `Source file: ${edit.sourcePath ?? 'Unknown; inspect workspace sources before editing'}`,
     `Target: <${edit.tag}> at ${edit.selector}`,
     `Current HTML:\n${truncate(edit.outerHTML)}`,
   ];
@@ -334,10 +357,10 @@ export function buildEnrichedPrompt(
   const truncate = (s: string) => (s.length > MAX_HTML ? `${s.slice(0, MAX_HTML)}…` : s);
 
   const lines: string[] = [
-    `## REQUIRED EDITS — you MUST apply every edit below to ${DEFAULT_SOURCE_ENTRY}`,
+    '## REQUIRED EDITS — apply every edit below to its identified source file',
     '',
     'Each edit targets a specific element identified by its selector and outerHTML.',
-    'Use `str_replace_based_edit_tool` with `command: "view"` and `command: "str_replace"` to find and modify the element. Do NOT skip any edit.',
+    'Use `read` and `edit` to inspect the identified source and modify the intended element. DOM selectors are not source-code locations; resolve rendered markup against the source before editing and preserve unrelated siblings. If the source imports the component, follow that import. Do NOT assume every edit belongs in App.jsx.',
     '',
   ];
 
@@ -379,6 +402,8 @@ function applyGenerateSuccess(
     outputTokens?: number;
     costUsd?: number;
     resourceState?: ResourceStateV1;
+    chatPersisted?: boolean;
+    snapshotId?: string;
   },
   designIdAtStart: string | null,
 ): void {
@@ -412,7 +437,12 @@ function applyGenerateSuccess(
           )
         : { cache: state.previewSourceByDesign, recent: state.recentDesignIds };
     return {
-      ...(isCurrentDesign ? { previewSource: nextSource } : {}),
+      ...(isCurrentDesign
+        ? {
+            previewSource: nextSource,
+            ...(result.snapshotId ? { currentSnapshotId: result.snapshotId } : {}),
+          }
+        : {}),
       previewSourceByDesign: pool.cache,
       recentDesignIds: pool.recent,
       generationByDesign,
@@ -431,7 +461,12 @@ function applyGenerateSuccess(
 
   const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
   if (artifact !== null) {
-    void persistDesignState(get, designId, firstArtifact?.content ?? null, artifact);
+    void persistDesignState(
+      get,
+      designId,
+      firstArtifact?.content ?? null,
+      result.snapshotId ? null : artifact,
+    );
   }
   // Sidebar v2: append chat rows for artifact delivery.
   // When agent runtime is active (tool_call rows exist), useAgentStream
@@ -441,14 +476,22 @@ function applyGenerateSuccess(
   const agentRuntimeActive = get().chatMessages.some(
     (m) => m.designId === designId && m.kind === 'tool_call',
   );
-  if (!agentRuntimeActive && assistantMessage.trim().length > 0) {
+  // Background chat rows are intentionally absent from the active design's
+  // state, so dedupe against this run's stream rather than only visible rows.
+  const streamedAssistantText = stateBefore.generationByDesign[designId]?.streamedAssistantText;
+  if (
+    !result.chatPersisted &&
+    !agentRuntimeActive &&
+    assistantMessage.trim().length > 0 &&
+    streamedAssistantText !== assistantMessage.trim()
+  ) {
     void get().appendChatMessage({
       designId,
       kind: 'assistant_text',
       payload: { text: assistantMessage },
     });
   }
-  if (deliveredPath) {
+  if (deliveredPath && !result.chatPersisted) {
     void get().appendChatMessage({
       designId,
       kind: 'artifact_delivered',
@@ -458,6 +501,9 @@ function applyGenerateSuccess(
   if (rejectedUsageFields.length > 0) {
     const detail = rejectedUsageFields.join(', ');
     console.warn('[open-codesign] dropped non-finite usage values from provider:', detail);
+  }
+  if (stateBefore.generationByDesign[designId]?.awaitingResponse) {
+    setTimeout(() => get().tryAutoPolish(designId, i18n.language), 1200);
   }
 }
 
@@ -491,11 +537,16 @@ function applyGenerateError(
       lastError: displayMsg,
     });
   }
-  void get().appendChatMessage({
-    designId,
-    kind: 'error',
-    payload: { message: displayMsg },
-  });
+  if (
+    !stateBefore.generationByDesign[designId]?.chatPersisted &&
+    typeof window.codesign?.recoverRuns !== 'function'
+  ) {
+    void get().appendChatMessage({
+      designId,
+      kind: 'error',
+      payload: { message: displayMsg },
+    });
+  }
   const code = extractCodesignErrorCode(err) ?? 'GENERATION_FAILED';
   const upstream = extractUpstreamContext(err);
 
@@ -675,6 +726,8 @@ async function runGenerate(
       outputTokens?: number;
       costUsd?: number;
       resourceState?: ResourceStateV1;
+      chatPersisted?: boolean;
+      snapshotId?: string;
     },
     designIdAtStart,
   );
@@ -700,12 +753,29 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       const cancelled = get().cancelledGenerationIds;
       reconcileGenerationStatus(
         set,
-        status.running.filter((run) => !cancelled.has(run.generationId)),
+        status.running.filter(
+          (run) =>
+            !cancelled.has(run.generationId) && !get().settledGenerationIds.has(run.generationId),
+        ),
+      );
+      const currentDesignId = get().currentDesignId;
+      await Promise.all(
+        [
+          ...new Set([
+            ...Object.keys(get().activeMessagesByDesign),
+            ...status.running.map((run) => run.designId),
+            ...(currentDesignId ? [currentDesignId] : []),
+          ]),
+        ].map((designId) => get().syncActiveMessages(designId)),
       );
     },
 
     markGenerationRunning(designId, generationId, stage = 'thinking') {
-      if (get().cancelledGenerationIds.has(generationId)) return;
+      if (
+        get().cancelledGenerationIds.has(generationId) ||
+        get().settledGenerationIds.has(generationId)
+      )
+        return;
       markGenerationRunningForDesign(set, designId, generationId, stage);
     },
 
@@ -777,6 +847,9 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       const allPendingEdits = [...pendingEdits, ...injectedPendingEdits];
       const enrichedPrompt = buildEnrichedPrompt(request.prompt, allPendingEdits);
       const pendingEditIds = pendingEdits.map((c) => c.id);
+      const submittedComments = Object.fromEntries(
+        pendingEdits.map((comment) => [comment.id, commentContentFingerprint(comment)]),
+      );
 
       const designIdAtStart = get().currentDesignId;
       const activeDesign = get().designs.find((design) => design.id === designIdAtStart);
@@ -813,7 +886,10 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       }
 
       const generationId = newId();
-      startGenerationForDesign(set, designIdAtStart, generationId);
+      startGenerationForDesign(set, designIdAtStart, generationId, {
+        ...(request.referenceUrl ? { referenceUrl: request.referenceUrl } : {}),
+        comments: submittedComments,
+      });
       clearStreamingForDesign(set, designIdAtStart);
       set(() => ({
         errorMessage: null,
@@ -889,25 +965,47 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
               }
             }
             if (appliedIn) {
-              const updated = await window.codesign.comments.markApplied(
+              const result = await window.codesign.comments.markAppliedIfUnchanged(
                 designIdAtStart,
                 pendingEditIds,
                 appliedIn,
+                submittedComments,
               );
-              if (updated.length > 0) {
-                set((s) => ({
+              const conflicts = new Set(result.conflictedIds);
+              set((s) => {
+                const updated = result.applied.filter((row) => {
+                  if (s.currentDesignId !== designIdAtStart) return true;
+                  const current = s.comments.find((comment) => comment.id === row.id);
+                  const unchanged =
+                    current && commentContentFingerprint(current) === submittedComments[row.id];
+                  if (!unchanged) conflicts.add(row.id);
+                  return unchanged;
+                });
+                const appliedIds = new Set(updated.map((row) => row.id));
+                return {
                   ...(s.currentDesignId === designIdAtStart
                     ? {
                         comments: s.comments.map((c) => updated.find((u) => u.id === c.id) ?? c),
                         currentSnapshotId: appliedIn,
+                        queuedCommentIds: s.queuedCommentIds.filter((id) => !appliedIds.has(id)),
                       }
                     : {}),
-                  queuedCommentIds: s.queuedCommentIds.filter((id) => !pendingEditIds.includes(id)),
-                }));
+                };
+              });
+              if (conflicts.size > 0) {
+                get().pushToast({
+                  variant: 'info',
+                  title: tr('notifications.commentsChangedDuringGeneration'),
+                });
               }
             }
           } catch (err) {
             console.warn('[open-codesign] markApplied failed:', err);
+            get().pushToast({
+              variant: 'error',
+              title: tr('notifications.commentUpdateFailed'),
+              description: err instanceof Error ? err.message : tr('errors.unknown'),
+            });
           }
         }
       } catch (err) {
@@ -951,6 +1049,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       void window.codesign
         .cancelGeneration(id)
         .then(() => {
+          void get().syncActiveMessages(designId);
           // The renderer already stopped optimistically. Main-process late
           // events are filtered until the terminal event arrives.
         })
@@ -1006,6 +1105,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
             selector: selection.selector,
             tag: selection.tag,
             outerHTML: selection.outerHTML,
+            ...(selection.sourcePath ? { sourcePath: selection.sourcePath } : {}),
             text: trimmed,
           },
         ],
@@ -1094,7 +1194,15 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
           sourcePath: resolved.path,
         });
         if (res.status === 'saved' && res.path) {
-          set({ toastMessage: tr('notifications.exportedTo', { path: res.path }) });
+          set({
+            toastMessage: [
+              tr('notifications.exportedTo', { path: res.path }),
+              ...(res.sourcesPath
+                ? [tr('notifications.exportedTo', { path: res.sourcesPath })]
+                : []),
+              ...(res.researchWarnings ?? []),
+            ].join('\n'),
+          });
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');

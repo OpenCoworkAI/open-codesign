@@ -2,7 +2,7 @@ import { useT } from '@open-codesign/i18n';
 import { canonicalBaseUrl, detectWireFromBaseUrl, type WireApi } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
 import { AlertCircle, Check, CheckCircle, Loader2, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Props {
   onSave: () => void;
@@ -32,6 +32,7 @@ interface Props {
     wire: WireApi;
     defaultModel: string;
     builtin: boolean;
+    requiresApiKey?: boolean;
     /** When true, lock baseUrl/wire so users can't accidentally break a
      *  builtin. Builtins still allow API key + defaultModel edits. */
     lockEndpoint: boolean;
@@ -78,20 +79,50 @@ export function buildEndpointDiscoveryPayload(
   baseUrl: string,
   allowPrivateNetwork: boolean,
   tlsRejectUnauthorized = false,
+  requiresApiKey = true,
 ): {
   wire: WireApi;
   baseUrl: string;
   apiKey: string;
+  requiresApiKey: boolean;
   allowPrivateNetwork: boolean;
   tlsRejectUnauthorized?: boolean;
-} {
+} | null {
+  if (requiresApiKey) return null;
   return {
     wire,
     baseUrl: baseUrl.trim(),
     apiKey: '',
+    requiresApiKey: false,
     allowPrivateNetwork,
     ...(tlsRejectUnauthorized ? { tlsRejectUnauthorized: true } : {}),
   };
+}
+
+export function buildProviderAuthUpdate(
+  requiresApiKey: boolean,
+  apiKey: string,
+  editTarget: { builtin: boolean; requiresApiKey?: boolean },
+): { requiresApiKey?: boolean; apiKey?: string } {
+  const changed = requiresApiKey !== (editTarget.requiresApiKey !== false);
+  if (!editTarget.builtin && changed) {
+    return {
+      requiresApiKey,
+      ...(!requiresApiKey
+        ? { apiKey: '' }
+        : apiKey.trim().length > 0
+          ? { apiKey: apiKey.trim() }
+          : {}),
+    };
+  }
+  return requiresApiKey && apiKey.trim().length > 0 ? { apiKey: apiKey.trim() } : {};
+}
+
+export function buildProviderAuthPayload(
+  requiresApiKey: boolean,
+  apiKey: string,
+): { requiresApiKey: boolean; apiKey: string } {
+  return { requiresApiKey, apiKey: requiresApiKey ? apiKey.trim() : '' };
 }
 
 /**
@@ -112,6 +143,7 @@ export function AddCustomProviderModal({
   const [name, setName] = useState(editTarget?.name ?? initialValues?.name ?? '');
   const [baseUrl, setBaseUrl] = useState(editTarget?.baseUrl ?? initialValues?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
+  const [requiresApiKey, setRequiresApiKey] = useState(editTarget?.requiresApiKey !== false);
   const [defaultModel, setDefaultModel] = useState(
     editTarget?.defaultModel ?? initialValues?.defaultModel ?? '',
   );
@@ -138,24 +170,32 @@ export function AddCustomProviderModal({
   // When true, user explicitly chose to type a model name instead of picking from the dropdown.
   const [manualModel, setManualModel] = useState(false);
   // Track whether user has explicitly typed/picked a model so auto-pick doesn't override it.
-  const userPickedModel = useRef(false);
+  const userPickedModel = useRef(defaultModel.trim().length > 0);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discoverySeq = useRef(0);
+  useEffect(
+    () => () => {
+      if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
+      discoverySeq.current += 1;
+    },
+    [],
+  );
 
   function scheduleDiscovery(
     currentBaseUrl: string,
     currentWire: WireApi,
     privateNetworkAllowed = allowPrivateNetwork,
+    keyRequired = requiresApiKey,
   ) {
     if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
-    if (!currentBaseUrl.trim().match(/^https?:\/\//)) {
-      discoverySeq.current += 1;
+    discoverySeq.current += 1;
+    if (keyRequired || !currentBaseUrl.trim().match(/^https?:\/\//)) {
       setDiscovery({ kind: 'idle' });
       return;
     }
     debounceTimer.current = setTimeout(() => {
-      void runDiscovery(currentBaseUrl, currentWire, privateNetworkAllowed);
+      void runDiscovery(currentBaseUrl, currentWire, privateNetworkAllowed, keyRequired);
     }, 500);
   }
 
@@ -163,19 +203,21 @@ export function AddCustomProviderModal({
     currentBaseUrl: string,
     currentWire: WireApi,
     privateNetworkAllowed = allowPrivateNetwork,
+    keyRequired = requiresApiKey,
   ) {
     if (!window.codesign?.config) return;
+    const payload = buildEndpointDiscoveryPayload(
+      currentWire,
+      currentBaseUrl,
+      privateNetworkAllowed,
+      tlsRejectUnauthorized,
+      keyRequired,
+    );
+    if (payload === null) return;
     const seq = ++discoverySeq.current;
     setDiscovery({ kind: 'discovering' });
     try {
-      const res = await window.codesign.config.testEndpoint(
-        buildEndpointDiscoveryPayload(
-          currentWire,
-          currentBaseUrl,
-          privateNetworkAllowed,
-          tlsRejectUnauthorized,
-        ),
-      );
+      const res = await window.codesign.config.testEndpoint(payload);
       if (seq !== discoverySeq.current) return;
       if (res.ok && res.models.length > 0) {
         setDiscovery({ kind: 'found', models: res.models });
@@ -200,11 +242,14 @@ export function AddCustomProviderModal({
 
   function handleApiKeyChange(v: string) {
     setApiKey(v);
+    discoverySeq.current += 1;
+    setTest({ kind: 'idle' });
   }
 
   function handleWireChange(v: WireApi) {
     setWire(v);
     setWireAuto(false);
+    setTest({ kind: 'idle' });
     scheduleDiscovery(baseUrl, v);
   }
 
@@ -255,19 +300,31 @@ export function AddCustomProviderModal({
   async function handleTest() {
     if (!window.codesign?.config) return;
     if (baseUrl.trim().length === 0) return;
+    if (debounceTimer.current !== null) clearTimeout(debounceTimer.current);
+    const seq = ++discoverySeq.current;
     setTest({ kind: 'testing' });
     try {
       const res = await window.codesign.config.testEndpoint({
         wire,
         baseUrl: baseUrl.trim(),
-        apiKey: apiKey.trim(),
+        ...buildProviderAuthPayload(requiresApiKey, apiKey),
         allowPrivateNetwork,
         ...(tlsRejectUnauthorized ? { tlsRejectUnauthorized: true } : {}),
       });
-      if (res.ok) setTest({ kind: 'ok', modelCount: res.modelCount });
-      else setTest({ kind: 'error', message: res.message });
+      if (seq !== discoverySeq.current) return;
+      if (res.ok) {
+        setTest({ kind: 'ok', modelCount: res.modelCount });
+        if (res.models.length > 0) {
+          setDiscovery({ kind: 'found', models: res.models });
+          if (!userPickedModel.current && defaultModel.trim().length === 0) {
+            setDefaultModel(pickBestModel(res.models));
+          }
+        }
+      } else setTest({ kind: 'error', message: res.message });
     } catch (err) {
-      setTest({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
+      if (seq === discoverySeq.current) {
+        setTest({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
+      }
     }
   }
 
@@ -293,8 +350,7 @@ export function AddCustomProviderModal({
           }
           if (wire !== editTarget.wire) update.wire = wire;
         }
-        const typedKey = apiKey.trim();
-        if (typedKey.length > 0) update.apiKey = typedKey;
+        Object.assign(update, buildProviderAuthUpdate(requiresApiKey, apiKey, editTarget));
         if (!editTarget.builtin) {
           const previous = editTarget.tlsRejectUnauthorized === true;
           if (previous !== tlsRejectUnauthorized) {
@@ -310,7 +366,7 @@ export function AddCustomProviderModal({
           name: name.trim() || id,
           wire,
           baseUrl: canonicalBaseUrl(baseUrl.trim(), wire),
-          apiKey: apiKey.trim(),
+          ...buildProviderAuthPayload(requiresApiKey, apiKey),
           defaultModel: defaultModel.trim(),
           setAsActive: initialSetAsActive,
           ...(tlsRejectUnauthorized ? { tlsRejectUnauthorized: true } : {}),
@@ -324,13 +380,21 @@ export function AddCustomProviderModal({
     }
   }
 
-  const canTest = baseUrl.trim().length > 0 && test.kind !== 'testing';
+  const canTest =
+    baseUrl.trim().length > 0 &&
+    (!requiresApiKey || apiKey.trim().length > 0) &&
+    test.kind !== 'testing';
   const canSave = (() => {
     if (saving) return false;
     if (isEdit) {
       // In edit mode, require at least the mandatory fields still hold values
       // — but don't require the user to re-enter the API key.
-      return baseUrl.trim().length > 0 && defaultModel.trim().length > 0 && name.trim().length > 0;
+      return (
+        baseUrl.trim().length > 0 &&
+        defaultModel.trim().length > 0 &&
+        name.trim().length > 0 &&
+        (!requiresApiKey || apiKey.trim().length > 0 || !!editTarget?.keyMask)
+      );
     }
     return canTest && defaultModel.trim().length > 0 && name.trim().length > 0;
   })();
@@ -353,7 +417,7 @@ export function AddCustomProviderModal({
       onKeyDown={(e) => e.key === 'Escape' && onClose()}
     >
       <div
-        className="w-full max-w-md bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-xl)] shadow-[var(--shadow-elevated)] p-6 space-y-4"
+        className="w-full max-w-md max-h-full overflow-y-auto bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-xl)] shadow-[var(--shadow-elevated)] p-6 space-y-4"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
         role="document"
@@ -465,11 +529,33 @@ export function AddCustomProviderModal({
           )}
         </Field>
 
+        {!editTarget?.builtin && (
+          <label className="flex items-start gap-2 text-[var(--text-xs)] text-[var(--color-text-secondary)]">
+            <input
+              type="checkbox"
+              checked={!requiresApiKey}
+              onChange={(e) => {
+                const nextRequiresApiKey = !e.target.checked;
+                setRequiresApiKey(nextRequiresApiKey);
+                setTest({ kind: 'idle' });
+                scheduleDiscovery(baseUrl, wire, allowPrivateNetwork, nextRequiresApiKey);
+              }}
+              className="mt-0.5 accent-[var(--color-accent)]"
+            />
+            <span>
+              <span className="block font-medium">
+                {t('settings.providers.custom.keylessLabel')}
+              </span>
+              <span>{t('settings.providers.custom.keylessDescription')}</span>
+            </span>
+          </label>
+        )}
         <Field label={t('settings.providers.custom.apiKey')}>
           <TextInput
             value={apiKey}
             onChange={handleApiKeyChange}
             type="password"
+            disabled={!requiresApiKey}
             placeholder={
               isEdit && editTarget?.keyMask !== undefined && editTarget.keyMask.length > 0
                 ? t('settings.providers.custom.apiKeyEditPlaceholder', {

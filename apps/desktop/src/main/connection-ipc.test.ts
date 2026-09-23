@@ -1394,6 +1394,87 @@ describe('config:v1:test-endpoint response parsing', () => {
       restore();
     }
   });
+
+  it.each([
+    'openai-chat',
+    'openai-responses',
+    'anthropic',
+  ])('allows explicitly keyless %s endpoint discovery without an auth header', async (wire) => {
+    const { calls, restore } = installFakeFetch((_url, init) => {
+      const headers = new Headers(init.headers);
+      expect(headers.has('authorization')).toBe(false);
+      expect(headers.has('x-api-key')).toBe(false);
+      return { status: 200, body: { data: [{ id: 'gpt-6-astra' }] } };
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire,
+          baseUrl: 'http://127.0.0.1:18537/v1',
+          apiKey: '  ',
+          requiresApiKey: false,
+          allowPrivateNetwork: true,
+        }),
+      ).resolves.toEqual({ ok: true, modelCount: 1, models: ['gpt-6-astra'] });
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.url).toBe('http://127.0.0.1:18537/v1/models');
+    } finally {
+      restore();
+    }
+  });
+
+  it.each([
+    null,
+    'false',
+    0,
+  ])('rejects malformed requiresApiKey (%s) before fetch', async (requiresApiKey) => {
+    const { calls, restore } = installFakeFetch(() => {
+      throw new Error('fetch should not be called');
+    });
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-responses',
+          baseUrl: 'https://provider.example/v1',
+          apiKey: '',
+          requiresApiKey,
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: 'bad-input',
+        message: 'requiresApiKey must be a boolean',
+      });
+      expect(calls).toHaveLength(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('still requires a key when explicitly marked as keyed', async () => {
+    await expect(
+      handleConfigV1TestEndpoint({
+        wire: 'openai-responses',
+        baseUrl: 'https://provider.example/v1',
+        apiKey: '',
+        requiresApiKey: true,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: 'bad-input',
+      message: 'apiKey must be a non-empty string',
+    });
+  });
+
+  it('does not let keyless opt-in bypass private-network confirmation', async () => {
+    await expect(
+      handleConfigV1TestEndpoint({
+        wire: 'openai-responses',
+        baseUrl: 'http://127.0.0.1:18537/v1',
+        apiKey: '',
+        requiresApiKey: false,
+      }),
+    ).resolves.toMatchObject({ ok: false, error: 'private-network-confirmation-required' });
+  });
 });
 
 // ---------------------------------------------------------------------------
