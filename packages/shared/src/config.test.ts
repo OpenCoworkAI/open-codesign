@@ -5,6 +5,9 @@ import {
   defaultProviderCapabilities,
   detectWireFromBaseUrl,
   hydrateConfig,
+  MINIMAX_ENDPOINTS,
+  MINIMAX_MODEL_CATALOG,
+  MINIMAX_MODEL_IDS,
   migrateLegacyToV3,
   parseConfigFlexible,
   resolveProviderCapabilities,
@@ -13,6 +16,56 @@ import {
 } from './config';
 
 describe('config v3 schema', () => {
+  it('registers MiniMax models and all configured endpoint variants', () => {
+    expect(MINIMAX_MODEL_IDS).toEqual(['MiniMax-M3', 'MiniMax-M2.7']);
+    expect(BUILTIN_PROVIDERS.minimax).toMatchObject({
+      id: 'minimax',
+      wire: 'openai-chat',
+      baseUrl: MINIMAX_ENDPOINTS.global_en.openaiBaseUrl,
+      envKey: 'MINIMAX_API_KEY',
+      defaultModel: 'MiniMax-M3',
+      modelsHint: ['MiniMax-M3', 'MiniMax-M2.7'],
+    });
+    expect(
+      Object.values(MINIMAX_ENDPOINTS).flatMap((endpoint) => [
+        endpoint.openaiBaseUrl,
+        endpoint.anthropicBaseUrl,
+      ]),
+    ).toEqual([
+      'https://api.minimax.io/v1',
+      'https://api.minimax.io/anthropic',
+      'https://api.minimaxi.com/v1',
+      'https://api.minimaxi.com/anthropic',
+    ]);
+    expect(
+      Object.values(MINIMAX_ENDPOINTS).every((endpoint) =>
+        endpoint.anthropicBaseUrl.endsWith('/anthropic'),
+      ),
+    ).toBe(true);
+    expect(MINIMAX_MODEL_CATALOG).toMatchObject([
+      {
+        modelId: 'MiniMax-M3',
+        contextWindow: 1_000_000,
+        pricingUsdPerMillionTokens: {
+          input: 0.6,
+          output: 2.4,
+          cacheRead: 0.12,
+          cacheWrite: null,
+        },
+        inputModalities: ['text', 'image', 'video'],
+        thinking: ['adaptive', 'disabled'],
+      },
+      {
+        modelId: 'MiniMax-M2.7',
+        contextWindow: 204_800,
+        inputModalities: ['text'],
+        thinking: ['always_on'],
+      },
+    ]);
+    expect(MINIMAX_MODEL_CATALOG[0]?.pricingTiersUsdPerMillionTokens).toHaveLength(4);
+    expect(MINIMAX_MODEL_CATALOG[1]?.pricingUsdPerMillionTokens.cacheWrite).toBe(0.375);
+  });
+
   it('parses a minimal v3 config', () => {
     const raw = {
       version: 3,
@@ -302,7 +355,7 @@ describe('config v3 schema', () => {
 });
 
 describe('migrateLegacyToV3', () => {
-  it('seeds three builtin providers from an empty v2', () => {
+  it('seeds all supported builtin providers from an empty v2', () => {
     const legacy = {
       version: 2 as const,
       provider: 'anthropic' as const,

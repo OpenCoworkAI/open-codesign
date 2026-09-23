@@ -281,6 +281,7 @@ Contract tests check loaded instructions, supported source examples, preference 
 - **Unified provider model** — Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
 - **One-click import and sign-in** — bring Claude Code / Codex API-key provider configs across, or sign in with ChatGPT subscription for Codex models
 - **Dynamic model picker** — every provider exposes its real model catalogue, not a hardcoded shortlist
+- **MiniMax support** - built-in MiniMax access with regional OpenAI-compatible and Anthropic-compatible endpoint guidance ([provider guide](./MINIMAX.md))
 
 ### Generation and editing
 - **Prompt → HTML or JSX/React component** prototype, rendered in a sandboxed iframe (vendored React 18 + Babel on-device)

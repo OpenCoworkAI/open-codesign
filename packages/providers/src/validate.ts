@@ -3,6 +3,7 @@ import {
   CodesignError,
   ERROR_CODES,
   isSupportedOnboardingProvider,
+  MINIMAX_ENDPOINTS,
   type SupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
 } from '@open-codesign/shared';
@@ -57,6 +58,15 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
         headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
       };
     }
+    case 'minimax': {
+      const root = baseUrl
+        ? normalizeValidateBaseUrl(baseUrl)
+        : normalizeValidateBaseUrl(MINIMAX_ENDPOINTS.global_en.openaiBaseUrl);
+      return {
+        url: `${root}/v1/models`,
+        headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+      };
+    }
     case 'ollama': {
       // Local Ollama — OpenAI-compat endpoint at /v1. No auth header; the
       // caller (renderer) may still pass a non-empty apiKey as a sentinel
@@ -97,7 +107,7 @@ export async function pingProvider(
 ): Promise<ValidateResult> {
   if (!isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
-      `Provider "${provider}" is not supported by the first-run provider shortcut. Supported: anthropic, openai, openrouter, ollama. Add custom providers in Settings, or use ChatGPT subscription sign-in for chatgpt-codex.`,
+      `Provider "${provider}" is not supported by the first-run provider shortcut. Supported: anthropic, openai, openrouter, minimax, ollama. Add custom providers in Settings, or use ChatGPT subscription sign-in for chatgpt-codex.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }

@@ -1,4 +1,4 @@
-import { CodesignError } from '@open-codesign/shared';
+import { CodesignError, MINIMAX_ENDPOINTS } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { pingProvider } from './validate';
 
@@ -125,6 +125,23 @@ describe('pingProvider', () => {
     });
     const result = await pingProvider('openai', 'sk-test');
     expect(result).toEqual({ ok: true, modelCount: 0 });
+  });
+
+  it('uses the configured global MiniMax OpenAI endpoint and Bearer auth', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toBe(`${MINIMAX_ENDPOINTS.global_en.openaiBaseUrl}/models`);
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['authorization']).toBe('Bearer minimax-test-key');
+      return new Response(
+        JSON.stringify({ data: [{ id: 'MiniMax-M3' }, { id: 'MiniMax-M2.7' }] }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+    });
+    const result = await pingProvider('minimax', 'minimax-test-key');
+    expect(result).toEqual({ ok: true, modelCount: 2 });
   });
 
   it('respects custom baseUrl without /v1 suffix', async () => {
