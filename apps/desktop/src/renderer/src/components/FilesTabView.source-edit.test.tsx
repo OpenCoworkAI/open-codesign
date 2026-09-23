@@ -129,6 +129,43 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe('FilesTab source edit integration', () => {
+  it('uses explicit source selection without instrumenting or trusting the preview', async () => {
+    inspect.mockResolvedValueOnce({
+      schemaVersion: 1,
+      status: 'rejected',
+      reason: 'unsafe-source',
+      message: 'Opaque execution',
+    });
+    await mount();
+    await toggle();
+    const fallback = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'canvas.sourceEdit.chooseSource',
+    );
+    expect(fallback).toBeDefined();
+    await act(async () => fallback?.click());
+    expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ selectionMode: 'source' }));
+    const select = container.querySelector('select');
+    expect(select).not.toBeNull();
+    await act(async () => {
+      if (!select) throw new Error('No source list');
+      select.value = target.id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(container.querySelector('textarea')?.value).toBe('Old');
+    await emit({ targetId: '9:30', sourceHash: hash, previewRevision: 'forged' });
+    expect(container.querySelector('textarea')?.value).toBe('Old');
+    expect(
+      vi.mocked(buildInteractivePreviewDocument).mock.calls.at(-1)?.[1]?.sourceEdit,
+    ).toBeUndefined();
+    await act(async () =>
+      container
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
+    expect(apply).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selectionMode: 'source', targetId: target.id }),
+    );
+  });
   it('keeps comment routing by default but never opens comments in source edit mode', async () => {
     await mount();
     await emit();

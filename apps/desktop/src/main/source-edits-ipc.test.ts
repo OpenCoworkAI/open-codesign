@@ -68,6 +68,48 @@ afterEach(async () => {
 });
 
 describe('deterministic source edits IPC', () => {
+  it('persists explicit source selection beside effects while retaining stale protection', async () => {
+    const content = original.replace(
+      'return <main>',
+      'React.useEffect(() => { document.title = "Page"; }, []); return <main>',
+    );
+    await writeFile(path.join(root, 'App.jsx'), content);
+    expect(await inspect(designId, 'App.jsx', content)).toMatchObject({
+      status: 'rejected',
+      reason: 'unsafe-source',
+    });
+    const result = SourceEditInspectResultV1.parse(
+      await invoke('inspect', {
+        schemaVersion: 1,
+        designId,
+        path: 'App.jsx',
+        expectedContent: content,
+        selectionMode: 'source',
+      }),
+    );
+    if (result.status !== 'ready') throw new Error(result.message);
+    const target = result.targets.find((item) => item.tagName === 'h1');
+    if (!target) throw new Error('Missing heading');
+    const input = {
+      schemaVersion: 1,
+      designId,
+      path: 'App.jsx',
+      selectionMode: 'source',
+      expectedSourceHash: result.sourceHash,
+      targetId: target.id,
+      previewRevision: 'source-list-1',
+      scope: 'source-definition',
+      operation: { kind: 'set-text', value: 'Source selected' },
+    };
+    expect(await invoke('apply', input)).toMatchObject({ status: 'applied' });
+    expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe(
+      content.replace('>Original<', '>{"Source selected"}<'),
+    );
+    expect(await invoke('apply', input)).toMatchObject({
+      status: 'rejected',
+      reason: 'stale-source',
+    });
+  });
   it('reads actual workspace, applies one AST patch and creates no snapshots', async () => {
     const input = await request();
     const result = SourceEditApplyResultV1.parse(await invoke('apply', input));

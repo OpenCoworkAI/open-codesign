@@ -8,6 +8,7 @@ import {
   type SourceEditPatch,
   type SourceEditRejectedV1,
   type SourceEditScope,
+  type SourceEditSelectionMode,
   SourceEditStyleProperty,
   type SourceEditTarget,
   type SourceEditUnsupported,
@@ -505,7 +506,11 @@ function isStateHandler(attribute: AstNode, bindings: ReturnType<typeof stateBin
   );
 }
 
-function analyze(path: string, source: string): Analysis | SourceEditRejectedV1 {
+function analyze(
+  path: string,
+  source: string,
+  selectionMode: SourceEditSelectionMode = 'preview',
+): Analysis | SourceEditRejectedV1 {
   if (!/\.(jsx|tsx)$/i.test(path))
     return reject('unsupported-path', 'Source editing requires a real JSX or TSX file.');
   let ast: AstNode;
@@ -783,7 +788,10 @@ function analyze(path: string, source: string): Analysis | SourceEditRejectedV1 
     )
       flag('unsafe-source', 'Member mutation is outside the static source ownership boundary.');
   });
-  if (unsafe) return unsafe;
+  // A source-list selection names an AST definition, not a live DOM node.
+  // Opaque execution prevents preview ownership claims but cannot change the
+  // exact literal span selected in the current, hash-checked source.
+  if (unsafe && selectionMode !== 'source') return unsafe;
 
   const allowed = new Set<number>();
   const excluded = new Map<number, SourceEditUnsupported>();
@@ -857,14 +865,18 @@ function analyze(path: string, source: string): Analysis | SourceEditRejectedV1 
  * - Pure inline state-setter handlers are supported; opaque/imperative handlers are not.
  * - Imports/exports, non-state hooks, global/DOM/ref mutation, reused entries,
  *   computed/shared styles and executable/customized hosts are unsupported.
+ * Explicit source-list mode retains the structural/field constraints but makes
+ * no live ownership claim, so opaque execution does not reject the whole file.
+ * Source-list results must never be used to instrument a selectable preview.
  * Dynamic children alone do not invalidate a static parent's own layout fields.
  * Scheduling/global rejection bounds this MVP; it is not a general JavaScript safety proof.
  */
 export function analyzeSourceEdit(input: {
   path: string;
   source: string;
+  selectionMode?: SourceEditSelectionMode | undefined;
 }): SourceEditInspectResultV1 {
-  const result = analyze(input.path, input.source);
+  const result = analyze(input.path, input.source, input.selectionMode);
   if ('status' in result) return result;
   return {
     schemaVersion: 1,
@@ -942,6 +954,7 @@ export function planSourceEdit(input: {
   targetId: string;
   operation: SourceEditOperation;
   scope: SourceEditScope;
+  selectionMode?: SourceEditSelectionMode | undefined;
 }): SourceEditApplyResultV1 {
   if (input.scope !== 'source-definition')
     return reject(
@@ -953,7 +966,7 @@ export function planSourceEdit(input: {
     return reject('invalid-operation', 'Only allowlisted literal operations are supported.');
   if (hash(input.source) !== input.expectedSourceHash)
     return reject('stale-source', 'The source changed; inspect the current file before editing.');
-  const analysis = analyze(input.path, input.source);
+  const analysis = analyze(input.path, input.source, input.selectionMode);
   if ('status' in analysis) return analysis;
   const located = analysis.targets.find(({ target }) => target.id === input.targetId);
   if (!located)

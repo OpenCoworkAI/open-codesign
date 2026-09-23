@@ -66,6 +66,10 @@
     "openInTab": "在新标签打开",
     "previewHint": "缩略预览 · 双击文件名或点击「在新标签打开」可在独立标签查看",
     "sourceEdit": {
+      "chooseSource": "从源码选择静态字段",
+      "sourceField": "源码字段",
+      "sourceHint": "选择源码中的字段进行修改。页面行为可能影响显示结果；此模式不支持预览点选。",
+      "noSourceFields": "没有可编辑的直接静态字段。",
       "toggle": "编辑源码",
       "title": "局部源码编辑",
       "close": "关闭源码编辑",

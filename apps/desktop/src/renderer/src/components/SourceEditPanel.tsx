@@ -10,6 +10,12 @@ export interface SourceEditPanelProps {
   message: string | null;
   onApply: (operation: SourceEditOperation) => Promise<void>;
   onClose: () => void;
+  sourceMode?: boolean;
+  canSelectSource?: boolean;
+  onSourceMode?: () => void;
+  sourceTargets?: SourceEditTarget[];
+  source?: string;
+  onSelectSource?: (id: string) => void;
 }
 
 export function sourceEditFieldLabel(
@@ -73,14 +79,21 @@ export function SourceEditPanel({
   message,
   onApply,
   onClose,
+  sourceMode = false,
+  canSelectSource = false,
+  onSourceMode,
+  sourceTargets = [],
+  source = '',
+  onSelectSource,
 }: SourceEditPanelProps) {
   const t = useT();
   const heading = useId();
+  const sourceSelect = useId();
   return (
     <aside
       aria-labelledby={heading}
       aria-busy={busy}
-      className="flex min-h-0 flex-col gap-[var(--space-3)] overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-4)] shadow-[var(--shadow-soft)]"
+      className="flex min-h-0 flex-1 flex-col gap-[var(--space-3)] overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-4)] shadow-[var(--shadow-soft)]"
     >
       <div className="flex items-center justify-between gap-[var(--space-2)]">
         <h3
@@ -118,7 +131,49 @@ export function SourceEditPanel({
           {t('common.loading')}
         </p>
       ) : null}
-      {!target && !busy ? (
+      {canSelectSource && !busy ? (
+        <button
+          type="button"
+          onClick={onSourceMode}
+          className="rounded-[var(--radius-sm)] border border-[var(--color-border)] p-[var(--space-2)] text-[var(--text-sm)]"
+        >
+          {t('canvas.sourceEdit.chooseSource')}
+        </button>
+      ) : null}
+      {sourceMode ? (
+        <div className="grid gap-[var(--space-2)] text-[var(--text-sm)]">
+          <p>{t('canvas.sourceEdit.sourceHint')}</p>
+          <label htmlFor={sourceSelect}>{t('canvas.sourceEdit.sourceField')}</label>
+          <select
+            id={sourceSelect}
+            value={target?.id ?? ''}
+            disabled={busy}
+            onChange={(event) => onSelectSource?.(event.target.value)}
+            className="min-w-0 w-full border border-[var(--color-border)] bg-[var(--color-background)] p-[var(--space-2)]"
+          >
+            <option value="">{t('canvas.sourceEdit.chooseSource')}</option>
+            {sourceTargets.map((item) => (
+              <option key={item.id} value={item.id}>
+                {source.slice(0, item.start).split('\n').length}: &lt;{item.tagName}&gt;{' '}
+                {item.editableFields
+                  .map((field) => field.value)
+                  .join(' · ')
+                  .replace(/\s+/g, ' ')
+                  .slice(0, 100)}
+              </option>
+            ))}
+          </select>
+          {!busy && sourceTargets.length === 0 ? (
+            <p>{t('canvas.sourceEdit.noSourceFields')}</p>
+          ) : null}
+          {target ? (
+            <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-all">
+              {source.slice(target.start, Math.min(target.end, target.start + 1000))}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
+      {!sourceMode && !canSelectSource && !target && !busy ? (
         <p className="m-0 text-[var(--text-sm)] text-[var(--color-text-muted)]">
           {t('canvas.sourceEdit.selectHint')}
         </p>

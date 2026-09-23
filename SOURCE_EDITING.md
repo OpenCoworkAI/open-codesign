@@ -9,17 +9,19 @@ Here, **deterministic** means that the same source and supported operation produ
 1. Open a design bound to a real local workspace.
 2. In the **Files** tab, open an integrated preview of an actual `.jsx` or `.tsx` workspace file.
 3. Choose **Edit source**. The displayed source must match the current workspace file before editing is enabled; a snapshot or fallback preview is not a writable source.
-4. Select an element in the preview. The panel identifies its source file and shows supported existing fields, or explains why a target or field is unsupported.
+4. Select an element in the preview. The panel identifies its source file and shows supported existing fields, or explains why a target or field is unsupported. If opaque execution prevents preview selection, choose **Choose a static source field**, then select by source line, native tag and current value. Review the displayed source fragment before saving.
 5. Change one field and use its **Save source definition** button.
 6. Check the refreshed preview and the source file. A save can reload the preview and reset in-memory component state; state-preserving HMR is not promised. Select again when the preview or source revision changes.
 
-The operation has **source-definition** scope. It changes a literal in the source, not a private copy of whichever DOM instance happened to be clicked. The first version deliberately refuses cases where its supported source boundary cannot be established.
+The operation has **source-definition** scope. It changes a literal in the source, not a private copy of whichever DOM instance happened to be clicked. Preview selection deliberately refuses cases where its supported source boundary cannot be established. Explicit source selection instead identifies a literal in the parsed source without claiming a mapping to a live DOM element; page behavior can still affect the rendered result.
+
+The source editor toolbar and panel reserve their own layout space outside the preview iframe, so they do not intercept clicks on artifact controls. The panel reduces the available preview width while open, which can trigger the artifact's responsive layout.
 
 Ordinary comment and tweak behavior remains separate. Tweaks are temporarily hidden while source editing is active so the two editing paths do not compete. Leaving a tab, file, or design suppresses late UI acknowledgements for the old view; it does **not** promise to undo a save that has already been dispatched to the main process. Generation in the same design or workspace disables source editing.
 
 ## Supported fields
 
-The initial boundary is a single auto-mounted `App` or `_App` script entry with directly owned native JSX elements and fragments. It is not an arbitrary imported React application.
+Both selection modes require one directly declared `App` or `_App` script entry with a direct JSX return and directly owned native JSX elements and fragments. Preview selection additionally requires the supported auto-mounted execution boundary. Explicit source selection permits effects, refs, opaque handlers and explicit mounting elsewhere in the source without asserting that a selected definition has a unique or unchanged rendered instance. It is not an arbitrary imported React application.
 
 | Field | Supported form |
 | --- | --- |
@@ -37,19 +39,21 @@ Directly owned `useState` state and supported pure inline state-setter handlers 
 
 Unsupported cases include:
 
-- Dynamic text or attribute expressions, mapped/repeated targets, reused entry definitions, and ambiguous source ownership.
+- Dynamic text or attribute expressions and mapped/repeated targets. Preview selection also refuses reused entry references and ambiguous runtime ownership.
 - Custom-component targets, component prop forwarding, computed or shared style objects, and unsupported spreads. Dynamic children do not necessarily prevent editing a static parent's own supported layout fields.
-- Import/export module syntax, refs, effect or other non-state hooks, DOM/global mutation, timers or other scheduling, reflection, and unknown or imperative handlers outside the supported pure setter form.
+- Import/export module syntax and unsupported entry structure in both modes. Preview selection additionally refuses refs, effect or other non-state hooks, DOM/global mutation, timers or other scheduling, reflection, and unknown or imperative handlers outside the supported pure setter form.
 - Runtime-control text in a proposed value, including certain preview/document/tweak markers, mount controls, or `App`/`_App` declaration patterns that the preview runtime currently recognizes in raw source.
 - Unsupported files, unavailable workspaces, hidden or escaping paths, symlinked child paths, hard-linked source files, stale source, and saves attempted during generation.
 
-Refusal is intentional. The editor does not silently fall back to DOM mutation, broad string replacement, whole-file regeneration, or an LLM request.
+Refusal is intentional. Switching to source selection is an explicit user action. It does not enable dynamic fields or indirect definitions, and the editor does not silently fall back to DOM mutation, broad string replacement, whole-file regeneration, or an LLM request.
 
 ## Source identity and preview metadata
 
 Inspection binds the exact displayed source to the workspace file and returns a SHA-256 source hash and source targets. Selection and save acknowledgements are also associated with a preview revision. The source hash and preview revision serve different purposes: source bytes determine the patch baseline; the preview revision prevents a late selection or acknowledgement from being presented as belonging to a different rendered view.
 
 Temporary preview instrumentation identifies source definitions for selection. Those markers are inserted only into the preview document, not saved into the workspace source. Ordinary exports do not add this source-edit provenance. Generated-page metadata, target IDs, and the preview revision are **not authorization**: the main process validates the request and independently reads and analyzes the current workspace source.
+
+In explicit source selection mode the preview is not instrumented, and preview selection messages cannot change the selected source field. The request carries `selectionMode: "source"`; omission retains the strict preview mode. Both inspection and save use the selected mode, while source hashes, field validation and atomic conflict checks remain mandatory. Source-mode analysis results must never be used as preview provenance. The revision still correlates save acknowledgements with the current editor context.
 
 For JSX/TSX, workspace reads preserve a UTF-8 BOM so preview content, offsets, hashes, and saved bytes remain aligned. Other text readers retain their existing decoding behavior; this does not change BOM handling for JSON files. Invalid UTF-8 source is rejected rather than silently transcoded.
 
@@ -74,6 +78,7 @@ If saving has committed but the refresh notification fails, the result remains *
 Relevant tests are kept alongside the implementation:
 
 - [AST support and refusal tests](apps/desktop/src/main/source-edit-engine.test.ts)
+- [Explicit source selection and execution-boundary tests](apps/desktop/src/main/source-edit-engine.source-selection.test.ts)
 - [Atomic commit and failure tests](apps/desktop/src/main/source-edit-atomic.test.ts)
 - [Main IPC, conflicts, and BOM round-trip tests](apps/desktop/src/main/source-edits-ipc.test.ts)
 - [Workspace reader compatibility tests](apps/desktop/src/main/workspace-reader.test.ts)
@@ -95,6 +100,8 @@ corepack pnpm --filter @open-codesign/runtime test
 These are test entry points, not a claim that a full browser or packaged Electron end-to-end run has passed on a particular platform. Unit tests and Node IPC fixtures do not replace real preview verification.
 
 In the existing desktop app, manually check a self-contained supported static sample with no model credentials or network access: compare the exact source diff, save, and verify the refreshed preview. Change the file externally between selection and save and verify a conflict leaves the external content intact. Check a BOM-prefixed JSX/TSX file, an unsupported mapped or dynamic target, switching tabs during a save, and an active generation. Confirm that no generation turn, undo/history UI, or persistent preview marker appears. A successful source edit may reset preview state; test that behavior rather than assuming HMR.
+
+Also check a script containing effects or explicit mounting: preview selection should remain refused, while explicitly choosing an eligible source field can save a static literal. Confirm the source-mode preview has no source-selection markers, exact before/after bytes differ only at the selected field, and edits survive a full application restart. Use actual mouse input to check artifact controls near the preview's top-right edge; DOM-triggered clicks cannot detect shell overlays intercepting the same screen coordinates.
 
 ## Parser dependency review
 

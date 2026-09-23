@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+// Source selection edits an explicitly chosen literal without trusting a rendered element.
+export const SourceEditSelectionMode = z.enum(['preview', 'source']);
+export type SourceEditSelectionMode = z.infer<typeof SourceEditSelectionMode>;
+
 export const SourceEditScope = z.literal('source-definition');
 export type SourceEditScope = z.infer<typeof SourceEditScope>;
 export const SourceEditAttributeName = z.enum(['title', 'placeholder', 'alt']);
@@ -74,6 +78,7 @@ export const SourceEditInspectRequestV1 = z
     designId: z.string().min(1),
     path: z.string().min(1),
     expectedContent: z.string(),
+    selectionMode: SourceEditSelectionMode.optional(),
   })
   .strict();
 export type SourceEditInspectRequestV1 = z.infer<typeof SourceEditInspectRequestV1>;
@@ -98,6 +103,7 @@ export const SourceEditApplyRequestV1 = z
     designId: z.string().min(1),
     path: z.string().min(1),
     expectedSourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    selectionMode: SourceEditSelectionMode.optional(),
     previewRevision: z.string().min(1),
     targetId: z.string().regex(/^\d+:\d+$/),
     operation: SourceEditOperation,

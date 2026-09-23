@@ -142,7 +142,11 @@ export function registerSourceEditsIpc(db: Database, getWin: () => BrowserWindow
             return rejected('stale-source', 'The preview source changed; reload before editing.');
           const { analyzeSourceEdit } = await import('./source-edit-engine');
           await source.validate();
-          return analyzeSourceEdit({ path: source.path, source: source.content });
+          return analyzeSourceEdit({
+            path: source.path,
+            source: source.content,
+            selectionMode: input.data.selectionMode,
+          });
         });
       } catch (error) {
         return failure(error);

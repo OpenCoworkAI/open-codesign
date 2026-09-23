@@ -66,6 +66,10 @@
     "openInTab": "Open in tab",
     "previewHint": "Thumbnail preview · double-click the file or use Open in tab for full view",
     "sourceEdit": {
+      "chooseSource": "Choose a static source field",
+      "sourceField": "Source field",
+      "sourceHint": "Choose a field in the source to edit. Page behavior may affect the rendered result; preview selection is unavailable in this mode.",
+      "noSourceFields": "No editable direct static fields.",
       "toggle": "Edit source",
       "title": "Local source edit",
       "close": "Close source editor",

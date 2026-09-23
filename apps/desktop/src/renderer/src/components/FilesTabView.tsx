@@ -1645,7 +1645,9 @@ export function WorkspaceFilePreview({
       }),
   });
   const previewInteractionMode = sourceEdit.active
-    ? 'comment'
+    ? sourceEdit.sourceMode
+      ? 'default'
+      : 'comment'
     : interactive
       ? interactionMode
       : 'default';
@@ -1920,80 +1922,98 @@ export function WorkspaceFilePreview({
   }
 
   return (
-    <div className="relative h-full min-h-0">
-      <iframe
-        key={srcDoc}
-        ref={iframeRef}
-        title={`design-preview-${path}`}
-        sandbox={INTERACTIVE_PREVIEW_SANDBOX}
-        srcDoc={srcDoc}
-        onLoad={() => {
-          const win = iframeRef.current?.contentWindow;
-          postModeToPreviewWindow(win, previewInteractionMode, pushIframeError);
-          if (
-            interactive &&
-            !sourceEdit.active &&
-            commentBubble &&
-            commentBubble.sourcePath === activePreviewSource?.path
-          ) {
-            postPinSelectorToPreviewWindow(win, commentBubble.selector, pushIframeError);
-          }
-        }}
-        className="w-full h-full bg-white border-0 block"
-      />
-      <div hidden={previewFullscreen}>
-        {interactive ? (
-          <div className="absolute right-[var(--space-3)] top-[var(--space-3)] z-10 flex max-h-[calc(100%_-_var(--space-6))] w-[min(100%,var(--size-menu-wide))] pointer-events-none [&>*]:pointer-events-auto flex-col items-end gap-[var(--space-2)]">
-            <button
-              type="button"
-              aria-pressed={sourceEdit.active}
-              disabled={!sourceEdit.eligible}
-              title={
-                sourceEdit.eligible
-                  ? t('canvas.sourceEdit.scope')
-                  : t('canvas.sourceEdit.unavailable')
+    <div className="relative flex h-full min-h-0 flex-col">
+      {interactive && !previewFullscreen ? (
+        <div className="flex shrink-0 justify-end border-b border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-1)]">
+          <button
+            type="button"
+            aria-pressed={sourceEdit.active}
+            disabled={!sourceEdit.eligible}
+            title={
+              sourceEdit.eligible
+                ? t('canvas.sourceEdit.scope')
+                : t('canvas.sourceEdit.unavailable')
+            }
+            onClick={() => {
+              useCodesignStore.getState().clearCanvasElement();
+              sourceEdit.toggle();
+            }}
+            className="inline-flex min-h-[var(--size-control-sm)] items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-sm)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
+          >
+            <MousePointer2 className="size-[var(--space-4)]" aria-hidden />
+            {t('canvas.sourceEdit.toggle')}
+          </button>
+        </div>
+      ) : null}
+      <div className="relative flex min-h-0 flex-1">
+        <iframe
+          key={srcDoc}
+          ref={iframeRef}
+          title={`design-preview-${path}`}
+          sandbox={INTERACTIVE_PREVIEW_SANDBOX}
+          srcDoc={srcDoc}
+          onLoad={() => {
+            const win = iframeRef.current?.contentWindow;
+            postModeToPreviewWindow(win, previewInteractionMode, pushIframeError);
+            if (
+              interactive &&
+              !sourceEdit.active &&
+              commentBubble &&
+              commentBubble.sourcePath === activePreviewSource?.path
+            ) {
+              postPinSelectorToPreviewWindow(win, commentBubble.selector, pushIframeError);
+            }
+          }}
+          className="min-w-0 flex-1 h-full bg-white border-0 block"
+        />
+        <div hidden={previewFullscreen} className="min-h-0 shrink-0 max-w-[45%]">
+          {interactive ? (
+            <div
+              className={
+                sourceEdit.active
+                  ? 'flex h-full min-h-0 w-[var(--size-menu-wide)] max-w-full flex-col'
+                  : undefined
               }
-              onClick={() => {
-                useCodesignStore.getState().clearCanvasElement();
-                sourceEdit.toggle();
-              }}
-              className="inline-flex min-h-[var(--size-control-sm)] items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-sm)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
             >
-              <MousePointer2 className="size-[var(--space-4)]" aria-hidden />
-              {t('canvas.sourceEdit.toggle')}
-            </button>
-            {sourceEdit.active && activePreviewSource ? (
-              <SourceEditPanel
-                key={`${sourceEdit.inspection?.previewRevision}:${sourceEdit.selection?.id ?? ''}`}
-                path={activePreviewSource.path}
-                target={sourceEdit.selection}
-                busy={sourceEdit.busy}
-                message={sourceEdit.message}
-                onApply={sourceEdit.apply}
-                onClose={sourceEdit.toggle}
-              />
-            ) : null}
-          </div>
-        ) : null}
-        {showTweakPanel && !sourceEdit.active ? (
-          <Suspense fallback={null}>
-            {activePreviewSource ? (
-              <TweakPanel
-                key={`${currentDesignId}:${activePreviewSource.path}`}
-                iframeRef={iframeRef}
-                source={activePreviewSource}
-                onPersist={(source) =>
-                  setPreviewSource({
-                    ...source,
-                    ...(activePreviewSource.workspaceDesignId
-                      ? { workspaceDesignId: activePreviewSource.workspaceDesignId }
-                      : {}),
-                  })
-                }
-              />
-            ) : null}
-          </Suspense>
-        ) : null}
+              {sourceEdit.active && activePreviewSource ? (
+                <SourceEditPanel
+                  key={`${sourceEdit.inspection?.previewRevision}:${sourceEdit.selection?.id ?? ''}`}
+                  path={activePreviewSource.path}
+                  target={sourceEdit.selection}
+                  busy={sourceEdit.busy}
+                  message={sourceEdit.message}
+                  onApply={sourceEdit.apply}
+                  onClose={sourceEdit.toggle}
+                  sourceMode={sourceEdit.sourceMode}
+                  canSelectSource={sourceEdit.canSelectSource}
+                  onSourceMode={sourceEdit.enableSourceSelection}
+                  sourceTargets={sourceEdit.sourceTargets}
+                  source={activePreviewSource.content}
+                  onSelectSource={sourceEdit.selectSource}
+                />
+              ) : null}
+            </div>
+          ) : null}
+          {showTweakPanel && !sourceEdit.active ? (
+            <Suspense fallback={null}>
+              {activePreviewSource ? (
+                <TweakPanel
+                  key={`${currentDesignId}:${activePreviewSource.path}`}
+                  iframeRef={iframeRef}
+                  source={activePreviewSource}
+                  onPersist={(source) =>
+                    setPreviewSource({
+                      ...source,
+                      ...(activePreviewSource.workspaceDesignId
+                        ? { workspaceDesignId: activePreviewSource.workspaceDesignId }
+                        : {}),
+                    })
+                  }
+                />
+              ) : null}
+            </Suspense>
+          ) : null}
+        </div>
       </div>
     </div>
   );

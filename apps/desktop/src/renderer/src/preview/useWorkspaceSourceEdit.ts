@@ -21,6 +21,8 @@ export function useWorkspaceSourceEdit(input: {
   onSaved: (warnings: string[]) => void;
 }) {
   const t = useT();
+  const [sourceMode, setSourceMode] = useState(false);
+  const [canSelectSource, setCanSelectSource] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -44,6 +46,7 @@ export function useWorkspaceSourceEdit(input: {
       allowed,
       enabled,
       refresh,
+      sourceMode,
     }),
     [
       input.designId,
@@ -54,6 +57,7 @@ export function useWorkspaceSourceEdit(input: {
       allowed,
       enabled,
       refresh,
+      sourceMode,
     ],
   );
   const current = useRef(context);
@@ -76,6 +80,7 @@ export function useWorkspaceSourceEdit(input: {
     setSelection(null);
     setInspected(null);
     setMessage(null);
+    setCanSelectSource(false);
     setBusy(false);
     if (!context.allowed) setEnabled(false);
     if (
@@ -98,12 +103,17 @@ export function useWorkspaceSourceEdit(input: {
         designId: context.designId,
         path: context.path,
         expectedContent: context.content,
+        ...(context.sourceMode ? { selectionMode: 'source' as const } : {}),
       },
       api.inspect,
     )
       .then((result) => {
         if (current.current !== context || epoch.current !== ticket) return;
         if (result.status === 'rejected') {
+          setCanSelectSource(
+            !context.sourceMode &&
+              ['unsafe-source', 'reused-entry', 'cross-file-source'].includes(result.reason),
+          );
           setMessage(`${result.message} (${result.reason})`);
           return;
         }
@@ -130,7 +140,7 @@ export function useWorkspaceSourceEdit(input: {
 
   const select = useCallback(
     (meta?: SourceEditSelection) => {
-      if (!active || applying.current) return;
+      if (!active || sourceMode || applying.current) return;
       setMessage(null);
       const target =
         inspection &&
@@ -142,7 +152,7 @@ export function useWorkspaceSourceEdit(input: {
       setSelection(target ?? null);
       if (!target) setMessage(t('canvas.sourceEdit.unsupportedSelection'));
     },
-    [active, inspection, t],
+    [active, inspection, sourceMode, t],
   );
 
   const apply = useCallback(
@@ -176,6 +186,7 @@ export function useWorkspaceSourceEdit(input: {
             targetId: selection.id,
             operation,
             scope: 'source-definition',
+            ...(context.sourceMode ? { selectionMode: 'source' as const } : {}),
           },
           api.apply,
         );
@@ -213,13 +224,34 @@ export function useWorkspaceSourceEdit(input: {
     eligible,
     busy,
     message,
-    inspection,
+    inspection: sourceMode ? null : inspection,
+    sourceMode,
+    canSelectSource,
+    enableSourceSelection: () => {
+      setSourceMode(true);
+      setSelection(null);
+    },
+    sourceTargets:
+      sourceMode && inspection
+        ? inspection.targets.filter((target) => target.editableFields.length > 0)
+        : [],
+    selectSource: (id: string) => {
+      if (!sourceMode || !inspection || applying.current) return;
+      setMessage(null);
+      setSelection(
+        inspection.targets.find((target) => target.id === id && target.editableFields.length > 0) ??
+          null,
+      );
+    },
     selection: inspection ? selection : null,
     toggle: () => {
       setEnabled((value) => !value);
+      setSourceMode(false);
       setSelection(null);
     },
-    clearSelection: () => setSelection(null),
+    clearSelection: () => {
+      if (!sourceMode) setSelection(null);
+    },
     select,
     apply,
   };
