@@ -127,6 +127,7 @@ describe('toProviderRows', () => {
     expect(anthropicRow?.maskedKey).toMatch(/sk-.*\*{3}/);
     expect(anthropicRow?.isActive).toBe(true);
     expect(anthropicRow?.hasKey).toBe(true);
+    expect(anthropicRow?.modelDiscoveryMode).toBe('models');
   });
 
   it('surfaces keyless providers as rows with hasKey:false', () => {
@@ -173,7 +174,35 @@ describe('toProviderRows', () => {
       label: 'Ollama (local)',
       hasKey: true,
       maskedKey: '',
+      modelDiscoveryMode: 'models',
     });
+  });
+
+  it('stamps infer-only from stored capabilities without remote listing', () => {
+    const cfg = makeCfg({
+      provider: 'glm',
+      modelPrimary: 'glm-4.6',
+      secrets: { glm: { ciphertext: 'enc' } },
+      providers: {
+        glm: {
+          id: 'glm',
+          name: 'GLM',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+          defaultModel: 'glm-4.6',
+          capabilities: {
+            supportsModelsEndpoint: false,
+            modelDiscoveryMode: 'infer-only',
+          },
+        },
+      },
+    });
+
+    const rows = toProviderRows(cfg, () => 'sk-test-token-1234567890');
+    const glmRow = rows.find((row) => row.provider === 'glm');
+    expect(glmRow?.modelDiscoveryMode).toBe('infer-only');
+    expect(glmRow?.modelsHint).toBeUndefined();
   });
 });
 

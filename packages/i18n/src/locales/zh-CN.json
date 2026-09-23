@@ -499,6 +499,7 @@
         "discoveryFailed": "无法自动发现模型",
         "test": "测试连接",
         "testOk": "正常 — 共 {{count}} 个模型",
+        "testOkNoListing": "没有模型列表 — 请手动输入模型 ID。推理接口仍可工作。",
         "save": "保存并继续",
         "saveEdit": "保存修改"
       },
@@ -591,7 +592,14 @@
         "reasoningSaved": "已保存推理深度",
         "reasoningSaveFailed": "保存推理深度失败",
         "connectionOk": "连接正常",
+        "connectionOkDegraded": "已连接 — 无法列出模型，但推理接口可用",
         "connectionFailed": "连接失败"
+      },
+      "discovery": {
+        "manualHint": "此服务商需要手动输入模型 ID。",
+        "inferOnlyHint": "此服务商不提供模型列表 — 请输入模型 ID。推理接口仍可工作。",
+        "staticHint": "此服务商的已知模型。仍可手动输入其他 ID。",
+        "enterModelId": "model-id"
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
@@ -1098,6 +1106,7 @@
       "corsError": "CORS 跨域错误（主进程中不应出现此错误，这是一个 Bug）。",
       "sslError": "SSL / 证书错误（自签名或私有 CA 证书？）。可在「设置 → 服务商 → 该条目 → 禁用 TLS 校验」启用对可信内网端点的连接。",
       "endpointNotFound": "Base URL 已包含版本路径，但 Provider 没有暴露这个接口路径。",
+      "modelsListingNotApplicable": "此服务商不提供模型列表接口。这是预期行为 — 请输入模型 ID 并通过推理验证，不要把缺少 /models 当成硬失败。",
       "gatewayIncompatible": "网关接受了连接但没有实现该 Provider 的 API。尝试切换 wire（例如改为 openai-chat）。",
       "gatewayWafBlocked": "网关或反代在请求到达模型前拦截了生成请求。测试连接可能仍然通过，因为它只探测 /models 端点。",
       "openaiResponsesMisconfigured": "端点拒绝了请求格式。wire 可能配错了——尝试切换到 openai-chat。",

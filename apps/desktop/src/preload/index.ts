@@ -22,6 +22,7 @@ import type {
   ModelRef,
   OnboardingState,
   PreviewMode,
+  ProviderModelDiscoveryMode,
   ReasoningLevel,
   ReportEventInput,
   ReportEventResult,
@@ -215,6 +216,8 @@ export interface ProviderRow {
    *  Built-in providers force-ignore this flag at runtime; only surfaced
    *  for custom/imported providers. See #229. */
   tlsRejectUnauthorized?: boolean;
+  modelDiscoveryMode: ProviderModelDiscoveryMode;
+  modelsHint?: string[];
   error?: 'decryption_failed' | string;
 }
 
@@ -581,6 +584,7 @@ const api = {
       queryParams?: Record<string, string>;
       envKey?: string;
       tlsRejectUnauthorized?: boolean;
+      modelDiscoveryMode?: ProviderModelDiscoveryMode;
       setAsActive: boolean;
     }) => ipcRenderer.invoke('config:v1:add-provider', input) as Promise<OnboardingState>,
     updateProvider: (input: {
@@ -601,6 +605,7 @@ const api = {
       /** Per-provider TLS verification opt-out (#229). Omit to leave
        *  untouched; `false`/`true` writes the field through. */
       tlsRejectUnauthorized?: boolean;
+      modelDiscoveryMode?: ProviderModelDiscoveryMode;
     }) => ipcRenderer.invoke('config:v1:update-provider', input) as Promise<OnboardingState>,
     removeProvider: (id: string) =>
       ipcRenderer.invoke('config:v1:remove-provider', id) as Promise<OnboardingState>,
