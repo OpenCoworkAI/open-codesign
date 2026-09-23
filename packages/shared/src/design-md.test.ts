@@ -65,6 +65,63 @@ Do use restraint. Don't use decorative gradients.
 `;
 
 describe('Google DESIGN.md helpers', () => {
+  it('preserves string component extensions with warnings per the upstream consumer contract', () => {
+    const raw = VALID_DESIGN_MD.replace(
+      '    padding: 12px',
+      '    padding: 12px\n    minHeight: 44px\n    borderRadius: 16px',
+    );
+    const findings = validateDesignMd(raw);
+    expect(findings).toEqual([
+      expect.objectContaining({ severity: 'warning', path: 'components.button-primary.minHeight' }),
+      expect.objectContaining({
+        severity: 'warning',
+        path: 'components.button-primary.borderRadius',
+      }),
+    ]);
+    expect(parseDesignMd(raw).frontmatter['components']).toMatchObject({
+      'button-primary': { minHeight: '44px', borderRadius: '16px' },
+    });
+    expect(formatDesignMdForPrompt(raw)).toContain('minHeight: 44px');
+  });
+
+  it.each([
+    '44',
+    '{ value: 44px }',
+    '[44px]',
+    'null',
+  ])('keeps non-string component extensions blocking: %s', (value) => {
+    const findings = validateDesignMd(
+      VALID_DESIGN_MD.replace('    padding: 12px', `    minHeight: ${value}`),
+    );
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        severity: 'error',
+        path: 'components.button-primary.minHeight',
+        message: 'Expected a string or token reference',
+      }),
+    );
+  });
+
+  it('gives concrete object repair shapes instead of just naming rejected types', () => {
+    const findings = validateDesignMd(`---
+name: Example
+typography:
+  body: system-ui
+components:
+  button: comfortable touch target
+---`);
+    expect(findings).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        message: expect.stringContaining('fontFamily: "system-ui"'),
+      }),
+      expect.objectContaining({
+        severity: 'error',
+        message: expect.stringContaining('rounded: "8px"'),
+      }),
+    ]);
+  });
+
   it('parses and validates the Google README-style format', () => {
     const parsed = parseDesignMd(VALID_DESIGN_MD);
     expect(parsed.frontmatter['name']).toBe('Heritage');

@@ -16,10 +16,19 @@
  * the runtime's iframe HTML builder.
  */
 
-export const OVERLAY_SCRIPT = `(function() {
+import {
+  isSourceEditSelection,
+  SOURCE_EDIT_ATTRIBUTE,
+  type SourceEditOverlayContext,
+  type SourceEditSelection,
+} from './source-edit-instrumentation';
+
+export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): string {
+  return `(function() {
   'use strict';
   var hovered = null;
   var pinned = null;
+  var originalOutlines = new WeakMap();
   var warned = Object.create(null);
   function warnOnce(key, err) {
     if (warned[key]) return;
@@ -27,6 +36,29 @@ export const OVERLAY_SCRIPT = `(function() {
     try { console.warn('[overlay] ' + key, err); } catch (_) { /* noop */ }
   }
   var currentMode = 'default';
+  var sourceEditContext = ${JSON.stringify(sourceEdit ?? null).replaceAll('<', '\\u003c')};
+  function sourceEditSelection(el) {
+    if (!sourceEditContext || !el || typeof el.getAttribute !== 'function') return null;
+    var marker = el.getAttribute('${SOURCE_EDIT_ATTRIBUTE}');
+    var prefix = sourceEditContext.previewRevision + ':';
+    if (typeof marker !== 'string' || marker.slice(0, prefix.length) !== prefix) return null;
+    var id = marker.slice(prefix.length);
+    if (!Object.prototype.hasOwnProperty.call(sourceEditContext.targets, id)) return null;
+    if (String(el.tagName).toLowerCase() !== sourceEditContext.targets[id].toLowerCase()) return null;
+    // Authored code can forge same-frame DOM and messages; main must revalidate the source.
+    return { targetId: id, sourceHash: sourceEditContext.sourceHash, previewRevision: sourceEditContext.previewRevision };
+  }
+
+  window.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape' || e.isComposing || e.keyCode === 229) return;
+    // Defer until artifact dialogs and other window listeners can consume Escape.
+    queueMicrotask(function() {
+      if (e.defaultPrevented || e.cancelBubble) return;
+      try {
+        window.parent.postMessage({ __codesign: true, type: 'PREVIEW_ESCAPE' }, '*');
+      } catch (err) { warnOnce('postMessage PREVIEW_ESCAPE failed', err); }
+    });
+  });
 
   var watchedSelectors = [];
   var rectsFrameHandle = 0;
@@ -34,6 +66,7 @@ export const OVERLAY_SCRIPT = `(function() {
   function resolveBodyRelativePath(sel) {
     var parts = String(sel || '').slice(1).split('/');
     var current = document.body;
+    if (sel === '/') return current;
     if (!current || !parts.length) return null;
     for (var i = 0; i < parts.length; i++) {
       var match = /^([a-zA-Z][a-zA-Z0-9-]*)\\[(\\d+)\\]$/.exec(parts[i]);
@@ -45,7 +78,7 @@ export const OVERLAY_SCRIPT = `(function() {
       var next = null;
       for (var j = 0; j < current.children.length; j++) {
         var child = current.children[j];
-        if (child && child.tagName === tag) {
+        if (child && String(child.tagName).toUpperCase() === tag) {
           seen++;
           if (seen === targetIndex) {
             next = child;
@@ -61,6 +94,7 @@ export const OVERLAY_SCRIPT = `(function() {
 
   function resolveSelector(sel) {
     if (!sel || typeof sel !== 'string') return null;
+    if (sel === '/') return document.body;
     try {
       var c = sel.charAt(0);
       if (c === '#' || c === '[' || c === '.') return document.querySelector(sel);
@@ -75,19 +109,26 @@ export const OVERLAY_SCRIPT = `(function() {
 
   function measureAndPostRects() {
     rectsFrameHandle = 0;
+    if (pinned && (pinned.isConnected === false || (pinned.getClientRects && !pinned.getClientRects().length))) {
+      clearHover();
+      clearPinned();
+      try {
+        window.parent.postMessage({ __codesign: true, type: 'ELEMENT_SELECTION_CLEARED' }, '*');
+      } catch (err) { warnOnce('postMessage ELEMENT_SELECTION_CLEARED failed', err); }
+    }
     if (!watchedSelectors.length) return;
     var entries = [];
     for (var i = 0; i < watchedSelectors.length; i++) {
       var sel = watchedSelectors[i];
       var el = resolveSelector(sel);
       if (!el || !el.getBoundingClientRect) continue;
+      if (el.getClientRects && !el.getClientRects().length) continue;
       var r = el.getBoundingClientRect();
       entries.push({
         selector: sel,
         rect: { top: r.top, left: r.left, width: r.width, height: r.height }
       });
     }
-    if (!entries.length) return;
     try {
       window.parent.postMessage({
         __codesign: true,
@@ -98,6 +139,7 @@ export const OVERLAY_SCRIPT = `(function() {
   }
 
   function scheduleRectsBroadcast() {
+    if (!pinned && !watchedSelectors.length) return;
     if (rectsFrameHandle) return;
     try {
       rectsFrameHandle = window.requestAnimationFrame(measureAndPostRects);
@@ -109,39 +151,59 @@ export const OVERLAY_SCRIPT = `(function() {
   var HOVER_OUTLINE = '2px solid #c96442';
   var PINNED_OUTLINE = '2.5px solid #b5441a';
 
+  function setOutline(el, value) {
+    if (!el || !el.style) return;
+    if (!originalOutlines.has(el)) originalOutlines.set(el, el.style.outline || '');
+    el.style.outline = value;
+  }
+  function restoreOutline(el) {
+    if (!el || !el.style || !originalOutlines.has(el)) return;
+    el.style.outline = originalOutlines.get(el);
+    originalOutlines.delete(el);
+    if (el.getAttribute && el.getAttribute('style') === '') el.removeAttribute('style');
+  }
+
   function clearHover() {
     // Don't clear if this element is pinned — pinned takes precedence.
     if (hovered && hovered !== pinned) {
-      try { hovered.style.outline = ''; } catch (_) {}
+      try { restoreOutline(hovered); } catch (_) {}
     }
     hovered = null;
   }
 
   function clearPinned() {
     if (pinned) {
-      try { pinned.style.outline = ''; } catch (_) {}
+      try { restoreOutline(pinned); } catch (_) {}
     }
     pinned = null;
   }
 
-  function pinElement(el, selector) {
+  function pinElement(el, selector, scroll) {
     if (!el || !el.style) return;
+    var alreadyPinned = pinned === el;
     if (pinned && pinned !== el) {
-      try { pinned.style.outline = ''; } catch (_) {}
+      try { restoreOutline(pinned); } catch (_) {}
     }
     pinned = el;
-    try { el.style.outline = PINNED_OUTLINE; } catch (_) {}
+    try { setOutline(el, PINNED_OUTLINE); } catch (_) {}
     if (selector && watchedSelectors.indexOf(selector) === -1) watchedSelectors.push(selector);
     try {
-      if (el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+      if (scroll !== false && !alreadyPinned && el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
     } catch (_) { /* noop */ }
     scheduleRectsBroadcast();
   }
 
 
   function getXPath(el) {
-    if (el.dataset && el.dataset.codesignId) return '[data-codesign-id="' + el.dataset.codesignId + '"]';
-    if (el.id) return '#' + el.id;
+    var candidates = [];
+    if (window.CSS && window.CSS.escape) {
+      if (el.dataset && el.dataset.codesignId) candidates.push('[data-codesign-id="' + window.CSS.escape(el.dataset.codesignId) + '"]');
+      if (el.id) candidates.push('#' + window.CSS.escape(el.id));
+    }
+    for (var c = 0; c < candidates.length; c++) {
+      var matches = document.querySelectorAll(candidates[c]);
+      if (matches.length === 1 && matches[0] === el) return candidates[c];
+    }
     var parts = [];
     while (el && el.nodeType === 1 && el !== document.body) {
       var idx = 1;
@@ -157,11 +219,11 @@ export const OVERLAY_SCRIPT = `(function() {
     if (currentMode !== 'comment') return;
     // Don't override pinned outline on hover-in of a different element.
     if (hovered && hovered !== pinned) {
-      try { hovered.style.outline = ''; } catch (_) {}
+      try { restoreOutline(hovered); } catch (_) {}
     }
     hovered = e.target;
     if (hovered && hovered !== pinned) {
-      try { hovered.style.outline = HOVER_OUTLINE; } catch (_) {}
+      try { setOutline(hovered, HOVER_OUTLINE); } catch (_) {}
     }
   }
   function onMouseOut() {
@@ -179,23 +241,29 @@ export const OVERLAY_SCRIPT = `(function() {
       var selector = getXPath(el);
       // Auto-watch the freshly-pinned element so scroll/resize immediately
       // keep its rect live, without waiting for a parent→iframe round-trip.
-      pinElement(el, selector);
+      clearHover();
+      clearPinned();
+      var selectedHtml = (el.outerHTML || '').slice(0, 800);
       var parentHtml = '';
       try {
         if (el.parentElement && el.parentElement.outerHTML) {
           parentHtml = String(el.parentElement.outerHTML).slice(0, 600);
         }
       } catch (_) { /* parent inaccessible — leave blank */ }
+      pinElement(el, selector, false);
       try {
-        window.parent.postMessage({
+        var selection = {
           __codesign: true,
           type: 'ELEMENT_SELECTED',
           selector: selector,
           tag: el.tagName.toLowerCase(),
-          outerHTML: (el.outerHTML || '').slice(0, 800),
+          outerHTML: selectedHtml,
           parentOuterHTML: parentHtml,
           rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
-        }, '*');
+        };
+        var provenance = sourceEditSelection(el);
+        if (provenance) selection.sourceEdit = provenance;
+        window.parent.postMessage(selection, '*');
       } catch (err) { console.warn('[overlay] postMessage ELEMENT_SELECTED failed:', err); }
       return;
     }
@@ -210,9 +278,15 @@ export const OVERLAY_SCRIPT = `(function() {
       // Allow hash-jump ONLY when it resolves to an existing element on page.
       if (href.charAt(0) === '#' && href.length > 1) {
         var id = href.slice(1);
+        try { id = decodeURIComponent(id); } catch (_) {}
         var target = null;
         try { target = document.getElementById(id); } catch (_) {}
-        if (target) return; // let the browser scroll
+        if (target) {
+          // A workspace base URL turns even #fragment links into document navigation.
+          e.preventDefault();
+          target.scrollIntoView();
+          return;
+        }
       }
       e.preventDefault();
       e.stopPropagation();
@@ -327,6 +401,10 @@ export const OVERLAY_SCRIPT = `(function() {
     }
   }
   reattach();
+  if (window.MutationObserver && document.body) {
+    var observer = new window.MutationObserver(scheduleRectsBroadcast);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden'] });
+  }
   try {
     try { clearInterval(window.__cs_reattach_interval); } catch (_) {}
     window.__cs_reattach_interval = setInterval(reattach, 200);
@@ -359,10 +437,14 @@ export const OVERLAY_SCRIPT = `(function() {
     }
   } catch (err) { try { console.warn('[overlay] navguard install failed:', err); } catch (_) {} }
 })();`;
+}
+
+export const OVERLAY_SCRIPT = buildOverlayScript();
 
 export interface OverlayMessage {
   __codesign: true;
   type: 'ELEMENT_SELECTED';
+  sourceEdit?: SourceEditSelection;
   selector: string;
   tag: string;
   outerHTML: string;
@@ -373,11 +455,40 @@ export interface OverlayMessage {
 }
 
 export function isOverlayMessage(data: unknown): data is OverlayMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const d = data as Partial<OverlayMessage>;
   return (
-    typeof data === 'object' &&
-    data !== null &&
-    (data as { __codesign?: boolean }).__codesign === true &&
-    (data as { type?: string }).type === 'ELEMENT_SELECTED'
+    d.__codesign === true &&
+    d.type === 'ELEMENT_SELECTED' &&
+    (d.sourceEdit === undefined || isSourceEditSelection(d.sourceEdit)) &&
+    typeof d.selector === 'string' &&
+    d.selector.length > 0 &&
+    d.selector.length <= 8192 &&
+    typeof d.tag === 'string' &&
+    d.tag.length > 0 &&
+    d.tag.length <= 128 &&
+    typeof d.outerHTML === 'string' &&
+    d.outerHTML.length <= 800 &&
+    (d.parentOuterHTML === undefined ||
+      (typeof d.parentOuterHTML === 'string' && d.parentOuterHTML.length <= 600)) &&
+    isElementRect(d.rect)
+  );
+}
+
+function isElementRect(rect: unknown): rect is OverlayMessage['rect'] {
+  if (typeof rect !== 'object' || rect === null) return false;
+  const r = rect as Partial<OverlayMessage['rect']>;
+  return (
+    typeof r.top === 'number' &&
+    Number.isFinite(r.top) &&
+    typeof r.left === 'number' &&
+    Number.isFinite(r.left) &&
+    typeof r.width === 'number' &&
+    Number.isFinite(r.width) &&
+    r.width >= 0 &&
+    typeof r.height === 'number' &&
+    Number.isFinite(r.height) &&
+    r.height >= 0
   );
 }
 
@@ -407,17 +518,7 @@ export function isElementRectsMessage(data: unknown): data is ElementRectsMessag
     if (typeof e !== 'object' || e === null) return false;
     const entry = e as { selector?: unknown; rect?: unknown };
     if (typeof entry.selector !== 'string') return false;
-    const r = entry.rect as { top?: unknown; left?: unknown; width?: unknown; height?: unknown };
-    if (
-      typeof r !== 'object' ||
-      r === null ||
-      typeof r.top !== 'number' ||
-      typeof r.left !== 'number' ||
-      typeof r.width !== 'number' ||
-      typeof r.height !== 'number'
-    ) {
-      return false;
-    }
+    if (!isElementRect(entry.rect)) return false;
   }
   return true;
 }

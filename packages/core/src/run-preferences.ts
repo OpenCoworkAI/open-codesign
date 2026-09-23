@@ -32,7 +32,7 @@ export const DEFAULT_RUN_PREFERENCES: DesignRunPreferencesV1 = {
 };
 
 export const RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT = [
-  'You route Open CoDesign run preferences and design natural clarification questions from semantic intent.',
+  'You route Open CoDesign capability preferences from semantic intent. You are not an interview stage.',
   'Output ONLY valid JSON. No markdown.',
   '',
   'Return shape:',
@@ -43,29 +43,20 @@ export const RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT = [
   '    "reusableSystem": "yes" | "no" | "auto",',
   '    "visualDirection"?: "editorial" | "professional" | "bold" | "custom",',
   '    "routing": { "<field>": { "provenance": "explicit" | "inferred" | "default", "confidence": "high" | "medium" | "low", "reason"?: string } }',
-  '  },',
-  '  "needsClarification": boolean,',
-  '  "clarificationRationale"?: string,',
-  '  "clarificationQuestions"?: AskInput["questions"]',
+  '  }',
   '}',
-  '',
-  'Allowed clarification question shapes:',
-  '- {"id": string, "type": "text-options", "prompt": string, "options": string[], "multi"?: boolean}',
-  '- {"id": string, "type": "freeform", "prompt": string, "placeholder"?: string, "multiline"?: boolean}',
   '',
   'Rules:',
   '- Use explicit only when the user clearly asked for or refused a capability.',
   '- Use inferred for likely intent from task context; use default for no evidence.',
   '- Prefer auto when unsure; do not over-route.',
-  '- Ask clarification only for high-impact ambiguity that would materially change this run.',
-  '- Never ask generic setup questions just because artifact type or visual style is missing.',
-  '- Do not ask clarification for operational requests such as reviewing, debugging, inspecting files, explaining current state, or making a narrow revision.',
-  '- When the prompt is actionable, infer safely and let the agent build; the user can revise cheaply later.',
-  '- If you ask, write questions in the same language as the user prompt and make every option specific to the user scenario.',
-  '- Prefer 1 question. Use 2 only when two independent decisions materially change the first pass. Never return more than 2.',
-  '- Avoid options like "professional", "editorial", "bold", "custom" unless those words came from the user. Use concrete phrases instead.',
-  '- Each question must be short enough for a narrow chat sidebar and must not contain newlines.',
-  '- clarificationRationale, when present, must be one short same-language sentence explaining why the answer matters now.',
+  '- Do not generate questions or block generation. Missing visual direction or optional capability details can remain auto.',
+  '- The main agent reads available context and handles genuinely blocking facts or explicit ask-first/interview requests through its ask tool.',
+  '- Preserve explicit preferences and prior answers unless the current request changes them. Revisions and decompose follow-ups do not start a new interview.',
+  '- Routing a capability is not permission to spend money, install, publish, or access restricted resources; existing authorization gates still apply.',
+  '- workspaceState.fileInventory.paths lists known existing workspace-relative files, not their contents. hasSource refers to a generated app source, not reference inputs: a document-only workspace can already contain all required inputs.',
+  '- The file inventory is bounded and non-exhaustive; truncated or unlisted means unknown, not proven absent. Never ask the user to re-upload listed files or infer missing inputs from hasSource=false. Let the agent inspect local files with its existing tools before asking for genuinely missing references.',
+  '- hasDesignMd/hasDesignSystem indicates existing design guidance, including workspace DESIGN.md; do not request a replacement just because there is no App.jsx yet.',
 ].join('\n');
 
 interface RunPreferenceRouterModelInput {
@@ -91,6 +82,7 @@ export interface RouteRunPreferencesInput extends RunPreferenceRouterModelInput 
 
 export interface RouteRunPreferencesResult {
   preferences: DesignRunPreferencesV1;
+  /** Legacy result field; the live preference router no longer starts interviews. */
   needsClarification: boolean;
   clarificationRationale?: string;
   clarificationQuestions?: AskInput['questions'];
@@ -323,7 +315,10 @@ export async function routeRunPreferences(
         ...(input.wire !== undefined ? { wire: input.wire } : {}),
       },
     );
-    return runPreferencesFromJson(result.content, fallback);
+    return {
+      preferences: runPreferencesFromJson(result.content, fallback).preferences,
+      needsClarification: false,
+    };
   } catch (err) {
     log.warn('[run-preferences-router] fail', {
       message: err instanceof Error ? err.message : String(err),

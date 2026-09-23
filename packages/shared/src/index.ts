@@ -1,5 +1,17 @@
 import { z } from 'zod';
 
+export {
+  ActiveRunMessageInputV1,
+  ActiveRunMessageV1,
+  ListActiveMessagesInputV1,
+} from './active-messages';
+export { AskCancelledV1 } from './ask';
+export {
+  CommentApplyResultV1,
+  CommentContentExpectations,
+  commentContentFingerprint,
+} from './comment-content';
+
 export const ProviderId = z.enum([
   'anthropic',
   'openai',
@@ -35,7 +47,9 @@ export {
   parseDesignMd,
   validateDesignMd,
 } from './design-md';
+export * from './source-edits';
 export { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from './source-entries';
+export { inspectTweakSource, type TweakSourceState } from './tweak-source';
 
 export const DesignParam = z.discriminatedUnion('type', [
   z.object({
@@ -164,6 +178,7 @@ export type ElementSelectionRect = z.infer<typeof ElementSelectionRect>;
 
 export const SelectedElement = z
   .object({
+    sourcePath: z.string().min(1).optional(),
     selector: z.string().min(1),
     tag: z.string().min(1),
     outerHTML: z.string(),
@@ -603,3 +618,5 @@ export {
   replaceEditmodeBlock,
   replaceTweakSchema,
 } from './editmode';
+
+export * from './web-research';

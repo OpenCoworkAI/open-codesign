@@ -771,6 +771,7 @@ export function ModelsTab() {
             defaultModel: editingRow.defaultModel,
             builtin: editingRow.builtin,
             lockEndpoint: editingRow.builtin,
+            requiresApiKey: editingRow.requiresApiKey !== false,
             ...(editingRow.maskedKey.length > 0 ? { keyMask: editingRow.maskedKey } : {}),
             ...(editingRow.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
           }}

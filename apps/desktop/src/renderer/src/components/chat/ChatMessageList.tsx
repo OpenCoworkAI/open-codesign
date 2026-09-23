@@ -3,6 +3,7 @@ import type { ChatMessageRow, ChatToolCallPayload, ChatUserPayload } from '@open
 import { FileText } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { AssistantText } from './AssistantText';
+import { ErrorDetails } from './ErrorDetails';
 import { UserMessage } from './UserMessage';
 import { PreparingActivity, WorkingCard } from './WorkingCard';
 
@@ -142,7 +143,7 @@ export function ChatMessageList({
         key: `err-${msg.seq}-${items.length}`,
         node: (
           <div className="rounded-[var(--radius-md)] border border-[var(--color-error)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-2)] text-[12.5px] font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-primary)] break-all whitespace-pre-wrap">
-            {p?.message ?? t('errors.unknown')}
+            <ErrorDetails message={p?.message ?? t('errors.unknown')} />
           </div>
         ),
       });

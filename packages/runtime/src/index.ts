@@ -27,20 +27,27 @@ import IOS_FRAME_JSX from '../vendor/ios-frame.jsx?raw';
 import REACT_UMD from '../vendor/react.umd.js?raw';
 import REACT_DOM_UMD from '../vendor/react-dom.umd.js?raw';
 
-import { OVERLAY_SCRIPT } from './overlay';
+import { bindEditmodeTokensToRuntime } from './editmode-runtime';
+import { buildOverlayScript, OVERLAY_SCRIPT } from './overlay';
+import {
+  instrumentSourceForEditing,
+  type SourceEditOverlayContext,
+  type SourceEditPreviewOptions,
+} from './source-edit-instrumentation';
 import { TWEAKS_BRIDGE_LISTENER, TWEAKS_BRIDGE_SETUP } from './tweaks-bridge';
 
 export type { IframeErrorMessage } from './iframe-errors';
 export { isIframeErrorMessage } from './iframe-errors';
 export type { ElementRectsMessage, OverlayMessage } from './overlay';
 export { isElementRectsMessage, isOverlayMessage, OVERLAY_SCRIPT } from './overlay';
+export type { SourceEditPreviewOptions, SourceEditSelection } from './source-edit-instrumentation';
+export { isTweakCompatibilityNotice } from './tweaks-bridge';
 
 const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
 const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
 const OVERLAY_MARKER = '<!-- CODESIGN_OVERLAY_SCRIPT -->';
 const JSX_RUNTIME_MARKER = '<!-- CODESIGN_JSX_RUNTIME -->';
 const STANDALONE_RUNTIME_MARKER = '<!-- CODESIGN_STANDALONE_RUNTIME -->';
-const EDITMODE_MARKER_RE = /\/\*\s*EDITMODE-BEGIN\s*\*\/[\s\S]*?\/\*\s*EDITMODE-END\s*\*\//g;
 export type RenderableSourceKind = 'html' | 'jsx' | 'tsx' | 'unknown';
 
 export interface BuildPreviewDocumentOptions {
@@ -48,6 +55,10 @@ export interface BuildPreviewDocumentOptions {
   path?: string | undefined;
   /** Optional absolute file:// base URL so relative assets resolve in srcdoc/data URLs. */
   baseHref?: string | undefined;
+}
+
+export interface BuildInteractivePreviewDocumentOptions extends BuildPreviewDocumentOptions {
+  sourceEdit?: SourceEditPreviewOptions | undefined;
 }
 
 function extensionKind(path: string | undefined): RenderableSourceKind {
@@ -226,10 +237,9 @@ export function requiresPreviewScripts(source: string, path?: string | undefined
 }
 
 function escapeForScriptLiteral(jsx: string): string {
-  // JSON.stringify handles quotes/newlines; the </script> escape prevents the
-  // outer <script> from being closed early if the agent's source happens to
-  // contain that literal string.
-  return JSON.stringify(jsx).split('</script>').join('<\\/script>');
+  // HTML parses script terminators case-insensitively, before JavaScript strings.
+  // Escape every opening delimiter in the preview/export copy, not the source file.
+  return JSON.stringify(jsx).replaceAll('<', '\\u003c');
 }
 
 function escapeHtmlAttr(value: string): string {
@@ -242,6 +252,36 @@ function escapeHtmlAttr(value: string): string {
 
 function baseTag(baseHref: string | undefined): string {
   return baseHref ? `<base href="${escapeHtmlAttr(baseHref)}" />\n` : '';
+}
+
+function runtimeFontLinks(source: string): string {
+  const families = [
+    {
+      pattern: /(?<![\w-])Fraunces(?=\s*(?:['"`,;}\]]|$))/i,
+      query:
+        'Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400',
+    },
+    {
+      pattern: /(?<![\w-])DM[ _]+Serif[ _]+Display(?=\s*(?:['"`,;}\]]|$))/i,
+      query: 'DM+Serif+Display:ital@0;1',
+    },
+    {
+      pattern: /(?<![\w-])DM[ _]+Sans(?=\s*(?:['"`,;}\]]|$))/i,
+      query: 'DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500',
+    },
+    {
+      pattern: /(?<![\w-])JetBrains[ _]+Mono(?=\s*(?:['"`,;}\]]|$))/i,
+      query: 'JetBrains+Mono:wght@400;500',
+    },
+  ]
+    .filter(({ pattern }) => pattern.test(source))
+    .map(({ query }) => `family=${query}`);
+  if (families.length === 0) return '';
+  const url = `https://fonts.googleapis.com/css2?${families.join('&')}&display=swap`;
+  return `<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link data-codesign-runtime-fonts href="${escapeHtmlAttr(url)}" rel="stylesheet" />
+`;
 }
 
 function autoMountJsxIfNeeded(source: string): string {
@@ -265,47 +305,25 @@ function transformOptionsForKind(kind: 'jsx' | 'tsx'): { presets: unknown[]; fil
   return { filename: 'artifact.jsx', presets: ['react'] };
 }
 
-function bindEditmodeTokensToRuntime(source: string): string {
-  return source.replace(EDITMODE_MARKER_RE, 'window.__codesign_tweaks__.tokens');
-}
-
-function readsTweakDefaultsAfterDeclaration(source: string): boolean {
-  let count = 0;
-  let index = source.indexOf('TWEAK_DEFAULTS');
-  while (index >= 0) {
-    count += 1;
-    if (count > 1) return true;
-    index = source.indexOf('TWEAK_DEFAULTS', index + 'TWEAK_DEFAULTS'.length);
-  }
-  return false;
-}
-
 function compileAndRunScript(
   source: string,
   kind: 'jsx' | 'tsx',
   opts: { liveTweaks?: boolean } = {},
 ): string {
   const runtimeSource = opts.liveTweaks ? bindEditmodeTokensToRuntime(source) : source;
-  const registerRunner =
-    opts.liveTweaks === true && readsTweakDefaultsAfterDeclaration(source)
-      ? `
-    if (window.__codesign_tweaks__ && typeof window.__codesign_tweaks__.registerRunner === 'function') {
-      window.__codesign_tweaks__.registerRunner(runner);
-    }`
-      : '';
   const sourceLiteral = escapeForScriptLiteral(runtimeSource);
   const optionsLiteral = JSON.stringify(transformOptionsForKind(kind));
+  const execute = opts.liveTweaks
+    ? 'window.__codesign_tweaks__.runModule(function() { execute(window.React, window.ReactDOM); });'
+    : 'execute(window.React, window.ReactDOM);';
   return `<script>
 (function() {
   var source = ${sourceLiteral};
   var options = ${optionsLiteral};
   try {
     var compiled = window.Babel.transform(source, options).code;
-    var runner = function() {
-      new Function('React', 'ReactDOM', compiled)(window.React, window.ReactDOM);
-    };
-${registerRunner}
-    runner();
+    var execute = new Function('React', 'ReactDOM', compiled);
+    ${execute}
   } catch (err) {
     setTimeout(function() { throw err; }, 0);
   }
@@ -336,7 +354,11 @@ function jsxRuntimeBaseScripts(): string {
 
 function wrapJsxAsSrcdoc(
   jsx: string,
-  opts: { kind?: 'jsx' | 'tsx'; baseHref?: string | undefined } = {},
+  opts: {
+    kind?: 'jsx' | 'tsx';
+    baseHref?: string | undefined;
+    sourceEdit?: SourceEditOverlayContext;
+  } = {},
 ): string {
   const kind = opts.kind ?? 'jsx';
   // v0.2 requires canonical EDITMODE markers. `ensureEditmodeMarkers` is kept
@@ -347,10 +369,7 @@ function wrapJsxAsSrcdoc(
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-${baseTag(opts.baseHref)}<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}html,body,#root{height:100%;}body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-artifact-bg, #ffffff);}</style>
+${baseTag(opts.baseHref)}${runtimeFontLinks(jsx)}<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}html,body,#root{height:100%;}body{font-family:system-ui,sans-serif;background:var(--color-artifact-bg, #ffffff);}</style>
 </head>
 <body>
 <div id="root"></div>
@@ -364,7 +383,7 @@ ${JSX_TEMPLATE_BEGIN}
 ${compileAndRunScript(normalized, kind, { liveTweaks: true })}
 ${JSX_TEMPLATE_END}
 <script>${TWEAKS_BRIDGE_LISTENER}</script>
-<script>${OVERLAY_SCRIPT}</script>
+<script>${opts.sourceEdit ? buildOverlayScript(opts.sourceEdit) : OVERLAY_SCRIPT}</script>
 </body>
 </html>`;
 }
@@ -380,10 +399,7 @@ function wrapJsxAsStandaloneDocument(
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-${baseTag(opts.baseHref)}<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}html,body,#root{height:100%;}body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-artifact-bg, #ffffff);}</style>
+${baseTag(opts.baseHref)}${runtimeFontLinks(jsx)}<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}html,body,#root{height:100%;}body{font-family:system-ui,sans-serif;background:var(--color-artifact-bg, #ffffff);}</style>
 </head>
 <body>
 <div id="root"></div>
@@ -621,6 +637,39 @@ export function buildPreviewDocument(
   }
 
   return wrapJsxAsSrcdoc(stripped, { kind, baseHref: opts.baseHref });
+}
+
+export const INTERACTIVE_PREVIEW_SANDBOX = 'allow-scripts allow-forms';
+
+export function buildInteractivePreviewDocument(
+  userSource: string,
+  opts: BuildInteractivePreviewDocumentOptions = {},
+): string {
+  let preview: string;
+  if (opts.sourceEdit) {
+    const kind = extensionKind(opts.path);
+    if (
+      (kind !== 'jsx' && kind !== 'tsx') ||
+      looksLikeFullHtmlDocument(userSource) ||
+      userSource.includes(JSX_TEMPLATE_BEGIN)
+    ) {
+      throw new Error('Source edit preview supports only original JSX or TSX source.');
+    }
+    const instrumented = instrumentSourceForEditing(userSource, opts.sourceEdit);
+    preview = wrapJsxAsSrcdoc(instrumented.source, {
+      kind,
+      baseHref: opts.baseHref,
+      sourceEdit: instrumented.context,
+    });
+  } else {
+    preview = buildPreviewDocument(userSource, opts);
+  }
+  const document = preview.replace(/^\s*<!doctype[^>]*>/iu, '');
+  // Apply before even malformed authored head markup. Submit events may run,
+  // but browser-enforced CSP also blocks form.submit(), which bypasses events.
+  return `<!doctype html>
+<meta http-equiv="Content-Security-Policy" content="form-action 'none'" data-codesign-form-policy />
+${document}`;
 }
 
 function ensureStandaloneShell(html: string): string {

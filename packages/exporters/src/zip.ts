@@ -69,16 +69,18 @@ export async function exportZip(
 
   const stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-zip-'));
   try {
-    const htmlDocument = buildHtmlDocument(artifactSource, {
+    const collectedAssets =
+      (opts.collectLocalAssets ?? true)
+        ? await collectLocalAssetsFromHtml(artifactSource, opts)
+        : [];
+    const exportSource =
+      (opts.collectLocalAssets ?? true)
+        ? rewriteHtmlLocalAssetReferences(artifactSource, opts)
+        : artifactSource;
+    const exportHtml = buildHtmlDocument(exportSource, {
       prettify: false,
       sourcePath: opts.sourcePath,
     });
-    const collectedAssets =
-      (opts.collectLocalAssets ?? true) ? await collectLocalAssetsFromHtml(htmlDocument, opts) : [];
-    const exportHtml =
-      (opts.collectLocalAssets ?? true)
-        ? rewriteHtmlLocalAssetReferences(htmlDocument, opts)
-        : htmlDocument;
 
     const indexPath = path.join(stagingDir, 'index.html');
     await fs.writeFile(indexPath, exportHtml, 'utf8');

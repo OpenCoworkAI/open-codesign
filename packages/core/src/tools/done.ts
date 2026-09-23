@@ -36,6 +36,7 @@ export interface DoneDetails {
   status: 'ok' | 'has_errors';
   path: string;
   errors: DoneError[];
+  warnings?: DoneError[];
   summary?: string;
 }
 
@@ -75,21 +76,28 @@ function isUserDesignSourcePath(path: string): boolean {
   return isRenderableDesignSourcePath(normalized);
 }
 
-function validateDesignMdContent(content: string): DoneError[] {
-  return validateDesignMd(content)
-    .filter((finding) => finding.severity === 'error')
-    .map((finding) => ({
+function validateDesignMdContent(content: string): { errors: DoneError[]; warnings: DoneError[] } {
+  const errors: DoneError[] = [];
+  const warnings: DoneError[] = [];
+  for (const finding of validateDesignMd(content)) {
+    if (finding.severity === 'info') continue;
+    const target = finding.severity === 'error' ? errors : warnings;
+    target.push({
       message: `${finding.path}: ${finding.message}`,
       source: DESIGN_MD_ENTRY,
-    }));
+    });
+  }
+  return { errors, warnings };
 }
 
-function designMdWorkspaceErrors(fs: TextEditorFsCallbacks, activePath: string): DoneError[] {
+function designMdWorkspaceFindings(
+  fs: TextEditorFsCallbacks,
+  activePath: string,
+): { errors: DoneError[]; warnings: DoneError[] } {
   const errors: DoneError[] = [];
   const designFile = fs.view(DESIGN_MD_ENTRY);
   if (designFile !== null) {
-    errors.push(...validateDesignMdContent(designFile.content));
-    return errors;
+    return validateDesignMdContent(designFile.content);
   }
   const renderable = fs
     .listDir('.')
@@ -103,7 +111,15 @@ function designMdWorkspaceErrors(fs: TextEditorFsCallbacks, activePath: string):
       source: DESIGN_MD_ENTRY,
     });
   }
-  return errors;
+  return { errors, warnings: [] };
+}
+
+function formatWarnings(warnings: DoneError[]): string {
+  return warnings.length === 0
+    ? ''
+    : `\n\nNon-blocking design metadata warnings:\n${warnings
+        .map((warning) => `- ${warning.source}: ${warning.message}`)
+        .join('\n')}`;
 }
 
 function requiredDesignMdErrors(fs: TextEditorFsCallbacks, activePath: string): DoneError[] {
@@ -121,7 +137,10 @@ function requiredDesignMdErrors(fs: TextEditorFsCallbacks, activePath: string): 
 /** Host-injected runtime verifier. Receives the raw artifact source (the
  *  agent's JSX module, NOT a fully-built srcdoc) and returns any console /
  *  load errors observed when the host actually executed it. */
-export type DoneRuntimeVerifier = (artifactSource: string) => Promise<DoneError[]>;
+export type DoneRuntimeVerifier = (
+  artifactSource: string,
+  context?: { path: string; signal?: AbortSignal },
+) => Promise<DoneError[]>;
 
 const VOID_ELEMENTS = new Set([
   'area',
@@ -465,7 +484,8 @@ export function makeDoneTool(
       'remain with a valid artifact after those repair rounds, the host may ' +
       'keep the latest artifact but will surface warnings to the user.',
     parameters: DoneParams,
-    async execute(_id, params): Promise<AgentToolResult<DoneDetails>> {
+    async execute(_id, params, signal): Promise<AgentToolResult<DoneDetails>> {
+      signal?.throwIfAborted();
       const path = resolveDonePath(fs, params.path);
       const file = fs.view(path);
       if (file === null) {
@@ -481,20 +501,24 @@ export function makeDoneTool(
         };
       }
       if (path === DESIGN_MD_ENTRY) {
-        const errors = validateDesignMdContent(file.content);
+        const { errors, warnings } = validateDesignMdContent(file.content);
         const status: DoneDetails['status'] = errors.length === 0 ? 'ok' : 'has_errors';
         const details: DoneDetails = {
           status,
           path,
           errors,
+          ...(warnings.length > 0 ? { warnings } : {}),
           ...(params.summary !== undefined ? { summary: params.summary } : {}),
         };
         const text =
           status === 'ok'
-            ? 'ok — DESIGN.md is valid Google design.md.'
+            ? warnings.length > 0
+              ? 'ok — DESIGN.md has no blocking errors; non-blocking metadata warnings remain.'
+              : 'ok — DESIGN.md is valid Google design.md.'
             : `has_errors\n${errors.map((e) => `- ${e.message}`).join('\n')}`;
-        return { content: [{ type: 'text', text }], details };
+        return { content: [{ type: 'text', text: text + formatWarnings(warnings) }], details };
       }
+      const designFindings = designMdWorkspaceFindings(fs, path);
       const errors: DoneError[] = [
         ...findJsxStructuralIssues(file.content),
         ...(isJsxShaped(file.content) ? [] : findUnclosedTags(file.content)),
@@ -502,13 +526,18 @@ export function makeDoneTool(
         ...findMissingAlt(file.content),
         ...findBrokenHashLinks(file.content),
         ...(opts.requireDesignMd ? requiredDesignMdErrors(fs, path) : []),
-        ...designMdWorkspaceErrors(fs, path),
+        ...designFindings.errors,
       ];
       if (runtimeVerify && isRenderableDesignSourcePath(path)) {
         try {
-          const runtimeErrors = await runtimeVerify(file.content);
+          const runtimeErrors = await runtimeVerify(file.content, {
+            path,
+            ...(signal ? { signal } : {}),
+          });
+          signal?.throwIfAborted();
           errors.push(...runtimeErrors);
         } catch (err) {
+          signal?.throwIfAborted();
           errors.push({
             message: `Runtime verifier failed: ${err instanceof Error ? err.message : String(err)}`,
             source: 'runtime',
@@ -520,6 +549,7 @@ export function makeDoneTool(
         status,
         path,
         errors,
+        ...(designFindings.warnings.length > 0 ? { warnings: designFindings.warnings } : {}),
         ...(params.summary !== undefined ? { summary: params.summary } : {}),
       };
       const text =
@@ -536,8 +566,11 @@ export function makeDoneTool(
               'extracts the artifact from the virtual filesystem automatically;',
               "anything else you emit is wasted tokens and pollutes the user's chat.",
             ].join('\n')
-          : `has_errors\n${errors.map((e) => `- ${e.message}${e.lineno ? ` (line ${e.lineno})` : ''}`).join('\n')}`;
-      return { content: [{ type: 'text', text }], details };
+          : `has_errors\n${errors.map((e) => `- ${e.source ? `${e.source}: ` : ''}${e.message}${e.lineno ? ` (line ${e.lineno})` : ''}`).join('\n')}`;
+      return {
+        content: [{ type: 'text', text: text + formatWarnings(designFindings.warnings) }],
+        details,
+      };
     },
   };
 }

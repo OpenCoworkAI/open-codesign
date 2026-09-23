@@ -1,0 +1,83 @@
+.codesign-topbar {
+  --codesign-topbar-content-height: calc(
+    var(--size-control-lg) +
+    var(--size-control-md) +
+    var(--space-2)
+  );
+  display: grid;
+  grid-template-areas:
+    "brand drag controls"
+    "navigation navigation model";
+  grid-template-columns: auto minmax(var(--space-6), 1fr) auto;
+  grid-template-rows: var(--size-control-lg) auto;
+  column-gap: var(--space-3);
+  padding-bottom: var(--space-2);
+}
+
+.codesign-topbar-brand {
+  grid-area: brand;
+}
+
+.codesign-topbar-navigation {
+  grid-area: navigation;
+  display: flex;
+  align-items: center;
+}
+
+.codesign-topbar-drag {
+  grid-area: drag;
+}
+
+.codesign-topbar-model {
+  grid-area: model;
+  justify-self: end;
+  width: clamp(var(--size-titlebar-model-min-width), 25vw, var(--size-titlebar-model-max-width));
+}
+
+.codesign-topbar-model [role="listbox"] {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - var(--codesign-topbar-content-height) - var(--space-2));
+}
+
+.codesign-topbar-model [role="listbox"] > .codesign-scroll-area {
+  min-height: 0;
+}
+
+.codesign-topbar-model [role="listbox"] > :not(.codesign-scroll-area) {
+  flex-shrink: 0;
+}
+
+.codesign-topbar-controls {
+  grid-area: controls;
+  justify-self: end;
+}
+
+.codesign-topbar-tab-indicator {
+  bottom: 0;
+}
+
+/* Gallery tabs need more room than the shrinkable workspace breadcrumb. */
+@media (min-width: 62.5rem) {
+  .codesign-topbar:not([data-view="hub"]) {
+    --codesign-topbar-content-height: var(--size-titlebar-height);
+    grid-template-areas: "brand navigation drag model controls";
+    grid-template-columns: auto minmax(0, 1fr) var(--space-6) auto auto;
+    grid-template-rows: var(--size-titlebar-height);
+    padding-bottom: 0;
+  }
+}
+
+@media (min-width: 75rem) {
+  .codesign-topbar[data-view="hub"] {
+    --codesign-topbar-content-height: var(--size-titlebar-height);
+    grid-template-areas: "brand navigation drag model controls";
+    grid-template-columns: auto minmax(0, max-content) minmax(var(--space-6), 1fr) auto auto;
+    grid-template-rows: var(--size-titlebar-height);
+    padding-bottom: 0;
+  }
+
+  .codesign-topbar-tab-indicator {
+    bottom: calc((var(--size-control-md) - var(--size-titlebar-height)) / 2 - var(--space-0_5));
+  }
+}

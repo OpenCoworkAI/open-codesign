@@ -124,6 +124,11 @@ function mockCommentsApi() {
     update: vi.fn(async (_designId: string, _id: string, _patch: CommentUpdateInput) => null),
     remove: vi.fn(async (_designId: string, _id: string) => ({ removed: false })),
     markApplied: vi.fn(async (_designId: string, _ids: string[], _snapshotId: string) => []),
+    markAppliedIfUnchanged: vi.fn(async () => ({
+      schemaVersion: 1,
+      applied: [],
+      conflictedIds: [],
+    })),
   };
 }
 
@@ -299,6 +304,104 @@ describe('useCodesignStore streaming assistant text', () => {
 });
 
 describe('useCodesignStore inline comments', () => {
+  it('reopens a saved file comment in its source tab, preserving raw geometry', () => {
+    const row = { ...commentRow(), sourcePath: 'screens/tablet.html' };
+    useCodesignStore.setState({
+      comments: [row],
+      canvasTabs: [{ kind: 'files' }, { kind: 'file', path: 'App.jsx' }],
+      activeCanvasTab: 1,
+    });
+    useCodesignStore.getState().openCommentBubble({
+      sourcePath: row.sourcePath,
+      selector: row.selector,
+      tag: row.tag,
+      outerHTML: row.outerHTML,
+      rect: row.rect,
+      existingCommentId: row.id,
+    });
+    const state = useCodesignStore.getState();
+    expect(state.canvasTabs[state.activeCanvasTab]).toEqual({ kind: 'file', path: row.sourcePath });
+    expect(state.commentBubble?.rect).toEqual(row.rect);
+    expect(state.commentBubble?.sourcePath).toBe(row.sourcePath);
+    expect(state.interactionMode).toBe('comment');
+  });
+
+  it('does not save or retarget an anchor after the design changes during snapshot lookup', async () => {
+    const pending = deferred<Array<{ id: string }>>();
+    const add = vi.fn();
+    vi.stubGlobal('window', {
+      codesign: {
+        comments: { ...mockCommentsApi(), add },
+        snapshots: { ...mockSnapshotsApi(), list: vi.fn(() => pending.promise) },
+      },
+    });
+    setWorkspaceBackedDesign('design-a');
+    const row = commentRow();
+    const saving = useCodesignStore.getState().addComment({
+      kind: 'edit',
+      selector: '#target',
+      tag: 'button',
+      outerHTML: '<button/>',
+      rect: row.rect,
+      text: 'Only here',
+      sourcePath: 'screens/tablet.html',
+    });
+    setWorkspaceBackedDesign('design-b');
+    pending.resolve([{ id: 'snapshot-a' }]);
+    expect(await saving).toBeNull();
+    expect(add).not.toHaveBeenCalled();
+    expect(useCodesignStore.getState().currentSnapshotId).toBeNull();
+  });
+
+  it('carries the file-tab source through a deterministic directed edit without changing siblings', async () => {
+    const original = '<button>Reserve sibling</button><button>Reserve selected</button>';
+    const workspace = new Map([
+      ['App.jsx', 'function App(){ return <h1>Main source</h1> }'],
+      ['screens/mobile.html', original],
+      ['screens/tablet.html', original],
+    ]);
+    const generate = vi.fn(async (payload: { prompt: string }) => {
+      expect(payload.prompt).toContain('Source file: screens/tablet.html');
+      expect(payload.prompt).toContain('&lt;button&gt;Reserve selected&lt;/button&gt;');
+      const target = /Source file: ([^\n]+)/.exec(payload.prompt)?.[1];
+      if (!target || !workspace.has(target)) throw new Error('Missing source target');
+      const source = workspace.get(target) ?? '';
+      const updated = source.replace(
+        '<button>Reserve selected</button>',
+        '<button>Confirm booking</button>',
+      );
+      workspace.set(target, updated);
+      return { artifacts: [{ content: updated }], message: 'Deterministic edit applied.' };
+    });
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+        snapshots: mockSnapshotsApi(),
+      },
+      setTimeout,
+    });
+    setWorkspaceBackedDesign();
+    useCodesignStore.setState({
+      selectedElement: {
+        sourcePath: 'screens/tablet.html',
+        selector: '/button[2]',
+        tag: 'button',
+        outerHTML: '<button>Reserve selected</button>',
+        rect: { top: 10, left: 20, width: 120, height: 40 },
+      },
+    });
+    await useCodesignStore.getState().applyInlineComment('Rename to Confirm booking');
+    expect(generate).toHaveBeenCalledOnce();
+    expect(workspace.get('screens/tablet.html')).toBe(
+      '<button>Reserve sibling</button><button>Confirm booking</button>',
+    );
+    expect(workspace.get('screens/mobile.html')).toBe(original);
+    expect(workspace.get('App.jsx')).toContain('Main source');
+    expect(useCodesignStore.getState().previewSource).toContain('Confirm booking');
+  });
+
   it('saves a comment without starting generation', async () => {
     const row = commentRow({ id: 'saved-comment', text: 'Keep this note' });
     const generate = vi.fn();
@@ -509,19 +612,21 @@ describe('useCodesignStore inline comments', () => {
       outerHTML: '<section id="other">Other</section>',
       text: 'Do not send this one yet',
     });
-    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) =>
-      ids.map((id) => ({
+    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) => ({
+      schemaVersion: 1,
+      conflictedIds: [],
+      applied: ids.map((id) => ({
         ...(id === target.id ? target : other),
         status: 'applied' as const,
         appliedInSnapshotId: snapshotId,
       })),
-    );
+    }));
 
     vi.stubGlobal('window', {
       codesign: {
         generate,
         chat: mockChatApi(),
-        comments: { ...mockCommentsApi(), markApplied },
+        comments: { ...mockCommentsApi(), markAppliedIfUnchanged: markApplied },
         snapshots: {
           ...mockSnapshotsApi(),
           list: vi.fn(async () => [nextSnapshot]),
@@ -543,7 +648,12 @@ describe('useCodesignStore inline comments', () => {
     expect(generatedPrompt).toContain(target.text);
     expect(generatedPrompt).not.toContain(other.selector);
     expect(generatedPrompt).not.toContain(other.text);
-    expect(markApplied).toHaveBeenCalledWith(DEFAULT_DESIGN.id, [target.id], nextSnapshot.id);
+    expect(markApplied).toHaveBeenCalledWith(
+      DEFAULT_DESIGN.id,
+      [target.id],
+      nextSnapshot.id,
+      expect.any(Object),
+    );
   });
 
   it('keeps Apply sending every queued pending comment', async () => {
@@ -569,19 +679,21 @@ describe('useCodesignStore inline comments', () => {
     };
     const first = commentRow({ id: 'comment-a', selector: '#a', text: 'Edit A' });
     const second = commentRow({ id: 'comment-b', selector: '#b', text: 'Edit B' });
-    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) =>
-      ids.map((id) => ({
+    const markApplied = vi.fn(async (_designId: string, ids: string[], snapshotId: string) => ({
+      schemaVersion: 1,
+      conflictedIds: [],
+      applied: ids.map((id) => ({
         ...(id === first.id ? first : second),
         status: 'applied' as const,
         appliedInSnapshotId: snapshotId,
       })),
-    );
+    }));
 
     vi.stubGlobal('window', {
       codesign: {
         generate,
         chat: mockChatApi(),
-        comments: { ...mockCommentsApi(), markApplied },
+        comments: { ...mockCommentsApi(), markAppliedIfUnchanged: markApplied },
         snapshots: {
           ...mockSnapshotsApi(),
           list: vi.fn(async () => [nextSnapshot]),
@@ -603,6 +715,7 @@ describe('useCodesignStore inline comments', () => {
       DEFAULT_DESIGN.id,
       [first.id, second.id],
       nextSnapshot.id,
+      expect.any(Object),
     );
     expect(useCodesignStore.getState().queuedCommentIds).toEqual([]);
   });
@@ -2177,6 +2290,85 @@ describe('useCodesignStore artifact persistence', () => {
 });
 
 describe('loadDesigns startup', () => {
+  it('shares in-flight startup initialization instead of creating duplicate blank designs', async () => {
+    const creation = deferred<typeof DEFAULT_DESIGN>();
+    let created = false;
+    const createDesign = vi.fn(async () => {
+      const design = await creation.promise;
+      created = true;
+      return design;
+    });
+    const listDesigns = vi.fn(async () => (created ? [DEFAULT_DESIGN] : []));
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: { ...mockSnapshotsApi(), listDesigns, createDesign },
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+      },
+      setTimeout,
+    });
+
+    const first = useCodesignStore.getState().ensureCurrentDesign();
+    const second = useCodesignStore.getState().ensureCurrentDesign();
+    await vi.waitFor(() => expect(createDesign).toHaveBeenCalled());
+    const third = useCodesignStore.getState().ensureCurrentDesign();
+    creation.resolve(DEFAULT_DESIGN);
+    await Promise.all([first, second, third]);
+
+    expect(createDesign).toHaveBeenCalledTimes(1);
+    expect(listDesigns).toHaveBeenCalledTimes(2);
+    expect(useCodesignStore.getState().currentDesignId).toBe(DEFAULT_DESIGN.id);
+    expect(useCodesignStore.getState().designs).toEqual([DEFAULT_DESIGN]);
+  });
+
+  it('retries startup after a failed design-list read without swallowing the error', async () => {
+    const error = new Error('Design storage unavailable');
+    const listDesigns = vi.fn().mockRejectedValueOnce(error).mockResolvedValue([DEFAULT_DESIGN]);
+    const createDesign = vi.fn();
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: { ...mockSnapshotsApi(), listDesigns, createDesign },
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+      },
+      setTimeout,
+    });
+
+    await expect(useCodesignStore.getState().ensureCurrentDesign()).rejects.toBe(error);
+    await useCodesignStore.getState().ensureCurrentDesign();
+
+    expect(listDesigns).toHaveBeenCalledTimes(2);
+    expect(createDesign).not.toHaveBeenCalled();
+    expect(useCodesignStore.getState().currentDesignId).toBe(DEFAULT_DESIGN.id);
+  });
+
+  it('retries startup when creating the initial design failed', async () => {
+    const createDesign = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Workspace unavailable'))
+      .mockResolvedValue(DEFAULT_DESIGN);
+    const listDesigns = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([DEFAULT_DESIGN]);
+    vi.stubGlobal('window', {
+      codesign: {
+        snapshots: { ...mockSnapshotsApi(), listDesigns, createDesign },
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+      },
+      setTimeout,
+    });
+
+    await useCodesignStore.getState().ensureCurrentDesign();
+    expect(useCodesignStore.getState().currentDesignId).toBeNull();
+    await useCodesignStore.getState().ensureCurrentDesign();
+
+    expect(createDesign).toHaveBeenCalledTimes(2);
+    expect(useCodesignStore.getState().currentDesignId).toBe(DEFAULT_DESIGN.id);
+  });
+
   it('populates designs from listDesigns IPC so persisted work reappears after relaunch', async () => {
     const designs = [
       {
@@ -2219,6 +2411,32 @@ describe('loadDesigns startup', () => {
 });
 
 describe('useCodesignStore interaction mode', () => {
+  it('clears a pending anchor when switching file tabs', () => {
+    const selection = {
+      sourcePath: 'screens/mobile.html',
+      selector: '#reserve',
+      tag: 'button',
+      outerHTML: '<button id="reserve">Reserve</button>',
+      rect: { top: 10, left: 20, width: 100, height: 40 },
+    };
+    useCodesignStore.setState({
+      canvasTabs: [
+        { kind: 'files' },
+        { kind: 'file', path: 'screens/mobile.html' },
+        { kind: 'file', path: 'screens/tablet.html' },
+      ],
+      activeCanvasTab: 1,
+      selectedElement: selection,
+      commentBubble: selection,
+      liveRects: { '#reserve': selection.rect },
+    });
+    useCodesignStore.getState().setActiveCanvasTab(2);
+    expect(useCodesignStore.getState()).toMatchObject({
+      selectedElement: null,
+      commentBubble: null,
+      liveRects: {},
+    });
+  });
   it('defaults to "default" mode with no selected element', () => {
     const state = useCodesignStore.getState();
     expect(state.interactionMode).toBe('default');
@@ -2249,7 +2467,7 @@ describe('useCodesignStore interaction mode', () => {
 });
 
 describe('useCodesignStore liveRects', () => {
-  it('applyLiveRects merges entries by selector', () => {
+  it('applyLiveRects replaces the measured set and drops disappeared selectors', () => {
     useCodesignStore.setState({ liveRects: {} });
     useCodesignStore.getState().applyLiveRects([
       { selector: '#a', rect: { top: 10, left: 20, width: 30, height: 40 } },
@@ -2264,7 +2482,7 @@ describe('useCodesignStore liveRects', () => {
       .getState()
       .applyLiveRects([{ selector: '#a', rect: { top: 99, left: 20, width: 30, height: 40 } }]);
     expect(useCodesignStore.getState().liveRects['#a']?.top).toBe(99);
-    expect(useCodesignStore.getState().liveRects['#b']?.top).toBe(1);
+    expect(useCodesignStore.getState().liveRects['#b']).toBeUndefined();
   });
 
   it('clearLiveRects wipes the map (used on design switch)', () => {
@@ -2275,11 +2493,11 @@ describe('useCodesignStore liveRects', () => {
     expect(useCodesignStore.getState().liveRects).toEqual({});
   });
 
-  it('applyLiveRects is a no-op for empty entries (keeps reference stable)', () => {
+  it('applyLiveRects clears stale geometry when no watched elements remain visible', () => {
     const map = { '#a': { top: 1, left: 2, width: 3, height: 4 } };
     useCodesignStore.setState({ liveRects: map });
     useCodesignStore.getState().applyLiveRects([]);
-    expect(useCodesignStore.getState().liveRects).toBe(map);
+    expect(useCodesignStore.getState().liveRects).toEqual({});
   });
 });
 

@@ -18,7 +18,6 @@ export function CommentChipBar() {
   const queuedCommentIds = useCodesignStore((s) => s.queuedCommentIds);
   const openCommentBubble = useCodesignStore((s) => s.openCommentBubble);
   const removeComment = useCodesignStore((s) => s.removeComment);
-  const previewZoom = useCodesignStore((s) => s.previewZoom);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
   const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const config = useCodesignStore((s) => s.config);
@@ -68,12 +67,8 @@ export function CommentChipBar() {
                   selector: c.selector,
                   tag: c.tag,
                   outerHTML: c.outerHTML,
-                  rect: {
-                    top: c.rect.top * (previewZoom / 100),
-                    left: c.rect.left * (previewZoom / 100),
-                    width: c.rect.width * (previewZoom / 100),
-                    height: c.rect.height * (previewZoom / 100),
-                  },
+                  rect: c.rect,
+                  ...(c.sourcePath ? { sourcePath: c.sourcePath } : {}),
                   existingCommentId: c.id,
                   initialText: c.text,
                 })

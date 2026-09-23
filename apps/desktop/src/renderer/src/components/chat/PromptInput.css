@@ -1,0 +1,98 @@
+.codesign-active-message-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) 0;
+}
+
+.codesign-active-message-button {
+  min-height: var(--size-control-md);
+  min-width: var(--size-control-md);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.codesign-active-message-button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.codesign-active-message-primary {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.codesign-active-message-primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.codesign-active-message-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.codesign-active-message-help {
+  margin-inline-start: auto;
+  flex: none;
+}
+
+.codesign-active-message-help > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-control-sm);
+  height: var(--size-control-sm);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  list-style: none;
+  cursor: pointer;
+}
+
+.codesign-active-message-help > summary::-webkit-details-marker {
+  display: none;
+}
+
+.codesign-active-message-help > summary:hover {
+  background: var(--color-surface-hover);
+}
+
+.codesign-active-message-button:focus-visible,
+.codesign-active-message-help > summary:focus-visible,
+.codesign-active-message-help-panel:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.codesign-active-message-help-panel {
+  position: absolute;
+  inset-inline: var(--space-3);
+  bottom: calc(100% + var(--space-2));
+  z-index: 10;
+  max-height: min(calc(var(--size-control-md) * 6), 40vh);
+  overflow: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-secondary);
+  box-shadow: var(--shadow-elevated);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.codesign-active-message-help-panel p {
+  margin: 0;
+}
+
+.codesign-active-message-help-panel p + p {
+  margin-top: var(--space-2);
+}

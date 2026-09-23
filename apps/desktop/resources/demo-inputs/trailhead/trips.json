@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "trips": [
+    {
+      "id": "ridge",
+      "title": "A quiet ridge morning",
+      "date": "2026-09-26",
+      "stops": [
+        {
+          "id": "s1",
+          "label": "Trail gate",
+          "minutes": 20,
+          "note": "Meet and check the day pack."
+        },
+        {
+          "id": "s2",
+          "label": "Fern clearing",
+          "minutes": 45,
+          "note": "An unhurried sketching break."
+        },
+        {
+          "id": "s3",
+          "label": "Ridge picnic",
+          "minutes": 60,
+          "note": "Lunch and a wide-open view."
+        }
+      ]
+    },
+    { "id": "water", "title": "Waterside afternoon", "date": "2026-09-27", "stops": [] }
+  ]
+}
