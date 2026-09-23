@@ -281,6 +281,9 @@ async function main() {
     effort,
     systemPrompt: buildSystemPrompt(prompt),
     userPrompt,
+    // Review reasoning and final JSON share the output budget; keep recovery bounded.
+    maxTokens: 16_384,
+    maxRetryTokens: 32_768,
   });
 
   const body = ensureBotSignature(assertNonEmptyParsedString(parsed, 'body'));

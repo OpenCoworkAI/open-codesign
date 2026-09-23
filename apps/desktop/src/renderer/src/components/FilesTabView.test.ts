@@ -1,5 +1,6 @@
 import type { CommentRow } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
+import type { DesignFileEntry } from '../hooks/useDesignFiles';
 import { openFileTab } from '../store/slices/tabs';
 import {
   chooseWorkspacePreviewSourceMode,
@@ -22,10 +23,22 @@ import {
   splitMarkdownFrontmatter,
   workspaceBaseHrefForFile,
   workspacePreviewDependencyKey,
+  workspacePreviewPathForSelection,
   workspacePreviewSourceStableKey,
 } from './FilesTabView';
 
 describe('FilesTabView preview helpers', () => {
+  it('does not reuse a comment with an identical selector in a different source file', () => {
+    const comment = commentRow();
+    expect(
+      findReusableWorkspaceFileCommentForSelector({
+        comments: [{ ...comment, sourcePath: 'screens/mobile.html' }],
+        selector: comment.selector,
+        currentSnapshotId: comment.snapshotId,
+        sourcePath: 'screens/tablet.html',
+      }),
+    ).toBeNull();
+  });
   const commentRow = (overrides: Partial<CommentRow> = {}): CommentRow => ({
     schemaVersion: 1,
     id: overrides.id ?? 'comment-1',
@@ -49,6 +62,49 @@ describe('FilesTabView preview helpers', () => {
     expect(clampFileBrowserWidth(480.4, 1280)).toBe(480);
     expect(clampFileBrowserWidth(900, 1280)).toBe(704);
     expect(clampFileBrowserWidth(900, 900)).toBe(495);
+  });
+
+  it('follows the preferred entry as a fresh workspace gains a runnable artifact', () => {
+    const files: DesignFileEntry[] = [
+      { path: 'DESIGN.md', kind: 'text', size: 100, updatedAt: '2026-09-17' },
+    ];
+    expect(workspacePreviewPathForSelection([], 'design-1', null)).toBeNull();
+    expect(workspacePreviewPathForSelection(files, 'design-1', null)).toBe('DESIGN.md');
+    files.push({ path: 'App.jsx', kind: 'jsx', size: 500, updatedAt: '2026-09-17' });
+    expect(workspacePreviewPathForSelection(files, 'design-1', null)).toBe('App.jsx');
+  });
+
+  it('preserves an explicit document selection when a runnable artifact arrives', () => {
+    const files: DesignFileEntry[] = [
+      { path: 'DESIGN.md', kind: 'text', size: 100, updatedAt: '2026-09-17' },
+      { path: 'App.jsx', kind: 'jsx', size: 500, updatedAt: '2026-09-17' },
+    ];
+    expect(
+      workspacePreviewPathForSelection(files, 'design-1', {
+        designId: 'design-1',
+        path: 'DESIGN.md',
+      }),
+    ).toBe('DESIGN.md');
+    expect(
+      workspacePreviewPathForSelection(files, 'design-2', {
+        designId: 'design-1',
+        path: 'DESIGN.md',
+      }),
+    ).toBe('App.jsx');
+  });
+
+  it('falls back for removed selections and preserves document-only and legacy workspaces', () => {
+    const files: DesignFileEntry[] = [
+      { path: 'brief.md', kind: 'text', size: 100, updatedAt: '2026-09-17' },
+    ];
+    expect(
+      workspacePreviewPathForSelection(files, 'design-1', {
+        designId: 'design-1',
+        path: 'removed.jsx',
+      }),
+    ).toBe('brief.md');
+    files.push({ path: 'index.html', kind: 'html', size: 500, updatedAt: '2026-09-17' });
+    expect(workspacePreviewPathForSelection(files, 'design-1', null)).toBe('index.html');
   });
 
   it('keeps native app detections on external app preview', () => {
@@ -134,7 +190,7 @@ describe('FilesTabView preview helpers', () => {
     const applyLiveRects = vi.fn();
     const pushIframeError = vi.fn();
     const handlers = createWorkspaceFilePreviewMessageHandlers({
-      previewZoom: 50,
+      sourcePath: 'screens/tablet.html',
       selectCanvasElement,
       openCommentBubble,
       applyLiveRects,
@@ -152,17 +208,19 @@ describe('FilesTabView preview helpers', () => {
     });
 
     expect(selectCanvasElement).toHaveBeenCalledWith({
+      sourcePath: 'screens/tablet.html',
       selector: '#hero',
       tag: 'section',
       outerHTML: '<section id="hero">Hello</section>',
-      rect: { top: 10, left: 20, width: 100, height: 50 },
+      rect: { top: 20, left: 40, width: 200, height: 100 },
     });
     expect(openCommentBubble).toHaveBeenCalledWith({
+      sourcePath: 'screens/tablet.html',
       selector: '#hero',
       tag: 'section',
       outerHTML: '<section id="hero">Hello</section>',
       parentOuterHTML: '<main><section id="hero">Hello</section></main>',
-      rect: { top: 10, left: 20, width: 100, height: 50 },
+      rect: { top: 20, left: 40, width: 200, height: 100 },
     });
   });
 
@@ -173,7 +231,6 @@ describe('FilesTabView preview helpers', () => {
     const applyLiveRects = vi.fn();
     const pushIframeError = vi.fn();
     const handlers = createWorkspaceFilePreviewMessageHandlers({
-      previewZoom: 100,
       comments: [existing],
       currentSnapshotId: existing.snapshotId,
       selectCanvasElement,
@@ -248,7 +305,7 @@ describe('FilesTabView preview helpers', () => {
     expect(previewKindForFile('archive.zip', 'asset')).toBe('unsupported');
   });
 
-  it('shows tweaks only for the main runtime design source preview', () => {
+  it('shows source-backed tweaks for every runtime file, not just the main entry', () => {
     expect(
       shouldShowTweakPanelForFile({
         path: 'App.jsx',
@@ -269,7 +326,7 @@ describe('FilesTabView preview helpers', () => {
         previewKind: 'runtime',
         hasPreviewSource: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldShowTweakPanelForFile({
         path: 'DESIGN.md',

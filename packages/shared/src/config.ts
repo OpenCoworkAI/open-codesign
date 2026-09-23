@@ -324,6 +324,15 @@ export const ConfigV3Schema = z
     providers: z.record(z.string(), ProviderEntrySchema).default({}),
     designSystem: StoredDesignSystem.optional(),
     imageGeneration: ImageGenerationSettingsSchema.optional(),
+    webSearch: z
+      .object({
+        enabled: z.boolean().default(false),
+        maxCalls: z.number().int().min(1).max(50).default(12),
+        timeoutMs: z.number().int().min(1000).max(60000).default(15000),
+        maxChars: z.number().int().min(1000).max(12000).default(10000),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((config, ctx) => {
@@ -461,6 +470,7 @@ export function toPersistedV3(cfg: Config | ConfigV3): ConfigV3 {
     activeProvider: cfg.activeProvider,
     activeModel: cfg.activeModel,
     secrets: cfg.secrets,
+    ...(cfg.webSearch !== undefined ? { webSearch: cfg.webSearch } : {}),
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
     ...(cfg.imageGeneration !== undefined ? { imageGeneration: cfg.imageGeneration } : {}),

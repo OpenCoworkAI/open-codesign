@@ -247,9 +247,8 @@ if (!IS_VITEST) {
         });
       }
       // Seed `<userData>/templates/` from the bundled resources if it does
-      // not already exist. After the first boot the user owns the tree —
-      // edits to scaffolds, skills, brand-refs, frames, or design-skills
-      // survive upgrades, and deleting the folder re-seeds on next launch.
+      // not already exist. Known, unedited method skills receive guarded upgrades;
+      // custom skills and other user-owned resources retain their existing policy.
       const bootLog = getLogger('main:boot');
       const templatesSource = resolveBundledTemplatesDir(process.resourcesPath);
       const seeded = await ensureUserTemplates(app.getPath('userData'), templatesSource);

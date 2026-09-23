@@ -14,6 +14,7 @@ import {
   STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
 } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ActiveRunMessages } from './active-messages';
 
 const loadBuiltinSkillsMock = vi.fn(async (): Promise<LoadedSkill[]> => []);
 
@@ -96,6 +97,9 @@ let scriptedAgent: AgentScript = { assistantText: '' };
 
 vi.mock('@mariozechner/pi-agent-core', () => {
   class MockAgent {
+    clearAllQueues(): void {}
+    steer(): void {}
+    followUp(): void {}
     readonly state: { messages: AgentMessage[] };
     private readonly call: AgentCall;
     constructor(options: AgentOptions) {
@@ -419,6 +423,52 @@ afterEach(() => {
 });
 
 describe('generateViaAgent()', () => {
+  it('invalidates earlier done verification when a subsequent instruction enters the agent', async () => {
+    const active = new ActiveRunMessages('design', 'run', vi.fn());
+    const bind = active.bind.bind(active);
+    vi.spyOn(active, 'bind').mockImplementation((agent) => {
+      bind(agent);
+      active.submit({
+        schemaVersion: 1,
+        designId: 'design',
+        generationId: 'run',
+        messageId: 'new',
+        mode: 'follow-up',
+        text: 'Revise it',
+      });
+    });
+    const message = {
+      role: 'user' as const,
+      content: [{ type: 'text' as const, text: 'Revise it' }],
+      timestamp: 1,
+      codesignMessageId: 'new',
+    };
+    scriptedAgent = {
+      assistantText: 'Old verification is not enough',
+      events: [{ type: 'message_start', message }],
+    };
+    const result = await generateViaAgent(
+      {
+        prompt: 'Continue',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        initialResourceState: resourceState({
+          mutationSeq: 1,
+          lastDone: {
+            status: 'ok',
+            path: 'App.jsx',
+            mutationSeq: 1,
+            errorCount: 0,
+            checkedAt: new Date().toISOString(),
+          },
+        }),
+      },
+      { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }), activeMessages: active },
+    );
+    expect(result.resourceState?.lastDone).toBeNull();
+    expect(result.warnings).toEqual([expect.stringContaining('did not call done')]);
+  });
   it('throws CodesignError on empty prompt (matches generate())', async () => {
     await expect(
       generateViaAgent({ prompt: '  ', history: [], model: MODEL, apiKey: 'sk-test' }),
@@ -595,6 +645,21 @@ describe('generateViaAgent()', () => {
     });
   });
 
+  it('uses supported default reasoning for Astra on a custom Responses gateway', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-local', modelId: 'gpt-6-astra' },
+      apiKey: 'test-key',
+      baseUrl: 'http://localhost:18537/v1',
+      wire: 'openai-responses',
+    });
+
+    expect(agentCalls[0]?.options.initialState?.thinkingLevel).toBe('low');
+    expect(agentCalls[0]?.options.initialState?.model?.reasoning).toBe(true);
+  });
+
   it('honors explicit reasoningLevel=off instead of model-family defaults', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent({
@@ -610,7 +675,7 @@ describe('generateViaAgent()', () => {
     expect(agentCalls[0]?.options.initialState?.thinkingLevel).toBe('off');
   });
 
-  it('replays the prompt with thinking off after a first-turn reasoning_content error', async () => {
+  it('continues the existing prompt with thinking off after a first-turn reasoning_content error', async () => {
     scriptedAgent = {
       assistantText: '',
       stopReason: 'error',
@@ -638,8 +703,8 @@ describe('generateViaAgent()', () => {
     expect(result.artifacts).toHaveLength(1);
     expect(agentCalls).toHaveLength(2);
     expect(agentCalls[1]?.options.initialState?.thinkingLevel).toBe('off');
-    expect(agentCalls[1]?.continues).toBe(0);
-    expect(agentCalls[1]?.prompts).toHaveLength(1);
+    expect(agentCalls[1]?.continues).toBe(1);
+    expect(agentCalls[1]?.prompts).toHaveLength(0);
     expect(onRetry).toHaveBeenCalledWith(
       expect.objectContaining({ reason: expect.stringContaining('reasoning_content') }),
     );
@@ -1028,12 +1093,42 @@ describe('generateViaAgent()', () => {
     );
   });
 
-  it('keeps the latest artifact when the agent stops on the done repair limit', async () => {
+  it('surfaces unresolved verification without deleting files', async () => {
     scriptedAgent = {
-      assistantText: '',
-      stopReason: 'toolUse',
-      executeTool: { name: 'done', times: 3, params: { path: 'App.jsx' } },
+      assistantText: 'The design is ready.',
+      stopReason: 'stop',
+      executeTool: { name: 'done', times: 1, params: { path: 'App.jsx' } },
     };
+    const fs = makeStubFs({ 'App.jsx': HTML_WITH_MISSING_ALT, 'DESIGN.md': VALID_DESIGN_MD });
+    const onComplete = vi.fn();
+    const result = generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        initialResourceState: resourceState({ mutationSeq: 1 }),
+      },
+      { fs, onComplete },
+    );
+
+    await expect(result).rejects.toMatchObject({
+      code: ERROR_CODES.GENERATION_INCOMPLETE,
+      message: expect.stringContaining('<img> without alt attribute'),
+    });
+    expect(fs.view('App.jsx')?.content).toBe(HTML_WITH_MISSING_ALT);
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it('succeeds when a later done check verifies the repaired design', async () => {
+    scriptedAgent = {
+      assistantText: 'Verified.',
+      executeTool: { name: 'done', times: 2, params: { path: 'App.jsx' } },
+    };
+    const runtimeVerify = vi
+      .fn()
+      .mockResolvedValueOnce([{ message: 'Temporary render error' }])
+      .mockResolvedValueOnce([]);
     const result = await generateViaAgent(
       {
         prompt: 'design a meditation app',
@@ -1042,13 +1137,10 @@ describe('generateViaAgent()', () => {
         apiKey: 'sk-test',
         initialResourceState: resourceState({ mutationSeq: 1 }),
       },
-      { fs: makeStubFs({ 'App.jsx': HTML_WITH_MISSING_ALT, 'DESIGN.md': VALID_DESIGN_MD }) },
+      { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML, 'DESIGN.md': VALID_DESIGN_MD }), runtimeVerify },
     );
-
+    expect(result.resourceState?.lastDone?.status).toBe('ok');
     expect(result.artifacts).toHaveLength(1);
-    expect(result.message).toContain('Stopped after 3 done() error rounds');
-    expect(result.warnings).toEqual([expect.stringContaining('done() reported unresolved errors')]);
-    expect(result.resourceState?.lastDone?.status).toBe('has_errors');
   });
 
   it('blocks substantive file edits until set_todos has run for fresh multi-step work', async () => {
@@ -1338,7 +1430,7 @@ describe('generateViaAgent()', () => {
     });
   });
 
-  it('abort signal cascades into agent.abort()', async () => {
+  it('rejects cancellation during setup before admitting a prompt', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     const controller = new AbortController();
     const promise = generateViaAgent({
@@ -1349,15 +1441,8 @@ describe('generateViaAgent()', () => {
       signal: controller.signal,
     });
     controller.abort();
-    // With first-turn withBackoff the pre-call signal check may short-circuit
-    // the prompt entirely (throwing PROVIDER_ABORTED), or the prompt may have
-    // already completed; either way the `signal → agent.abort()` listener
-    // registered before sending should have fired.
-    await promise.catch(() => {
-      // Expected when abort arrives before the withBackoff loop enters its
-      // first iteration.
-    });
-    expect(agentCalls[0]?.aborted).toBe(true);
+    await expect(promise).rejects.toMatchObject({ code: ERROR_CODES.PROVIDER_ABORTED });
+    expect(agentCalls.every((call) => call.prompts.length === 0)).toBe(true);
   });
 
   it('reports skill-loader failure via warnings without blocking the artifact', async () => {
@@ -1738,24 +1823,23 @@ describe('generateViaAgent()', () => {
     const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
     expect(sys).toContain('str_replace_based_edit_tool');
     expect(sys).toContain('Use `create` for new files');
-    expect(sys).toContain('Prefer progressive generation');
-    expect(sys).toContain('coherent first pass');
-    expect(sys).toContain('complete first pass');
-    expect(sys).toContain(
-      'Do not call `preview` while a previewable artifact is still only a scaffold',
-    );
-    expect(sys).toContain('A complete first `create` is acceptable');
-    expect(sys).toContain('Interleave major tool groups');
-    expect(sys).toContain('under 18 words');
+    expect(sys).toContain('write a small, styled, runnable slice');
+    expect(sys).toContain('before implementing secondary screens');
+    expect(sys).toContain('An early slice is a milestone');
+    expect(sys).toContain('not each tool call');
     expect(sys).toContain('`str_replace`, or `insert`');
-    expect(sys).toContain('Do not emit `<artifact>`');
+    expect(sys).toContain('do not emit `<artifact>`');
     expect(sys).toContain('design source to `App.jsx`');
-    expect(sys).toContain('Local workspace assets and scaffolded files are allowed');
-    expect(sys).toContain('call `done(path)` as the final self-check');
+    expect(sys).toContain('Use local assets');
+    expect(sys).toContain('then `done(path)`');
     expect(sys).toContain('stop after 3 error rounds');
     expect(sys).not.toContain('text_editor.create(');
     expect(sys).not.toContain('view("index.html"');
     expect(sys).not.toContain('IOSDevice, IOSStatusBar');
+    expect(sys).not.toContain('focused edits before previewing');
+    expect(sys).not.toContain('still only a scaffold, loading state, skeleton');
+    expect(sys).not.toContain('under 18 words');
+    expect(sys.split('## Host tool contract')[1]?.length).toBeLessThanOrEqual(3_000);
   });
 
   it('exposes the current v0.2 toolset when host capabilities are present', async () => {
@@ -1906,6 +1990,9 @@ describe('generateViaAgent()', () => {
     const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
     expect(sys).toContain('User-routed preferences');
     expect(sys).not.toContain('The user explicitly declined');
+    expect(sys).toContain('this is a soft preference, not a prohibition');
+    expect(sys).not.toContain('Do not create controls');
+    expect(sys).not.toContain('Do not call `tweaks()`');
   });
 
   it('keeps selective tweaks guidance in auto mode', async () => {
@@ -1974,9 +2061,11 @@ describe('generateViaAgent()', () => {
       },
     );
     const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
-    expect(sys).toContain('inventory required assets');
+    expect(sys).toContain('Inventory required assets');
     expect(sys).toContain('One named bitmap slot equals one tool call');
     expect(sys).toContain('accurate `purpose`');
+    expect(sys).toContain('Only blocking assets should delay the first runnable slice');
+    expect(sys.split('## Host tool contract')[1]?.length).toBeLessThanOrEqual(3_000);
   });
 
   it('injects project context into the system stack while keeping attachments untrusted', async () => {
@@ -2185,7 +2274,7 @@ describe('generateViaAgent() — first-turn retry', () => {
 });
 
 describe('generateViaAgent() — transport-level retry', () => {
-  it('retries a terminated error by creating a fresh agent with conversation replay', async () => {
+  it('retries a terminated error by continuing the transcript in a fresh agent', async () => {
     scriptedAgent = {
       assistantText: RESPONSE_WITH_ARTIFACT,
       stopReason: 'error',
@@ -2347,7 +2436,7 @@ describe('generateViaAgent() — transport-level retry', () => {
     expect(agentCalls.length).toBe(1);
   });
 
-  it('strips the failed turn from message history on retry', async () => {
+  it('retains the interrupted user in message history on retry', async () => {
     scriptedAgent = {
       assistantText: RESPONSE_WITH_ARTIFACT,
       stopReason: 'error',
@@ -2370,14 +2459,14 @@ describe('generateViaAgent() — transport-level retry', () => {
       },
       { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }) },
     );
-    // Second agent should be seeded with only the successful history
-    // (original 2 messages), not the failed turn (which would be 4 messages:
-    // user, assistant, user, failed-assistant)
     const retryAgentMessages = agentCalls[1]?.options.initialState?.messages;
-    expect(retryAgentMessages?.length).toBe(2);
+    expect(retryAgentMessages?.length).toBe(3);
+    expect(retryAgentMessages?.at(-1)?.role).toBe('user');
+    expect(agentCalls[1]?.prompts).toHaveLength(0);
+    expect(agentCalls[1]?.continues).toBe(1);
   });
 
-  it('strips aborted transport turns from message history on retry', async () => {
+  it('retains the interrupted user after provider-side transport aborts', async () => {
     scriptedAgent = {
       assistantText: RESPONSE_WITH_ARTIFACT,
       stopReason: 'aborted',
@@ -2402,14 +2491,13 @@ describe('generateViaAgent() — transport-level retry', () => {
     );
 
     const retryAgentMessages = agentCalls[1]?.options.initialState?.messages;
-    expect(retryAgentMessages?.length).toBe(2);
+    expect(retryAgentMessages?.length).toBe(3);
+    expect(retryAgentMessages?.at(-1)?.role).toBe('user');
+    expect(agentCalls[1]?.prompts).toHaveLength(0);
   });
 
-  it('strips tool-call and toolResult messages from the failed turn', async () => {
-    // Simulate a failed turn that includes tool activity:
-    // [user, assistant(success), user, assistant(tool-call), toolResult, assistant(error)]
-    // After strip, only [user, assistant(success)] should remain.
-    const { stripFailedTurn } = await import('./agent.js');
+  it('retains completed tool calls and results when removing the terminal failure', async () => {
+    const { stripTerminalAssistantFailure } = await import('./agent.js');
     const messages = [
       { role: 'user', content: 'first request', timestamp: 1 },
       {
@@ -2466,10 +2554,10 @@ describe('generateViaAgent() — transport-level retry', () => {
         errorMessage: 'fetch failed: terminated',
         timestamp: 6,
       },
-    ] as unknown as Parameters<typeof stripFailedTurn>[0];
-    const result = stripFailedTurn(messages);
-    // Should keep only the first 2 messages (user + successful assistant)
-    expect(result.length).toBe(2);
+    ] as unknown as Parameters<typeof stripTerminalAssistantFailure>[0];
+    const result = stripTerminalAssistantFailure(messages);
+    expect(result).toEqual(messages.slice(0, -1));
+    expect(result.length).toBe(5);
     expect(result[0]?.role).toBe('user');
     expect(result[1]?.role).toBe('assistant');
     expect((result[1] as unknown as Record<string, unknown>)['stopReason']).toBe('stop');
@@ -2578,4 +2666,80 @@ describe('loadFrameTemplates — device frame starter assets', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
+
+it('exposes research tools to the actual model-visible Agent list and preserves separate-source guidance', async () => {
+  scriptedAgent = { assistantText: 'Ready' };
+  const research: import('@open-codesign/shared').ResearchHost = {
+    search: vi.fn(async () => []),
+    fetch: vi.fn(),
+    recordEvidence: vi.fn(),
+    linkSlide: vi.fn(),
+    exportSources: vi.fn(),
+    readRecords: vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      sources: [],
+      evidence: [],
+      usages: [],
+    })),
+  };
+  await generateViaAgent(
+    { prompt: 'Industry slides', history: [], model: MODEL, apiKey: 'test' },
+    { research },
+  );
+  const state = agentCalls[0]?.options.initialState;
+  const tools = state?.tools ?? [];
+  expect(tools.map((t) => t.name)).toEqual(
+    expect.arrayContaining([
+      'web_search',
+      'web_fetch',
+      'research_evidence',
+      'research_slide',
+      'research_export',
+      'research_records',
+    ]),
+  );
+  expect(state?.systemPrompt).toContain('Do NOT put source footers');
+  expect(state?.systemPrompt).toContain('Never search/fetch if the user prohibits networking');
+  expect(state?.systemPrompt).toContain('chart styling or page reorder');
+  const search = tools.find((t) => t.name === 'web_search');
+  const controller = new AbortController();
+  await search?.execute('call', { query: 'recent industry', count: 1 }, controller.signal);
+  expect(research.search).toHaveBeenCalledWith('recent industry', 1, controller.signal);
+});
+
+it('omits research-only guidance and tools when no research host is provided', async () => {
+  scriptedAgent = { assistantText: 'Ready' };
+  await generateViaAgent({
+    prompt: 'A layout-only slide deck',
+    history: [],
+    model: MODEL,
+    apiKey: 'test',
+  });
+  const state = agentCalls[0]?.options.initialState;
+  expect(state?.tools?.map((tool) => tool.name)).not.toContain('research_export');
+  expect(state?.systemPrompt).not.toContain('## Slides research and separate sources');
+  expect(state?.systemPrompt).not.toContain('data-slide-id');
+  expect(state?.systemPrompt).not.toContain('research_export');
+});
+
+it('does not advertise research workflow when an explicit tool override hides the research tools', async () => {
+  scriptedAgent = { assistantText: 'Ready' };
+  const research: import('@open-codesign/shared').ResearchHost = {
+    search: vi.fn(),
+    fetch: vi.fn(),
+    recordEvidence: vi.fn(),
+    linkSlide: vi.fn(),
+    exportSources: vi.fn(),
+    readRecords: vi.fn(),
+  };
+  await generateViaAgent(
+    { prompt: 'A focused edit', history: [], model: MODEL, apiKey: 'test' },
+    { research, tools: [], encourageToolUse: true },
+  );
+  const state = agentCalls[0]?.options.initialState;
+  expect(state?.tools).toEqual([]);
+  expect(state?.systemPrompt).not.toContain('## Slides research and separate sources');
+  expect(state?.systemPrompt).not.toContain('data-slide-id');
+  expect(state?.systemPrompt).not.toContain('research_export');
 });

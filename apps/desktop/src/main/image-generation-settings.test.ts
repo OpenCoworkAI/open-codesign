@@ -406,3 +406,18 @@ describe('image generation enablement', () => {
     });
   });
 });
+
+it.each([
+  true,
+  false,
+  undefined,
+])('retains web search settings (%s) while saving image settings', async (enabled) => {
+  const cfg = makeConfig(true);
+  const webSearch =
+    enabled === undefined ? undefined : { enabled, maxCalls: 7, timeoutMs: 23000, maxChars: 6000 };
+  mocks.cachedConfig = { ...cfg, ...(webSearch ? { webSearch } : {}) };
+  mocks.writeConfig.mockClear();
+  await updateImageGenerationSettings({ enabled: false });
+  const saved = mocks.writeConfig.mock.calls.at(-1)?.[0];
+  expect(saved?.webSearch).toEqual(webSearch);
+});
