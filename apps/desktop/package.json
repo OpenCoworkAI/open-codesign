@@ -62,7 +62,7 @@
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
     "vite": "^7.3.2",
-    "vitest": "^4.1.8",
+    "vitest": "^4.1.11",
     "zip-lib": "^1.0.4",
     "zustand": "^5.0.2"
   }
