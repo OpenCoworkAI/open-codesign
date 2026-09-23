@@ -145,6 +145,65 @@ describe('workspace files IPC legacy workspace fallback', () => {
     }
   });
 
+  it('rejects stale tweak writes at the IPC boundary without overwriting source', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-tweak-conflict-'));
+    try {
+      const db = initInMemoryDb();
+      const design = createDesign(db, 'Tweak conflict');
+      updateDesignWorkspace(db, design.id, root);
+      registerWorkspaceIpc(db, () => null);
+      const write = getHandler('codesign:files:v1:write');
+      await writeFile(path.join(root, 'Details.jsx'), 'agent revision', 'utf8');
+      await expect(
+        write(null, {
+          schemaVersion: 1,
+          designId: design.id,
+          path: 'Details.jsx',
+          content: 'stale tweak',
+          expectedContent: 'old source',
+        }),
+      ).rejects.toMatchObject({ code: 'IPC_CONFLICT' });
+      expect(await readFile(path.join(root, 'Details.jsx'), 'utf8')).toBe('agent revision');
+      await write(null, {
+        schemaVersion: 1,
+        designId: design.id,
+        path: 'Details.jsx',
+        content: 'saved tweak',
+        expectedContent: 'agent revision',
+      });
+      expect(await readFile(path.join(root, 'Details.jsx'), 'utf8')).toBe('saved tweak');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not recreate a removed tweak target or escape the workspace', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-tweak-missing-'));
+    try {
+      const db = initInMemoryDb();
+      const design = createDesign(db, 'Tweak missing');
+      updateDesignWorkspace(db, design.id, root);
+      registerWorkspaceIpc(db, () => null);
+      const write = getHandler('codesign:files:v1:write');
+      for (const target of ['Details.jsx', '../outside.jsx']) {
+        await expect(
+          write(null, {
+            schemaVersion: 1,
+            designId: design.id,
+            path: target,
+            content: 'tweak',
+            expectedContent: 'source',
+          }),
+        ).rejects.toThrow();
+      }
+      await expect(readFile(path.join(root, 'Details.jsx'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('imports external files into references or assets with deduped names', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codesign-import-workspace-'));
     const sourceDir = await mkdtemp(path.join(tmpdir(), 'codesign-import-source-'));

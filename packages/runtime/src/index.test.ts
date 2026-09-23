@@ -1,13 +1,86 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildInteractivePreviewDocument,
   buildPreviewDocument,
   buildSrcdoc,
   buildStandaloneDocument,
   classifyRenderableSource,
   extractAndUpgradeArtifact,
   findArtifactSourceReference,
+  INTERACTIVE_PREVIEW_SANDBOX,
   resolveArtifactSourceReferencePath,
 } from './index';
+
+function compiledArtifactSource(document: string): string {
+  const compiled = [...document.matchAll(/var source = ([^\n]+);\n {2}var options = /g)].at(
+    -1,
+  )?.[1];
+  if (!compiled) throw new Error('Missing compiled artifact source');
+  return JSON.parse(compiled) as string;
+}
+describe('interactive preview form policy', () => {
+  it.each([
+    ['App.jsx', 'function App(){return <form><button>Save</button></form>}'],
+    [
+      'index.html',
+      '<html lang="en"><script>window.early=true</script><head></head><body><form></form></body></html>',
+    ],
+  ])('keeps trusted policy first through %s round trips without changing exports', (path, source) => {
+    const first = buildInteractivePreviewDocument(source, { path });
+    const second = buildInteractivePreviewDocument(first, { path, baseHref: 'file:///workspace/' });
+    for (const document of [first, second]) {
+      expect(document).toMatch(/^<!doctype html>\s*<meta http-equiv="Content-Security-Policy"/u);
+      expect(document.match(/data-codesign-form-policy/gu)).toHaveLength(1);
+      expect(document).toContain('content="form-action \'none\'"');
+    }
+    expect(second).toContain('<base href="file:///workspace/"');
+    expect(buildStandaloneDocument(source, { path })).not.toContain('data-codesign-form-policy');
+    expect(INTERACTIVE_PREVIEW_SANDBOX.split(' ')).toEqual(['allow-scripts', 'allow-forms']);
+  });
+});
+
+describe.each([
+  ['preview', buildPreviewDocument],
+  ['standalone', buildStandaloneDocument],
+] as const)('%s runtime fonts', (_name, build) => {
+  it.each([
+    'function App(){return <p>Hello</p>}',
+    'function App(){return <p style={{fontFamily:"system-ui, Arial, sans-serif"}}>Hello</p>}',
+    'function App(){return <p style={{fontFamily:"My-Fraunces, JetBrains Mono Custom"}}>Hello</p>}',
+  ])('does not contact font services for a source without supported families', (source) => {
+    const out = build(source, { path: 'App.jsx' });
+    expect(out).not.toContain('fonts.googleapis.com');
+    expect(out).not.toContain('fonts.gstatic.com');
+    expect(out).not.toContain('rel="preconnect"');
+    expect(out).toContain('body{font-family:system-ui,sans-serif;');
+  });
+
+  it.each([
+    ['Fraunces', 'Fraunces:ital,opsz,wght@'],
+    ['DM Serif Display', 'DM+Serif+Display:ital@'],
+    ['DM Sans', 'DM+Sans:opsz,wght@'],
+    ['JetBrains Mono', 'JetBrains+Mono:wght@'],
+  ])('loads only explicitly referenced %s', (family, query) => {
+    const out = build(`function App(){return <p style={{fontFamily:"${family}"}}>Hello</p>}`);
+    const link = out.match(/<link data-codesign-runtime-fonts[^>]+>/)?.[0];
+    expect(link).toContain(`family=${query}`);
+    expect(link?.match(/family=/g)).toHaveLength(1);
+    expect(out.match(/data-codesign-runtime-fonts/g)).toHaveLength(1);
+    expect(out.match(/rel="preconnect"/g)).toHaveLength(2);
+  });
+
+  it('deduplicates families from CSS, token values and Tailwind arbitrary font names', () => {
+    const source = `const headingFont = "Fraunces";
+function App(){return <><style>{".body{font-family:'DM Sans',sans-serif}"}</style><p style={{fontFamily:headingFont}}>Title</p><p className="font-['DM_Sans']">Body</p></>}`;
+    const out = build(source);
+    const link = out.match(/<link data-codesign-runtime-fonts[^>]+>/)?.[0];
+    expect(link?.match(/family=/g)).toHaveLength(2);
+    expect(link).toContain('family=Fraunces:');
+    expect(link).toContain('family=DM+Sans:');
+    expect(link).not.toContain('JetBrains');
+    expect(link).not.toContain('Serif');
+  });
+});
 
 describe('buildSrcdoc', () => {
   it('strips CSP meta tags', () => {
@@ -138,7 +211,7 @@ describe('buildSrcdoc', () => {
     const out = buildSrcdoc('<div>plain</div>');
     expect(out).toContain('AGENT_BODY_BEGIN');
     expect(out).toContain('window.Babel.transform');
-    expect(out).toContain('<div>plain</div>');
+    expect(compiledArtifactSource(out)).toBe('<div>plain</div>');
   });
 });
 
@@ -172,14 +245,15 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`;
     expect(out).not.toContain('originalScript');
   });
 
-  it('registers a cached live runner only when source reads TWEAK_DEFAULTS after declaration', () => {
+  it('runs the artifact module once and leaves live rerenders to the existing React root', () => {
     const out =
       buildSrcdoc(`const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"accent":"#000"}/*EDITMODE-END*/;
 function App() { return <main style={{ color: TWEAK_DEFAULTS.accent }}>hi</main>; }
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`);
 
     expect(out).toContain('window.__codesign_tweaks__.tokens');
-    expect(out).toContain('registerRunner(runner)');
+    expect(out).not.toContain('registerRunner(runner)');
+    expect(out).toContain('window.React.cloneElement(element)');
   });
 
   it('detects JSX via ReactDOM.createRoot signature even without EDITMODE', () => {
@@ -279,7 +353,9 @@ describe('standalone renderable classification', () => {
     const out = buildPreviewDocument('function _App() { return <div>hi</div>; }', {
       path: 'demo.jsx',
     });
-    expect(out).toContain("ReactDOM.createRoot(document.getElementById('root')).render(<_App />);");
+    expect(compiledArtifactSource(out)).toContain(
+      "ReactDOM.createRoot(document.getElementById('root')).render(<_App />);",
+    );
   });
 
   it('preserves explicit mount code without adding an _App fallback', () => {
@@ -287,8 +363,8 @@ describe('standalone renderable classification', () => {
       'function App() { return <div>hi</div>; }\nReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
       { path: 'demo.jsx' },
     );
-    expect(out).toContain('render(<App/>);');
-    expect(out).not.toContain('render(<_App />);');
+    expect(compiledArtifactSource(out)).toContain('render(<App/>);');
+    expect(compiledArtifactSource(out)).not.toContain('render(<_App />);');
   });
 
   it('uses the TypeScript Babel preset for TSX files', () => {

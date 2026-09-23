@@ -523,3 +523,27 @@ describe('provider capability helpers', () => {
     expect(caps.modelDiscoveryMode).toBe('manual');
   });
 });
+
+it('round-trips opt-in web search settings and keeps Tavily in the existing secrets map', () => {
+  const cfg = parseConfigFlexible({
+    version: 3,
+    activeProvider: '',
+    activeModel: '',
+    webSearch: { enabled: true },
+    secrets: { tavily: { ciphertext: 'plain:test-only' } },
+  });
+  expect(cfg.webSearch).toEqual({ enabled: true, maxCalls: 12, timeoutMs: 15000, maxChars: 10000 });
+  expect(parseConfigFlexible(toPersistedV3(cfg))).toEqual(cfg);
+  expect(() =>
+    ConfigV3Schema.parse({ ...toPersistedV3(cfg), webSearch: { enabled: true, maxCalls: 1000 } }),
+  ).toThrow();
+  expect(() =>
+    ConfigV3Schema.parse({
+      ...toPersistedV3(cfg),
+      webSearch: { enabled: true, apiKey: 'not-allowed-here' },
+    }),
+  ).toThrow();
+  expect(
+    parseConfigFlexible({ version: 3, activeProvider: '', activeModel: '' }).webSearch,
+  ).toBeUndefined();
+});

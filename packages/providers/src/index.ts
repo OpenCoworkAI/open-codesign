@@ -65,6 +65,18 @@ export interface GenerateResult {
   costUsd: number;
 }
 
+/** A length stop is not a successful completion. Keep usage, never partial
+ * content, so bounded callers can retry without under-reporting token cost. */
+export class CompletionLengthError extends CodesignError {
+  constructor(public readonly usage: Omit<GenerateResult, 'content'>) {
+    super(
+      'Provider stopped before completion because the response hit the token limit',
+      ERROR_CODES.PROVIDER_ERROR,
+    );
+    this.name = 'CompletionLengthError';
+  }
+}
+
 interface PiTextContent {
   type: 'text';
   text: string;
@@ -193,8 +205,12 @@ function isOpenAIOfficial(baseUrl: string | undefined): boolean {
 }
 
 function isReasoningModelId(modelId: string): boolean {
-  // OpenAI reasoning families: o1, o3, o4, gpt-5 (incl. variants like gpt-5-turbo, gpt-5.4)
-  return /^(o[134]|gpt-5)/i.test(modelId);
+  return /^(o[134]|gpt-[56])/i.test(modelId);
+}
+
+export function requiredReasoningDefault(modelId: string): PiReasoningLevel | undefined {
+  // Astra rejects pi-ai's implicit "none", including on custom Responses gateways.
+  return /^(?:openai\/)?gpt-6-astra$/i.test(modelId) ? 'low' : undefined;
 }
 
 /**
@@ -221,7 +237,7 @@ const REASONING_MODEL_ID_PATTERN = new RegExp(
   [
     ':thinking$',
     '(^|/)claude-(?:opus|sonnet)-4',
-    '^(?:openai/)?(?:o1|o3|o4|gpt-5)(?:[-.].*)?$',
+    '^(?:openai/)?(?:o1|o3|o4|gpt-[56])(?:[-.].*)?$',
     '^deepseek/deepseek-r\\d',
     '^qwen/qwq',
   ].join('|'),
@@ -407,7 +423,8 @@ export async function complete(
   if (opts.baseUrl !== undefined) piOpts.baseUrl = opts.baseUrl;
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
-  if (opts.reasoning !== undefined && opts.reasoning !== 'off') piOpts.reasoning = opts.reasoning;
+  const reasoning = opts.reasoning ?? requiredReasoningDefault(effectiveModelId);
+  if (reasoning !== undefined && reasoning !== 'off') piOpts.reasoning = reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };
 
   // Strict OpenAI-Responses gateways (e.g. sub2api-style routers) 400 when
@@ -470,12 +487,17 @@ function assertCompleteStop(result: PiAssistantMessage): void {
       ERROR_CODES.PROVIDER_ABORTED,
     );
   }
+  if (result.stopReason === 'length') {
+    throw new CompletionLengthError({
+      inputTokens: result.usage?.input ?? 0,
+      outputTokens: result.usage?.output ?? 0,
+      costUsd: result.usage?.cost?.total ?? 0,
+    });
+  }
   const message =
-    result.stopReason === 'length'
-      ? 'Provider stopped before completion because the response hit the token limit'
-      : result.stopReason === 'toolUse'
-        ? 'Provider returned an unresolved tool call in a non-tool completion'
-        : (result.errorMessage ?? 'Provider returned an error');
+    result.stopReason === 'toolUse'
+      ? 'Provider returned an unresolved tool call in a non-tool completion'
+      : (result.errorMessage ?? 'Provider returned an error');
   throw new CodesignError(message, ERROR_CODES.PROVIDER_ERROR);
 }
 

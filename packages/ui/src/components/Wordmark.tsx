@@ -15,11 +15,11 @@ export function Wordmark({ badge, size = 'md' }: WordmarkProps) {
   const metrics = {
     sm: { markPx: 36, fontSize: '16px', badgeSize: '8px', gap: '8px', badgeMarginTop: '4px' },
     titlebar: {
-      markPx: 56,
-      fontSize: '24px',
+      markPx: 36,
+      fontSize: '18px',
       badgeSize: '9px',
-      gap: '10px',
-      badgeMarginTop: '6px',
+      gap: '8px',
+      badgeMarginTop: '4px',
     },
     md: { markPx: 88, fontSize: '30px', badgeSize: '10px', gap: '16px', badgeMarginTop: '10px' },
   }[size];

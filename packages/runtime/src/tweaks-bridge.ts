@@ -7,12 +7,28 @@
  *
  * With this, the host posts `{type: 'codesign:tweaks:update', tokens}` to the
  * iframe. The bridge updates the runtime-owned token object, maps primitives to
- * canonical CSS custom properties, and asks the already-compiled artifact runner
- * to render again on the next animation frame. Slider/color changes no longer
- * pay the Babel compilation cost on every tick.
+ * canonical CSS custom properties, and renders the existing React element again
+ * on the next animation frame. Component types and module scope stay intact:
+ * rerunning the module would redefine component functions and discard hook state.
  *
  * Bundled as a string at build time; injected by `wrapJsxAsSrcdoc`.
  */
+
+export interface TweakCompatibilityNotice {
+  type: 'codesign:tweaks:compatibility';
+  message: string;
+}
+
+export function isTweakCompatibilityNotice(data: unknown): data is TweakCompatibilityNotice {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'type' in data &&
+    data.type === 'codesign:tweaks:compatibility' &&
+    'message' in data &&
+    typeof data.message === 'string'
+  );
+}
 
 export const TWEAKS_BRIDGE_SETUP = `(function() {
   'use strict';
@@ -21,14 +37,61 @@ export const TWEAKS_BRIDGE_SETUP = `(function() {
   var state = {
     root: null,
     tokens: {},
-    runner: null,
+    element: null,
+    render: null,
+    module: null,
+    moduleRunning: false,
+    replayReason: null,
+    warned: false,
     renderPending: false
+  };
+  // Plain accessor properties preserve structuredClone/JSON compatibility.
+  var liveTokens = {};
+  function defineToken(key, value) {
+    state.tokens[key] = value;
+    Object.defineProperty(liveTokens, key, {
+      enumerable: true,
+      configurable: true,
+      get: function() {
+        if (state.moduleRunning) {
+          state.replayReason = 'token values are captured outside component rendering';
+        }
+        return state.tokens[key];
+      },
+      set: function(next) { state.tokens[key] = next; }
+    });
+  }
+  var origCreateElement = window.React.createElement;
+  // Cached closures can capture a token before the hook executes; observing
+  // factory reads alone cannot distinguish those from token-independent hooks.
+  ['useMemo', 'useCallback'].forEach(function(name) {
+    var original = window.React[name];
+    window.React[name] = function() {
+      state.replayReason = 'memoization hooks may capture live token values';
+      return original.apply(this, arguments);
+    };
+  });
+  window.React.createElement = function(type) {
+    if (type && (type.$$typeof === Symbol.for('react.memo') ||
+        (type.prototype && (type.prototype.isPureReactComponent || type.prototype.shouldComponentUpdate)))) {
+      state.replayReason = 'memoized components may skip live token updates';
+    }
+    return origCreateElement.apply(this, arguments);
   };
   var origCreateRoot = window.ReactDOM.createRoot;
   window.ReactDOM.createRoot = function(el) {
     if (state.root) return state.root;
     var root = origCreateRoot.call(this, el);
     state.root = root;
+    state.render = root.render.bind(root);
+    root.render = function(element) {
+      state.element = element;
+      if (element !== null && (!window.React.isValidElement(element) ||
+          (typeof element.type !== 'function' && typeof element.type !== 'object'))) {
+        state.replayReason = 'the root is static JSX, a fragment, or an array rather than a component';
+      }
+      return state.render(element);
+    };
     return root;
   };
   function toKebab(key) {
@@ -59,11 +122,14 @@ export const TWEAKS_BRIDGE_SETUP = `(function() {
   }
   function replaceTokens(tokens) {
     for (var existing in state.tokens) {
-      if (Object.prototype.hasOwnProperty.call(state.tokens, existing)) delete state.tokens[existing];
+      if (Object.prototype.hasOwnProperty.call(state.tokens, existing)) {
+        delete state.tokens[existing];
+        delete liveTokens[existing];
+      }
     }
     if (tokens && typeof tokens === 'object') {
       for (var key in tokens) {
-        if (Object.prototype.hasOwnProperty.call(tokens, key)) state.tokens[key] = tokens[key];
+        if (Object.prototype.hasOwnProperty.call(tokens, key)) defineToken(key, tokens[key]);
       }
     }
     applyCssVars(state.tokens);
@@ -79,26 +145,49 @@ export const TWEAKS_BRIDGE_SETUP = `(function() {
     return JSON.parse(body);
   }
   function scheduleRender() {
-    if (state.renderPending || typeof state.runner !== 'function') return;
+    if (state.renderPending || typeof state.render !== 'function') return;
     state.renderPending = true;
     var raf = window.requestAnimationFrame || function(cb) { return setTimeout(cb, 0); };
     raf(function() {
       state.renderPending = false;
-      state.runner();
+      if (state.replayReason && state.module) {
+        if (!state.warned) {
+          state.warned = true;
+          window.parent.postMessage({
+            type: 'codesign:tweaks:compatibility',
+            message: 'Live tweak compatibility mode: ' + state.replayReason +
+              '. Updating tweaks reinitializes artifact state. Read tokens inside non-memoized components to preserve interaction state.',
+          }, '*');
+        }
+        state.module();
+        return;
+      }
+      var element = state.element;
+      if (window.React.isValidElement(element)) {
+        element = window.React.cloneElement(element);
+      }
+      state.render(element);
     });
   }
   window.__codesign_tweaks__ = {
-    tokens: state.tokens,
+    tokens: liveTokens,
     applyCssVars: applyCssVars,
     applyTokens: function(tokens) {
+      var keys = Object.keys(tokens);
+      if (keys.length === Object.keys(state.tokens).length &&
+          keys.every(function(key) { return Object.prototype.hasOwnProperty.call(state.tokens, key) &&
+            state.tokens[key] === tokens[key]; })) return;
       replaceTokens(tokens);
       scheduleRender();
     },
     applyInitial: function(source) {
       replaceTokens(parseInitialTokens(source));
     },
-    registerRunner: function(runner) {
-      state.runner = runner;
+    runModule: function(run) {
+      state.module = run;
+      state.moduleRunning = true;
+      try { run(); }
+      finally { state.moduleRunning = false; }
     }
   };
 })();`;

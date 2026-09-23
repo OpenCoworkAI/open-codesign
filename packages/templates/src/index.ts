@@ -14,10 +14,12 @@ import { ptBRDemos } from './locales/pt-BR';
 import { zhCNDemos } from './locales/zh-CN';
 
 export {
+  EXAMPLE_FEATURES,
   EXAMPLES,
   type Example,
   type ExampleCategory,
   type ExampleContent,
+  type ExampleFeature,
   getExample,
   getExamples,
   type LocalizedExample,

@@ -1,6 +1,6 @@
 {
   "name": "@open-codesign/desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Prompt-to-design desktop app for HTML prototypes, decks, and marketing assets.",
   "author": "Open CoDesign Maintainers <maintainers@opencowork.ai>",
@@ -20,8 +20,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@babel/parser": "7.29.2",
     "jszip": "^3.10.1",
     "ms": "2.1.3",
+    "parse5": "8.0.1",
     "puppeteer-core": "^24.42.0",
     "undici": "^7.25.0"
   },

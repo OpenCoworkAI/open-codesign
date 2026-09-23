@@ -134,6 +134,7 @@ async function persistProviderMutation(
     providers: nextProviders,
     ...(cfg?.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
     ...(cfg?.imageGeneration !== undefined ? { imageGeneration: cfg.imageGeneration } : {}),
+    ...(cfg?.webSearch !== undefined ? { webSearch: cfg.webSearch } : {}),
   });
   await writeConfig(next);
   setCachedConfig(next);
@@ -157,6 +158,7 @@ async function claimActiveProviderIfUnset(): Promise<void> {
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
     ...(cfg.imageGeneration !== undefined ? { imageGeneration: cfg.imageGeneration } : {}),
+    ...(cfg.webSearch !== undefined ? { webSearch: cfg.webSearch } : {}),
   });
   await writeConfig(next);
   setCachedConfig(next);
@@ -271,6 +273,7 @@ async function runLogout(): Promise<CodexOAuthStatus> {
       providers: nextProviders,
       ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
       ...(cfg.imageGeneration !== undefined ? { imageGeneration: cfg.imageGeneration } : {}),
+      ...(cfg.webSearch !== undefined ? { webSearch: cfg.webSearch } : {}),
     });
     await writeConfig(next);
     setCachedConfig(next);
@@ -329,6 +332,7 @@ export async function migrateStaleCodexEntryIfNeeded(): Promise<void> {
     providers: nextProviders,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
     ...(cfg.imageGeneration !== undefined ? { imageGeneration: cfg.imageGeneration } : {}),
+    ...(cfg.webSearch !== undefined ? { webSearch: cfg.webSearch } : {}),
   });
   await writeConfig(next);
   setCachedConfig(next);

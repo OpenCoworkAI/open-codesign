@@ -398,6 +398,7 @@ export async function updateImageGenerationSettings(
     activeModel: cfg.activeModel,
     secrets: cfg.secrets,
     providers: cfg.providers,
+    ...(cfg.webSearch !== undefined ? { webSearch: cfg.webSearch } : {}),
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
     imageGeneration: parsed,
   });

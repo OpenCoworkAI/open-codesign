@@ -34,9 +34,25 @@ vi.mock('./skills/loader.js', async () => {
   };
 });
 
-import { applyComment, buildApplyCommentUserPrompt } from './index';
+import { applyComment, buildApplyCommentUserPrompt, reasoningForModel } from './index';
 
 const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
+
+describe('reasoningForModel', () => {
+  it.each([
+    'openai',
+    'custom-coproxy-local',
+    'openrouter',
+  ])('uses supported Astra reasoning for %s', (provider) => {
+    expect(reasoningForModel({ provider, modelId: 'gpt-6-astra' })).toBe('low');
+  });
+
+  it('preserves defaults for other custom models', () => {
+    expect(
+      reasoningForModel({ provider: 'custom-coproxy-local', modelId: 'gpt-4o' }),
+    ).toBeUndefined();
+  });
+});
 
 const SAMPLE_HTML = `<!doctype html><html lang="en"><body><h1>Hi</h1></body></html>`;
 
@@ -139,9 +155,9 @@ describe('composeSystemPrompt()', () => {
       'Design workflow',
       'Output rules',
       'Design methodology',
-      'Pre-flight checklist',
+      'Resources and preparation',
       'EDITMODE protocol',
-      'Anti-slop digest',
+      'Design quality guard',
       'Brand acquisition',
       'Multi-screen consistency',
       'Safety and scope',
@@ -155,6 +171,9 @@ describe('composeSystemPrompt()', () => {
     const tweak = composeSystemPrompt({ mode: 'tweak' });
     expect(tweak).toContain('EDITMODE');
     expect(tweak).toContain('Keys must match the existing `TWEAK_DEFAULTS` keys');
+    expect(tweak).toContain('keys during value edits');
+    expect(tweak).toContain('Add controls only when requested');
+    expect(tweak).toContain('`tweaks()` discovers, not binds');
     expect(create).not.toContain('Keys must match the existing `TWEAK_DEFAULTS` keys');
   });
 
@@ -180,14 +199,12 @@ describe('composeSystemPrompt()', () => {
   it('create mode keeps design-quality guardrails in the compact prompt', () => {
     const prompt = composeSystemPrompt({ mode: 'create' });
     for (const guardrail of [
-      'Section/content beats needed to avoid sparse output',
-      'Palette, type ladder, candidate tweakable tokens',
+      'Cover requested journeys and their necessary connections',
+      'typography, spacing, color, and content density',
       'No hotlinked stock or placeholder images',
-      'Content must be domain-specific',
-      '#0E0E10',
-      'default Tailwind grays',
-      'constructed monogram',
-      'Lorem ipsum',
+      'Use credible, labelled sample content',
+      'not font or palette blacklists',
+      'not invented proof',
     ]) {
       expect(prompt, `missing compact guardrail: ${guardrail}`).toContain(guardrail);
     }
@@ -236,19 +253,20 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('TWEAK_DEFAULTS');
   });
 
-  it('create mode asks before high-impact ambiguity and treats tweaks as optional', () => {
+  it('create mode asks only for blockers or requested interviews and keeps tweaks optional', () => {
     const prompt = composeSystemPrompt({ mode: 'create' });
-    expect(prompt).toContain('ask before editing instead of guessing');
-    expect(prompt).toContain('optional feature would add meaningful work');
-    expect(prompt).toContain('Tweak controls would require extra design-token work');
-    expect(prompt).toContain('Expose tweaks selectively');
-    expect(prompt).toContain('Skip tweak work for narrow edits');
-    expect(prompt).toContain('they can ask for controls in a later turn');
+    expect(prompt).toContain(
+      'non-inferable facts or choices that block a materially correct result',
+    );
+    expect(prompt).toContain('Act on reversible style, layout, and ordinary details');
+    expect(prompt).toContain('Honor explicit ask-first/interview requests');
+    expect(prompt).toContain('When controls are requested or useful');
+    expect(prompt).toContain('Do not delay the first working slice');
     expect(prompt).toContain('Empty `{}` is valid');
-    expect(prompt).toContain('user did not want tweak controls');
+    expect(prompt).toContain('controls are unnecessary or declined');
   });
 
-  it('routes create prompt guidance when tweaks are disabled', () => {
+  it('keeps inferred disabled preferences soft', () => {
     const prompt = composeSystemPrompt({
       mode: 'create',
       featureProfile: {
@@ -257,8 +275,8 @@ describe('composeSystemPrompt()', () => {
         reusableSystem: 'auto',
       },
     });
-    expect(prompt).toContain('Do not create EDITMODE tweak controls');
-    expect(prompt).not.toContain('Expose tweaks selectively');
+    expect(prompt).toContain('this is a soft preference, not a prohibition');
+    expect(prompt).not.toContain('Do not create controls or call `tweaks()`');
   });
 
   it('routes create prompt guidance when tweaks are explicitly enabled', () => {
@@ -270,7 +288,7 @@ describe('composeSystemPrompt()', () => {
         reusableSystem: 'auto',
       },
     });
-    expect(prompt).toContain('Create 2-5 high-leverage EDITMODE controls');
+    expect(prompt).toContain('Expose useful source-backed EDITMODE decisions');
   });
 
   it('create mode defines concrete DESIGN.md promotion triggers', () => {
@@ -280,7 +298,7 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('TWEAK_DEFAULTS values');
     expect(prompt).toContain('Google-compatible frontmatter');
     expect(prompt).toContain('version: alpha');
-    expect(prompt).toContain('Keys:');
+    expect(prompt).toContain('validated example and accepted types');
   });
 
   it('tweak mode also includes the EDITMODE protocol section', () => {
@@ -293,7 +311,7 @@ describe('composeSystemPrompt()', () => {
   it('revise mode includes EDITMODE protocol with revise-mode preservation guidance', () => {
     const prompt = composeSystemPrompt({ mode: 'revise' });
     expect(prompt).toContain('EDITMODE protocol');
-    expect(prompt).toContain('In revise mode, preserve an existing EDITMODE block');
+    expect(prompt).toContain('Preserve user selections in later edits');
   });
 
   it('create mode is byte-identical across keyword-shaped user prompts', () => {
@@ -350,27 +368,26 @@ describe('composeSystemPrompt()', () => {
   it('describes App.jsx as the default visual source without forcing document outputs into it', () => {
     const p = composeSystemPrompt({ mode: 'create' });
     expect(p).toContain('Match the deliverable shape to the request');
-    expect(p).toContain('Multi-deliverable work is allowed');
+    expect(p).toContain('multi-file packages are allowed when needed');
     expect(p).toContain('`App.jsx`');
-    expect(p).toContain('not a standalone HTML export');
+    expect(p).toContain('not standalone HTML');
   });
 
-  it('allows a coherent first file pass before preview', () => {
+  it('allows a coherent early preview without treating the frame as a finished product', () => {
     const p = composeSystemPrompt({ mode: 'create' });
-    expect(p).toContain('First file pass');
-    expect(p).toContain('create `App.jsx` when you have a coherent first pass');
-    expect(p).toContain('For document-first requests');
-    expect(p).toContain('Preview the complete pass');
-    expect(p).toContain('Implement and polish');
-    expect(p).toContain('call `preview(path)` only for previewable HTML/JSX/TSX files');
+    expect(p).toContain('write a small, styled, runnable slice');
+    expect(p).toContain('before implementing secondary screens and full styling');
+    expect(p).toContain('An early slice is a milestone');
+    expect(p).toContain('not permission to omit final requirements');
+    expect(p).toContain('For document-only work');
+    expect(p).toContain('For changed interactive journeys');
   });
 
   it('asks the agent to interleave concise progress notes with tool phases', () => {
     const p = composeSystemPrompt({ mode: 'create' });
-    expect(p).toContain('Visible progress');
-    expect(p).toContain('Interleave tool groups with short assistant text');
-    expect(p).toContain('under 18 words');
-    expect(p).toContain('Do not narrate every tiny edit');
+    expect(p).toContain('Update on visible milestones or blockers');
+    expect(p).toContain('not each tool call');
+    expect(p).not.toContain('under 18 words');
   });
 });
 

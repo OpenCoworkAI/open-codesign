@@ -1,13 +1,11 @@
 /**
  * `runPreview` — host executor for the core `preview` tool.
  *
- * Separate from `done-verify.ts` on purpose: `done` renders agent JSX through
- * Electron's hidden BrowserWindow + `buildSrcdoc` (React+Babel wrapper), while
- * `preview` reads an already-standalone workspace artifact file, wraps JSX/TSX
- * through the same runtime builder used by the renderer, and loads the final
- * HTML in a puppeteer-core page. Keeping the two paths separate lets preview's
- * wire shape (screenshot + metrics) evolve without perturbing done's lint +
- * console contract.
+ * Reads workspace artifacts, wraps JSX/TSX through the renderer's runtime
+ * builder, and loads the result in an isolated puppeteer-core page. Optional
+ * declarative interactions run before the final screenshot/DOM report.
+ * Separate from `done-verify.ts` so this wire shape can evolve without changing
+ * done's lint + console contract.
  *
  * Reuses `findSystemChrome` from `@open-codesign/exporters` so we match the
  * PDF exporter's discovery rules (no bundled Chromium — PRINCIPLES §1).
@@ -15,9 +13,13 @@
 
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
-import type { PreviewResult } from '@open-codesign/core';
+import {
+  type RunPreviewOptions as CorePreviewOptions,
+  type PreviewResult,
+  validatePreviewInput,
+} from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
 import {
   buildPreviewDocument,
@@ -25,11 +27,11 @@ import {
   resolveArtifactSourceReferencePath,
 } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
+import { getLogger } from './logger';
+import { boundedPreview, collectVisibleEvidence, runPreviewSteps } from './preview-interactions';
 import { resolveSafeWorkspaceChildPath } from './workspace-reader';
 
-export interface RunPreviewOptions {
-  path: string;
-  vision: boolean;
+export interface RunPreviewOptions extends CorePreviewOptions {
   workspaceRoot: string;
 }
 
@@ -52,6 +54,12 @@ const RUNTIME_FONT_PATH_PREFIXES = [
 ] as const;
 
 export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult> {
+  try {
+    validatePreviewInput(opts);
+    if (opts.signal?.aborted) return emptyFail('Preview cancelled');
+  } catch (err) {
+    return emptyFail(err instanceof Error ? err.message : String(err));
+  }
   const absWorkspace = resolve(opts.workspaceRoot);
   let source: string;
   let sourcePath = opts.path;
@@ -72,11 +80,7 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
 
   let html: string;
   try {
-    html = buildPreviewDocument(source, {
-      path: sourcePath,
-      baseHref: pathToFileURL(absWorkspace.endsWith(sep) ? absWorkspace : `${absWorkspace}${sep}`)
-        .href,
-    });
+    html = await buildWorkspacePreviewDocument(source, absWorkspace, sourcePath);
   } catch (err) {
     return emptyFail(err instanceof Error ? err.message : String(err));
   }
@@ -98,6 +102,11 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
   const startTs = Date.now();
   let browser: Browser | null = null;
   let page: Page | null = null;
+  let steps: PreviewResult['steps'];
+  let navigationFailure: string | undefined;
+  let report: PreviewResult | undefined;
+  const browserLifetime = new AbortController();
+  const hasSteps = (opts.steps?.length ?? 0) > 0;
   // Launch with an isolated, disposable user-data-dir. Without this puppeteer
   // tries to reuse the user's default Chrome profile; macOS's single-instance
   // handling then activates their running Chrome (bouncing the Dock icon)
@@ -110,6 +119,10 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
       executablePath,
       headless: true,
       userDataDir,
+      ...(hasSteps ? { downloadBehavior: { policy: 'deny' as const } } : {}),
+      signal: opts.signal
+        ? AbortSignal.any([opts.signal, browserLifetime.signal])
+        : browserLifetime.signal,
       args: [
         '--headless=new',
         '--disable-dev-shm-usage',
@@ -124,8 +137,9 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
         ...(process.getuid?.() === 0 ? ['--no-sandbox'] : []),
       ],
     });
+    if (opts.signal?.aborted) throw new Error('Preview cancelled');
     page = await browser.newPage();
-    await page.setViewport(DEFAULT_VIEWPORT);
+    await page.setViewport(opts.viewport ?? DEFAULT_VIEWPORT);
 
     page.on('console', (msg: ConsoleMessage) => {
       if (consoleErrors.length >= MAX_CONSOLE_ENTRIES) return;
@@ -167,30 +181,67 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
 
     const previewFilePath = join(userDataDir, 'preview.html');
     await writeFile(previewFilePath, html, 'utf8');
+    const previewUrl = pathToFileURL(previewFilePath).href;
+    let initialNavigation = true;
+    if (hasSteps) {
+      await page.evaluateOnNewDocument(
+        `window.open = () => { throw new Error('Preview interactions cannot open another document'); };`,
+      );
+    }
     await page.setRequestInterception(true);
     page.on('request', (req: HTTPRequest) => {
+      if (hasSteps && req.isNavigationRequest()) {
+        if (!initialNavigation || req.url() !== previewUrl) {
+          navigationFailure = 'Navigation outside the current preview document is not allowed';
+          // ERR_ABORTED keeps the source document instead of displaying Chrome's error page.
+          void req.abort('aborted').catch((error: unknown) => {
+            navigationFailure = `Navigation blocked: ${String(error)}`;
+          });
+          return;
+        }
+        initialNavigation = false;
+      }
       void handlePreviewRequest(req, absWorkspace, previewFilePath);
     });
-    await page.goto(pathToFileURL(previewFilePath).href, {
-      waitUntil: 'domcontentloaded',
-      timeout: LOAD_TIMEOUT_MS,
-    });
-    await new Promise<void>((r) => setTimeout(r, SETTLE_AFTER_LOAD_MS));
+    await boundedPreview(
+      page.goto(previewUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: LOAD_TIMEOUT_MS,
+      }),
+      LOAD_TIMEOUT_MS,
+      opts.signal,
+    );
+    await boundedPreview(
+      new Promise<void>((r) => setTimeout(r, SETTLE_AFTER_LOAD_MS)),
+      SETTLE_AFTER_LOAD_MS + 100,
+      opts.signal,
+    );
+    if (opts.steps !== undefined) {
+      steps = await runPreviewSteps(page, opts.steps, opts.signal, () => navigationFailure);
+    }
 
-    const metrics = await page.evaluate(() => {
-      // Runs in the browser; DOM globals are defined at call time.
-      // @ts-expect-error browser context
-      const rect = document.documentElement.getBoundingClientRect();
-      return {
+    const metrics = await boundedPreview(
+      page.evaluate(() => {
+        // Runs in the browser; DOM globals are defined at call time.
         // @ts-expect-error browser context
-        nodes: document.querySelectorAll('*').length,
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
-    });
+        const rect = document.documentElement.getBoundingClientRect();
+        return {
+          // @ts-expect-error browser context
+          nodes: document.querySelectorAll('*').length,
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+      }),
+      2000,
+      opts.signal,
+    );
+    const failedStep = steps?.find((step) => !step.ok);
+    const reason = failedStep
+      ? `Step ${failedStep.index + 1} (${failedStep.action} ${failedStep.selector}): ${failedStep.reason}`
+      : navigationFailure;
 
     const result: PreviewResult = {
-      ok: consoleErrors.length === 0 && assetErrors.length === 0,
+      ok: !reason && consoleErrors.length === 0 && assetErrors.length === 0,
       consoleErrors,
       assetErrors,
       metrics: {
@@ -199,64 +250,108 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
         height: metrics.height,
         loadMs: Date.now() - startTs,
       },
+      ...(steps !== undefined ? { steps } : {}),
+      ...(reason ? { reason } : {}),
     };
 
     if (opts.vision) {
-      const png = await page.screenshot({ type: 'png', encoding: 'base64' });
+      const png = await boundedPreview(
+        page.screenshot({ type: 'png', encoding: 'base64' }),
+        2000,
+        opts.signal,
+      );
       result.screenshot = `data:image/png;base64,${png}`;
     } else {
-      result.domOutline = await page.evaluate(() => {
-        // Runs in the browser. Re-declare the minimal DOM surface we need
-        // locally instead of depending on the DOM lib in the main-process
-        // tsconfig.
-        interface El {
-          tagName: string;
-          id: string;
-          classList: { length: number } & Iterable<string>;
-          children: Iterable<El>;
-        }
-        function outline(el: El, depth: number, maxDepth: number): string {
-          const indent = '  '.repeat(depth);
-          const tag = el.tagName.toLowerCase();
-          const idPart = el.id ? `#${el.id}` : '';
-          const clsPart =
-            el.classList.length > 0 ? `.${Array.from(el.classList).slice(0, 2).join('.')}` : '';
-          const self = `${indent}${tag}${idPart}${clsPart}`;
-          if (depth >= maxDepth) return self;
-          const kids = Array.from(el.children).slice(0, 20);
-          const children = kids.map((c) => outline(c, depth + 1, maxDepth)).join('\n');
-          return children.length > 0 ? `${self}\n${children}` : self;
-        }
-        // @ts-expect-error browser context
-        return outline(document.documentElement as unknown as El, 0, 4);
-      });
+      result.domOutline = await boundedPreview(
+        page.evaluate(() => {
+          // Runs in the browser. Re-declare the minimal DOM surface we need
+          // locally instead of depending on the DOM lib in the main-process
+          // tsconfig.
+          interface El {
+            tagName: string;
+            id: string;
+            classList: { length: number } & Iterable<string>;
+            children: Iterable<El>;
+          }
+          function outline(el: El, depth: number, maxDepth: number): string {
+            const indent = '  '.repeat(depth);
+            const tag = el.tagName.toLowerCase();
+            const idPart = el.id ? `#${el.id}` : '';
+            const clsPart =
+              el.classList.length > 0 ? `.${Array.from(el.classList).slice(0, 2).join('.')}` : '';
+            const self = `${indent}${tag}${idPart}${clsPart}`;
+            if (depth >= maxDepth) return self;
+            const kids = Array.from(el.children).slice(0, 20);
+            const children = kids.map((c) => outline(c, depth + 1, maxDepth)).join('\n');
+            return children.length > 0 ? `${self}\n${children}` : self;
+          }
+          // @ts-expect-error browser context
+          return outline(document.documentElement as unknown as El, 0, 4);
+        }),
+        2000,
+        opts.signal,
+      );
     }
+    if (!opts.vision || hasSteps) {
+      result.visibleText = await boundedPreview(
+        page.evaluate(collectVisibleEvidence),
+        2000,
+        opts.signal,
+      );
+    }
+    result.ok = result.ok && consoleErrors.length === 0 && assetErrors.length === 0;
+    report = result;
     return result;
   } catch (err) {
-    return {
+    report = {
       ok: false,
       consoleErrors,
       assetErrors,
       metrics: { nodes: 0, width: 0, height: 0, loadMs: Date.now() - startTs },
       reason: err instanceof Error ? err.message : String(err),
+      ...(steps !== undefined ? { steps } : {}),
     };
+    return report;
   } finally {
-    try {
-      if (page) await page.close();
-    } catch {
-      /* noop */
-    }
-    try {
-      if (browser) await browser.close();
-    } catch {
-      /* noop */
+    const cleanupFailed = (error: unknown) => {
+      const message = `Preview cleanup failed: ${error instanceof Error ? error.message : String(error)}`;
+      getLogger('preview').error('preview.cleanup.failed', { message });
+      if (consoleErrors.length < MAX_CONSOLE_ENTRIES) {
+        consoleErrors.push({ level: 'error', message });
+      }
+      if (report) {
+        report.ok = false;
+        report.reason ??= message;
+      }
+    };
+    if (browser) {
+      // Puppeteer's launch signal terminates this browser's process tree if graceful close stalls.
+      const closing = browser.close();
+      try {
+        await boundedPreview(closing, 5000);
+      } catch (error) {
+        browserLifetime.abort();
+        try {
+          await boundedPreview(closing, 2000);
+          if (report) {
+            report.warnings = [
+              `Graceful preview shutdown failed; isolated browser was terminated: ${error instanceof Error ? error.message : String(error)}`,
+            ];
+            getLogger('preview').warn('preview.cleanup.recovered', {
+              message: report.warnings[0],
+            });
+          }
+        } catch (terminationError) {
+          cleanupFailed(terminationError);
+        }
+      }
     }
     // Clean up the per-call profile dir — leaving it around would let the
     // tmpdir accumulate hundreds of MB across runs.
     try {
-      await rm(userDataDir, { recursive: true, force: true });
-    } catch {
-      /* noop */
+      await rm(userDataDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch (error) {
+      cleanupFailed(error);
     }
   }
 }
@@ -277,6 +372,18 @@ async function readPreviewSource(absWorkspace: string, relPath: string): Promise
     throw new Error(`binary file cannot be previewed: ${relPath}`);
   }
   return source;
+}
+
+export async function buildWorkspacePreviewDocument(
+  source: string,
+  workspaceRoot: string,
+  sourcePath: string,
+): Promise<string> {
+  const absoluteSource = await resolveSafeWorkspaceChildPath(workspaceRoot, sourcePath);
+  return buildPreviewDocument(source, {
+    path: sourcePath,
+    baseHref: pathToFileURL(`${dirname(absoluteSource)}${sep}`).href,
+  });
 }
 
 export async function isPreviewFileUrlAllowed(
@@ -383,7 +490,8 @@ export function isRuntimeConsoleNoise(
   return /https:\/\/fonts\.(?:googleapis|gstatic)\.com\//.test(message);
 }
 
-function previewIncludesRuntimeFontLinks(html: string): boolean {
+export function previewIncludesRuntimeFontLinks(html: string): boolean {
+  if (/<link\b[^>]*\bdata-codesign-runtime-fonts\b/.test(html)) return true;
   return (
     html.includes('<!-- AGENT_BODY_BEGIN -->') &&
     html.includes('https://fonts.googleapis.com/css2?family=Fraunces:')

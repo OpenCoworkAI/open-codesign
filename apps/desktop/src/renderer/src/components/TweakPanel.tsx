@@ -1,18 +1,16 @@
 import { useT } from '@open-codesign/i18n';
-import {
-  type EditmodeBlock,
-  type EditmodeTokens,
-  type EditmodeTokenValue,
-  parseEditmodeBlock,
-  parseTweakSchema,
-  replaceEditmodeBlock,
-  type TokenSchemaEntry,
-  type TweakSchema,
-} from '@open-codesign/shared';
+import { isTweakCompatibilityNotice } from '@open-codesign/runtime';
+import type { EditmodeTokens, EditmodeTokenValue, TokenSchemaEntry } from '@open-codesign/shared';
+import { inspectTweakSource } from '@open-codesign/shared';
 import { RotateCcw, SlidersHorizontal, X } from 'lucide-react';
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import { stablePreviewSourceKey } from '../preview/helpers';
-import { persistTweakTokensToWorkspace } from '../preview/tweak-persistence';
+import { isTrustedPreviewMessageSource } from '../preview/helpers';
+import {
+  createTweakPersistDebounce,
+  persistTweakTokensToWorkspace,
+  rebaseTweakDraft,
+} from '../preview/tweak-persistence';
+import type { WorkspacePreviewReadResult } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
 import {
   ColorSwatch,
@@ -29,18 +27,26 @@ export function shouldSyncPreviewSourceAfterTweakPersist(result: { wrote: boolea
   return !result.wrote;
 }
 
+function inferColors(tokens: EditmodeTokens | null): Record<string, boolean> {
+  return Object.fromEntries(
+    Object.entries(tokens ?? {}).map(([key, value]) => [key, isColorString(value)]),
+  );
+}
+
 function TokenRow({
   tokenKey,
   value,
   onChange,
   pickColorLabel,
   schemaEntry,
+  inferredColor,
 }: {
   tokenKey: string;
   value: EditmodeTokenValue;
   onChange: (next: EditmodeTokenValue) => void;
   pickColorLabel: string;
   schemaEntry?: TokenSchemaEntry | undefined;
+  inferredColor: boolean;
 }) {
   const labelText = humanize(tokenKey);
 
@@ -95,7 +101,7 @@ function TokenRow({
     );
   }
 
-  // Fallback heuristic — same as before.
+  // Inference belongs to the source token, not a partially typed draft.
   if (typeof value === 'boolean') {
     return (
       <div className="flex items-center justify-between gap-[var(--space-3)] py-[var(--space-1_5)]">
@@ -113,7 +119,7 @@ function TokenRow({
       >
         {labelText}
       </span>
-      {isColorString(value) ? (
+      {inferredColor && typeof value === 'string' ? (
         <ColorSwatch value={value} onChange={(v) => onChange(v)} pickColorLabel={pickColorLabel} />
       ) : typeof value === 'number' ? (
         <NumberInput value={value} onChange={(v) => onChange(v)} />
@@ -124,81 +130,130 @@ function TokenRow({
   );
 }
 
-export function TweakPanel({
-  iframeRef,
-  presentation = 'floating',
-}: {
+interface TweakPanelProps {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   presentation?: 'floating' | 'inspector';
-}) {
+  source?: WorkspacePreviewReadResult;
+  onPersist?: (source: WorkspacePreviewReadResult) => void;
+}
+
+export function TweakPanel(props: TweakPanelProps) {
+  const designId = useCodesignStore((s) => s.currentDesignId);
+  return <TweakPanelEditor key={JSON.stringify([designId, props.source?.path])} {...props} />;
+}
+
+function TweakPanelEditor({
+  iframeRef,
+  presentation = 'floating',
+  source,
+  onPersist,
+}: TweakPanelProps) {
   const t = useT();
-  const previewSource = useCodesignStore((s) => s.previewSource);
+  const storedSource = useCodesignStore((s) => s.previewSource);
+  const previewSource = source?.content ?? storedSource;
   const setPreviewSource = useCodesignStore((s) => s.setPreviewSource);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const isGenerating = useCodesignStore(
+    (s) => currentDesignId !== null && s.generationByDesign?.[currentDesignId] !== undefined,
+  );
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
-
-  const block: EditmodeBlock | null = useMemo(
-    () => (previewSource ? parseEditmodeBlock(previewSource) : null),
-    [previewSource],
+  const mountedRef = useRef(true);
+  const generationRevisionRef = useRef(0);
+  const persistDebounce = useMemo(
+    () =>
+      createTweakPersistDebounce(() => {
+        if (mountedRef.current) setSaving(false);
+      }),
+    [],
   );
 
-  const schema: TweakSchema | null = useMemo(
-    () => (previewSource ? parseTweakSchema(previewSource) : null),
-    [previewSource],
-  );
-  const sourceKey = useMemo(
-    () => (previewSource ? stablePreviewSourceKey(previewSource) : ''),
-    [previewSource],
-  );
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: currentDesignId and sourceKey intentionally reset the transient panel state when the user switches designs or a new artifact structure loads.
-  useEffect(() => {
-    setOpen(false);
-  }, [currentDesignId, sourceKey]);
-
+  const tweakSource = useMemo(() => inspectTweakSource(previewSource ?? ''), [previewSource]);
+  const { block, schema } = tweakSource;
   // Live working copy — drives the UI and the postMessage stream to the iframe
   // without paying for a full srcdoc reload on every keystroke. Persistence
-  // back into `previewSource` is debounced (see persistTimer below).
-  const [liveTokens, setLiveTokens] = useState<EditmodeTokens | null>(null);
-  const liveSigRef = useRef<string>('');
+  // back into the workspace is debounced.
+  const [liveTokens, setLiveTokens] = useState<EditmodeTokens | null>(block?.tokens ?? null);
+  const initialTokensRef = useRef<EditmodeTokens | null>(block?.tokens ?? null);
+  const [inference, setInference] = useState(() => ({
+    revision: 0,
+    colors: inferColors(block?.tokens ?? null),
+  }));
+  const baselineRef = useRef(previewSource);
+  const observedSourceRef = useRef(previewSource);
+  const acknowledgedSourceRef = useRef<string | null>(null);
+  const latestSourceRef = useRef(previewSource);
+  latestSourceRef.current = previewSource;
   useEffect(() => {
+    if (saving || persistDebounce.hasPending() || observedSourceRef.current === previewSource)
+      return;
+    observedSourceRef.current = previewSource;
+    if (previewSource === acknowledgedSourceRef.current) return;
+    baselineRef.current = previewSource;
+    setInference((previous) => ({
+      revision: previous.revision + 1,
+      colors: inferColors(block?.tokens ?? null),
+    }));
     if (!block) {
       setLiveTokens(null);
-      liveSigRef.current = '';
-      return;
-    }
-    const sig = Object.keys(block.tokens).sort().join('|');
-    // Only resync from store when the *schema* (key set) changes — this happens
-    // on a new artifact load. Otherwise we'd clobber the user's in-flight edits
-    // each time `setPreviewSource` settles from our own debounce.
-    if (sig !== liveSigRef.current) {
-      setLiveTokens({ ...block.tokens });
-      liveSigRef.current = sig;
-    }
-  }, [block]);
-
-  const initialTokensRef = useRef<EditmodeTokens | null>(null);
-  useEffect(() => {
-    if (!block) {
       initialTokensRef.current = null;
       return;
     }
-    const sig = Object.keys(block.tokens).sort().join('|');
-    if (initialTokensRef.current === null || liveSigRef.current !== sig) {
-      initialTokensRef.current = { ...block.tokens };
+    setLiveTokens({ ...block.tokens });
+    initialTokensRef.current = { ...block.tokens };
+  }, [block, previewSource, persistDebounce, saving]);
+
+  useEffect(() => {
+    if (!liveTokens) return;
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'codesign:tweaks:update', tokens: liveTokens },
+      '*',
+    );
+  }, [iframeRef, liveTokens]);
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent<unknown>) {
+      if (
+        !mountedRef.current ||
+        useCodesignStore.getState().currentDesignId !== currentDesignId ||
+        !isTrustedPreviewMessageSource(event.source, iframeRef.current?.contentWindow) ||
+        !isTweakCompatibilityNotice(event.data)
+      )
+        return;
+      useCodesignStore.getState().pushToast({
+        variant: 'info',
+        title: t('tweaks.title'),
+        description: t('tweaks.compatibilityNotice'),
+      });
     }
-  }, [block]);
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [currentDesignId, iframeRef, t]);
 
   // Debounced persist back to the artifact source so reload / snapshot / export
   // see the tweaked state. Live updates have already gone via postMessage.
-  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // A file/design switch must invalidate even a save already awaiting a file read.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: identity invalidates pending writes.
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
-      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      mountedRef.current = false;
+      persistDebounce.cancel();
     };
-  }, []);
+  }, [currentDesignId, source?.path, persistDebounce]);
+
+  useEffect(() => {
+    if (!isGenerating || !persistDebounce.hasPending()) return;
+    generationRevisionRef.current++;
+    persistDebounce.cancel();
+    setLiveTokens(block ? { ...block.tokens } : null);
+    useCodesignStore.getState().pushToast({
+      variant: 'error',
+      title: t('projects.notifications.saveFailed'),
+      description: 'Tweak save cancelled because generation started.',
+    });
+  }, [isGenerating, block, t, persistDebounce]);
 
   useEffect(() => {
     if (!open) return;
@@ -220,63 +275,72 @@ export function TweakPanel({
 
   if (!previewSource) return null;
   const entries = liveTokens ? Object.entries(liveTokens) : [];
-  const hasTokens = entries.length > 0;
-
-  function postLive(tokens: EditmodeTokens): void {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage({ type: 'codesign:tweaks:update', tokens }, '*');
-  }
+  const hasTokens = tweakSource.status === 'ready' && entries.length > 0;
 
   function schedulePersist(tokens: EditmodeTokens): void {
-    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-    persistTimerRef.current = setTimeout(() => {
-      persistTimerRef.current = null;
-      const source = useCodesignStore.getState().previewSource;
-      if (!source) return;
-      const designId = useCodesignStore.getState().currentDesignId;
+    const designId = currentDesignId;
+    const path = source?.path;
+    if (!baselineRef.current) return;
+    const generationRevision = generationRevisionRef.current;
+    persistDebounce.schedule(baselineRef.current, tokens, async (baseSource, nextTokens) => {
       const files = window.codesign?.files;
-      if (!designId || !files?.write) {
-        setPreviewSource(replaceEditmodeBlock(source, tokens));
-        return;
-      }
-
-      persistQueueRef.current = persistQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          const latestSource = useCodesignStore.getState().previewSource ?? source;
-          const result = await persistTweakTokensToWorkspace({
-            designId,
-            previewSource: latestSource,
-            tokens,
-            read: files.read,
-            write: files.write,
-          });
-          if (
-            shouldSyncPreviewSourceAfterTweakPersist(result) &&
-            useCodesignStore.getState().currentDesignId === designId
-          ) {
+      const canWrite = () => {
+        const state = useCodesignStore.getState();
+        return (
+          mountedRef.current &&
+          generationRevisionRef.current === generationRevision &&
+          state.currentDesignId === designId &&
+          (!designId || state.generationByDesign?.[designId] === undefined)
+        );
+      };
+      const observedSource = latestSourceRef.current;
+      setSaving(true);
+      try {
+        const result = await persistTweakTokensToWorkspace({
+          designId,
+          previewSource: baseSource,
+          path,
+          tokens: nextTokens,
+          read: files?.read,
+          write: files?.write,
+          canWrite,
+        });
+        if (!canWrite()) return;
+        baselineRef.current = result.content;
+        acknowledgedSourceRef.current = result.content;
+        initialTokensRef.current = inspectTweakSource(result.content).block?.tokens ?? null;
+        setLiveTokens((draft) => draft && rebaseTweakDraft(result.content, nextTokens, draft));
+        // Do not publish an old ACK over an independently refreshed source.
+        if (
+          latestSourceRef.current === observedSource ||
+          latestSourceRef.current === baseSource ||
+          latestSourceRef.current === result.content
+        ) {
+          if (onPersist) onPersist(result);
+          else if (shouldSyncPreviewSourceAfterTweakPersist(result)) {
             setPreviewSource(result.content);
           }
-        })
-        .catch((err) => {
-          useCodesignStore.getState().pushToast({
-            variant: 'error',
-            title: t('projects.notifications.saveFailed'),
-            description: err instanceof Error ? err.message : t('errors.unknown'),
-          });
+        }
+        return result;
+      } catch (err) {
+        // Keep the recoverable draft; neither retry queued edits nor reload over it.
+        observedSourceRef.current = latestSourceRef.current;
+        useCodesignStore.getState().pushToast({
+          variant: 'error',
+          title: t('projects.notifications.saveFailed'),
+          description: err instanceof Error ? err.message : t('errors.unknown'),
         });
-    }, 400);
+      }
+    });
   }
 
   function applyTokens(next: EditmodeTokens): void {
     setLiveTokens(next);
-    postLive(next);
     schedulePersist(next);
   }
 
   function applyChange(key: string, next: EditmodeTokenValue): void {
-    if (!liveTokens) return;
+    if (!liveTokens || isGenerating) return;
     applyTokens({ ...liveTokens, [key]: next });
   }
 
@@ -293,8 +357,14 @@ export function TweakPanel({
   const resetText = t('tweaks.reset');
   const openLabel = t('tweaks.openLabel');
   const pickColorLabel = t('tweaks.pickColor');
-  const emptyTitle = t('tweaks.emptyTitle');
-  const emptyHint = t('tweaks.emptyHint');
+  const emptyTitle =
+    tweakSource.status === 'invalid' ? t('tweaks.invalidTitle') : t('tweaks.emptyTitle');
+  const emptyHint =
+    tweakSource.status === 'invalid'
+      ? t('tweaks.invalidHint')
+      : tweakSource.status === 'empty'
+        ? t('tweaks.declaredEmptyHint')
+        : t('tweaks.emptyHint');
   const countBadge = hasTokens ? String(entries.length) : '—';
 
   const panelBody = (
@@ -329,7 +399,7 @@ export function TweakPanel({
           <button
             type="button"
             onClick={reset}
-            disabled={!isDirty}
+            disabled={!isDirty || saving || isGenerating}
             title={resetText}
             aria-label={resetText}
             className="inline-flex h-[24px] w-[24px] items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-secondary)] transition-colors duration-[var(--duration-faster)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:pointer-events-none disabled:opacity-30"
@@ -350,27 +420,46 @@ export function TweakPanel({
         </div>
       </div>
 
+      <div
+        className="break-all px-[var(--space-3)] pt-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]"
+        title={source?.path}
+      >
+        {t('tweaks.sourceLabel')}: {source?.path ?? t('tweaks.currentPreview')}
+      </div>
       {hasTokens ? (
-        <div className="flex max-h-[60vh] flex-col gap-[var(--space-1)] overflow-y-auto px-[var(--space-3)] py-[var(--space-2)]">
+        <fieldset
+          disabled={isGenerating}
+          aria-busy={saving}
+          className="flex min-w-0 max-h-[60vh] flex-col gap-[var(--space-1)] overflow-y-auto px-[var(--space-3)] py-[var(--space-2)] disabled:opacity-50"
+        >
           {entries.map(([key, value]) => (
             <TokenRow
-              key={key}
+              key={`${inference.revision}:${key}`}
               tokenKey={key}
               value={value}
               onChange={(next) => applyChange(key, next)}
               pickColorLabel={pickColorLabel}
               schemaEntry={schema?.[key]}
+              inferredColor={inference.colors[key] ?? false}
             />
           ))}
-        </div>
+        </fieldset>
       ) : (
-        <div className="flex flex-col items-start gap-[var(--space-1_5)] px-[var(--space-3)] py-[var(--space-3)]">
+        <div
+          role={tweakSource.status === 'invalid' ? 'alert' : 'status'}
+          className="flex flex-col items-start gap-[var(--space-1_5)] px-[var(--space-3)] py-[var(--space-3)]"
+        >
           <div className="text-[12px] font-medium text-[var(--color-text-primary)]">
             {emptyTitle}
           </div>
           <div className="text-[11px] leading-[var(--leading-snug)] text-[var(--color-text-muted)]">
             {emptyHint}
           </div>
+          {tweakSource.status === 'invalid' ? (
+            <p className="m-0 break-words text-[var(--text-xs)] text-[var(--color-error)]">
+              {tweakSource.error}
+            </p>
+          ) : null}
         </div>
       )}
     </div>
