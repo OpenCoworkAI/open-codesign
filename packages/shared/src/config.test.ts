@@ -6,6 +6,7 @@ import {
   detectWireFromBaseUrl,
   hydrateConfig,
   migrateLegacyToV3,
+  PROVIDER_SHORTLIST,
   parseConfigFlexible,
   resolveProviderCapabilities,
   SUPPORTED_ONBOARDING_PROVIDERS,
@@ -81,6 +82,29 @@ describe('config v3 schema', () => {
       reasoningLevel: 'off',
     });
     expect(caps.supportsReasoning).toBe(false);
+  });
+
+  it('includes Atlas Cloud as an OpenAI-compatible builtin provider', () => {
+    expect(SUPPORTED_ONBOARDING_PROVIDERS).toContain('atlascloud');
+    expect(BUILTIN_PROVIDERS.atlascloud).toMatchObject({
+      id: 'atlascloud',
+      name: 'Atlas Cloud',
+      wire: 'openai-chat',
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      envKey: 'ATLASCLOUD_API_KEY',
+      defaultModel: 'qwen/qwen3.5-flash',
+      capabilities: {
+        supportsKeyless: false,
+        supportsModelsEndpoint: true,
+        modelDiscoveryMode: 'models',
+      },
+    });
+    expect(PROVIDER_SHORTLIST.atlascloud).toMatchObject({
+      provider: 'atlascloud',
+      label: 'Atlas Cloud',
+      defaultPrimary: 'qwen/qwen3.5-flash',
+    });
+    expect(PROVIDER_SHORTLIST.atlascloud.primary).toContain('deepseek-ai/deepseek-v4-pro');
   });
 
   it('rejects unknown wire values', () => {
@@ -302,7 +326,7 @@ describe('config v3 schema', () => {
 });
 
 describe('migrateLegacyToV3', () => {
-  it('seeds three builtin providers from an empty v2', () => {
+  it('seeds builtin providers from an empty v2', () => {
     const legacy = {
       version: 2 as const,
       provider: 'anthropic' as const,
