@@ -213,37 +213,110 @@ export function buildDeepSeekChatUrl(baseUrl) {
   return `${normalizeApiBaseUrl(baseUrl)}/chat/completions`;
 }
 
-export function mapReasoningEffort(effort) {
-  const normalized = (effort || 'high').toLowerCase();
-  if (normalized === 'xhigh' || normalized === 'max') {
-    return 'max';
+export function mapReasoningEffort(effort = 'high') {
+  switch (effort.trim().toLowerCase()) {
+    case 'none':
+      return 'none';
+    case 'minimal':
+    case 'low':
+      return 'low';
+    case 'medium':
+    case 'high':
+    case 'xhigh':
+      return 'high';
+    case 'max':
+    case 'ultra':
+      return 'max';
+    default:
+      throw new RangeError('Unsupported DeepSeek reasoning effort.');
   }
-  return 'high';
 }
 
-export function resolveThinkingConfig(model) {
-  const normalized = (model || '').toLowerCase();
-  if (normalized === 'deepseek-reasoner' || normalized.startsWith('deepseek-v4-pro')) {
-    return { type: 'enabled' };
-  }
-  return null;
+export function resolveThinkingConfig(_model, effort = 'high') {
+  // Flash also defaults to thinking; model-name inference cannot express an explicit opt-out.
+  return { type: mapReasoningEffort(effort) === 'none' ? 'disabled' : 'enabled' };
 }
 
 export function parseJsonObject(text) {
-  if (!text) {
-    return null;
-  }
+  if (!text) return null;
   try {
     return JSON.parse(text);
   } catch {}
   const match = text.match(/\{[\s\S]*\}/);
-  if (!match) {
-    return null;
-  }
+  if (!match) return null;
   try {
     return JSON.parse(match[0]);
   } catch {
     return null;
+  }
+}
+
+export class DeepSeekOutputError extends Error {
+  constructor(code, message, diagnostics = {}) {
+    super(`[${code}] ${message} ${JSON.stringify(diagnostics)}`);
+    this.name = 'DeepSeekOutputError';
+    this.code = code;
+    this.diagnostics = diagnostics;
+  }
+}
+
+function safeModelName(value, apiKey) {
+  if (typeof value !== 'string' || !/^[\w./:-]{1,128}$/.test(value)) return null;
+  if (apiKey && value.includes(apiKey)) return null;
+  return value;
+}
+
+function sanitizeUsage(usage) {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return null;
+  const result = {};
+  for (const field of [
+    'prompt_tokens',
+    'completion_tokens',
+    'total_tokens',
+    'prompt_cache_hit_tokens',
+    'prompt_cache_miss_tokens',
+  ]) {
+    if (Number.isSafeInteger(usage[field]) && usage[field] >= 0) result[field] = usage[field];
+  }
+  for (const [field, count] of [
+    ['completion_tokens_details', 'reasoning_tokens'],
+    ['prompt_tokens_details', 'cached_tokens'],
+  ]) {
+    const value = usage[field]?.[count];
+    if (Number.isSafeInteger(value) && value >= 0) result[field] = { [count]: value };
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function outputDiagnostics(payload, model, apiKey, maxTokens) {
+  const choice = payload?.choices?.[0];
+  const content = choice?.message?.content;
+  const reasoning = choice?.message?.reasoning_content;
+  const reason = choice?.finish_reason;
+  return {
+    requestedModel: safeModelName(model, apiKey),
+    returnedModel: safeModelName(payload?.model, apiKey),
+    finishReason: [
+      'stop',
+      'length',
+      'content_filter',
+      'tool_calls',
+      'function_call',
+      'aborted',
+      'insufficient_system_resource',
+    ].includes(reason)
+      ? reason
+      : 'unknown',
+    maxTokens,
+    contentChars: typeof content === 'string' ? content.length : 0,
+    reasoningChars: typeof reasoning === 'string' ? reasoning.length : 0,
+    usage: sanitizeUsage(payload?.usage),
+  };
+}
+
+function validateLimit(value, name, maximum) {
+  if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
+    throw new RangeError(`${name} must be an integer between 1 and ${maximum}.`);
   }
 }
 
@@ -256,6 +329,7 @@ export async function callDeepSeekJson({
   userPrompt,
   maxTokens = 8192,
 }) {
+  validateLimit(maxTokens, 'maxTokens', 65_536);
   const requestBody = {
     model,
     messages: [
@@ -263,84 +337,135 @@ export async function callDeepSeekJson({
       { role: 'user', content: userPrompt },
     ],
     reasoning_effort: mapReasoningEffort(effort),
+    thinking: resolveThinkingConfig(model, effort),
     response_format: { type: 'json_object' },
     max_tokens: maxTokens,
     stream: false,
   };
-
-  const thinking = resolveThinkingConfig(model);
-  if (thinking) {
-    requestBody.thinking = thinking;
+  const requestDiagnostics = { requestedModel: safeModelName(model, apiKey), maxTokens };
+  let response;
+  let rawText;
+  let phase = 'request';
+  try {
+    response = await fetch(buildDeepSeekChatUrl(baseUrl), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(10 * 60 * 1000),
+    });
+    if (!response.ok) {
+      // Provider error bodies may echo input or credentials; only log the HTTP status.
+      void response.body?.cancel().catch(() => {});
+      throw new DeepSeekOutputError('HTTP_ERROR', 'DeepSeek API request failed.', {
+        ...requestDiagnostics,
+        status: response.status,
+      });
+    }
+    phase = 'response_body';
+    rawText = await response.text();
+  } catch (error) {
+    if (error instanceof DeepSeekOutputError) throw error;
+    throw new DeepSeekOutputError('REQUEST_FAILED', 'DeepSeek request did not complete.', {
+      ...requestDiagnostics,
+      phase,
+      reason:
+        error?.name === 'TimeoutError'
+          ? 'timeout'
+          : error?.name === 'AbortError'
+            ? 'aborted'
+            : 'network',
+    });
   }
 
-  const response = await fetch(buildDeepSeekChatUrl(baseUrl), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-    signal: AbortSignal.timeout(10 * 60 * 1000),
-  });
-
-  const rawText = await response.text();
-  if (!response.ok) {
-    throw new Error(
-      `DeepSeek API error ${response.status}: ${truncate(rawText, 1000, 'error body')}`,
+  let payload;
+  try {
+    payload = JSON.parse(rawText);
+  } catch {
+    // JSON.parse errors can include raw input; replace rather than forwarding them.
+    throw new DeepSeekOutputError(
+      'INVALID_RESPONSE',
+      'DeepSeek returned an invalid JSON envelope.',
+      requestDiagnostics,
     );
   }
-
-  const payload = JSON.parse(rawText);
-  const content = payload.choices?.[0]?.message?.content;
+  const diagnostics = outputDiagnostics(payload, model, apiKey, maxTokens);
+  const choice = payload?.choices?.[0];
+  if (!Array.isArray(payload?.choices) || !choice || typeof choice !== 'object') {
+    throw new DeepSeekOutputError(
+      'INVALID_RESPONSE',
+      'DeepSeek returned no valid completion choice.',
+      diagnostics,
+    );
+  }
+  if (choice.finish_reason === 'length') {
+    throw new DeepSeekOutputError(
+      'OUTPUT_TRUNCATED',
+      'DeepSeek exhausted the output budget before completion.',
+      diagnostics,
+    );
+  }
+  if (choice.finish_reason !== 'stop') {
+    throw new DeepSeekOutputError(
+      'INCOMPLETE_OUTPUT',
+      'DeepSeek did not finish normally; no automated output is available.',
+      diagnostics,
+    );
+  }
+  const content = choice.message?.content;
   if (typeof content !== 'string' || !content.trim()) {
-    throw new Error(
-      `DeepSeek API returned no message content: ${truncate(rawText, 1000, 'response')}`,
+    throw new DeepSeekOutputError(
+      'EMPTY_CONTENT',
+      'DeepSeek returned no final message content.',
+      diagnostics,
     );
   }
-
   const parsed = parseJsonObject(content);
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error(
-      `DeepSeek returned non-JSON content: ${truncate(content, 1000, 'model output')}`,
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new DeepSeekOutputError(
+      'INVALID_JSON',
+      'DeepSeek final content is not a JSON object.',
+      diagnostics,
     );
   }
-
-  return {
-    parsed,
-    usage: payload.usage || null,
-    content,
-  };
+  return { parsed, usage: diagnostics.usage, content, diagnostics };
 }
 
 function isRetryableDeepSeekOutputError(error) {
-  const message = String(error?.message || error)
   return (
-    message.includes('DeepSeek API returned no message content') ||
-    message.includes('DeepSeek returned non-JSON content') ||
-    message.includes('Model returned an empty body.')
-  )
+    error instanceof DeepSeekOutputError &&
+    ['OUTPUT_TRUNCATED', 'EMPTY_CONTENT', 'INVALID_JSON', 'EMPTY_BODY'].includes(error.code)
+  );
 }
 
-export function assertNonEmptyParsedString(parsed, fieldName = 'body') {
-  const value = parsed && typeof parsed === 'object' ? parsed[fieldName] : undefined
-  if (typeof value === 'string' && value.trim()) {
-    return value.trim()
-  }
-
-  let serialized = ''
-  try {
-    serialized = JSON.stringify(parsed)
-  } catch {
-    serialized = String(parsed)
-  }
-  throw new Error(
-    `Model returned an empty ${fieldName}. Parsed payload: ${truncate(serialized, 1000, 'parsed payload')}`
-  )
+export function assertNonEmptyParsedString(parsed, fieldName = 'body', diagnostics = {}) {
+  const value =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed[fieldName] : undefined;
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  throw new DeepSeekOutputError(
+    'EMPTY_BODY',
+    'Model returned an empty required text field.',
+    diagnostics,
+  );
 }
 
 export async function callDeepSeekJsonWithRetries(options) {
-  const { maxAttempts = 3, fieldName = 'body', userPrompt, ...requestOptions } = options
-  let lastError = null
+  const {
+    maxAttempts = 3,
+    fieldName = 'body',
+    userPrompt,
+    maxTokens = 8192,
+    maxRetryTokens = Math.max(maxTokens, 32_768),
+    ...requestOptions
+  } = options;
+  validateLimit(maxAttempts, 'maxAttempts', 3);
+  validateLimit(maxTokens, 'maxTokens', 65_536);
+  validateLimit(maxRetryTokens, 'maxRetryTokens', 65_536);
+  if (maxRetryTokens < maxTokens)
+    throw new RangeError('maxRetryTokens must not be below maxTokens.');
+  let budget = maxTokens;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const attemptPrompt =
@@ -350,33 +475,45 @@ export async function callDeepSeekJsonWithRetries(options) {
             userPrompt,
             '',
             'AUTOMATION RETRY NOTE:',
-            '- Your previous response was invalid for automation.',
-            '- Return ONLY valid JSON.',
+            '- Your previous response was incomplete or invalid for automation.',
+            '- Finish with ONLY valid JSON; keep the final response concise.',
             `- The JSON MUST include a non-empty string field named "${fieldName}".`,
-            '- Do not wrap the JSON in code fences.',
-            `- Do not return an empty, null, or missing "${fieldName}" field.`,
-          ].join('\n')
-
+            '- Do not wrap the JSON in code fences. Do not substitute reasoning for the final answer.',
+          ].join('\n');
     try {
       const result = await callDeepSeekJson({
         ...requestOptions,
+        maxTokens: budget,
         userPrompt: attemptPrompt,
-      })
-      assertNonEmptyParsedString(result.parsed, fieldName)
-      return result
+      });
+      assertNonEmptyParsedString(result.parsed, fieldName, result.diagnostics);
+      return result;
     } catch (error) {
-      lastError = error
-      if (attempt >= maxAttempts || !isRetryableDeepSeekOutputError(error)) {
-        throw error
+      if (attempt >= maxAttempts || !isRetryableDeepSeekOutputError(error)) throw error;
+      // Reasoning-only output is a budget hypothesis, not proof. Never lower review quality to force a pass.
+      const needsBudget =
+        error.code === 'OUTPUT_TRUNCATED' ||
+        (error.code === 'EMPTY_CONTENT' && error.diagnostics.reasoningChars > 0);
+      let nextBudget = budget;
+      if (needsBudget) {
+        nextBudget = Math.min(budget * 2, maxRetryTokens);
+        if (nextBudget === budget) {
+          throw new DeepSeekOutputError(
+            error.code,
+            'Output remains incomplete at the configured token ceiling; automated output unavailable.',
+            error.diagnostics,
+          );
+        }
       }
       console.warn(
-        `DeepSeek output invalid on attempt ${attempt}/${maxAttempts}: ${error.message}`
-      )
+        `DeepSeek output invalid on attempt ${attempt}/${maxAttempts}: ${error.message}; retry max_tokens=${nextBudget}`,
+      );
+      budget = nextBudget;
     }
   }
-
-  throw lastError || new Error('DeepSeek output validation failed after retries.')
+  throw new Error('DeepSeek output validation failed after bounded retries.');
 }
+
 export function ensureBotSignature(body) {
   const trimmed = body.trim();
   if (!trimmed) {
@@ -398,11 +535,10 @@ export function writeTempJson(prefix, value) {
 }
 
 export function printUsage(label, usage) {
-  if (!usage) {
-    return;
-  }
+  const safeUsage = sanitizeUsage(usage);
+  if (!safeUsage) return;
   console.log(`${label} usage`);
-  console.log(JSON.stringify(usage, null, 2));
+  console.log(JSON.stringify(safeUsage, null, 2));
 }
 
 export function loadRepoDocs(relativePaths, maxChars = 6000) {

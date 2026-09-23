@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path_module from 'node:path';
 import type { AttachmentContext, CoreLogger, GenerateImageAssetRequest } from '@open-codesign/core';
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import { CodesignError, DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import { withWorkspaceFileWriter } from '@open-codesign/shared/workspace-file-lock';
 import type { AgentStreamEvent } from '../../preload/index';
 import {
   type Database,
@@ -72,6 +73,7 @@ interface CreateRuntimeTextEditorFsOptions {
   logger: Pick<CoreLogger, 'error'>;
   frames?: ReadonlyArray<readonly [string, string]>;
   designSkills?: ReadonlyArray<readonly [string, string]>;
+  signal?: AbortSignal;
 }
 
 function dataUrlByteLength(dataUrl: string): number {
@@ -99,6 +101,13 @@ function attachmentViewContent(attachment: AttachmentContext): string | null {
   ].join('\n');
 }
 
+function firstImageAttachmentDataUrl(attachments: ReadonlyArray<AttachmentContext>): string | null {
+  return (
+    attachments.find((attachment) => attachment.mediaType?.startsWith('image/') === true)
+      ?.imageDataUrl ?? null
+  );
+}
+
 export function createRuntimeTextEditorFs({
   db,
   generationId,
@@ -110,6 +119,7 @@ export function createRuntimeTextEditorFs({
   logger,
   frames = [],
   designSkills = [],
+  signal,
 }: CreateRuntimeTextEditorFsOptions) {
   const baseCtx = { designId: designId ?? '', generationId } as const;
   const fsMap = new Map<string, string>();
@@ -126,6 +136,11 @@ export function createRuntimeTextEditorFs({
     const content = attachmentViewContent(attachment);
     if (content === null) continue;
     fsMap.set(normalizeDesignFilePath(attachment.path), content);
+  }
+  const sourceImageDataUrl = firstImageAttachmentDataUrl(attachments);
+  const currentSourcePng = fsMap.get('source.png');
+  if (sourceImageDataUrl !== null && currentSourcePng?.startsWith('data:') !== true) {
+    fsMap.set('source.png', sourceImageDataUrl);
   }
   if (
     previousSource &&
@@ -173,7 +188,12 @@ export function createRuntimeTextEditorFs({
     });
   }
 
-  async function persistMutation(filePath: string, content: string): Promise<string> {
+  async function persistMutation(
+    filePath: string,
+    content: string,
+    expectedContent?: string,
+  ): Promise<string> {
+    signal?.throwIfAborted();
     const normalizedPath = normalizeDesignFilePath(filePath);
     assertWorkspacePathVisible(normalizedPath);
     const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
@@ -181,12 +201,26 @@ export function createRuntimeTextEditorFs({
     try {
       await withResolvedWorkspace(normalizedPath, async (_workspacePath, destinationPath) => {
         try {
-          await mkdir(path_module.dirname(destinationPath), { recursive: true });
-          if (typeof writeContent.diskContent === 'string') {
-            await writeFile(destinationPath, writeContent.diskContent, 'utf8');
-          } else {
-            await writeFile(destinationPath, writeContent.diskContent);
-          }
+          await withWorkspaceFileWriter(destinationPath, async () => {
+            signal?.throwIfAborted();
+            if (expectedContent !== undefined) {
+              const currentContent = await readFile(destinationPath, 'utf8');
+              if (currentContent !== expectedContent) {
+                fsMap.set(normalizedPath, currentContent);
+                throw new CodesignError(
+                  'Workspace file changed before the edit could be saved. View its current source and retry.',
+                  'IPC_CONFLICT',
+                );
+              }
+            }
+            await mkdir(path_module.dirname(destinationPath), { recursive: true });
+            signal?.throwIfAborted();
+            if (typeof writeContent.diskContent === 'string') {
+              await writeFile(destinationPath, writeContent.diskContent, 'utf8');
+            } else {
+              await writeFile(destinationPath, writeContent.diskContent);
+            }
+          });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           logger.error('runtime.fs.writeThrough.fail', {
@@ -194,10 +228,12 @@ export function createRuntimeTextEditorFs({
             filePath,
             message,
           });
+          if (err instanceof CodesignError && err.code === 'IPC_CONFLICT') throw err;
           throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
         }
       });
     } catch (err) {
+      if (err instanceof CodesignError && err.code === 'IPC_CONFLICT') throw err;
       const message = err instanceof Error ? err.message : String(err);
       if (message.startsWith('Workspace write-through failed for ')) throw err;
       if (
@@ -265,7 +301,7 @@ export function createRuntimeTextEditorFs({
         throw new Error(`old_str is ambiguous in ${path}; provide more context`);
       }
       const next = current.slice(0, idx) + newStr + current.slice(idx + oldStr.length);
-      const persisted = await persistMutation(path, next);
+      const persisted = await persistMutation(path, next, current);
       fsMap.set(path, persisted);
       emitFsUpdated(path, persisted);
       emitSourceIfAssetChanged(path);
@@ -278,7 +314,7 @@ export function createRuntimeTextEditorFs({
       const clamped = Math.max(0, Math.min(line, lines.length));
       lines.splice(clamped, 0, text);
       const next = lines.join('\n');
-      const persisted = await persistMutation(path, next);
+      const persisted = await persistMutation(path, next, current);
       fsMap.set(path, persisted);
       emitFsUpdated(path, persisted);
       emitSourceIfAssetChanged(path);

@@ -19,7 +19,9 @@ export interface ToolManifestEntryV1 {
   label: string;
   iconKey: ToolManifestIconKeyV1;
   status: ToolManifestStatusV1;
-  requires: Array<'fs' | 'preview' | 'image' | 'workspaceInspector' | 'workspaceReader' | 'ask'>;
+  requires: Array<
+    'fs' | 'preview' | 'image' | 'workspaceInspector' | 'workspaceReader' | 'ask' | 'research'
+  >;
 }
 
 export interface ToolManifestV1 {
@@ -34,11 +36,20 @@ export const CURRENT_TOOL_ORDER = [
   'scaffold',
   'inspect_workspace',
   'str_replace_based_edit_tool',
+  'decompose_to_ui_kit',
+  'verify_ui_kit_parity',
+  'verify_ui_kit_visual_parity',
   'done',
   'preview',
   'generate_image_asset',
   'tweaks',
   'ask',
+  'web_search',
+  'web_fetch',
+  'research_evidence',
+  'research_slide',
+  'research_export',
+  'research_records',
 ] as const;
 
 export type CurrentToolNameV1 = (typeof CURRENT_TOOL_ORDER)[number];
@@ -70,6 +81,27 @@ export const TOOL_MANIFEST_V1: ToolManifestV1 = {
       status: 'current',
       requires: ['fs'],
     },
+    {
+      name: 'decompose_to_ui_kit',
+      label: 'decompose_to_ui_kit',
+      iconKey: 'file-plus',
+      status: 'current',
+      requires: ['fs'],
+    },
+    {
+      name: 'verify_ui_kit_parity',
+      label: 'verify_ui_kit_parity',
+      iconKey: 'check',
+      status: 'current',
+      requires: ['fs'],
+    },
+    {
+      name: 'verify_ui_kit_visual_parity',
+      label: 'verify_ui_kit_visual_parity',
+      iconKey: 'eye',
+      status: 'current',
+      requires: ['fs'],
+    },
     { name: 'done', label: 'done', iconKey: 'check', status: 'current', requires: ['fs'] },
     { name: 'preview', label: 'preview', iconKey: 'eye', status: 'current', requires: ['preview'] },
     {
@@ -92,6 +124,48 @@ export const TOOL_MANIFEST_V1: ToolManifestV1 = {
       iconKey: 'message-circle-question',
       status: 'current',
       requires: ['ask'],
+    },
+    {
+      name: 'web_search',
+      label: 'web_search',
+      iconKey: 'wrench',
+      status: 'current',
+      requires: ['research'],
+    },
+    {
+      name: 'web_fetch',
+      label: 'web_fetch',
+      iconKey: 'wrench',
+      status: 'current',
+      requires: ['research'],
+    },
+    {
+      name: 'research_evidence',
+      label: 'research_evidence',
+      iconKey: 'wrench',
+      status: 'current',
+      requires: ['research'],
+    },
+    {
+      name: 'research_slide',
+      label: 'research_slide',
+      iconKey: 'wrench',
+      status: 'current',
+      requires: ['research'],
+    },
+    {
+      name: 'research_export',
+      label: 'research_export',
+      iconKey: 'wrench',
+      status: 'current',
+      requires: ['research'],
+    },
+    {
+      name: 'research_records',
+      label: 'research_records',
+      iconKey: 'wrench',
+      status: 'current',
+      requires: ['research'],
     },
     {
       name: 'text_editor',

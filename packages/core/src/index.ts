@@ -1,4 +1,8 @@
-import { completeWithRetry, type RetryReason } from '@open-codesign/providers';
+import {
+  completeWithRetry,
+  type RetryReason,
+  requiredReasoningDefault,
+} from '@open-codesign/providers';
 import type {
   Artifact,
   ChatMessage,
@@ -17,6 +21,7 @@ import { formatUntrustedContext } from './lib/context-format.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt, type PromptComposeOptions } from './prompts/index.js';
 
+export { ActiveRunMessages } from './active-messages.js';
 export type { AgentEvent, GenerateViaAgentDeps } from './agent.js';
 export { generateViaAgent } from './agent.js';
 export type {
@@ -127,9 +132,13 @@ export {
 } from './tools/inspect-workspace.js';
 export {
   makePreviewTool,
+  type PreviewInput,
   type PreviewResult,
+  type PreviewStep,
   type RunPreviewFn,
+  type RunPreviewOptions,
   trimPreviewResult,
+  validatePreviewInput,
 } from './tools/preview.js';
 export { makeScaffoldTool, type ScaffoldDetails } from './tools/scaffold.js';
 export { makeSetTitleTool, normalizeTitle, type SetTitleDetails } from './tools/set-title.js';
@@ -149,6 +158,18 @@ export {
   type TweakFileInput,
   type TweaksDetails,
 } from './tools/tweaks.js';
+export {
+  type JudgeVisualParityFn,
+  makeVerifyUiKitVisualParityTool,
+  type RenderUiKitFn,
+  STANDARD_VISUAL_PARITY_CHECKS,
+  type VisualParityCheck,
+  type VisualParityGap,
+  type VisualParityImageRef,
+  type VisualParityReport,
+  type VisualParityStatus,
+  visualParityStatusFromChecks,
+} from './tools/verify-ui-kit-visual-parity.js';
 export type { PromptComposeOptions };
 
 export interface AttachmentContext {
@@ -267,20 +288,13 @@ export interface GenerateInput {
    * read back console / asset errors + a DOM outline (or screenshot on
    * vision-capable models).
    */
-  runPreview?:
-    | ((opts: {
-        path: string;
-        vision: boolean;
-      }) => Promise<import('./tools/preview.js').PreviewResult>)
-    | undefined;
+  runPreview?: import('./tools/preview.js').RunPreviewFn | undefined;
   /**
    * Optional async bridge for the `ask` tool. When provided, the agent gains
    * an `ask` tool that pauses the turn, renders the questionnaire to the
    * user, and resumes with the collected answers.
    */
-  askBridge?:
-    | ((input: import('./tools/ask.js').AskInput) => Promise<import('./tools/ask.js').AskResult>)
-    | undefined;
+  askBridge?: import('./tools/ask.js').AskBridge | undefined;
 }
 
 export interface ApplyCommentInput {
@@ -447,6 +461,8 @@ export function reasoningForModel(
   model: ModelRef,
   baseUrl?: string | undefined,
 ): ReasoningLevel | undefined {
+  const requiredDefault = requiredReasoningDefault(model.modelId);
+  if (requiredDefault !== undefined) return requiredDefault;
   // Proxy detection: when the provider id is 'anthropic' but baseUrl points
   // somewhere other than api.anthropic.com, we're talking to a Claude Code-
   // style proxy. Those commonly gate reasoning by plan and consumer-tier
@@ -630,3 +646,5 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
     throw remapProviderError(err, input.model.provider, input.wire);
   }
 }
+
+export { makeWebResearchTools, WEB_RESEARCH_GUIDANCE } from './tools/web-research.js';

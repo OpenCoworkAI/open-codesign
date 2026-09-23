@@ -1,4 +1,21 @@
 {
+  "activeMessages": {
+    "queue": "Encolar seguimiento",
+    "steer": "Orientar el siguiente paso",
+    "queueShort": "Encolar",
+    "steerShort": "Orientar",
+    "help": "Ayuda sobre el envío de mensajes",
+    "pending": "En cola — aún no entregado",
+    "notDelivered": "No entregado",
+    "recover": "Recuperar como borrador",
+    "recoverPending": "Solo copia el texto; el mensaje sigue en cola. No lo reenvíes salvo que sea necesario.",
+    "boundary": "Los seguimientos esperan a que el asistente termine su turno y el lote de herramientas. Las indicaciones se entregan en el siguiente límite de paso compatible, no durante una respuesta o herramienta. Ninguna opción omite preguntas o solicitudes de permiso pendientes.",
+    "textOnly": "Durante la generación, los mensajes son solo de texto. No pueden incluir archivos, URL de referencia ni comentarios en cola.",
+    "textOnlyError": "Los mensajes activos solo admiten texto. Quita los archivos adjuntos, la URL de referencia y los comentarios en cola, o espera a que termine la generación. Se conservó el borrador.",
+    "notRunning": "Esta generación ya no está disponible. Se conservó el borrador; envíalo cuando el agente esté listo.",
+    "sendFailed": "No se aceptó el mensaje",
+    "loadFailed": "No se pudieron actualizar los mensajes activos"
+  },
   "common": {
     "appName": "open-codesign",
     "send": "Enviar",
@@ -45,6 +62,7 @@
     "previewTab": "Vista previa",
     "filesTab": "Archivos",
     "filesTabEmpty": "Sin archivos aún",
+    "filesTabEmptyHint": "Describe tu diseño en el chat, adjunta referencias locales o elige un espacio de trabajo existente. Tus archivos y la vista previa aparecerán aquí.",
     "openInTab": "Abrir en pestaña",
     "previewHint": "Vista previa en miniatura · haz doble clic en el archivo o usa Abrir en pestaña para vista completa",
     "documentPreview": {
@@ -182,6 +200,11 @@
     "dismissErrors": "Descartar errores de vista previa",
     "zoom": "Zoom",
     "zoomFit": "Ajustar",
+    "fullscreen": "Vista previa a pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa",
+    "fullscreenHint": "Ampliar la vista previa ejecutable dentro de esta ventana",
+    "exitFullscreenHint": "Restaurar paneles (Escape)",
+    "fullscreenUnavailable": "Abre una vista previa ejecutable de JSX o HTML para usar pantalla completa",
     "viewport": {
       "desktop": "Vista de escritorio",
       "tablet": "Vista de tablet",
@@ -190,13 +213,19 @@
   },
   "tweaks": {
     "title": "Ajustes",
+    "compatibilityNotice": "Este artefacto usa el modo de compatibilidad de ajustes en vivo. Actualizar los ajustes reinicia su estado de interacción. Para conservarlo, lee los tokens durante el renderizado en componentes sin memoización.",
     "openLabel": "Abrir panel de ajustes",
     "close": "Cerrar",
     "reset": "Restablecer valores predeterminados",
     "pickColor": "Elegir color",
     "swatchAria": "Color de {{key}}",
     "emptyTitle": "Sin tokens ajustables",
-    "emptyHint": "El agente no ha declarado un bloque EDITMODE aún. Futuras generaciones expondrán tokens de diseño aquí."
+    "emptyHint": "Este archivo no tiene controles EDITMODE. Pide al agente controles útiles en este archivo y que los conecte al diseño. Los controles de una plantilla separada no afectan a esta vista previa.",
+    "declaredEmptyHint": "Este archivo declara un bloque EDITMODE vacío. No hay controles habilitados. Solicita ajustes específicos vinculados al código si los necesitas.",
+    "invalidTitle": "La declaración de ajustes necesita reparación",
+    "invalidHint": "Corrige la declaración de este archivo antes de ajustar valores: EDITMODE requiere un objeto JSON plano con ambos marcadores. TWEAK_SCHEMA debe usar tipos de control compatibles.",
+    "sourceLabel": "Archivo",
+    "currentPreview": "Vista previa actual"
   },
   "inspector": {
     "title": "Inspector",
@@ -379,6 +408,8 @@
         "baseUrl": "URL base",
         "apiKey": "Clave API",
         "apiKeyEditPlaceholder": "Dejar vacío para mantener {{mask}}",
+        "keylessLabel": "No se requiere clave API",
+        "keylessDescription": "Activa esta opción solo para endpoints que acepten solicitudes sin clave API. Al cambiar a este modo, la clave guardada se eliminará al guardar.",
         "defaultModel": "Modelo predeterminado",
         "compatibilityHintTitle": "Nota de compatibilidad",
         "compatibilityHintBody": "Algunos planes de programación, servicios de retransmisión o pasarelas compatibles con OpenAI solo permiten clientes específicos como Claude Code, openclaw o Hermes. Incluso si la API parece compatible, Open CoDesign aún podría ser bloqueado por una lista de aplicaciones permitidas.",
@@ -767,6 +798,7 @@
     "commentNeedsSnapshot": "Genera un diseño primero antes de dejar un comentario",
     "commentCreateFailed": "No se pudo guardar el comentario",
     "commentUpdateFailed": "No se pudo actualizar el comentario",
+    "commentsChangedDuringGeneration": "Los comentarios cambiaron durante la generación y siguen pendientes. Envíalos de nuevo para aplicar los cambios actualizados.",
     "commentDeleteFailed": "No se pudo eliminar el comentario",
     "noDesignToExport": "No hay diseño para exportar aún.",
     "exportedTo": "Exportado a {{path}}"
@@ -780,6 +812,8 @@
     "applyChange": "Aplicar cambio"
   },
   "commentBubble": {
+    "retryHint": "Tu borrador se conserva. Intenta guardarlo de nuevo.",
+    "keyboardHint": "Enter: nueva línea · Ctrl/⌘+Enter: añadir al chat",
     "title": "Comentar en",
     "close": "Cerrar burbuja de comentario",
     "placeholder": "Describe el cambio, o deja una nota para ti mismo…",
@@ -1110,7 +1144,19 @@
   "examples": {
     "tab": "Ejemplos",
     "title": "Ejemplos",
-    "subtitle": "Puntos de partida seleccionados a mano. Pasa el cursor para previsualizar, luego suelta la instrucción en el editor.",
+    "subtitle": "Empieza con una instrucción o archivos locales editables. Las etiquetas indican referencias y funciones solicitadas, no resultados verificados. Las portadas son ilustraciones conceptuales originales.",
+    "featuresLabel": "Archivos y funciones solicitadas",
+    "inputFiles": "{{count}} archivos de entrada · ver lista",
+    "useDemoPack": "Usar paquete de ejemplo",
+    "features": {
+      "local-assets": "Recursos locales",
+      "document-input": "Documentos",
+      "sketch-reference": "Boceto de referencia",
+      "multi-screen": "Varias pantallas",
+      "shared-state": "Estado compartido",
+      "interactive-flow": "Flujo interactivo",
+      "responsive": "Adaptable"
+    },
     "empty": "Ningún ejemplo coincide con tu filtro.",
     "useThisPrompt": "Usar esta instrucción",
     "categories": {
