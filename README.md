@@ -226,7 +226,7 @@ After each stable tag push, CI syncs SHAs back into `packaging/` and publishes d
 On first launch, Open CoDesign opens the Settings page. Pick the path that matches how you already use models:
 
 - **ChatGPT subscription** — sign in with ChatGPT to use Codex models without pasting an API key.
-- **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
+- **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Atlas Cloud, Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
 - **Local / keyless** — use Ollama or an IP-allowlisted OpenAI-compatible gateway.
 
 For a custom endpoint that accepts requests without an API key, select **No API key required** in the custom-provider form. Choose the endpoint's wire protocol (including **OpenAI Responses** when appropriate), enter its base URL and default model, and leave the key empty. Local/private endpoint testing still requires the separate network confirmation. Automatic model discovery never sends API keys; for authenticated endpoints, enter a key and click **Test connection**. Switching an existing provider to keyless removes its stored key on save; switching back requires a stored or newly entered key.
@@ -278,7 +278,7 @@ Contract tests check loaded instructions, supported source examples, preference 
 ## What you get
 
 ### Models and providers
-- **Unified provider model** — Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
+- **Unified provider model** — Anthropic, OpenAI, Atlas Cloud, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
 - **One-click import and sign-in** — bring Claude Code / Codex API-key provider configs across, or sign in with ChatGPT subscription for Codex models
 - **Dynamic model picker** — every provider exposes its real model catalogue, not a hardcoded shortlist
 
