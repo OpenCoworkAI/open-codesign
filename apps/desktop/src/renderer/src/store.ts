@@ -1,4 +1,5 @@
 import type {
+  ActiveRunMessageV1,
   ChatAppendInput,
   ChatMessageRow,
   ChatToolCallPayload,
@@ -27,6 +28,7 @@ import type {
 } from '../../preload/index';
 import { recordAction } from './lib/action-timeline';
 import { tr, uniqueFiles } from './store/lib/locale';
+import { makeActiveMessagesSlice } from './store/slices/active-messages';
 import { makeChatSlice } from './store/slices/chat';
 import { makeCommentsSlice } from './store/slices/comments';
 import { makeDesignsSlice } from './store/slices/designs';
@@ -107,6 +109,7 @@ export type PreviewViewport = 'desktop' | 'tablet' | 'mobile';
 export type PreviewZoomMode = 'manual' | 'fit';
 
 export interface CommentBubbleAnchor {
+  sourcePath?: string | undefined;
   selector: string;
   tag: string;
   outerHTML: string;
@@ -120,6 +123,14 @@ export interface CommentBubbleAnchor {
 }
 
 export interface CodesignState {
+  composerDrafts: Record<string, string>;
+  activeMessagesByDesign: Record<string, ActiveRunMessageV1[]>;
+  activeMessageSendingByDesign: Record<string, boolean>;
+  setComposerDraft: (text: string, designId?: string | null) => void;
+  sendActiveMessage: (text: string, mode: ActiveRunMessageV1['mode']) => Promise<void>;
+  syncActiveMessages: (designId?: string) => Promise<void>;
+  reconcileActiveMessage: (message: ActiveRunMessageV1) => void;
+  recoverActiveMessage: (designId: string, messageId: string) => void;
   previewSource: string | null;
   /** LRU cache of `previewSource` per design id, capped to PREVIEW_POOL_LIMIT.
    *  PreviewPane renders one (display:none) iframe per entry so switching back
@@ -129,8 +140,17 @@ export interface CodesignState {
   recentDesignIds: string[];
   generationByDesign: Record<
     string,
-    { generationId: string; stage: GenerationStage; startedAt?: number }
+    {
+      generationId: string;
+      stage: GenerationStage;
+      startedAt?: number;
+      awaitingResponse?: boolean;
+      chatPersisted?: boolean;
+      streamedAssistantText?: string;
+      submittedContext?: { referenceUrl?: string; comments: Record<string, string> };
+    }
   >;
+  settledGenerationIds: Set<string>;
   isGenerating: boolean;
   activeGenerationId: string | null;
   /** Design id that owns the in-flight generation. Lets the user switch to
@@ -183,9 +203,11 @@ export interface CodesignState {
   selectedElement: SelectedElement | null;
   previewZoom: number;
   previewZoomMode: PreviewZoomMode;
+  previewFullscreen: boolean;
   interactionMode: InteractionMode;
   // Sidebar v2 chat state
   chatMessages: ChatMessageRow[];
+  chatViewEpoch: number;
   chatLoaded: boolean;
   /** In-flight tool calls that haven't completed yet. Purely in-memory —
    *  only persisted to session JSONL when the result arrives (done/error). */
@@ -282,7 +304,7 @@ export interface CodesignState {
   autoPolishFired: Set<string>;
   /** Fire the canned "deepen this design" follow-up prompt once per design,
    *  if the condition is met (first round succeeded, no prior polish). Call
-   *  from useAgentStream's agent_end handler. */
+   *  after a successful IPC response, or agent_end for rehydrated runs. */
   tryAutoPolish: (designId: string, locale: string) => void;
   /** Generation ids the user explicitly stopped. Late stream events for
    *  these ids are ignored so the renderer cannot flip back to "running". */
@@ -322,6 +344,7 @@ export interface CodesignState {
   setPreviewZoom: (zoom: number) => void;
   setPreviewZoomFit: (zoom: number) => void;
   setPreviewZoomMode: (mode: PreviewZoomMode) => void;
+  setPreviewFullscreen: (fullscreen: boolean) => void;
   setInteractionMode: (mode: InteractionMode) => void;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -338,7 +361,7 @@ export interface CodesignState {
   ensureCurrentDesign: () => Promise<void>;
   openNewDesignDialog: () => void;
   closeNewDesignDialog: () => void;
-  createNewDesign: (workspacePath?: string | null) => Promise<Design | null>;
+  createNewDesign: (workspacePath?: string | null, demoInputId?: string) => Promise<Design | null>;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string, options?: RenameDesignOptions) => Promise<void>;
@@ -417,6 +440,7 @@ export interface CodesignState {
     text: string;
     scope?: CommentScope;
     parentOuterHTML?: string;
+    sourcePath?: string;
   }) => Promise<CommentRow | null>;
   updateComment: (id: string, patch: { text?: string }) => Promise<CommentRow | null>;
   /** Single entry point used by CommentBubble. If `existingCommentId` is set,
@@ -424,6 +448,7 @@ export interface CodesignState {
    *  (creating a new one). Returns the resulting row on success, null on
    *  failure — callers must check before closing UI so drafts aren't lost. */
   submitComment: (input: {
+    sourcePath?: string;
     existingCommentId?: string;
     kind: CommentKind;
     selector: string;
@@ -452,10 +477,14 @@ export interface CodesignState {
 
 export const useCodesignStore = create<CodesignState>((set, get) => ({
   // ---- initial state ----
+  composerDrafts: {},
+  activeMessagesByDesign: {},
+  activeMessageSendingByDesign: {},
   previewSource: null,
   previewSourceByDesign: {},
   recentDesignIds: [],
   generationByDesign: {},
+  settledGenerationIds: new Set(),
   isGenerating: false,
   activeGenerationId: null,
   generatingDesignId: null,
@@ -530,8 +559,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   selectedElement: null,
   previewZoom: 100,
   previewZoomMode: 'fit' as PreviewZoomMode,
+  previewFullscreen: false,
   interactionMode: 'default' as InteractionMode,
   chatMessages: [],
+  chatViewEpoch: 0,
   chatLoaded: false,
   sidebarCollapsed: false,
 
@@ -553,6 +584,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   activeReportLocalId: null,
 
   // ---- slice-owned actions ----
+  ...makeActiveMessagesSlice(set, get),
   ...makeDiagnosticsSlice(set, get),
   ...makeGenerationSlice(set, get),
   ...makeDesignsSlice(set, get),
@@ -717,7 +749,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   },
 
   clearCanvasElement() {
-    set({ selectedElement: null });
+    set({ selectedElement: null, commentBubble: null, liveRects: {} });
   },
 
   setPreviewZoom(zoom) {
@@ -730,6 +762,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   setPreviewZoomMode(mode) {
     set({ previewZoomMode: mode });
+  },
+
+  setPreviewFullscreen(previewFullscreen) {
+    set({ previewFullscreen });
   },
 
   setInteractionMode(mode: InteractionMode) {
@@ -757,7 +793,12 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       view,
       previousView: prev === view ? get().previousView : prev,
       ...(view !== 'workspace'
-        ? { interactionMode: 'default' as const, selectedElement: null, commentBubble: null }
+        ? {
+            previewFullscreen: false,
+            interactionMode: 'default' as const,
+            selectedElement: null,
+            commentBubble: null,
+          }
         : {}),
     });
   },
@@ -768,6 +809,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       view: 'settings',
       previousView: prev === 'settings' ? get().previousView : prev,
       settingsTab: tab,
+      previewFullscreen: false,
       interactionMode: 'default',
       selectedElement: null,
       commentBubble: null,
@@ -793,25 +835,49 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   openCanvasFileTab(path: string) {
     set((s) => {
       const result = openFileTab(s.canvasTabs, path);
-      return { canvasTabs: result.tabs, activeCanvasTab: result.index };
+      return {
+        canvasTabs: result.tabs,
+        activeCanvasTab: result.index,
+        ...(result.index !== s.activeCanvasTab
+          ? { previewFullscreen: false, selectedElement: null, commentBubble: null, liveRects: {} }
+          : {}),
+      };
     });
   },
 
   closeCanvasTab(index: number) {
     set((s) => {
       const result = closeTabAt(s.canvasTabs, s.activeCanvasTab, index);
-      return { canvasTabs: result.tabs, activeCanvasTab: result.activeIndex };
+      return {
+        canvasTabs: result.tabs,
+        activeCanvasTab: result.activeIndex,
+        ...(index === s.activeCanvasTab
+          ? { previewFullscreen: false, selectedElement: null, commentBubble: null, liveRects: {} }
+          : {}),
+      };
     });
   },
 
   setActiveCanvasTab(index: number) {
     set((s) => {
       if (index < 0 || index >= s.canvasTabs.length) return {};
-      return { activeCanvasTab: index };
+      return {
+        activeCanvasTab: index,
+        ...(index !== s.activeCanvasTab
+          ? { previewFullscreen: false, selectedElement: null, commentBubble: null, liveRects: {} }
+          : {}),
+      };
     });
   },
 
   resetCanvasTabs() {
-    set({ canvasTabs: DEFAULT_CANVAS_TABS, activeCanvasTab: 0 });
+    set({
+      previewFullscreen: false,
+      canvasTabs: DEFAULT_CANVAS_TABS,
+      activeCanvasTab: 0,
+      selectedElement: null,
+      commentBubble: null,
+      liveRects: {},
+    });
   },
 }));

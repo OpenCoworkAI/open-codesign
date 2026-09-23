@@ -15,6 +15,7 @@ export const DEFAULT_WORKSPACE_PATTERNS = [
   '**/*.mjs',
   '**/*.cjs',
   '**/*.json',
+  '**/*.csv',
   '**/*.svg',
   '**/*.md',
   '**/*.txt',
@@ -191,6 +192,8 @@ const WORKSPACE_IGNORED_FILE_NAMES = new Set<string>([
 
 const LIST_MAX_FILES = 2_000;
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+// JSX/TSX previews and deterministic edits share exact source offsets and hashes.
+const JSX_UTF8_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const TEXT_READABLE_EXTENSIONS = new Set([
   '.cjs',
   '.css',
@@ -339,7 +342,7 @@ export async function resolveSafeWorkspaceChildPath(
 
 async function readUtf8TextFile(abs: string): Promise<string> {
   const bytes = await readFile(abs);
-  const content = UTF8_DECODER.decode(bytes);
+  const content = (/\.[jt]sx$/i.test(abs) ? JSX_UTF8_DECODER : UTF8_DECODER).decode(bytes);
   if (content.indexOf('\u0000') !== -1) {
     throw new Error('binary file contains NUL byte');
   }

@@ -44,6 +44,7 @@ import {
   shouldForceClaudeCodeIdentity,
   withBackoff,
 } from '@open-codesign/providers';
+import type { ResearchHost } from '@open-codesign/shared';
 import {
   type ChatMessage,
   CodesignError,
@@ -59,6 +60,7 @@ import {
   type WireApi,
 } from '@open-codesign/shared';
 import type { TSchema } from '@sinclair/typebox';
+import type { ActiveRunMessages } from './active-messages.js';
 import { buildTransformContext } from './context-prune.js';
 import { remapProviderError } from './errors.js';
 import type { GenerateInput, GenerateOutput } from './index.js';
@@ -117,6 +119,7 @@ import {
   makeVerifyUiKitVisualParityTool,
   type RenderUiKitFn,
 } from './tools/verify-ui-kit-visual-parity.js';
+import { makeWebResearchTools, WEB_RESEARCH_GUIDANCE } from './tools/web-research.js';
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via
  *  pi-ai). Declared here so this file does not take a direct dependency on
@@ -434,8 +437,8 @@ function wrapTodosState<TParams extends TSchema, TDetails>(
 ): AgentTool<TParams, TDetails> {
   return {
     ...tool,
-    async execute(toolCallId, params) {
-      const result = await tool.execute(toolCallId, params);
+    async execute(...args) {
+      const result = await tool.execute(...args);
       state.todosSet = true;
       return result;
     },
@@ -451,15 +454,15 @@ function wrapPlanningGate<TParams extends TSchema, TDetails>(
 ): AgentTool<TParams, TDetails> {
   return {
     ...tool,
-    async execute(toolCallId, params) {
+    async execute(...args) {
       if (
         state.requiresTodosBeforeMutation &&
         !state.todosSet &&
-        options.allowBeforeTodos?.(params) !== true
+        options.allowBeforeTodos?.(args[1]) !== true
       ) {
         return todosRequiredResult(tool.name) as AgentToolResult<TDetails>;
       }
-      return await tool.execute(toolCallId, params);
+      return await tool.execute(...args);
     },
   };
 }
@@ -496,54 +499,28 @@ function agenticToolGuidance(input: {
   currentDesignName?: string | undefined;
 }): string {
   const titleStep = isAutoDesignName(input.currentDesignName)
-    ? '1. The current design title is still auto-generated. Call `set_title` once as the first tool call, before `set_todos`, `view`, `scaffold`, or file edits. Use a 2-5 word title that describes what is being designed.'
-    : '1. For a fresh design, call `set_title` once. For continuation or existing-source turns, do not call `set_title` unless the user explicitly asks to rename or pivot to a new artifact.';
+    ? 'The title is auto-generated: call `set_title` as the first tool call, before reading or editing.'
+    : 'For a fresh design, call `set_title` once; do not rename an existing design unless requested.';
   const tweakStep = explicitDisabled(input.featureProfile.tweaks)
-    ? `${input.inspectWorkspace ? '6' : '5'}. Do not call \`tweaks()\` unless the user explicitly asks for controls later.`
+    ? 'Do not call `tweaks()`; the user explicitly declined controls.'
     : featureModeValue(input.featureProfile.tweaks) === 'enabled'
-      ? `${input.inspectWorkspace ? '6' : '5'}. Create 2-5 high-leverage EDITMODE controls, then call \`tweaks()\`.`
-      : `${input.inspectWorkspace ? '6' : '5'}. Decide agentically whether \`tweaks()\` would materially improve iteration; do not rely on harness guesses.`;
-  const requiredSteps = [
+      ? 'After implementing useful source-backed controls, call `tweaks()` if available.'
+      : 'When available, decide agentically whether tweak controls improve iteration; inferred preferences are not prohibitions.';
+  return [
+    '## Host tool contract',
     titleStep,
-    '2. For multi-step or ambiguous work, call `set_todos` early with a short checklist. Do not delay a ready file mutation solely to add todos.',
-    '3. Load optional resources explicitly before relying on them. Use `skill(name)` for method guidance. When the request matches an available frame, shell, primitive, deck, report, or starter, call `scaffold({kind, destPath})` before writing the primary artifact; do not substitute a virtual `frames/*` or `skills/*` view for scaffolded workspace source.',
+    '- Use `set_todos` for dependent multi-step work; obey a host-required todo gate before mutation.',
     ...(input.inspectWorkspace
       ? [
-          '4. When the workspace brief says files or reference materials are present, call `inspect_workspace` before editing, then `view` the specific files you need.',
+          '- When the brief includes workspace files or references, call `inspect_workspace` before editing, then read the relevant files.',
         ]
       : []),
-    `${input.inspectWorkspace ? '5' : '4'}. Match the workspace files to the request. For visual/web work, write/edit the primary preview source at \`${DEFAULT_SOURCE_ENTRY}\`; for document-first work, create the requested Markdown/handoff file without inventing a visual shell.`,
-    tweakStep,
-    `${input.inspectWorkspace ? '7' : '6'}. Call \`preview(path)\` for previewable HTML/JSX/TSX files after the final mutation, then call \`done(path)\` as the final self-check. If done reports errors, fix and retry, but stop after ${MAX_DONE_ERROR_ROUNDS} error rounds.`,
-  ];
-  return [
-    '## Workspace output contract',
-    '',
-    '- The workspace filesystem is the deliverable. Chat text is never the artifact.',
-    `- For visual/web deliverables, write the primary design source to \`${DEFAULT_SOURCE_ENTRY}\` with \`str_replace_based_edit_tool\`.`,
-    '- Multi-deliverable packages are allowed when useful: preview source, DESIGN.md, Markdown handoff docs, data files, and local assets can all belong to one design.',
-    '- For document-first requests such as design briefs, content outlines, or handoff notes, create the requested `.md` file directly and skip `App.jsx` unless a visual preview is also useful.',
-    '- Prefer progressive generation when it is natural: write a coherent first pass, then add sections, data, interactions, and polish in focused edits before previewing.',
-    '- Fresh visual sequence: `set_title` -> optional `set_todos`/`skill` -> required `scaffold` when a matching starter/frame/shell/primitive exists -> `create App.jsx` with a coherent first pass -> focused edits if needed -> `preview(App.jsx)`.',
-    '- Fresh document sequence: `set_title` -> optional `set_todos`/`skill` -> create the requested document file -> `done(path)` self-check.',
-    '- Do not call `preview` while a previewable artifact is still only a scaffold, loading state, skeleton, placeholder, or empty lower section. Preview should represent a coherent first pass unless the user explicitly asked for a loading-state design.',
-    '- Existing-source sequence: optional `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. Do not edit an existing source from memory, and do not rebuild unless the user explicitly asks.',
-    '- If the design is still named `Untitled design` or `Untitled design N`, naming is not optional: call `set_title` before other work, even when a scaffold or reference source already exists.',
+    `- Write the primary visual design source to \`${DEFAULT_SOURCE_ENTRY}\` using \`str_replace_based_edit_tool\`; document-only outputs need no visual shell.`,
     '- Use `create` for new files; follow-up edits use `view`, `str_replace`, or `insert`.',
-    '- Do not emit `<artifact>` tags, fenced source blocks, raw HTML/JSX/CSS, or HTML wrappers in chat.',
-    '- Local workspace assets and scaffolded files are allowed. External scripts remain restricted by the base output rules.',
-    '- Interleave major tool groups with one short assistant progress sentence: what you are about to inspect/write/preview/fix, or what the preview showed. Keep it under 18 words and do not reveal hidden reasoning.',
-    '',
-    '## Tool loop',
-    '',
-    ...requiredSteps,
-    '',
-    '## File-edit discipline',
-    '',
-    '- Keep `old_str` small and unique. Large replacements waste context and are fragile.',
-    '- For existing files, call `view` in the same run before `str_replace` or `insert`; use the latest viewed text, not memory.',
-    '- A complete first `create` is acceptable when the target file is ready. Keep follow-up edits focused so they remain reliable.',
-    '- Never view just to check whether an edit succeeded; the tool reports failures.',
+    '- Before editing an existing file, `view` its current contents in this run. Keep `old_str` small and unique. Successful edits need no redundant readback; inspect when subsequent work needs context.',
+    tweakStep,
+    '- Use only available tools and their live schemas. Batch independent reads; sequence dependent edits and preview checks.',
+    `- After the final relevant source mutation, use \`preview(path)\` when available, then \`done(path)\`. If done reports errors, repair them, but stop after ${MAX_DONE_ERROR_ROUNDS} error rounds and report the unresolved failure.`,
   ].join('\n');
 }
 
@@ -551,7 +528,7 @@ const IMAGE_ASSET_TOOL_GUIDANCE = [
   '## Bitmap asset generation',
   '',
   'Use `generate_image_asset` only for named or clearly beneficial bitmap slots: hero, product, poster, background, illustration, or rendered logo.',
-  'Before writing the design source, inventory required assets and request all bitmap assets in one batch. One named bitmap slot equals one tool call.',
+  'Inventory required assets and request independent slots together when useful. One named bitmap slot equals one tool call. Only blocking assets should delay the first runnable slice; add supporting assets in later coherent edits.',
   'Use inline SVG/CSS for charts, simple icons, flat geometric marks, gradients, and UI chrome.',
   'Each call needs a production prompt, accurate `purpose`, matching `aspectRatio`, meaningful `alt`, and optional `filenameHint`.',
   'Reference the returned local `assets/...` path from the design source.',
@@ -563,49 +540,28 @@ const IMAGE_ASSET_TOOL_GUIDANCE = [
 
 const MAX_TRANSPORT_RETRIES = 2;
 
-/**
- * Remove the failed final turn from the agent message history so a fresh agent
- * can retry with a clean slate. Walks backwards from the terminal error
- * assistant message to find the user message that started the turn, removing
- * all intermediate tool-call / toolResult entries in between.
- */
-export function stripFailedTurn(messages: readonly AgentMessage[]): AgentMessage[] {
-  let errorIndex = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (!msg) continue;
-    if (errorIndex === -1) {
-      const stopReason = (msg as PiAssistantMessage).stopReason;
-      if (msg.role === 'assistant' && (stopReason === 'error' || stopReason === 'aborted')) {
-        errorIndex = i;
-      }
-      continue;
-    }
-    if (msg.role === 'user') {
-      return [...messages.slice(0, i), ...messages.slice(errorIndex + 1)];
-    }
-  }
-  return errorIndex === -1 ? [...messages] : messages.slice(0, errorIndex);
-}
-
 function trackFsMutations(
   fs: TextEditorFsCallbacks,
   resourceState: ResourceStateV1,
+  signal?: AbortSignal,
 ): TextEditorFsCallbacks {
   return {
     view: (path) => fs.view(path),
     listDir: (dir) => fs.listDir(dir),
     async create(path, content) {
+      signal?.throwIfAborted();
       const result = await fs.create(path, content);
       recordMutation(resourceState);
       return result;
     },
     async strReplace(path, oldStr, newStr) {
+      signal?.throwIfAborted();
       const result = await fs.strReplace(path, oldStr, newStr);
       recordMutation(resourceState);
       return result;
     },
     async insert(path, line, text) {
+      signal?.throwIfAborted();
       const result = await fs.insert(path, line, text);
       recordMutation(resourceState);
       return result;
@@ -619,8 +575,8 @@ function wrapSkillState(
 ): AgentTool<TSchema, unknown> {
   return {
     ...tool,
-    async execute(id, params, signal): Promise<AgentToolResult<unknown>> {
-      const result = await tool.execute(id, params, signal);
+    async execute(...args): Promise<AgentToolResult<unknown>> {
+      const result = await tool.execute(...args);
       const details = result.details as { name?: unknown; status?: unknown } | undefined;
       if (details?.status === 'loaded' && typeof details.name === 'string') {
         recordLoadedResource(resourceState, details.name);
@@ -636,8 +592,8 @@ function wrapScaffoldState(
 ): AgentTool<TSchema, unknown> {
   return {
     ...tool,
-    async execute(id, params, signal): Promise<AgentToolResult<unknown>> {
-      const result = await tool.execute(id, params, signal);
+    async execute(...args): Promise<AgentToolResult<unknown>> {
+      const result = await tool.execute(...args);
       const details = result.details as ScaffoldDetails | undefined;
       if (details && 'ok' in details && details.ok === true) {
         recordScaffold(resourceState, {
@@ -654,27 +610,27 @@ function wrapScaffoldState(
 function wrapDoneState(
   tool: AgentTool<TSchema, unknown>,
   resourceState: ResourceStateV1,
-  onRepairLimitReached?: (() => void) | undefined,
+  onDone?: ((details: DoneDetails) => void) | undefined,
+  progress = { errorRounds: 0 },
 ): AgentTool<TSchema, unknown> {
-  let errorRounds = 0;
   return {
     ...tool,
     executionMode: 'sequential',
-    async execute(id, params, signal): Promise<AgentToolResult<unknown>> {
-      const result = await tool.execute(id, params, signal);
+    async execute(...args): Promise<AgentToolResult<unknown>> {
+      const result = await tool.execute(...args);
       const details = result.details as DoneDetails | undefined;
       if (details) {
+        onDone?.(details);
         recordDone(resourceState, {
           status: details.status,
           path: details.path,
           errorCount: details.errors.length,
         });
         if (details.status === 'ok') {
-          errorRounds = 0;
+          progress.errorRounds = 0;
         } else {
-          errorRounds += 1;
-          if (errorRounds >= MAX_DONE_ERROR_ROUNDS) {
-            onRepairLimitReached?.();
+          progress.errorRounds += 1;
+          if (progress.errorRounds >= MAX_DONE_ERROR_ROUNDS) {
             return {
               ...result,
               content: [{ type: 'text', text: formatDoneRepairLimitText(details) }],
@@ -699,7 +655,7 @@ function formatDoneRepairLimitText(details: DoneDetails): string {
     'has_errors',
     `Repair limit reached after ${MAX_DONE_ERROR_ROUNDS} done() error rounds.`,
     'STOP. Do not call done, preview, edit, or any other tool again.',
-    'The host will keep the latest artifact when possible and surface these warnings to the user.',
+    'The host will keep the workspace files and report verification failure. Do not claim the design is ready.',
     '',
     'Remaining verifier output:',
     ...remainingErrors,
@@ -732,7 +688,8 @@ function aggregateAssistantUsage(messages: readonly AgentMessage[]): {
   return totals;
 }
 
-function stripTerminalAssistantFailure(messages: readonly AgentMessage[]): AgentMessage[] {
+// Retain the actual delivered instruction and completed tools; continuing must not replay either.
+export function stripTerminalAssistantFailure(messages: readonly AgentMessage[]): AgentMessage[] {
   const out = [...messages];
   const last = out[out.length - 1];
   if (
@@ -743,21 +700,6 @@ function stripTerminalAssistantFailure(messages: readonly AgentMessage[]): Agent
     out.pop();
   }
   return out;
-}
-
-function prepareReasoningFallback(messages: readonly AgentMessage[]): {
-  messages: AgentMessage[];
-  mode: 'continue' | 'prompt';
-} {
-  const cleanMessages = stripTerminalAssistantFailure(messages);
-  const last = cleanMessages[cleanMessages.length - 1];
-  if (last?.role === 'toolResult') {
-    return { messages: cleanMessages, mode: 'continue' };
-  }
-  if (last?.role === 'user') {
-    return { messages: cleanMessages.slice(0, -1), mode: 'prompt' };
-  }
-  return { messages: cleanMessages, mode: 'prompt' };
 }
 
 function projectContextSections(context: GenerateInput['projectContext']): string[] {
@@ -924,6 +866,8 @@ function buildTurnPrompt(input: GenerateInput, fs: TextEditorFsCallbacks | undef
 export type { AgentEvent };
 
 export interface GenerateViaAgentDeps {
+  research?: ResearchHost | undefined;
+  activeMessages?: ActiveRunMessages | undefined;
   /** Optional subscriber for Agent lifecycle + streaming events. */
   onEvent?: ((event: AgentEvent) => void) | undefined;
   /** Retry callback — invoked with placeholder reasons today; present so the
@@ -989,6 +933,17 @@ export async function generateViaAgent(
   input: GenerateInput,
   deps: GenerateViaAgentDeps = {},
 ): Promise<GenerateOutput> {
+  try {
+    return await generateViaAgentInternal(input, deps);
+  } finally {
+    deps.activeMessages?.close();
+  }
+}
+
+async function generateViaAgentInternal(
+  input: GenerateInput,
+  deps: GenerateViaAgentDeps = {},
+): Promise<GenerateOutput> {
   const log = input.logger ?? NOOP_LOGGER;
   const ctx = {
     provider: input.model.provider,
@@ -1023,8 +978,15 @@ export async function generateViaAgent(
   log.info('[generate] step=build_request', ctx);
   const buildStart = Date.now();
   const resourceState = cloneResourceState(input.initialResourceState);
-  const trackedFs = deps.fs ? trackFsMutations(deps.fs, resourceState) : undefined;
-  let doneRepairLimitReached = false;
+  const trackedFs = deps.fs ? trackFsMutations(deps.fs, resourceState, input.signal) : undefined;
+  let lastDoneDetails: DoneDetails | undefined;
+  const doneProgress = { errorRounds: 0 };
+  const repairLimitReached = () => doneProgress.errorRounds >= MAX_DONE_ERROR_ROUNDS;
+  const assertNotCancelled = (signal?: AbortSignal): void => {
+    if (input.signal?.aborted || signal?.aborted) {
+      throw new CodesignError('Generation cancelled', ERROR_CODES.PROVIDER_ABORTED);
+    }
+  };
   const skillsBuiltinDir = input.templatesRoot
     ? path.join(input.templatesRoot, 'skills')
     : undefined;
@@ -1061,7 +1023,9 @@ export async function generateViaAgent(
     },
     attachmentCount: input.attachments?.length ?? 0,
     hasReferenceUrl: input.referenceUrl !== null && input.referenceUrl !== undefined,
-    hasDesignSystem: input.designSystem !== null && input.designSystem !== undefined,
+    hasDesignSystem:
+      (input.designSystem !== null && input.designSystem !== undefined) ||
+      Boolean(input.projectContext?.designMd?.trim()),
   });
   const runProtocolState: RunProtocolState = {
     requiresTodosBeforeMutation: runProtocol.requiresTodosBeforeMutation,
@@ -1092,9 +1056,7 @@ export async function generateViaAgent(
   //   - set_title / set_todos / skill / scaffold (always — no deps)
   //   - str_replace_based_edit_tool + done (when fs callbacks are provided)
   //
-  // No generic network-fetch tool is installed here: external fetches must go
-  // through the host's permissioned tool path. DESIGN.md context is injected
-  // into the prompt instead of fetched through a side tool.
+  // Network tools use a main-process permissioned service; no credentials enter core.
   const scaffoldsRoot = input.templatesRoot ? path.join(input.templatesRoot, 'scaffolds') : null;
   const brandRefsRoot = input.templatesRoot ? path.join(input.templatesRoot, 'brand-refs') : null;
   const getWorkspaceRoot = () => input.getWorkspaceRoot?.() ?? input.workspaceRoot ?? null;
@@ -1147,9 +1109,10 @@ export async function generateViaAgent(
             requireDesignMd: true,
           }) as unknown as AgentTool<TSchema, unknown>,
           resourceState,
-          () => {
-            doneRepairLimitReached = true;
+          (details) => {
+            lastDoneDetails = details;
           },
+          doneProgress,
         ),
         runProtocolState,
       ),
@@ -1228,7 +1191,10 @@ export async function generateViaAgent(
       makeAskTool(input.askBridge) as unknown as AgentTool<TSchema, unknown>,
     );
   }
+  const researchTools = deps.research ? makeWebResearchTools(deps.research) : [];
+  for (const tool of researchTools) defaultToolsByName.set(tool.name, tool);
   const defaultTools = availableToolNames({
+    research: deps.research !== undefined,
     fs: trackedFs !== undefined,
     preview: input.runPreview !== undefined,
     image: deps.generateImageAsset !== undefined && !imageExplicitlyDisabled,
@@ -1238,13 +1204,26 @@ export async function generateViaAgent(
   })
     .map((name) => defaultToolsByName.get(name))
     .filter((tool): tool is AgentTool<TSchema, unknown> => tool !== undefined);
-  const tools = deps.tools ?? defaultTools;
+  const tools = (deps.tools ?? defaultTools).map((tool) => ({
+    ...tool,
+    async execute(...args: Parameters<typeof tool.execute>) {
+      assertNotCancelled(args[2]);
+      return tool.execute(...args);
+    },
+  }));
   const encourageToolUse = deps.encourageToolUse ?? tools.length > 0;
-  const baseAgenticGuidance = agenticToolGuidance({
-    inspectWorkspace: input.inspectWorkspace !== undefined,
-    featureProfile,
-    currentDesignName: promptInput.currentDesignName,
-  });
+  const researchGuidance =
+    researchTools.length > 0 &&
+    researchTools.every((researchTool) => tools.some((tool) => tool.name === researchTool.name))
+      ? `${WEB_RESEARCH_GUIDANCE}\n\n`
+      : '';
+  const baseAgenticGuidance =
+    researchGuidance +
+    agenticToolGuidance({
+      inspectWorkspace: input.inspectWorkspace !== undefined,
+      featureProfile,
+      currentDesignName: promptInput.currentDesignName,
+    });
   const activeGuidance =
     deps.generateImageAsset && !imageExplicitlyDisabled
       ? `${baseAgenticGuidance}\n\n${IMAGE_ASSET_TOOL_GUIDANCE}`
@@ -1309,7 +1288,7 @@ export async function generateViaAgent(
   let capturedGetApiKeyError: unknown = null;
 
   // Factory for creating agents with a given message history. Used for both
-  // the initial agent and transport-level retry agents (conversation replay).
+  // the initial agent and retry agents that continue the interrupted transcript.
   const createRetryAgent = (
     messages: AgentMessage[],
     retryThinkingLevel = thinkingLevel,
@@ -1330,10 +1309,21 @@ export async function generateViaAgent(
             m.role === 'user' || m.role === 'assistant' || m.role === 'toolResult',
         ),
       transformContext: buildTransformContext(log, deps.onAggressivePrune),
+      beforeToolCall: async (_context, signal) => {
+        if (input.signal?.aborted || signal?.aborted) {
+          return { block: true, reason: 'Generation cancelled' };
+        }
+        if (repairLimitReached()) {
+          return { block: true, reason: 'Done repair limit reached; no further tools may run.' };
+        }
+        return undefined;
+      },
       getApiKey: input.getApiKey
         ? async () => {
             try {
+              assertNotCancelled();
               const key = await input.getApiKey?.();
+              assertNotCancelled();
               const trimmedKey = key?.trim() ?? '';
               if (trimmedKey.length > 0) return trimmedKey;
               if (input.allowKeyless === true) return initialApiKey || 'open-codesign-keyless';
@@ -1346,30 +1336,52 @@ export async function generateViaAgent(
               throw err;
             }
           }
-        : () => initialApiKey || 'open-codesign-keyless',
+        : () => {
+            assertNotCancelled();
+            return initialApiKey || 'open-codesign-keyless';
+          },
       ...(onPayload !== undefined ? { onPayload } : {}),
     });
-    if (deps.onEvent) {
-      retryAgent.subscribe((event) => deps.onEvent?.(event));
-    }
+    retryAgent.subscribe((event) => {
+      deps.activeMessages?.handleEvent(event, () => {
+        resourceState.lastDone = null;
+        runProtocolState.todosSet = false;
+        lastDoneDetails = undefined;
+        doneProgress.errorRounds = 0;
+      });
+      deps.onEvent?.(event);
+      if (event.type === 'turn_end') {
+        assertNotCancelled();
+        // Agent does not expose the low-level shouldStopAfterTurn hook. Fail the
+        // settled batch at its native event boundary, before pi drains queues.
+        if (repairLimitReached()) {
+          throw new CodesignError('Done repair limit reached', ERROR_CODES.GENERATION_INCOMPLETE);
+        }
+      }
+    });
+    deps.activeMessages?.bind(retryAgent);
     return retryAgent;
   };
 
-  const attachAbortSignal = (target: Agent): void => {
-    if (!input.signal) return;
-    if (input.signal.aborted) {
-      target.abort();
-    } else {
-      input.signal.addEventListener('abort', () => target.abort(), { once: true });
+  let agent = createRetryAgent(historyAsAgentMessages);
+  const admitRun = async (run: () => Promise<void>): Promise<void> => {
+    assertNotCancelled();
+    const target = agent;
+    const abort = () => target.abort();
+    input.signal?.addEventListener('abort', abort, { once: true });
+    try {
+      assertNotCancelled();
+      await run();
+      await target.waitForIdle();
+      assertNotCancelled();
+    } finally {
+      input.signal?.removeEventListener('abort', abort);
     }
   };
 
-  let agent = createRetryAgent(historyAsAgentMessages);
-
-  attachAbortSignal(agent);
-
   log.info('[generate] step=send_request', ctx);
   const sendStart = Date.now();
+  assertNotCancelled();
   if (preflightTitle !== null) {
     emitPreflightSetTitle(deps.onEvent, preflightTitle);
   }
@@ -1390,8 +1402,7 @@ export async function generateViaAgent(
   const sendOnce = async (): Promise<void> => {
     const preLen = agent.state.messages.length;
     try {
-      await agent.prompt(userContent, promptImages);
-      await agent.waitForIdle();
+      await admitRun(() => agent.prompt(userContent, promptImages));
     } catch (err) {
       if (agent.state.messages.length > preLen) {
         const tagged = (err instanceof Error ? err : new Error(String(err))) as RetryBlockedError;
@@ -1437,7 +1448,7 @@ export async function generateViaAgent(
   }
 
   // Post-agent recovery:
-  // - Retry transport-level failures by replaying the turn from clean history.
+  // - Retry transport-level failures from the interrupted user/tool-result boundary.
   // - Retry reasoning_content round-trip failures once with thinking off,
   //   preserving the current transcript up to the failed provider response.
   let transportRetryCount = 0;
@@ -1445,7 +1456,7 @@ export async function generateViaAgent(
   while (true) {
     const checkMsg = findFinalAssistantMessage(agent.state.messages);
     if (!checkMsg || checkMsg.stopReason === 'stop') break;
-    if (input.signal?.aborted) break;
+    if (input.signal?.aborted || repairLimitReached()) break;
 
     const shouldRetryWithoutReasoning =
       !reasoningFallbackUsed &&
@@ -1465,19 +1476,13 @@ export async function generateViaAgent(
         reason: `reasoning retry: ${checkMsg.errorMessage}`,
       });
 
-      const fallback = prepareReasoningFallback(agent.state.messages);
+      const cleanMessages = stripTerminalAssistantFailure(agent.state.messages);
       capturedGetApiKeyError = null;
-      agent = createRetryAgent(fallback.messages, 'off');
-      attachAbortSignal(agent);
+      agent = createRetryAgent(cleanMessages, 'off');
 
       const retryStart = Date.now();
       try {
-        if (fallback.mode === 'continue') {
-          await agent.continue();
-        } else {
-          await agent.prompt(userContent, promptImages);
-        }
-        await agent.waitForIdle();
+        await admitRun(() => agent.continue());
       } catch (err) {
         log.error('[generate] step=reasoning_retry.fail', {
           ...ctx,
@@ -1513,15 +1518,13 @@ export async function generateViaAgent(
       reason: `transport retry: ${checkMsg.errorMessage}`,
     });
 
-    const cleanMessages = stripFailedTurn(agent.state.messages);
+    const cleanMessages = stripTerminalAssistantFailure(agent.state.messages);
     capturedGetApiKeyError = null;
-    agent = createRetryAgent(cleanMessages);
-    attachAbortSignal(agent);
+    agent = createRetryAgent(cleanMessages, reasoningFallbackUsed ? 'off' : thinkingLevel);
 
     const retryStart = Date.now();
     try {
-      await agent.prompt(userContent, promptImages);
-      await agent.waitForIdle();
+      await admitRun(() => agent.continue());
     } catch (err) {
       log.error('[generate] step=transport_retry.fail', {
         ...ctx,
@@ -1537,8 +1540,7 @@ export async function generateViaAgent(
   if (!finalAssistant) {
     throw new CodesignError('Agent produced no assistant message', ERROR_CODES.PROVIDER_ERROR);
   }
-  const stoppedAfterDoneRepairLimit =
-    doneRepairLimitReached && finalAssistant.stopReason === 'toolUse';
+  const stoppedAfterDoneRepairLimit = repairLimitReached();
   if (finalAssistant.stopReason !== 'stop' && !stoppedAfterDoneRepairLimit) {
     // Prefer the original `getApiKey` throw (e.g. PROVIDER_AUTH_MISSING after
     // mid-run logout) over pi-agent-core's flattened plain-string failure,
@@ -1573,17 +1575,39 @@ export async function generateViaAgent(
 
   deps.onComplete?.(agent.state.messages);
 
+  if (lastDoneDetails?.status === 'has_errors') {
+    const remaining = lastDoneDetails.errors
+      .slice(0, 8)
+      .map((error) => `${error.message}${error.lineno ? ` (line ${error.lineno})` : ''}`)
+      .join('\n');
+    const message = [
+      `Design verification failed for ${lastDoneDetails.path}.`,
+      ...(repairLimitReached()
+        ? [`The repair limit was reached after ${MAX_DONE_ERROR_ROUNDS} done() error rounds.`]
+        : []),
+      'The workspace files have been kept, but the design is not ready. Fix the errors and retry.',
+      remaining,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    log.error('[generate] step=verify.fail', {
+      ...ctx,
+      path: lastDoneDetails.path,
+      errorCount: lastDoneDetails.errors.length,
+      repairLimitReached: repairLimitReached(),
+    });
+    throw new CodesignError(message, ERROR_CODES.GENERATION_INCOMPLETE);
+  }
+
   log.info('[generate] step=parse_response', ctx);
   const parseStart = Date.now();
-  const fullText = stoppedAfterDoneRepairLimit
-    ? `Stopped after ${MAX_DONE_ERROR_ROUNDS} done() error rounds. The latest artifact is available with warnings.`
-    : finalAssistant.content
-        .filter(
-          (c): c is { type: 'text'; text: string } =>
-            c.type === 'text' && typeof (c as { text?: unknown }).text === 'string',
-        )
-        .map((c) => c.text)
-        .join('');
+  const fullText = finalAssistant.content
+    .filter(
+      (c): c is { type: 'text'; text: string } =>
+        c.type === 'text' && typeof (c as { text?: unknown }).text === 'string',
+    )
+    .map((c) => c.text)
+    .join('');
 
   const collected: Collected = { text: fullText, artifacts: [] };
 

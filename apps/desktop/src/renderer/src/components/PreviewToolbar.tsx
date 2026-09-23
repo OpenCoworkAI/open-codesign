@@ -1,19 +1,19 @@
 import { useT } from '@open-codesign/i18n';
-import { Download, MessageSquare } from 'lucide-react';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { Download, Maximize2, MessageSquare, Minimize2 } from 'lucide-react';
+import { type ReactElement, useEffect, useRef } from 'react';
 import type { ExportFormat } from '../../../preload/index';
 import { useCodesignStore } from '../store';
-
-interface ExportItem {
-  format: ExportFormat;
-  label: string;
-  hint?: string;
-  ready: boolean;
-}
+import { PreviewToolbarMenu } from './PreviewToolbarMenu';
+import './PreviewToolbar.css';
 
 const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200] as const;
+const EXPORT_FORMATS: ExportFormat[] = ['html', 'pdf', 'pptx', 'zip', 'markdown'];
 
-export function PreviewToolbar(): ReactElement {
+export function PreviewToolbar({
+  canFullscreen = false,
+}: {
+  canFullscreen?: boolean;
+}): ReactElement {
   const t = useT();
   const previewSource = useCodesignStore((s) => s.previewSource);
   const exportActive = useCodesignStore((s) => s.exportActive);
@@ -25,28 +25,26 @@ export function PreviewToolbar(): ReactElement {
   const setPreviewZoomMode = useCodesignStore((s) => s.setPreviewZoomMode);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
-  const [open, setOpen] = useState(false);
-  const [zoomOpen, setZoomOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-  const zoomRef = useRef<HTMLDivElement | null>(null);
-
+  const previewFullscreen = useCodesignStore((s) => s.previewFullscreen);
+  const setPreviewFullscreen = useCodesignStore((s) => s.setPreviewFullscreen);
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const activeCanvasTab = useCodesignStore((s) => s.activeCanvasTab);
+  const view = useCodesignStore((s) => s.view);
+  const fullscreenButton = useRef<HTMLButtonElement>(null);
+  const previousFullscreen = useRef({ active: false, currentDesignId, activeCanvasTab });
   useEffect(() => {
-    if (!open) return;
-    function onClick(e: MouseEvent): void {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const previous = previousFullscreen.current;
+    previousFullscreen.current = { active: previewFullscreen, currentDesignId, activeCanvasTab };
+    if (
+      previous.active &&
+      !previewFullscreen &&
+      view === 'workspace' &&
+      previous.currentDesignId === currentDesignId &&
+      previous.activeCanvasTab === activeCanvasTab
+    ) {
+      fullscreenButton.current?.focus();
     }
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, [open]);
-
-  useEffect(() => {
-    if (!zoomOpen) return;
-    function onClick(e: MouseEvent): void {
-      if (zoomRef.current && !zoomRef.current.contains(e.target as Node)) setZoomOpen(false);
-    }
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, [zoomOpen]);
+  }, [previewFullscreen, currentDesignId, activeCanvasTab, view]);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -56,159 +54,88 @@ export function PreviewToolbar(): ReactElement {
 
   const disabled = !previewSource;
   const commentActive = interactionMode === 'comment';
-  const exportItems: ExportItem[] = [
-    {
-      format: 'html',
-      label: t('export.items.html.label'),
-      ready: true,
-      hint: t('export.items.html.hint'),
-    },
-    {
-      format: 'pdf',
-      label: t('export.items.pdf.label'),
-      ready: true,
-      hint: t('export.items.pdf.hint'),
-    },
-    {
-      format: 'pptx',
-      label: t('export.items.pptx.label'),
-      ready: true,
-      hint: t('export.items.pptx.hint'),
-    },
-    {
-      format: 'zip',
-      label: t('export.items.zip.label'),
-      ready: true,
-      hint: t('export.items.zip.hint'),
-    },
-    {
-      format: 'markdown',
-      label: t('export.items.markdown.label'),
-      ready: true,
-      hint: t('export.items.markdown.hint'),
-    },
-  ];
 
   return (
-    <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-[var(--space-1)] pr-[var(--space-4)] py-[3px]">
+    <div className="codesign-preview-toolbar">
+      <button
+        ref={fullscreenButton}
+        type="button"
+        className="codesign-preview-control codesign-preview-fullscreen"
+        disabled={!canFullscreen && !previewFullscreen}
+        aria-pressed={previewFullscreen}
+        aria-label={t(previewFullscreen ? 'preview.exitFullscreen' : 'preview.fullscreen')}
+        title={t(
+          previewFullscreen
+            ? 'preview.exitFullscreenHint'
+            : canFullscreen
+              ? 'preview.fullscreenHint'
+              : 'preview.fullscreenUnavailable',
+        )}
+        aria-description={
+          !canFullscreen && !previewFullscreen ? t('preview.fullscreenUnavailable') : undefined
+        }
+        onClick={() => setPreviewFullscreen(!previewFullscreen)}
+      >
+        {previewFullscreen ? (
+          <Minimize2 className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" aria-hidden />
+        ) : (
+          <Maximize2 className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" aria-hidden />
+        )}
+        {t(previewFullscreen ? 'preview.exitFullscreen' : 'preview.fullscreen')}
+      </button>
       {toastMessage && (
-        <output className="mr-auto text-[var(--text-xs)] text-[var(--color-text-secondary)] truncate max-w-[60%]">
+        <output className="min-w-0 basis-full max-h-[var(--size-control-lg)] overflow-auto text-[var(--text-xs)] text-[var(--color-text-secondary)] [overflow-wrap:anywhere]">
           {toastMessage}
         </output>
       )}
-
       <button
         type="button"
         disabled={disabled}
         aria-pressed={commentActive}
         onClick={() => setInteractionMode(commentActive ? 'default' : 'comment')}
-        className={`inline-flex h-[28px] items-center gap-[6px] rounded-[var(--radius-sm)] px-[10px] text-[12px] whitespace-nowrap transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)] disabled:opacity-40 disabled:pointer-events-none ${
-          commentActive
-            ? 'text-[var(--color-accent)]'
-            : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'
-        }`}
+        className="codesign-preview-control"
       >
-        <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
+        <MessageSquare className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" aria-hidden />
         {t('preview.commentMode')}
       </button>
-
-      <div className="relative" ref={zoomRef}>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => setZoomOpen((v) => !v)}
-          className="inline-flex h-[28px] min-w-[76px] items-center justify-center rounded-[var(--radius-sm)] px-[10px] text-[12px] tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
-          aria-haspopup="menu"
-          aria-expanded={zoomOpen}
-          aria-label={t('preview.zoom')}
-          style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
-        >
+      <PreviewToolbarMenu
+        label={t('preview.zoom')}
+        disabled={disabled}
+        compact
+        items={[
+          {
+            id: 'fit',
+            label: t('preview.zoomFit'),
+            checked: previewZoomMode === 'fit',
+            onSelect: () => setPreviewZoomMode('fit'),
+          },
+          ...ZOOM_OPTIONS.map((value) => ({
+            id: String(value),
+            label: `${value}%`,
+            checked: previewZoomMode === 'manual' && previewZoom === value,
+            onSelect: () => setPreviewZoom(value),
+          })),
+        ]}
+      >
+        <span className="tabular-nums">
           {previewZoomMode === 'fit'
             ? `${t('preview.zoomFit')} ${previewZoom}%`
             : `${previewZoom}%`}
-        </button>
-
-        {zoomOpen && (
-          <div
-            role="menu"
-            className="absolute right-0 top-full mt-[var(--space-1_5)] w-[96px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] p-[var(--space-1)] z-10"
-          >
-            <button
-              type="button"
-              role="menuitemradio"
-              aria-checked={previewZoomMode === 'fit'}
-              onClick={() => {
-                setPreviewZoomMode('fit');
-                setZoomOpen(false);
-              }}
-              className={`block w-full rounded-[var(--radius-sm)] px-[var(--space-2)] py-[var(--space-1)] text-left text-[12px] transition-colors duration-100 hover:bg-[var(--color-surface-hover)] ${previewZoomMode === 'fit' ? 'text-[var(--color-accent)] font-medium' : 'text-[var(--color-text-primary)]'}`}
-            >
-              {t('preview.zoomFit')}
-            </button>
-            {ZOOM_OPTIONS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                role="menuitemradio"
-                aria-checked={previewZoom === value}
-                onClick={() => {
-                  setPreviewZoom(value);
-                  setZoomOpen(false);
-                }}
-                className={`block w-full rounded-[var(--radius-sm)] py-[var(--space-1)] pr-[10px] text-right text-[12px] tabular-nums transition-colors duration-100 hover:bg-[var(--color-surface-hover)] ${previewZoomMode === 'manual' && previewZoom === value ? 'text-[var(--color-accent)] font-medium' : 'text-[var(--color-text-primary)]'}`}
-                style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
-              >
-                {value}%
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="relative" ref={ref}>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => setOpen((v) => !v)}
-          title={t('export.button')}
-          aria-label={t('export.button')}
-          className="inline-flex h-[28px] items-center gap-[6px] rounded-[var(--radius-sm)] px-[10px] text-[12px] text-[var(--color-text-secondary)] whitespace-nowrap hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
-          aria-haspopup="menu"
-          aria-expanded={open}
-        >
-          <Download className="w-3.5 h-3.5" aria-hidden="true" />
-        </button>
-
-        {open && (
-          <div
-            role="menu"
-            className="absolute right-0 top-full mt-[var(--space-1_5)] min-w-[320px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] p-[var(--space-1)] z-10"
-          >
-            {exportItems.map((item) => (
-              <button
-                key={item.format}
-                type="button"
-                role="menuitem"
-                disabled={!item.ready}
-                onClick={() => {
-                  setOpen(false);
-                  void exportActive(item.format);
-                }}
-                className="w-full flex flex-col items-start gap-[2px] px-[var(--space-3)] py-[var(--space-2)] text-left rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors duration-100"
-              >
-                <span className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
-                  {item.label}
-                </span>
-                {item.hint && (
-                  <span className="text-[11px] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
-                    {item.hint}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+        </span>
+      </PreviewToolbarMenu>
+      <PreviewToolbarMenu
+        label={t('export.button')}
+        disabled={disabled}
+        items={EXPORT_FORMATS.map((format) => ({
+          id: format,
+          label: t(`export.items.${format}.label`),
+          hint: t(`export.items.${format}.hint`),
+          onSelect: () => void exportActive(format),
+        }))}
+      >
+        <Download className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" aria-hidden />
+        {t('export.button')}
+      </PreviewToolbarMenu>
     </div>
   );
 }

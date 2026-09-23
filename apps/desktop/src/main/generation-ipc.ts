@@ -13,8 +13,8 @@ export function cancelGenerationRequest(
   raw: unknown,
   inFlight: Map<string, AbortController>,
   logIpc: CancellationLogger,
-  inFlightByDesign?: Map<string, InFlightGeneration>,
-  inFlightByWorkspace?: Map<string, InFlightGeneration>,
+  _inFlightByDesign?: Map<string, InFlightGeneration>,
+  _inFlightByWorkspace?: Map<string, InFlightGeneration>,
 ): void {
   if (typeof raw !== 'string') {
     throw new CodesignError(
@@ -27,17 +27,7 @@ export function cancelGenerationRequest(
   if (!controller) return;
 
   controller.abort();
-  inFlight.delete(raw);
-  if (inFlightByDesign !== undefined) {
-    for (const [designId, generation] of inFlightByDesign) {
-      if (generation.generationId === raw) inFlightByDesign.delete(designId);
-    }
-  }
-  if (inFlightByWorkspace !== undefined) {
-    for (const [workspaceKey, generation] of inFlightByWorkspace) {
-      if (generation.generationId === raw) inFlightByWorkspace.delete(workspaceKey);
-    }
-  }
+  // Abort requests cancellation; only the owning run's finally releases ownership.
   logIpc.info('generate.cancelled', { id: raw });
 }
 
@@ -47,6 +37,8 @@ export async function withInFlightGeneration<T>(
   controller: AbortController,
   run: () => Promise<T>,
 ): Promise<T> {
+  if (inFlight.has(id))
+    throw new CodesignError('This generation ID is already running.', 'GENERATION_ALREADY_RUNNING');
   inFlight.set(id, controller);
   try {
     return await run();
@@ -66,13 +58,13 @@ export async function withInFlightGenerationForDesign<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   const existing = inFlightByDesign.get(designId);
-  if (existing !== undefined && existing.generationId !== id) {
+  if (existing !== undefined) {
     throw new CodesignError(
       'A generation is already running for this design. Wait for it to finish or stop it before continuing.',
       'GENERATION_ALREADY_RUNNING',
     );
   }
-  const startedAt = existing?.startedAt ?? Date.now();
+  const startedAt = Date.now();
   inFlightByDesign.set(designId, { generationId: id, startedAt });
   try {
     return await withInFlightGeneration(id, inFlight, controller, run);
@@ -89,13 +81,13 @@ export function acquireInFlightWorkspaceGeneration(
   inFlightByWorkspace: Map<string, InFlightGeneration>,
 ): () => void {
   const existing = inFlightByWorkspace.get(workspaceKey);
-  if (existing !== undefined && existing.generationId !== id) {
+  if (existing !== undefined) {
     throw new CodesignError(
       'A generation is already running for this workspace. Wait for it to finish or stop it before continuing.',
       'GENERATION_ALREADY_RUNNING',
     );
   }
-  const startedAt = existing?.startedAt ?? Date.now();
+  const startedAt = Date.now();
   inFlightByWorkspace.set(workspaceKey, { generationId: id, startedAt });
   return () => {
     if (inFlightByWorkspace.get(workspaceKey)?.generationId === id) {
