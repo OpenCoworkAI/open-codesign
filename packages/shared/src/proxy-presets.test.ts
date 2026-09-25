@@ -34,6 +34,7 @@ describe('PROXY_PRESETS', () => {
     expect(ids).toContain('duckcoding');
     expect(ids).toContain('openrouter');
     expect(ids).toContain('requesty');
+    expect(ids).toContain('cheaperinference');
     expect(ids).toContain('siliconflow');
     expect(ids).toContain('one-api');
     expect(ids).toContain('custom');
