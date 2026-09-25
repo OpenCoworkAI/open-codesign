@@ -1,0 +1,28 @@
+Workspace
+C:\Users\hjh\AppDa…r-qLNxfB\workspace
+Change
+Preview · Auto: Integrated
+Detect
+DESIGN FILES
+1
+App.jsx
+338 B
+
+Thumbnail preview · double-click the file or use Open in tab for full view
+
+OPEN IN TAB
+Edit source
+Local source edit
+
+App.jsx · <h1>
+
+Edits the source definition, not an arbitrary rendered instance.
+
+Saving reloads the preview and may reset its state.
+
+The source changed; inspect the current file before editing. (stale-source)
+
+Text
+title
+
+Only existing properties of a direct inline style object are supported. (no-inline-style)

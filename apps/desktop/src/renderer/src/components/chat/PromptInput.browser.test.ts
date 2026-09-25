@@ -1,10 +1,9 @@
-import { randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { findSystemChrome } from '@open-codesign/exporters';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
-import { createServer, type ViteDevServer } from 'vite';
+import { build, type PreviewServer, preview } from 'vite';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type {} from './__fixtures__/active-message-browser';
 
@@ -12,50 +11,54 @@ const chrome = await findSystemChrome().catch(() => null);
 
 describe.skipIf(!chrome)('active composer fake gate in system Chrome', () => {
   let browser: Browser;
-  let server: ViteDevServer;
+  let server: PreviewServer;
   let page: Page;
   let endpoint: string;
-  // Browser profile writes must not trigger Vite/Tailwind source watching.
-  const profile = resolve(tmpdir(), `codesign-active-composer-${randomUUID()}`);
+  let directory: string;
+  const fixture = 'src/renderer/src/components/chat/__fixtures__/active-message-browser.html';
   const externalRequests: string[] = [];
   const browserErrors: string[] = [];
 
   beforeAll(async () => {
     if (!chrome) throw new Error('System Chrome unavailable');
-    server = await createServer({
+    directory = await mkdtemp(join(tmpdir(), 'codesign-active-composer-'));
+    const outDir = join(directory, 'site');
+    // Build before navigation so cold dev-server optimization cannot invalidate
+    // an in-flight dependency and leave the first page unmounted.
+    await build({
       configFile: false,
       root: process.cwd(),
       logLevel: 'error',
       esbuild: { jsx: 'automatic' },
-      server: {
-        host: '127.0.0.1',
-        port: 0,
-        watch: { ignored: ['**/.codesign-browser-profile-*/**'] },
-      },
+      build: { outDir, target: 'esnext', rollupOptions: { input: resolve(fixture) } },
+    });
+    server = await preview({
+      configFile: false,
+      root: process.cwd(),
+      logLevel: 'error',
+      build: { outDir },
+      preview: { host: '127.0.0.1', port: 0 },
       plugins: [
         {
           name: 'active-message-component-fixture',
-          configureServer(vite) {
+          configurePreviewServer(vite) {
             vite.middlewares.use((req, res, next) => {
-              if (req.url?.split('?')[0] !== '/active-message-fixture') return next();
-              res.setHeader('Content-Type', 'text/html');
-              res.end(
-                '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/renderer/src/components/chat/__fixtures__/active-message-browser.tsx"></script></body></html>',
-              );
+              if (req.url !== '/favicon.ico') return next();
+              res.statusCode = 204;
+              res.end();
             });
           },
         },
       ],
     });
-    await server.listen();
     const address = server.httpServer?.address();
     if (!address || typeof address === 'string') throw new Error('Fixture server unavailable');
-    endpoint = `http://127.0.0.1:${address.port}/active-message-fixture`;
+    endpoint = `http://127.0.0.1:${address.port}/${fixture}`;
     expect((await fetch(endpoint)).ok).toBe(true);
     browser = await puppeteer.launch({
       executablePath: chrome,
       headless: true,
-      userDataDir: profile,
+      userDataDir: join(directory, 'profile'),
     });
   }, 60_000);
 
@@ -64,6 +67,17 @@ describe.skipIf(!chrome)('active composer fake gate in system Chrome', () => {
     browserErrors.length = 0;
     page = await browser.newPage();
     page.on('pageerror', (error) => browserErrors.push(String(error)));
+    const diagnostics: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') diagnostics.push(message.text());
+    });
+    page.on('requestfailed', (request) => {
+      diagnostics.push(`${request.url()}: ${request.failure()?.errorText}`);
+    });
+    page.on('response', (response) => {
+      if (response.status() >= 400)
+        diagnostics.push(`${response.status()} ${response.statusText()}: ${response.url()}`);
+    });
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       if (new URL(request.url()).origin === new URL(endpoint).origin) {
@@ -73,8 +87,15 @@ describe.skipIf(!chrome)('active composer fake gate in system Chrome', () => {
         void request.abort();
       }
     });
-    await page.goto(endpoint);
-    await page.waitForSelector('textarea');
+    try {
+      await page.goto(endpoint);
+      await page.waitForSelector('textarea');
+    } catch (cause) {
+      throw new Error(
+        `Composer fixture failed to mount:\n${[...browserErrors, ...diagnostics].join('\n')}`,
+        { cause },
+      );
+    }
   }, 60_000);
 
   afterEach(async () => {
@@ -87,8 +108,11 @@ describe.skipIf(!chrome)('active composer fake gate in system Chrome', () => {
     try {
       await browser?.close();
     } finally {
-      await server?.close();
-      await rm(profile, { recursive: true, force: true });
+      try {
+        await server?.close();
+      } finally {
+        if (directory) await rm(directory, { recursive: true, force: true });
+      }
     }
   }, 30_000);
 

@@ -1,0 +1,23 @@
+Workspace
+C:\Users\hjh\AppDa…r-qLNxfB\workspace
+Change
+Preview · Auto: Integrated
+Detect
+DESIGN FILES
+1
+App.jsx
+338 B
+
+Thumbnail preview · double-click the file or use Open in tab for full view
+
+OPEN IN TAB
+Edit source
+Local source edit
+
+App.jsx · <p>
+
+Edits the source definition, not an arbitrary rendered instance.
+
+Saving reloads the preview and may reset its state.
+
+Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not. (non-direct-source)
