@@ -90,7 +90,7 @@ import {
 import { registerSourceEditBusyCheck } from '../source-edits-ipc';
 import { withTlsBypass } from '../tls-override';
 import { createResearchHost, createWebResearchAuthorization } from '../web-research';
-import { createWebResearchNetwork } from '../web-research-network';
+import { createWebResearchRun } from '../web-research-run';
 import { withStableWorkspacePath } from '../workspace-path-lock';
 import { listWorkspaceFilesAt, readWorkspaceFilesAt } from '../workspace-reader';
 import { finalAssistantTextForTurn } from './assistant-text';
@@ -690,6 +690,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     designId: string,
     previousSource: string | null,
     workspaceRoot: string,
+    researchRun: ReturnType<typeof createWebResearchRun>,
     attachmentsForRuntimeFs?: Parameters<typeof createRuntimeTextEditorFs>[0]['attachments'],
     memoryCallbacks?: {
       onAggressivePrune?: () => void;
@@ -700,6 +701,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       publishEvent(event);
     };
     const baseCtx = { designId, generationId: id } as const;
+    const cfg = getCachedConfig();
+    const { settings: researchSettings, network } = researchRun;
     const toolStartedAt = new Map<string, number>();
     const templatesRoot = path_module.join(app.getPath('userData'), 'templates');
     const currentWorkspaceRoot = () => requireWorkspaceRootForDesign(designId).workspaceRoot;
@@ -721,32 +724,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       frames,
       designSkills,
     });
-    const cfg = getCachedConfig();
-    const researchSettings = cfg?.webSearch ?? {
-      enabled: false,
-      maxCalls: 12,
-      timeoutMs: 15000,
-      maxChars: 10000,
-    };
-    // Keep credentials in this process and resolve only when a network tool is used.
-    let network: ReturnType<typeof createWebResearchNetwork> | undefined;
-    const getResearchNetwork = () => {
-      if (!network) {
-        const stored = cfg?.secrets['tavily'];
-        network = createWebResearchNetwork({
-          ...researchSettings,
-          ...(stored && researchSettings.enabled
-            ? { apiKey: decryptSecret(stored.ciphertext) }
-            : {}),
-        });
-      }
-      return network;
-    };
     const research = createResearchHost({
-      network: {
-        search: (query, count, signal) => getResearchNetwork().search(query, count, signal),
-        fetch: (url, signal) => getResearchNetwork().fetch(url, signal),
-      },
+      network,
       inWorkspace: (fn) => withStableWorkspacePath(designId, () => fn(currentWorkspaceRoot())),
       authorize: createWebResearchAuthorization(researchSettings, (questions, signal) =>
         requestAsk(id, questions, () => getMainWindow(), {
@@ -1116,6 +1095,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               'CONFIG_MISSING',
             );
           }
+          const researchRun = createWebResearchRun(cfg, decryptSecret);
           const active = resolveActiveModel(cfg, payload.model);
           const allowKeyless = active.allowKeyless;
           const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
@@ -1357,6 +1337,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 designId,
                 payload.previousSource ?? null,
                 workspaceRoot,
+                researchRun,
                 promptContext.attachments,
                 {
                   onAggressivePrune: () => {
@@ -1626,6 +1607,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               'CONFIG_MISSING',
             );
           }
+          const researchRun = createWebResearchRun(cfg, decryptSecret);
           // Inline-comment edits don't need to be tied to whatever provider was
           // pinned in the original generate; resolve fresh against the canonical
           // active provider so a switch in Settings takes effect immediately.
@@ -1714,6 +1696,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 payload.designId,
                 payload.artifactSource,
                 workspaceRoot,
+                researchRun,
                 promptContext.attachments,
               ),
             );

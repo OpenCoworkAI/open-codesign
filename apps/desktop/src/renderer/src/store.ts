@@ -97,6 +97,7 @@ export type AppView = 'hub' | 'workspace' | 'settings';
 export type SettingsTab =
   | 'models'
   | 'images'
+  | 'webSearch'
   | 'memory'
   | 'appearance'
   | 'workspace'

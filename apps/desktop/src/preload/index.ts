@@ -26,6 +26,7 @@ import type {
   ReportEventInput,
   ReportEventResult,
   ResourceStateV1,
+  SaveWebSearchSettingsInput,
   SelectedElement,
   SnapshotCreateInput,
   SourceEditApplyRequestV1,
@@ -33,6 +34,8 @@ import type {
   SourceEditInspectRequestV1,
   SourceEditInspectResultV1,
   SupportedOnboardingProvider,
+  WebSearchSettingsState,
+  WebSearchTestResult,
   WireApi,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
@@ -637,6 +640,12 @@ const api = {
     get: () => ipcRenderer.invoke('preferences:v1:get') as Promise<Preferences>,
     update: (patch: Partial<Preferences>) =>
       ipcRenderer.invoke('preferences:v1:update', patch) as Promise<Preferences>,
+  },
+  webSearch: {
+    get: () => ipcRenderer.invoke('settings:v1:get-web-search') as Promise<WebSearchSettingsState>,
+    save: (input: SaveWebSearchSettingsInput) =>
+      ipcRenderer.invoke('settings:v1:save-web-search', input) as Promise<WebSearchSettingsState>,
+    test: () => ipcRenderer.invoke('settings:v1:test-web-search') as Promise<WebSearchTestResult>,
   },
   memory: {
     getUser: () => ipcRenderer.invoke('memory:v1:get-user') as Promise<MemoryFileRead | null>,

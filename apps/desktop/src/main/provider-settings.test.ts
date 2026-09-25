@@ -4,7 +4,7 @@ import {
   type Config,
   hydrateConfig,
 } from '@open-codesign/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   assertProviderHasStoredSecret,
   computeDeleteProviderResult,
@@ -94,6 +94,49 @@ describe('getAddProviderDefaults', () => {
 });
 
 describe('toProviderRows', () => {
+  it.each([
+    { ciphertext: 'plain:tvly-fixture' },
+    { ciphertext: 'safe:unreadable-fixture' },
+    { ciphertext: 'legacy-fixture', mask: 'tvly***ture' },
+  ])('does not list or decrypt Tavily credentials as a model service: %j', (tavily) => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      secrets: { tavily },
+    });
+    cfg.webSearch = { enabled: true, maxCalls: 7, timeoutMs: 4000, maxChars: 3000 };
+    const before = structuredClone(cfg);
+    const decrypt = vi.fn(() => {
+      throw new Error('Search credentials must not be decrypted for model settings');
+    });
+
+    const rows = toProviderRows(cfg, decrypt);
+
+    expect(rows.map((row) => row.provider)).toEqual(['anthropic', 'openai', 'openrouter']);
+    expect(JSON.stringify(rows)).not.toContain('tvly');
+    expect(decrypt).not.toHaveBeenCalled();
+    expect(cfg).toEqual(before);
+  });
+
+  it('keeps recognized legacy model keys without provider entries but excludes search-only keys', () => {
+    const cfg = hydrateConfig({
+      version: 3,
+      activeProvider: '',
+      activeModel: '',
+      providers: {},
+      secrets: {
+        openai: { ciphertext: 'plain:model-fixture', mask: '***' },
+        tavily: { ciphertext: 'plain:tvly-fixture' },
+      },
+    });
+    const decrypt = vi.fn(() => 'unused');
+
+    expect(toProviderRows(cfg, decrypt)).toEqual([
+      expect.objectContaining({ provider: 'openai', hasKey: true, maskedKey: '***' }),
+    ]);
+    expect(decrypt).not.toHaveBeenCalled();
+  });
+
   it('returns a row with error:decryption_failed and empty maskedKey when decrypt throws', () => {
     const cfg = makeCfg({
       provider: 'openai',

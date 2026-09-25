@@ -11,6 +11,12 @@ export {
   CommentContentExpectations,
   commentContentFingerprint,
 } from './comment-content';
+export {
+  SaveWebSearchSettingsInput,
+  WEB_SEARCH_SETTINGS_CHANNELS,
+  WebSearchSettingsState,
+  WebSearchTestResult,
+} from './web-search-settings';
 
 export const ProviderId = z.enum([
   'anthropic',

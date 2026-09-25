@@ -132,6 +132,48 @@ vi.mock('@open-codesign/providers', () => ({
 }));
 
 describe('registerOnboardingIpc — channel versioning', () => {
+  it('routes search settings through safe versioned get/save/test handlers', async () => {
+    const { hydrateConfig, WEB_SEARCH_SETTINGS_CHANNELS } = await import('@open-codesign/shared');
+    const { setCachedConfig } = await import('./onboarding/config-cache');
+    const network = await import('./web-research-network');
+    const probe = vi.spyOn(network, 'testTavilyConnection').mockResolvedValue({ status: 'ok' });
+    setCachedConfig(
+      hydrateConfig({
+        version: 3,
+        activeProvider: '',
+        activeModel: '',
+        providers: {},
+        secrets: {},
+      }),
+    );
+    await registerIpcForTest();
+    try {
+      const get = handlers.get(WEB_SEARCH_SETTINGS_CHANNELS.get);
+      const save = handlers.get(WEB_SEARCH_SETTINGS_CHANNELS.save);
+      const test = handlers.get(WEB_SEARCH_SETTINGS_CHANNELS.test);
+      expect(get).toBeDefined();
+      expect(save).toBeDefined();
+      expect(test).toBeDefined();
+      expect(await get?.({})).toEqual({ enabled: false, hasKey: false });
+      expect(await save?.({}, { apiKey: 'tvly-ipc-fixture' })).toEqual({
+        enabled: false,
+        hasKey: true,
+      });
+      expect(await save?.({}, { enabled: true })).toEqual({ enabled: true, hasKey: true });
+      const listProviders = handlers.get('settings:v1:list-providers');
+      expect(listProviders).toBeDefined();
+      expect(await listProviders?.({})).toEqual([]);
+      expect(await get?.({})).toEqual({ enabled: true, hasKey: true });
+      expect(probe).not.toHaveBeenCalled();
+      expect(await test?.({})).toEqual({ status: 'ok' });
+      expect(probe).toHaveBeenCalledExactlyOnceWith('tvly-ipc-fixture', 15000);
+      expect(await save?.({}, { clearKey: true })).toEqual({ enabled: true, hasKey: false });
+      expect(await test?.({})).toEqual({ status: 'missing-key' });
+      expect(probe).toHaveBeenCalledOnce();
+    } finally {
+      probe.mockRestore();
+    }
+  });
   it('registers settings:v1:list-providers without the unversioned settings:list-providers shim', async () => {
     await registerIpcForTest();
 

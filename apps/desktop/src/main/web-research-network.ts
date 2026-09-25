@@ -304,10 +304,83 @@ export async function readableHtml(html: string): Promise<{ text: string; title:
   };
 }
 
+function tavilyRequest(apiKey: string, query: string, count: number, signal: AbortSignal) {
+  return {
+    signal,
+    authorization: `Bearer ${apiKey}`,
+    body: JSON.stringify({
+      query,
+      max_results: count,
+      search_depth: 'basic',
+      include_answer: false,
+      include_raw_content: false,
+      auto_parameters: false,
+    }),
+  };
+}
+
+export interface TavilyConnectionResult {
+  status:
+    | 'ok'
+    | 'invalid-key'
+    | 'quota'
+    | 'rate-limit'
+    | 'timeout'
+    | 'network-error'
+    | 'service-error'
+    | 'unexpected-response';
+  httpStatus?: number;
+}
+
+export async function testTavilyConnection(
+  apiKey: string,
+  timeoutMs: number,
+  deps: NetworkDependencies = {},
+): Promise<TavilyConnectionResult> {
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), timeoutMs);
+  try {
+    // A basic search costs one credit. Never follow redirects with this credential.
+    const response = await requestPublicUrl(
+      new URL('https://api.tavily.com/search'),
+      tavilyRequest(apiKey, 'Tavily', 1, timeout.signal),
+      deps,
+    );
+    const httpStatus = response.status;
+    switch (httpStatus) {
+      case 200:
+        try {
+          const body: unknown = JSON.parse(response.body);
+          if (body && typeof body === 'object' && 'results' in body && Array.isArray(body.results))
+            return { status: 'ok', httpStatus };
+        } catch {
+          // Upstream bodies and parser errors may contain the credential.
+        }
+        return { status: 'unexpected-response', httpStatus };
+      case 401:
+        return { status: 'invalid-key', httpStatus };
+      case 429:
+        return { status: 'rate-limit', httpStatus };
+      case 432:
+      case 433:
+        return { status: 'quota', httpStatus };
+      case 500:
+        return { status: 'service-error', httpStatus };
+      default:
+        return { status: 'unexpected-response', httpStatus };
+    }
+  } catch {
+    return { status: timeout.signal.aborted ? 'timeout' : 'network-error' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function createWebResearchNetwork(
   options: {
     enabled: boolean;
     apiKey?: string;
+    getApiKey?: () => string | undefined;
     timeoutMs: number;
     maxChars: number;
     maxCalls: number;
@@ -322,7 +395,7 @@ export function createWebResearchNetwork(
     signal?.throwIfAborted();
     if (!options.enabled)
       throw new Error(
-        'Web access is disabled for web_search and web_fetch. Set enabled = true in the top-level [webSearch] section of the active config.toml, then fully quit and restart Open CoDesign. A Tavily key alone does not enable web access.',
+        'Web access is disabled for web_search and web_fetch. Enable it in Settings > Web Search, then start a new turn; no app restart is needed. A Tavily key alone does not enable web access.',
       );
     if (calls >= options.maxCalls)
       throw new Error(
@@ -355,11 +428,12 @@ export function createWebResearchNetwork(
     async search(query, count, signal) {
       if (!options.enabled)
         throw new Error(
-          'Web access is disabled for web_search and web_fetch. Set enabled = true in the top-level [webSearch] section of the active config.toml, then fully quit and restart Open CoDesign. A Tavily key alone does not enable web access.',
+          'Web access is disabled for web_search and web_fetch. Enable it in Settings > Web Search, then start a new turn; no app restart is needed. A Tavily key alone does not enable web access.',
         );
-      if (!options.apiKey)
+      const apiKey = options.getApiKey ? options.getApiKey() : options.apiKey;
+      if (!apiKey)
         throw new Error(
-          'Tavily credentials are not configured. Set [secrets.tavily] ciphertext = "plain:YOUR_TAVILY_KEY" in the local config.toml and restart. Never paste keys into chat.',
+          'Tavily credentials are not configured. Add a key in Settings > Web Search, then start a new turn; no app restart is needed. Never paste keys into chat.',
         );
       if (
         !query.trim() ||
@@ -372,17 +446,7 @@ export function createWebResearchNetwork(
       return run(async (combined) => {
         const response = await requestPublicUrl(
           new URL('https://api.tavily.com/search'),
-          {
-            signal: combined,
-            authorization: `Bearer ${options.apiKey}`,
-            body: JSON.stringify({
-              query,
-              max_results: count,
-              search_depth: 'basic',
-              include_answer: false,
-              include_raw_content: false,
-            }),
-          },
+          tavilyRequest(apiKey, query, count, combined),
           deps,
         );
         if (response.status < 200 || response.status >= 300)

@@ -4,6 +4,7 @@ import {
   ERROR_CODES,
   type ExternalConfigsDetection,
   type OnboardingState,
+  WEB_SEARCH_SETTINGS_CHANNELS,
 } from '@open-codesign/shared';
 import { ipcMain } from '../electron-runtime';
 import { readClaudeCodeSettings } from '../imports/claude-code-config';
@@ -13,6 +14,11 @@ import { readOpencodeConfig } from '../imports/opencode-config';
 import { getLogger } from '../logger';
 import type { ProviderRow } from '../provider-settings';
 import type { AppPaths } from '../storage-settings';
+import {
+  getWebSearchSettings,
+  saveWebSearchSettings,
+  testWebSearchSettings,
+} from '../web-search-settings';
 import { getCachedConfig, toState } from './config-cache';
 import {
   runImportClaudeCode,
@@ -47,6 +53,12 @@ const logger = getLogger('settings-ipc');
 // silently" background.
 
 export function registerOnboardingIpc(): void {
+  ipcMain.handle(WEB_SEARCH_SETTINGS_CHANNELS.get, () => getWebSearchSettings());
+  ipcMain.handle(WEB_SEARCH_SETTINGS_CHANNELS.save, (_event, raw: unknown) =>
+    saveWebSearchSettings(raw),
+  );
+  ipcMain.handle(WEB_SEARCH_SETTINGS_CHANNELS.test, () => testWebSearchSettings());
+
   ipcMain.handle('onboarding:get-state', (): OnboardingState => toState(getCachedConfig()));
 
   ipcMain.handle('onboarding:validate-key', async (_e, raw: unknown): Promise<ValidateResult> => {

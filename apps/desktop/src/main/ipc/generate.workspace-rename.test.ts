@@ -137,6 +137,7 @@ vi.mock('../onboarding-ipc', () => ({
   getCachedConfig: vi.fn(() => ({
     provider: 'mock-provider',
     modelPrimary: 'mock-model',
+    secrets: {},
     designSystem: null,
   })),
   hasApiKeyForProvider: vi.fn(() => true),

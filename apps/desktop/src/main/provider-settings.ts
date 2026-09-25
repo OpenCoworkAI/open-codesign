@@ -114,6 +114,9 @@ export function toProviderRows(
   for (const provider of allIds) {
     const ref = cfg.secrets?.[provider];
     const entry = resolveEntryFor(cfg, provider);
+    // Secrets also contain non-model credentials such as Tavily. Only actual
+    // model entries (or recognized legacy builtins) belong in the model list.
+    if (entry === null) continue;
 
     let maskedKey = '';
     let rowError: ProviderRow['error'];
