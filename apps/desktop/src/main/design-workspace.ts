@@ -4,14 +4,10 @@ import path from 'node:path';
 import type { Design, WorkspaceMode } from '@open-codesign/shared';
 import { type BrowserWindow, dialog, shell } from 'electron';
 import { getLogger } from './logger';
-import {
-  clearDesignWorkspace,
-  type Database,
-  getDesign,
-  listDesigns,
-  updateDesignWorkspace,
-} from './snapshots-db';
+import { type Database, getDesign, listDesigns } from './snapshots-db';
+import { changeSourceEntryWorkspace } from './source-entry';
 import { normalizeWorkspacePath } from './workspace-path';
+import { runWithWorkspaceRenameQueue } from './workspace-path-lock';
 import { listWorkspaceFilesAt, resolveSafeWorkspaceChildPath } from './workspace-reader';
 
 export { normalizeWorkspacePath } from './workspace-path';
@@ -147,52 +143,31 @@ export async function bindWorkspace(
   migrateFiles: boolean,
   workspaceMode?: WorkspaceMode,
 ): Promise<Design> {
-  const current = requireDesign(db, designId);
-
-  if (workspacePath === null) {
-    logger.info('workspace.clear.start', { designId });
-    const cleared = clearDesignWorkspace(db, designId);
-    if (cleared === null) {
-      throw new Error(`Design not found: ${designId}`);
+  return runWithWorkspaceRenameQueue(designId, async () => {
+    const current = requireDesign(db, designId);
+    const normalizedPath = workspacePath === null ? null : normalizeWorkspacePath(workspacePath);
+    const samePath =
+      normalizedPath !== null &&
+      current.workspacePath !== null &&
+      workspacePathComparisonKey(current.workspacePath) ===
+        workspacePathComparisonKey(normalizedPath);
+    if (normalizedPath !== null && !samePath) {
+      const conflict = findWorkspaceConflict(db, designId, normalizedPath);
+      if (conflict !== null) throw new Error(workspaceConflictMessage(conflict));
+      await assertExistingWorkspaceDirectory(normalizedPath);
     }
-    logger.info('workspace.clear.done', { designId });
-    return cleared;
-  }
-
-  const normalizedPath = normalizeWorkspacePath(workspacePath);
-  const comparisonPath = workspacePathComparisonKey(normalizedPath);
-  if (
-    current.workspacePath !== null &&
-    workspacePathComparisonKey(current.workspacePath) === comparisonPath
-  ) {
-    logger.info('workspace.bind.noop', { designId, workspacePath: normalizedPath });
-    return current;
-  }
-  const conflict = findWorkspaceConflict(db, designId, normalizedPath);
-  if (conflict !== null) {
-    throw new Error(workspaceConflictMessage(conflict));
-  }
-  await assertExistingWorkspaceDirectory(normalizedPath);
-
-  logger.info('workspace.bind.start', {
-    designId,
-    workspacePath: normalizedPath,
-    migrateFiles,
+    const updated = await changeSourceEntryWorkspace(
+      db,
+      designId,
+      normalizedPath,
+      migrateFiles,
+      async () => {
+        if (migrateFiles && normalizedPath !== null)
+          await migrateWorkspaceFiles(db, designId, normalizedPath);
+      },
+      workspaceMode,
+    );
+    logger.info('workspace.bind.done', { designId, workspacePath: normalizedPath, migrateFiles });
+    return updated;
   });
-
-  if (migrateFiles) {
-    await migrateWorkspaceFiles(db, designId, normalizedPath);
-  }
-
-  const updated = updateDesignWorkspace(db, designId, normalizedPath, workspaceMode);
-  if (updated === null) {
-    throw new Error(`Design not found: ${designId}`);
-  }
-
-  logger.info('workspace.bind.done', {
-    designId,
-    workspacePath: normalizedPath,
-    migrateFiles,
-  });
-  return updated;
 }

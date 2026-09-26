@@ -1,13 +1,15 @@
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Design } from '@open-codesign/shared';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDesign, getDesign, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
 import {
   detectLocalPreviewServer,
   registerSnapshotsIpc,
   registerWorkspaceIpc,
 } from './snapshots-ipc';
+import { getSourceEntry, initializeSourceEntry, selectSourceEntry } from './source-entry';
+import { readSourceEntryFile } from './source-entry-store';
 import { normalizeWorkspacePath } from './workspace-path';
 import { withStableWorkspacePath } from './workspace-path-lock';
 import type { WorkspaceFileEntry } from './workspace-reader';
@@ -65,8 +67,10 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     ...actual,
     rename: vi.fn(async (oldPath: string, newPath: string) => {
       await actual.rename(oldPath, newPath);
-      renameControl.markStarted();
-      await renameControl.waitUntilReleased();
+      if (!oldPath.endsWith('.tmp')) {
+        renameControl.markStarted();
+        await renameControl.waitUntilReleased();
+      }
     }),
   };
 });
@@ -105,8 +109,12 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
+beforeAll(async () => {
+  await import('@open-codesign/runtime');
+}, 60_000);
+
 describe('workspace files IPC during auto-managed workspace renames', () => {
-  const documentsRoot = testRoots.documentsRoot;
+  let documentsRoot = testRoots.documentsRoot;
   const defaultWorkspaceRoot = path.join(documentsRoot, 'CoDesign');
   let root: string;
 
@@ -115,7 +123,9 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
     renameControl.reset();
     await rm(documentsRoot, { recursive: true, force: true });
     await mkdir(defaultWorkspaceRoot, { recursive: true });
-    root = defaultWorkspaceRoot;
+    documentsRoot = await realpath(documentsRoot);
+    testRoots.documentsRoot = documentsRoot;
+    root = await realpath(defaultWorkspaceRoot);
   });
 
   afterEach(async () => {
@@ -124,7 +134,7 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
   });
 
   it('waits for an in-flight workspace rename before listing files', async () => {
-    const db = initInMemoryDb();
+    const db = { ...initInMemoryDb(), sessionDir: path.join(documentsRoot, 'sessions') };
     const design = createDesign(db, 'Untitled design 1');
     const oldWorkspace = path.join(root, 'Untitled-design-1');
     await mkdir(oldWorkspace);
@@ -163,6 +173,40 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
     expect(files.map((file) => file.path)).toContain('App.jsx');
   });
 
+  it('rejects a selection queued with the pre-rename binding after the directory moves', async () => {
+    const db = { ...initInMemoryDb(), sessionDir: path.join(documentsRoot, 'sessions') };
+    const design = createDesign(db, 'Untitled design 1');
+    const oldWorkspace = path.join(root, 'Untitled-design-1');
+    await mkdir(oldWorkspace);
+    await writeFile(path.join(oldWorkspace, 'index.html'), '<h1>Original</h1>');
+    updateDesignWorkspace(db, design.id, oldWorkspace);
+    const previous = await initializeSourceEntry(db, design.id);
+    registerSnapshotsIpc(db);
+    const renaming = getHandler('snapshots:v1:rename-design')(null, {
+      schemaVersion: 1,
+      id: design.id,
+      name: 'Renamed',
+    }) as Promise<Design>;
+    await renameControl.started;
+    const selecting = expect(
+      selectSourceEntry(
+        db,
+        {
+          schemaVersion: 1,
+          designId: design.id,
+          path: 'index.html',
+          expectedWorkspacePath: normalizeWorkspacePath(oldWorkspace),
+          expectedRevision: previous.revision,
+        },
+        () => {},
+      ),
+    ).rejects.toMatchObject({ reason: 'workspace-changed' });
+    renameControl.release();
+    await renaming;
+    await selecting;
+    expect(await getSourceEntry(db, design.id)).toMatchObject({ status: 'planned' });
+  });
+
   it('marks reachable Tauri dev servers as external app previews', async () => {
     const workspace = path.join(root, 'MadWhisp');
     await mkdir(path.join(workspace, 'src-tauri'), { recursive: true });
@@ -195,13 +239,14 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
   });
 
   it('can rename design metadata without moving an auto-managed workspace folder', async () => {
-    const db = initInMemoryDb();
+    const db = { ...initInMemoryDb(), sessionDir: path.join(documentsRoot, 'sessions') };
     const design = createDesign(db, 'Untitled design 1');
     const oldWorkspace = path.join(root, 'Untitled-design-1');
     const newWorkspace = path.join(root, 'Studio-Loop-Welcome-Email');
     await mkdir(oldWorkspace);
     await writeFile(path.join(oldWorkspace, 'App.jsx'), 'function App() { return null; }', 'utf8');
     updateDesignWorkspace(db, design.id, oldWorkspace);
+    const entry = await initializeSourceEntry(db, design.id);
     registerSnapshotsIpc(db);
 
     const renameDesign = getHandler('snapshots:v1:rename-design');
@@ -212,6 +257,7 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
       renameWorkspace: false,
     })) as Design;
 
+    expect(await readSourceEntryFile(db, design.id)).toEqual(entry);
     expect(updated.name).toBe('Studio Loop Welcome Email');
     expect(updated.workspacePath).toBe(normalizeWorkspacePath(oldWorkspace));
     await expect(exists(path.join(oldWorkspace, 'App.jsx'))).resolves.toBe(true);
@@ -219,7 +265,7 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
   });
 
   it('stores a connected preview URL without moving the workspace folder', async () => {
-    const db = initInMemoryDb();
+    const db = { ...initInMemoryDb(), sessionDir: path.join(documentsRoot, 'sessions') };
     const design = createDesign(db, 'Local app');
     const workspace = path.join(root, 'local-app');
     await mkdir(workspace);
@@ -242,7 +288,7 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
   });
 
   it('rejects integrated file preview for an app-shaped workspace', async () => {
-    const db = initInMemoryDb();
+    const db = { ...initInMemoryDb(), sessionDir: path.join(documentsRoot, 'sessions') };
     const design = createDesign(db, 'App workspace');
     const workspace = path.join(root, 'app-workspace');
     await mkdir(workspace);
@@ -266,7 +312,7 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
   });
 
   it('allows integrated file preview for a simple HTML workspace with package metadata', async () => {
-    const db = initInMemoryDb();
+    const db = { ...initInMemoryDb(), sessionDir: path.join(documentsRoot, 'sessions') };
     const design = createDesign(db, 'Simple HTML workspace');
     const workspace = path.join(root, 'simple-html-workspace');
     await mkdir(workspace);
@@ -288,7 +334,7 @@ describe('workspace files IPC during auto-managed workspace renames', () => {
   });
 
   it('defers auto-managed workspace folder renames while generation owns a stable workspace path', async () => {
-    const db = initInMemoryDb();
+    const db = { ...initInMemoryDb(), sessionDir: path.join(documentsRoot, 'sessions') };
     const design = createDesign(db, 'Untitled design 1');
     const oldWorkspace = path.join(root, 'Untitled-design-1');
     const newWorkspace = path.join(root, 'Pocketbase-Studio-Open-Source-Home');

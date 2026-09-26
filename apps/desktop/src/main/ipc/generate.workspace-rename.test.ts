@@ -735,21 +735,34 @@ describe('generate IPC workspace rename coordination', () => {
     );
     await generateControl.started;
 
-    let renameSettled = false;
     const renamePromise = Promise.resolve(
       renameDesign(null, {
         schemaVersion: 1,
         id: design.id,
         name: 'Hybrid Workshop Day Agenda',
       }) as Promise<Design>,
-    ).finally(() => {
-      renameSettled = true;
-    });
-
+    );
+    let generationSettled = false;
+    void generatePromise.then(
+      () => {
+        generationSettled = true;
+      },
+      () => {
+        generationSettled = true;
+      },
+    );
+    let renameDeadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(renameSettled).toBe(true);
-      const renamed = await renamePromise;
+      const renamed = await Promise.race([
+        renamePromise,
+        new Promise<never>((_resolve, reject) => {
+          renameDeadline = setTimeout(
+            () => reject(new Error('Workspace rename must complete before generation is released')),
+            5_000,
+          );
+        }),
+      ]);
+      expect(generationSettled).toBe(false);
       const preview = vi.mocked(generateViaAgent).mock.calls[0]?.[0].runPreview;
       expect(preview).toBeDefined();
       const options: RunPreviewOptions = {
@@ -770,6 +783,7 @@ describe('generate IPC workspace rename coordination', () => {
         workspaceRoot: renamed.workspacePath,
       });
     } finally {
+      clearTimeout(renameDeadline);
       generateControl.release();
       await Promise.allSettled([generatePromise, renamePromise]);
     }
@@ -778,7 +792,7 @@ describe('generate IPC workspace rename coordination', () => {
     expect(renamed.workspacePath).toBe(
       normalizeWorkspacePath(path.join(defaultWorkspaceRoot, 'Hybrid-Workshop-Day-Agenda')),
     );
-  });
+  }, 15_000);
 
   it.each([
     'Make a Todo app',

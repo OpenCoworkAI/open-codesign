@@ -79,10 +79,15 @@ import {
   softDeleteDesign,
   touchDesignActivity,
   updateDesignPreview,
-  updateDesignWorkspace,
   upsertDesignFile,
 } from './snapshots-db';
 import { registerSourceEditsIpc } from './source-edits-ipc';
+import {
+  changeSourceEntryWorkspace,
+  duplicateWithSourceEntry,
+  initializeSourceEntry,
+  removeSourceEntryForRollback,
+} from './source-entry';
 import { prepareWorkspaceWriteContent } from './workspace-file-content';
 import { normalizeWorkspacePath } from './workspace-path';
 import {
@@ -866,6 +871,24 @@ export async function renameAutoManagedWorkspaceForDesign(input: {
   newName: string;
   defaultRoot?: string | undefined;
 }): Promise<Design | null> {
+  return runWithWorkspaceRenameQueue(input.designBeforeRename.id, () =>
+    renameAutoManagedWorkspaceUnderLock(input),
+  );
+}
+
+async function renameAutoManagedWorkspaceUnderLock(
+  input: Parameters<typeof renameAutoManagedWorkspaceForDesign>[0],
+): Promise<Design | null> {
+  const current = getDesign(input.db, input.designBeforeRename.id);
+  if (
+    !current ||
+    (current.workspacePath === null ? null : normalizeWorkspacePath(current.workspacePath)) !==
+      (input.designBeforeRename.workspacePath === null
+        ? null
+        : normalizeWorkspacePath(input.designBeforeRename.workspacePath))
+  ) {
+    throw new Error('The workspace changed before renaming it.');
+  }
   const workspacePath = input.designBeforeRename.workspacePath;
   if (workspacePath === null) return null;
 
@@ -888,10 +911,34 @@ export async function renameAutoManagedWorkspaceForDesign(input: {
   );
   if (nextPath === null) return null;
 
-  await rename(currentPath, nextPath);
-  return runDb('rename-design.workspace', () =>
-    updateDesignWorkspace(input.db, input.designBeforeRename.id, nextPath, 'blank-canvas'),
-  );
+  let moved = false;
+  try {
+    return await changeSourceEntryWorkspace(
+      input.db,
+      input.designBeforeRename.id,
+      nextPath,
+      true,
+      async () => {
+        await rename(currentPath, nextPath);
+        moved = true;
+      },
+      'blank-canvas',
+    );
+  } catch (error) {
+    if (moved) {
+      try {
+        if (await pathExists(currentPath))
+          throw new Error('The original workspace path was recreated.');
+        await rename(nextPath, currentPath);
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `Workspace rename failed; files remain at ${nextPath}. Restoring ${currentPath} also failed.`,
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 /**
@@ -1324,18 +1371,23 @@ export function registerSnapshotsIpc(db: Database): void {
           const { seedDemoInputs } = await import('./demo-inputs');
           await seedDemoInputs(workspacePath, demoInputId);
         }
-        return await bindWorkspace(
+        const bound = await bindWorkspace(
           db,
           design.id,
           workspacePath,
           false,
           requestedWorkspacePath === undefined ? 'blank-canvas' : 'work-on-project',
         );
+        if (requestedWorkspacePath === undefined && demoInputId === undefined) {
+          await initializeSourceEntry(db, design.id);
+        }
+        return bound;
       } catch (err) {
         if (autoWorkspacePath !== null) {
           await cleanupAutoAllocatedWorkspace(autoWorkspacePath, 'create-design');
         }
         try {
+          await removeSourceEntryForRollback(db, design.id);
           runDb('create-design.rollback', () => deleteDesignForRollback(db, design.id));
         } catch (rollbackErr) {
           logger.error('create-design.rollback.failed', {
@@ -1388,7 +1440,7 @@ export function registerSnapshotsIpc(db: Database): void {
         if (renameWorkspace) {
           try {
             finalDesign =
-              (await renameAutoManagedWorkspaceForDesign({
+              (await renameAutoManagedWorkspaceUnderLock({
                 db,
                 designBeforeRename: before,
                 newName: updated.name,
@@ -1470,20 +1522,25 @@ export function registerSnapshotsIpc(db: Database): void {
       if (source === null) {
         throw new CodesignError('Source design not found', 'IPC_NOT_FOUND');
       }
-      const sourceWorkspacePath = requireBoundWorkspacePath(
-        source,
-        'Source design is not bound to a workspace',
-      );
+      requireBoundWorkspacePath(source, 'Source design is not bound to a workspace');
       const cloned = runDb('duplicate-design', () => duplicateDesign(db, sourceId, name));
       if (cloned === null) {
         throw new CodesignError('Source design not found', 'IPC_NOT_FOUND');
       }
       let autoWorkspacePath: string | null = null;
       try {
-        const workspacePath = await allocateDefaultWorkspacePath(name);
-        autoWorkspacePath = workspacePath;
-        await copyTrackedWorkspaceFiles(db, sourceId, sourceWorkspacePath, workspacePath);
-        const bound = await bindWorkspace(db, cloned.id, workspacePath, false, 'blank-canvas');
+        const bound = await duplicateWithSourceEntry(db, sourceId, cloned.id, async () => {
+          const current = getDesign(db, sourceId);
+          if (!current) throw new CodesignError('Source design not found', 'IPC_NOT_FOUND');
+          const sourceWorkspacePath = requireBoundWorkspacePath(
+            current,
+            'Source design is not bound to a workspace',
+          );
+          const workspacePath = await allocateDefaultWorkspacePath(name);
+          autoWorkspacePath = workspacePath;
+          await copyTrackedWorkspaceFiles(db, sourceId, sourceWorkspacePath, workspacePath);
+          return bindWorkspace(db, cloned.id, workspacePath, false, 'blank-canvas');
+        });
         logger.info('design.duplicated', { sourceId, newId: bound.id });
         return bound;
       } catch (err) {
@@ -1491,6 +1548,7 @@ export function registerSnapshotsIpc(db: Database): void {
           await cleanupAutoAllocatedWorkspace(autoWorkspacePath, 'duplicate-design');
         }
         try {
+          await removeSourceEntryForRollback(db, cloned.id);
           runDb('duplicate-design.rollback', () => deleteDesignForRollback(db, cloned.id));
         } catch (rollbackErr) {
           logger.error('duplicate-design.rollback.failed', {
