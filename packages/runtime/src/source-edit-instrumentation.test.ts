@@ -214,6 +214,21 @@ describe('source edit preview instrumentation', () => {
       plan.targets.map((target) => target.id),
     );
   });
+  it.each([
+    'App.jsx',
+    'App.tsx',
+    'index.html',
+  ])('rejects explicit native mode with source editing even for %s', (path) => {
+    const source = 'function App(){return <button>Save</button>}';
+    expect(() =>
+      buildInteractivePreviewDocument(source, {
+        path,
+        runtimeMode: 'native-html',
+        sourceEdit: planFor(source, ['button']),
+      }),
+    ).toThrow('original JSX or TSX');
+  });
+
   it('rejects already-wrapped source', () => {
     const wrapped = buildInteractivePreviewDocument('function App(){return <button/>}', {
       path: 'App.jsx',

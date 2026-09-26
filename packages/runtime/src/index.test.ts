@@ -8,6 +8,7 @@ import {
   extractAndUpgradeArtifact,
   findArtifactSourceReference,
   INTERACTIVE_PREVIEW_SANDBOX,
+  requiresPreviewScripts,
   resolveArtifactSourceReferencePath,
 } from './index';
 
@@ -288,6 +289,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`);
 });
 
 describe('buildStandaloneDocument', () => {
+  it('does not add preview support or trim native documents that already have a shell', () => {
+    const source =
+      '  <!doctype html><html><head></head><body><script>window.template = "</body>";</script></body></html>\n';
+    expect(buildStandaloneDocument(source, { runtimeMode: 'native-html' })).toBe(source);
+  });
+
   it('exports bare JSX as browser-openable HTML with an inline runtime', () => {
     const out = buildStandaloneDocument(
       'function App() { return <div>hi</div>; }\nReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
@@ -399,6 +406,181 @@ describe('standalone renderable classification', () => {
     expect(() => buildPreviewDocument('body {}', { path: 'style.css' })).toThrow(
       /Unsupported preview file type/,
     );
+  });
+});
+
+describe.each([
+  ['preview', buildPreviewDocument],
+  ['interactive', buildInteractivePreviewDocument],
+  ['standalone', buildStandaloneDocument],
+] as const)('%s explicit runtime mode', (name, build) => {
+  const scripts = [
+    '<script id="inline" nonce="authored">function App() { return "ReactDOM.createRoot React.createElement <App/>"; }</script>',
+    '<script type="module" data-author="module">const label = "EDITMODE-BEGIN"; window.label = label;</script>',
+    '<script defer crossorigin="anonymous" integrity="sha256-authored" src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>',
+    '<script async src="./local.js" data-author="external"></script>',
+    '<script type="text/babel" data-presets="react">ReactDOM.createRoot(root).render(<App/>);</script>',
+  ];
+
+  it.each([
+    'document',
+    'fragment',
+    'marker',
+  ])('preserves authored scripts without automatic React/Babel in a native %s', (shape) => {
+    const body = `<main>React.createElement &lt;App&gt; EDITMODE-BEGIN</main>${scripts.join('\n')}`;
+    const source =
+      shape === 'document'
+        ? `<!doctype html><html><head><meta name="viewport" content="width=640"></head><body>${body}</body></html>`
+        : `${shape === 'marker' ? '<!-- AGENT_BODY_BEGIN -->' : ''}${body}`;
+    const options = {
+      path: 'nested/App.jsx',
+      runtimeMode: 'native-html' as const,
+      baseHref: 'file:///workspace/nested/',
+    };
+    const out = build(source, options);
+    for (const script of scripts) expect(out).toContain(script);
+    expect(out).not.toContain('CODESIGN_JSX_RUNTIME');
+    expect(out).not.toContain('CODESIGN_STANDALONE_RUNTIME');
+    expect(out).not.toContain('window.Babel.transform');
+    expect(out).not.toContain('<div id="root"></div>');
+    expect(out).toContain('<base href="file:///workspace/nested/"');
+    expect(out.match(/name="viewport"/g)).toHaveLength(1);
+    if (name === 'standalone') {
+      expect(out).toMatch(/^<!doctype html>/i);
+      expect(out).not.toContain('CODESIGN_OVERLAY_SCRIPT');
+      expect(out).not.toContain('OPEN-CODESIGN-PREVIEW-VIEWPORT');
+      expect(out).not.toContain('data-codesign-form-policy');
+    } else {
+      expect(out).toContain('CODESIGN_OVERLAY_SCRIPT');
+      expect(out).toContain('OPEN-CODESIGN-PREVIEW-VIEWPORT');
+      expect(out.includes('data-codesign-form-policy')).toBe(name === 'interactive');
+    }
+    const rebuilt = build(out, options);
+    if (name !== 'interactive') expect(rebuilt).toBe(out);
+    expect(rebuilt.match(/<base /g)).toHaveLength(1);
+    expect(rebuilt.match(/name="viewport"/g)).toHaveLength(1);
+    if (name !== 'standalone') expect(rebuilt.match(/CODESIGN_OVERLAY_SCRIPT/g)).toHaveLength(1);
+  });
+
+  it.each([
+    '<script>window.template = "</body>"; window.nativeReady = true;</script>',
+    '<script>window.example = "<script data-example=plain>"; /* <!-- <script> double escaped then reset --> */ window.nativeReady = true;</script>',
+    '<script data-note="</head> >">window.template = \'<head><base href="fake"><meta name="viewport"><meta http-equiv="Content-Security-Policy" content="script-src none"></head>\';</script>',
+    '<style>.sample::after { content: "</head><base href=fake>"; }</style>',
+    '<!-- <head><base href="fake"><meta name="viewport"><meta http-equiv="Content-Security-Policy" content="none"></head></body> -->',
+    '<div title=\'<head><base href="fake"><meta name="viewport"><meta http-equiv="Content-Security-Policy" content="none"></head></body>\'>Content</div>',
+    '<textarea><head><base href="fake"><meta name="viewport"><meta http-equiv="Content-Security-Policy" content="none"></head></body></textarea>',
+    '<title><head><base href="fake"><meta name="viewport"><meta http-equiv="Content-Security-Policy" content="none"></head></body></title>',
+    '<template><template><base href="fake"><meta name="viewport"><meta http-equiv="Content-Security-Policy" content="none"></template><script>window.template = "</body>";</script></template>',
+  ])('preserves markup-looking authored bytes: %s', (authored) => {
+    const source = `<!doctype html><html><head></head><body><!-- AGENT_BODY_BEGIN -->${authored}<main>Native</main></body></html>`;
+    const out = build(source, {
+      path: 'index.html',
+      runtimeMode: 'native-html',
+      baseHref: 'file:///workspace/',
+    });
+    expect(out.includes(authored)).toBe(true);
+    const rebuilt = build(out, {
+      path: 'index.html',
+      runtimeMode: 'native-html',
+      baseHref: 'file:///workspace/',
+    });
+    expect(rebuilt.includes(authored)).toBe(true);
+    expect(rebuilt.split('<base href="file:///workspace/"').length).toBe(2);
+    if (name !== 'interactive') expect(rebuilt === out).toBe(true);
+    expect(out.includes('<base href="file:///workspace/"')).toBe(true);
+    if (name !== 'standalone') {
+      expect(out.includes('data-open-codesign="viewport"')).toBe(true);
+      expect(out.indexOf('<!-- CODESIGN_OVERLAY_SCRIPT -->')).toBeGreaterThan(
+        out.indexOf('<main>Native</main>'),
+      );
+    }
+  });
+
+  it('does not treat runtime marker text inside authored scripts as injected support', () => {
+    const authored =
+      '<script>window.markers = "<!-- CODESIGN_OVERLAY_SCRIPT --> <!-- OPEN-CODESIGN-PREVIEW-VIEWPORT -->";</script>';
+    const source = `<!doctype html><html><head></head><body>${authored}</body></html>`;
+    const out = build(source, { runtimeMode: 'native-html' });
+    expect(out.includes(authored)).toBe(true);
+    if (name !== 'standalone') {
+      expect(out.split('<!-- CODESIGN_OVERLAY_SCRIPT --><script>').length).toBe(2);
+      expect(out.split('<style data-open-codesign="preview-viewport">').length).toBe(2);
+      const rebuilt = build(out, { runtimeMode: 'native-html' });
+      expect(rebuilt.includes(authored)).toBe(true);
+      expect(rebuilt.split('<!-- CODESIGN_OVERLAY_SCRIPT --><script>').length).toBe(2);
+    }
+  });
+
+  it('removes only actual CSP meta tags, preserving other attributes and inert template content', () => {
+    const inert =
+      '<template><meta http-equiv="Content-Security-Policy" content="inert"></template>';
+    const authored =
+      '<script>window.csp = \'<meta http-equiv="Content-Security-Policy" content="authored">\';</script>';
+    const unrelated = '<meta name="description" content="http-equiv Content-Security-Policy">';
+    const source = `<!doctype html><html><head><meta content="script-src 'none' >" HTTP-EQUIV="Content-Security-Policy">${unrelated}</head><body>${inert}${authored}</body></html>`;
+    const out = build(source, { runtimeMode: 'native-html' });
+    expect(out.includes('content="script-src \'none\' >"')).toBe(false);
+    expect(out.includes(unrelated)).toBe(true);
+    expect(out.includes(inert)).toBe(true);
+    expect(out.includes(authored)).toBe(true);
+  });
+
+  it.each([
+    '<script>window.template = "</body>";',
+    '<style>body { color: red; }',
+    '<textarea>Unclosed',
+    '<!-- Unclosed',
+    '<div title="Unclosed >',
+    '<template><p>Unclosed template</p>',
+    '<plaintext>Everything is text',
+    '<script><!--<script>double escaped</script>',
+  ])('rejects ambiguous or unclosed native contexts instead of corrupting source: %s', (source) => {
+    expect(() => build(source, { runtimeMode: 'native-html' })).toThrow(
+      /Cannot safely build native HTML/,
+    );
+  });
+
+  it('preserves an existing base and viewport in native mode', () => {
+    const source =
+      '<!doctype html><html><head><base href="file:///authored/"><meta name="viewport" content="width=640"></head><body>React.createElement</body></html>';
+    const out = build(source, { runtimeMode: 'native-html', baseHref: 'file:///workspace/' });
+    expect(out).toContain('<base href="file:///authored/">');
+    expect(out).toContain('<meta name="viewport" content="width=640">');
+    expect(out.match(/<base /g)).toHaveLength(1);
+    expect(out.match(/name="viewport"/g)).toHaveLength(1);
+    expect(out).not.toContain('window.Babel.transform');
+  });
+
+  it.each([
+    ['App.jsx', 'function App(){return <main>Hello</main>}'],
+    ['App.tsx', 'function App(): JSX.Element {return <main>Hello</main>}'],
+    [
+      'index.html',
+      '<html><body><script type="text/babel">function App(){return <main/>}</script></body></html>',
+    ],
+    ['index.html', buildSrcdoc('function App(){return <main>Hello</main>}')],
+  ])('keeps omitted and legacy-auto behavior identical for %s', (path, source) => {
+    expect(build(source, { path, runtimeMode: 'legacy-auto' })).toBe(build(source, { path }));
+  });
+});
+
+describe('preview script permission', () => {
+  it('permits authored native scripts even without React signals', () => {
+    expect(requiresPreviewScripts('<button>Native</button>', 'index.html', 'native-html')).toBe(
+      true,
+    );
+    expect(requiresPreviewScripts('<button>Native</button>', undefined, 'native-html')).toBe(true);
+  });
+
+  it.each([
+    ['index.html', '<html><body>Plain</body></html>', false],
+    ['App.jsx', 'function App(){return <main/>}', true],
+    ['App.tsx', 'function App(): JSX.Element {return <main/>}', true],
+    ['index.html', '<html><body>React.createElement</body></html>', true],
+  ] as const)('retains legacy script permission for %s', (path, source, expected) => {
+    expect(requiresPreviewScripts(source, path)).toBe(expected);
+    expect(requiresPreviewScripts(source, path, 'legacy-auto')).toBe(expected);
   });
 });
 

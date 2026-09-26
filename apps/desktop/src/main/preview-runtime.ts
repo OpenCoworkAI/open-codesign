@@ -26,6 +26,7 @@ import {
   findArtifactSourceReference,
   resolveArtifactSourceReferencePath,
 } from '@open-codesign/runtime';
+import type { SourceIdentityV1 } from '@open-codesign/shared';
 import type { Browser, ConsoleMessage, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
 import { getLogger } from './logger';
 import { boundedPreview, collectVisibleEvidence, runPreviewSteps } from './preview-interactions';
@@ -33,6 +34,7 @@ import { resolveSafeWorkspaceChildPath } from './workspace-reader';
 
 export interface RunPreviewOptions extends CorePreviewOptions {
   workspaceRoot: string;
+  runtimeMode?: SourceIdentityV1['runtimeMode'] | undefined;
 }
 
 const LOAD_TIMEOUT_MS = 15_000;
@@ -65,7 +67,7 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
   let sourcePath = opts.path;
   try {
     source = await readPreviewSource(absWorkspace, opts.path);
-    if (isHtmlPreviewPath(opts.path)) {
+    if (opts.runtimeMode !== 'native-html' && isHtmlPreviewPath(opts.path)) {
       const reference = findArtifactSourceReference(source);
       const referencedPath =
         reference === null ? null : resolveArtifactSourceReferencePath(opts.path, reference);
@@ -80,7 +82,7 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
 
   let html: string;
   try {
-    html = await buildWorkspacePreviewDocument(source, absWorkspace, sourcePath);
+    html = await buildWorkspacePreviewDocument(source, absWorkspace, sourcePath, opts.runtimeMode);
   } catch (err) {
     return emptyFail(err instanceof Error ? err.message : String(err));
   }
@@ -378,10 +380,12 @@ export async function buildWorkspacePreviewDocument(
   source: string,
   workspaceRoot: string,
   sourcePath: string,
+  runtimeMode?: SourceIdentityV1['runtimeMode'] | undefined,
 ): Promise<string> {
   const absoluteSource = await resolveSafeWorkspaceChildPath(workspaceRoot, sourcePath);
   return buildPreviewDocument(source, {
     path: sourcePath,
+    runtimeMode,
     baseHref: pathToFileURL(`${dirname(absoluteSource)}${sep}`).href,
   });
 }

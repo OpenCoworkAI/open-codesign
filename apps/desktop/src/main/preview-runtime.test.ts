@@ -206,6 +206,92 @@ describe('runtime noise filtering', () => {
 });
 
 describeIfChrome('runPreview with real Chrome', () => {
+  it.each([
+    'document',
+    'fragment',
+    'marker',
+  ])('runs a native %s with nested offline assets and no React/Babel', async (shape) => {
+    const folder = `native-${shape}`;
+    mkdirSync(join(tempDir, folder, 'assets'), { recursive: true });
+    writeFileSync(join(tempDir, folder, 'assets', 'style.css'), '#state { --fixture-ready: yes; }');
+    writeFileSync(
+      join(tempDir, folder, 'assets', 'image.svg'),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="green"/></svg>',
+    );
+    writeFileSync(
+      join(tempDir, folder, 'assets', 'app.js'),
+      `
+        function App() { return 'ReactDOM.createRoot React.createElement <App/> EDITMODE-BEGIN'; }
+        document.getElementById('native-click').addEventListener('click', () => {
+          const state = document.getElementById('state');
+          const image = document.getElementById('image');
+          const ready = !window.React && !window.ReactDOM && !window.Babel
+            && getComputedStyle(state).getPropertyValue('--fixture-ready').trim() === 'yes'
+            && image.complete && image.naturalWidth === 16
+            && document.documentElement.style.getPropertyValue('--codesign-preview-width');
+          state.textContent = ready ? 'Native assets ready' : 'Native check failed';
+        });
+      `,
+    );
+    const body = `<link rel="stylesheet" href="./assets/style.css"><main><p>React.createElement &lt;App&gt; EDITMODE-BEGIN</p><img id="image" src="./assets/image.svg"><button id="native-click">Check</button><output id="state">Waiting</output></main><script src="./assets/app.js"></script>`;
+    const source =
+      shape === 'document'
+        ? `<!doctype html><html><head></head><body>${body}</body></html>`
+        : `${shape === 'marker' ? '<!-- AGENT_BODY_BEGIN -->' : ''}${body}`;
+    writeFileSync(join(tempDir, folder, 'index.html'), source);
+    const result = await runPreview({
+      workspaceRoot: tempDir,
+      path: `${folder}/index.html`,
+      runtimeMode: 'native-html',
+      vision: false,
+      steps: [
+        { action: 'click', selector: '#native-click' },
+        { action: 'assert', selector: '#state', text: 'Native assets ready' },
+      ],
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.consoleErrors).toEqual([]);
+    expect(result.assetErrors).toEqual([]);
+    expect(result.visibleText).toContain('Native assets ready');
+  }, 30_000);
+
+  it('executes native scripts containing structural HTML decoys without modifying them', async () => {
+    const source = `<!doctype html><html><head></head><body><!-- AGENT_BODY_BEGIN -->
+      <button id="native-decoy">Check</button><output id="decoy-state">Waiting</output>
+      <script>window.template = '</body></head><head><base href="fake"><meta name="viewport"><meta http-equiv="Content-Security-Policy" content="none">'; window.nativeReady = true;
+      document.getElementById('native-decoy').onclick = () => {
+        document.getElementById('decoy-state').textContent = window.nativeReady && window.template.includes('Content-Security-Policy') && !window.React && !window.Babel ? 'Authored script preserved' : 'Broken';
+      };</script></body></html>`;
+    writeFileSync(join(tempDir, 'native-decoys.html'), source);
+    const result = await runPreview({
+      workspaceRoot: tempDir,
+      path: 'native-decoys.html',
+      runtimeMode: 'native-html',
+      vision: false,
+      steps: [
+        { action: 'click', selector: '#native-decoy' },
+        { action: 'assert', selector: '#decoy-state', text: 'Authored script preserved' },
+      ],
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.consoleErrors).toEqual([]);
+  }, 30_000);
+
+  it('does not follow a native HTML source-reference decoy', async () => {
+    writeFileSync(
+      join(tempDir, 'native-reference.html'),
+      '<!doctype html><html><body><!-- artifact source lives in missing-native.jsx --><main id="native-reference">Native source</main></body></html>',
+    );
+    const result = await runPreview({
+      workspaceRoot: tempDir,
+      path: 'native-reference.html',
+      runtimeMode: 'native-html',
+      vision: false,
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.domOutline).toContain('main#native-reference');
+  }, 30_000);
+
   it('selects a native controlled React option and updates linked summary state', async () => {
     writeFileSync(
       join(tempDir, 'Select.jsx'),

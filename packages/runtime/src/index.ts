@@ -11,8 +11,9 @@
  * the same runtime, and can inject a workspace `baseHref` for relative assets.
  */
 
-import { ensureEditmodeMarkers } from '@open-codesign/shared';
+import { ensureEditmodeMarkers, type SourceIdentityV1 } from '@open-codesign/shared';
 import {
+  decodeHtmlEntities,
   findHtmlStartTag,
   getHtmlAttribute,
   insertAfterHtmlStartTag,
@@ -51,6 +52,7 @@ const STANDALONE_RUNTIME_MARKER = '<!-- CODESIGN_STANDALONE_RUNTIME -->';
 export type RenderableSourceKind = 'html' | 'jsx' | 'tsx' | 'unknown';
 
 export interface BuildPreviewDocumentOptions {
+  runtimeMode?: SourceIdentityV1['runtimeMode'] | undefined;
   /** Workspace-relative path, used to classify .jsx/.tsx/.html files. */
   path?: string | undefined;
   /** Optional absolute file:// base URL so relative assets resolve in srcdoc/data URLs. */
@@ -229,7 +231,12 @@ export function resolveArtifactSourceReferencePath(
   return base.length > 0 ? `${base}/${normalizedReference}` : normalizedReference;
 }
 
-export function requiresPreviewScripts(source: string, path?: string | undefined): boolean {
+export function requiresPreviewScripts(
+  source: string,
+  path?: string | undefined,
+  runtimeMode?: SourceIdentityV1['runtimeMode'] | undefined,
+): boolean {
+  if (runtimeMode === 'native-html') return true;
   const kind = classifyRenderableSource(source, path);
   if (kind === 'jsx' || kind === 'tsx') return true;
   if (kind === 'html') return needsJsxRuntimeInHtml(source);
@@ -608,10 +615,189 @@ export function extractAndUpgradeArtifact(source: string): string {
   return wrapJsxAsSrcdoc(source);
 }
 
+interface NativeHtmlToken {
+  name: string;
+  start: number;
+  end: number;
+  attrs: string;
+  closing: boolean;
+}
+
+function unsafeNativeHtml(): never {
+  throw new Error('Cannot safely build native HTML: unclosed or ambiguous markup context.');
+}
+
+function nativeRawTextEnd(source: string, start: number, name: string): number {
+  const pattern =
+    name === 'script'
+      ? /<!--|-->|<\/?script(?=[\t\n\f\r />])/gi
+      : new RegExp(`</${name}(?=[\\t\\n\\f\\r />])`, 'gi');
+  pattern.lastIndex = start;
+  let scriptState: 'data' | 'escaped' | 'double-escaped' = 'data';
+  for (let match = pattern.exec(source); match; match = pattern.exec(source)) {
+    const token = match[0].toLowerCase();
+    if (name !== 'script') return match.index;
+    if (token === '<!--' && scriptState === 'data') scriptState = 'escaped';
+    else if (token === '-->') scriptState = 'data';
+    else if (token === '<script' && scriptState === 'escaped') scriptState = 'double-escaped';
+    else if (token === '</script') {
+      if (scriptState !== 'double-escaped') return match.index;
+      scriptState = 'escaped';
+    }
+  }
+  return unsafeNativeHtml();
+}
+
+// Native source must remain byte-for-byte intact outside real host edits. The
+// legacy string helpers cannot distinguish markup from script/attribute text.
+function scanNativeHtml(source: string): NativeHtmlToken[] {
+  const tokens: NativeHtmlToken[] = [];
+  const contexts: string[] = [];
+  let cursor = 0;
+  while (cursor < source.length) {
+    const start = source.indexOf('<', cursor);
+    if (start < 0) break;
+    if (source.startsWith('<!--', start)) {
+      const close = source.indexOf('-->', start + 4);
+      const abrupt = source.indexOf('--!>', start + 4);
+      if (close < 0 || (abrupt >= 0 && abrupt < close) || source[start + 4] === '>')
+        unsafeNativeHtml();
+      cursor = close + 3;
+      if (contexts.length === 0)
+        tokens.push({
+          name: '#comment',
+          start,
+          end: cursor,
+          attrs: source.slice(start, cursor),
+          closing: false,
+        });
+      continue;
+    }
+    if (
+      source.startsWith('<![CDATA[', start) &&
+      contexts.some((name) => name === 'svg' || name === 'math')
+    ) {
+      const close = source.indexOf(']]>', start + 9);
+      if (close < 0) unsafeNativeHtml();
+      cursor = close + 3;
+      continue;
+    }
+    const opening = /^<(\/)?([a-z][a-z0-9:-]*)(?=[\t\n\f\r />])/i.exec(source.slice(start));
+    const doctype = /^<!doctype\s+html(?=[\t\n\f\r >])/i.exec(source.slice(start));
+    if (!opening && !doctype) {
+      if (/[!/?a-z]/i.test(source[start + 1] ?? '')) unsafeNativeHtml();
+      cursor = start + 1;
+      continue;
+    }
+    const name = opening?.[2]?.toLowerCase() ?? '!doctype';
+    const closing = opening?.[1] === '/';
+    const attrsStart = start + (opening?.[0].length ?? doctype?.[0].length ?? 0);
+    let quote = '';
+    let end = attrsStart;
+    for (; end < source.length; end += 1) {
+      const ch = source[end];
+      if (quote) {
+        if (ch === quote) quote = '';
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === '>') break;
+      else if (ch === '<') unsafeNativeHtml();
+    }
+    if (end === source.length) unsafeNativeHtml();
+    cursor = end + 1;
+    const attrs = source.slice(attrsStart, end);
+    const token = { name, start, end: cursor, attrs, closing };
+    if (contexts.length === 0) tokens.push(token);
+    if (name === 'plaintext') unsafeNativeHtml();
+    if (name === 'template' || name === 'svg' || name === 'math') {
+      if (closing) {
+        if (contexts.pop() !== name) unsafeNativeHtml();
+      } else if (!(name !== 'template' && /\/\s*$/.test(attrs))) {
+        if (contexts.length >= 256) unsafeNativeHtml();
+        contexts.push(name);
+      }
+    }
+    if (
+      !closing &&
+      /^(script|style|title|textarea|xmp|iframe|noembed|noframes|noscript)$/.test(name)
+    ) {
+      if (
+        contexts.some((context) => context === 'svg' || context === 'math') &&
+        /\/\s*$/.test(attrs)
+      )
+        continue;
+      const close = nativeRawTextEnd(source, cursor, name);
+      cursor = close;
+    }
+  }
+  if (contexts.length > 0) unsafeNativeHtml();
+  return tokens;
+}
+
+function buildNativeHtmlDocument(
+  source: string,
+  opts: BuildPreviewDocumentOptions,
+  standalone: boolean,
+): string {
+  let tokens = scanNativeHtml(source);
+  const needsShell = standalone && !tokens.some((token) => token.name === 'html' && !token.closing);
+  if (needsShell) {
+    const doctypeEnd = tokens.find((token) => token.name === '!doctype')?.end ?? 0;
+    source = `${doctypeEnd ? source.slice(0, doctypeEnd) : '<!doctype html>'}\n<html lang="en"><head><meta charset="utf-8" /></head><body>\n${source.slice(doctypeEnd)}\n</body></html>`;
+    tokens = scanNativeHtml(source);
+  }
+  const startTag = (name: string) => tokens.find((token) => token.name === name && !token.closing);
+  const endTag = (name: string) => tokens.find((token) => token.name === name && token.closing);
+  const hasMarker = (marker: string) =>
+    tokens.some((token) => token.name === '#comment' && token.attrs === marker);
+  const metaValue = (token: NativeHtmlToken, name: string) =>
+    decodeHtmlEntities(getHtmlAttribute(token.attrs, name) ?? '').toLowerCase();
+  const hasViewport = tokens.some(
+    (token) => token.name === 'meta' && !token.closing && metaValue(token, 'name') === 'viewport',
+  );
+  const edits: { start: number; end: number; text: string }[] = [];
+  for (const token of tokens) {
+    if (
+      token.name === 'meta' &&
+      !token.closing &&
+      metaValue(token, 'http-equiv') === 'content-security-policy'
+    ) {
+      edits.push({ start: token.start, end: token.end, text: '' });
+    }
+  }
+  let headContent = startTag('base') ? '' : baseTag(opts.baseHref);
+  if (standalone) {
+    if (needsShell && !hasViewport)
+      headContent += '<meta name="viewport" content="width=device-width, initial-scale=1.0" />';
+  } else if (!hasMarker(PREVIEW_VIEWPORT_MARKER)) {
+    const support = previewViewportSupportTags();
+    headContent += hasViewport ? support.replace(`${PREVIEW_VIEWPORT_META}\n`, '') : support;
+  }
+  if (headContent) {
+    const head = startTag('head');
+    const offset = head?.end ?? startTag('html')?.end ?? startTag('!doctype')?.end ?? 0;
+    edits.push({
+      start: offset,
+      end: offset,
+      text: head ? `\n${headContent}` : `\n<head>${headContent}</head>\n`,
+    });
+  }
+  if (!standalone && !hasMarker(OVERLAY_MARKER)) {
+    const offset = endTag('body')?.start ?? endTag('html')?.start ?? source.length;
+    edits.push({ start: offset, end: offset, text: overlayScriptTag() });
+  }
+  if (standalone && !startTag('!doctype'))
+    edits.push({ start: 0, end: 0, text: '<!doctype html>\n' });
+  edits.sort((a, b) => b.start - a.start || b.end - a.end);
+  for (const edit of edits)
+    source = source.slice(0, edit.start) + edit.text + source.slice(edit.end);
+  return source;
+}
+
 export function buildPreviewDocument(
   userSource: string,
   opts: BuildPreviewDocumentOptions = {},
 ): string {
+  if (opts.runtimeMode === 'native-html') return buildNativeHtmlDocument(userSource, opts, false);
   const stripped = removeCspMetaTags(userSource);
   // Already-wrapped srcdoc (round-trip safe). When the workspace preview path
   // supplies a base URL, inject it once so relative assets still resolve.
@@ -649,6 +835,7 @@ export function buildInteractivePreviewDocument(
   if (opts.sourceEdit) {
     const kind = extensionKind(opts.path);
     if (
+      opts.runtimeMode === 'native-html' ||
       (kind !== 'jsx' && kind !== 'tsx') ||
       looksLikeFullHtmlDocument(userSource) ||
       userSource.includes(JSX_TEMPLATE_BEGIN)
@@ -692,6 +879,7 @@ export function buildStandaloneDocument(
   userSource: string,
   opts: BuildPreviewDocumentOptions = {},
 ): string {
+  if (opts.runtimeMode === 'native-html') return buildNativeHtmlDocument(userSource, opts, true);
   const stripped = removeCspMetaTags(userSource);
   const classified = classifyRenderableSource(stripped, opts.path);
   const kind = classified === 'unknown' && opts.path === undefined ? 'jsx' : classified;

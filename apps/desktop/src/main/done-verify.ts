@@ -1,8 +1,8 @@
 /**
  * Hidden runtime verifier for the agent's `done` tool.
  *
- * The agent emits a JSX module (TWEAK_DEFAULTS + App + ReactDOM.createRoot).
- * We wrap it via `@open-codesign/runtime`'s `buildSrcdoc` (same path the
+ * The host supplies artifact source and its optional runtime mode.
+ * We wrap it via `@open-codesign/runtime`'s `buildPreviewDocument` (same path the
  * preview iframe uses), write the srcdoc to a temporary HTML file, load it with
  * the same system Chrome/Puppeteer engine used by `preview`, and capture
  * console/page errors for a short settle window. The collected errors flow
@@ -20,7 +20,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
 import type { DoneError, DoneRuntimeVerifier } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
-import { buildSrcdoc } from '@open-codesign/runtime';
+import { buildPreviewDocument } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, Page } from 'puppeteer-core';
 import { boundedPreview } from './preview-interactions';
 import { buildWorkspacePreviewDocument, isPreviewFileUrlAllowed } from './preview-runtime';
@@ -259,8 +259,12 @@ export function makeRuntimeVerifier(options?: { workspaceRoot: string }): DoneRu
           artifactSource,
           workspaceRoot,
           context?.path ?? 'App.jsx',
+          context?.runtimeMode,
         )
-      : buildSrcdoc(artifactSource);
+      : buildPreviewDocument(artifactSource, {
+          path: context?.path,
+          runtimeMode: context?.runtimeMode,
+        });
     const tempDir = await mkdtemp(join(tmpdir(), 'codesign-done-verify-'));
     const verifyPath = join(tempDir, 'verify.html');
     await writeFile(verifyPath, srcdoc, 'utf8');

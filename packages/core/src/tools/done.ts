@@ -15,7 +15,12 @@
  */
 
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY, validateDesignMd } from '@open-codesign/shared';
+import {
+  DEFAULT_SOURCE_ENTRY,
+  LEGACY_SOURCE_ENTRY,
+  type SourceIdentityV1,
+  validateDesignMd,
+} from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 import type { TextEditorFsCallbacks } from './text-editor.js';
 
@@ -139,7 +144,11 @@ function requiredDesignMdErrors(fs: TextEditorFsCallbacks, activePath: string): 
  *  load errors observed when the host actually executed it. */
 export type DoneRuntimeVerifier = (
   artifactSource: string,
-  context?: { path: string; signal?: AbortSignal },
+  context?: {
+    path: string;
+    signal?: AbortSignal;
+    runtimeMode?: SourceIdentityV1['runtimeMode'] | undefined;
+  },
 ) => Promise<DoneError[]>;
 
 const VOID_ELEMENTS = new Set([

@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { buildPreviewDocument } from '@open-codesign/runtime';
 import type { LaunchOptions } from 'puppeteer-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeRuntimeVerifier } from './done-verify';
@@ -7,6 +8,10 @@ const chrome = vi.hoisted(() => ({
   find: vi.fn(async () => 'synthetic-chrome'),
   launch: vi.fn<(options: LaunchOptions) => Promise<never>>(),
 }));
+vi.mock('@open-codesign/runtime', async (importOriginal) => {
+  const runtime = await importOriginal<typeof import('@open-codesign/runtime')>();
+  return { ...runtime, buildPreviewDocument: vi.fn(runtime.buildPreviewDocument) };
+});
 vi.mock('@open-codesign/exporters', () => ({ findSystemChrome: chrome.find }));
 vi.mock('puppeteer-core', () => ({ default: { launch: chrome.launch } }));
 vi.mock('./logger', () => ({ getLogger: () => ({ warn: vi.fn(), error: vi.fn() }) }));
@@ -14,6 +19,24 @@ vi.mock('./logger', () => ({ getLogger: () => ({ warn: vi.fn(), error: vi.fn() }
 beforeEach(() => {
   chrome.find.mockClear();
   chrome.launch.mockReset();
+  vi.mocked(buildPreviewDocument).mockClear();
+});
+
+describe('done verifier context without a workspace', () => {
+  it.each([
+    { path: 'screens/index.html', runtimeMode: 'native-html' as const },
+    { path: 'screens/App.tsx', runtimeMode: 'legacy-auto' as const },
+    { path: 'screens/App.jsx' },
+  ])('forwards the current path and mode to the runtime: %j', async (context) => {
+    chrome.launch.mockRejectedValue(new Error('Synthetic launch failure'));
+    const source = '<html><body>React.createElement</body></html>';
+    const errors = await makeRuntimeVerifier()(source, context);
+    expect(errors.some((error) => error.message.includes('Synthetic launch failure'))).toBe(true);
+    expect(buildPreviewDocument).toHaveBeenCalledExactlyOnceWith(source, {
+      path: context.path,
+      runtimeMode: context.runtimeMode,
+    });
+  });
 });
 
 describe('done browser executor cancellation', () => {
