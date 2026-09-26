@@ -203,6 +203,35 @@ describe('source-definition span editing support matrix', () => {
   });
 });
 
+function expectLiteralCandidates(source: string, path = 'App.jsx') {
+  const withLiterals = source.replace('<header', '<header title="Original" style={{gap:2}}');
+  const result = inspect(withLiterals, path);
+  for (const target of result.targets) {
+    if (target.tagName === 'header' && target.editableFields.length) {
+      expect(target.editableFields).toContainEqual({
+        kind: 'set-attribute',
+        name: 'title',
+        value: 'Original',
+      });
+      expect(target.editableFields).toContainEqual({
+        kind: 'set-style',
+        property: 'gap',
+        value: '2',
+      });
+    }
+    for (const operation of target.editableFields)
+      expect(
+        planSourceEdit({
+          path,
+          source: withLiterals,
+          expectedSourceHash: result.sourceHash,
+          targetId: target.id,
+          scope: 'source-definition',
+          operation,
+        }),
+      ).toMatchObject({ status: 'applied' });
+  }
+}
 function expectRejectedByInspectAndPlan(source: string, reason: string, path = 'App.jsx') {
   expect(analyzeSourceEdit({ path, source })).toMatchObject({ status: 'rejected', reason });
   const result = planSourceEdit({
@@ -283,9 +312,9 @@ describe('public review regressions: script entries and effects', () => {
   ])('rejects TSX module shapes too: %s', (source) => {
     expectRejectedByInspectAndPlan(source, 'unsupported-module', 'App.tsx');
   });
-  it('rejects an effect mutating through self without relying on an append blacklist', () => {
+  it('keeps direct literal candidates beside effects for independent preview verification', () => {
     const source = `function App(){React.useEffect(()=>{self['document'].getElementsByTagName('header')[0].append(' injected')},[]);return <header>Hello</header>}`;
-    expectRejectedByInspectAndPlan(source, 'unsafe-source');
+    expectLiteralCandidates(source);
   });
   it.each([
     'React.useEffect(()=>{},[])',
@@ -298,11 +327,8 @@ describe('public review regressions: script entries and effects', () => {
     "const R=React; R['use'+'Effect'](()=>{},[])",
     `React['useEffect'](()=>{},[])`,
     `React['use'+'Effect'](()=>{},[])`,
-  ])('fails closed on non-state or reflected hook execution: %s', (effect) => {
-    expectRejectedByInspectAndPlan(
-      `function App(){${effect};return <header>Hello</header>}`,
-      'unsafe-source',
-    );
+  ])('keeps direct literal candidates beside non-state or reflected hooks: %s', (effect) => {
+    expectLiteralCandidates(`function App(){${effect};return <header>Hello</header>}`);
   });
   it.each([
     'self',
@@ -311,24 +337,20 @@ describe('public review regressions: script entries and effects', () => {
     'top',
     'parent',
     'this',
-  ])('rejects the %s global/reflection entry independently of hooks', (entry) => {
-    expectRejectedByInspectAndPlan(
+  ])('keeps direct literal candidates beside the %s global/reflection entry', (entry) => {
+    expectLiteralCandidates(
       `function App(){${entry}['document'].getElementsByTagName('header')[0].append(' injected');return <header>Hello</header>}`,
-      'unsafe-source',
     );
   });
 });
 
-describe('public review regressions: scheduling is outside the source boundary', () => {
-  it('rejects string-evaluating timers without executing the candidate', () => {
+describe('preview candidates do not execute or globally reject scheduling code', () => {
+  it('exposes existing literal fields without executing string timers', () => {
     const source = `function App(){setTimeout("document.querySelector('header').textContent='injected'",0);return <header>Hello</header>}`;
-    expectRejectedByInspectAndPlan(source, 'unsafe-source');
+    expectLiteralCandidates(source);
   });
-  it('also rejects callback timers instead of inspecting only string arguments', () => {
-    expectRejectedByInspectAndPlan(
-      'function App(){setTimeout(()=>{},0);return <header>Hello</header>}',
-      'unsafe-source',
-    );
+  it('keeps direct literal candidates for callback timers as well', () => {
+    expectLiteralCandidates('function App(){setTimeout(()=>{},0);return <header>Hello</header>}');
   });
   it.each([
     'setTimeout',
@@ -346,10 +368,9 @@ describe('public review regressions: scheduling is outside the source boundary',
     'postMessage',
     'MessageChannel',
     'MessagePort',
-  ])('rejects scheduling global %s even through a captured alias', (reference) => {
-    expectRejectedByInspectAndPlan(
+  ])('keeps direct literal candidates for scheduling global %s through aliases', (reference) => {
+    expectLiteralCandidates(
       `function App(){const schedule=${reference};return <header>Hello</header>}`,
-      'unsafe-source',
     );
   });
 });
@@ -394,21 +415,21 @@ describe('conservative rejection and independent revalidation', () => {
       'function App(){return <header>A</header>} ReactDOM.createRoot(root).render(<App/>);',
       'unsafe-source',
     ],
-  ])('rejects unsupported ownership: %s', (source, reason) => {
-    expect(analyzeSourceEdit({ path: 'App.jsx', source })).toMatchObject({
-      status: 'rejected',
-      reason,
-    });
+  ])('separates structural refusal from globally opaque execution: %s', (source, reason) => {
+    if (reason === 'unsafe-source' || reason === 'reused-entry') {
+      expectLiteralCandidates(source);
+    } else
+      expect(analyzeSourceEdit({ path: 'App.jsx', source })).toMatchObject({
+        status: 'rejected',
+        reason,
+      });
   });
   it.each([
     'function useState(){return [0,evil]} function App(){const [count,setCount]=useState(0);return <header onClick={()=>setCount(0)}>Static</header>}',
     'function App(){const [count,setCount]=React.useState(0);return <header>{items.map(setCount=><button onClick={()=>setCount(0)}>Click</button>)}</header>}',
     'function App(){const [count,setCount]=React.useState(0);return <header onClick={count=>setCount(count)}>Static</header>}',
-  ])('rejects shadowed hook/setter/value bindings: %s', (source) => {
-    expect(analyzeSourceEdit({ path: 'App.jsx', source })).toMatchObject({
-      status: 'rejected',
-      reason: 'unsafe-source',
-    });
+  ])('does not let opaque hook/setter/value bindings hide direct literal candidates: %s', (source) => {
+    expectLiteralCandidates(source);
   });
   it('rejects stale hashes before locating targets', () => {
     const inspected = inspect(simple);
@@ -465,11 +486,18 @@ describe('conservative rejection and independent revalidation', () => {
     expect(targets.map((target) => target.tagName)).toEqual(['my-widget', 'script', 'style']);
     expect(targets.every((target) => target.editableFields.length === 0)).toBe(true);
   });
-  it('rejects shared definitions even if currently rendered once', () => {
+  it('edits a shared text definition without asserting instance uniqueness', () => {
     const source =
       'function Card(){return <header title="one">Shared</header>} function App(){return <Card/>}';
-    expect(inspect(source).targets[0]?.editableFields).toEqual([]);
+    expect(inspect(source).targets[0]?.editableFields).toEqual([
+      { kind: 'set-text', value: 'Shared' },
+    ]);
     expect(apply(source, { kind: 'set-text', value: 'x' })).toMatchObject({
+      status: 'applied',
+      scope: 'source-definition',
+      content: source.replace('>Shared<', '>{"x"}<'),
+    });
+    expect(apply(source, { kind: 'set-attribute', name: 'title', value: 'x' })).toMatchObject({
       status: 'rejected',
       reason: 'unsupported-field',
     });
@@ -479,7 +507,7 @@ describe('conservative rejection and independent revalidation', () => {
     '<header>Hello <b>child</b></header>',
     '<header>{`template`}</header>',
     '<header>{"A"}{"B"}</header>',
-  ])('rejects non-sole-static text %s', (jsx) => {
+  ])('rejects unresolved text or a missing mixed-segment ID: %s', (jsx) => {
     expect(apply(`function App(){return ${jsx}}`, { kind: 'set-text', value: 'x' })).toMatchObject({
       status: 'rejected',
       reason: 'unsupported-field',

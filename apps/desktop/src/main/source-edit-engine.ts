@@ -13,46 +13,15 @@ import {
   type SourceEditTarget,
   type SourceEditUnsupported,
 } from '@open-codesign/shared';
+import {
+  type AstNode,
+  children,
+  createTextResolver,
+  nameOf,
+  node,
+  walk,
+} from './source-edit-provenance';
 
-// A structural view keeps parser implementation types out of the wire contract.
-interface AstNode {
-  type: string;
-  start: number;
-  end: number;
-  name?: unknown;
-  value?: unknown;
-  openingElement?: unknown;
-  expression?: unknown;
-  children?: unknown;
-  attributes?: unknown;
-  computed?: unknown;
-  shorthand?: unknown;
-  properties?: unknown;
-  key?: unknown;
-  program?: unknown;
-  body?: unknown;
-  declaration?: unknown;
-  id?: unknown;
-  kind?: unknown;
-  declarations?: unknown;
-  init?: unknown;
-  argument?: unknown;
-  params?: unknown;
-  async?: unknown;
-  generator?: unknown;
-  property?: unknown;
-  left?: unknown;
-  selfClosing?: unknown;
-  object?: unknown;
-  callee?: unknown;
-  arguments?: unknown;
-  elements?: unknown;
-  operator?: unknown;
-  right?: unknown;
-  test?: unknown;
-  consequent?: unknown;
-  alternate?: unknown;
-}
 interface FieldSpan {
   operation: SourceEditOperation;
   start: number;
@@ -68,47 +37,6 @@ interface Analysis {
   targets: LocatedTarget[];
 }
 
-function node(value: unknown): AstNode | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate['type'] === 'string' &&
-    typeof candidate['start'] === 'number' &&
-    typeof candidate['end'] === 'number'
-    ? (value as AstNode)
-    : undefined;
-}
-function children(value: unknown): AstNode[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item: unknown) => {
-    const child = node(item);
-    return child ? [child] : [];
-  });
-}
-function walk(root: AstNode, visit: (current: AstNode) => void): void {
-  visit(root);
-  for (const [key, value] of Object.entries(root)) {
-    if (
-      key === 'loc' ||
-      key === 'extra' ||
-      key.endsWith('Comments') ||
-      key === 'comments' ||
-      key === 'tokens'
-    )
-      continue;
-    const child = node(value);
-    if (child) walk(child, visit);
-    else for (const item of children(value)) walk(item, visit);
-  }
-}
-function nameOf(value: unknown): string | undefined {
-  const current = node(value);
-  if (current?.type === 'Identifier' || current?.type === 'JSXIdentifier') {
-    return typeof current.name === 'string' ? current.name : undefined;
-  }
-  if (current?.type === 'StringLiteral')
-    return typeof current.value === 'string' ? current.value : undefined;
-  return undefined;
-}
 function reject(reason: string, message: string): SourceEditRejectedV1 {
   return { schemaVersion: 1, status: 'rejected', reason, message };
 }
@@ -199,7 +127,7 @@ function openingProblem(opening: AstNode): SourceEditUnsupported | undefined {
         'reserved-provenance',
         'Reserved preview provenance attributes cannot be authored or edited.',
       );
-    if (name === 'children')
+    if (name === 'children' || name === 'dangerouslySetInnerHTML')
       return problem(
         'target',
         'children-prop',
@@ -215,9 +143,15 @@ function openingProblem(opening: AstNode): SourceEditUnsupported | undefined {
   return undefined;
 }
 
-function fieldsFor(element: AstNode): {
+function fieldsFor(
+  element: AstNode,
+  resolveText: ReturnType<typeof createTextResolver>,
+): {
   fields: FieldSpan[];
   unsupported: SourceEditUnsupported[];
+  directText?: string;
+  textSources: NonNullable<SourceEditTarget['textSources']>;
+  textLayout: NonNullable<SourceEditTarget['textLayout']>;
 } {
   const fields: FieldSpan[] = [];
   const unsupported: SourceEditUnsupported[] = [];
@@ -228,26 +162,65 @@ function fieldsFor(element: AstNode): {
       node(child.expression)?.type === 'JSXEmptyExpression'
     );
   });
-  const only = meaningful.length === 1 ? meaningful[0] : undefined;
-  const text =
-    only?.type === 'JSXText'
-      ? jsxText(String(only.value))
-      : only?.type === 'JSXExpressionContainer'
-        ? staticString(node(only.expression))
-        : undefined;
-  if (only && text !== undefined) {
+  const textSources: NonNullable<SourceEditTarget['textSources']> = [];
+  const textLayout: NonNullable<SourceEditTarget['textLayout']> = [];
+  let directText: string | undefined = '';
+  for (const child of meaningful) {
+    if (child.type === 'JSXElement' || child.type === 'JSXFragment') {
+      textLayout.push(
+        child.type === 'JSXElement' && isHost(child)
+          ? { kind: 'element', targetId: `${child.start}:${child.end}` }
+          : { kind: 'dynamic' },
+      );
+      continue;
+    }
+    const expression = child.type === 'JSXExpressionContainer' ? node(child.expression) : undefined;
+    const resolved = expression ? resolveText(expression) : undefined;
+    const text = child.type === 'JSXText' ? jsxText(String(child.value)) : resolved?.value;
+    if (text === undefined) {
+      textLayout.push({ kind: 'dynamic' });
+      directText = undefined;
+      unsupported.push(
+        problem(
+          'text',
+          'unresolved-text-source',
+          'This text is computed, mutable, or supplied by a map/component parameter. Its literal source cannot be determined; edit the source manually.',
+        ),
+      );
+      continue;
+    }
+    if (directText !== undefined) directText += text;
+    const indirect = expression?.type !== 'StringLiteral' && child.type !== 'JSXText';
+    const textId = meaningful.length === 1 && !indirect ? undefined : `${child.start}:${child.end}`;
+    const start = indirect && resolved ? resolved.start : child.start;
+    const end = indirect && resolved ? resolved.end : child.end;
+    textLayout.push(
+      text.length <= 100_000
+        ? { kind: 'text', value: text, ...(textId ? { textId } : {}) }
+        : { kind: 'dynamic' },
+    );
     fields.push({
-      operation: { kind: 'set-text', value: text },
-      start: only.start,
-      end: only.end,
-      expressionContainer: true,
+      operation: { kind: 'set-text', value: text, ...(textId ? { textId } : {}) },
+      start,
+      end,
+      expressionContainer: !indirect,
     });
-  } else
+    textSources.push({
+      ...(textId ? { textId } : {}),
+      start,
+      end,
+      origin:
+        indirect && resolved
+          ? resolved.origin
+          : 'JSX text definition (all uses of this definition)',
+    });
+  }
+  if (!fields.length && !unsupported.length)
     unsupported.push(
       problem(
         'text',
         'non-static-text',
-        'Text requires one direct static text child or string expression.',
+        'This element has no directly owned text. Select its text-bearing child.',
       ),
     );
 
@@ -375,135 +348,17 @@ function fieldsFor(element: AstNode): {
     );
     return false;
   });
-  return { fields: boundedFields, unsupported };
-}
-
-function stateBindings(body: AstNode | undefined): {
-  setters: Set<string>;
-  values: Set<string>;
-  definitions: Set<number>;
-} {
-  const setters = new Set<string>();
-  const values = new Set<string>();
-  const definitions = new Set<number>();
-  for (const statement of children(body?.body)) {
-    if (statement.type !== 'VariableDeclaration' || statement.kind !== 'const') continue;
-    for (const binding of children(statement.declarations)) {
-      const id = node(binding.id);
-      const init = node(binding.init);
-      const callee = node(init?.callee);
-      const isUseState =
-        nameOf(callee) === 'useState' ||
-        (callee?.type === 'MemberExpression' &&
-          callee.computed !== true &&
-          nameOf(callee.object) === 'React' &&
-          nameOf(callee.property) === 'useState');
-      if (
-        id?.type !== 'ArrayPattern' ||
-        init?.type !== 'CallExpression' ||
-        !isUseState ||
-        !Array.isArray(id.elements)
-      )
-        continue;
-      const setter = nameOf(id.elements[1]);
-      const value = nameOf(id.elements[0]);
-      if (setter) {
-        setters.add(setter);
-        const declaration = node(id.elements[1]);
-        if (declaration) definitions.add(declaration.start);
-      }
-      if (value) values.add(value);
-    }
-  }
-  return { setters, values, definitions };
-}
-
-function pureStateValue(expression: AstNode | undefined, values: Set<string>): boolean {
-  if (!expression) return false;
-  if (
-    ['StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'NullLiteral'].includes(expression.type)
-  )
-    return true;
-  if (expression.type === 'Identifier') return values.has(nameOf(expression) ?? '');
-  if (expression.type === 'UnaryExpression')
-    return (
-      ['!', '+', '-', '~', 'typeof'].includes(String(expression.operator)) &&
-      pureStateValue(node(expression.argument), values)
-    );
-  if (expression.type === 'BinaryExpression' || expression.type === 'LogicalExpression')
-    return (
-      pureStateValue(node(expression.left), values) &&
-      pureStateValue(node(expression.right), values)
-    );
-  if (expression.type === 'ConditionalExpression')
-    return (
-      pureStateValue(node(expression.test), values) &&
-      pureStateValue(node(expression.consequent), values) &&
-      pureStateValue(node(expression.alternate), values)
-    );
-  if (
-    expression.type === 'ArrowFunctionExpression' &&
-    expression.async !== true &&
-    children(expression.params).every((param) => param.type === 'Identifier')
-  ) {
-    const locals = new Set(values);
-    for (const param of children(expression.params)) locals.add(nameOf(param) ?? '');
-    const body = node(expression.body);
-    const statements = children(body?.body);
-    const returned =
-      body?.type === 'BlockStatement' &&
-      statements.length === 1 &&
-      statements[0]?.type === 'ReturnStatement'
-        ? node(statements[0].argument)
-        : body;
-    return pureStateValue(returned, locals);
-  }
-  return false;
-}
-
-function isStateHandler(attribute: AstNode, bindings: ReturnType<typeof stateBindings>): boolean {
-  const value = node(attribute.value);
-  const handler = value?.type === 'JSXExpressionContainer' ? node(value.expression) : undefined;
-  if (
-    !handler ||
-    !['ArrowFunctionExpression', 'FunctionExpression'].includes(handler.type) ||
-    handler.async === true ||
-    handler.generator === true
-  )
-    return false;
-  const params = children(handler.params);
-  if (
-    params.some(
-      (param) =>
-        param.type !== 'Identifier' ||
-        bindings.setters.has(nameOf(param) ?? '') ||
-        bindings.values.has(nameOf(param) ?? ''),
-    )
-  )
-    return false;
-  const body = node(handler.body);
-  const expressions =
-    body?.type === 'BlockStatement'
-      ? children(body.body).map((statement) =>
-          statement.type === 'ExpressionStatement'
-            ? node(statement.expression)
-            : statement.type === 'ReturnStatement'
-              ? node(statement.argument)
-              : undefined,
-        )
-      : [body];
-  return (
-    expressions.length > 0 &&
-    expressions.every((expression) => {
-      if (
-        expression?.type !== 'CallExpression' ||
-        !bindings.setters.has(nameOf(expression.callee) ?? '')
-      )
-        return false;
-      const args = children(expression.arguments);
-      return args.length === 1 && pureStateValue(args[0], bindings.values);
-    })
-  );
+  return {
+    fields: boundedFields,
+    unsupported,
+    textSources: textSources.filter((origin) =>
+      boundedFields.some(
+        (field) => field.operation.kind === 'set-text' && field.operation.textId === origin.textId,
+      ),
+    ),
+    textLayout,
+    ...(directText !== undefined ? { directText } : {}),
+  };
 }
 
 function analyze(
@@ -511,6 +366,11 @@ function analyze(
   source: string,
   selectionMode: SourceEditSelectionMode = 'preview',
 ): Analysis | SourceEditRejectedV1 {
+  if (selectionMode === 'source')
+    return reject(
+      'source-mode-removed',
+      'Source-list editing has been removed. Select the element in the current preview.',
+    );
   if (!/\.(jsx|tsx)$/i.test(path))
     return reject('unsupported-path', 'Source editing requires a real JSX or TSX file.');
   let ast: AstNode;
@@ -600,201 +460,41 @@ function analyze(
       'App/_App must directly return a static JSX structure without props forwarding or conditional entry returns.',
     );
   }
-  const bindings = stateBindings(body);
-  const directStateReactReferences = new Set<number>();
+  // Candidates identify source definitions. The preview independently checks
+  // the selected DOM instance; opaque execution elsewhere does not remove fields.
+  const resolveText = createTextResolver(ast);
+  const parents = new Map<AstNode, AstNode>();
   walk(ast, (current) => {
-    if (
-      current.type === 'MemberExpression' &&
-      current.computed !== true &&
-      nameOf(current.object) === 'React' &&
-      nameOf(current.property) === 'useState'
-    ) {
-      const object = node(current.object);
-      if (object) directStateReactReferences.add(object.start);
+    for (const value of Object.values(current)) {
+      const child = node(value);
+      if (child) parents.set(child, current);
+      else for (const item of children(value)) parents.set(item, current);
     }
   });
-  let unsafe: SourceEditRejectedV1 | undefined;
-  function flag(reason: string, message: string): void {
-    if (
-      !unsafe ||
-      reason === 'unsafe-source' ||
-      (reason === 'cross-file-source' && unsafe.reason !== 'unsafe-source')
-    )
-      unsafe = reject(reason, message);
-  }
-  walk(ast, (current) => {
-    const declarations =
-      current.type === 'VariableDeclarator'
-        ? [node(current.id)]
-        : current.type === 'FunctionDeclaration' ||
-            current.type === 'FunctionExpression' ||
-            current.type === 'ArrowFunctionExpression'
-          ? [node(current.id), ...children(current.params)]
-          : [];
-    for (const declaration of declarations) {
-      if (!declaration) continue;
-      walk(declaration, (binding) => {
-        const name = nameOf(binding);
-        if (
-          binding.type === 'Identifier' &&
-          (name === 'React' ||
-            name === 'useState' ||
-            (bindings.setters.has(name ?? '') && !bindings.definitions.has(binding.start)))
-        )
-          flag(
-            'unsafe-source',
-            'Shadowed React hooks or state setters have ambiguous execution ownership.',
+  function textBoundary(current: AstNode): SourceEditUnsupported | undefined {
+    let ancestor: AstNode | undefined = current;
+    const visited = new Set<AstNode>();
+    while (ancestor && !visited.has(ancestor)) {
+      visited.add(ancestor);
+      if (ancestor.type === 'JSXElement') {
+        const opening = node(ancestor.openingElement);
+        if (!isHost(ancestor))
+          return problem(
+            'target',
+            'custom-component-ancestor',
+            'Forwarded children may be transformed by a component. Select a directly owned text definition instead.',
           );
-      });
+        if (opening) {
+          const issue = openingProblem(opening);
+          if (issue) return issue;
+        }
+      }
+      ancestor = parents.get(ancestor);
     }
-    if (
-      current.type === 'ImportDeclaration' ||
-      current.type === 'ImportExpression' ||
-      current.type === 'Import'
-    )
-      flag(
-        'cross-file-source',
-        'Imported execution and cross-file ownership are outside this source-definition MVP.',
-      );
-    if (
-      (current.type === 'Identifier' || current.type === 'JSXIdentifier') &&
-      current.name === entry.id.name &&
-      current.start !== entry.id.start
-    )
-      flag(
-        'reused-entry',
-        'A referenced or reused entry cannot establish the direct auto-mounted source boundary.',
-      );
-    if (
-      current.type === 'Identifier' &&
-      current.name === 'React' &&
-      !directStateReactReferences.has(current.start)
-    )
-      flag(
-        'unsafe-source',
-        'Only direct React.useState access is supported; aliased React execution cannot establish the state-only hook boundary.',
-      );
-    const referencedHook =
-      current.type === 'Identifier'
-        ? nameOf(current)
-        : current.type === 'MemberExpression' || current.type === 'OptionalMemberExpression'
-          ? nameOf(current.property)
-          : undefined;
-    if (referencedHook && /^use[A-Z]/.test(referencedHook) && referencedHook !== 'useState')
-      flag(
-        'unsafe-source',
-        'Only directly owned useState hooks are supported; effect and other hook execution is outside the static editing boundary.',
-      );
-    if (
-      (current.type === 'MemberExpression' || current.type === 'OptionalMemberExpression') &&
-      nameOf(current.object) === 'React' &&
-      current.computed === true
-    )
-      flag(
-        'unsafe-source',
-        'Dynamic or reflective React access cannot establish the supported state-only hook boundary.',
-      );
-    if (current.type === 'ThisExpression' || current.type === 'MetaProperty')
-      flag(
-        'unsafe-source',
-        'Implicit global or module reflection is outside the static editing boundary.',
-      );
-    if (
-      current.type === 'Identifier' &&
-      [
-        'document',
-        'window',
-        'globalThis',
-        'self',
-        'global',
-        'top',
-        'parent',
-        'frames',
-        'ReactDOM',
-        'eval',
-        'Function',
-        'Reflect',
-        'Proxy',
-        'setTimeout',
-        'setInterval',
-        'setImmediate',
-        'clearTimeout',
-        'clearInterval',
-        'clearImmediate',
-        'queueMicrotask',
-        'requestAnimationFrame',
-        'cancelAnimationFrame',
-        'requestIdleCallback',
-        'cancelIdleCallback',
-        'scheduler',
-        'postMessage',
-        'MessageChannel',
-        'MessagePort',
-        'jQuery',
-        '$',
-      ].includes(String(current.name))
-    )
-      flag(
-        'unsafe-source',
-        'Imperative DOM/global execution is outside the supported ownership boundary.',
-      );
-    if (
-      (current.type === 'MemberExpression' || current.type === 'OptionalMemberExpression') &&
-      [
-        'innerHTML',
-        'outerHTML',
-        'textContent',
-        'insertAdjacentHTML',
-        'appendChild',
-        'replaceChildren',
-        'createElement',
-        'cloneElement',
-        'createPortal',
-        'getElementById',
-        'querySelector',
-        'querySelectorAll',
-        'setAttribute',
-        'removeAttribute',
-        'setProperty',
-        'constructor',
-        '__proto__',
-        'defineProperty',
-        'defineProperties',
-        'setPrototypeOf',
-        'assign',
-      ].includes(nameOf(current.property) ?? '')
-    )
-      flag('unsafe-source', 'Imperative element creation or mutation obscures source ownership.');
-    if (
-      current.type === 'JSXAttribute' &&
-      ['ref', 'dangerouslySetInnerHTML'].includes(nameOf(current.name) ?? '')
-    )
-      flag('unsafe-source', 'Refs and raw HTML may imperatively mutate the rendered definition.');
-    if (
-      current.type === 'JSXAttribute' &&
-      /^on/i.test(nameOf(current.name) ?? '') &&
-      !isStateHandler(current, bindings)
-    )
-      flag(
-        'unsafe-source',
-        'Only inline handlers calling directly owned state setters with pure values are supported.',
-      );
-    if (current.type === 'UnaryExpression' && current.operator === 'delete')
-      flag('unsafe-source', 'Imperative deletion is outside the static source ownership boundary.');
-    if (
-      (current.type === 'AssignmentExpression' &&
-        node(current.left)?.type === 'MemberExpression') ||
-      (current.type === 'UpdateExpression' && node(current.argument)?.type === 'MemberExpression')
-    )
-      flag('unsafe-source', 'Member mutation is outside the static source ownership boundary.');
-  });
-  // A source-list selection names an AST definition, not a live DOM node.
-  // Opaque execution prevents preview ownership claims but cannot change the
-  // exact literal span selected in the current, hash-checked source.
-  if (unsafe && selectionMode !== 'source') return unsafe;
+    return undefined;
+  }
 
   const allowed = new Set<number>();
-  const excluded = new Map<number, SourceEditUnsupported>();
   function mark(current: AstNode, inherited?: SourceEditUnsupported): void {
     if (current.type === 'JSXFragment') {
       for (const child of children(current.children))
@@ -814,8 +514,7 @@ function analyze(
         : opening
           ? openingProblem(opening)
           : undefined);
-    if (own) excluded.set(current.start, own);
-    else allowed.add(current.start);
+    if (!own) allowed.add(current.start);
     for (const child of children(current.children))
       if (child.type === 'JSXElement' || child.type === 'JSXFragment') mark(child, own);
   }
@@ -826,19 +525,29 @@ function analyze(
     const opening = node(current.openingElement);
     const tagName = nameOf(opening?.name);
     if (!opening || !tagName) return;
-    const details = allowed.has(current.start)
-      ? fieldsFor(current)
-      : {
-          fields: [],
-          unsupported: [
-            excluded.get(current.start) ??
-              problem(
-                'target',
-                'non-direct-source',
-                'Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not.',
-              ),
-          ],
-        };
+    const boundary = textBoundary(current);
+    const details = fieldsFor(current, resolveText);
+    const layoutAllowed = allowed.has(current.start);
+    if (boundary) {
+      details.fields = [];
+      details.textSources = [];
+      details.textLayout = details.textLayout.map((part) =>
+        part.kind === 'text' ? { kind: 'dynamic' } : part,
+      );
+      details.unsupported = [boundary];
+    } else {
+      details.fields = details.fields.filter(
+        (field) => field.operation.kind === 'set-text' || layoutAllowed,
+      );
+      if (!layoutAllowed)
+        details.unsupported.push(
+          problem(
+            'target',
+            'text-definition-only',
+            'Only traced text definitions are editable here. Layout/attribute ownership cannot be established. Shared definitions change every use, not just the clicked instance.',
+          ),
+        );
+    }
     targets.push({
       target: {
         id: `${current.start}:${current.end}`,
@@ -848,28 +557,31 @@ function analyze(
         insertionOffset: opening.end - (opening.selfClosing === true ? 2 : 1),
         scope: 'source-definition',
         editableFields: details.fields.map((field) => field.operation),
+        ...(details.directText !== undefined ? { directText: details.directText } : {}),
+        textSources: details.textSources,
+        textLayout: details.textLayout,
         unsupported: details.unsupported,
       },
       fields: details.fields,
     });
   });
+  if (
+    targets.length > 10_000 ||
+    targets.some(({ target }) => (target.textLayout?.length ?? 0) > 10_000)
+  )
+    return reject(
+      'unsupported-targets',
+      'This source exceeds the supported preview target or text-layout limit.',
+    );
   return { sourceHash: hash(source), targets };
 }
 
 /**
- * MVP support matrix (always source-definition scope, never instance uniqueness):
- * - One auto-mounted App/_App; direct host/fragment structure only.
- * - One static JSXText/string-expression child; existing static title/placeholder/alt.
- * - Existing string/number properties in a directly owned inline style object.
- * - Dynamic/map/custom-component descendants remain annotated, but are not editable.
- * - Pure inline state-setter handlers are supported; opaque/imperative handlers are not.
- * - Imports/exports, non-state hooks, global/DOM/ref mutation, reused entries,
- *   computed/shared styles and executable/customized hosts are unsupported.
- * Explicit source-list mode retains the structural/field constraints but makes
- * no live ownership claim, so opaque execution does not reject the whole file.
- * Source-list results must never be used to instrument a selectable preview.
- * Dynamic children alone do not invalidate a static parent's own layout fields.
- * Scheduling/global rejection bounds this MVP; it is not a general JavaScript safety proof.
+ * Candidates identify exact source definitions, never private DOM instances.
+ * Indirect fields need lexical literal provenance; ordered child layouts let the
+ * preview verify individual static segments beside dynamic content. Existing
+ * attribute/style literals retain direct native App ownership. No source executes
+ * here, and legacy source-list mode is refused rather than providing a bypass.
  */
 export function analyzeSourceEdit(input: {
   path: string;
@@ -891,7 +603,7 @@ function sameField(a: SourceEditOperation, b: SourceEditOperation): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'set-attribute' && b.kind === 'set-attribute') return a.name === b.name;
   if (a.kind === 'set-style' && b.kind === 'set-style') return a.property === b.property;
-  return a.kind === 'set-text';
+  return a.kind === 'set-text' && b.kind === 'set-text' && a.textId === b.textId;
 }
 function quote(value: string): string {
   return JSON.stringify(value)
@@ -956,6 +668,11 @@ export function planSourceEdit(input: {
   scope: SourceEditScope;
   selectionMode?: SourceEditSelectionMode | undefined;
 }): SourceEditApplyResultV1 {
+  if (input.selectionMode === 'source')
+    return reject(
+      'source-mode-removed',
+      'Source-list editing has been removed. Select the element in the current preview.',
+    );
   if (input.scope !== 'source-definition')
     return reject(
       'invalid-scope',

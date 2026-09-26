@@ -68,23 +68,26 @@ afterEach(async () => {
 });
 
 describe('deterministic source edits IPC', () => {
-  it('persists explicit source selection beside effects while retaining stale protection', async () => {
+  it('persists preview-selected literals beside effects while retaining stale protection', async () => {
     const content = original.replace(
       'return <main>',
       'React.useEffect(() => { document.title = "Page"; }, []); return <main>',
     );
     await writeFile(path.join(root, 'App.jsx'), content);
-    expect(await inspect(designId, 'App.jsx', content)).toMatchObject({
-      status: 'rejected',
-      reason: 'unsafe-source',
-    });
+    const preview = await inspect(designId, 'App.jsx', content);
+    expect(preview.status).toBe('ready');
+    if (preview.status !== 'ready') throw new Error(preview.message);
+    expect(preview.targets.find((item) => item.tagName === 'h1')?.editableFields).toEqual([
+      { kind: 'set-text', value: 'Original' },
+      { kind: 'set-attribute', name: 'title', value: 'hello' },
+    ]);
     const result = SourceEditInspectResultV1.parse(
       await invoke('inspect', {
         schemaVersion: 1,
         designId,
         path: 'App.jsx',
         expectedContent: content,
-        selectionMode: 'source',
+        selectionMode: 'preview',
       }),
     );
     if (result.status !== 'ready') throw new Error(result.message);
@@ -94,21 +97,39 @@ describe('deterministic source edits IPC', () => {
       schemaVersion: 1,
       designId,
       path: 'App.jsx',
-      selectionMode: 'source',
+      selectionMode: 'preview',
       expectedSourceHash: result.sourceHash,
       targetId: target.id,
-      previewRevision: 'source-list-1',
+      previewRevision: 'preview-1',
       scope: 'source-definition',
-      operation: { kind: 'set-text', value: 'Source selected' },
+      operation: { kind: 'set-text', value: 'Preview selected' },
     };
     expect(await invoke('apply', input)).toMatchObject({ status: 'applied' });
     expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe(
-      content.replace('>Original<', '>{"Source selected"}<'),
+      content.replace('>Original<', '>{"Preview selected"}<'),
     );
     expect(await invoke('apply', input)).toMatchObject({
       status: 'rejected',
       reason: 'stale-source',
     });
+  });
+  it('explicitly rejects legacy source-mode inspect and apply without touching disk', async () => {
+    const input = await request();
+    expect(
+      await invoke('inspect', {
+        schemaVersion: 1,
+        designId,
+        path: 'App.jsx',
+        expectedContent: original,
+        selectionMode: 'source',
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'source-mode-removed' });
+    expect(await invoke('apply', { ...input, selectionMode: 'source' })).toMatchObject({
+      status: 'rejected',
+      reason: 'source-mode-removed',
+    });
+    expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe(original);
+    expect(await readdir(root)).toEqual(['App.jsx']);
   });
   it('reads actual workspace, applies one AST patch and creates no snapshots', async () => {
     const input = await request();

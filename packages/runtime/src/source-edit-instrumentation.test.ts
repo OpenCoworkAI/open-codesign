@@ -30,11 +30,19 @@ function planFor(source: string, tags: string[]): SourceEditPreviewOptions {
   };
 }
 
-function artifactCompileInput(document: string): { source: string; options: object } {
+function artifactCompileInput(document: string): {
+  source: string;
+  options: object;
+  offset: number;
+} {
   const matches = [...document.matchAll(/var source = (.+);\n {2}var options = (.+);/g)];
   const artifact = matches.at(-1);
   if (!artifact?.[1] || !artifact[2]) throw new Error('Missing artifact compile input');
-  return { source: JSON.parse(artifact[1]) as string, options: JSON.parse(artifact[2]) as object };
+  return {
+    source: JSON.parse(artifact[1]) as string,
+    options: JSON.parse(artifact[2]) as object,
+    offset: artifact.index,
+  };
 }
 
 const babel = new Function('exports', 'module', `${BABEL_STANDALONE}\nreturn exports;`)({}, {}) as {
@@ -57,6 +65,39 @@ describe('source edit preview instrumentation', () => {
     expect(result.source.replace(/ data-codesign-source-id="[A-Za-z0-9_-]+:\d+:\d+"/g, '')).toBe(
       source,
     );
+  });
+
+  it('carries field plans for mixed text without adding DOM wrappers or rewriting expressions', () => {
+    const source = 'function App(){const count=2;return <button>Cart ({count})</button>}';
+    const plan = planFor(source, ['button']);
+    const target = plan.targets[0];
+    if (!target) throw new Error('Missing target');
+    target.textLayout = [
+      { kind: 'text', textId: '1:2', value: 'Cart (' },
+      { kind: 'dynamic' },
+      { kind: 'text', textId: '3:4', value: ')' },
+    ];
+    target.editableFields = [
+      { kind: 'set-text', textId: '1:2', value: 'Cart (' },
+      { kind: 'set-text', textId: '3:4', value: ')' },
+    ];
+    const instrumented = instrumentSourceForEditing(source, plan);
+    expect(instrumented.context.fieldPlans?.[target.id]).toEqual({
+      textLayout: target.textLayout,
+      editableFields: target.editableFields,
+    });
+    expect(
+      instrumented.source.replace(/ data-codesign-source-id="[A-Za-z0-9_-]+:\d+:\d+"/g, ''),
+    ).toBe(source);
+    expect(instrumented.source).not.toContain('<span');
+    const document = buildInteractivePreviewDocument(source, { path: 'App.jsx', sourceEdit: plan });
+    const compiled = artifactCompileInput(document);
+    expect(() => babel.transform(compiled.source, compiled.options)).not.toThrow();
+    // Check generator-owned markers, not HTML tag syntax: the observer must precede user code.
+    const observerIndex = document.indexOf('textObserver.observe(document.documentElement');
+    expect(observerIndex).toBeGreaterThanOrEqual(0);
+    expect(compiled.source).toContain('Cart (');
+    expect(compiled.offset).toBeGreaterThan(observerIndex);
   });
 
   it('honors inspected offsets through greater-than text and nested JSX attributes', () => {

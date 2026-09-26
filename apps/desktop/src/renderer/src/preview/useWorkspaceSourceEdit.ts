@@ -1,7 +1,17 @@
 import { useT } from '@open-codesign/i18n';
 import type { SourceEditSelection } from '@open-codesign/runtime';
-import type { SourceEditOperation, SourceEditTarget } from '@open-codesign/shared';
+import {
+  type SourceEditOperation,
+  type SourceEditTarget,
+  sourceEditFieldKey,
+} from '@open-codesign/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type SourceEditAncestor,
+  type SourceEditValidationRequest,
+  sourceEditFieldState,
+} from './helpers';
+import { sourceEditReasonMessage } from './source-edit-messages';
 import { inspectWorkspaceSourceEdit, persistWorkspaceSourceEdit } from './source-edit-persistence';
 
 export interface SourceEditWorkspaceSource {
@@ -17,17 +27,21 @@ export function useWorkspaceSourceEdit(input: {
   available: boolean;
   loading?: boolean;
   generating: boolean;
+  validate: (
+    request: SourceEditValidationRequest,
+    signal: AbortSignal,
+  ) => Promise<SourceEditSelection | null>;
   onPersist: (source: SourceEditWorkspaceSource) => void;
   onSaved: (warnings: string[]) => void;
 }) {
   const t = useT();
-  const [sourceMode, setSourceMode] = useState(false);
-  const [canSelectSource, setCanSelectSource] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selection, setSelection] = useState<SourceEditTarget | null>(null);
+  const [fieldStates, setFieldStates] = useState<SourceEditSelection['fieldStates']>();
+  const [ancestors, setAncestors] = useState<SourceEditAncestor[]>([]);
   const allowed =
     input.available &&
     !input.generating &&
@@ -46,7 +60,6 @@ export function useWorkspaceSourceEdit(input: {
       allowed,
       enabled,
       refresh,
-      sourceMode,
     }),
     [
       input.designId,
@@ -57,13 +70,14 @@ export function useWorkspaceSourceEdit(input: {
       allowed,
       enabled,
       refresh,
-      sourceMode,
     ],
   );
   const current = useRef(context);
   current.current = context;
   const epoch = useRef(0);
+  const selectionEpoch = useRef(0);
   const applying = useRef(false);
+  const validation = useRef<AbortController | null>(null);
   const [inspected, setInspected] = useState<{
     context: typeof context;
     source: string;
@@ -76,11 +90,14 @@ export function useWorkspaceSourceEdit(input: {
 
   useEffect(() => {
     const ticket = ++epoch.current;
+    validation.current?.abort();
     applying.current = false;
+    selectionEpoch.current++;
     setSelection(null);
+    setFieldStates(undefined);
+    setAncestors([]);
     setInspected(null);
     setMessage(null);
-    setCanSelectSource(false);
     setBusy(false);
     if (!context.allowed) setEnabled(false);
     if (
@@ -103,18 +120,13 @@ export function useWorkspaceSourceEdit(input: {
         designId: context.designId,
         path: context.path,
         expectedContent: context.content,
-        ...(context.sourceMode ? { selectionMode: 'source' as const } : {}),
       },
       api.inspect,
     )
       .then((result) => {
         if (current.current !== context || epoch.current !== ticket) return;
         if (result.status === 'rejected') {
-          setCanSelectSource(
-            !context.sourceMode &&
-              ['unsafe-source', 'reused-entry', 'cross-file-source'].includes(result.reason),
-          );
-          setMessage(`${result.message} (${result.reason})`);
+          setMessage(sourceEditReasonMessage(result.reason, t));
           return;
         }
         setInspected({
@@ -125,34 +137,49 @@ export function useWorkspaceSourceEdit(input: {
           targets: result.targets,
         });
       })
-      .catch((error: unknown) => {
-        if (current.current === context && epoch.current === ticket) {
-          setMessage(error instanceof Error ? error.message : t('errors.unknown'));
-        }
+      .catch(() => {
+        if (current.current === context && epoch.current === ticket)
+          setMessage(t('canvas.sourceEdit.inspectFailed'));
       })
       .finally(() => {
         if (current.current === context && epoch.current === ticket) setBusy(false);
       });
     return () => {
       epoch.current++;
+      validation.current?.abort();
     };
   }, [context, t]);
 
+  const clearSelection = useCallback(() => {
+    selectionEpoch.current++;
+    validation.current?.abort();
+    setSelection(null);
+    setFieldStates(undefined);
+    setAncestors([]);
+  }, []);
+
+  const exit = useCallback(() => {
+    setEnabled(false);
+    clearSelection();
+  }, [clearSelection]);
+
   const select = useCallback(
-    (meta?: SourceEditSelection) => {
-      if (!active || sourceMode || applying.current) return;
+    (meta?: SourceEditSelection, trail: SourceEditAncestor[] = []) => {
+      if (!active || !inspection || applying.current) return;
+      selectionEpoch.current++;
       setMessage(null);
-      const target =
-        inspection &&
-        meta &&
-        meta.sourceHash === inspection.sourceHash &&
-        meta.previewRevision === inspection.previewRevision
-          ? inspection.targets.find((item) => item.id === meta.targetId)
-          : undefined;
+      const matches =
+        meta?.sourceHash === inspection.sourceHash &&
+        meta.previewRevision === inspection.previewRevision;
+      const target = matches
+        ? inspection.targets.find((item) => item.id === meta.targetId)
+        : undefined;
       setSelection(target ?? null);
+      setFieldStates(target ? meta?.fieldStates : undefined);
+      setAncestors(!meta || matches ? trail : []);
       if (!target) setMessage(t('canvas.sourceEdit.unsupportedSelection'));
     },
-    [active, inspection, sourceMode, t],
+    [active, inspection, t],
   );
 
   const apply = useCallback(
@@ -166,6 +193,14 @@ export function useWorkspaceSourceEdit(input: {
         current.current !== context
       )
         return;
+      const fieldKey = sourceEditFieldKey(operation);
+      if (
+        !selection.editableFields.some((field) => sourceEditFieldKey(field) === fieldKey) ||
+        sourceEditFieldState(selection, operation, fieldStates).status !== 'ready'
+      ) {
+        setMessage(t('canvas.sourceEdit.validationFailed'));
+        return;
+      }
       const api = window.codesign?.sourceEdits;
       if (!api) {
         setMessage(t('canvas.sourceEdit.unavailable'));
@@ -173,9 +208,48 @@ export function useWorkspaceSourceEdit(input: {
       }
       applying.current = true;
       const ticket = epoch.current;
+      const selectedTicket = selectionEpoch.current;
+      const controller = new AbortController();
+      validation.current = controller;
       setBusy(true);
       setMessage(null);
       try {
+        const checked = await input.validate(
+          {
+            targetId: selection.id,
+            sourceHash: inspection.sourceHash,
+            previewRevision: inspection.previewRevision,
+            fieldKey,
+          },
+          controller.signal,
+        );
+        if (
+          current.current !== context ||
+          epoch.current !== ticket ||
+          selectionEpoch.current !== selectedTicket ||
+          controller.signal.aborted
+        )
+          return;
+        const valid =
+          checked?.targetId === selection.id &&
+          checked.sourceHash === inspection.sourceHash &&
+          checked.previewRevision === inspection.previewRevision;
+        if (
+          !valid ||
+          sourceEditFieldState(selection, operation, checked?.fieldStates).status !== 'ready'
+        ) {
+          setFieldStates(
+            valid
+              ? checked?.fieldStates
+              : selection.editableFields.map((field) => ({
+                  key: sourceEditFieldKey(field),
+                  status: 'unmapped' as const,
+                })),
+          );
+          setMessage(t('canvas.sourceEdit.validationFailed'));
+          return;
+        }
+        setFieldStates(checked.fieldStates);
         const result = await persistWorkspaceSourceEdit(
           {
             schemaVersion: 1,
@@ -186,16 +260,15 @@ export function useWorkspaceSourceEdit(input: {
             targetId: selection.id,
             operation,
             scope: 'source-definition',
-            ...(context.sourceMode ? { selectionMode: 'source' as const } : {}),
           },
           api.apply,
         );
         if (current.current !== context || epoch.current !== ticket) return;
         if (result.status === 'rejected') {
-          setMessage(`${result.message} (${result.reason})`);
+          setMessage(sourceEditReasonMessage(result.reason, t));
           return;
         }
-        setSelection(null);
+        clearSelection();
         setInspected(null);
         setRefresh((value) => value + 1);
         input.onPersist({
@@ -204,19 +277,29 @@ export function useWorkspaceSourceEdit(input: {
           workspaceDesignId: context.designId,
         });
         // Only the atomic-write ACK may announce a save, never an optimistic local patch.
-        input.onSaved(result.warnings ?? []);
-      } catch (error) {
-        if (current.current === context && epoch.current === ticket) {
-          setMessage(error instanceof Error ? error.message : t('errors.unknown'));
-        }
+        input.onSaved(result.warnings?.length ? [t('canvas.sourceEdit.refreshWarning')] : []);
+      } catch {
+        if (current.current === context && epoch.current === ticket && !controller.signal.aborted)
+          setMessage(t('canvas.sourceEdit.saveFailed'));
       } finally {
+        if (validation.current === controller) validation.current = null;
         if (current.current === context && epoch.current === ticket) {
           applying.current = false;
           setBusy(false);
         }
       }
     },
-    [context, inspection, selection, input.onPersist, input.onSaved, t],
+    [
+      context,
+      inspection,
+      selection,
+      fieldStates,
+      input.validate,
+      input.onPersist,
+      input.onSaved,
+      clearSelection,
+      t,
+    ],
   );
 
   return {
@@ -224,34 +307,16 @@ export function useWorkspaceSourceEdit(input: {
     eligible,
     busy,
     message,
-    inspection: sourceMode ? null : inspection,
-    sourceMode,
-    canSelectSource,
-    enableSourceSelection: () => {
-      setSourceMode(true);
-      setSelection(null);
-    },
-    sourceTargets:
-      sourceMode && inspection
-        ? inspection.targets.filter((target) => target.editableFields.length > 0)
-        : [],
-    selectSource: (id: string) => {
-      if (!sourceMode || !inspection || applying.current) return;
-      setMessage(null);
-      setSelection(
-        inspection.targets.find((target) => target.id === id && target.editableFields.length > 0) ??
-          null,
-      );
-    },
+    inspection,
     selection: inspection ? selection : null,
+    fieldStates: inspection ? fieldStates : undefined,
+    ancestors: inspection ? ancestors : [],
     toggle: () => {
       setEnabled((value) => !value);
-      setSourceMode(false);
-      setSelection(null);
+      clearSelection();
     },
-    clearSelection: () => {
-      if (!sourceMode) setSelection(null);
-    },
+    clearSelection,
+    exit,
     select,
     apply,
   };

@@ -4,105 +4,122 @@ Open CoDesign can edit a small, explicitly supported part of a React design dire
 
 Here, **deterministic** means that the same source and supported operation produce a reproducible source patch or refusal. It does not prove arbitrary JavaScript safe, establish that a source definition has only one rendered instance, or guarantee visual correctness in every application state.
 
-## Use it
+## One editing flow
 
 1. Open a design bound to a real local workspace.
-2. In the **Files** tab, open an integrated preview of an actual `.jsx` or `.tsx` workspace file.
-3. Choose **Edit source**. The displayed source must match the current workspace file before editing is enabled; a snapshot or fallback preview is not a writable source.
-4. Select an element in the preview. The panel identifies its source file and shows supported existing fields, or explains why a target or field is unsupported. If opaque execution prevents preview selection, choose **Choose a static source field**, then select by source line, native tag and current value. Review the displayed source fragment before saving.
-5. Change one field and use its **Save source definition** button.
-6. Check the refreshed preview and the source file. A save can reload the preview and reset in-memory component state; state-preserving HMR is not promised. Select again when the preview or source revision changes.
+2. In **Files**, open an integrated preview of an actual `.jsx` or `.tsx` workspace file.
+3. Choose **Edit source**. The displayed source must match the current workspace file; a snapshot or fallback preview is not writable source.
+4. Select an element in the preview. The panel shows supported fields, their source origins and any field-specific refusal. If you hit a nested icon, explicitly select a containing element from the breadcrumb buttons.
+5. Change one field and use its **Save source definition** button. Text segments are labeled **Text 1**, **Text 2**, etc., rather than source offsets.
+6. Check the refreshed preview and source. A save can reload the preview and reset component state; state-preserving HMR is not promised. Select again after the preview or source revision changes.
 
-The operation has **source-definition** scope. It changes a literal in the source, not a private copy of whichever DOM instance happened to be clicked. Preview selection deliberately refuses cases where its supported source boundary cannot be established. Explicit source selection instead identifies a literal in the parsed source without claiming a mapping to a live DOM element; page behavior can still affect the rendered result.
+There is no separate source-selection mode or whole-file static-field picker. Source locations remain read-only explanations in the same panel. Content in an unrendered branch must first be made visible; a source definition alone does not create a clickable runtime element.
 
-The source editor toolbar and panel reserve their own layout space outside the preview iframe, so they do not intercept clicks on artifact controls. The panel reduces the available preview width while open, which can trigger the artifact's responsive layout.
+The operation has **source-definition** scope. It changes the actual literal, not a private copy of the clicked DOM instance. A component/map literal or shared variable can therefore change every use of that definition. No single-instance override is offered.
 
-Ordinary comment and tweak behavior remains separate. Tweaks are temporarily hidden while source editing is active so the two editing paths do not compete. Leaving a tab, file, or design suppresses late UI acknowledgements for the old view; it does **not** promise to undo a save that has already been dispatched to the main process. Generation in the same design or workspace disables source editing.
+The toolbar and panel reserve layout space outside the iframe; the panel can change the available responsive viewport width. While editing is active, a temporary hit layer intercepts artifact actions and allows selection of disabled controls. It does not wrap source text or insert children into the artifact's React layout. Leaving editing removes the hit layer and restores ordinary preview interaction.
+
+Comments remain separate. Tweaks are hidden while source editing is active so the paths do not compete. Leaving a tab, file or design suppresses late UI acknowledgements for the old view; it does **not** undo a save already dispatched to main. Generation in the same design or workspace disables editing.
 
 ## Supported fields
 
-Both selection modes require one directly declared `App` or `_App` script entry with a direct JSX return and directly owned native JSX elements and fragments. Preview selection additionally requires the supported auto-mounted execution boundary. Explicit source selection permits effects, refs, opaque handlers and explicit mounting elsewhere in the source without asserting that a selected definition has a unique or unchanged rendered instance. It is not an arbitrary imported React application.
+Inspection requires one directly declared `App` or `_App` script entry with a direct JSX return. Text targets are **native JSX source definitions**, including definitions inside local components and callback/conditional JSX. This is not arbitrary imported React application support.
 
 | Field | Supported form |
 | --- | --- |
-| Text | An existing static text child or supported string-literal expression. |
-| Attributes | Existing static `title`, `placeholder`, or `alt` literals. |
-| Inline style | Existing literal properties in a directly owned inline style object: `color`, `backgroundColor`, `fontSize`, `gap`, `padding`, `borderRadius`, `maxWidth`. |
+| Text segments | Existing JSX text or string expressions, including segments beside icons, `<br />`, emphasis and unresolved dynamic siblings. Each save changes one segment and preserves child elements. |
+| Traced text | Lexically resolved `const` strings/aliases and static object/array paths such as `resume.name` or `cards[1].title`, ending at a same-file string literal. The actual literal, line and origin chain are shown. |
+| Shared text | Literal JSX inside a local component or map callback. Saving edits the definition and all its uses, not one rendered instance. |
+| Attributes | Existing static `title`, `placeholder` or `alt` literals with directly owned native App targets. |
+| Inline style | Existing literal `color`, `backgroundColor`, `fontSize`, `gap`, `padding`, `borderRadius` or `maxWidth` in a directly owned inline style object. |
 
-The editor does not add absent attributes or style properties. It does not rewrite an entire file or infer which shared variable should change.
+Effects, refs, opaque handlers and explicit mounting elsewhere do not blanket-disable candidates. Attribute/style ownership and literal allowlists still apply. Each candidate must independently match the current preview before the UI offers saving.
 
-CSS values follow a narrow allowlist, not arbitrary CSS. Supported forms include literal color forms and finite nonnegative sizes with supported units; `gap`, `padding`, and `borderRadius` permit their supported short forms, and `maxWidth` also accepts `none`. CSS variables, URLs, expressions, arbitrary declarations, and unsupported value syntax are refused. An accepted source literal is not a guarantee that every browser interprets every value identically.
+For example, `<button>Cart ({count})</button>` exposes the static prefix and suffix through preview selection; it does not make `count` editable. There is no need to switch modes.
 
-Directly owned `useState` state and supported pure inline state-setter handlers can coexist with static editable fields. This does not make a state-derived label or arbitrary event handler editable.
+### Field-level preview mapping
 
-### Explicit refusals
+Inspection provides ordered direct-child descriptors: static text segments, marked native child boundaries and unknown dynamic positions. The overlay aligns these with the selected element's actual direct text nodes and children. It does not flatten nested element text, evaluate generated expressions, inspect React private internals, or search the page for the first equal string.
+
+- A field is enabled only when its rendered position is uniquely established. Matching preserves complete React scalar Text-node slots; it never accepts a substring of a surviving sibling as a removed field. A dynamic sibling alone is not grounds for rejecting static text.
+- An ambiguous or changed field is disabled with a reason. Independent fields, including matching attributes/styles, can remain available.
+- Attribute values and normalized **inline** style values are checked independently; computed/inherited styles are not source locations.
+- Matching is bounded (256 layout descriptors, 128 fields for text mapping, 1,024 child nodes, 50,000 text units and 30,000 search steps per host). Large or ambiguous structures can be refused conservatively.
+- A preview-only observer starts before generated code executes. It remembers field Text-node identities and records removals/character changes; replacing a static node with an equal-valued node does not silently restore readiness. Before initial binding, removing matching text is conservatively refused. Pending records are flushed synchronously before selection and save validation. Observation is bounded (4,096 records / 10,000 visited nodes per batch); overflow disables text mapping until reload.
+- Selection readiness is refreshed while editing, and the parent requests a fresh check of the pinned DOM instance immediately before dispatching a save. Replies are tied to the current iframe, request and preview revision. Imperative changes or React replacing scalar nodes can require reloading rather than automatically rebinding an uncertain origin.
+
+These checks improve source/display correspondence; they are not proof against arbitrary same-frame script tampering, ambient prototype changes or future imperative overwrites. The main process never treats preview metadata as write authorization.
+
+### Source resolution and limitations
+
+The resolver parses source; it never executes it. It checks lexical shadowing, writes, aliases, container escapes, duplicate keys, getters and spreads. A bounded read-only inline array `map` may coexist with traced fields, but does **not** make its callback parameter an editable data instance. The complete object/array must be static. Unsupported uses such as `flatMap`, `filter`, destructured callbacks or passing containers to unknown code conservatively disable indirect edits through that connected container.
+
+The editor does not add absent properties, hard-code generated expressions, replace equal strings throughout a file or rewrite the whole file. A fixed array path edits that exact field and any uses of it; an unrelated equal-valued field remains unchanged.
+
+CSS follows a narrow allowlist: supported literal colors and finite nonnegative sizes/units; `gap`, `padding` and `borderRadius` permit supported short forms, and `maxWidth` accepts `none`. CSS variables, URLs, expressions and arbitrary declarations are refused. Browser acceptance of every proposed value is not guaranteed merely by source parsing.
 
 Unsupported cases include:
 
-- Dynamic text or attribute expressions and mapped/repeated targets. Preview selection also refuses reused entry references and ambiguous runtime ownership.
-- Custom-component targets, component prop forwarding, computed or shared style objects, and unsupported spreads. Dynamic children do not necessarily prevent editing a static parent's own supported layout fields.
-- Import/export module syntax and unsupported entry structure in both modes. Preview selection additionally refuses refs, effect or other non-state hooks, DOM/global mutation, timers or other scheduling, reflection, and unknown or imperative handlers outside the supported pure setter form.
-- Runtime-control text in a proposed value, including certain preview/document/tweak markers, mount controls, or `App`/`_App` declaration patterns that the preview runtime currently recognizes in raw source.
-- Unsupported files, unavailable workspaces, hidden or escaping paths, symlinked child paths, hard-linked source files, stale source, and saves attempted during generation.
+- Computed text (calls, interpolation, concatenation and conditional expressions), state-derived labels, mutable/escaping data, dynamic keys, destructuring bindings, TS expression wrappers and optional access. In particular, `items.map(item => <p>{item.title}</p>)` and component parameter text remain unsupported.
+- Custom-component targets, forwarded JSX children/props, shared/computed style objects and ambiguous spreads. Literal text inside a component's native JSX is a shared definition, not a prop override.
+- Import/export module syntax and unsupported entry structures.
+- Unrendered source branches, ambiguous DOM correspondence, removed text and fields whose displayed values no longer match their source definitions.
+- Runtime-control text in proposed values, including preview/document/tweak markers, mount controls and entry declaration patterns recognized by the runtime.
+- Unsupported files, unavailable workspaces, hidden/escaping paths, symlinked child paths, hard-linked source files, stale source and saves during generation.
 
-Refusal is intentional. Switching to source selection is an explicit user action. It does not enable dynamic fields or indirect definitions, and the editor does not silently fall back to DOM mutation, broad string replacement, whole-file regeneration, or an LLM request.
+A refusal stays in the same preview editing interface. There is no fallback to a source picker, DOM-only mutation, whole-file regeneration or an LLM request.
 
 ## Source identity and preview metadata
 
-Inspection binds the exact displayed source to the workspace file and returns a SHA-256 source hash and source targets. Selection and save acknowledgements are also associated with a preview revision. The source hash and preview revision serve different purposes: source bytes determine the patch baseline; the preview revision prevents a late selection or acknowledgement from being presented as belonging to a different rendered view.
+Inspection binds exact displayed bytes to the workspace file and returns a SHA-256 hash and source targets. The source hash determines the patch baseline; a separate preview revision prevents old selections and acknowledgements being reused for a different rendered view.
 
-Temporary preview instrumentation identifies source definitions for selection. Those markers are inserted only into the preview document, not saved into the workspace source. Ordinary exports do not add this source-edit provenance. Generated-page metadata, target IDs, and the preview revision are **not authorization**: the main process validates the request and independently reads and analyzes the current workspace source.
+Instrumentation adds temporary source markers only to the preview document. They are not saved in workspace source or added as editing metadata to ordinary exports. Both source-bound and ancestor-only edit selections carry the preview revision. Clicking a breadcrumb requests an actual ancestor selection in the current preview rather than selecting an arbitrary source ID locally.
 
-In explicit source selection mode the preview is not instrumented, and preview selection messages cannot change the selected source field. The request carries `selectionMode: "source"`; omission retains the strict preview mode. Both inspection and save use the selected mode, while source hashes, field validation and atomic conflict checks remain mandatory. Source-mode analysis results must never be used as preview provenance. The revision still correlates save acknowledgements with the current editor context.
+HTML placeholders can resolve to nested JSX/TSX files. Loaded bytes are bound to the **requested file, design and workspace**; writes use the resolved source path. Changes outside expanded file-tree directories also invalidate preview inspection.
 
-For JSX/TSX, workspace reads preserve a UTF-8 BOM so preview content, offsets, hashes, and saved bytes remain aligned. Other text readers retain their existing decoding behavior; this does not change BOM handling for JSON files. Invalid UTF-8 source is rejected rather than silently transcoded.
+Mixed/indirect operations carry `textId`, identifying a parsed child segment rather than a caller-supplied write range. Actual literal-definition ranges remain separate. Main re-resolves the target at save time.
+
+The IPC contract remains schema version 1 with additive field-layout metadata. Omitted `selectionMode` and legacy `preview` use the same unified inspector. Legacy `source` requests receive `source-mode-removed` instead of activating a permissive alternate path. Older clients omitting a segment ID cannot accidentally save a mixed field.
+
+JSX/TSX reads preserve a UTF-8 BOM so bytes, hashes and offsets remain aligned. Invalid UTF-8 is rejected rather than silently transcoded; unrelated reader formats are unchanged.
 
 ## Save and conflict behavior
 
-The main process:
+Before invoking main, the renderer verifies the selected field against the live preview. Main independently:
 
-1. Validates the versioned request, source-definition scope, operation allowlist, workspace path, and live generation state.
-2. Holds the existing stable-workspace-path and canonical-file-writer leases, rereads the source, and checks the expected SHA-256 hash.
-3. Parses the source locally, resolves the target independently, plans one source-span replacement, and reparses the result before saving.
-4. Writes an exclusive, same-directory temporary stage, syncs it, verifies staged bytes and the current source/path, and atomically replaces the source with `rename`.
-5. Returns the committed source, hash, patch, and matching preview revision, and requests a preview refresh.
+1. Validates the versioned request, scope, operation allowlist, workspace path and generation state.
+2. Holds stable-workspace-path and canonical-file-writer leases, rereads source and checks its SHA-256 hash.
+3. Parses source, resolves the target, plans one span replacement and reparses the result.
+4. Writes an exclusive same-directory temporary stage, syncs it, verifies bytes/path/source and atomically replaces the file with `rename`.
+5. Returns committed content, hash, patch and matching preview revision, and requests refresh.
 
-Detected source conflicts are refused without overwriting the newer file. Pre-commit failures do not replace the source; cleanup of the temporary stage is attempted without overwriting the current file. There is no new session history, undo/version UI, or database-backed snapshot state for this feature.
+Conflicts are refused without overwriting newer files. Pre-commit failures do not replace source. There is no new history/undo UI or database snapshot state.
 
-**Concurrency boundary:** the writer lease serializes participating app writers, including different designs using the same canonical file. It is not an operating-system compare-and-swap or a lock respected by an external editor. An external process can still race the final validation and rename (TOCTOU). The implementation does not claim otherwise.
+**Concurrency boundary:** app writer leases serialize participating writers to the same canonical file, not external editors. They are not an OS compare-and-swap; an external process can still race final validation and rename (TOCTOU).
 
-If saving has committed but the refresh notification fails, the result remains **saved**, with a warning to reload the preview. It is not reported as an unsaved edit, and the app does not blindly restore old bytes over a later external version. Inspect the workspace file when a warning or stale preview makes the visual result uncertain.
+If commit succeeds but refresh notification fails, the result remains **saved** with a reload warning. The app does not restore old bytes over later changes. Inspect the workspace file if a stale preview makes the result uncertain.
 
-## Verification and manual checks
+## Verification
 
-Relevant tests are kept alongside the implementation:
+Relevant tests:
 
-- [AST support and refusal tests](apps/desktop/src/main/source-edit-engine.test.ts)
-- [Explicit source selection and execution-boundary tests](apps/desktop/src/main/source-edit-engine.source-selection.test.ts)
-- [Atomic commit and failure tests](apps/desktop/src/main/source-edit-atomic.test.ts)
-- [Main IPC, conflicts, and BOM round-trip tests](apps/desktop/src/main/source-edits-ipc.test.ts)
-- [Workspace reader compatibility tests](apps/desktop/src/main/workspace-reader.test.ts)
-- [Generation registry and workspace lifecycle tests](apps/desktop/src/main/ipc/generate.workspace-rename.test.ts)
-- [Preload channel tests](apps/desktop/src/preload/source-edits.test.ts)
-- [Files tab integration tests](apps/desktop/src/renderer/src/components/FilesTabView.source-edit.test.tsx)
-- [Source edit persistence tests](apps/desktop/src/renderer/src/preview/source-edit-persistence.test.ts)
-- [Preview lifecycle tests](apps/desktop/src/renderer/src/preview/useWorkspaceSourceEdit.test.tsx)
-- [Runtime overlay tests](packages/runtime/src/overlay.test.ts)
+- [AST supported fields and refusals](apps/desktop/src/main/source-edit-engine.test.ts)
+- [Unified inspection and retired-mode migration](apps/desktop/src/main/source-edit-engine.source-selection.test.ts)
+- [Generated data and mixed/shared text](apps/desktop/src/main/source-edit-engine.text-coverage.test.ts)
+- [Lexical provenance, mutations and escapes](apps/desktop/src/main/source-edit-provenance.test.ts)
+- [Atomic writes](apps/desktop/src/main/source-edit-atomic.test.ts) and [main IPC](apps/desktop/src/main/source-edits-ipc.test.ts)
+- [Files tab integration](apps/desktop/src/renderer/src/components/FilesTabView.source-edit.test.tsx) and [editing lifecycle](apps/desktop/src/renderer/src/preview/useWorkspaceSourceEdit.test.tsx)
+- [Bounded field mapping](packages/runtime/src/source-edit-binding.test.ts) and [overlay selection/validation](packages/runtime/src/overlay.test.ts)
+- [Browser selection, filesystem writes, refresh and reopen](apps/desktop/src/renderer/src/components/SourceEditPanel.browser.test.ts)
 
-From the repository root, using the supported Node version and installed workspace dependencies:
+Run scoped desktop suites with `corepack pnpm --filter @open-codesign/desktop exec vitest run <test-paths>` and the runtime package with `corepack pnpm --filter @open-codesign/runtime test`.
 
-```sh
-corepack pnpm --filter @open-codesign/desktop exec vitest run src/main/source-edit-engine.test.ts src/main/source-edit-atomic.test.ts src/main/source-edits-ipc.test.ts src/main/workspace-reader.test.ts src/main/ipc/generate.workspace-rename.test.ts src/preload/source-edits.test.ts
-corepack pnpm --filter @open-codesign/desktop exec vitest run src/renderer/src/components/FilesTabView.source-edit.test.tsx src/renderer/src/preview/source-edit-persistence.test.ts src/renderer/src/preview/useWorkspaceSourceEdit.test.tsx
-corepack pnpm --filter @open-codesign/runtime test
-```
+Run the browser suite from the desktop directory with `corepack pnpm exec vitest run src/renderer/src/components/SourceEditPanel.browser.test.ts`. It uses installed system Chromium, production handlers and the atomic writer through an HTTP bridge in a temporary workspace, with external requests blocked. This verifies browser-to-filesystem persistence, **not packaged Electron/preload E2E**. No browser is bundled/downloaded and no model credentials are required. Separate tests cover path, hash, generation, BOM, version and atomic-write protections.
 
-These are test entry points, not a claim that a full browser or packaged Electron end-to-end run has passed on a particular platform. Unit tests and Node IPC fixtures do not replace real preview verification.
+Reproduction used six actual local generated designs (resume, product-page and slide structures). Their originals remain read-only and uncommitted; portable tests contain representative structures, not private copies. AST candidate counts are not a claim that every runtime state or visible field has been clicked.
 
-In the existing desktop app, manually check a self-contained supported static sample with no model credentials or network access: compare the exact source diff, save, and verify the refreshed preview. Change the file externally between selection and save and verify a conflict leaves the external content intact. Check a BOM-prefixed JSX/TSX file, an unsupported mapped or dynamic target, switching tabs during a save, and an active generation. Confirm that no generation turn, undo/history UI, or persistent preview marker appears. A successful source edit may reset preview state; test that behavior rather than assuming HMR.
-
-Also check a script containing effects or explicit mounting: preview selection should remain refused, while explicitly choosing an eligible source field can save a static literal. Confirm the source-mode preview has no source-selection markers, exact before/after bytes differ only at the selected field, and edits survive a full application restart. Use actual mouse input to check artifact controls near the preview's top-right edge; DOM-triggered clicks cannot detect shell overlays intercepting the same screen coordinates.
+In the desktop app, check a mixed static/dynamic label, an icon/text button, disabled controls, shared component definitions, fixed object/array fields and refused map parameters. Verify exact source differences and persistence after reopening. Change source externally between selection and save; change a displayed field after selection; switch files/designs during a save. Confirm source conflicts and stale/ambiguous preview mappings do not enable incorrect writes. Use actual pointer input, not only DOM-triggered clicks, and verify leaving editing restores normal controls.
 
 ## Parser dependency review
 
-The desktop app explicitly depends on `@babel/parser` **7.29.2**, under the **MIT** license; the package license was reviewed for this addition. A measured local installation contains 8 files totaling 1,995,536 bytes, including its source map. This is installed package size, **not** an installer-size delta. The same parser version was already present transitively in the lockfile; making it a direct desktop dependency adds three lockfile lines rather than introducing a new parser version. The main-process AST engine is imported on demand. Regex is unsuitable for reliably locating and validating JSX/TSX syntax; Acorn plus JSX would require an additional TypeScript strategy. Reusing the larger browser Babel bundle (roughly 3 MB) would couple Node-side analysis to a browser compilation bundle, and the main process should parse, not execute, generated source. A peer dependency is inappropriate for this internal desktop capability because the app must reliably ship the parser it requires.
+The desktop app explicitly depends on `@babel/parser` **7.29.2**, under **MIT**. A measured local installation contains 8 files totaling 1,995,536 bytes including its source map; this is installed package size, not installer delta. The version was already transitive; making it direct added three lockfile lines rather than another parser version. Main loads the AST engine on demand. Regex cannot reliably locate JSX/TSX spans; Acorn plus JSX would need an additional TypeScript strategy. Reusing browser Babel would couple Node analysis to a browser compilation bundle. A peer dependency is inappropriate for a shipped internal desktop capability. Preview-only unification adds no runtime dependency.

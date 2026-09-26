@@ -16,9 +16,12 @@
  * the runtime's iframe HTML builder.
  */
 
+import { bindSourceEditFields } from './source-edit-binding';
 import {
+  isSourceEditRevision,
   isSourceEditSelection,
   SOURCE_EDIT_ATTRIBUTE,
+  type SourceEditAncestor,
   type SourceEditOverlayContext,
   type SourceEditSelection,
 } from './source-edit-instrumentation';
@@ -37,7 +40,93 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
   }
   var currentMode = 'default';
   var sourceEditContext = ${JSON.stringify(sourceEdit ?? null).replaceAll('<', '\\u003c')};
+  var bindFields = ${sourceEdit?.fieldPlans ? bindSourceEditFields.toString() : 'null'};
+  var editHitLayer = null;
+  var pinnedSourceEditSignature = '';
+  var fieldBindings = new WeakMap();
+  var invalidTextFields = new WeakMap();
+  var textObserver = null;
+  var mutationOverflow = false;
+  function markedFieldPlan(el) {
+    if (!sourceEditContext || !sourceEditContext.fieldPlans || !el || !el.getAttribute) return null;
+    var marker = el.getAttribute('${SOURCE_EDIT_ATTRIBUTE}');
+    var prefix = sourceEditContext.previewRevision + ':';
+    return marker && marker.indexOf(prefix) === 0 ? sourceEditContext.fieldPlans[marker.slice(prefix.length)] : null;
+  }
+  function rememberBindings(el, plan) {
+    if (fieldBindings.has(el) || !plan || !bindFields) return;
+    var bindings = new Map();
+    bindFields(el, plan, sourceEditContext.previewRevision, function(key, node) { bindings.set(key, node); });
+    fieldBindings.set(el, bindings);
+  }
+  function invalidateRemovedText(host, node, oldValue) {
+    var plan = markedFieldPlan(host);
+    if (!plan) return;
+    var bindings = fieldBindings.get(host);
+    var invalid = invalidTextFields.get(host) || new Set();
+    for (var i = 0; i < plan.textLayout.length; i++) {
+      var part = plan.textLayout[i];
+      if (part.kind !== 'text') continue;
+      var key = 'text:' + (part.textId || 'only');
+      if (bindings && bindings.has(key) ? bindings.get(key) === node : part.value === oldValue) invalid.add(key);
+    }
+    invalidTextFields.set(host, invalid);
+  }
+  function processTextMutations(records) {
+    if (records.length > 4096) { mutationOverflow = true; return; }
+    var oldParents = new WeakMap();
+    var scanRoots = [];
+    var touched = new Set();
+    var work = 0;
+    for (var i = 0; i < records.length; i++) {
+      var record = records[i];
+      if (record.type === 'childList') {
+        touched.add(record.target);
+        for (var j = 0; j < record.removedNodes.length; j++) {
+          if (++work > 10000) { mutationOverflow = true; return; }
+          var removed = record.removedNodes[j];
+          if (removed.nodeType === 3) {
+            var owners = oldParents.get(removed) || new Set();
+            owners.add(record.target);
+            oldParents.set(removed, owners);
+            invalidateRemovedText(record.target, removed, removed.textContent);
+          }
+        }
+        for (var j = 0; j < record.addedNodes.length; j++) {
+          if (++work > 10000) { mutationOverflow = true; return; }
+          if (record.addedNodes[j].nodeType === 1) scanRoots.push(record.addedNodes[j]);
+        }
+      }
+    }
+    for (var i = 0; i < records.length; i++) {
+      var record = records[i];
+      if (record.type === 'characterData') {
+        var owners = oldParents.get(record.target) || new Set();
+        if (record.target.parentElement) owners.add(record.target.parentElement);
+        var ownerList = Array.from(owners);
+        for (var j = 0; j < ownerList.length; j++) {
+          if (++work > 10000) { mutationOverflow = true; return; }
+          touched.add(ownerList[j]);
+          invalidateRemovedText(ownerList[j], record.target, record.oldValue);
+        }
+      }
+    }
+    touched.forEach(function(el) { rememberBindings(el, markedFieldPlan(el)); });
+    for (var i = 0; i < scanRoots.length; i++) {
+      var stack = [scanRoots[i]];
+      while (stack.length) {
+        if (++work > 10000) { mutationOverflow = true; return; }
+        var el = stack.pop();
+        rememberBindings(el, markedFieldPlan(el));
+        for (var child = el.firstElementChild; child; child = child.nextElementSibling) stack.push(child);
+      }
+    }
+  }
+  function flushTextMutations() {
+    if (textObserver) processTextMutations(textObserver.takeRecords());
+  }
   function sourceEditSelection(el) {
+    flushTextMutations();
     if (!sourceEditContext || !el || typeof el.getAttribute !== 'function') return null;
     var marker = el.getAttribute('${SOURCE_EDIT_ATTRIBUTE}');
     var prefix = sourceEditContext.previewRevision + ':';
@@ -45,8 +134,35 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     var id = marker.slice(prefix.length);
     if (!Object.prototype.hasOwnProperty.call(sourceEditContext.targets, id)) return null;
     if (String(el.tagName).toLowerCase() !== sourceEditContext.targets[id].toLowerCase()) return null;
+    var fieldPlan = sourceEditContext.fieldPlans && sourceEditContext.fieldPlans[id];
+    if (!fieldPlan && sourceEditContext.directTexts && Object.prototype.hasOwnProperty.call(sourceEditContext.directTexts, id)) {
+      var directText = '';
+      for (var i = 0; i < el.childNodes.length; i++) {
+        if (el.childNodes[i].nodeType === 3) directText += el.childNodes[i].textContent;
+      }
+      if (directText !== sourceEditContext.directTexts[id]) return null;
+    }
     // Authored code can forge same-frame DOM and messages; main must revalidate the source.
-    return { targetId: id, sourceHash: sourceEditContext.sourceHash, previewRevision: sourceEditContext.previewRevision };
+    var selection = { targetId: id, sourceHash: sourceEditContext.sourceHash, previewRevision: sourceEditContext.previewRevision };
+    if (fieldPlan && bindFields) {
+      rememberBindings(el, fieldPlan);
+      var remembered = fieldBindings.get(el);
+      selection.fieldStates = bindFields(el, fieldPlan, sourceEditContext.previewRevision, function(key, node) {
+        if (remembered && remembered.has(key) && remembered.get(key) !== node) {
+          var invalid = invalidTextFields.get(el) || new Set();
+          invalid.add(key);
+          invalidTextFields.set(el, invalid);
+        }
+      });
+      var invalid = invalidTextFields.get(el);
+      selection.fieldStates.forEach(function(field) {
+        if (field.key.indexOf('text:') === 0 && (mutationOverflow || (invalid && invalid.has(field.key)))) {
+          field.status = mutationOverflow ? 'unmapped' : 'changed';
+          field.message = 'The original preview text node changed or was removed; reload before editing this field.';
+        }
+      });
+    }
+    return selection;
   }
 
   window.addEventListener('keydown', function(e) {
@@ -215,6 +331,86 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     return '/' + parts.join('/');
   }
 
+  function sourceAncestors(el) {
+    var result = [];
+    var parent = el && el.parentElement;
+    while (parent && parent !== document.body && result.length < 16) {
+      var marker = parent.getAttribute && parent.getAttribute('${SOURCE_EDIT_ATTRIBUTE}');
+      var prefix = sourceEditContext && sourceEditContext.previewRevision + ':';
+      if (marker && prefix && marker.indexOf(prefix) === 0 && Object.prototype.hasOwnProperty.call(sourceEditContext.targets, marker.slice(prefix.length))) {
+        result.push({ selector: getXPath(parent), tagName: String(parent.tagName).toLowerCase() });
+      }
+      parent = parent.parentElement;
+    }
+    return result;
+  }
+  function emitSourceSelection(el) {
+    if (!el || !el.getBoundingClientRect) return;
+    var rect = el.getBoundingClientRect();
+    var selector = getXPath(el);
+    clearHover();
+    pinElement(el, selector, false);
+    var provenance = sourceEditSelection(el);
+    pinnedSourceEditSignature = JSON.stringify(provenance);
+    var selection = {
+      __codesign: true, type: 'ELEMENT_SELECTED', selector: selector,
+      tag: String(el.tagName).toLowerCase(), outerHTML: String(el.outerHTML || '').slice(0, 800),
+      rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+      sourceEditAncestors: sourceAncestors(el),
+      sourceEditRevision: { sourceHash: sourceEditContext.sourceHash, previewRevision: sourceEditContext.previewRevision }
+    };
+    if (provenance) selection.sourceEdit = provenance;
+    window.parent.postMessage(selection, '*');
+  }
+  function elementUnderEditLayer(x, y) {
+    if (!editHitLayer) return document.elementFromPoint(x, y);
+    editHitLayer.style.pointerEvents = 'none';
+    try { return document.elementFromPoint(x, y); }
+    finally { editHitLayer.style.pointerEvents = 'auto'; }
+  }
+  function syncEditHitLayer() {
+    if (currentMode !== 'source-edit') {
+      if (editHitLayer) editHitLayer.remove();
+      editHitLayer = null;
+      return;
+    }
+    if (!editHitLayer) {
+      editHitLayer = document.createElement('div');
+      editHitLayer.setAttribute('data-codesign-edit-hit-layer', '');
+      editHitLayer.setAttribute('aria-hidden', 'true');
+      editHitLayer.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:transparent;cursor:crosshair;touch-action:none';
+      editHitLayer.addEventListener('wheel', function(e) {
+        if (e.ctrlKey) return;
+        var el = elementUnderEditLayer(e.clientX, e.clientY);
+        while (el) {
+          if (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) {
+            var style = window.getComputedStyle(el);
+            if (/(auto|scroll)/.test(style.overflowY + style.overflowX) || el === document.scrollingElement) {
+              var unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
+              el.scrollBy(e.deltaX * unit, e.deltaY * unit);
+              e.preventDefault();
+              return;
+            }
+          }
+          el = el.parentElement;
+        }
+      }, { passive: false });
+    }
+    if (!editHitLayer.isConnected && document.documentElement) document.documentElement.appendChild(editHitLayer);
+  }
+  function onEditPointer(e) {
+    if (currentMode !== 'source-edit') return;
+    var el = elementUnderEditLayer(e.clientX, e.clientY);
+    if (e.type === 'pointerdown') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (el) emitSourceSelection(el);
+    } else {
+      if (hovered !== el) clearHover();
+      hovered = el;
+      if (hovered && hovered !== pinned) setOutline(hovered, HOVER_OUTLINE);
+    }
+  }
   function onMouseOver(e) {
     if (currentMode !== 'comment') return;
     // Don't override pinned outline on hover-in of a different element.
@@ -231,6 +427,13 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     clearHover();
   }
   function onClick(e) {
+    if (currentMode === 'source-edit') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var hit = e.target === editHitLayer ? elementUnderEditLayer(e.clientX, e.clientY) : e.target;
+      if (hit && hit !== pinned) emitSourceSelection(hit);
+      return;
+    }
     if (currentMode === 'comment') {
       e.preventDefault();
       e.stopPropagation();
@@ -302,12 +505,26 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     var data = ev.data;
     if (!data || data.__codesign !== true) return;
     if (data.type === 'SET_MODE') {
-      var next = data.mode === 'comment' ? 'comment' : 'default';
+      var next = data.mode === 'source-edit' && sourceEditContext ? 'source-edit' : data.mode === 'comment' ? 'comment' : 'default';
       if (next === currentMode) return;
       currentMode = next;
-      if (currentMode === 'default') {
-        clearHover();
-        clearPinned();
+      clearHover();
+      clearPinned();
+      syncEditHitLayer();
+      return;
+    }
+    if (data.type === 'SOURCE_EDIT_SELECT' || data.type === 'SOURCE_EDIT_VALIDATE') {
+      if (currentMode !== 'source-edit' || !sourceEditContext || data.sourceHash !== sourceEditContext.sourceHash || data.previewRevision !== sourceEditContext.previewRevision) return;
+      if (data.type === 'SOURCE_EDIT_SELECT') {
+        if (typeof data.selector !== 'string' || data.selector.length > 4000 || !pinned) return;
+        var ancestors = sourceAncestors(pinned);
+        if (!ancestors.some(function(item) { return item.selector === data.selector; })) return;
+        var ancestor = resolveSelector(data.selector);
+        if (ancestor) emitSourceSelection(ancestor);
+      } else if (typeof data.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(data.requestId) && typeof data.fieldKey === 'string' && data.fieldKey.length < 100) {
+        var validated = pinned && pinned.isConnected ? sourceEditSelection(pinned) : null;
+        if (!validated || validated.targetId !== data.targetId) validated = null;
+        window.parent.postMessage({ __codesign: true, type: 'SOURCE_EDIT_VALIDATED', requestId: data.requestId, sourceEdit: validated }, '*');
       }
       return;
     }
@@ -376,7 +593,15 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     { evt: 'click', fn: onClick },
     { evt: 'submit', fn: function(e) { e.preventDefault(); } }
   ];
+  if (sourceEditContext) installs.push({ evt: 'pointerdown', fn: onEditPointer }, { evt: 'pointermove', fn: onEditPointer });
   function reattach() {
+    if (currentMode === 'source-edit') {
+      syncEditHitLayer();
+      if (pinned && pinned.isConnected) {
+        var signature = JSON.stringify(sourceEditSelection(pinned));
+        if (signature !== pinnedSourceEditSignature) emitSourceSelection(pinned);
+      }
+    }
     for (var i = 0; i < installs.length; i++) {
       var spec = installs[i];
       try { document.removeEventListener(spec.evt, spec.fn, true); } catch (err) { warnOnce('removeEventListener failed for ' + spec.evt, err); }
@@ -399,6 +624,11 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
         window.__cs_scroll = true;
       } catch (err) { warnOnce('attach scroll/resize listener failed', err); }
     }
+  }
+  if (sourceEditContext && bindFields && window.MutationObserver && document.documentElement) {
+    textObserver = new window.MutationObserver(processTextMutations);
+    textObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true, characterDataOldValue: true });
+    processTextMutations([{ type: 'childList', target: document.documentElement, removedNodes: [], addedNodes: [document.documentElement] }]);
   }
   reattach();
   if (window.MutationObserver && document.body) {
@@ -445,6 +675,8 @@ export interface OverlayMessage {
   __codesign: true;
   type: 'ELEMENT_SELECTED';
   sourceEdit?: SourceEditSelection;
+  sourceEditAncestors?: SourceEditAncestor[];
+  sourceEditRevision?: Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>;
   selector: string;
   tag: string;
   outerHTML: string;
@@ -461,6 +693,20 @@ export function isOverlayMessage(data: unknown): data is OverlayMessage {
     d.__codesign === true &&
     d.type === 'ELEMENT_SELECTED' &&
     (d.sourceEdit === undefined || isSourceEditSelection(d.sourceEdit)) &&
+    (d.sourceEditRevision === undefined || isSourceEditRevision(d.sourceEditRevision)) &&
+    (d.sourceEditAncestors === undefined ||
+      (Array.isArray(d.sourceEditAncestors) &&
+        d.sourceEditAncestors.length <= 16 &&
+        d.sourceEditAncestors.every(
+          (ancestor) =>
+            ancestor &&
+            typeof ancestor.selector === 'string' &&
+            ancestor.selector.length > 0 &&
+            ancestor.selector.length <= 4000 &&
+            typeof ancestor.tagName === 'string' &&
+            /^[a-z][A-Za-z0-9-]{0,127}$/.test(ancestor.tagName) &&
+            Object.keys(ancestor).every((key) => ['selector', 'tagName'].includes(key)),
+        ))) &&
     typeof d.selector === 'string' &&
     d.selector.length > 0 &&
     d.selector.length <= 8192 &&

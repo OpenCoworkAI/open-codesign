@@ -1,6 +1,7 @@
 import type { CommentRow } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import type { DesignFileEntry } from '../hooks/useDesignFiles';
+import { handlePreviewFullscreenEscape } from '../preview/fullscreen';
 import { openFileTab } from '../store/slices/tabs';
 import {
   chooseWorkspacePreviewSourceMode,
@@ -182,6 +183,26 @@ describe('FilesTabView preview helpers', () => {
         '<main>Hello</main><script type="module">console.log("ok")</script>',
       ),
     ).toBe(false);
+  });
+
+  it('routes Escape to explicit source-edit exit and otherwise preserves fullscreen behavior', () => {
+    const onSourceEditExit = vi.fn();
+    const onSelectionCleared = vi.fn();
+    const input = {
+      onSourceEditExit,
+      onSelectionCleared,
+      selectCanvasElement: vi.fn(),
+      openCommentBubble: vi.fn(),
+      applyLiveRects: vi.fn(),
+      pushIframeError: vi.fn(),
+    };
+    const editing = createWorkspaceFilePreviewMessageHandlers({ ...input, sourceEditMode: true });
+    editing.onPreviewEscape?.();
+    expect(onSourceEditExit).toHaveBeenCalledOnce();
+    expect(onSelectionCleared).not.toHaveBeenCalled();
+    expect(createWorkspaceFilePreviewMessageHandlers(input).onPreviewEscape).toBe(
+      handlePreviewFullscreenEscape,
+    );
   });
 
   it('forwards element selection messages from file preview iframes into comment state', () => {
@@ -372,28 +393,24 @@ describe('FilesTabView preview helpers', () => {
     ).toBe(false);
   });
 
-  it('rejects stale preview sources from another selected file', () => {
-    expect(
-      isPreviewSourceUsableForSelectedPath({
-        selectedPath: 'App.jsx',
-        previewSourcePath: 'DESIGN.md',
-        selectedPreviewKind: 'runtime',
-      }),
-    ).toBe(false);
-    expect(
-      isPreviewSourceUsableForSelectedPath({
-        selectedPath: 'App.jsx',
-        previewSourcePath: 'App.jsx',
-        selectedPreviewKind: 'runtime',
-      }),
-    ).toBe(true);
-    expect(
-      isPreviewSourceUsableForSelectedPath({
-        selectedPath: 'index.html',
-        previewSourcePath: 'src/App.jsx',
-        selectedPreviewKind: 'runtime',
-      }),
-    ).toBe(true);
+  it('binds resolved preview sources to the requested file, design, and workspace', () => {
+    const request = { path: 'pages/preview.html', designId: 'a', workspacePath: '/workspace/a' };
+    expect(isPreviewSourceUsableForSelectedPath({ request, loadedRequest: null })).toBe(false);
+    expect(isPreviewSourceUsableForSelectedPath({ request, loadedRequest: { ...request } })).toBe(
+      true,
+    );
+    for (const change of [
+      { path: 'pages/other.html' },
+      { designId: 'b' },
+      { workspacePath: '/workspace/b' },
+    ]) {
+      expect(
+        isPreviewSourceUsableForSelectedPath({
+          request,
+          loadedRequest: { ...request, ...change },
+        }),
+      ).toBe(false);
+    }
   });
 
   it('splits YAML frontmatter before rendering markdown previews', () => {

@@ -96,6 +96,10 @@ interface ListenerHarness {
   windowListeners: Map<string, (e: unknown) => void>;
   parent: object;
   postedToParent: unknown[];
+  setHitTarget: (target: unknown) => void;
+  runTick: () => void;
+  queueMutations: (records: object[]) => void;
+  hitLayer: { isConnected: boolean; style: Record<string, string> };
 }
 
 function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
@@ -106,24 +110,56 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
   const windowListeners = new Map<string, (e: unknown) => void>();
   const postedToParent: unknown[] = [];
   const parent = { postMessage: (msg: unknown) => postedToParent.push(msg) };
+  let hitTarget: unknown = null;
+  let tick = () => {};
+  const hitLayer = {
+    isConnected: false,
+    style: {} as Record<string, string>,
+    setAttribute: () => {},
+    addEventListener: () => {},
+    remove: () => {
+      hitLayer.isConnected = false;
+    },
+  };
 
   const fakeDocument = {
     body,
     querySelectorAll: (selector: string) => selectorMatches.get(selector) ?? [],
+    querySelector: (selector: string) => selectorMatches.get(selector)?.[0] ?? null,
+    createElement: () => hitLayer,
+    documentElement: {
+      appendChild: () => {
+        hitLayer.isConnected = true;
+      },
+    },
+    elementFromPoint: () => hitTarget,
     getElementById: (id: string) => elementIds.get(id) ?? null,
     addEventListener: (type: string, fn: (e: unknown) => void) => {
       documentListeners.set(type, fn);
     },
     removeEventListener: () => {},
   };
+  let mutations: object[] = [];
+  class MutationObserver {
+    observe() {}
+    takeRecords() {
+      const records = mutations;
+      mutations = [];
+      return records;
+    }
+  }
   const fakeWindow = {
+    MutationObserver,
     CSS: { escape: (value: string) => value.replaceAll(':', '\\:') },
     addEventListener: (type: string, fn: (e: unknown) => void) => {
       windowListeners.set(type, fn);
     },
     parent,
   };
-  const fakeSetInterval = () => 1;
+  const fakeSetInterval = (fn: () => void) => {
+    tick = fn;
+    return 1;
+  };
   const sandbox = new Function(
     'window',
     'document',
@@ -140,6 +176,14 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
     windowListeners,
     parent,
     postedToParent,
+    setHitTarget: (target) => {
+      hitTarget = target;
+    },
+    runTick: () => tick(),
+    queueMutations: (records) => {
+      mutations.push(...records);
+    },
+    hitLayer,
   };
 }
 
@@ -675,7 +719,13 @@ describe('source provenance selection hints', () => {
     previewRevision: 'preview-1',
     targets: { '10:50': 'button' },
   };
-  function click(h: ListenerHarness, marker: string | null, tagName = 'BUTTON', parent?: object) {
+  function click(
+    h: ListenerHarness,
+    marker: string | null,
+    tagName = 'BUTTON',
+    parent?: object,
+    childNodes: { nodeType: number; textContent: string }[] = [],
+  ) {
     h.windowListeners.get('message')?.({
       source: h.parent,
       data: { __codesign: true, type: 'SET_MODE', mode: 'comment' },
@@ -689,6 +739,7 @@ describe('source provenance selection hints', () => {
         parentElement: parent ?? h.body,
         style: {},
         outerHTML: '<button>Save</button>',
+        childNodes,
         getAttribute: (name: string) => (name === 'data-codesign-source-id' ? marker : null),
         getBoundingClientRect: () => ({ top: 0, left: 0, width: 10, height: 10 }),
       },
@@ -706,6 +757,31 @@ describe('source provenance selection hints', () => {
       },
     });
     expect(isOverlayMessage(selection)).toBe(true);
+  });
+  it('validates direct text without consuming icon or emphasized sibling content', () => {
+    const h = runOverlayWithHarness(
+      buildOverlayScript({ ...context, directTexts: { '10:50': ' Save now' } }),
+    );
+    expect(
+      click(h, 'preview-1:10:50', 'BUTTON', undefined, [
+        { nodeType: 1, textContent: 'icon' },
+        { nodeType: 3, textContent: ' Save' },
+        { nodeType: 8, textContent: 'React separator' },
+        { nodeType: 3, textContent: ' now' },
+      ]),
+    ).toHaveProperty('sourceEdit');
+  });
+  it.each([
+    'Changed by an effect',
+    'Save now',
+    ' Save now!',
+  ])('refuses DOM text changed from the inspected definition: %s', (textContent) => {
+    const h = runOverlayWithHarness(
+      buildOverlayScript({ ...context, directTexts: { '10:50': ' Save now' } }),
+    );
+    expect(
+      click(h, 'preview-1:10:50', 'BUTTON', undefined, [{ nodeType: 3, textContent }]),
+    ).not.toHaveProperty('sourceEdit');
   });
   it('never guesses an ancestor origin or trusts unknown marker/tag pairs', () => {
     for (const [marker, tagName] of [
@@ -764,6 +840,311 @@ describe('source provenance selection hints', () => {
       { ...message, outerHTML: 'x'.repeat(801) },
       { ...message, parentOuterHTML: 'x'.repeat(601) },
       { ...message, tag: 'x'.repeat(129) },
+    ])
+      expect(isOverlayMessage(invalid)).toBe(false);
+  });
+});
+
+describe('unified preview edit selection and validation', () => {
+  const sourceHash = 'b'.repeat(64);
+  const previewRevision = 'preview-edit';
+  function fixture() {
+    const h = runOverlayWithHarness(
+      buildOverlayScript({
+        sourceHash,
+        previewRevision,
+        targets: { '10:50': 'button' },
+        fieldPlans: {
+          '10:50': {
+            textLayout: [
+              { kind: 'text', textId: '11:20', value: 'Cart (' },
+              { kind: 'dynamic' },
+              { kind: 'text', textId: '30:40', value: ')' },
+            ],
+            editableFields: [
+              { kind: 'set-text', textId: '11:20', value: 'Cart (' },
+              { kind: 'set-text', textId: '30:40', value: ')' },
+            ],
+          },
+        },
+      }),
+    );
+    const button = {
+      nodeType: 1,
+      tagName: 'BUTTON',
+      id: 'cart',
+      parentElement: h.body,
+      style: {},
+      isConnected: true,
+      outerHTML: '<button disabled>Cart (2)</button>',
+      childNodes: [
+        { nodeType: 3, textContent: 'Cart (' },
+        { nodeType: 3, textContent: '2' },
+        { nodeType: 3, textContent: ')' },
+      ],
+      getAttribute: (name: string) =>
+        name === 'data-codesign-source-id' ? 'preview-edit:10:50' : null,
+      getBoundingClientRect: () => ({ top: 0, left: 0, width: 100, height: 30 }),
+    };
+    h.selectorMatches.set('#cart', [button]);
+    h.setHitTarget(button);
+    function control(type: string, extra: Record<string, unknown> = {}) {
+      h.windowListeners.get('message')?.({
+        source: h.parent,
+        data: { __codesign: true, type, sourceHash, previewRevision, ...extra },
+      });
+    }
+    control('SET_MODE', { mode: 'source-edit' });
+    function pointer() {
+      const preventDefault = vi.fn();
+      const stopImmediatePropagation = vi.fn();
+      h.documentListeners.get('pointerdown')?.({
+        type: 'pointerdown',
+        clientX: 10,
+        clientY: 10,
+        preventDefault,
+        stopImmediatePropagation,
+        target: h.hitLayer,
+      });
+      return { preventDefault, stopImmediatePropagation };
+    }
+    return { h, button, control, pointer };
+  }
+  it('selects disabled hosts via a removable hit layer without dispatching artifact clicks', () => {
+    const { h, control, pointer } = fixture();
+    expect(h.hitLayer.isConnected).toBe(true);
+    const event = pointer();
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
+    const selected = h.postedToParent.at(-1);
+    expect(isOverlayMessage(selected)).toBe(true);
+    expect(selected).toMatchObject({
+      sourceEditRevision: { sourceHash, previewRevision },
+      sourceEdit: {
+        targetId: '10:50',
+        fieldStates: [
+          { key: 'text:11:20', status: 'ready' },
+          { key: 'text:30:40', status: 'ready' },
+        ],
+      },
+    });
+    control('SET_MODE', { mode: 'default' });
+    expect(h.hitLayer.isConnected).toBe(false);
+  });
+  it('revalidates the pinned instance immediately before saving and reports DOM changes', () => {
+    const { h, button, control, pointer } = fixture();
+    pointer();
+    const prefixNode = button.childNodes[0];
+    if (!prefixNode) throw new Error('Missing text node');
+    prefixNode.textContent = 'Changed (';
+    control('SOURCE_EDIT_VALIDATE', {
+      requestId: 'save-1',
+      targetId: '10:50',
+      fieldKey: 'text:11:20',
+    });
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      type: 'SOURCE_EDIT_VALIDATED',
+      requestId: 'save-1',
+      sourceEdit: {
+        fieldStates: [
+          { key: 'text:11:20', status: 'changed' },
+          { key: 'text:30:40', status: 'ready' },
+        ],
+      },
+    });
+    h.runTick();
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      type: 'ELEMENT_SELECTED',
+      sourceEdit: {
+        fieldStates: [
+          { key: 'text:11:20', status: 'changed' },
+          { key: 'text:30:40', status: 'ready' },
+        ],
+      },
+    });
+    button.isConnected = false;
+    control('SOURCE_EDIT_VALIDATE', {
+      requestId: 'save-2',
+      targetId: '10:50',
+      fieldKey: 'text:11:20',
+    });
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      type: 'SOURCE_EDIT_VALIDATED',
+      sourceEdit: null,
+    });
+  });
+  it('requires current trusted controls and explicit ancestor navigation', () => {
+    const { h, button, control, pointer } = fixture();
+    const icon = {
+      ...button,
+      tagName: 'SVG',
+      id: 'icon',
+      parentElement: button,
+      outerHTML: '<svg/>',
+      getAttribute: () => null,
+    };
+    h.setHitTarget(icon);
+    pointer();
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      sourceEditAncestors: [{ selector: '#cart', tagName: 'button' }],
+      sourceEditRevision: { sourceHash, previewRevision },
+    });
+    expect(h.postedToParent.at(-1)).not.toHaveProperty('sourceEdit');
+    const count = h.postedToParent.length;
+    h.windowListeners.get('message')?.({
+      source: {},
+      data: {
+        __codesign: true,
+        type: 'SOURCE_EDIT_SELECT',
+        selector: '#cart',
+        sourceHash,
+        previewRevision,
+      },
+    });
+    control('SOURCE_EDIT_SELECT', { selector: '#cart', previewRevision: 'old' });
+    control('SOURCE_EDIT_SELECT', { selector: '#elsewhere' });
+    expect(h.postedToParent).toHaveLength(count);
+    control('SOURCE_EDIT_SELECT', { selector: '#cart' });
+    expect(h.postedToParent.at(-1)).toMatchObject({ sourceEdit: { targetId: '10:50' } });
+  });
+  it('flushes pre-selection removals rather than binding a same-valued dynamic survivor', () => {
+    const { h, button, pointer } = fixture();
+    const removed = { nodeType: 3, textContent: 'Cart (' };
+    // The first surviving node has the same value but came from dynamic content.
+    h.queueMutations([
+      { type: 'childList', target: button, removedNodes: [removed], addedNodes: [] },
+    ]);
+    pointer();
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      sourceEdit: {
+        fieldStates: [
+          { key: 'text:11:20', status: 'changed' },
+          { key: 'text:30:40', status: 'ready' },
+        ],
+      },
+    });
+  });
+  it('retains original owners when changed text moves before the first observer delivery', () => {
+    const { h, button, pointer } = fixture();
+    const other = { getAttribute: () => null };
+    const changed = { nodeType: 3, textContent: 'Z', parentElement: other };
+    h.queueMutations([
+      { type: 'characterData', target: changed, oldValue: 'Cart (' },
+      { type: 'childList', target: button, removedNodes: [changed], addedNodes: [] },
+      { type: 'childList', target: other, removedNodes: [], addedNodes: [changed] },
+    ]);
+    pointer();
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      sourceEdit: {
+        fieldStates: [
+          { key: 'text:11:20', status: 'changed' },
+          { key: 'text:30:40', status: 'ready' },
+        ],
+      },
+    });
+  });
+  it('tracks exact static node identity without poisoning an established dynamic sibling', () => {
+    const { h, button, pointer, control } = fixture();
+    pointer();
+    const dynamicNode = button.childNodes[1];
+    const original = button.childNodes[0];
+    if (!dynamicNode || !original) throw new Error('Missing fixture text');
+    dynamicNode.textContent = 'Cart (';
+    Object.assign(dynamicNode, { parentElement: button });
+    h.queueMutations([{ type: 'characterData', target: dynamicNode, oldValue: '2' }]);
+    control('SOURCE_EDIT_VALIDATE', {
+      requestId: 'dynamic',
+      targetId: '10:50',
+      fieldKey: 'text:11:20',
+    });
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      sourceEdit: {
+        fieldStates: [
+          { key: 'text:11:20', status: 'ready' },
+          { key: 'text:30:40', status: 'ready' },
+        ],
+      },
+    });
+    button.childNodes[0] = { nodeType: 3, textContent: 'Cart (' };
+    h.queueMutations([
+      {
+        type: 'childList',
+        target: button,
+        removedNodes: [original],
+        addedNodes: [button.childNodes[0]],
+      },
+    ]);
+    control('SOURCE_EDIT_VALIDATE', {
+      requestId: 'replacement',
+      targetId: '10:50',
+      fieldKey: 'text:11:20',
+    });
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      sourceEdit: {
+        fieldStates: [
+          { key: 'text:11:20', status: 'changed' },
+          { key: 'text:30:40', status: 'ready' },
+        ],
+      },
+    });
+  });
+  it('fails text readiness closed when mutation observation exceeds its budget', () => {
+    const { h, button, pointer } = fixture();
+    h.queueMutations(
+      Array.from({ length: 4097 }, () => ({
+        type: 'childList',
+        target: button,
+        removedNodes: [],
+        addedNodes: [],
+      })),
+    );
+    pointer();
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      sourceEdit: { fieldStates: [{ status: 'unmapped' }, { status: 'unmapped' }] },
+    });
+  });
+  it('bounds new field states, ancestor paths and revisions', () => {
+    const { h, pointer } = fixture();
+    pointer();
+    const message = h.postedToParent.at(-1);
+    if (!isOverlayMessage(message)) throw new Error('Missing selection');
+    for (const invalid of [
+      {
+        ...message,
+        sourceEdit: {
+          ...message.sourceEdit,
+          fieldStates: [{ key: 'text:11:20', status: 'approved' }],
+        },
+      },
+      {
+        ...message,
+        sourceEdit: {
+          ...message.sourceEdit,
+          fieldStates: [{ key: 'text:11:20', status: 'ready', start: 0 }],
+        },
+      },
+      {
+        ...message,
+        sourceEdit: {
+          ...message.sourceEdit,
+          fieldStates: [
+            { key: 'text:11:20', status: 'ready' },
+            { key: 'text:11:20', status: 'ready' },
+          ],
+        },
+      },
+      {
+        ...message,
+        sourceEditAncestors: Array.from({ length: 17 }, () => ({
+          selector: '#cart',
+          tagName: 'button',
+        })),
+      },
+      {
+        ...message,
+        sourceEditAncestors: [{ selector: '#cart', tagName: 'button', sourcePath: '../other.jsx' }],
+      },
+      { ...message, sourceEditRevision: { sourceHash: 'bad', previewRevision } },
     ])
       expect(isOverlayMessage(invalid)).toBe(false);
   });

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// Source selection edits an explicitly chosen literal without trusting a rendered element.
+// The retired source value remains parseable only to return an explicit migration refusal.
 export const SourceEditSelectionMode = z.enum(['preview', 'source']);
 export type SourceEditSelectionMode = z.infer<typeof SourceEditSelectionMode>;
 
@@ -20,7 +20,17 @@ export const SourceEditStyleProperty = z.enum([
 export type SourceEditStyleProperty = z.infer<typeof SourceEditStyleProperty>;
 
 export const SourceEditOperation = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('set-text'), value: z.string().max(100_000) }).strict(),
+  z
+    .object({
+      kind: z.literal('set-text'),
+      value: z.string().max(100_000),
+      // Identifies one direct text segment, not a rendered instance or a client-supplied write range.
+      textId: z
+        .string()
+        .regex(/^\d+:\d+$/)
+        .optional(),
+    })
+    .strict(),
   z
     .object({
       kind: z.literal('set-attribute'),
@@ -37,6 +47,32 @@ export const SourceEditOperation = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 export type SourceEditOperation = z.infer<typeof SourceEditOperation>;
+
+export function sourceEditFieldKey(operation: SourceEditOperation): string {
+  if (operation.kind === 'set-text') return `text:${operation.textId ?? 'only'}`;
+  if (operation.kind === 'set-attribute') return `attribute:${operation.name}`;
+  return `style:${operation.property}`;
+}
+
+export const SourceEditTextLayout = z
+  .array(
+    z.discriminatedUnion('kind', [
+      z
+        .object({
+          kind: z.literal('text'),
+          textId: z
+            .string()
+            .regex(/^\d+:\d+$/)
+            .optional(),
+          value: z.string().max(100_000),
+        })
+        .strict(),
+      z.object({ kind: z.literal('element'), targetId: z.string().regex(/^\d+:\d+$/) }).strict(),
+      z.object({ kind: z.literal('dynamic') }).strict(),
+    ]),
+  )
+  .max(10_000);
+export type SourceEditTextLayout = z.infer<typeof SourceEditTextLayout>;
 
 export const SourceEditUnsupported = z
   .object({
@@ -57,6 +93,24 @@ export const SourceEditTarget = z
     insertionOffset: z.number().int().nonnegative(),
     scope: SourceEditScope,
     editableFields: z.array(SourceEditOperation),
+    // Legacy aggregate text is informational; current previews bind fields independently.
+    directText: z.string().optional(),
+    textLayout: SourceEditTextLayout.optional(),
+    textSources: z
+      .array(
+        z
+          .object({
+            textId: z
+              .string()
+              .regex(/^\d+:\d+$/)
+              .optional(),
+            start: z.number().int().nonnegative(),
+            end: z.number().int().nonnegative(),
+            origin: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
     unsupported: z.array(SourceEditUnsupported),
   })
   .strict();

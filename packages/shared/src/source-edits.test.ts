@@ -6,6 +6,7 @@ import {
   SourceEditInspectResultV1,
   SourceEditOperation,
   SourceEditTarget,
+  sourceEditFieldKey,
 } from './source-edits';
 
 const hash = 'a'.repeat(64);
@@ -70,6 +71,57 @@ describe('source edit wire contracts', () => {
         targets: [target],
       }).status,
     ).toBe('ready');
+  });
+  it('carries ordered field layout while rejecting executable or oversized descriptors', () => {
+    const textLayout = [
+      { kind: 'text', textId: '38:43', value: 'Cart (' },
+      { kind: 'dynamic' },
+      { kind: 'element', targetId: '44:49' },
+    ];
+    expect(SourceEditTarget.parse({ ...target, textLayout }).textLayout).toEqual(textLayout);
+    for (const invalid of [
+      [{ kind: 'text', value: 'x', start: 0, end: 100 }],
+      [{ kind: 'dynamic', expression: 'run()' }],
+      [{ kind: 'element', targetId: '../file.jsx' }],
+      [{ kind: 'text', value: 'x'.repeat(100_001) }],
+      Array.from({ length: 10_001 }, () => ({ kind: 'dynamic' })),
+    ])
+      expect(SourceEditTarget.safeParse({ ...target, textLayout: invalid }).success).toBe(false);
+    expect(SourceEditApplyRequestV1.safeParse({ ...request, textLayout }).success).toBe(false);
+  });
+  it('uses field identities independent from current displayed values', () => {
+    expect(sourceEditFieldKey({ kind: 'set-text', value: 'Hello' })).toBe('text:only');
+    expect(sourceEditFieldKey({ kind: 'set-text', textId: '38:43', value: 'Changed' })).toBe(
+      'text:38:43',
+    );
+    expect(sourceEditFieldKey({ kind: 'set-attribute', name: 'title', value: 'Tip' })).toBe(
+      'attribute:title',
+    );
+    expect(sourceEditFieldKey({ kind: 'set-style', property: 'gap', value: '12' })).toBe(
+      'style:gap',
+    );
+  });
+  it('adds bounded text segment identities without accepting caller write ranges', () => {
+    const operation = { kind: 'set-text', value: 'New', textId: '38:43' };
+    expect(SourceEditOperation.parse(operation)).toEqual(operation);
+    for (const textId of ['../App.jsx', 'run()', '-1:2', '38:43:44', '']) {
+      expect(SourceEditOperation.safeParse({ ...operation, textId }).success).toBe(false);
+    }
+    expect(SourceEditOperation.safeParse({ ...operation, start: 0, end: 999 }).success).toBe(false);
+    expect(
+      SourceEditTarget.parse({
+        ...target,
+        directText: 'Hello',
+        textSources: [
+          {
+            textId: '38:43',
+            start: 0,
+            end: 7,
+            origin: 'const title → string literal',
+          },
+        ],
+      }).textSources?.[0]?.start,
+    ).toBe(0);
   });
   it.each([
     'onClick',
