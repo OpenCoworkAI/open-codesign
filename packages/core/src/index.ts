@@ -11,6 +11,7 @@ import type {
   ReasoningLevel,
   ResourceStateV1,
   SelectedElement,
+  SourceIdentityV1,
   StoredDesignSystem,
   WireApi,
 } from '@open-codesign/shared';
@@ -201,6 +202,10 @@ export interface ProjectContext {
 }
 
 export interface GenerateInput {
+  source?: SourceIdentityV1 | undefined;
+  onSourceAccepted?:
+    | ((accepted: import('./tools/done.js').VerifiedSource) => void | Promise<void>)
+    | undefined;
   prompt: string;
   history: ChatMessage[];
   model: ModelRef;
@@ -240,6 +245,7 @@ export interface GenerateInput {
   /** Optional host callback for workspace roots that can change mid-run, for
    * example when `set_title` renames an auto-managed workspace folder. */
   getWorkspaceRoot?: (() => string | null | undefined) | undefined;
+  withWorkspace?: (<T>(operation: (workspaceRoot: string) => Promise<T>) => Promise<T>) | undefined;
   /** Stable workspace context loaded by the host before generation. */
   projectContext?: ProjectContext | undefined;
   /** User-visible design title at the start of this run. */
@@ -339,6 +345,7 @@ export interface GenerateOutput {
 }
 
 export interface BuildApplyCommentPromptInput {
+  source?: SourceIdentityV1 | undefined;
   comment: string;
   selection: SelectedElement;
 }
@@ -354,7 +361,7 @@ export function buildApplyCommentUserPrompt(input: BuildApplyCommentPromptInput)
     ].join('\n'),
   );
   const parts = [
-    'Revise the design source that is already in the workspace at `App.jsx`.',
+    `Revise the design source that is already in the workspace at \`${input.source?.path ?? 'App.jsx'}\`.`,
     'Keep the overall structure, copy, and layout intact unless the user request requires a broader change.',
     'Prioritize the selected element first and avoid unrelated edits.',
     `User request: ${input.comment.trim()}`,

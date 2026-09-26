@@ -86,6 +86,7 @@ import {
   changeSourceEntryWorkspace,
   duplicateWithSourceEntry,
   initializeSourceEntry,
+  notifyAutoManagedSourceRename,
   removeSourceEntryForRollback,
 } from './source-entry';
 import { prepareWorkspaceWriteContent } from './workspace-file-content';
@@ -923,6 +924,7 @@ async function renameAutoManagedWorkspaceUnderLock(
         moved = true;
       },
       'blank-canvas',
+      notifyAutoManagedSourceRename,
     );
   } catch (error) {
     if (moved) {

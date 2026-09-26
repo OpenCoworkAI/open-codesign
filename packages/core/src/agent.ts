@@ -90,11 +90,14 @@ import { composeSystemPrompt } from './prompts/index.js';
 import { collectResourceManifest } from './resource-manifest.js';
 import {
   assertFinalizationGate,
+  assertSourceFinalization,
   cloneResourceState,
   recordDone,
   recordLoadedResource,
   recordMutation,
   recordScaffold,
+  type SourceVerification,
+  snapshotSourceFiles,
 } from './resource-state.js';
 import { buildRunProtocolPreflight, type RunProtocolState } from './run-protocol.js';
 import { availableToolNames } from './tool-manifest.js';
@@ -545,6 +548,7 @@ function trackFsMutations(
   fs: TextEditorFsCallbacks,
   resourceState: ResourceStateV1,
   signal?: AbortSignal,
+  mutatedPaths?: Set<string>,
 ): TextEditorFsCallbacks {
   return {
     view: (path) => fs.view(path),
@@ -553,18 +557,21 @@ function trackFsMutations(
       signal?.throwIfAborted();
       const result = await fs.create(path, content);
       recordMutation(resourceState);
+      mutatedPaths?.add(path);
       return result;
     },
     async strReplace(path, oldStr, newStr) {
       signal?.throwIfAborted();
       const result = await fs.strReplace(path, oldStr, newStr);
       recordMutation(resourceState);
+      mutatedPaths?.add(path);
       return result;
     },
     async insert(path, line, text) {
       signal?.throwIfAborted();
       const result = await fs.insert(path, line, text);
       recordMutation(resourceState);
+      mutatedPaths?.add(path);
       return result;
     },
   };
@@ -613,20 +620,27 @@ function wrapDoneState(
   resourceState: ResourceStateV1,
   onDone?: ((details: DoneDetails) => void) | undefined,
   progress = { errorRounds: 0 },
+  onStart?: () => void,
 ): AgentTool<TSchema, unknown> {
   return {
     ...tool,
     executionMode: 'sequential',
     async execute(...args): Promise<AgentToolResult<unknown>> {
+      const mutationSeq = resourceState.mutationSeq;
+      onStart?.();
       const result = await tool.execute(...args);
       const details = result.details as DoneDetails | undefined;
       if (details) {
         onDone?.(details);
-        recordDone(resourceState, {
-          status: details.status,
-          path: details.path,
-          errorCount: details.errors.length,
-        });
+        recordDone(
+          resourceState,
+          {
+            status: details.status,
+            path: details.path,
+            errorCount: details.errors.length,
+          },
+          mutationSeq,
+        );
         if (details.status === 'ok') {
           progress.errorRounds = 0;
         } else {
@@ -796,7 +810,12 @@ function buildWorkspaceBrief(
 ): string | null {
   if (!fs) return null;
   const files = workspaceFiles(fs);
-  const sources = sourceCandidates(files, fs);
+  const entryPath = input.source?.path ?? DEFAULT_SOURCE_ENTRY;
+  const sources = input.source
+    ? fs.view(entryPath)?.content.trim()
+      ? [entryPath]
+      : []
+    : sourceCandidates(files, fs);
   const hasDesignMd = fs.view('DESIGN.md') !== null;
   const hasAgentsMd = fs.view('AGENTS.md') !== null;
   const hasSettingsJson = fs.view('.codesign/settings.json') !== null;
@@ -818,7 +837,7 @@ function buildWorkspaceBrief(
       : '- Current design title: unknown.',
     sources.length > 0
       ? `- Existing source candidates: ${sources.join(', ')}`
-      : `- No existing design source was found. Create ${DEFAULT_SOURCE_ENTRY} for visual/web work, or create the requested document/handoff file for document-first work.`,
+      : `- No existing design source was found. Create ${entryPath} for visual/web work, or create the requested document/handoff file for document-first work.`,
     `- DESIGN.md: ${hasDesignMd ? 'present; treat it as the design baton for this workspace.' : 'absent.'}`,
     `- AGENTS.md: ${hasAgentsMd ? 'present' : 'absent'}`,
     `- .codesign/settings.json: ${hasSettingsJson ? 'present' : 'absent'}`,
@@ -828,10 +847,10 @@ function buildWorkspaceBrief(
     needsTitle
       ? sources.length > 0
         ? 'This workspace has source files, but the visible design title is still an auto-generated placeholder. First call `set_title` once, then inspect/view/edit. Preserve and extend existing source unless the user explicitly asks for a rebuild.'
-        : `This is an empty auto-named workspace. First call \`set_title\` once, then create ${DEFAULT_SOURCE_ENTRY} for visual/web work or the requested document file for document-first work. Use set_todos for multi-step work.`
+        : `This is an empty auto-named workspace. First call \`set_title\` once, then create ${entryPath} for visual/web work or the requested document file for document-first work. Use set_todos for multi-step work.`
       : sources.length > 0
         ? 'Before editing existing source files, inspect the workspace when available, then view the current source file. Use set_todos when the edit has multiple steps. Existing-source sequence: optional `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. For continuation or existing-source turns, do not call `set_title`; preserve and extend the current design unless the user explicitly asks for a rebuild.'
-        : `This is an empty workspace. For visual/web work, create ${DEFAULT_SOURCE_ENTRY} when the first pass is ready; for document-first work, create the requested document file. Use set_todos for multi-step work.`,
+        : `This is an empty workspace. For visual/web work, create ${entryPath} when the first pass is ready; for document-first work, create the requested document file. Use set_todos for multi-step work.`,
   );
   if (hasDesignMd) {
     lines.push(
@@ -979,7 +998,14 @@ async function generateViaAgentInternal(
   log.info('[generate] step=build_request', ctx);
   const buildStart = Date.now();
   const resourceState = cloneResourceState(input.initialResourceState);
-  const trackedFs = deps.fs ? trackFsMutations(deps.fs, resourceState, input.signal) : undefined;
+  if (input.source) resourceState.lastDone = null;
+  const initialFiles = deps.fs ? snapshotSourceFiles(deps.fs) : new Map<string, string>();
+  const mutatedPaths = new Set<string>();
+  const trackedFs = deps.fs
+    ? trackFsMutations(deps.fs, resourceState, input.signal, mutatedPaths)
+    : undefined;
+  let verification: SourceVerification | undefined;
+  let verificationStart: { mutationSeq: number; files: ReadonlyMap<string, string> } | undefined;
   let lastDoneDetails: DoneDetails | undefined;
   const doneProgress = { errorRounds: 0 };
   const repairLimitReached = () => doneProgress.errorRounds >= MAX_DONE_ERROR_ROUNDS;
@@ -1079,15 +1105,23 @@ async function generateViaAgentInternal(
       resourceState,
     ),
   );
+  const scaffoldTool = makeScaffoldTool(getWorkspaceRoot, () => scaffoldsRoot, {
+    onScaffolded: async (details) => {
+      mutatedPaths.add(details.destPath);
+      await input.onScaffolded?.(details);
+    },
+  });
   defaultToolsByName.set(
     'scaffold',
     wrapPlanningGate(
       wrapScaffoldState(
-        makeScaffoldTool(
-          getWorkspaceRoot,
-          () => scaffoldsRoot,
-          input.onScaffolded ? { onScaffolded: input.onScaffolded } : {},
-        ) as unknown as AgentTool<TSchema, unknown>,
+        {
+          ...scaffoldTool,
+          execute: (...args: Parameters<typeof scaffoldTool.execute>) =>
+            input.withWorkspace
+              ? input.withWorkspace(() => scaffoldTool.execute(...args))
+              : scaffoldTool.execute(...args),
+        } as unknown as AgentTool<TSchema, unknown>,
         resourceState,
       ),
       runProtocolState,
@@ -1108,12 +1142,23 @@ async function generateViaAgentInternal(
         wrapDoneState(
           makeDoneTool(trackedFs, deps.runtimeVerify, {
             requireDesignMd: true,
+            source: input.source,
+            onSourceVerified: (accepted) => {
+              if (verificationStart) verification = { ...accepted, ...verificationStart };
+            },
           }) as unknown as AgentTool<TSchema, unknown>,
           resourceState,
           (details) => {
             lastDoneDetails = details;
           },
           doneProgress,
+          () => {
+            verification = undefined;
+            verificationStart = {
+              mutationSeq: resourceState.mutationSeq,
+              files: snapshotSourceFiles(trackedFs),
+            };
+          },
         ),
         runProtocolState,
       ),
@@ -1234,6 +1279,11 @@ async function generateViaAgentInternal(
     encourageToolUse ? `${systemPrompt}\n\n${activeGuidance}` : systemPrompt,
     ...resourceResult.sections,
     ...projectContextSections(input.projectContext),
+    ...(input.source
+      ? [
+          `Host source constraint (overrides generic entry/runtime guidance): the primary source is ${JSON.stringify(input.source.path)}, format ${input.source.format}, runtime ${input.source.runtimeMode}. Preserve that identity. done() must verify this exact entry in this run; other previews do not complete it. ${input.source.runtimeMode === 'native-html' ? 'Author native HTML/CSS/JavaScript, not JSX or a Babel/React compile bootstrap.' : 'Preserve the existing legacy source runtime.'} Document-only or conversational work must not emit a visual artifact.`,
+        ]
+      : []),
   ].join('\n\n');
 
   // Seed the transcript with prior history (already in ChatMessage shape).
@@ -1616,7 +1666,29 @@ async function generateViaAgentInternal(
   // assistant text is prose, not an `<artifact>` blob. Pull the primary source
   // out of the virtual FS to populate the artifact list while preserving source
   // metadata separately from the export/render artifact type.
-  if (deps.fs) {
+  if (input.source) {
+    if (!deps.fs)
+      throw new CodesignError(
+        'Source-aware generation requires a workspace filesystem.',
+        ERROR_CODES.GENERATION_INCOMPLETE,
+      );
+    const visual = assertSourceFinalization({
+      source: input.source,
+      fs: deps.fs,
+      state: resourceState,
+      initialFiles,
+      mutatedPaths,
+      verification,
+    });
+    if (visual && verification) {
+      assertNotCancelled();
+      await input.onSourceAccepted?.({ source: input.source, content: verification.content });
+      assertNotCancelled();
+      collected.artifacts.push(
+        createDesignSourceArtifact(verification.content, 0, input.source.path, input.source),
+      );
+    }
+  } else if (deps.fs) {
     const primary = deps.fs.view(DEFAULT_SOURCE_ENTRY);
     const legacy = primary === null ? deps.fs.view(LEGACY_SOURCE_ENTRY) : null;
     const entryPath = primary !== null ? DEFAULT_SOURCE_ENTRY : LEGACY_SOURCE_ENTRY;
@@ -1626,7 +1698,7 @@ async function generateViaAgentInternal(
     }
   }
   const finalizationWarnings =
-    deps.tools === undefined && deps.fs !== undefined
+    !input.source && deps.tools === undefined && deps.fs !== undefined
       ? assertFinalizationGate({
           state: resourceState,
           fs: deps.fs,

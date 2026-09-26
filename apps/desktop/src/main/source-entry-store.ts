@@ -135,6 +135,7 @@ export async function writeSourceEntryFile(
   entry: DesignSourceEntryV1,
   previous: DesignSourceEntryV1 | null,
   validate: () => Promise<void>,
+  beforeCommit?: () => void,
 ): Promise<void> {
   DesignSourceEntryV1.parse(entry);
   if (entry.designId !== designId)
@@ -171,6 +172,8 @@ export async function writeSourceEntryFile(
     if ((await realpath(directory)) !== canonicalDirectory) {
       throw new SourceEntryError('unsafe-path', 'Source-entry storage changed before saving.');
     }
+    // No asynchronous work may separate the run guard from starting the commit.
+    beforeCommit?.();
     // This coordinates app writers; rename is not an OS-level compare-and-swap.
     await rename(temporary, file);
     created = false;

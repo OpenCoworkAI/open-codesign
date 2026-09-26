@@ -285,33 +285,71 @@ async function resolveEntry(
   };
 }
 
+export async function withSourceEntry<T>(
+  db: Database,
+  designId: string,
+  operation: (entry: SourceEntryResultV1) => Promise<T> | T,
+): Promise<T> {
+  return withStableWorkspacePath(designId, () =>
+    withWorkspaceFileWriter(sourceEntryFile(db, designId), async () => {
+      let design: Design | null = null;
+      let entry: DesignSourceEntryV1 | null = null;
+      let resolved: SourceEntryResultV1;
+      try {
+        design = requireDesign(db, designId);
+        if (!design.previewMode || design.previewMode === 'managed-file')
+          entry = await readSourceEntryFile(db, designId);
+        resolved = await resolveEntry(design, entry);
+      } catch (error) {
+        resolved = {
+          schemaVersion: 1,
+          designId,
+          workspacePath: design?.workspacePath ?? null,
+          revision: entry?.revision ?? null,
+          status: 'invalid',
+          reason: error instanceof SourceEntryError ? error.reason : 'workspace-error',
+          message:
+            error instanceof SourceEntryError
+              ? error.message
+              : 'The workspace source could not be read safely.',
+        };
+      }
+      return operation(resolved);
+    }),
+  );
+}
+
 export async function getSourceEntry(db: Database, designId: string): Promise<SourceEntryResultV1> {
-  return withStableWorkspacePath(designId, async () => {
-    let design: Design | null = null;
-    let entry: DesignSourceEntryV1 | null = null;
+  return withSourceEntry(db, designId, (entry) => entry);
+}
+
+export interface SourceWorkspaceTuple {
+  workspacePath: string;
+  revision: string | null;
+  source: SourceIdentityV1;
+}
+export interface AutoManagedSourceRename {
+  designId: string;
+  before: SourceWorkspaceTuple;
+  after: SourceWorkspaceTuple;
+}
+const autoManagedRenameListeners = new Set<(event: AutoManagedSourceRename) => void>();
+export function onAutoManagedSourceRename(
+  listener: (event: AutoManagedSourceRename) => void,
+): () => void {
+  autoManagedRenameListeners.add(listener);
+  return () => {
+    autoManagedRenameListeners.delete(listener);
+  };
+}
+export function notifyAutoManagedSourceRename(event: AutoManagedSourceRename): void {
+  for (const listener of autoManagedRenameListeners) {
     try {
-      design = requireDesign(db, designId);
-      if (design.previewMode && design.previewMode !== 'managed-file')
-        return resolveEntry(design, null);
-      return await withWorkspaceFileWriter(sourceEntryFile(db, designId), async () => {
-        entry = await readSourceEntryFile(db, designId);
-        return resolveEntry(requireDesign(db, designId), entry);
-      });
-    } catch (error) {
-      return {
-        schemaVersion: 1,
-        designId,
-        workspacePath: design?.workspacePath ?? null,
-        revision: (entry as DesignSourceEntryV1 | null)?.revision ?? null,
-        status: 'invalid',
-        reason: error instanceof SourceEntryError ? error.reason : 'workspace-error',
-        message:
-          error instanceof SourceEntryError
-            ? error.message
-            : 'The workspace source could not be read safely.',
-      };
+      listener(event);
+    } catch {
+      /* A notification cannot undo a committed directory rename. */
     }
-  });
+  }
 }
 
 export async function initializeSourceEntry(
@@ -366,6 +404,7 @@ async function persistConfirmed(
   source: SourceIdentityV1,
   expectedContent: string,
   validate: HostValidation,
+  beforeCommit?: () => void,
 ): Promise<DesignSourceEntryV1> {
   const workspacePath = requireManagedWorkspace(design);
   const destination = await resolveSafeWorkspaceChildPath(workspacePath, source.path);
@@ -387,7 +426,7 @@ async function persistConfirmed(
       phase: 'confirmed',
       source,
     };
-    await writeSourceEntryFile(db, design.id, entry, previous, check);
+    await writeSourceEntryFile(db, design.id, entry, previous, check, beforeCommit);
     return entry;
   });
 }
@@ -427,10 +466,21 @@ export async function selectSourceEntry(
   );
 }
 
+/** Binding callbacks run under the stable lease and metadata writer, before queued renames. */
+export interface SourceConfirmationLifecycle {
+  beforeCommit?: () => void;
+  onCommitted?: (entry: DesignSourceEntryV1) => void;
+  expectedBinding?: () => Pick<
+    ConfirmSourceEntryInput,
+    'expectedWorkspacePath' | 'expectedRevision'
+  >;
+}
+
 export async function confirmSourceEntry(
   db: Database,
   input: ConfirmSourceEntryInput,
   validate: HostValidation,
+  lifecycle: SourceConfirmationLifecycle = {},
 ): Promise<DesignSourceEntryV1> {
   if (input.schemaVersion !== 1)
     throw new SourceEntryError('invalid-input', 'Unsupported source confirmation schema.');
@@ -439,7 +489,8 @@ export async function confirmSourceEntry(
     withWorkspaceFileWriter(sourceEntryFile(db, input.designId), async () => {
       const design = requireDesign(db, input.designId);
       const previous = await readSourceEntryFile(db, input.designId);
-      assertExpected(design, previous, input.expectedWorkspacePath, input.expectedRevision);
+      const expected = lifecycle.expectedBinding?.() ?? input;
+      assertExpected(design, previous, expected.expectedWorkspacePath, expected.expectedRevision);
       assertBinding(previous, design.workspacePath);
       if (previous?.phase === 'invalidated')
         throw new SourceEntryError(
@@ -454,7 +505,17 @@ export async function confirmSourceEntry(
           'runtime-mismatch',
           'Native generation cannot silently switch to a legacy runtime.',
         );
-      return persistConfirmed(db, design, previous, input.source, input.expectedContent, validate);
+      const confirmed = await persistConfirmed(
+        db,
+        design,
+        previous,
+        input.source,
+        input.expectedContent,
+        validate,
+        lifecycle.beforeCommit,
+      );
+      lifecycle.onCommitted?.(confirmed);
+      return confirmed;
     }),
   );
 }
@@ -467,6 +528,7 @@ export async function changeSourceEntryWorkspace(
   preserveSource: boolean,
   moveFiles: () => Promise<void>,
   workspaceMode?: WorkspaceMode,
+  onPreservedRename?: (event: AutoManagedSourceRename) => void,
 ): Promise<Design> {
   return withWorkspaceFileWriter(sourceEntryFile(db, designId), async () => {
     const before = requireDesign(db, designId);
@@ -549,7 +611,23 @@ export async function changeSourceEntryWorkspace(
         )
           throw new SourceEntryError('source-changed', 'The moved source changed before saving.');
       });
-      return updateBinding();
+      const updated = updateBinding();
+      if (preserved && before.workspacePath && nextPath) {
+        try {
+          onPreservedRename?.({
+            designId,
+            before: {
+              workspacePath: before.workspacePath,
+              revision: previous?.revision ?? null,
+              source: preserved.source,
+            },
+            after: { workspacePath: nextPath, revision: entry.revision, source: preserved.source },
+          });
+        } catch {
+          /* The binding has committed; notification failure is not rollback. */
+        }
+      }
+      return updated;
     };
     if (preserved && before.workspacePath) {
       const expected = preserved;

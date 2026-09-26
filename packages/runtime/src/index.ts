@@ -733,6 +733,30 @@ function scanNativeHtml(source: string): NativeHtmlToken[] {
   return tokens;
 }
 
+export function validateNativeGenerationSource(source: string): void {
+  for (const token of scanNativeHtml(source)) {
+    if (token.name !== 'script' || token.closing) continue;
+    const type = decodeHtmlEntities(getHtmlAttribute(token.attrs, 'type') ?? '')
+      .trim()
+      .toLowerCase();
+    const src = decodeHtmlEntities(getHtmlAttribute(token.attrs, 'src') ?? '').trim();
+    const executable =
+      !type ||
+      type === 'module' ||
+      /^(?:(?:text|application)\/(?:x-)?(?:java|ecma)script|text\/(?:javascript1\.[0-5]|jscript|livescript))$/.test(
+        type,
+      );
+    if (
+      /^(?:text|application)\/(?:babel|jsx)$/.test(type) ||
+      (executable && /(?:^|\/)@babel\/standalone(?:@[^/]+)?(?:\/|$)/i.test(src))
+    ) {
+      throw new Error(
+        'Native generation does not accept legacy Babel/JSX compile scripts. Use authored HTML, CSS and JavaScript.',
+      );
+    }
+  }
+}
+
 function buildNativeHtmlDocument(
   source: string,
   opts: BuildPreviewDocumentOptions,

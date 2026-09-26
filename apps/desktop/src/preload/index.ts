@@ -32,6 +32,7 @@ import type {
   SourceEditApplyResultV1,
   SourceEditInspectRequestV1,
   SourceEditInspectResultV1,
+  SourceIdentityV1,
   SupportedOnboardingProvider,
   WireApi,
 } from '@open-codesign/shared';
@@ -242,7 +243,8 @@ export interface GenerateArtifact {
   title: string;
   content: string;
   designParams: unknown[];
-  sourceFormat?: 'jsx' | 'html' | 'svg' | 'markdown';
+  sourceFormat?: 'jsx' | 'tsx' | 'html' | 'svg' | 'markdown';
+  source?: SourceIdentityV1;
   renderRuntime?: 'react' | 'static-html' | 'svg' | 'none';
   entryPath?: string;
   createdAt: string;
@@ -338,6 +340,7 @@ export interface AgentStreamEvent {
   // generation so the user can watch the design take shape.
   path?: string;
   content?: string;
+  source?: SourceIdentityV1;
   // error
   message?: string;
   code?: string;

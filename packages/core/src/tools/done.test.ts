@@ -53,6 +53,87 @@ Use a compact product design system.
 const VALID_TASK_APP = `function App() { return <main><h1>Tasks</h1></main>; }
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);`;
 
+describe('identity-bearing done', () => {
+  const source = {
+    schemaVersion: 1,
+    path: 'pages/main.html',
+    format: 'html',
+    runtimeMode: 'native-html',
+  } as const;
+  const raw =
+    '<!doctype html><title>Native</title><p>One<p>Two<script>const example = `<img id="same"><a href="#missing">`; function App() { return "React"; }</script>';
+
+  it('verifies only the declared raw source and mode without legacy text lint', async () => {
+    const runtime = vi.fn(async () => []);
+    const accepted = vi.fn();
+    const fs = makeFs({
+      [source.path]: raw,
+      'App.jsx': VALID_TASK_APP,
+      'DESIGN.md': VALID_DESIGN_MD,
+    });
+    const result = await makeDoneTool(fs, runtime, { source, onSourceVerified: accepted }).execute(
+      'native',
+      {},
+    );
+    expect(result.details.status).toBe('ok');
+    expect(result.details.path).toBe(source.path);
+    expect(runtime).toHaveBeenCalledWith(raw, { path: source.path, runtimeMode: 'native-html' });
+    expect(accepted).toHaveBeenCalledWith({ source, content: raw });
+  });
+
+  it.each(['App.jsx', 'other.html'])('cannot switch the source to %s', async (path) => {
+    const runtime = vi.fn(async () => []);
+    const accepted = vi.fn();
+    const fs = makeFs({ [source.path]: raw, [path]: '<main>Other</main>' });
+    const result = await makeDoneTool(fs, runtime, { source, onSourceVerified: accepted }).execute(
+      'other',
+      { path },
+    );
+    expect(result.details.status).toBe('has_errors');
+    expect(runtime).not.toHaveBeenCalled();
+    expect(accepted).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back when the declared source is absent', async () => {
+    const runtime = vi.fn(async () => []);
+    const result = await makeDoneTool(makeFs({ 'App.jsx': VALID_TASK_APP }), runtime, {
+      source,
+    }).execute('missing', {});
+    expect(result.details.status).toBe('has_errors');
+    expect(result.details.path).toBe(source.path);
+    expect(runtime).not.toHaveBeenCalled();
+  });
+
+  it('requires a native runtime verifier', async () => {
+    const result = await makeDoneTool(makeFs({ [source.path]: '<main>Native</main>' }), undefined, {
+      source,
+    }).execute('no-runtime', {});
+    expect(result.details.status).toBe('has_errors');
+  });
+
+  it('does not record failed or cancelled verification', async () => {
+    const accepted = vi.fn();
+    const fs = makeFs({ [source.path]: '<main>Native</main>' });
+    const failed = await makeDoneTool(fs, async () => [{ message: 'runtime error' }], {
+      source,
+      onSourceVerified: accepted,
+    }).execute('failed', {});
+    expect(failed.details.status).toBe('has_errors');
+    const controller = new AbortController();
+    await expect(
+      makeDoneTool(
+        fs,
+        async () => {
+          controller.abort();
+          return [];
+        },
+        { source, onSourceVerified: accepted },
+      ).execute('cancelled', {}, controller.signal),
+    ).rejects.toThrow();
+    expect(accepted).not.toHaveBeenCalled();
+  });
+});
+
 describe('done tool', () => {
   it.each([
     'App.jsx',

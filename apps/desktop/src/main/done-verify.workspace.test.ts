@@ -76,6 +76,24 @@ describe.skipIf(!chromeAvailable)('done workspace assets in system Chrome', () =
     ).toEqual([]);
   }, 30_000);
 
+  it('accepts optional end tags and inert Babel, ID and link examples in authored scripts', async () => {
+    const source = `<!doctype html><html><body><p id="message">First<p>Second
+      <button id="check">Check</button><output id="result">Waiting</output>
+      <script>
+      const example = '<script type="text/babel"><p id="message"><a href="#missing"><img src="missing.png">';
+      document.getElementById('check').onclick = () => { document.getElementById('result').textContent = example.includes('text/babel') ? 'Passed' : 'Failed'; };
+      document.getElementById('check').click();
+      if (document.getElementById('result').textContent !== 'Passed') throw new Error('Authored behavior changed');
+      </script></body></html>`;
+    await writeFile(join(workspace, 'screens', 'examples.html'), source);
+    expect(
+      await makeRuntimeVerifier({ workspaceRoot: workspace })(source, {
+        path: 'screens/examples.html',
+        runtimeMode: 'native-html',
+      }),
+    ).toEqual([]);
+  });
+
   it('captures authored native script errors without satisfying React references automatically', async () => {
     const source =
       '<!doctype html><html><body><script>React.createElement("main");</script></body></html>';

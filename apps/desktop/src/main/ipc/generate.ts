@@ -38,13 +38,13 @@ import { CHATGPT_CODEX_PROVIDER_ID, getCodexTokenStore } from '../codex-oauth-ip
 import { makeRuntimeVerifier } from '../done-verify';
 import { app, ipcMain } from '../electron-runtime';
 import {
-  acquireInFlightWorkspaceGeneration,
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
   listInFlightGenerations,
   withInFlightGenerationForDesign,
 } from '../generation-ipc';
+import { createGenerationSource, type GenerationSource } from '../generation-source';
 import { resolveGenerationWorkspaceRoot } from '../generation-workspace';
 import { resolveImageGenerationConfig, toGenerateImageOptions } from '../image-generation-settings';
 import { makeJudgeVisualParity } from '../judge-visual-parity';
@@ -379,6 +379,13 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         });
       });
   };
+  const sourceRuns = new Map<string, GenerationSource>();
+  const sourceRun = (id: string): GenerationSource => {
+    const context = sourceRuns.get(id);
+    if (!context)
+      throw new CodesignError('Generation source context unavailable.', 'GENERATION_INCOMPLETE');
+    return context;
+  };
   const durableRun = async <T extends Awaited<ReturnType<typeof generateViaAgent>>>(
     id: string,
     designId: string,
@@ -392,7 +399,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
       let snapshotId: string | undefined;
       const artifact = result.artifacts[0];
-      if (journal && db && artifact && !controller.signal.aborted) {
+      controller.signal.throwIfAborted();
+      await sourceRun(id).confirm(result.artifacts.length > 0);
+      if (journal && db && artifact) {
         const parent = listSnapshots(db, designId)[0];
         const rows = listSessionChatMessages({ db, sessionDir: db.sessionDir }, designId);
         const lastUser = rows.filter((row) => row.kind === 'user').at(-1);
@@ -415,28 +424,37 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         designId,
         generationId: id,
         type: 'run_settled',
-        outcome: controller.signal.aborted ? 'cancelled' : 'completed',
+        outcome:
+          controller.signal.aborted && !sourceRuns.get(id)?.committed ? 'cancelled' : 'completed',
         response: response as GenerateResponse,
       });
       await eventDelivery;
       if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
       return { ...response, ...(journal ? { chatPersisted: true } : {}) };
     } catch (error) {
+      const committed = sourceRuns.get(id)?.committed === true;
+      const failure = committed
+        ? new Error(
+            `The source was confirmed, but completion delivery failed: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          )
+        : error;
       publishEvent({
         designId,
         generationId: id,
         type: 'run_settled',
         outcome:
+          !committed &&
           controller.signal.aborted &&
           !extractGenerationTimeoutError(controller.signal) &&
           !deliveryFailures.has(id)
             ? 'cancelled'
             : 'failed',
-        message: error instanceof Error ? error.message : String(error),
+        message: failure instanceof Error ? failure.message : String(failure),
         ...(error instanceof CodesignError ? { code: error.code } : {}),
       });
       await eventDelivery;
-      throw error;
+      throw failure;
     } finally {
       settledRuns.add(id);
       closingRuns.delete(id);
@@ -452,9 +470,30 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     controller: AbortController,
     run: () => Promise<T>,
   ) =>
-    withInFlightGenerationForDesign(id, designId, running, byDesign, controller, () =>
-      durableRun(id, designId, controller, run),
-    );
+    withInFlightGenerationForDesign(id, designId, running, byDesign, controller, async () => {
+      let clearTimeoutGuard = () => {};
+      try {
+        return await durableRun(id, designId, controller, async () => {
+          if (!db)
+            throw new CodesignError('Generation requires a design store.', 'GENERATION_INCOMPLETE');
+          const source = await createGenerationSource({
+            db,
+            designId,
+            generationId: id,
+            signal: controller.signal,
+            inFlightByDesign: byDesign,
+            inFlightByWorkspace,
+          });
+          sourceRuns.set(id, source);
+          clearTimeoutGuard = await armTimeout(id, controller);
+          return run();
+        });
+      } finally {
+        clearTimeoutGuard();
+        sourceRuns.get(id)?.dispose();
+        sourceRuns.delete(id);
+      }
+    });
   const canRecoverDesign = (designId: string): boolean => {
     const design = db ? getDesign(db, designId) : null;
     return design !== null && design.deletedAt === null && design.workspacePath !== null;
@@ -702,11 +741,25 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const baseCtx = { designId, generationId: id } as const;
     const toolStartedAt = new Map<string, number>();
     const templatesRoot = path_module.join(app.getPath('userData'), 'templates');
-    const currentWorkspaceRoot = () => requireWorkspaceRootForDesign(designId).workspaceRoot;
+    const sourceContext = sourceRun(id);
+    const currentWorkspaceRoot = () => sourceContext.workspaceRoot;
+    const withWorkspace = sourceContext.withWorkspace;
     const [frames, designSkills, initialWorkspaceFiles] = await Promise.all([
       loadFrameTemplates(path_module.join(templatesRoot, 'frames')),
       loadDesignSkills(path_module.join(templatesRoot, 'design-skills')),
-      withStableWorkspacePath(designId, () => readWorkspaceFilesAt(currentWorkspaceRoot())),
+      withWorkspace(async (root, resolved) => {
+        const files = await readWorkspaceFilesAt(root);
+        if (
+          sourceContext.source &&
+          (resolved.status === 'ready' || resolved.status === 'planned')
+        ) {
+          const filtered = files.filter((file) => file.file !== sourceContext.source?.path);
+          if (resolved.content !== null)
+            filtered.push({ file: resolved.source.path, contents: resolved.content });
+          return filtered;
+        }
+        return files;
+      }),
     ]);
     const { fs, fsMap, syncWorkspaceTextFile } = createRuntimeTextEditorFs({
       db,
@@ -714,7 +767,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       generationId: id,
       logger: logIpc,
       ...(input.signal ? { signal: input.signal } : {}),
-      previousSource,
+      previousSource: sourceContext.source ? null : previousSource,
+      source: sourceContext.source,
+      withWorkspace,
+      onMutation: sourceContext.recordMutation,
       initialFiles: initialWorkspaceFiles,
       attachments: attachmentsForRuntimeFs ?? input.attachments,
       sendEvent,
@@ -747,7 +803,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         search: (query, count, signal) => getResearchNetwork().search(query, count, signal),
         fetch: (url, signal) => getResearchNetwork().fetch(url, signal),
       },
-      inWorkspace: (fn) => withStableWorkspacePath(designId, () => fn(currentWorkspaceRoot())),
+      inWorkspace: (fn) => withWorkspace((root) => fn(root)),
       authorize: createWebResearchAuthorization(researchSettings, (questions, signal) =>
         requestAsk(id, questions, () => getMainWindow(), {
           designId,
@@ -857,6 +913,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     return generateViaAgent(
       {
         ...input,
+        source: sourceContext.source,
+        onSourceAccepted: sourceContext.source ? sourceContext.accept : undefined,
+        withWorkspace,
         templatesRoot,
         askBridge: (askInput, signal) =>
           requestAsk(id, askInput, () => getMainWindow(), {
@@ -866,20 +925,24 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         workspaceRoot,
         getWorkspaceRoot: currentWorkspaceRoot,
         onScaffolded: async (details) => {
+          sourceContext.recordMutation(details.destPath);
           await syncWorkspaceTextFile(details.destPath, details.written);
         },
         inspectWorkspace: async () =>
-          withStableWorkspacePath(designId, async () => {
-            const files = await listWorkspaceFilesAt(currentWorkspaceRoot());
+          withWorkspace(async (root) => {
+            const files = await listWorkspaceFilesAt(root);
             return inspectWorkspaceFiles(files.map((file) => ({ file: file.path })));
           }),
         readWorkspaceFiles: (patterns) =>
-          withStableWorkspacePath(designId, () =>
-            readWorkspaceFilesAt(currentWorkspaceRoot(), patterns),
-          ),
+          withWorkspace((root) => readWorkspaceFilesAt(root, patterns)),
         runPreview: (options) =>
-          withStableWorkspacePath(designId, () =>
-            runPreview({ ...options, workspaceRoot: currentWorkspaceRoot() }),
+          withWorkspace((root) =>
+            runPreview({
+              ...options,
+              workspaceRoot: root,
+              runtimeMode: sourceContext.runtimeMode(options.path),
+              ...(input.signal ? { signal: input.signal } : {}),
+            }),
           ),
       },
       {
@@ -887,8 +950,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         research,
         activeMessages,
         runtimeVerify: (source, context) =>
-          withStableWorkspacePath(designId, () =>
-            makeRuntimeVerifier({ workspaceRoot: currentWorkspaceRoot() })(source, context),
+          sourceContext.verify(source, context, (raw, checked) =>
+            makeRuntimeVerifier({ workspaceRoot: currentWorkspaceRoot() })(raw, checked),
           ),
         renderUiKit,
         judgeVisualParity,
@@ -1028,10 +1091,28 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       })
       .then((result) => ({
         ...result,
-        artifacts: result.artifacts.map((artifact) => ({
-          ...artifact,
-          content: resolveLocalAssetRefs(artifact.content, fsMap),
-        })),
+        artifacts: result.artifacts.map((artifact) => {
+          sourceContext.assertArtifact(artifact.content);
+          return {
+            ...artifact,
+            ...(sourceContext.source
+              ? {
+                  source: sourceContext.source,
+                  entryPath: sourceContext.source.path,
+                  sourceFormat: sourceContext.source.format,
+                  renderRuntime:
+                    sourceContext.source.runtimeMode === 'native-html'
+                      ? ('static-html' as const)
+                      : ('react' as const),
+                }
+              : {}),
+            content: resolveLocalAssetRefs(
+              artifact.content,
+              fsMap,
+              sourceContext.source?.path ?? artifact.entryPath,
+            ),
+          };
+        }),
       }));
   };
 
@@ -1170,7 +1251,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             memoryContext,
             memoryLoadWarning,
             fileInventory,
-          } = await withStableWorkspacePath(payload.designId, async () => {
+          } = await sourceRun(id).withWorkspace(async () => {
             const { designId, workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
             const promptContext = await preparePromptContext({
               attachments: payload.attachments,
@@ -1236,15 +1317,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           });
 
           const t0 = Date.now();
-          let clearTimeoutGuard: () => void = () => {};
-          let releaseWorkspaceGeneration: () => void = () => {};
           try {
-            releaseWorkspaceGeneration = acquireInFlightWorkspaceGeneration(
-              id,
-              workspaceRoot,
-              inFlightByWorkspace,
-            );
-            clearTimeoutGuard = await armTimeout(id, controller);
             const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
             let capturedMessages: DesignBriefConversationMessages | null = null;
             let aggressivePruneDetected = false;
@@ -1267,8 +1340,13 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 : null;
             const workspaceState = {
               fileInventory,
-              sourcePath: payload.previousSource ? 'App.jsx' : null,
-              hasSource: Boolean(payload.previousSource?.trim()),
+              sourcePath: sourceRun(id).source?.path ?? (payload.previousSource ? 'App.jsx' : null),
+              hasSource: Boolean(
+                (sourceRun(id).source
+                  ? sourceRun(id).initialContent
+                  : payload.previousSource
+                )?.trim(),
+              ),
               hasDesignMd: Boolean(promptContext.projectContext.designMd?.trim()),
               hasAgentsMd: Boolean(promptContext.projectContext.agentsMd?.trim()),
               hasSettingsJson: Boolean(promptContext.projectContext.settingsJson?.trim()),
@@ -1313,8 +1391,14 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               resourceState,
               modelContextWindow: contextWindowForContextPack(active.model),
               workspaceState: {
-                sourcePath: payload.previousSource ? 'App.jsx' : null,
-                hasSource: Boolean(payload.previousSource?.trim()),
+                sourcePath:
+                  sourceRun(id).source?.path ?? (payload.previousSource ? 'App.jsx' : null),
+                hasSource: Boolean(
+                  (sourceRun(id).source
+                    ? sourceRun(id).initialContent
+                    : payload.previousSource
+                  )?.trim(),
+                ),
                 hasDesignMd: Boolean(promptContext.projectContext.designMd?.trim()),
                 hasAgentsMd: Boolean(promptContext.projectContext.agentsMd?.trim()),
                 hasSettingsJson: Boolean(promptContext.projectContext.settingsJson?.trim()),
@@ -1586,9 +1670,6 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             });
             recordFinalError('generate', id, rethrow);
             throw rethrow;
-          } finally {
-            clearTimeoutGuard();
-            releaseWorkspaceGeneration();
           }
         },
       );
@@ -1636,19 +1717,16 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           const baseUrl = active.baseUrl ?? undefined;
           const tlsBypass = resolveTlsBypassFor(cfg, active.model.provider);
 
-          const { workspaceRoot, promptContext } = await withStableWorkspacePath(
-            payload.designId,
-            async () => {
-              const { workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
-              const promptContext = await preparePromptContext({
-                attachments: payload.attachments,
-                referenceUrl: payload.referenceUrl,
-                designSystem: cfg.designSystem ?? null,
-                workspaceRoot,
-              });
-              return { workspaceRoot, promptContext };
-            },
-          );
+          const { workspaceRoot, promptContext } = await sourceRun(id).withWorkspace(async () => {
+            const { workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
+            const promptContext = await preparePromptContext({
+              attachments: payload.attachments,
+              referenceUrl: payload.referenceUrl,
+              designSystem: cfg.designSystem ?? null,
+              workspaceRoot,
+            });
+            return { workspaceRoot, promptContext };
+          });
 
           logIpc.info('applyComment', {
             generationId: id,
@@ -1667,20 +1745,13 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
 
           const systemPrompt = composeSystemPrompt({ mode: 'revise' });
           const userPrompt = buildApplyCommentUserPrompt({
+            source: sourceRun(id).source,
             comment: payload.comment,
             selection: payload.selection,
           });
 
           const t0 = Date.now();
-          let clearTimeoutGuard: () => void = () => {};
-          let releaseWorkspaceGeneration: () => void = () => {};
           try {
-            releaseWorkspaceGeneration = acquireInFlightWorkspaceGeneration(
-              id,
-              workspaceRoot,
-              inFlightByWorkspace,
-            );
-            clearTimeoutGuard = await armTimeout(id, controller);
             const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
             const result = await withTlsBypass(tlsBypass, () =>
               runGenerate(
@@ -1747,9 +1818,6 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             });
             recordFinalError('apply-comment', id, rethrow);
             throw rethrow;
-          } finally {
-            clearTimeoutGuard();
-            releaseWorkspaceGeneration();
           }
         },
       );

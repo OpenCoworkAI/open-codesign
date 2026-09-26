@@ -10,7 +10,32 @@ import {
   INTERACTIVE_PREVIEW_SANDBOX,
   requiresPreviewScripts,
   resolveArtifactSourceReferencePath,
+  validateNativeGenerationSource,
 } from './index';
+
+describe('native generation acceptance', () => {
+  it.each([
+    '<script type="text/babel">const App = () => <div/>;</script>',
+    '<script TYPE=text&#47;babel src="app.jsx"></script>',
+    '<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>',
+  ])('rejects active legacy compile bootstrap: %s', (source) => {
+    expect(() => validateNativeGenerationSource(source)).toThrow(
+      /^Native generation does not accept/,
+    );
+  });
+  it.each([
+    '<p>React Babel App<p>Native',
+    '<script>const example = `<script type="text/babel">`; function App(){ return "React"; }</script>',
+    '<!-- artifact source lives in App.jsx --><p>Native',
+    '<template><script type="text/babel">example</script></template>',
+    '<script type="application/json">{"framework":"React"}</script>',
+    '<script src="./native.js"></script>',
+    '<script src="./babel.js"></script>',
+    '<script type="application/json" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>',
+  ])('accepts authored native content: %s', (source) => {
+    expect(() => validateNativeGenerationSource(source)).not.toThrow();
+  });
+});
 
 function compiledArtifactSource(document: string): string {
   const compiled = [...document.matchAll(/var source = ([^\n]+);\n {2}var options = /g)].at(

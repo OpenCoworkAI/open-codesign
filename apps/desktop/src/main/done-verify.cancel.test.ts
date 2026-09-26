@@ -39,6 +39,19 @@ describe('done verifier context without a workspace', () => {
   });
 });
 
+describe('native generation acceptance before launch', () => {
+  it('rejects a real Babel compile script before launching a browser', async () => {
+    await expect(
+      makeRuntimeVerifier()('<script type="text/babel">const view = <main />;</script>', {
+        path: 'index.html',
+        runtimeMode: 'native-html',
+      }),
+    ).rejects.toThrow(/^Native generation does not accept/);
+    expect(chrome.find).not.toHaveBeenCalled();
+    expect(chrome.launch).not.toHaveBeenCalled();
+  });
+});
+
 describe('done browser executor cancellation', () => {
   it('rejects an already aborted verification before locating or launching a browser', async () => {
     const controller = new AbortController();

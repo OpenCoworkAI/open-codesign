@@ -20,7 +20,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
 import type { DoneError, DoneRuntimeVerifier } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
-import { buildPreviewDocument } from '@open-codesign/runtime';
+import { buildPreviewDocument, validateNativeGenerationSource } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, Page } from 'puppeteer-core';
 import { boundedPreview } from './preview-interactions';
 import { buildWorkspacePreviewDocument, isPreviewFileUrlAllowed } from './preview-runtime';
@@ -253,6 +253,7 @@ async function verifyWithSystemChrome(
 export function makeRuntimeVerifier(options?: { workspaceRoot: string }): DoneRuntimeVerifier {
   return async (artifactSource, context): Promise<DoneError[]> => {
     context?.signal?.throwIfAborted();
+    if (context?.runtimeMode === 'native-html') validateNativeGenerationSource(artifactSource);
     const workspaceRoot = options ? resolve(options.workspaceRoot) : undefined;
     const srcdoc = workspaceRoot
       ? await buildWorkspacePreviewDocument(

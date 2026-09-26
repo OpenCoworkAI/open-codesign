@@ -77,6 +77,7 @@ interface AgentScript {
    * generateViaAgent's tool wrappers without reimplementing pi-agent-core's
    * full model/tool loop in the mock.
    */
+  execute?: (options: AgentOptions) => Promise<void>;
   executeTool?: {
     name: string;
     times?: number;
@@ -185,6 +186,7 @@ vi.mock('@mariozechner/pi-agent-core', () => {
         }
       }
 
+      await script.execute?.(this.call.options);
       if (script.executeTool) {
         const tool = this.call.options.initialState?.tools?.find(
           (candidate) => candidate.name === script.executeTool?.name,
@@ -999,6 +1001,152 @@ describe('generateViaAgent()', () => {
     expect(result.inputTokens).toBe(1120);
     expect(result.outputTokens).toBe(340);
     expect(result.costUsd).toBeCloseTo(0.0493);
+  });
+
+  describe('source identity completion', () => {
+    const source = {
+      schemaVersion: 1,
+      path: 'pages/main.html',
+      format: 'html',
+      runtimeMode: 'native-html',
+    } as const;
+    const input = {
+      prompt: 'revise this page',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+      source,
+      systemPrompt: 'Follow host source identity.',
+    };
+    const fsForRun = () =>
+      makeStubFs({
+        [source.path]: SAMPLE_HTML,
+        'App.jsx': '<main>Unrelated</main>',
+        'DESIGN.md': VALID_DESIGN_MD,
+      });
+    async function tool(options: AgentOptions, name: string, params: Record<string, unknown> = {}) {
+      const selected = options.initialState?.tools?.find((entry) => entry.name === name);
+      if (!selected) throw new Error(`Missing tool ${name}`);
+      return selected.execute('identity-test', params);
+    }
+
+    it('accepts the declared raw source, even with a coexisting App.jsx', async () => {
+      const accepted = vi.fn();
+      scriptedAgent = {
+        assistantText: 'Verified.',
+        execute: async (options) => {
+          await tool(options, 'done');
+        },
+      };
+      const result = await generateViaAgent(
+        { ...input, onSourceAccepted: accepted },
+        { fs: fsForRun(), runtimeVerify: async () => [] },
+      );
+      expect(result.artifacts).toHaveLength(1);
+      expect(result.artifacts[0]).toMatchObject({
+        content: SAMPLE_HTML,
+        entryPath: source.path,
+        sourceFormat: 'html',
+        renderRuntime: 'static-html',
+        source,
+      });
+      expect(accepted).toHaveBeenCalledWith({ source, content: SAMPLE_HTML });
+    });
+
+    it.each([
+      false,
+      true,
+    ])('no-op never emits an existing visual artifact (history=%s)', async (history) => {
+      const accepted = vi.fn();
+      scriptedAgent = { assistantText: 'Just discussing.' };
+      const initialResourceState = resourceState({
+        mutationSeq: 4,
+        lastDone: {
+          status: 'ok',
+          path: source.path,
+          mutationSeq: 4,
+          errorCount: 0,
+          checkedAt: '2026-01-01',
+        },
+      });
+      const result = await generateViaAgent(
+        { ...input, onSourceAccepted: accepted, ...(history ? { initialResourceState } : {}) },
+        { fs: fsForRun() },
+      );
+      expect(result.artifacts).toEqual([]);
+      expect(accepted).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'missing',
+      'stale',
+      'during',
+      'direct',
+      'document-bypass',
+      'custom',
+    ])('rejects %s verification bypass', async (scenario) => {
+      const fs = fsForRun();
+      const accepted = vi.fn();
+      scriptedAgent = {
+        assistantText: 'Finished.',
+        execute: async (options) => {
+          if (scenario === 'custom') {
+            await fs.create(source.path, `${SAMPLE_HTML}\nchanged`);
+            return;
+          }
+          if (scenario === 'stale' || scenario === 'direct') await tool(options, 'done');
+          if (scenario === 'direct') await fs.create(source.path, `${SAMPLE_HTML}\nchanged`);
+          else if (scenario !== 'during')
+            await tool(options, 'str_replace_based_edit_tool', {
+              command: 'create',
+              path: 'assets/style.css',
+              file_text: 'body { color: red; }',
+            });
+          if (scenario === 'during') await tool(options, 'done');
+          if (scenario === 'document-bypass') await tool(options, 'done', { path: 'DESIGN.md' });
+        },
+      };
+      const runtimeVerify = async () => {
+        if (scenario === 'during') {
+          const options = agentCalls.at(-1)?.options;
+          if (!options) throw new Error('Missing options');
+          await tool(options, 'str_replace_based_edit_tool', {
+            command: 'create',
+            path: 'assets/style.css',
+            file_text: 'body {}',
+          });
+        }
+        return [];
+      };
+      await expect(
+        generateViaAgent(
+          { ...input, onSourceAccepted: accepted },
+          { fs, runtimeVerify, ...(scenario === 'custom' ? { tools: [] } : {}) },
+        ),
+      ).rejects.toMatchObject({ code: ERROR_CODES.GENERATION_INCOMPLETE });
+      expect(accepted).not.toHaveBeenCalled();
+    });
+
+    it('allows DESIGN.md-only work without confirming or collecting visual source', async () => {
+      const accepted = vi.fn();
+      scriptedAgent = {
+        assistantText: 'Updated documentation.',
+        execute: async (options) => {
+          await tool(options, 'str_replace_based_edit_tool', {
+            command: 'create',
+            path: 'DESIGN.md',
+            file_text: `${VALID_DESIGN_MD}\nNew note.`,
+          });
+          await tool(options, 'done', { path: 'DESIGN.md' });
+        },
+      };
+      const result = await generateViaAgent(
+        { ...input, onSourceAccepted: accepted },
+        { fs: fsForRun() },
+      );
+      expect(result.artifacts).toEqual([]);
+      expect(accepted).not.toHaveBeenCalled();
+    });
   });
 
   it('falls back to legacy index.html when App.jsx is absent', async () => {
