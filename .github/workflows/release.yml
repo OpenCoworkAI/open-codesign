@@ -35,7 +35,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -95,7 +95,7 @@ jobs:
     outputs:
       changelog: ${{ steps.build.outputs.changelog }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -170,7 +170,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -290,7 +290,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -370,7 +370,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -436,7 +436,7 @@ jobs:
     env:
       RELEASE_REF: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
@@ -490,7 +490,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Check out the default branch (not the tag) so the commit lands
           # on main. We pass the version explicitly to the script.
@@ -581,7 +581,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: steps.guard.outputs.skip == 'false'
 
       - name: Derive version from tag
@@ -601,7 +601,7 @@ jobs:
 
       - name: Checkout Scoop bucket
         if: steps.guard.outputs.skip == 'false'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: OpenCoworkAI/scoop-bucket
           path: scoop-bucket
@@ -646,7 +646,7 @@ jobs:
 
       - name: Checkout source
         if: steps.guard.outputs.skip == 'false'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: source
           ref: ${{ github.event_name == 'push' && github.ref || 'main' }}
@@ -660,7 +660,7 @@ jobs:
 
       - name: Checkout Homebrew tap
         if: steps.guard.outputs.skip == 'false'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: OpenCoworkAI/homebrew-tap
           path: homebrew-tap
