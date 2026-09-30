@@ -188,9 +188,11 @@ describe.skipIf(!chrome)('active composer fake gate in system Chrome', () => {
         ),
       ).toBe(true);
       await page.focus('textarea');
-      await page.keyboard.down('Control');
-      await page.keyboard.press('A');
-      await page.keyboard.up('Control');
+      const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+      await page.keyboard.down(modifier);
+      // Headless shell needs an explicit native editing command for Select All.
+      await page.keyboard.press('A', { commands: ['selectAll'] });
+      await page.keyboard.up(modifier);
       await page.keyboard.press('Backspace');
       await page.waitForSelector('.codesign-active-message-actions', { hidden: true });
       expect(await page.$('.codesign-active-message-help')).toBeNull();

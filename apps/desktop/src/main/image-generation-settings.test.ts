@@ -62,14 +62,18 @@ vi.mock('./logger', () => ({
   }),
 }));
 
-function makeConfig(imageEnabled: boolean): Config {
+function makeConfig(
+  imageEnabled: boolean,
+  baseUrl = 'https://api.openai.com/v1',
+  imageBaseUrl?: string,
+): Config {
   const providers: Record<string, ProviderEntry> = {
     openai: {
       id: 'openai',
       name: 'OpenAI',
       builtin: true,
       wire: 'openai-chat',
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl,
       defaultModel: 'gpt-5.4',
     },
   };
@@ -85,6 +89,7 @@ function makeConfig(imageEnabled: boolean): Config {
       provider: 'openai',
       credentialMode: 'inherit',
       model: 'gpt-image-2',
+      ...(imageBaseUrl === undefined ? {} : { baseUrl: imageBaseUrl }),
       quality: 'high',
       size: '1536x1024',
       outputFormat: 'png',
@@ -168,6 +173,45 @@ describe('image generation enablement', () => {
       false,
     );
     expect((await updateImageGenerationSettings({ provider: 'openai' })).requestBase64).toBe(false);
+  });
+
+  it('preserves the inherited gateway when saving only the base64 preference', async () => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    const cfg = makeConfig(true, 'https://inherited-relay.example/v1');
+    mocks.cachedConfig = cfg;
+    expect((await imageSettingsToView(cfg.imageGeneration)).baseUrl).toBe(
+      'https://api.openai.com/v1',
+    );
+    await updateImageGenerationSettings(parseImageGenerationUpdate({ requestBase64: true }));
+    const saved = mocks.writeConfig.mock.calls[0]?.[0];
+    if (saved === undefined) throw new Error('Expected persisted configuration');
+    expect(saved.imageGeneration?.baseUrl).toBeUndefined();
+    expect(saved.providers['openai']?.baseUrl).toBe('https://inherited-relay.example/v1');
+    await expect(resolveImageGenerationConfig(saved)).resolves.toMatchObject({
+      baseUrl: 'https://inherited-relay.example/v1',
+      requestBase64: true,
+    });
+  });
+
+  it('preserves an explicit gateway while allowing a later explicit URL update', async () => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    const cfg = makeConfig(
+      true,
+      'https://inherited-relay.example/v1',
+      'https://image-relay.example/v1',
+    );
+    mocks.cachedConfig = cfg;
+    await updateImageGenerationSettings({ requestBase64: true });
+    if (mocks.cachedConfig === null) throw new Error('Expected persisted configuration');
+    await expect(resolveImageGenerationConfig(mocks.cachedConfig)).resolves.toMatchObject({
+      baseUrl: 'https://image-relay.example/v1',
+      requestBase64: true,
+    });
+    await updateImageGenerationSettings({ baseUrl: 'https://new-relay.example/v1' });
+    await expect(resolveImageGenerationConfig(mocks.cachedConfig)).resolves.toMatchObject({
+      baseUrl: 'https://new-relay.example/v1',
+      requestBase64: true,
+    });
   });
 
   it.each(['true', 1, null])('rejects malformed base64 preferences (%s)', (requestBase64) => {

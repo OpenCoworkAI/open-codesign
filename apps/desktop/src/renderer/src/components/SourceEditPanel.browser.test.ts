@@ -396,9 +396,11 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await element.evaluate((node) => {
       if (node instanceof HTMLTextAreaElement) node.focus();
     });
-    await page.keyboard.down('Control');
-    await page.keyboard.press('A');
-    await page.keyboard.up('Control');
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.keyboard.down(modifier);
+    // Headless shell needs an explicit native editing command for Select All.
+    await page.keyboard.press('A', { commands: ['selectAll'] });
+    await page.keyboard.up(modifier);
     await page.keyboard.type(value);
     await page.click(selector, { delay: clickDelay });
   }

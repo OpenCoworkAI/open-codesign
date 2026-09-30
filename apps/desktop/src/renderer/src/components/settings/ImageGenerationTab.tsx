@@ -137,7 +137,7 @@ function ImageGenerationPanel() {
         </label>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-3)]">
+      <div className="grid grid-cols-1 gap-[var(--space-3)]">
         <Row label={t('settings.imageGen.provider')}>
           <NativeSelect
             value={settings.provider}
@@ -279,7 +279,13 @@ function ImageGenerationPanel() {
               baseUrl === settings.baseUrl &&
               requestBase64 === settings.requestBase64)
           }
-          onClick={() => void save({ model, baseUrl, requestBase64 })}
+          onClick={() =>
+            void save({
+              ...(model !== settings.model ? { model } : {}),
+              ...(baseUrl !== settings.baseUrl ? { baseUrl } : {}),
+              ...(requestBase64 !== settings.requestBase64 ? { requestBase64 } : {}),
+            })
+          }
           className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {t('common.save')}
