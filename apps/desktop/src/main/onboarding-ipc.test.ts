@@ -251,6 +251,34 @@ describe('registerOnboardingIpc — channel versioning', () => {
     expect(rows.some((row) => row.provider === 'ollama')).toBe(true);
   });
 
+  it('persists API Route as an opt-in builtin with its own key and exact model ID', async () => {
+    const { readConfig, writeConfig } = await import('./config');
+    vi.mocked(readConfig).mockResolvedValueOnce(null);
+    vi.mocked(writeConfig).mockClear();
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+
+    const rows = (await handlers.get('settings:v1:add-provider')?.(
+      {},
+      {
+        provider: 'api-route',
+        apiKey: 'sk-api-route-test',
+        modelPrimary: 'deepseek-v4-flash',
+      },
+    )) as Array<{ provider: string }>;
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.providers['api-route']).toMatchObject({
+      id: 'api-route',
+      wire: 'openai-chat',
+      baseUrl: 'https://global.api-route.com/v1',
+      envKey: 'API_ROUTE_API_KEY',
+      defaultModel: 'deepseek-v4-flash',
+    });
+    expect(written?.secrets['api-route']?.ciphertext).toBe('enc:sk-api-route-test');
+    expect(rows.some((row) => row.provider === 'api-route')).toBe(true);
+  });
+
   it('trims modelPrimary before writing builtin provider settings', async () => {
     const { readConfig, writeConfig } = await import('./config');
     vi.mocked(readConfig).mockResolvedValueOnce(null);
@@ -961,6 +989,26 @@ describe('registerOnboardingIpc — validate-key passes baseUrl to pingProvider'
       'atlascloud',
       'apikey-test',
       'https://api.atlascloud.ai/v1',
+    );
+  });
+
+  it('forwards API Route validation without confusing it with an OpenAI key', async () => {
+    const { pingProvider } = await import('@open-codesign/providers');
+    vi.mocked(pingProvider).mockClear();
+    const handler = handlers.get('onboarding:validate-key');
+    expect(handler).toBeDefined();
+    await handler?.(
+      {},
+      {
+        provider: 'api-route',
+        apiKey: 'sk-api-route-test',
+        baseUrl: 'https://global.api-route.com/v1',
+      },
+    );
+    expect(pingProvider).toHaveBeenCalledWith(
+      'api-route',
+      'sk-api-route-test',
+      'https://global.api-route.com/v1',
     );
   });
 
