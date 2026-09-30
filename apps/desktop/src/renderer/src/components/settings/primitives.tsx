@@ -1,5 +1,12 @@
 import { getCurrentLocale, useT } from '@open-codesign/i18n';
-import type { OnboardingState, ReasoningLevel } from '@open-codesign/shared';
+import {
+  localModelsForDiscoveryMode,
+  type OnboardingState,
+  type ProviderModelDiscoveryMode,
+  type ReasoningLevel,
+  settingsModelPickerKind,
+  usesRemoteModelsListing,
+} from '@open-codesign/shared';
 import {
   AlertTriangle,
   CheckCircle,
@@ -53,6 +60,20 @@ export function computeModelOptions(input: {
     return [{ value: activeModelId, label: `${activeModelId} ${notInListSuffix}` }, ...base];
   }
   return base;
+}
+
+export function settingsModelPickerState(input: {
+  discoveryMode: ProviderModelDiscoveryMode;
+  loading: boolean;
+  models: string[] | null;
+  forceManual: boolean;
+}): 'loading' | 'select' | 'manual' {
+  if (input.forceManual) return 'manual';
+  if (settingsModelPickerKind(input.discoveryMode) === 'manual') return 'manual';
+  if (input.discoveryMode === 'models' && (input.loading || input.models === null)) {
+    return 'loading';
+  }
+  return (input.models?.length ?? 0) > 0 ? 'select' : 'manual';
 }
 
 export function Label({ children }: { children: React.ReactNode }) {
@@ -318,7 +339,13 @@ export function ProviderCard({
       const res = await window.codesign.connection.testProvider(row.provider);
       recordAction({ type: 'connection.test', data: { provider: row.provider, ok: res.ok } });
       if (res.ok) {
-        pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
+        pushToast({
+          variant: res.compatibility === 'degraded' ? 'info' : 'success',
+          title:
+            res.compatibility === 'degraded'
+              ? t('settings.providers.toast.connectionOkDegraded')
+              : t('settings.providers.toast.connectionOk'),
+        });
       } else {
         reportableErrorToast({
           code: 'CONNECTION_TEST_FAILED',
@@ -432,13 +459,23 @@ export function RowModelSelector({
 
   const provider = row.provider;
   const isActive = row.isActive;
+  const discoveryMode = row.modelDiscoveryMode;
+  const fetchRemote = usesRemoteModelsListing(discoveryMode);
 
   const initial = isActive
     ? (config.modelPrimary ?? row.defaultModel ?? '')
     : (row.defaultModel ?? '');
   const [primary, setPrimary] = useState(initial);
-  const [models, setModels] = useState<string[] | null>(null);
-  const [loadingModels, setLoadingModels] = useState(false);
+  const [models, setModels] = useState<string[] | null>(
+    fetchRemote
+      ? null
+      : (localModelsForDiscoveryMode(discoveryMode, {
+          defaultModel: row.defaultModel,
+          modelsHint: row.modelsHint,
+        }) ?? []),
+  );
+  const [loadingModels, setLoadingModels] = useState(fetchRemote);
+  const [forceManual, setForceManual] = useState(false);
 
   useEffect(() => {
     setPrimary(
@@ -447,6 +484,16 @@ export function RowModelSelector({
   }, [isActive, config.modelPrimary, row.defaultModel]);
 
   useEffect(() => {
+    if (!fetchRemote) {
+      setModels(
+        localModelsForDiscoveryMode(discoveryMode, {
+          defaultModel: row.defaultModel,
+          modelsHint: row.modelsHint,
+        }) ?? [],
+      );
+      setLoadingModels(false);
+      return;
+    }
     if (!window.codesign?.models?.listForProvider) return;
     let cancelled = false;
     setLoadingModels(true);
@@ -458,7 +505,7 @@ export function RowModelSelector({
     return () => {
       cancelled = true;
     };
-  }, [provider]);
+  }, [provider, fetchRemote, discoveryMode, row.defaultModel, row.modelsHint]);
 
   const saveSeq = useRef(0);
 
@@ -473,8 +520,6 @@ export function RowModelSelector({
         recordAction({ type: 'provider.switch', data: { provider, modelId: next } });
         setConfig(updated);
       } else {
-        // Inactive row: persist the per-provider default so "Set as current"
-        // later picks it up via currentRow.defaultModel.
         await window.codesign.config.updateProvider({ id: provider, defaultModel: next });
         onRowChanged({ ...row, defaultModel: next });
       }
@@ -511,20 +556,66 @@ export function RowModelSelector({
       }),
     [models, isActive, primary, notInListSuffix],
   );
+  const picker = settingsModelPickerState({
+    discoveryMode,
+    loading: loadingModels,
+    models,
+    forceManual,
+  });
+  const hintKey =
+    discoveryMode === 'infer-only'
+      ? 'settings.providers.discovery.inferOnlyHint'
+      : discoveryMode === 'manual'
+        ? 'settings.providers.discovery.manualHint'
+        : discoveryMode === 'static-hint'
+          ? 'settings.providers.discovery.staticHint'
+          : null;
 
   return (
-    <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
-      <Cpu className="w-3 h-3 shrink-0" />
-      {loadingModels ? (
-        <span className="inline-flex items-center gap-1 h-6 px-2 text-[var(--text-xs)]">
-          <Loader2 className="w-3 h-3 animate-spin" />
-        </span>
-      ) : options !== null ? (
-        <NativeSelect value={primary} onChange={handleChange} options={options} />
-      ) : (
-        <span className="h-6 px-2 inline-flex items-center font-mono text-[var(--text-xs)] text-[var(--color-text-primary)]">
-          {primary || t('settings.providers.noModel')}
-        </span>
+    <div className="mt-[var(--space-2)] space-y-1">
+      <div className="flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
+        <Cpu className="w-3 h-3 shrink-0" />
+        {picker === 'loading' ? (
+          <span className="inline-flex items-center gap-1 h-6 px-2 text-[var(--text-xs)]">
+            <Loader2 className="w-3 h-3 animate-spin" />
+          </span>
+        ) : picker === 'select' && options !== null ? (
+          <>
+            <NativeSelect value={primary} onChange={handleChange} options={options} />
+            <button
+              type="button"
+              onClick={() => setForceManual(true)}
+              className="shrink-0 text-[var(--text-xs)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
+            >
+              {t('settings.providers.custom.switchToManual')}
+            </button>
+          </>
+        ) : (
+          <input
+            type="text"
+            value={primary}
+            onChange={(e) => setPrimary(e.target.value)}
+            onBlur={() => {
+              const next = primary.trim();
+              const currentSaved = isActive
+                ? (config.modelPrimary ?? row.defaultModel ?? '')
+                : (row.defaultModel ?? '');
+              if (next.length > 0 && next !== currentSaved) handleChange(next);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              const next = primary.trim();
+              if (next.length > 0) handleChange(next);
+            }}
+            placeholder={t('settings.providers.discovery.enterModelId')}
+            className="h-6 min-w-[12rem] px-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] font-mono text-[var(--text-xs)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+            aria-label={t('settings.providers.editModel')}
+          />
+        )}
+      </div>
+      {hintKey !== null && (
+        <p className="pl-5 text-[var(--text-xs)] text-[var(--color-text-muted)]">{t(hintKey)}</p>
       )}
     </div>
   );

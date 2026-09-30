@@ -383,6 +383,7 @@
         "compatibilityHintBody": "Alguns coding plans, relays e gateways compatíveis com OpenAI só permitem clientes específicos, como Claude Code, openclaw ou Hermes. Mesmo que a API pareça compatível, o Open CoDesign ainda pode ser bloqueado por uma lista de apps permitidos.",
         "test": "Testar conexão",
         "testOk": "OK — {{count}} modelos disponíveis",
+        "testOkNoListing": "Sem listagem de modelos — informe um ID. A inferência ainda pode funcionar.",
         "save": "Salvar e continuar",
         "saveEdit": "Salvar alterações",
         "switchToDropdown": "Escolher da lista",
@@ -476,8 +477,15 @@
         "reasoningSaved": "Profundidade de raciocínio salva",
         "reasoningSaveFailed": "Falha ao salvar a profundidade de raciocínio",
         "connectionOk": "Conexão OK",
+        "connectionOkDegraded": "Conectado — sem listagem de modelos; a inferência ainda funciona",
         "connectionFailed": "Falha na conexão",
         "saveFailed": "Falha ao salvar o provedor"
+      },
+      "discovery": {
+        "manualHint": "Os IDs de modelo são informados manualmente neste provedor.",
+        "inferOnlyHint": "Este provedor não lista modelos — informe um ID. A inferência ainda pode funcionar.",
+        "staticHint": "Modelos conhecidos deste provedor. Você ainda pode informar outro ID.",
+        "enterModelId": "model-id"
       },
       "reasoning": {
         "label": "Profundidade de raciocínio",
@@ -982,6 +990,7 @@
       "corsError": "Erro de CORS (não deveria acontecer no processo principal). Isso é um bug.",
       "sslError": "Erro de SSL / certificado (certificado autoassinado ou CA privada?). Ative em Configurações → Provedores → este provedor → Desativar verificação TLS para conectar a endpoints internos confiáveis.",
       "endpointNotFound": "A URL base já contém um caminho de versão, mas o provedor não expôs esta rota.",
+      "modelsListingNotApplicable": "Este provedor não expõe um endpoint de listagem de modelos. Isso é esperado — informe um ID e use a inferência em vez de tratar a ausência de /models como falha grave.",
       "gatewayIncompatible": "O gateway aceitou a conexão, mas não implementa a API deste provedor. Tente trocar o wire, por exemplo para openai-chat.",
       "gatewayWafBlocked": "O gateway ou proxy reverso bloqueou a geração antes de ela chegar ao modelo. Test Connection ainda pode passar porque só verifica o endpoint /models.",
       "openaiResponsesMisconfigured": "O endpoint rejeitou o formato da requisição. O wire pode estar errado; tente openai-chat.",

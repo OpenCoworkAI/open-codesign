@@ -67,6 +67,30 @@ describe('diagnose', () => {
     expect(result[0]?.suggestedFix).toBeUndefined();
   });
 
+  it('404 on /models is listing-not-applicable when discovery mode does not expect listing', () => {
+    const result = diagnose('404', {
+      ...baseCtx,
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      attemptedUrl: 'https://open.bigmodel.cn/api/paas/v4/models',
+      modelDiscoveryMode: 'infer-only',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.modelsListingNotApplicable');
+    expect(result[0]?.category).toBe('model-discovery-degraded');
+    expect(result[0]?.severity).toBe('info');
+    expect(result[0]?.suggestedFix).toBeUndefined();
+  });
+
+  it('404 on an inference URL is still an endpoint failure even for infer-only providers', () => {
+    const result = diagnose('404', {
+      ...baseCtx,
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      attemptedUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+      modelDiscoveryMode: 'infer-only',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.endpointNotFound');
+    expect(result[0]?.category).toBe('endpoint-not-found');
+  });
+
   it('404 classifies endpoint-not-found when baseUrl already has /v1 (e.g. Cloudflare Workers AI)', () => {
     const result = diagnose('404', {
       ...baseCtx,
