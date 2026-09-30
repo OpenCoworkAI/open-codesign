@@ -70,18 +70,98 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
-async function exportDesign(format: ExporterFormat = 'html'): Promise<ExportResponse> {
+async function exportDesign(
+  format: ExporterFormat = 'html',
+  renderMode?: 'image' | 'native',
+): Promise<ExportResponse> {
   const destination = join(directory, `export.${format === 'markdown' ? 'md' : format}`);
   mocks.pick.mockResolvedValueOnce({ canceled: false, filePath: destination });
   const handler = mocks.handlers.get('codesign:export');
   if (!handler) throw new Error('Missing export IPC handler');
   return (await handler(null, {
     format,
+    ...(renderMode !== undefined ? { renderMode } : {}),
     workspacePath: directory,
     sourcePath: 'deck.html',
     artifactSource: source,
   })) as ExportResponse;
 }
+
+describe('PPTX IPC wiring', () => {
+  it.each([
+    undefined,
+    'image',
+    'native',
+  ] as const)('forwards mode %s with resolved source and asset options', async (renderMode) => {
+    const result = await exportDesign('pptx', renderMode);
+    expect(result.status).toBe('saved');
+    expect(mocks.exportArtifact).toHaveBeenCalledWith(
+      'pptx',
+      source,
+      join(directory, 'export.pptx'),
+      expect.objectContaining({
+        sourcePath: 'deck.html',
+        assetRootPath: directory,
+        assetBasePath: directory,
+      }),
+    );
+    const options = mocks.exportArtifact.mock.calls[0]?.[3];
+    if (renderMode === undefined) {
+      expect(options).not.toHaveProperty('renderMode');
+    } else {
+      expect(options).toHaveProperty('renderMode', renderMode);
+    }
+    expect(result).not.toHaveProperty('exportWarnings');
+  });
+
+  it('returns exporter warnings separately from failed research companion warnings', async () => {
+    const warnings = ['Slide 2 uses an image fallback.'];
+    mocks.exportArtifact.mockResolvedValueOnce({
+      path: join(directory, 'export.pptx'),
+      bytes: 42,
+      warnings,
+    });
+    mocks.slides.mockRejectedValueOnce(new Error('Research content is stale.'));
+    const result = await exportDesign('pptx', 'native');
+    expect(result.exportWarnings).toEqual(warnings);
+    expect(result.researchWarnings).toEqual([
+      'Sources companion was not exported: Research content is stale.',
+    ]);
+    expect(warnings).toEqual(['Slide 2 uses an image fallback.']);
+  });
+
+  it('surfaces exporter warnings even without research records', async () => {
+    await rm(join(directory, '.codesign', 'research.json'));
+    mocks.exportArtifact.mockResolvedValueOnce({
+      path: join(directory, 'export.pptx'),
+      bytes: 42,
+      warnings: ['Complex visuals became images.'],
+    });
+    const result = await exportDesign('pptx', 'native');
+    expect(result.exportWarnings).toEqual(['Complex visuals became images.']);
+    expect(result).not.toHaveProperty('researchWarnings');
+  });
+
+  it('validates renderMode before opening a save dialog or invoking exporters', async () => {
+    const handler = mocks.handlers.get('codesign:export');
+    if (!handler) throw new Error('Missing export IPC handler');
+    await expect(
+      handler(null, { format: 'pdf', artifactSource: source, renderMode: 'native' }),
+    ).rejects.toMatchObject({ code: 'IPC_BAD_INPUT' });
+    expect(mocks.pick).not.toHaveBeenCalled();
+    expect(mocks.exportArtifact).not.toHaveBeenCalled();
+  });
+
+  it('does not export when the native PPTX save dialog is cancelled', async () => {
+    const handler = mocks.handlers.get('codesign:export');
+    if (!handler) throw new Error('Missing export IPC handler');
+    mocks.pick.mockResolvedValueOnce({ canceled: true });
+    await expect(
+      handler(null, { format: 'pptx', artifactSource: source, renderMode: 'native' }),
+    ).resolves.toEqual({ status: 'cancelled' });
+    expect(mocks.exportArtifact).not.toHaveBeenCalled();
+  });
+});
 
 describe('optional research companion export', () => {
   it.each([

@@ -2289,6 +2289,55 @@ describe('useCodesignStore artifact persistence', () => {
   });
 });
 
+describe('PPTX export requests', () => {
+  it.each([
+    undefined,
+    'image',
+    'native',
+  ] as const)('forwards the selected mode %s without changing the default', async (renderMode) => {
+    const exportFile = vi.fn().mockResolvedValue({ status: 'saved', path: '/tmp/deck.pptx' });
+    vi.stubGlobal('window', { codesign: { export: exportFile }, setTimeout });
+    useCodesignStore.setState({ currentDesignId: null, previewSource: '<section>Deck</section>' });
+
+    await useCodesignStore.getState().exportActive('pptx', renderMode);
+
+    expect(exportFile).toHaveBeenCalledOnce();
+    expect(exportFile.mock.calls[0]?.[0]).toMatchObject({
+      format: 'pptx',
+      artifactSource: '<section>Deck</section>',
+    });
+    if (renderMode === undefined) {
+      expect(exportFile.mock.calls[0]?.[0]).not.toHaveProperty('renderMode');
+    } else {
+      expect(exportFile.mock.calls[0]?.[0]).toHaveProperty('renderMode', renderMode);
+    }
+  });
+
+  it('shows exporter warnings and research warnings alongside both saved paths', async () => {
+    const exportWarnings = ['Slide 2 uses an image fallback.'];
+    const researchWarnings = ['Some sources are stale.'];
+    const exportFile = vi.fn().mockResolvedValue({
+      status: 'saved',
+      path: '/tmp/deck.pptx',
+      sourcesPath: '/tmp/deck.sources.md',
+      exportWarnings,
+      researchWarnings,
+    });
+    vi.stubGlobal('window', { codesign: { export: exportFile }, setTimeout });
+    useCodesignStore.setState({ currentDesignId: null, previewSource: '<section>Deck</section>' });
+
+    await useCodesignStore.getState().exportActive('pptx', 'native');
+
+    const toast = useCodesignStore.getState().toastMessage;
+    expect(toast).toContain('/tmp/deck.pptx');
+    expect(toast).toContain('/tmp/deck.sources.md');
+    expect(toast).toContain(exportWarnings[0]);
+    expect(toast).toContain(researchWarnings[0]);
+    expect(exportWarnings).toEqual(['Slide 2 uses an image fallback.']);
+    expect(researchWarnings).toEqual(['Some sources are stale.']);
+  });
+});
+
 describe('loadDesigns startup', () => {
   it('shares in-flight startup initialization instead of creating duplicate blank designs', async () => {
     const creation = deferred<typeof DEFAULT_DESIGN>();

@@ -10,6 +10,11 @@ overrides:
   vitepress>vite: 6.4.2
   esbuild@<0.25.0: '>=0.25.0'
 
+patchedDependencies:
+  pptxgenjs@4.0.1:
+    hash: dd46c0a62033b672e35bc3f1d7cb16c23dc8ccaa76d11ba92543083d4eca2def
+    path: patches/pptxgenjs@4.0.1.patch
+
 importers:
 
   .:
@@ -146,7 +151,7 @@ importers:
         version: 1.14.0(react@19.2.6)
       pptxgenjs:
         specifier: ^4.0.1
-        version: 4.0.1
+        version: 4.0.1(patch_hash=dd46c0a62033b672e35bc3f1d7cb16c23dc8ccaa76d11ba92543083d4eca2def)
       react:
         specifier: ^19.2.6
         version: 19.2.6
@@ -235,7 +240,7 @@ importers:
         version: link:../shared
       pptxgenjs:
         specifier: ^4.0.1
-        version: 4.0.1
+        version: 4.0.1(patch_hash=dd46c0a62033b672e35bc3f1d7cb16c23dc8ccaa76d11ba92543083d4eca2def)
       puppeteer-core:
         specifier: ^24.42.0
         version: 24.42.0
@@ -246,6 +251,9 @@ importers:
       '@types/node':
         specifier: ^22.19.19
         version: 22.19.19
+      '@xmldom/xmldom':
+        specifier: 0.8.13
+        version: 0.8.13
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -10046,7 +10054,7 @@ snapshots:
       commander: 9.5.0
     optional: true
 
-  pptxgenjs@4.0.1:
+  pptxgenjs@4.0.1(patch_hash=dd46c0a62033b672e35bc3f1d7cb16c23dc8ccaa76d11ba92543083d4eca2def):
     dependencies:
       '@types/node': 22.19.19
       https: 1.0.0

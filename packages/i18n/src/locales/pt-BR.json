@@ -738,6 +738,10 @@
         "label": "PPTX",
         "hint": "Slides de alta fidelidade; um por <section>"
       },
+      "pptxNative": {
+        "label": "PPTX (editável, beta)",
+        "hint": "Texto e formas editáveis; elementos visuais complexos podem virar imagens"
+      },
       "zip": {
         "label": "Pacote ZIP",
         "hint": "index.html + assets + README.md"

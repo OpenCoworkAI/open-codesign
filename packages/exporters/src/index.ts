@@ -13,7 +13,10 @@ import type { LocalAssetOptions } from './assets';
 export const EXPORTER_FORMATS = ['html', 'pdf', 'pptx', 'zip', 'markdown'] as const;
 export type ExporterFormat = (typeof EXPORTER_FORMATS)[number];
 
-export type ExportOptions = LocalAssetOptions & { assets?: import('./zip').ZipAsset[] };
+export type ExportOptions = LocalAssetOptions & {
+  assets?: import('./zip').ZipAsset[];
+  renderMode?: import('./pptx').ExportPptxOptions['renderMode'];
+};
 
 export async function readResearchSlides(
   source: string,
@@ -26,6 +29,7 @@ export async function readResearchSlides(
 export interface ExportResult {
   bytes: number;
   path: string;
+  warnings?: string[];
 }
 
 export function isExporterReady(_format: ExporterFormat): boolean {

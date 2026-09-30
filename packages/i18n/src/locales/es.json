@@ -772,6 +772,10 @@
         "label": "PPTX",
         "hint": "Diapositivas de alta fidelidad; una por <section>"
       },
+      "pptxNative": {
+        "label": "PPTX (editable, beta)",
+        "hint": "Texto y formas editables; los elementos visuales complejos pueden convertirse en imágenes"
+      },
       "zip": {
         "label": "Paquete ZIP",
         "hint": "index.html + activos + README.md"

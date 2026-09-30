@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
+    "@xmldom/xmldom": "0.8.13",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }

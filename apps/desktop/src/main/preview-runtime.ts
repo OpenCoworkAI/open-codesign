@@ -223,10 +223,8 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
     const metrics = await boundedPreview(
       page.evaluate(() => {
         // Runs in the browser; DOM globals are defined at call time.
-        // @ts-expect-error browser context
         const rect = document.documentElement.getBoundingClientRect();
         return {
-          // @ts-expect-error browser context
           nodes: document.querySelectorAll('*').length,
           width: Math.round(rect.width),
           height: Math.round(rect.height),
@@ -285,7 +283,6 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
             const children = kids.map((c) => outline(c, depth + 1, maxDepth)).join('\n');
             return children.length > 0 ? `${self}\n${children}` : self;
           }
-          // @ts-expect-error browser context
           return outline(document.documentElement as unknown as El, 0, 4);
         }),
         2000,
