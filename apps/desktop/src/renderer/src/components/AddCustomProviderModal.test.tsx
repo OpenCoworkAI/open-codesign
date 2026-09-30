@@ -12,6 +12,22 @@ vi.mock('@open-codesign/i18n', () => ({
 }));
 
 describe('AddCustomProviderModal', () => {
+  it('prefills API Route as a locked, key-required builtin rather than a custom endpoint', () => {
+    const html = renderToStaticMarkup(
+      <AddCustomProviderModal
+        onSave={() => undefined}
+        onClose={() => undefined}
+        initialValues={{ builtinProvider: 'api-route' }}
+      />,
+    );
+    expect(html).toContain('API Route');
+    expect(html).toContain('https://global.api-route.com/v1');
+    expect(html).toContain('deepseek-v4-flash');
+    expect(html).not.toContain('settings.providers.custom.keylessLabel');
+    expect(html).not.toContain('settings.providers.custom.compatibilityHintTitle');
+    expect(html).not.toContain('settings.providers.tlsRejectUnauthorized.label');
+  });
+
   it('shows the compatibility warning for editable custom endpoints', () => {
     const html = renderToStaticMarkup(
       <AddCustomProviderModal onSave={() => undefined} onClose={() => undefined} />,

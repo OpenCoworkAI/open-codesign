@@ -226,7 +226,7 @@ After each stable tag push, CI syncs SHAs back into `packaging/` and publishes d
 On first launch, Open CoDesign opens the Settings page. Pick the path that matches how you already use models:
 
 - **ChatGPT subscription** — sign in with ChatGPT to use Codex models without pasting an API key.
-- **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Atlas Cloud, Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
+- **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Atlas Cloud, [API Route](https://www.api-route.com), Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
 - **Local / keyless** — use Ollama or an IP-allowlisted OpenAI-compatible gateway.
 
 For a custom endpoint that accepts requests without an API key, select **No API key required** in the custom-provider form. Choose the endpoint's wire protocol (including **OpenAI Responses** when appropriate), enter its base URL and default model, and leave the key empty. Local/private endpoint testing still requires the separate network confirmation. Automatic model discovery never sends API keys; for authenticated endpoints, enter a key and click **Test connection**. Switching an existing provider to keyless removes its stored key on save; switching back requires a stored or newly entered key.
@@ -234,6 +234,8 @@ For a custom endpoint that accepts requests without an API key, select **No API 
 JSX previews and standalone exports use `system-ui` by default without downloading fonts. The runtime loads a supported Google Fonts family (Fraunces, DM Serif Display, DM Sans, or JetBrains Mono) only when the artifact explicitly references it. Use local/system fonts for offline-only designs; explicit remote font choices still require network access.
 
 Credentials stay in `~/.config/open-codesign/config.toml` and the ChatGPT OAuth token store under the app config directory. Nothing leaves your machine unless your chosen model route requires it.
+
+For API Route, explicitly select **API Route** and enter your [API key](https://www.api-route.com/tokens). The preset uses `https://global.api-route.com/v1` and suggests `deepseek-v4-flash`; authenticated model discovery reflects your key's current access. A successful connection/model-list check does not verify generation or balance: send a small prompt to the selected model to confirm inference. API Route keys share the `sk-` prefix with other providers, so the prefix alone cannot identify the service.
 
 ### 3. Type your first prompt
 
@@ -278,7 +280,7 @@ Contract tests check loaded instructions, supported source examples, preference 
 ## What you get
 
 ### Models and providers
-- **Unified provider model** — Anthropic, OpenAI, Atlas Cloud, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
+- **Unified provider model** — Anthropic, OpenAI, Atlas Cloud, API Route, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
 - **One-click import and sign-in** — bring Claude Code / Codex API-key provider configs across, or sign in with ChatGPT subscription for Codex models
 - **Dynamic model picker** — every provider exposes its real model catalogue, not a hardcoded shortlist
 

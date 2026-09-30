@@ -420,6 +420,12 @@ describe('modelsEndpointUrl', () => {
     );
   });
 
+  it('openai-chat: API Route inference URL resolves to its models endpoint', () => {
+    expect(
+      modelsEndpointUrl('https://global.api-route.com/v1/chat/completions/', 'openai-chat'),
+    ).toBe('https://global.api-route.com/v1/models');
+  });
+
   it('openai-chat: GLM /api/paas/v4/models', () => {
     expect(
       modelsEndpointUrl('https://open.bigmodel.cn/api/paas/v4/chat/completions', 'openai-chat'),
