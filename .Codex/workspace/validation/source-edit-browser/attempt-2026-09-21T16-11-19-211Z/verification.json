@@ -1,0 +1,2242 @@
+{
+  "levels": {
+    "browser": "system Chromium",
+    "fullFilesTab": true,
+    "transport": "HTTP invokes captured production IPC handlers",
+    "electronE2E": false,
+    "realEngine": true,
+    "realAtomicWriter": true,
+    "temporaryWorkspace": true,
+    "llm": false,
+    "screenshotReview": "PNG captured; visual review unavailable (model has no image input)",
+    "uiChecks": "DOM visibility, viewport bounds, label association, keyboard entry, actual button clicks"
+  },
+  "verified": [
+    "title: exact single disk replacement, visible reset-state warning, DOM reload and working counter",
+    "gap: exact single disk replacement, visible reset-state warning, DOM reload and working counter",
+    "dynamic count and repeated map output: no editable controls, no apply request, unchanged disk",
+    "external disk conflict: production IPC stale-source rejection and external bytes preserved",
+    "old revision ELEMENT_SELECTED from current iframe observed but did not change current h1 selection or disk",
+    "text exact single replacement via UI -> HTTP -> real IPC -> atomic disk write",
+    "reloaded persisted artifact retains counter business behavior"
+  ],
+  "cases": [
+    {
+      "name": "persists existing title with an exact single diff and working reloaded counter",
+      "records": [
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "3045255836bc96a267931bd5f3424cec303282ed2b7430bf6db40be50c7c3688",
+            "targets": [
+              {
+                "id": "63:337",
+                "tagName": "main",
+                "start": 63,
+                "end": 337,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:117",
+                "tagName": "h1",
+                "start": 69,
+                "end": 117,
+                "insertionOffset": 95,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Original heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Original title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "117:178",
+                "tagName": "button",
+                "start": 117,
+                "end": 178,
+                "insertionOffset": 155,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "178:276",
+                "tagName": "section",
+                "start": 178,
+                "end": 276,
+                "insertionOffset": 237,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "12"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "238:252",
+                "tagName": "span",
+                "start": 238,
+                "end": 252,
+                "insertionOffset": 243,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "252:266",
+                "tagName": "span",
+                "start": 252,
+                "end": 266,
+                "insertionOffset": 257,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "276:330",
+                "tagName": "div",
+                "start": 276,
+                "end": 330,
+                "insertionOffset": 280,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "295:322",
+                "tagName": "p",
+                "start": 295,
+                "end": 322,
+                "insertionOffset": 305,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "method": "apply",
+          "result": {
+            "schemaVersion": 1,
+            "status": "applied",
+            "path": "App.jsx",
+            "content": "function App(){const [count,setCount]=React.useState(0);return <main><h1 title={\"Updated title\"}>Original heading</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button><section aria-label=\"Cards\" style={{display:'flex',gap:12}}><span>A</span><span>B</span></section><div>{[1,2].map(n=><p key={n}>Repeated {n}</p>)}</div></main>}",
+            "sourceHash": "33fb85afa6c250b81150758ae3acc5bd0802c6d03ef36d40b13965d4af640253",
+            "patch": {
+              "start": 79,
+              "end": 95,
+              "expectedText": "\"Original title\"",
+              "replacement": "{\"Updated title\"}"
+            },
+            "scope": "source-definition",
+            "previewRevision": "b1a40d4e-79b0-433d-940a-3418a44ff3c6"
+          }
+        },
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "33fb85afa6c250b81150758ae3acc5bd0802c6d03ef36d40b13965d4af640253",
+            "targets": [
+              {
+                "id": "63:338",
+                "tagName": "main",
+                "start": 63,
+                "end": 338,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:118",
+                "tagName": "h1",
+                "start": 69,
+                "end": 118,
+                "insertionOffset": 96,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Original heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Updated title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "118:179",
+                "tagName": "button",
+                "start": 118,
+                "end": 179,
+                "insertionOffset": 156,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "179:277",
+                "tagName": "section",
+                "start": 179,
+                "end": 277,
+                "insertionOffset": 238,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "12"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "239:253",
+                "tagName": "span",
+                "start": 239,
+                "end": 253,
+                "insertionOffset": 244,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "253:267",
+                "tagName": "span",
+                "start": 253,
+                "end": 267,
+                "insertionOffset": 258,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "277:331",
+                "tagName": "div",
+                "start": 277,
+                "end": 331,
+                "insertionOffset": 281,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "296:323",
+                "tagName": "p",
+                "start": 296,
+                "end": 323,
+                "insertionOffset": 306,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "disk": "function App(){const [count,setCount]=React.useState(0);return <main><h1 title={\"Updated title\"}>Original heading</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button><section aria-label=\"Cards\" style={{display:'flex',gap:12}}><span>A</span><span>B</span></section><div>{[1,2].map(n=><p key={n}>Repeated {n}</p>)}</div></main>}",
+      "applyRequests": 1,
+      "commits": 1
+    },
+    {
+      "name": "persists existing gap with an exact single diff and working reloaded counter",
+      "records": [
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "3045255836bc96a267931bd5f3424cec303282ed2b7430bf6db40be50c7c3688",
+            "targets": [
+              {
+                "id": "63:337",
+                "tagName": "main",
+                "start": 63,
+                "end": 337,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:117",
+                "tagName": "h1",
+                "start": 69,
+                "end": 117,
+                "insertionOffset": 95,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Original heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Original title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "117:178",
+                "tagName": "button",
+                "start": 117,
+                "end": 178,
+                "insertionOffset": 155,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "178:276",
+                "tagName": "section",
+                "start": 178,
+                "end": 276,
+                "insertionOffset": 237,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "12"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "238:252",
+                "tagName": "span",
+                "start": 238,
+                "end": 252,
+                "insertionOffset": 243,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "252:266",
+                "tagName": "span",
+                "start": 252,
+                "end": 266,
+                "insertionOffset": 257,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "276:330",
+                "tagName": "div",
+                "start": 276,
+                "end": 330,
+                "insertionOffset": 280,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "295:322",
+                "tagName": "p",
+                "start": 295,
+                "end": 322,
+                "insertionOffset": 305,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "method": "apply",
+          "result": {
+            "schemaVersion": 1,
+            "status": "applied",
+            "path": "App.jsx",
+            "content": "function App(){const [count,setCount]=React.useState(0);return <main><h1 title=\"Original title\">Original heading</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button><section aria-label=\"Cards\" style={{display:'flex',gap:24}}><span>A</span><span>B</span></section><div>{[1,2].map(n=><p key={n}>Repeated {n}</p>)}</div></main>}",
+            "sourceHash": "ead381d9013b821fa565080f45e22c456ea1a5d89dbe305bd427b067af630eae",
+            "patch": {
+              "start": 233,
+              "end": 235,
+              "expectedText": "12",
+              "replacement": "24"
+            },
+            "scope": "source-definition",
+            "previewRevision": "82347b22-b9e7-4d5d-b66b-cad142dae6f3"
+          }
+        },
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "ead381d9013b821fa565080f45e22c456ea1a5d89dbe305bd427b067af630eae",
+            "targets": [
+              {
+                "id": "63:337",
+                "tagName": "main",
+                "start": 63,
+                "end": 337,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:117",
+                "tagName": "h1",
+                "start": 69,
+                "end": 117,
+                "insertionOffset": 95,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Original heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Original title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "117:178",
+                "tagName": "button",
+                "start": 117,
+                "end": 178,
+                "insertionOffset": 155,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "178:276",
+                "tagName": "section",
+                "start": 178,
+                "end": 276,
+                "insertionOffset": 237,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "24"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "238:252",
+                "tagName": "span",
+                "start": 238,
+                "end": 252,
+                "insertionOffset": 243,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "252:266",
+                "tagName": "span",
+                "start": 252,
+                "end": 266,
+                "insertionOffset": 257,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "276:330",
+                "tagName": "div",
+                "start": 276,
+                "end": 330,
+                "insertionOffset": 280,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "295:322",
+                "tagName": "p",
+                "start": 295,
+                "end": 322,
+                "insertionOffset": 305,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "disk": "function App(){const [count,setCount]=React.useState(0);return <main><h1 title=\"Original title\">Original heading</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button><section aria-label=\"Cards\" style={{display:'flex',gap:24}}><span>A</span><span>B</span></section><div>{[1,2].map(n=><p key={n}>Repeated {n}</p>)}</div></main>}",
+      "applyRequests": 1,
+      "commits": 1
+    },
+    {
+      "name": "rejects dynamic and repeated selections without offering writes",
+      "records": [
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "3045255836bc96a267931bd5f3424cec303282ed2b7430bf6db40be50c7c3688",
+            "targets": [
+              {
+                "id": "63:337",
+                "tagName": "main",
+                "start": 63,
+                "end": 337,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:117",
+                "tagName": "h1",
+                "start": 69,
+                "end": 117,
+                "insertionOffset": 95,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Original heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Original title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "117:178",
+                "tagName": "button",
+                "start": 117,
+                "end": 178,
+                "insertionOffset": 155,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "178:276",
+                "tagName": "section",
+                "start": 178,
+                "end": 276,
+                "insertionOffset": 237,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "12"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "238:252",
+                "tagName": "span",
+                "start": 238,
+                "end": 252,
+                "insertionOffset": 243,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "252:266",
+                "tagName": "span",
+                "start": 252,
+                "end": 266,
+                "insertionOffset": 257,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "276:330",
+                "tagName": "div",
+                "start": 276,
+                "end": 330,
+                "insertionOffset": 280,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "295:322",
+                "tagName": "p",
+                "start": 295,
+                "end": 322,
+                "insertionOffset": 305,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "disk": "function App(){const [count,setCount]=React.useState(0);return <main><h1 title=\"Original title\">Original heading</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button><section aria-label=\"Cards\" style={{display:'flex',gap:12}}><span>A</span><span>B</span></section><div>{[1,2].map(n=><p key={n}>Repeated {n}</p>)}</div></main>}",
+      "applyRequests": 0,
+      "commits": 0
+    },
+    {
+      "name": "rejects stale disk changes without overwriting external content",
+      "records": [
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "3045255836bc96a267931bd5f3424cec303282ed2b7430bf6db40be50c7c3688",
+            "targets": [
+              {
+                "id": "63:337",
+                "tagName": "main",
+                "start": 63,
+                "end": 337,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:117",
+                "tagName": "h1",
+                "start": 69,
+                "end": 117,
+                "insertionOffset": 95,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Original heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Original title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "117:178",
+                "tagName": "button",
+                "start": 117,
+                "end": 178,
+                "insertionOffset": 155,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "178:276",
+                "tagName": "section",
+                "start": 178,
+                "end": 276,
+                "insertionOffset": 237,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "12"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "238:252",
+                "tagName": "span",
+                "start": 238,
+                "end": 252,
+                "insertionOffset": 243,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "252:266",
+                "tagName": "span",
+                "start": 252,
+                "end": 266,
+                "insertionOffset": 257,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "276:330",
+                "tagName": "div",
+                "start": 276,
+                "end": 330,
+                "insertionOffset": 280,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "295:322",
+                "tagName": "p",
+                "start": 295,
+                "end": 322,
+                "insertionOffset": 305,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "method": "apply",
+          "result": {
+            "schemaVersion": 1,
+            "status": "rejected",
+            "reason": "stale-source",
+            "message": "The source changed; inspect the current file before editing."
+          }
+        }
+      ],
+      "errors": [],
+      "disk": "function App(){const [count,setCount]=React.useState(0);return <main><h1 title=\"Original title\">External edit wins</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button><section aria-label=\"Cards\" style={{display:'flex',gap:12}}><span>A</span><span>B</span></section><div>{[1,2].map(n=><p key={n}>Repeated {n}</p>)}</div></main>}",
+      "applyRequests": 1,
+      "commits": 0
+    },
+    {
+      "name": "ignores an old revision overlay payload from the current iframe window",
+      "records": [
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "3045255836bc96a267931bd5f3424cec303282ed2b7430bf6db40be50c7c3688",
+            "targets": [
+              {
+                "id": "63:337",
+                "tagName": "main",
+                "start": 63,
+                "end": 337,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:117",
+                "tagName": "h1",
+                "start": 69,
+                "end": 117,
+                "insertionOffset": 95,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Original heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Original title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "117:178",
+                "tagName": "button",
+                "start": 117,
+                "end": 178,
+                "insertionOffset": 155,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "178:276",
+                "tagName": "section",
+                "start": 178,
+                "end": 276,
+                "insertionOffset": 237,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "12"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "238:252",
+                "tagName": "span",
+                "start": 238,
+                "end": 252,
+                "insertionOffset": 243,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "252:266",
+                "tagName": "span",
+                "start": 252,
+                "end": 266,
+                "insertionOffset": 257,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "276:330",
+                "tagName": "div",
+                "start": 276,
+                "end": 330,
+                "insertionOffset": 280,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "295:322",
+                "tagName": "p",
+                "start": 295,
+                "end": 322,
+                "insertionOffset": 305,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "3045255836bc96a267931bd5f3424cec303282ed2b7430bf6db40be50c7c3688",
+            "targets": [
+              {
+                "id": "63:337",
+                "tagName": "main",
+                "start": 63,
+                "end": 337,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:117",
+                "tagName": "h1",
+                "start": 69,
+                "end": 117,
+                "insertionOffset": 95,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Original heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Original title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "117:178",
+                "tagName": "button",
+                "start": 117,
+                "end": 178,
+                "insertionOffset": 155,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "178:276",
+                "tagName": "section",
+                "start": 178,
+                "end": 276,
+                "insertionOffset": 237,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "12"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "238:252",
+                "tagName": "span",
+                "start": 238,
+                "end": 252,
+                "insertionOffset": 243,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "252:266",
+                "tagName": "span",
+                "start": 252,
+                "end": 266,
+                "insertionOffset": 257,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "276:330",
+                "tagName": "div",
+                "start": 276,
+                "end": 330,
+                "insertionOffset": 280,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "295:322",
+                "tagName": "p",
+                "start": 295,
+                "end": 322,
+                "insertionOffset": 305,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "disk": "function App(){const [count,setCount]=React.useState(0);return <main><h1 title=\"Original title\">Original heading</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button><section aria-label=\"Cards\" style={{display:'flex',gap:12}}><span>A</span><span>B</span></section><div>{[1,2].map(n=><p key={n}>Repeated {n}</p>)}</div></main>}",
+      "applyRequests": 0,
+      "commits": 0
+    },
+    {
+      "name": "persists an exact text patch through the full FilesTab UI",
+      "records": [
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "3045255836bc96a267931bd5f3424cec303282ed2b7430bf6db40be50c7c3688",
+            "targets": [
+              {
+                "id": "63:337",
+                "tagName": "main",
+                "start": 63,
+                "end": 337,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:117",
+                "tagName": "h1",
+                "start": 69,
+                "end": 117,
+                "insertionOffset": 95,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Original heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Original title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "117:178",
+                "tagName": "button",
+                "start": 117,
+                "end": 178,
+                "insertionOffset": 155,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "178:276",
+                "tagName": "section",
+                "start": 178,
+                "end": 276,
+                "insertionOffset": 237,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "12"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "238:252",
+                "tagName": "span",
+                "start": 238,
+                "end": 252,
+                "insertionOffset": 243,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "252:266",
+                "tagName": "span",
+                "start": 252,
+                "end": 266,
+                "insertionOffset": 257,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "276:330",
+                "tagName": "div",
+                "start": 276,
+                "end": 330,
+                "insertionOffset": 280,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "295:322",
+                "tagName": "p",
+                "start": 295,
+                "end": 322,
+                "insertionOffset": 305,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "method": "apply",
+          "result": {
+            "schemaVersion": 1,
+            "status": "applied",
+            "path": "App.jsx",
+            "content": "function App(){const [count,setCount]=React.useState(0);return <main><h1 title=\"Original title\">{\"Edited heading\"}</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button><section aria-label=\"Cards\" style={{display:'flex',gap:12}}><span>A</span><span>B</span></section><div>{[1,2].map(n=><p key={n}>Repeated {n}</p>)}</div></main>}",
+            "sourceHash": "79bface95d03c81e53df61e69ee5a9ae5db0c5e153ceff73023a465b7215372a",
+            "patch": {
+              "start": 96,
+              "end": 112,
+              "expectedText": "Original heading",
+              "replacement": "{\"Edited heading\"}"
+            },
+            "scope": "source-definition",
+            "previewRevision": "13c4c6fa-61ac-4713-838e-764951f5d8df"
+          }
+        },
+        {
+          "method": "inspect",
+          "result": {
+            "schemaVersion": 1,
+            "status": "ready",
+            "path": "App.jsx",
+            "sourceHash": "79bface95d03c81e53df61e69ee5a9ae5db0c5e153ceff73023a465b7215372a",
+            "targets": [
+              {
+                "id": "63:339",
+                "tagName": "main",
+                "start": 63,
+                "end": 339,
+                "insertionOffset": 68,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "69:119",
+                "tagName": "h1",
+                "start": 69,
+                "end": 119,
+                "insertionOffset": 95,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "Edited heading"
+                  },
+                  {
+                    "kind": "set-attribute",
+                    "name": "title",
+                    "value": "Original title"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "119:180",
+                "tagName": "button",
+                "start": 119,
+                "end": 180,
+                "insertionOffset": 157,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "180:278",
+                "tagName": "section",
+                "start": 180,
+                "end": 278,
+                "insertionOffset": 239,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-style",
+                    "property": "gap",
+                    "value": "12"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  }
+                ]
+              },
+              {
+                "id": "240:254",
+                "tagName": "span",
+                "start": 240,
+                "end": 254,
+                "insertionOffset": 245,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "A"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "254:268",
+                "tagName": "span",
+                "start": 254,
+                "end": 268,
+                "insertionOffset": 259,
+                "scope": "source-definition",
+                "editableFields": [
+                  {
+                    "kind": "set-text",
+                    "value": "B"
+                  }
+                ],
+                "unsupported": [
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "278:332",
+                "tagName": "div",
+                "start": 278,
+                "end": 332,
+                "insertionOffset": 282,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "text",
+                    "reason": "non-static-text",
+                    "message": "Text requires one direct static text child or string expression."
+                  },
+                  {
+                    "field": "attributes",
+                    "reason": "no-static-attribute",
+                    "message": "Only existing static title, placeholder and alt attributes are supported."
+                  },
+                  {
+                    "field": "style",
+                    "reason": "no-inline-style",
+                    "message": "Only existing properties of a direct inline style object are supported."
+                  }
+                ]
+              },
+              {
+                "id": "297:324",
+                "tagName": "p",
+                "start": 297,
+                "end": 324,
+                "insertionOffset": 307,
+                "scope": "source-definition",
+                "editableFields": [],
+                "unsupported": [
+                  {
+                    "field": "target",
+                    "reason": "non-direct-source",
+                    "message": "Only direct static App/_App host structure is editable; callbacks, maps, expressions and reused definitions are not."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "disk": "function App(){const [count,setCount]=React.useState(0);return <main><h1 title=\"Original title\">{\"Edited heading\"}</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button><section aria-label=\"Cards\" style={{display:'flex',gap:12}}><span>A</span><span>B</span></section><div>{[1,2].map(n=><p key={n}>Repeated {n}</p>)}</div></main>}",
+      "applyRequests": 1,
+      "commits": 1
+    }
+  ]
+}
