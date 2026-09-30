@@ -512,6 +512,10 @@
         "reasoningSaved": "Profundidad de razonamiento guardada",
         "reasoningSaveFailed": "Error al guardar la profundidad de razonamiento",
         "connectionOk": "Conexión OK",
+        "connectionDegraded": "Conectado, lista de modelos no disponible",
+        "connectionDegradedBody": "Generate funcionará. Este endpoint no expone /models; Open CoDesign confirmó la ruta real de inferencia.",
+        "connectionDiverges": "Alcanzable, pero generate fallaría",
+        "connectionDivergesBody": "El endpoint /models respondió, pero la URL de inferencia usada al generar no. La prueba de conexión y generate comparten el mismo contrato de invocación.",
         "connectionFailed": "Conexión fallida"
       },
       "cliProxyApi": {
@@ -1021,7 +1025,8 @@
       "corsError": "Error de CORS (no debería pasar en el proceso principal). Esto es un error.",
       "sslError": "Error de SSL / certificado (¿certificado autofirmado o CA privada?). Actívalo en Ajustes → Proveedores → este proveedor → Desactivar verificación TLS para conectarte a endpoints internos de confianza.",
       "gatewayIncompatible": "La pasarela aceptó la conexión pero no implementa la API de este proveedor. Intenta cambiar de protocolo (ej. openai-chat).",
-      "gatewayWafBlocked": "La pasarela o el proxy inverso bloqueó la generación antes de llegar al modelo. Test Connection puede pasar porque solo prueba el endpoint /models.",
+      "gatewayWafBlocked": "La pasarela o el proxy inverso bloqueó la generación antes de llegar al modelo.",
+      "invokeContractDiverged": "El proveedor es alcanzable, pero falló el endpoint de inferencia que usa generate. El éxito de /models no basta: Open CoDesign generate usa la URL real de invocación de este protocolo.",
       "openaiResponsesMisconfigured": "El punto final rechazó la forma de la solicitud. El protocolo puede ser incorrecto — intenta cambiar a openai-chat.",
       "unsupportedRole": "El endpoint rechazó el formato de rol enviado al modelo. Normalmente es una incompatibilidad de protocolo o política del modelo.",
       "reasoningPolicy": "El endpoint rechazó los metadatos de razonamiento para este modelo. Reduce la profundidad de razonamiento e inténtalo de nuevo.",

@@ -123,6 +123,13 @@ describe('diagnose', () => {
     expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.disableTls');
   });
 
+  it('maps INVOKE_DIVERGED to invoke-contract-diverged', () => {
+    const result = diagnose('INVOKE_DIVERGED', baseCtx);
+    expect(result[0]?.cause).toBe('diagnostics.cause.invokeContractDiverged');
+    expect(result[0]?.category).toBe('invoke-contract-diverged');
+    expect(result[0]?.suggestedFix?.kind).toBe('openSettings');
+  });
+
   it('maps unknown codes to generic unknown cause', () => {
     const result = diagnose('SOME_UNKNOWN_CODE', baseCtx);
     expect(result[0]?.cause).toBe('diagnostics.cause.unknown');
