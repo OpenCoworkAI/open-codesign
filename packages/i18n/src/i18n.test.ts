@@ -8,6 +8,20 @@ import {
   setLocale,
 } from './index';
 
+describe('image response preference labels', () => {
+  it.each([
+    ['en', 'Request base64 response'],
+    ['zh-CN', '请求 base64 响应'],
+    ['es', 'Solicitar respuesta en base64'],
+    ['pt-BR', 'Solicitar resposta em base64'],
+  ])('localizes the preference in %s', async (locale, label) => {
+    const { i18n } = await import('./index');
+    await initI18n(locale);
+    expect(i18n.t('settings.imageGen.requestBase64')).toBe(label);
+    await setLocale('en');
+  });
+});
+
 describe('normalizeLocale', () => {
   it('returns the value unchanged when it is supported', () => {
     expect(normalizeLocale('en')).toBe('en');

@@ -310,6 +310,9 @@
   },
   "settings": {
     "title": "Configurações",
+    "imageGen": {
+      "requestBase64": "Solicitar resposta em base64"
+    },
     "tabs": {
       "models": "Modelos",
       "appearance": "Aparência",

@@ -5,6 +5,7 @@ import {
   defaultProviderCapabilities,
   detectWireFromBaseUrl,
   hydrateConfig,
+  ImageGenerationSettingsSchema,
   migrateLegacyToV3,
   PROVIDER_SHORTLIST,
   parseConfigFlexible,
@@ -14,6 +15,27 @@ import {
 } from './config';
 
 describe('config v3 schema', () => {
+  it.each([
+    true,
+    false,
+    undefined,
+  ])('preserves optional image response preferences (%s)', (requestBase64) => {
+    const settings = ImageGenerationSettingsSchema.parse({
+      schemaVersion: 1,
+      ...(requestBase64 === undefined ? {} : { requestBase64 }),
+    });
+    expect(settings.requestBase64).toBe(requestBase64);
+  });
+
+  it.each([
+    'true',
+    1,
+    null,
+  ])('rejects malformed image response preferences (%s)', (requestBase64) => {
+    expect(() =>
+      ImageGenerationSettingsSchema.parse({ schemaVersion: 1, requestBase64 }),
+    ).toThrow();
+  });
   it('parses a minimal v3 config', () => {
     const raw = {
       version: 3,

@@ -38,6 +38,7 @@ export interface ImageGenerationSettingsView {
   credentialMode: ImageGenerationCredentialMode;
   model: string;
   baseUrl: string;
+  requestBase64: boolean;
   quality: ImageGenerationQuality;
   size: ImageGenerationSize;
   outputFormat: ImageGenerationOutputFormat;
@@ -52,6 +53,7 @@ export interface ImageGenerationUpdateInput {
   credentialMode?: ImageGenerationCredentialMode;
   model?: string;
   baseUrl?: string;
+  requestBase64?: boolean;
   quality?: ImageGenerationQuality;
   size?: ImageGenerationSize;
   outputFormat?: ImageGenerationOutputFormat;
@@ -64,6 +66,7 @@ const IMAGE_GENERATION_UPDATE_FIELDS = [
   'credentialMode',
   'model',
   'baseUrl',
+  'requestBase64',
   'quality',
   'size',
   'outputFormat',
@@ -163,6 +166,7 @@ export interface ResolvedImageGenerationConfig {
   apiKey: string;
   model: string;
   baseUrl: string;
+  requestBase64: boolean;
   quality: ImageGenerationQuality;
   size: ImageGenerationSize;
   outputFormat: ImageGenerationOutputFormat;
@@ -173,6 +177,7 @@ export function defaultImageGenerationSettings(): ImageGenerationSettings {
     schemaVersion: IMAGE_GENERATION_SCHEMA_VERSION,
     enabled: false,
     provider: 'openai',
+    requestBase64: false,
     credentialMode: 'inherit',
     model: defaultImageModel('openai'),
     quality: 'high',
@@ -192,6 +197,7 @@ export async function imageSettingsToView(
     credentialMode: parsed.credentialMode,
     model: parsed.model,
     baseUrl: parsed.baseUrl ?? defaultImageBaseUrl(parsed.provider),
+    requestBase64: parsed.requestBase64 ?? false,
     quality: parsed.quality,
     size: parsed.size,
     outputFormat: parsed.outputFormat,
@@ -240,6 +246,7 @@ export async function resolveImageGenerationConfig(
     apiKey,
     model: parsed.model,
     baseUrl: parsed.baseUrl ?? inheritedBaseUrl ?? defaultImageBaseUrl(parsed.provider),
+    requestBase64: parsed.requestBase64 ?? false,
     quality: parsed.quality,
     size: parsed.size,
     outputFormat: parsed.outputFormat,
@@ -274,6 +281,7 @@ export function toGenerateImageOptions(
     apiKey: config.apiKey,
     model: config.model,
     baseUrl: config.baseUrl,
+    requestBase64: config.requestBase64,
     prompt,
     quality: config.quality,
     size,
@@ -328,6 +336,12 @@ export function parseImageGenerationUpdate(raw: unknown): ImageGenerationUpdateI
   if (model !== undefined) out.model = model;
   const baseUrl = parseOptionalHttpUrl(r['baseUrl'], 'baseUrl');
   if (baseUrl !== undefined) out.baseUrl = baseUrl;
+  if (r['requestBase64'] !== undefined) {
+    if (typeof r['requestBase64'] !== 'boolean') {
+      throw new CodesignError('requestBase64 must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+    }
+    out.requestBase64 = r['requestBase64'];
+  }
   const quality = parseEnumField(r['quality'], 'quality', ImageGenerationQualitySchema);
   if (quality !== undefined) out.quality = quality;
   const size = parseEnumField(r['size'], 'size', ImageGenerationSizeSchema);
@@ -370,6 +384,8 @@ export async function updateImageGenerationSettings(
     provider,
     credentialMode,
     model: patch.model ?? (providerChanged ? defaultImageModel(provider) : current.model),
+    requestBase64:
+      patch.requestBase64 ?? (providerChanged ? false : (current.requestBase64 ?? false)),
   };
   if (patch.baseUrl === undefined && providerChanged) {
     next.baseUrl = defaultImageBaseUrl(provider);

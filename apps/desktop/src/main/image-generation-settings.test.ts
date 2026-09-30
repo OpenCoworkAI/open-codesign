@@ -13,6 +13,7 @@ import {
   isGenerateImageAssetEnabled,
   parseImageGenerationUpdate,
   resolveImageGenerationConfig,
+  toGenerateImageOptions,
   updateImageGenerationSettings,
 } from './image-generation-settings';
 
@@ -125,6 +126,52 @@ describe('image generation enablement', () => {
     const cfg = makeConfig(false);
     await expect(isGenerateImageAssetEnabled(cfg)).resolves.toBe(false);
     await expect(resolveImageGenerationConfig(cfg)).resolves.toBeNull();
+  });
+
+  it('keeps base64 requests disabled for existing settings', async () => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    const cfg = makeConfig(true);
+    expect((await imageSettingsToView(cfg.imageGeneration)).requestBase64).toBe(false);
+    const resolved = await resolveImageGenerationConfig(cfg);
+    if (resolved === null) throw new Error('Expected enabled image generation');
+    expect(toGenerateImageOptions(resolved, 'fixture').requestBase64).toBe(false);
+  });
+
+  it.each([
+    true,
+    false,
+  ])('persists and forwards the base64 preference (%s)', async (requestBase64) => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    mocks.cachedConfig = makeConfig(true);
+    const patch = parseImageGenerationUpdate({
+      requestBase64,
+      baseUrl: 'https://relay.example/v1',
+    });
+    const view = await updateImageGenerationSettings(patch);
+    expect(view).toMatchObject({ requestBase64, baseUrl: 'https://relay.example/v1' });
+    const saved = mocks.writeConfig.mock.calls[0]?.[0];
+    if (saved === undefined) throw new Error('Expected persisted configuration');
+    expect(saved.imageGeneration?.requestBase64).toBe(requestBase64);
+    const resolved = await resolveImageGenerationConfig(saved);
+    if (resolved === null) throw new Error('Expected enabled image generation');
+    expect(toGenerateImageOptions(resolved, 'fixture')).toMatchObject({
+      requestBase64,
+      baseUrl: 'https://relay.example/v1',
+    });
+  });
+
+  it('resets the gateway compatibility option when switching image providers', async () => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    mocks.cachedConfig = makeConfig(true);
+    await updateImageGenerationSettings({ requestBase64: true });
+    expect((await updateImageGenerationSettings({ provider: 'openrouter' })).requestBase64).toBe(
+      false,
+    );
+    expect((await updateImageGenerationSettings({ provider: 'openai' })).requestBase64).toBe(false);
+  });
+
+  it.each(['true', 1, null])('rejects malformed base64 preferences (%s)', (requestBase64) => {
+    expectThrowCode(() => parseImageGenerationUpdate({ requestBase64 }), ERROR_CODES.IPC_BAD_INPUT);
   });
 
   it('enables generate_image_asset when image generation is on and key is available', async () => {

@@ -333,6 +333,7 @@
       "keyPlaceholder": "Dejar vacío para mantener {{mask}}",
       "newKeyPlaceholder": "Pegar clave API",
       "model": "Modelo de imagen",
+      "requestBase64": "Solicitar respuesta en base64",
       "baseUrl": "URL base",
       "quality": "Calidad",
       "size": "Tamaño",
