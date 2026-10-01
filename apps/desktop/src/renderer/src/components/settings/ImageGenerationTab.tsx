@@ -1,4 +1,5 @@
 import { useT } from '@open-codesign/i18n';
+import { MINIMAX_IMAGE_BASE_URLS, MINIMAX_IMAGE_MODEL } from '@open-codesign/shared';
 import { Image as ImageIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ImageGenerationSettingsView } from '../../../../preload/index';
@@ -6,12 +7,14 @@ import { useCodesignStore } from '../../store';
 import { Label, NativeSelect, Row, SectionTitle, SegmentedControl } from './primitives';
 
 function defaultImageModelFor(provider: ImageGenerationSettingsView['provider']): string {
+  if (provider === 'minimax') return MINIMAX_IMAGE_MODEL;
   if (provider === 'openrouter') return 'openai/gpt-5.4-image-2';
   if (provider === 'chatgpt-codex') return 'gpt-5.5';
   return 'gpt-image-2';
 }
 
 function defaultImageBaseUrlFor(provider: ImageGenerationSettingsView['provider']): string {
+  if (provider === 'minimax') return MINIMAX_IMAGE_BASE_URLS.global_en;
   if (provider === 'openrouter') return 'https://openrouter.ai/api/v1';
   if (provider === 'chatgpt-codex') return 'https://chatgpt.com/backend-api';
   return 'https://api.openai.com/v1';
@@ -140,6 +143,7 @@ function ImageGenerationPanel() {
             value={settings.provider}
             disabled={saving}
             options={[
+              { value: 'minimax', label: 'MiniMax' },
               { value: 'openai', label: 'OpenAI' },
               {
                 value: 'chatgpt-codex',
@@ -153,7 +157,12 @@ function ImageGenerationPanel() {
               const provider = value as ImageGenerationSettingsView['provider'];
               void save({
                 provider,
-                credentialMode: provider === 'chatgpt-codex' ? 'inherit' : settings.credentialMode,
+                credentialMode:
+                  provider === 'chatgpt-codex'
+                    ? 'inherit'
+                    : provider === 'minimax'
+                      ? 'custom'
+                      : settings.credentialMode,
                 model: defaultImageModelFor(provider),
                 baseUrl: defaultImageBaseUrlFor(provider),
               });
@@ -172,6 +181,20 @@ function ImageGenerationPanel() {
           />
         </Row>
       </div>
+
+      {settings.provider === 'minimax' ? (
+        <Row label={t('settings.imageGen.region', { defaultValue: 'MiniMax region' })}>
+          <NativeSelect
+            value={baseUrl}
+            disabled={saving}
+            options={[
+              { value: MINIMAX_IMAGE_BASE_URLS.global_en, label: 'Global' },
+              { value: MINIMAX_IMAGE_BASE_URLS.cn_zh, label: 'China' },
+            ]}
+            onChange={(value) => void save({ baseUrl: value })}
+          />
+        </Row>
+      ) : null}
 
       {settings.credentialMode === 'custom' ? (
         <div className="flex items-center gap-[var(--space-2)]">
@@ -225,7 +248,7 @@ function ImageGenerationPanel() {
         <Row label={t('settings.imageGen.quality')}>
           <NativeSelect
             value={settings.quality}
-            disabled={saving}
+            disabled={saving || settings.provider === 'minimax'}
             options={[
               { value: 'auto', label: 'Auto' },
               { value: 'low', label: 'Low' },

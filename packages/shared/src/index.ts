@@ -341,6 +341,8 @@ export {
   ImageGenerationSettingsSchema,
   ImageGenerationSizeSchema,
   isSupportedOnboardingProvider,
+  MINIMAX_IMAGE_BASE_URLS,
+  MINIMAX_IMAGE_MODEL,
   migrateLegacyToV3,
   PROVIDER_SHORTLIST,
   ProviderCapabilitiesSchema,

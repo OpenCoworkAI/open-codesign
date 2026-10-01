@@ -229,7 +229,9 @@ export async function resolveImageGenerationConfig(
     apiKey = getApiKeyForProvider(parsed.provider);
   }
   const inheritedBaseUrl =
-    parsed.credentialMode === 'inherit' ? cfg.providers[parsed.provider]?.baseUrl : undefined;
+    parsed.credentialMode === 'inherit' && parsed.provider !== 'minimax'
+      ? cfg.providers[parsed.provider]?.baseUrl
+      : undefined;
   log.info('resolve.ok', {
     provider: parsed.provider,
     model: parsed.model,
@@ -363,7 +365,8 @@ export async function updateImageGenerationSettings(
   const credentialMode =
     provider === CHATGPT_CODEX_PROVIDER_ID
       ? 'inherit'
-      : (patch.credentialMode ?? current.credentialMode);
+      : (patch.credentialMode ??
+        (providerChanged && provider === 'minimax' ? 'custom' : current.credentialMode));
   let next: ImageGenerationSettings = {
     ...current,
     ...safePatch,

@@ -1,6 +1,11 @@
-import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import {
+  CodesignError,
+  ERROR_CODES,
+  MINIMAX_IMAGE_BASE_URLS,
+  MINIMAX_IMAGE_MODEL,
+} from '@open-codesign/shared';
 
-export type ImageGenerationProvider = 'openai' | 'openrouter' | 'chatgpt-codex';
+export type ImageGenerationProvider = 'minimax' | 'openai' | 'openrouter' | 'chatgpt-codex';
 export type ImageOutputFormat = 'png' | 'jpeg' | 'webp';
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high';
 export type ImageSize = 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
@@ -78,12 +83,14 @@ const DEFAULT_CHATGPT_CODEX_IMAGE_MODEL = 'gpt-5.5';
 const BASE64_IMAGE_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export function defaultImageModel(provider: ImageGenerationProvider): string {
+  if (provider === 'minimax') return MINIMAX_IMAGE_MODEL;
   if (provider === 'openrouter') return DEFAULT_OPENROUTER_IMAGE_MODEL;
   if (provider === 'chatgpt-codex') return DEFAULT_CHATGPT_CODEX_IMAGE_MODEL;
   return DEFAULT_OPENAI_IMAGE_MODEL;
 }
 
 export function defaultImageBaseUrl(provider: ImageGenerationProvider): string {
+  if (provider === 'minimax') return MINIMAX_IMAGE_BASE_URLS.global_en;
   if (provider === 'openrouter') return DEFAULT_OPENROUTER_BASE_URL;
   if (provider === 'chatgpt-codex') return DEFAULT_CHATGPT_CODEX_BASE_URL;
   return DEFAULT_OPENAI_BASE_URL;
@@ -97,11 +104,67 @@ export async function generateImage(options: GenerateImageOptions): Promise<Gene
   if (prompt.length === 0) {
     throw new CodesignError('Image prompt cannot be empty', ERROR_CODES.INPUT_EMPTY_PROMPT);
   }
+  if (options.provider === 'minimax') return generateMiniMaxImage({ ...options, prompt });
   if (options.provider === 'openrouter') return generateOpenRouterImage({ ...options, prompt });
   if (options.provider === 'chatgpt-codex') {
     return generateChatGPTCodexImage({ ...options, prompt });
   }
   return generateOpenAIImage({ ...options, prompt });
+}
+
+interface MiniMaxImageResponse {
+  data?: { image_base64?: unknown[] };
+  base_resp?: { status_code?: number; status_msg?: string };
+}
+
+async function generateMiniMaxImage(
+  options: GenerateImageOptions & { prompt: string },
+): Promise<GenerateImageResult> {
+  const model = options.model?.trim() || MINIMAX_IMAGE_MODEL;
+  const body: Record<string, unknown> = {
+    model,
+    prompt: options.prompt,
+    n: 1,
+    response_format: 'base64',
+  };
+  if (options.aspectRatio !== undefined) {
+    body['aspect_ratio'] = options.aspectRatio;
+  } else if (options.size !== undefined && options.size !== 'auto') {
+    const [width, height] = options.size.split('x').map(Number);
+    body['width'] = width;
+    body['height'] = height;
+  }
+  const json = await postJson<MiniMaxImageResponse>(
+    joinEndpoint(options.baseUrl ?? MINIMAX_IMAGE_BASE_URLS.global_en, 'image_generation'),
+    body,
+    options,
+  );
+  if (json.base_resp?.status_code !== 0) {
+    throw new CodesignError(
+      `MiniMax image generation failed: ${json.base_resp?.status_msg ?? 'Missing success status'}`,
+      ERROR_CODES.PROVIDER_ERROR,
+    );
+  }
+  const image = json.data?.image_base64?.[0];
+  if (typeof image !== 'string') {
+    throw new CodesignError(
+      'MiniMax image response did not include base64 image data',
+      ERROR_CODES.PROVIDER_ERROR,
+    );
+  }
+  const base64 = normalizeBase64ImageData(image, 'MiniMax image response');
+  // The API controls the output encoding; preserve the actual image MIME type.
+  const bytes = Buffer.from(base64, 'base64');
+  const mimeType =
+    bytes[0] === 0x89 ? 'image/png' : bytes[0] === 0xff ? 'image/jpeg' : 'image/webp';
+  validateImageSignature(mimeType, base64, 'MiniMax image response');
+  return {
+    dataUrl: `data:${mimeType};base64,${base64}`,
+    base64,
+    mimeType,
+    model,
+    provider: 'minimax',
+  };
 }
 
 async function generateOpenAIImage(
