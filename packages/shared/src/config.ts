@@ -120,7 +120,14 @@ export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
 
 export const IMAGE_GENERATION_SCHEMA_VERSION = 1 as const;
 
+export const MINIMAX_IMAGE_MODEL = 'image-01';
+export const MINIMAX_IMAGE_BASE_URLS = {
+  global_en: 'https://api.minimax.io/v1',
+  cn_zh: 'https://api.minimaxi.com/v1',
+} as const;
+
 export const ImageGenerationProviderSchema = z.enum([
+  'minimax',
   'openai',
   'openrouter',
   CHATGPT_CODEX_PROVIDER_ID,

@@ -1,4 +1,4 @@
-import { ERROR_CODES } from '@open-codesign/shared';
+import { ERROR_CODES, MINIMAX_IMAGE_BASE_URLS, MINIMAX_IMAGE_MODEL } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defaultImageModel, generateImage } from './images';
 
@@ -16,6 +16,113 @@ function jwtWithClaims(claims: Record<string, unknown>): string {
 describe('generateImage', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it.each(
+    Object.values(MINIMAX_IMAGE_BASE_URLS),
+  )('calls the MiniMax image endpoint at %s with Bearer auth and aspect ratio', async (baseUrl) => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            base_resp: { status_code: 0 },
+            data: { image_base64: [PNG_HEADER_BASE64] },
+          }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const signal = new AbortController().signal;
+    const result = await generateImage({
+      provider: 'minimax',
+      apiKey: 'test-key',
+      prompt: '  poster  ',
+      baseUrl,
+      aspectRatio: '16:9',
+      size: '1536x1024',
+      quality: 'high',
+      outputFormat: 'webp',
+      signal,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      baseUrl + '/image_generation',
+      expect.objectContaining({
+        signal,
+        headers: expect.objectContaining({ authorization: 'Bearer test-key' }),
+        body: JSON.stringify({
+          model: MINIMAX_IMAGE_MODEL,
+          prompt: 'poster',
+          n: 1,
+          response_format: 'base64',
+          aspect_ratio: '16:9',
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      provider: 'minimax',
+      model: MINIMAX_IMAGE_MODEL,
+      mimeType: 'image/png',
+      base64: PNG_HEADER_BASE64,
+      dataUrl: 'data:image/png;base64,' + PNG_HEADER_BASE64,
+    });
+  });
+
+  it('uses MiniMax defaults and dimensions while preserving the actual output encoding', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            base_resp: { status_code: 0 },
+            data: { image_base64: ['/9j/'] },
+          }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await generateImage({
+      provider: 'minimax',
+      apiKey: 'test-key',
+      prompt: 'poster',
+      size: '1024x1536',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      MINIMAX_IMAGE_BASE_URLS.global_en + '/image_generation',
+      expect.objectContaining({
+        body: JSON.stringify({
+          model: MINIMAX_IMAGE_MODEL,
+          prompt: 'poster',
+          n: 1,
+          response_format: 'base64',
+          width: 1024,
+          height: 1536,
+        }),
+      }),
+    );
+    expect(result.mimeType).toBe('image/jpeg');
+  });
+
+  it.each([
+    { base_resp: { status_code: 1008, status_msg: 'Insufficient balance' } },
+    { data: { image_base64: [PNG_HEADER_BASE64] } },
+    { base_resp: { status_code: 0 }, data: { image_base64: [] } },
+    { base_resp: { status_code: 0 }, data: { image_base64: ['invalid image'] } },
+    { base_resp: { status_code: 0 }, data: { image_base64: ['aGVsbG8='] } },
+  ])('rejects unsuccessful or invalid MiniMax image responses', async (response) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(response))),
+    );
+    await expect(
+      generateImage({ provider: 'minimax', apiKey: 'test-key', prompt: 'poster' }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.PROVIDER_ERROR });
+  });
+
+  it('reports MiniMax HTTP errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('Unavailable', { status: 503 })),
+    );
+    await expect(
+      generateImage({ provider: 'minimax', apiKey: 'test-key', prompt: 'poster' }),
+    ).rejects.toThrow('HTTP 503');
   });
 
   it('calls OpenAI image generations and normalizes b64_json', async () => {

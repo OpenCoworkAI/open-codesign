@@ -4,6 +4,8 @@ import {
   ERROR_CODES,
   hydrateConfig,
   IMAGE_GENERATION_SCHEMA_VERSION,
+  MINIMAX_IMAGE_BASE_URLS,
+  MINIMAX_IMAGE_MODEL,
   type ProviderEntry,
 } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +15,7 @@ import {
   isGenerateImageAssetEnabled,
   parseImageGenerationUpdate,
   resolveImageGenerationConfig,
+  toGenerateImageOptions,
   updateImageGenerationSettings,
 } from './image-generation-settings';
 
@@ -119,6 +122,68 @@ describe('image generation enablement', () => {
     mocks.codexGetValidAccessToken.mockReset();
     mocks.setCachedConfig.mockReset();
     mocks.writeConfig.mockReset();
+  });
+
+  it('switches image generation to MiniMax with isolated custom credentials', async () => {
+    mocks.cachedConfig = makeConfig(true);
+    const view = await updateImageGenerationSettings({ provider: 'minimax' });
+    expect(view).toMatchObject({
+      provider: 'minimax',
+      model: MINIMAX_IMAGE_MODEL,
+      baseUrl: MINIMAX_IMAGE_BASE_URLS.global_en,
+      credentialMode: 'custom',
+      hasCustomKey: false,
+    });
+    await expect(resolveImageGenerationConfig(mocks.cachedConfig)).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_KEY_MISSING,
+    });
+    await updateImageGenerationSettings({
+      apiKey: 'test-key',
+      baseUrl: MINIMAX_IMAGE_BASE_URLS.cn_zh,
+    });
+    const resolved = await resolveImageGenerationConfig(mocks.cachedConfig);
+    expect(resolved).toMatchObject({
+      provider: 'minimax',
+      apiKey: 'test-key',
+      baseUrl: MINIMAX_IMAGE_BASE_URLS.cn_zh,
+    });
+    expect(resolved).not.toBeNull();
+    if (resolved) {
+      expect(toGenerateImageOptions(resolved, 'poster', undefined, '16:9')).toMatchObject({
+        provider: 'minimax',
+        aspectRatio: '16:9',
+        prompt: 'poster',
+      });
+    }
+  });
+
+  it('keeps the MiniMax image endpoint independent of inherited text configuration', async () => {
+    const cfg = makeConfig(true);
+    const provider = Object.values(cfg.providers)[0];
+    const imageSettings = cfg.imageGeneration;
+    if (!provider || !imageSettings) throw new Error('Missing test configuration');
+    cfg.providers['minimax'] = {
+      ...provider,
+      id: 'minimax',
+      baseUrl: 'https://text.example/text-api',
+    };
+    cfg.imageGeneration = {
+      ...imageSettings,
+      provider: 'minimax',
+      model: MINIMAX_IMAGE_MODEL,
+    };
+    getApiKeyForProviderMock.mockReturnValue('test-key');
+    await expect(resolveImageGenerationConfig(cfg)).resolves.toMatchObject({
+      baseUrl: MINIMAX_IMAGE_BASE_URLS.global_en,
+      apiKey: 'test-key',
+    });
+    expect(getApiKeyForProviderMock).toHaveBeenCalledWith('minimax');
+    expect(
+      parseImageGenerationUpdate({
+        provider: 'minimax',
+        baseUrl: MINIMAX_IMAGE_BASE_URLS.cn_zh,
+      }),
+    ).toMatchObject({ provider: 'minimax', baseUrl: MINIMAX_IMAGE_BASE_URLS.cn_zh });
   });
 
   it('disables generate_image_asset when image generation is turned off', async () => {
