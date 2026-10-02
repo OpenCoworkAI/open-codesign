@@ -216,9 +216,9 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
     const input = await page.$(selector);
     if (!input) throw new Error('Missing input');
     await input.focus();
-    await page.keyboard.down('Control');
-    await page.keyboard.press('A');
-    await page.keyboard.up('Control');
+    await input.evaluate((node) => {
+      if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) node.select();
+    });
     await page.keyboard.type(value, { delay: 20 });
     expect(
       await input.evaluate((node) => node.isConnected && document.activeElement === node),
