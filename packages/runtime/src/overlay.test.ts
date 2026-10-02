@@ -241,19 +241,27 @@ describe('OVERLAY_SCRIPT fragment navigation', () => {
     expect(stopPropagation).toHaveBeenCalledOnce();
   });
 
+  function screenDouble(id: string) {
+    const attrs: Record<string, string> = { 'data-oc-screen': id };
+    return {
+      id,
+      scrollIntoView: vi.fn(),
+      getAttribute: (name: string) => attrs[name] ?? null,
+      setAttribute: (name: string, value: string) => {
+        attrs[name] = value;
+      },
+      removeAttribute: (name: string) => {
+        delete attrs[name];
+      },
+    };
+  }
+
   it('shows the targeted data-oc-screen without scrolling or leaving the document', () => {
     const h = runOverlayWithHarness();
-    const home = {
-      id: 'home',
-      getAttribute: (name: string) => (name === 'data-oc-screen' ? 'home' : null),
-    };
-    const pricing = {
-      id: 'pricing',
-      scrollIntoView: vi.fn(),
-      getAttribute: (name: string) => (name === 'data-oc-screen' ? 'pricing' : null),
-    };
+    const home = screenDouble('home');
+    const pricing = screenDouble('pricing');
     h.elementIds.set('pricing', pricing);
-    h.selectorMatches.set('[data-oc-screen]', [home, pricing]);
+    h.selectorMatches.set('[data-oc-screen]', [h.documentElement, home, pricing]);
     const preventDefault = vi.fn();
     h.documentListeners.get('click')?.({
       target: { tagName: 'A', href: '#pricing', getAttribute: () => '#pricing' },
@@ -261,18 +269,22 @@ describe('OVERLAY_SCRIPT fragment navigation', () => {
       stopPropagation: vi.fn(),
     });
     expect(h.documentElement.getAttribute('data-oc-screen')).toBe('pricing');
-    expect(h.hitLayer.textContent).toContain('data-oc-screen="pricing"');
+    expect(pricing.getAttribute('hidden')).toBeNull();
+    expect(home.getAttribute('hidden')).toBe('');
+    expect(h.documentElement.getAttribute('hidden')).toBeNull();
     expect(preventDefault).toHaveBeenCalledOnce();
     expect(pricing.scrollIntoView).not.toHaveBeenCalled();
   });
 
   it('selects the first screen when the document renders one later', () => {
     const h = runOverlayWithHarness();
-    h.selectorMatches.set('[data-oc-screen]', [
-      { id: 'home', getAttribute: (name: string) => (name === 'data-oc-screen' ? 'home' : null) },
-    ]);
+    const home = screenDouble('home');
+    const pricing = screenDouble('pricing');
+    h.selectorMatches.set('[data-oc-screen]', [home, pricing]);
     h.runTick();
     expect(h.documentElement.getAttribute('data-oc-screen')).toBe('home');
+    expect(home.getAttribute('hidden')).toBeNull();
+    expect(pricing.getAttribute('hidden')).toBe('');
   });
 });
 

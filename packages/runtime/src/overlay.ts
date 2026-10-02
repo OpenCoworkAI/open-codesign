@@ -597,22 +597,18 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     { evt: 'submit', fn: function(e) { e.preventDefault(); } }
   ];
   if (sourceEditContext) installs.push({ evt: 'pointerdown', fn: onEditPointer }, { evt: 'pointermove', fn: onEditPointer });
-  function screenCss(id) {
-    var escaped = String(id).split('\\\\').join('\\\\\\\\').split('"').join('\\\\"');
-    return 'html[data-oc-screen] [data-oc-screen]{display:none!important}' +
-      'html[data-oc-screen="' + escaped + '"] [data-oc-screen="' + escaped + '"]{display:revert!important}';
-  }
   function showScreen(id) {
     var root = document.documentElement;
-    if (!id || !root || !root.setAttribute) return;
+    if (!id || !root || !root.setAttribute || !document.querySelectorAll) return;
     root.setAttribute('data-oc-screen', id);
-    var style = window.__cs_screen_style;
-    if (!style) {
-      style = document.createElement('style');
-      window.__cs_screen_style = style;
-      (document.head || root).appendChild(style);
+    var screens = document.querySelectorAll('[data-oc-screen]');
+    for (var i = 0; i < screens.length; i++) {
+      var screen = screens[i];
+      if (screen === root) continue;
+      var name = screen.id || screen.getAttribute('data-oc-screen');
+      if (name === id) screen.removeAttribute('hidden');
+      else screen.setAttribute('hidden', '');
     }
-    style.textContent = screenCss(id);
   }
   function ensureScreens() {
     var root = document.documentElement;
