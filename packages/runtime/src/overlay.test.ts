@@ -90,6 +90,7 @@ describe('OVERLAY_SCRIPT reattach loop warning throttle', () => {
 
 interface ListenerHarness {
   body: object;
+  documentElement: { getAttribute: (name: string) => string | null };
   selectorMatches: Map<string, unknown[]>;
   elementIds: Map<string, unknown>;
   documentListeners: Map<string, (e: unknown) => void>;
@@ -99,7 +100,7 @@ interface ListenerHarness {
   setHitTarget: (target: unknown) => void;
   runTick: () => void;
   queueMutations: (records: object[]) => void;
-  hitLayer: { isConnected: boolean; style: Record<string, string> };
+  hitLayer: { isConnected: boolean; style: Record<string, string>; textContent?: string };
 }
 
 function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
@@ -128,6 +129,13 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
     querySelector: (selector: string) => selectorMatches.get(selector)?.[0] ?? null,
     createElement: () => hitLayer,
     documentElement: {
+      attrs: {} as Record<string, string>,
+      getAttribute(name: string) {
+        return this.attrs[name] ?? null;
+      },
+      setAttribute(name: string, value: string) {
+        this.attrs[name] = value;
+      },
       appendChild: () => {
         hitLayer.isConnected = true;
       },
@@ -170,6 +178,7 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
   sandbox(fakeWindow, fakeDocument, { warn: () => {} }, fakeSetInterval);
   return {
     body,
+    documentElement: fakeDocument.documentElement,
     selectorMatches,
     elementIds,
     documentListeners,
@@ -230,6 +239,53 @@ describe('OVERLAY_SCRIPT fragment navigation', () => {
     });
     expect(preventDefault).toHaveBeenCalledOnce();
     expect(stopPropagation).toHaveBeenCalledOnce();
+  });
+
+  function screenDouble(id: string) {
+    const attrs: Record<string, string> = { 'data-oc-screen': id };
+    return {
+      id,
+      scrollIntoView: vi.fn(),
+      getAttribute: (name: string) => attrs[name] ?? null,
+      setAttribute: (name: string, value: string) => {
+        attrs[name] = value;
+      },
+      removeAttribute: (name: string) => {
+        delete attrs[name];
+      },
+    };
+  }
+
+  it('shows the targeted data-oc-screen without scrolling or leaving the document', () => {
+    const h = runOverlayWithHarness();
+    const home = screenDouble('home');
+    const pricing = screenDouble('pricing');
+    h.elementIds.set('pricing', pricing);
+    h.selectorMatches.set('[data-oc-screen]', [h.documentElement, home, pricing]);
+    const preventDefault = vi.fn();
+    h.documentListeners.get('click')?.({
+      target: { tagName: 'A', href: '#pricing', getAttribute: () => '#pricing' },
+      preventDefault,
+      stopPropagation: vi.fn(),
+    });
+    expect(h.documentElement.getAttribute('data-oc-active-screen')).toBe('pricing');
+    expect(h.documentElement.getAttribute('data-oc-screen')).toBeNull();
+    expect(pricing.getAttribute('hidden')).toBeNull();
+    expect(home.getAttribute('hidden')).toBe('');
+    expect(h.documentElement.getAttribute('hidden')).toBeNull();
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(pricing.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('selects the first screen when the document renders one later', () => {
+    const h = runOverlayWithHarness();
+    const home = screenDouble('home');
+    const pricing = screenDouble('pricing');
+    h.selectorMatches.set('[data-oc-screen]', [home, pricing]);
+    h.runTick();
+    expect(h.documentElement.getAttribute('data-oc-active-screen')).toBe('home');
+    expect(home.getAttribute('hidden')).toBeNull();
+    expect(pricing.getAttribute('hidden')).toBe('');
   });
 });
 

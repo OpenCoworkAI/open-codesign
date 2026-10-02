@@ -394,11 +394,11 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     const element = input.asElement();
     if (!element) throw new Error('Missing edit textarea');
     await element.evaluate((node) => {
-      if (node instanceof HTMLTextAreaElement) node.focus();
+      if (node instanceof HTMLTextAreaElement) {
+        node.focus();
+        node.select();
+      }
     });
-    await page.keyboard.down('Control');
-    await page.keyboard.press('A');
-    await page.keyboard.up('Control');
     await page.keyboard.type(value);
     await page.click(selector, { delay: clickDelay });
   }
