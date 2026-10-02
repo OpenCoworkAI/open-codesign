@@ -601,14 +601,32 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
   function showScreen(id) {
     var root = document.documentElement;
     if (!id || !root || !root.setAttribute || !document.querySelectorAll) return;
-    root.setAttribute('data-oc-screen', id);
+    root.setAttribute('data-oc-active-screen', id);
     var screens = document.querySelectorAll('[data-oc-screen]');
+    var active = document.activeElement;
+    var destination = null;
+    var moveFocus = false;
     for (var i = 0; i < screens.length; i++) {
       var screen = screens[i];
       if (screen === root) continue;
       var name = screen.id || screen.getAttribute('data-oc-screen');
-      if (name === id) screen.removeAttribute('hidden');
-      else screen.setAttribute('hidden', '');
+      if (name === id) {
+        destination = screen;
+        screen.removeAttribute('hidden');
+      } else {
+        if (active && screen.contains(active)) moveFocus = true;
+        screen.setAttribute('hidden', '');
+      }
+    }
+    if (moveFocus && destination) {
+      if (!destination.hasAttribute('tabindex')) {
+        destination.setAttribute('tabindex', '-1');
+        // Keep the target focusable until blur; immediate removal can reset focus.
+        destination.addEventListener('blur', function(e) {
+          e.currentTarget.removeAttribute('tabindex');
+        }, { once: true });
+      }
+      destination.focus({ preventScroll: true });
     }
   }
   function ensureScreens() {
@@ -619,10 +637,10 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     if (!screenStyle) {
       screenStyle = document.createElement('style');
       // Authored grid/flex display rules otherwise override the native hidden style.
-      screenStyle.textContent = ':root[data-oc-screen] [data-oc-screen][hidden]{display:none!important;}';
+      screenStyle.textContent = ':root[data-oc-active-screen] [data-oc-screen][hidden]{display:none!important;}';
       root.appendChild(screenStyle);
     }
-    var current = root.getAttribute('data-oc-screen');
+    var current = root.getAttribute('data-oc-active-screen');
     var first = null;
     for (var i = 0; i < screens.length; i++) {
       if (screens[i] === root) continue;

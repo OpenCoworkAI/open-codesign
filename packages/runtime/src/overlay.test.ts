@@ -268,7 +268,8 @@ describe('OVERLAY_SCRIPT fragment navigation', () => {
       preventDefault,
       stopPropagation: vi.fn(),
     });
-    expect(h.documentElement.getAttribute('data-oc-screen')).toBe('pricing');
+    expect(h.documentElement.getAttribute('data-oc-active-screen')).toBe('pricing');
+    expect(h.documentElement.getAttribute('data-oc-screen')).toBeNull();
     expect(pricing.getAttribute('hidden')).toBeNull();
     expect(home.getAttribute('hidden')).toBe('');
     expect(h.documentElement.getAttribute('hidden')).toBeNull();
@@ -282,7 +283,7 @@ describe('OVERLAY_SCRIPT fragment navigation', () => {
     const pricing = screenDouble('pricing');
     h.selectorMatches.set('[data-oc-screen]', [home, pricing]);
     h.runTick();
-    expect(h.documentElement.getAttribute('data-oc-screen')).toBe('home');
+    expect(h.documentElement.getAttribute('data-oc-active-screen')).toBe('home');
     expect(home.getAttribute('hidden')).toBeNull();
     expect(pricing.getAttribute('hidden')).toBe('');
   });
