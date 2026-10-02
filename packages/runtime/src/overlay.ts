@@ -470,10 +470,9 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
       } catch (err) { console.warn('[overlay] postMessage ELEMENT_SELECTED failed:', err); }
       return;
     }
-    // Default mode: block ALL navigating links — the sandbox iframe has no
-    // routing and any real navigation (including hash jumps to non-existent
-    // ids) would blank the preview. Agent should use React view-state for
-    // multi-page designs; see agent.ts AGENTIC_TOOL_GUIDANCE.
+    // Default mode: block document navigation. The sandbox iframe has no
+    // router, so a real location change blanks the preview. Same-document
+    // screens use data-oc-screen; ordinary hash links only scroll.
     var anchor = e.target;
     while (anchor && anchor.tagName !== 'A') anchor = anchor.parentElement;
     if (anchor && (anchor.href || anchor.getAttribute('href'))) {
@@ -487,6 +486,10 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
         if (target) {
           // A workspace base URL turns even #fragment links into document navigation.
           e.preventDefault();
+          if (target.getAttribute && target.getAttribute('data-oc-screen') != null) {
+            showScreen(target.id || target.getAttribute('data-oc-screen'));
+            return;
+          }
           target.scrollIntoView();
           return;
         }
@@ -594,6 +597,36 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     { evt: 'submit', fn: function(e) { e.preventDefault(); } }
   ];
   if (sourceEditContext) installs.push({ evt: 'pointerdown', fn: onEditPointer }, { evt: 'pointermove', fn: onEditPointer });
+  function screenCss(id) {
+    var escaped = String(id).split('\\\\').join('\\\\\\\\').split('"').join('\\\\"');
+    return 'html[data-oc-screen] [data-oc-screen]{display:none!important}' +
+      'html[data-oc-screen="' + escaped + '"] [data-oc-screen="' + escaped + '"]{display:revert!important}';
+  }
+  function showScreen(id) {
+    var root = document.documentElement;
+    if (!id || !root || !root.setAttribute) return;
+    root.setAttribute('data-oc-screen', id);
+    var style = window.__cs_screen_style;
+    if (!style) {
+      style = document.createElement('style');
+      window.__cs_screen_style = style;
+      (document.head || root).appendChild(style);
+    }
+    style.textContent = screenCss(id);
+  }
+  function ensureScreens() {
+    var root = document.documentElement;
+    if (!root || !root.getAttribute || !document.querySelectorAll) return;
+    var screens = document.querySelectorAll('[data-oc-screen]');
+    if (!screens || !screens.length) return;
+    var current = root.getAttribute('data-oc-screen');
+    for (var i = 0; i < screens.length; i++) {
+      var name = screens[i].id || screens[i].getAttribute('data-oc-screen');
+      if (current && name === current) return;
+    }
+    var first = screens[0];
+    showScreen(first.id || first.getAttribute('data-oc-screen'));
+  }
   function reattach() {
     if (currentMode === 'source-edit') {
       syncEditHitLayer();
@@ -607,6 +640,7 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
       try { document.removeEventListener(spec.evt, spec.fn, true); } catch (err) { warnOnce('removeEventListener failed for ' + spec.evt, err); }
       try { document.addEventListener(spec.evt, spec.fn, true); } catch (err) { warnOnce('addEventListener failed for ' + spec.evt, err); }
     }
+    ensureScreens();
     if (!window.__cs_err) {
       try { window.addEventListener('error', onError, true); window.__cs_err = true; } catch (err) { warnOnce('attach window error listener failed', err); }
     }

@@ -90,6 +90,7 @@ describe('OVERLAY_SCRIPT reattach loop warning throttle', () => {
 
 interface ListenerHarness {
   body: object;
+  documentElement: { getAttribute: (name: string) => string | null };
   selectorMatches: Map<string, unknown[]>;
   elementIds: Map<string, unknown>;
   documentListeners: Map<string, (e: unknown) => void>;
@@ -99,7 +100,7 @@ interface ListenerHarness {
   setHitTarget: (target: unknown) => void;
   runTick: () => void;
   queueMutations: (records: object[]) => void;
-  hitLayer: { isConnected: boolean; style: Record<string, string> };
+  hitLayer: { isConnected: boolean; style: Record<string, string>; textContent?: string };
 }
 
 function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
@@ -128,6 +129,13 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
     querySelector: (selector: string) => selectorMatches.get(selector)?.[0] ?? null,
     createElement: () => hitLayer,
     documentElement: {
+      attrs: {} as Record<string, string>,
+      getAttribute(name: string) {
+        return this.attrs[name] ?? null;
+      },
+      setAttribute(name: string, value: string) {
+        this.attrs[name] = value;
+      },
       appendChild: () => {
         hitLayer.isConnected = true;
       },
@@ -170,6 +178,7 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
   sandbox(fakeWindow, fakeDocument, { warn: () => {} }, fakeSetInterval);
   return {
     body,
+    documentElement: fakeDocument.documentElement,
     selectorMatches,
     elementIds,
     documentListeners,
@@ -230,6 +239,40 @@ describe('OVERLAY_SCRIPT fragment navigation', () => {
     });
     expect(preventDefault).toHaveBeenCalledOnce();
     expect(stopPropagation).toHaveBeenCalledOnce();
+  });
+
+  it('shows the targeted data-oc-screen without scrolling or leaving the document', () => {
+    const h = runOverlayWithHarness();
+    const home = {
+      id: 'home',
+      getAttribute: (name: string) => (name === 'data-oc-screen' ? 'home' : null),
+    };
+    const pricing = {
+      id: 'pricing',
+      scrollIntoView: vi.fn(),
+      getAttribute: (name: string) => (name === 'data-oc-screen' ? 'pricing' : null),
+    };
+    h.elementIds.set('pricing', pricing);
+    h.selectorMatches.set('[data-oc-screen]', [home, pricing]);
+    const preventDefault = vi.fn();
+    h.documentListeners.get('click')?.({
+      target: { tagName: 'A', href: '#pricing', getAttribute: () => '#pricing' },
+      preventDefault,
+      stopPropagation: vi.fn(),
+    });
+    expect(h.documentElement.getAttribute('data-oc-screen')).toBe('pricing');
+    expect(h.hitLayer.textContent).toContain('data-oc-screen="pricing"');
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(pricing.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('selects the first screen when the document renders one later', () => {
+    const h = runOverlayWithHarness();
+    h.selectorMatches.set('[data-oc-screen]', [
+      { id: 'home', getAttribute: (name: string) => (name === 'data-oc-screen' ? 'home' : null) },
+    ]);
+    h.runTick();
+    expect(h.documentElement.getAttribute('data-oc-screen')).toBe('home');
   });
 });
 
