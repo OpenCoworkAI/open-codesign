@@ -597,6 +597,7 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     { evt: 'submit', fn: function(e) { e.preventDefault(); } }
   ];
   if (sourceEditContext) installs.push({ evt: 'pointerdown', fn: onEditPointer }, { evt: 'pointermove', fn: onEditPointer });
+  var screenStyle = null;
   function showScreen(id) {
     var root = document.documentElement;
     if (!id || !root || !root.setAttribute || !document.querySelectorAll) return;
@@ -615,13 +616,24 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     if (!root || !root.getAttribute || !document.querySelectorAll) return;
     var screens = document.querySelectorAll('[data-oc-screen]');
     if (!screens || !screens.length) return;
-    var current = root.getAttribute('data-oc-screen');
-    for (var i = 0; i < screens.length; i++) {
-      var name = screens[i].id || screens[i].getAttribute('data-oc-screen');
-      if (current && name === current) return;
+    if (!screenStyle) {
+      screenStyle = document.createElement('style');
+      // Authored grid/flex display rules otherwise override the native hidden style.
+      screenStyle.textContent = ':root[data-oc-screen] [data-oc-screen][hidden]{display:none!important;}';
+      root.appendChild(screenStyle);
     }
-    var first = screens[0];
-    showScreen(first.id || first.getAttribute('data-oc-screen'));
+    var current = root.getAttribute('data-oc-screen');
+    var first = null;
+    for (var i = 0; i < screens.length; i++) {
+      if (screens[i] === root) continue;
+      if (!first) first = screens[i];
+      var name = screens[i].id || screens[i].getAttribute('data-oc-screen');
+      if (current && name === current) {
+        showScreen(current);
+        return;
+      }
+    }
+    if (first) showScreen(first.id || first.getAttribute('data-oc-screen'));
   }
   function reattach() {
     if (currentMode === 'source-edit') {
