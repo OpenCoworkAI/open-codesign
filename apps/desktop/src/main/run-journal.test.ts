@@ -325,4 +325,26 @@ describe('RunJournal', () => {
       expect.objectContaining({ type: 'run_settled', seq: 1, outcome: 'interrupted' }),
     ]);
   });
+
+  it('sums settled provider usage after the journal is reopened', async () => {
+    const journal = new RunJournal(directory);
+    await start(journal, 'run-a', 'design-a', 10);
+    const response: GenerateResponse = {
+      message: 'done',
+      artifacts: [],
+      inputTokens: 12,
+      outputTokens: 8,
+      costUsd: 0.03,
+    };
+    await journal.append(
+      event('run-a', 'design-a', { type: 'run_settled', outcome: 'completed', response }),
+    );
+    await start(journal, 'run-b', 'design-b', 11);
+    await journal.append(event('run-b', 'design-b', { type: 'run_settled', outcome: 'failed' }));
+
+    const reopened = new RunJournal(directory);
+    await expect(reopened.usageRecords()).resolves.toEqual([
+      { designId: 'design-a', startedAt: 10, inputTokens: 12, outputTokens: 8, costUsd: 0.03 },
+    ]);
+  });
 });

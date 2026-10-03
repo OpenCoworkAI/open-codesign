@@ -374,6 +374,10 @@
       "thinking": "正在思考",
       "streamingLabel": "助手正在回复",
       "tokensLine": "约 {{count}} tokens",
+      "usageLabel": "当前设计用量",
+      "usageLoadFailed": "无法读取用量统计",
+      "usageDesign": "本设计 {{tokens}} tokens · {{cost}}",
+      "usageWindow": "今日 {{todayTokens}} · {{todayCost}} · 本周 {{weekTokens}} · {{weekCost}}",
       "artifactDelivered": "已生成",
       "artifactDefaultLabel": "design.html",
       "tool": {

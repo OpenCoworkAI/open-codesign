@@ -58,7 +58,6 @@ import {
   workspaceNameFromPath,
 } from '../memory-ipc';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from '../onboarding-ipc';
-
 import { readPersisted as readPreferences } from '../preferences-ipc';
 import { runPreview } from '../preview-runtime';
 import { preparePromptContext } from '../prompt-context';
@@ -89,6 +88,7 @@ import {
 } from '../snapshots-db';
 import { registerSourceEditBusyCheck } from '../source-edits-ipc';
 import { withTlsBypass } from '../tls-override';
+import { summarizeUsageBudget, type UsageTotals } from '../usage-budget';
 import { createResearchHost, createWebResearchAuthorization } from '../web-research';
 import { createWebResearchRun } from '../web-research-run';
 import { withStableWorkspacePath } from '../workspace-path-lock';
@@ -508,6 +508,32 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       projectRunEventToChat({ db, sessionDir: db.sessionDir }, event);
     for (const event of recovered.events) projectionFailures.delete(event.generationId);
     return recovered;
+  });
+
+  const emptyUsage = (): UsageTotals => ({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
+  ipcMain.handle('codesign:v1:usage-budget', async (_event, raw: unknown) => {
+    const input = raw as { schemaVersion?: unknown; designId?: unknown } | null;
+    if (
+      !input ||
+      input.schemaVersion !== 1 ||
+      typeof input.designId !== 'string' ||
+      input.designId.length === 0 ||
+      input.designId.length > 512
+    ) {
+      throw new CodesignError('Invalid usage budget request', 'IPC_BAD_INPUT');
+    }
+    const empty = {
+      schemaVersion: 1 as const,
+      design: emptyUsage(),
+      today: emptyUsage(),
+      week: emptyUsage(),
+    };
+    if (!journal) return empty;
+    const records = await journal.usageRecords();
+    return {
+      schemaVersion: 1 as const,
+      ...summarizeUsageBudget(records, input.designId, Date.now()),
+    };
   });
 
   const recordFinalError = (scope: string, runId: string, err: unknown): void => {

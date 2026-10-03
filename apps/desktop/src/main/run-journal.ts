@@ -16,11 +16,18 @@ export interface RunJournalRecovery {
 
 type JournalEvent = AgentStreamEvent & { schemaVersion: 1; runId: string; seq: number };
 
+interface RunUsage {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
 interface RunState extends RunJournalStart {
   seq: number;
   bytes: number;
   settled: boolean;
   writeError?: Error;
+  usage?: RunUsage;
 }
 
 const EVENT_TYPES = new Set<AgentStreamEvent['type']>([
@@ -87,6 +94,20 @@ function validateEvent(value: unknown, run: RunState, seq: number): JournalEvent
     throw invalid(`invalid terminal outcome for ${run.runId}`);
   }
   return record as unknown as JournalEvent;
+}
+
+function finiteUsage(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function usageFromResponse(response: unknown): RunUsage | undefined {
+  if (response === null || typeof response !== 'object') return undefined;
+  const record = response as Record<string, unknown>;
+  return {
+    inputTokens: finiteUsage(record['inputTokens']),
+    outputTokens: finiteUsage(record['outputTokens']),
+    costUsd: finiteUsage(record['costUsd']),
+  };
 }
 
 function encode(value: unknown): Buffer {
@@ -170,6 +191,25 @@ export class RunJournal {
         this.assertUnchanged(run, loaded);
       }
       return { schemaVersion: 1, events };
+    });
+  }
+
+  /** Settled runs that recorded a provider response. Totals are derived from these rows. */
+  usageRecords(): Promise<Array<{ designId: string; startedAt: number } & RunUsage>> {
+    return this.serialize(async () => {
+      await this.initialize();
+      const records: Array<{ designId: string; startedAt: number } & RunUsage> = [];
+      for (const run of this.sortedRuns()) {
+        if (!run.usage) continue;
+        records.push({
+          designId: run.designId,
+          startedAt: run.startedAt,
+          inputTokens: run.usage.inputTokens,
+          outputTokens: run.usage.outputTokens,
+          costUsd: run.usage.costUsd,
+        });
+      }
+      return records;
     });
   }
 
@@ -278,6 +318,10 @@ export class RunJournal {
     run.seq = event.seq;
     run.bytes += bytes.length;
     run.settled = event.type === 'run_settled';
+    if (event.type === 'run_settled') {
+      const usage = usageFromResponse(event.response);
+      if (usage) run.usage = usage;
+    }
     return committed;
   }
 
@@ -319,6 +363,10 @@ export class RunJournal {
             const event = validateEvent(record, run, run.seq + 1);
             run.seq = event.seq;
             run.settled = event.type === 'run_settled';
+            if (event.type === 'run_settled') {
+              const usage = usageFromResponse(event.response);
+              if (usage) run.usage = usage;
+            }
             if (events && event.seq > after) events.push(event);
           }
           run.bytes += newline + 1;

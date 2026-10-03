@@ -1,7 +1,9 @@
 import { getCurrentLocale, useT, useTranslation } from '@open-codesign/i18n';
 import type { LocalInputFile, OnboardingState } from '@open-codesign/shared';
 import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { formatUsageCost, formatUsageTokens } from '../../../main/usage-budget';
+import type { UsageBudgetResult } from '../../../preload/index';
 import { useCodesignStore } from '../store';
 import { AskModal } from './AskModal';
 import { AddMenu } from './chat/AddMenu';
@@ -90,6 +92,10 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
   const pickDesignSystemDirectory = useCodesignStore((s) => s.pickDesignSystemDirectory);
   const clearDesignSystem = useCodesignStore((s) => s.clearDesignSystem);
   const lastUsage = useCodesignStore((s) => s.lastUsage);
+  const [usageBudget, setUsageBudget] = useState<UsageBudgetResult | null>(null);
+  const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportedUsageError = useRef<string | null>(null);
+  const usageDesignId = useRef<string | null>(null);
 
   const chatMessages = useCodesignStore((s) => s.chatMessages);
   const chatLoaded = useCodesignStore((s) => s.chatLoaded);
@@ -140,6 +146,43 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
   const _activeModelLine =
     config?.hasKey && config.modelPrimary ? config.modelPrimary : t('sidebar.chat.noModel');
   const lastTokens = lastUsage ? lastUsage.inputTokens + lastUsage.outputTokens : null;
+
+  // lastUsage is the signal that a run finished recording provider usage.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refetch when that usage changes
+  useEffect(() => {
+    const designId = currentDesignId;
+    if (!designId || typeof window.codesign?.usageBudget !== 'function') {
+      setUsageBudget(null);
+      return;
+    }
+    if (usageDesignId.current !== designId) {
+      usageDesignId.current = designId;
+      setUsageBudget(null);
+    }
+    let active = true;
+    void window.codesign.usageBudget(designId).then(
+      (budget) => {
+        if (!active) return;
+        reportedUsageError.current = null;
+        setUsageBudget(budget);
+      },
+      (error: unknown) => {
+        if (!active) return;
+        setUsageBudget(null);
+        const description = error instanceof Error ? error.message : String(error);
+        if (reportedUsageError.current === description) return;
+        reportedUsageError.current = description;
+        pushToast({
+          variant: 'error',
+          title: t('sidebar.chat.usageLoadFailed'),
+          description,
+        });
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [currentDesignId, lastUsage, pushToast, t]);
 
   return (
     <aside
@@ -304,6 +347,34 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
             </span>
           ) : null}
         </div>
+        {usageBudget ? (
+          <p
+            aria-label={t('sidebar.chat.usageLabel')}
+            className="break-words px-[2px] text-[var(--text-sm)] leading-5 text-[var(--color-text-muted)] tabular-nums"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            <span className="block">
+              {t('sidebar.chat.usageDesign', {
+                tokens: formatUsageTokens(
+                  usageBudget.design.inputTokens + usageBudget.design.outputTokens,
+                ),
+                cost: formatUsageCost(usageBudget.design.costUsd),
+              })}
+            </span>
+            <span className="block">
+              {t('sidebar.chat.usageWindow', {
+                todayTokens: formatUsageTokens(
+                  usageBudget.today.inputTokens + usageBudget.today.outputTokens,
+                ),
+                todayCost: formatUsageCost(usageBudget.today.costUsd),
+                weekTokens: formatUsageTokens(
+                  usageBudget.week.inputTokens + usageBudget.week.outputTokens,
+                ),
+                weekCost: formatUsageCost(usageBudget.week.costUsd),
+              })}
+            </span>
+          </p>
+        ) : null}
       </div>
     </aside>
   );
