@@ -11,7 +11,7 @@
  * PDF exporter's discovery rules (no bundled Chromium — PRINCIPLES §1).
  */
 
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
@@ -180,7 +180,6 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
     });
 
     const previewFilePath = join(userDataDir, 'preview.html');
-    await writeFile(previewFilePath, html, 'utf8');
     const previewUrl = pathToFileURL(previewFilePath).href;
     let initialNavigation = true;
     if (hasSteps) {
@@ -201,7 +200,7 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
         }
         initialNavigation = false;
       }
-      void handlePreviewRequest(req, absWorkspace, previewFilePath);
+      void handlePreviewRequest(req, absWorkspace, previewFilePath, html);
     });
     await boundedPreview(
       page.goto(previewUrl, {
@@ -418,12 +417,35 @@ export async function isPreviewFileUrlAllowed(
   }
 }
 
+/**
+ * Sandboxed Chrome builds (Snap, Flatpak) get a private /tmp, so a harness file
+ * written under os.tmpdir() is invisible to them (ERR_FILE_NOT_FOUND). The
+ * harness document is therefore served from memory at its file:// URL, which
+ * keeps relative workspace assets and the file-URL allowlist working.
+ */
+export function isHarnessDocumentRequest(rawUrl: string, documentPath: string): boolean {
+  try {
+    return fileURLToPath(new URL(rawUrl)) === documentPath;
+  } catch {
+    return false;
+  }
+}
+
+export async function respondWithHarnessDocument(req: HTTPRequest, html: string): Promise<void> {
+  await req.respond({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
+}
+
 async function handlePreviewRequest(
   req: HTTPRequest,
   absWorkspace: string,
   previewFilePath: string,
+  html: string,
 ): Promise<void> {
   try {
+    if (isHarnessDocumentRequest(req.url(), previewFilePath)) {
+      await respondWithHarnessDocument(req, html);
+      return;
+    }
     if (!(await isPreviewFileUrlAllowed(req.url(), absWorkspace, previewFilePath))) {
       await req.abort('blockedbyclient');
       return;

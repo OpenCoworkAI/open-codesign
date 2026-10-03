@@ -3,7 +3,7 @@
  *
  * The agent emits a JSX module (TWEAK_DEFAULTS + App + ReactDOM.createRoot).
  * We wrap it via `@open-codesign/runtime`'s `buildSrcdoc` (same path the
- * preview iframe uses), write the srcdoc to a temporary HTML file, load it with
+ * preview iframe uses), serve it from memory at a file:// URL, load it with
  * the same system Chrome/Puppeteer engine used by `preview`, and capture
  * console/page errors for a short settle window. The collected errors flow
  * back through the `done` tool so the agent can self-heal.
@@ -14,7 +14,8 @@
  * confirm the next `done` tool result lists the error.
  */
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
@@ -23,7 +24,12 @@ import { findSystemChrome } from '@open-codesign/exporters';
 import { buildSrcdoc } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, Page } from 'puppeteer-core';
 import { boundedPreview } from './preview-interactions';
-import { buildWorkspacePreviewDocument, isPreviewFileUrlAllowed } from './preview-runtime';
+import {
+  buildWorkspacePreviewDocument,
+  isHarnessDocumentRequest,
+  isPreviewFileUrlAllowed,
+  respondWithHarnessDocument,
+} from './preview-runtime';
 
 const VERIFY_LOAD_TIMEOUT_MS = 15_000;
 const SETTLE_AFTER_LOAD_MS = 1200;
@@ -95,9 +101,14 @@ function mapConsoleSource(raw: string): string | null {
 async function handleVerifierRequest(
   req: HTTPRequest,
   verifyFilePath: string,
+  html: string,
   workspaceRoot?: string,
 ): Promise<void> {
   try {
+    if (isHarnessDocumentRequest(req.url(), verifyFilePath)) {
+      await respondWithHarnessDocument(req, html);
+      return;
+    }
     const allowed =
       workspaceRoot !== undefined && req.url().startsWith('file:')
         ? await isPreviewFileUrlAllowed(req.url(), workspaceRoot, verifyFilePath)
@@ -167,6 +178,7 @@ function pushUniqueError(
 async function verifyWithSystemChrome(
   verifyUrl: string,
   verifyPath: string,
+  html: string,
   workspaceRoot?: string,
   signal?: AbortSignal,
 ): Promise<DoneError[]> {
@@ -199,7 +211,7 @@ async function verifyWithSystemChrome(
     await page.setViewport({ width: 1280, height: 800 });
     await page.setRequestInterception(true);
     page.on('request', (req: HTTPRequest) => {
-      void handleVerifierRequest(req, verifyPath, workspaceRoot);
+      void handleVerifierRequest(req, verifyPath, html, workspaceRoot);
     });
     page.on('console', (msg: ConsoleMessage) => {
       const source = mapConsoleSource(msg.type());
@@ -261,15 +273,8 @@ export function makeRuntimeVerifier(options?: { workspaceRoot: string }): DoneRu
           context?.path ?? 'App.jsx',
         )
       : buildSrcdoc(artifactSource);
-    const tempDir = await mkdtemp(join(tmpdir(), 'codesign-done-verify-'));
-    const verifyPath = join(tempDir, 'verify.html');
-    await writeFile(verifyPath, srcdoc, 'utf8');
+    const verifyPath = join(tmpdir(), `codesign-done-verify-${randomUUID()}`, 'verify.html');
     const verifyUrl = pathToFileURL(verifyPath).href;
-
-    try {
-      return await verifyWithSystemChrome(verifyUrl, verifyPath, workspaceRoot, context?.signal);
-    } finally {
-      await rm(tempDir, { recursive: true, force: true });
-    }
+    return verifyWithSystemChrome(verifyUrl, verifyPath, srcdoc, workspaceRoot, context?.signal);
   };
 }
