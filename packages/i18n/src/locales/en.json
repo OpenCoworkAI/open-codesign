@@ -690,6 +690,11 @@
         "connectionOk": "Connection OK",
         "connectionFailed": "Connection failed"
       },
+      "litellm": {
+        "presetName": "LiteLLM Gateway",
+        "presetDescription": "Self-hosted OpenAI-compatible gateway, API key optional",
+        "hint": "Point this at a LiteLLM proxy you already run (LiteLLM is not bundled). The default URL is http://localhost:4000/v1; edit it for remote deployments. Keyless mode is on for proxies without a master key; turn it off and paste your master or virtual key if the gateway requires auth. For a localhost URL, allow private-network testing below."
+      },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
         "presetDescription": "Local proxy that wraps Claude/Codex/Gemini OAuth subscriptions",

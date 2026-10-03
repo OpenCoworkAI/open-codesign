@@ -1,6 +1,7 @@
 import { useT } from '@open-codesign/i18n';
 import type { WireApi } from '@open-codesign/shared';
 import {
+  getPresetById,
   isSupportedOnboardingProvider,
   PROVIDER_SHORTLIST as SHORTLIST,
 } from '@open-codesign/shared';
@@ -170,6 +171,7 @@ interface AddProviderMenuProps {
   onAddOllama: () => void;
   onAddCustom: () => void;
   onAddCliProxyApi: () => void;
+  onAddLiteLLM: () => void;
 }
 
 function AddProviderMenu({
@@ -182,6 +184,7 @@ function AddProviderMenu({
   onAddOllama,
   onAddCustom,
   onAddCliProxyApi,
+  onAddLiteLLM,
 }: AddProviderMenuProps) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -253,6 +256,13 @@ function AddProviderMenu({
       }),
       disabled: false,
       onClick: onAddCliProxyApi,
+    },
+    {
+      key: 'litellm',
+      label: t('settings.providers.litellm.presetName'),
+      desc: t('settings.providers.litellm.presetDescription'),
+      disabled: false,
+      onClick: onAddLiteLLM,
     },
   ];
 
@@ -347,6 +357,8 @@ export function ModelsTab() {
         baseUrl: string;
         wire: WireApi;
         defaultModel?: string;
+        requiresApiKey?: boolean;
+        hint?: string;
       }
     | undefined
   >(undefined);
@@ -1033,6 +1045,18 @@ export function ModelsTab() {
                 baseUrl: 'http://127.0.0.1:8317',
                 wire: 'anthropic',
                 defaultModel: '',
+              });
+              setShowAddCustom(true);
+            }}
+            onAddLiteLLM={() => {
+              setShowAddMenu(false);
+              setCustomProviderPreset({
+                name: 'LiteLLM Gateway',
+                baseUrl: getPresetById('litellm')?.baseUrl ?? '',
+                wire: 'openai-chat',
+                defaultModel: '',
+                requiresApiKey: false,
+                hint: t('settings.providers.litellm.hint'),
               });
               setShowAddCustom(true);
             }}

@@ -690,6 +690,11 @@
         "connectionOk": "连接正常",
         "connectionFailed": "连接失败"
       },
+      "litellm": {
+        "presetName": "LiteLLM Gateway",
+        "presetDescription": "自托管的 OpenAI 兼容网关，API Key 可选",
+        "hint": "请指向你已在运行的 LiteLLM 代理（应用不内置 LiteLLM）。默认地址为 http://localhost:4000/v1，远程部署请修改 URL。默认开启无 Key 模式，适用于未配置 master key 的代理；若网关需要鉴权，请关闭该选项并粘贴 master key 或 virtual key。使用 localhost 地址时，请在下方允许测试本地/内网地址。"
+      },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
         "presetDescription": "本地反代，将 Claude/Codex/Gemini 的订阅账号包装成统一 API",

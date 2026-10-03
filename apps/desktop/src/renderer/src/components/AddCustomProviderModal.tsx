@@ -19,6 +19,9 @@ interface Props {
     baseUrl?: string;
     wire?: WireApi;
     defaultModel?: string;
+    requiresApiKey?: boolean;
+    /** Preset-specific setup note shown above the form. */
+    hint?: string;
   };
   /**
    * Edit-mode: pre-fill every field from an existing provider and save via
@@ -143,7 +146,9 @@ export function AddCustomProviderModal({
   const [name, setName] = useState(editTarget?.name ?? initialValues?.name ?? '');
   const [baseUrl, setBaseUrl] = useState(editTarget?.baseUrl ?? initialValues?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
-  const [requiresApiKey, setRequiresApiKey] = useState(editTarget?.requiresApiKey !== false);
+  const [requiresApiKey, setRequiresApiKey] = useState(
+    (editTarget ?? initialValues)?.requiresApiKey !== false,
+  );
   const [defaultModel, setDefaultModel] = useState(
     editTarget?.defaultModel ?? initialValues?.defaultModel ?? '',
   );
@@ -435,6 +440,12 @@ export function AddCustomProviderModal({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {!isEdit && initialValues?.hint !== undefined && (
+          <p className="text-[var(--text-xs)] leading-5 text-[var(--color-text-secondary)]">
+            {initialValues.hint}
+          </p>
+        )}
 
         {!lockEndpoint && (
           <Field label={t('settings.providers.custom.wire')}>

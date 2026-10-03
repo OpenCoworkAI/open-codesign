@@ -36,6 +36,7 @@ describe('PROXY_PRESETS', () => {
     expect(ids).toContain('requesty');
     expect(ids).toContain('siliconflow');
     expect(ids).toContain('one-api');
+    expect(ids).toContain('litellm');
     expect(ids).toContain('custom');
   });
 
@@ -48,6 +49,12 @@ describe('PROXY_PRESETS', () => {
   it('official-openai uses the correct baseUrl', () => {
     const preset = PROXY_PRESETS.find((p) => p.id === 'official-openai');
     expect(preset?.baseUrl).toBe('https://api.openai.com/v1');
+  });
+
+  it('LiteLLM preset targets the default local proxy over the OpenAI wire', () => {
+    const litellm = PROXY_PRESETS.find((p) => p.id === 'litellm');
+    expect(litellm?.provider).toBe('openai');
+    expect(litellm?.baseUrl).toBe('http://localhost:4000/v1');
   });
 
   it('custom preset has empty baseUrl', () => {
