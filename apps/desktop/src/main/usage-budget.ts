@@ -23,6 +23,12 @@ function startOfLocalDay(now: number): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+/** The next local midnight after now. Monday 00:00 is the week boundary too. */
+export function nextLocalMidnight(now: number): number {
+  const date = new Date(now);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime();
+}
+
 /** Local weeks start on Monday. */
 function startOfLocalWeek(now: number): number {
   const date = new Date(now);

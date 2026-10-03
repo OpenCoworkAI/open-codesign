@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatUsageCost, formatUsageTokens, summarizeUsageBudget } from './usage-budget';
+import {
+  formatUsageCost,
+  formatUsageTokens,
+  nextLocalMidnight,
+  summarizeUsageBudget,
+} from './usage-budget';
 
 const now = new Date(2024, 0, 7, 12).getTime();
 
@@ -78,5 +83,17 @@ describe('usage formatting', () => {
     expect(formatUsageCost(1.2)).toBe('$1.2');
     expect(formatUsageCost(0.0125)).toBe('$0.0125');
     expect(formatUsageCost(0.000012)).toBe('$0.000012');
+  });
+});
+
+describe('nextLocalMidnight', () => {
+  it('lands on the next local midnight and on Monday when the week turns', () => {
+    expect(nextLocalMidnight(new Date(2024, 0, 6, 23).getTime())).toBe(
+      new Date(2024, 0, 7).getTime(),
+    );
+    expect(nextLocalMidnight(new Date(2024, 0, 7, 12).getTime())).toBe(
+      new Date(2024, 0, 8).getTime(),
+    );
+    expect(nextLocalMidnight(new Date(2024, 0, 8).getTime())).toBe(new Date(2024, 0, 9).getTime());
   });
 });
