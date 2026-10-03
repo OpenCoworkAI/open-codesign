@@ -188,9 +188,9 @@ describe.skipIf(!chrome)('active composer fake gate in system Chrome', () => {
         ),
       ).toBe(true);
       await page.focus('textarea');
-      await page.$eval('textarea', (node) => {
-        if (node instanceof HTMLTextAreaElement) node.select();
-      });
+      await page.keyboard.down('Control');
+      await page.keyboard.press('A');
+      await page.keyboard.up('Control');
       await page.keyboard.press('Backspace');
       await page.waitForSelector('.codesign-active-message-actions', { hidden: true });
       expect(await page.$('.codesign-active-message-help')).toBeNull();
