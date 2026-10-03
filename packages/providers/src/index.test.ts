@@ -602,6 +602,28 @@ describe('complete', () => {
     );
   });
 
+  it('forwards the per-request timeout to pi-ai', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'OK' }],
+      stopReason: 'stop',
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    });
+
+    await complete(
+      { provider: 'custom-lmstudio', modelId: 'qwen3.6-35b-a3b' },
+      [{ role: 'user', content: 'Reply OK' }],
+      {
+        apiKey: '',
+        allowKeyless: true,
+        wire: 'openai-chat',
+        baseUrl: 'http://127.0.0.1:1234/v1',
+        timeoutMs: 7_200_000,
+      },
+    );
+
+    expect(completeSimpleMock.mock.calls[0]?.[2].timeoutMs).toBe(7_200_000);
+  });
+
   it('omits pi-ai reasoning option when caller explicitly sets reasoning off', async () => {
     getModelMock.mockReturnValue(undefined);
     completeSimpleMock.mockImplementationOnce(async (_model, _context, opts) => {

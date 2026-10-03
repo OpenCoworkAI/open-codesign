@@ -56,6 +56,8 @@ export interface GenerateOptions {
    * placeholder while auth is supplied by `httpHeaders` or by the gateway.
    */
   allowKeyless?: boolean;
+  /** Per-HTTP-request timeout forwarded to pi-ai; SDKs default to 10 minutes. */
+  timeoutMs?: number;
 }
 
 export interface GenerateResult {
@@ -389,6 +391,7 @@ export async function complete(
         reasoning?: PiReasoningLevel;
         headers?: Record<string, string>;
         onPayload?: (payload: unknown) => unknown;
+        timeoutMs?: number;
       },
     ) => Promise<PiAssistantMessage>;
   };
@@ -417,12 +420,14 @@ export async function complete(
     reasoning?: PiReasoningLevel;
     headers?: Record<string, string>;
     onPayload?: (payload: unknown) => unknown;
+    timeoutMs?: number;
   } = {
     apiKey,
   };
   if (opts.baseUrl !== undefined) piOpts.baseUrl = opts.baseUrl;
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
+  if (opts.timeoutMs !== undefined) piOpts.timeoutMs = opts.timeoutMs;
   const reasoning = opts.reasoning ?? requiredReasoningDefault(effectiveModelId);
   if (reasoning !== undefined && reasoning !== 'off') piOpts.reasoning = reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };

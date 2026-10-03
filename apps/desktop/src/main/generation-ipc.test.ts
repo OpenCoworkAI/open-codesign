@@ -5,6 +5,7 @@ import {
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
+  generationRequestTimeoutMs,
   listInFlightGenerations,
   withInFlightGeneration,
   withInFlightGenerationForDesign,
@@ -466,6 +467,18 @@ describe('armGenerationTimeout', () => {
       armGenerationTimeout('gen-1', controller, async () => -1, logger),
     ).rejects.toMatchObject({ name: 'CodesignError', code: 'PREFERENCES_INVALID_TIMEOUT' });
     expect(controller.signal.aborted).toBe(false);
+  });
+});
+
+describe('generationRequestTimeoutMs', () => {
+  it('matches the configured generation timeout instead of the SDK 10-minute default', () => {
+    expect(generationRequestTimeoutMs(1200)).toBe(1_200_000);
+    expect(generationRequestTimeoutMs(7200)).toBe(7_200_000);
+  });
+
+  it('uses the largest timer delay when the generation timeout is disabled or huge', () => {
+    expect(generationRequestTimeoutMs(0)).toBe(2_147_483_647);
+    expect(generationRequestTimeoutMs(10 ** 9)).toBe(2_147_483_647);
   });
 });
 

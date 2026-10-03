@@ -308,7 +308,10 @@ vi.mock('./skills/loader.js', async () => {
   };
 });
 
+const streamSimpleMock = vi.hoisted(() => vi.fn());
+
 vi.mock('@mariozechner/pi-ai', () => ({
+  streamSimple: streamSimpleMock,
   getModel: (provider: string, modelId: string) => ({
     id: modelId,
     name: modelId,
@@ -612,6 +615,44 @@ describe('generateViaAgent()', () => {
     expect(sanitized.input).toEqual([
       { role: 'user', content: [{ type: 'input_text', text: 'next' }] },
     ]);
+  });
+
+  it('forwards the request timeout to every pi-ai stream call', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-lmstudio', modelId: 'qwen3.6-35b-a3b' },
+      apiKey: 'sk-test',
+      baseUrl: 'http://127.0.0.1:1234/v1',
+      wire: 'openai-chat',
+      requestTimeoutMs: 7_200_000,
+    });
+
+    const streamFn = agentCalls[0]?.options.streamFn;
+    expect(streamFn).toBeDefined();
+    const model = agentCalls[0]?.options.initialState?.model;
+    if (streamFn === undefined || model === undefined) throw new Error('expected streamFn');
+    const context = { messages: [] };
+    const signal = new AbortController().signal;
+    streamFn(model, context, { apiKey: 'sk-test', signal });
+    expect(streamSimpleMock).toHaveBeenCalledWith(model, context, {
+      apiKey: 'sk-test',
+      signal,
+      timeoutMs: 7_200_000,
+    });
+  });
+
+  it("keeps pi-agent-core's default stream when no request timeout is configured", async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
+      apiKey: 'sk-test',
+    });
+
+    expect(agentCalls[0]?.options.streamFn).toBeUndefined();
   });
 
   it('uses conservative OpenAI-chat compat for DeepInfra agent models', async () => {

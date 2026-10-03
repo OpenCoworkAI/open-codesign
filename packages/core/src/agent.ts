@@ -27,10 +27,11 @@ import {
   type AgentTool,
   type AgentToolResult,
 } from '@mariozechner/pi-agent-core';
-import type {
-  ImageContent as PiAiImageContent,
-  Message as PiAiMessage,
-  Model as PiAiModel,
+import {
+  type ImageContent as PiAiImageContent,
+  type Message as PiAiMessage,
+  type Model as PiAiModel,
+  streamSimple,
 } from '@mariozechner/pi-ai';
 import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
@@ -1287,6 +1288,7 @@ async function generateViaAgentInternal(
   // original lets the post-agent branch rethrow it as-is, so the renderer
   // sees the same code the initial IPC-level resolution would emit.
   let capturedGetApiKeyError: unknown = null;
+  const requestTimeoutMs = input.requestTimeoutMs;
 
   // Factory for creating agents with a given message history. Used for both
   // the initial agent and retry agents that continue the interrupted transcript.
@@ -1342,6 +1344,12 @@ async function generateViaAgentInternal(
             return initialApiKey || 'open-codesign-keyless';
           },
       ...(onPayload !== undefined ? { onPayload } : {}),
+      ...(requestTimeoutMs !== undefined
+        ? {
+            streamFn: (model, context, options) =>
+              streamSimple(model, context, { ...options, timeoutMs: requestTimeoutMs }),
+          }
+        : {}),
     });
     retryAgent.subscribe((event) => {
       deps.activeMessages?.handleEvent(event, () => {

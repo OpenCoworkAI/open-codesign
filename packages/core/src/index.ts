@@ -270,6 +270,12 @@ export interface GenerateInput {
    */
   mode?: Extract<PromptComposeOptions['mode'], 'create'> | undefined;
   signal?: AbortSignal | undefined;
+  /**
+   * Per-HTTP-request timeout forwarded to pi-ai's `timeoutMs`. Without it the
+   * OpenAI / Anthropic SDKs cut every request at their 10-minute default,
+   * regardless of the run-level generation timeout.
+   */
+  requestTimeoutMs?: number | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
   logger?: CoreLogger | undefined;
   /**
