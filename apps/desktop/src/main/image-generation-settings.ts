@@ -186,8 +186,18 @@ export function defaultImageGenerationSettings(): ImageGenerationSettings {
   };
 }
 
+function imageRequestBaseUrl(
+  parsed: ImageGenerationSettings,
+  providers: Config['providers'] | undefined,
+): string {
+  const inheritedBaseUrl =
+    parsed.credentialMode === 'inherit' ? providers?.[parsed.provider]?.baseUrl : undefined;
+  return parsed.baseUrl ?? inheritedBaseUrl ?? defaultImageBaseUrl(parsed.provider);
+}
+
 export async function imageSettingsToView(
   settings: ImageGenerationSettings | undefined,
+  providers?: Config['providers'],
 ): Promise<ImageGenerationSettingsView> {
   const parsed = ImageGenerationSettingsSchema.parse(settings ?? defaultImageGenerationSettings());
   const inheritedKeyAvailable = await hasInheritedImageCredential(parsed.provider);
@@ -196,7 +206,7 @@ export async function imageSettingsToView(
     provider: parsed.provider,
     credentialMode: parsed.credentialMode,
     model: parsed.model,
-    baseUrl: parsed.baseUrl ?? defaultImageBaseUrl(parsed.provider),
+    baseUrl: imageRequestBaseUrl(parsed, providers),
     requestBase64: parsed.requestBase64 ?? false,
     quality: parsed.quality,
     size: parsed.size,
@@ -234,8 +244,6 @@ export async function resolveImageGenerationConfig(
   } else {
     apiKey = getApiKeyForProvider(parsed.provider);
   }
-  const inheritedBaseUrl =
-    parsed.credentialMode === 'inherit' ? cfg.providers[parsed.provider]?.baseUrl : undefined;
   log.info('resolve.ok', {
     provider: parsed.provider,
     model: parsed.model,
@@ -245,7 +253,7 @@ export async function resolveImageGenerationConfig(
     provider: parsed.provider,
     apiKey,
     model: parsed.model,
-    baseUrl: parsed.baseUrl ?? inheritedBaseUrl ?? defaultImageBaseUrl(parsed.provider),
+    baseUrl: imageRequestBaseUrl(parsed, cfg.providers),
     requestBase64: parsed.requestBase64 ?? false,
     quality: parsed.quality,
     size: parsed.size,
@@ -420,13 +428,13 @@ export async function updateImageGenerationSettings(
   });
   await writeConfig(config);
   setCachedConfig(config);
-  return imageSettingsToView(parsed);
+  return imageSettingsToView(parsed, config.providers);
 }
 
 export function registerImageGenerationSettingsIpc(): void {
   ipcMain.handle('image-generation:v1:get', async (): Promise<ImageGenerationSettingsView> => {
     const cfg = getCachedConfig();
-    return imageSettingsToView(cfg?.imageGeneration);
+    return imageSettingsToView(cfg?.imageGeneration, cfg?.providers);
   });
 
   ipcMain.handle(

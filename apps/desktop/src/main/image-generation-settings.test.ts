@@ -179,10 +179,13 @@ describe('image generation enablement', () => {
     getApiKeyForProviderMock.mockReturnValue('local-test-only');
     const cfg = makeConfig(true, 'https://inherited-relay.example/v1');
     mocks.cachedConfig = cfg;
-    expect((await imageSettingsToView(cfg.imageGeneration)).baseUrl).toBe(
-      'https://api.openai.com/v1',
+    expect((await imageSettingsToView(cfg.imageGeneration, cfg.providers)).baseUrl).toBe(
+      'https://inherited-relay.example/v1',
     );
-    await updateImageGenerationSettings(parseImageGenerationUpdate({ requestBase64: true }));
+    const view = await updateImageGenerationSettings(
+      parseImageGenerationUpdate({ requestBase64: true }),
+    );
+    expect(view.baseUrl).toBe('https://inherited-relay.example/v1');
     const saved = mocks.writeConfig.mock.calls[0]?.[0];
     if (saved === undefined) throw new Error('Expected persisted configuration');
     expect(saved.imageGeneration?.baseUrl).toBeUndefined();
@@ -191,6 +194,17 @@ describe('image generation enablement', () => {
       baseUrl: 'https://inherited-relay.example/v1',
       requestBase64: true,
     });
+  });
+
+  it('shows the provider default when custom credentials do not inherit the gateway', async () => {
+    const cfg = makeConfig(true, 'https://inherited-relay.example/v1');
+    const settings = cfg.imageGeneration;
+    if (settings === undefined) throw new Error('Expected image settings');
+    const view = await imageSettingsToView(
+      { ...settings, credentialMode: 'custom' },
+      cfg.providers,
+    );
+    expect(view.baseUrl).toBe('https://api.openai.com/v1');
   });
 
   it('preserves an explicit gateway while allowing a later explicit URL update', async () => {
