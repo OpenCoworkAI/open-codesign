@@ -290,6 +290,10 @@
       "noModel": "Nenhum modelo selecionado",
       "thinking": "Pensando",
       "tokensLine": "~{{count}} tokens",
+      "usageLabel": "Uso deste design",
+      "usageLoadFailed": "Não foi possível ler os totais de uso",
+      "usageDesign": "Design {{tokens}} tokens · {{cost}}",
+      "usageWindow": "Hoje {{todayTokens}} · {{todayCost}} · Semana {{weekTokens}} · {{weekCost}}",
       "artifactDelivered": "entregue",
       "artifactDefaultLabel": "design.html",
       "tool": {

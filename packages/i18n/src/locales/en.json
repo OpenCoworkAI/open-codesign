@@ -374,6 +374,10 @@
       "thinking": "Thinking",
       "streamingLabel": "Assistant is typing",
       "tokensLine": "~{{count}} tokens",
+      "usageLabel": "Usage for this design",
+      "usageLoadFailed": "Could not read usage totals",
+      "usageDesign": "Design {{tokens}} tokens · {{cost}}",
+      "usageWindow": "Today {{todayTokens}} · {{todayCost}} · Week {{weekTokens}} · {{weekCost}}",
       "artifactDelivered": "delivered",
       "artifactDefaultLabel": "design.html",
       "tool": {

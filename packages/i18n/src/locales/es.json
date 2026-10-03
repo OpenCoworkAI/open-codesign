@@ -294,6 +294,10 @@
       "thinking": "Pensando",
       "streamingLabel": "El asistente está escribiendo",
       "tokensLine": "~{{count}} tokens",
+      "usageLabel": "Uso de este diseño",
+      "usageLoadFailed": "No se pudieron leer los totales de uso",
+      "usageDesign": "Diseño {{tokens}} tokens · {{cost}}",
+      "usageWindow": "Hoy {{todayTokens}} · {{todayCost}} · Semana {{weekTokens}} · {{weekCost}}",
       "artifactDelivered": "entregado",
       "artifactDefaultLabel": "diseño.html",
       "tool": {

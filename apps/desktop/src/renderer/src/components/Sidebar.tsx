@@ -1,5 +1,10 @@
 import { getCurrentLocale, useT, useTranslation } from '@open-codesign/i18n';
-import type { LocalInputFile, OnboardingState } from '@open-codesign/shared';
+import {
+  formatUsageCost,
+  formatUsageTokens,
+  type LocalInputFile,
+  type OnboardingState,
+} from '@open-codesign/shared';
 import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { useCodesignStore } from '../store';
@@ -10,6 +15,7 @@ import { CommentChipBar } from './chat/CommentChipBar';
 import { EmptyState } from './chat/EmptyState';
 import { PromptInput, type PromptInputHandle } from './chat/PromptInput';
 import { ModelSwitcher } from './ModelSwitcher';
+import { useDesignUsageBudget } from './usage-budget-refresh';
 
 export interface SidebarProps {
   prefillPrompt: { id: number; text: string } | null;
@@ -90,6 +96,19 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
   const pickDesignSystemDirectory = useCodesignStore((s) => s.pickDesignSystemDirectory);
   const clearDesignSystem = useCodesignStore((s) => s.clearDesignSystem);
   const lastUsage = useCodesignStore((s) => s.lastUsage);
+  const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportUsageError = useCallback(
+    (error: unknown) => {
+      const description = error instanceof Error ? error.message : String(error);
+      pushToast({
+        variant: 'error',
+        title: t('sidebar.chat.usageLoadFailed'),
+        description,
+      });
+    },
+    [pushToast, t],
+  );
+  const usageBudget = useDesignUsageBudget(reportUsageError);
 
   const chatMessages = useCodesignStore((s) => s.chatMessages);
   const chatLoaded = useCodesignStore((s) => s.chatLoaded);
@@ -304,6 +323,34 @@ export function Sidebar({ prefillPrompt }: SidebarProps) {
             </span>
           ) : null}
         </div>
+        {usageBudget ? (
+          <p
+            aria-label={t('sidebar.chat.usageLabel')}
+            className="break-words px-[2px] text-[var(--text-sm)] leading-5 text-[var(--color-text-muted)] tabular-nums"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            <span className="block">
+              {t('sidebar.chat.usageDesign', {
+                tokens: formatUsageTokens(
+                  usageBudget.design.inputTokens + usageBudget.design.outputTokens,
+                ),
+                cost: formatUsageCost(usageBudget.design.costUsd),
+              })}
+            </span>
+            <span className="block">
+              {t('sidebar.chat.usageWindow', {
+                todayTokens: formatUsageTokens(
+                  usageBudget.today.inputTokens + usageBudget.today.outputTokens,
+                ),
+                todayCost: formatUsageCost(usageBudget.today.costUsd),
+                weekTokens: formatUsageTokens(
+                  usageBudget.week.inputTokens + usageBudget.week.outputTokens,
+                ),
+                weekCost: formatUsageCost(usageBudget.week.costUsd),
+              })}
+            </span>
+          </p>
+        ) : null}
       </div>
     </aside>
   );
