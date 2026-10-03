@@ -1,5 +1,5 @@
+import { nextLocalMidnight } from '@open-codesign/shared';
 import { useEffect, useRef, useState } from 'react';
-import { nextLocalMidnight } from '../../../main/usage-budget';
 import type { UsageBudgetResult } from '../../../preload/index';
 import { useCodesignStore } from '../store';
 

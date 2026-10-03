@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/renderer/**/*", "src/main/usage-budget.ts"],
+  "include": ["src/renderer/**/*"],
   "compilerOptions": {
     "outDir": "out/renderer",
     "jsx": "react-jsx",

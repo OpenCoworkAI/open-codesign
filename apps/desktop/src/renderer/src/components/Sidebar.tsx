@@ -1,8 +1,12 @@
 import { getCurrentLocale, useT, useTranslation } from '@open-codesign/i18n';
-import type { LocalInputFile, OnboardingState } from '@open-codesign/shared';
+import {
+  formatUsageCost,
+  formatUsageTokens,
+  type LocalInputFile,
+  type OnboardingState,
+} from '@open-codesign/shared';
 import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
-import { formatUsageCost, formatUsageTokens } from '../../../main/usage-budget';
 import { useCodesignStore } from '../store';
 import { AskModal } from './AskModal';
 import { AddMenu } from './chat/AddMenu';

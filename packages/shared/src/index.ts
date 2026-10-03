@@ -626,4 +626,14 @@ export {
   replaceTweakSchema,
 } from './editmode';
 
+export {
+  formatUsageCost,
+  formatUsageTokens,
+  nextLocalMidnight,
+  summarizeUsageBudget,
+  type UsageBudget,
+  type UsageRecord,
+  type UsageTotals,
+} from './usage-budget';
+
 export * from './web-research';

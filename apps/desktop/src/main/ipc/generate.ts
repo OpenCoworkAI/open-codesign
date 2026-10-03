@@ -29,6 +29,8 @@ import {
   deriveResourceStateFromChatRows,
   GeneratePayloadV1,
   ListActiveMessagesInputV1,
+  summarizeUsageBudget,
+  type UsageTotals,
 } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
 import type { BrowserWindow as ElectronBrowserWindow, WebContents } from 'electron';
@@ -88,7 +90,6 @@ import {
 } from '../snapshots-db';
 import { registerSourceEditBusyCheck } from '../source-edits-ipc';
 import { withTlsBypass } from '../tls-override';
-import { summarizeUsageBudget, type UsageTotals } from '../usage-budget';
 import { createResearchHost, createWebResearchAuthorization } from '../web-research';
 import { createWebResearchRun } from '../web-research-run';
 import { withStableWorkspacePath } from '../workspace-path-lock';
