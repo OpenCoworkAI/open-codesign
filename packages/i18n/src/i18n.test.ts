@@ -8,6 +8,33 @@ import {
   setLocale,
 } from './index';
 
+describe('image response preference labels', () => {
+  it.each([
+    ['en', 'Request base64 response'],
+    ['zh-CN', '请求 base64 响应'],
+    ['es', 'Solicitar respuesta en base64'],
+    ['pt-BR', 'Solicitar resposta em base64'],
+  ])('localizes the preference in %s', async (locale, label) => {
+    const { i18n } = await import('./index');
+    await initI18n(locale);
+    expect(i18n.t('settings.imageGen.requestBase64')).toBe(label);
+    await setLocale('en');
+  });
+
+  it('localizes the whole image generation panel in Portuguese without English fallback', async () => {
+    const { i18n } = await import('./index');
+    await initI18n('pt-BR');
+    const english = i18n.getResource('en', 'translation', 'settings.imageGen');
+    const portuguese = i18n.getResource('pt-BR', 'translation', 'settings.imageGen');
+    expect(Object.keys(portuguese).sort()).toEqual(Object.keys(english).sort());
+    expect(Object.keys(portuguese.status).sort()).toEqual(Object.keys(english.status).sort());
+    expect(Object.keys(portuguese.toast).sort()).toEqual(Object.keys(english.toast).sort());
+    expect(i18n.t('settings.imageGen.title')).toBe('Assistente de geração de imagens');
+    expect(i18n.t('settings.tabs.images')).toBe('API de imagens');
+    await setLocale('en');
+  });
+});
+
 describe('normalizeLocale', () => {
   it('returns the value unchanged when it is supported', () => {
     expect(normalizeLocale('en')).toBe('en');

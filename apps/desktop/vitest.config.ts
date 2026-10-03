@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    // Concurrent Chromium and filesystem suites otherwise exhaust Windows hosts.
-    maxWorkers: process.platform === 'win32' ? 2 : undefined,
+    // Bound concurrent Chromium and filesystem suites on CI and Windows hosts.
+    maxWorkers: process.env['CI'] || process.platform === 'win32' ? 2 : undefined,
   },
 });

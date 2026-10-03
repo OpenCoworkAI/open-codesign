@@ -310,8 +310,39 @@
   },
   "settings": {
     "title": "Configurações",
+    "imageGen": {
+      "tabTitle": "Geração de imagens",
+      "tabHint": "Permita que o agente de design use modelos de imagem pela OpenAI, OpenRouter ou assinatura do ChatGPT para criar imagens de destaque, pôsteres e fundos. As credenciais ficam neste dispositivo.",
+      "title": "Assistente de geração de imagens",
+      "hint": "Quando ativado, o agente pode usar generate_image_asset durante uma execução.",
+      "enabled": "Ativar assistente de geração de imagens",
+      "provider": "Provedor",
+      "chatgptSubscription": "Assinatura do ChatGPT",
+      "credentials": "Credenciais",
+      "inherit": "Herdar do provedor",
+      "customKey": "Chave separada",
+      "keyPlaceholder": "Deixe vazio para manter {{mask}}",
+      "newKeyPlaceholder": "Cole a chave de API",
+      "requestBase64": "Solicitar resposta em base64",
+      "model": "Modelo de imagem",
+      "baseUrl": "URL base",
+      "quality": "Qualidade",
+      "size": "Tamanho",
+      "status": {
+        "ready": "Pronto",
+        "needsKey": "Precisa de chave de API",
+        "needsChatgptLogin": "Precisa entrar no ChatGPT",
+        "disabled": "Desativado"
+      },
+      "toast": {
+        "loadFailed": "Falha ao carregar as configurações de geração de imagens",
+        "saved": "Configurações de geração de imagens salvas",
+        "saveFailed": "Falha ao salvar as configurações de geração de imagens"
+      }
+    },
     "tabs": {
       "models": "Modelos",
+      "images": "API de imagens",
       "appearance": "Aparência",
       "workspace": "Espaço e arquivos",
       "storage": "Armazenamento",

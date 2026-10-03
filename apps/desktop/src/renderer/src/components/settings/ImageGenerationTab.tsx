@@ -25,6 +25,7 @@ function ImageGenerationPanel() {
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const [requestBase64, setRequestBase64] = useState(false);
 
   useEffect(() => {
     if (!window.codesign?.imageGeneration) return;
@@ -34,6 +35,7 @@ function ImageGenerationPanel() {
         setSettings(next);
         setModel(next.model);
         setBaseUrl(next.baseUrl);
+        setRequestBase64(next.requestBase64);
       })
       .catch((err) => {
         pushToast({
@@ -54,6 +56,7 @@ function ImageGenerationPanel() {
       setSettings(next);
       setModel(next.model);
       setBaseUrl(next.baseUrl);
+      setRequestBase64(next.requestBase64);
       setApiKey('');
       pushToast({
         variant: 'success',
@@ -134,7 +137,7 @@ function ImageGenerationPanel() {
         </label>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-3)]">
+      <div className="grid grid-cols-1 gap-[var(--space-3)]">
         <Row label={t('settings.imageGen.provider')}>
           <NativeSelect
             value={settings.provider}
@@ -221,6 +224,19 @@ function ImageGenerationPanel() {
         </label>
       </div>
 
+      {settings.provider === 'openai' ? (
+        <Row label={t('settings.imageGen.requestBase64')}>
+          <input
+            type="checkbox"
+            aria-label={t('settings.imageGen.requestBase64')}
+            checked={requestBase64}
+            disabled={saving}
+            onChange={(e) => setRequestBase64(e.target.checked)}
+            className="h-4 w-4 accent-[var(--color-accent)]"
+          />
+        </Row>
+      ) : null}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-3)]">
         <Row label={t('settings.imageGen.quality')}>
           <NativeSelect
@@ -259,9 +275,17 @@ function ImageGenerationPanel() {
             saving ||
             model.trim().length === 0 ||
             baseUrl.trim().length === 0 ||
-            (model === settings.model && baseUrl === settings.baseUrl)
+            (model === settings.model &&
+              baseUrl === settings.baseUrl &&
+              requestBase64 === settings.requestBase64)
           }
-          onClick={() => void save({ model, baseUrl })}
+          onClick={() =>
+            void save({
+              ...(model !== settings.model ? { model } : {}),
+              ...(baseUrl !== settings.baseUrl ? { baseUrl } : {}),
+              ...(requestBase64 !== settings.requestBase64 ? { requestBase64 } : {}),
+            })
+          }
           className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {t('common.save')}

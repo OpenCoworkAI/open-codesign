@@ -1,3 +1,5 @@
+import { once } from 'node:events';
+import { createServer } from 'node:http';
 import { ERROR_CODES } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defaultImageModel, generateImage } from './images';
@@ -16,6 +18,111 @@ function jwtWithClaims(claims: Record<string, unknown>): string {
 describe('generateImage', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it.each([
+    true,
+    false,
+    undefined,
+  ])('honors the explicit base64 request option (%s) at custom endpoints', async (requestBase64) => {
+    const requests: Record<string, unknown>[] = [];
+    const server = createServer(async (req, res) => {
+      if (req.url !== '/v1/images/generations' && req.url !== '/strict/v1/images/generations') {
+        res.writeHead(404).end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
+      requests.push(body);
+      res.setHeader('content-type', 'application/json');
+      if (req.url.startsWith('/strict/') && 'response_format' in body) {
+        res
+          .writeHead(400)
+          .end(JSON.stringify({ error: { message: 'Unknown parameter: response_format' } }));
+        return;
+      }
+      res.end(
+        JSON.stringify({
+          data: [
+            req.url.startsWith('/strict/') || body['response_format'] === 'b64_json'
+              ? { b64_json: PNG_HEADER_BASE64 }
+              : { url: '/generated/image.png' },
+          ],
+        }),
+      );
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('Missing server port');
+    const path = requestBase64 === true ? 'v1' : 'strict/v1';
+    const baseUrl = `http://127.0.0.1:${address.port}/${path}/`;
+    try {
+      const result = await generateImage({
+        provider: 'openai',
+        apiKey: 'local-test-only',
+        prompt: 'hero image',
+        baseUrl,
+        requestBase64,
+      });
+      expect(result.base64).toBe(PNG_HEADER_BASE64);
+      expect(requests).toHaveLength(1);
+      if (requestBase64 === true) {
+        expect(requests[0]).toHaveProperty('response_format', 'b64_json');
+      } else {
+        expect(requests[0]).not.toHaveProperty('response_format');
+      }
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
+  });
+
+  it.each([
+    'https://api.openai.com/v1',
+    'https://api.openai.com/v1/',
+    'https://API.OPENAI.COM:443/v1/',
+  ])('preserves GPT image request compatibility at the official endpoint %s', async (baseUrl) => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(JSON.stringify({ data: [{ b64_json: PNG_HEADER_BASE64 }] }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await generateImage({ provider: 'openai', apiKey: 'test', prompt: 'hero image', baseUrl });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(init.body as string)).not.toHaveProperty('response_format');
+  });
+
+  it('reports invalid custom endpoints as typed provider errors', async () => {
+    await expect(
+      generateImage({
+        provider: 'openai',
+        apiKey: 'local-test-only',
+        prompt: 'hero image',
+        baseUrl: 'invalid-url',
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.PROVIDER_ERROR });
+  });
+
+  it('surfaces a rejected base64 option without automatically repeating generation', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('Unknown parameter: response_format', { status: 400 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      generateImage({
+        provider: 'openai',
+        apiKey: 'local-test-only',
+        prompt: 'fixture',
+        requestBase64: true,
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_ERROR,
+      message: expect.stringContaining('HTTP 400'),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('calls OpenAI image generations and normalizes b64_json', async () => {
@@ -87,6 +194,7 @@ describe('generateImage', () => {
     const result = await generateImage({
       provider: 'openrouter',
       apiKey: 'sk-or-test',
+      requestBase64: true,
       prompt: 'poster',
       aspectRatio: '16:9',
       outputFormat: 'webp',
@@ -136,6 +244,7 @@ describe('generateImage', () => {
     const result = await generateImage({
       provider: 'chatgpt-codex',
       apiKey: token,
+      requestBase64: true,
       prompt: 'draw a cat hugging an otter',
       size: '1024x1024',
       quality: 'high',
