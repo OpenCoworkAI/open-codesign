@@ -9,6 +9,7 @@
 import {
   type ChatMessage,
   CodesignError,
+  canonicalBaseUrl,
   ERROR_CODES,
   type ModelRef,
   type ReasoningLevel as SharedReasoningLevel,
@@ -372,11 +373,15 @@ export async function complete(
     throw new CodesignError('Missing API key', ERROR_CODES.PROVIDER_AUTH_MISSING);
   }
   const apiKey = trimmedApiKey.length > 0 ? trimmedApiKey : 'open-codesign-keyless';
+  const baseUrl =
+    opts.baseUrl !== undefined && opts.wire !== undefined
+      ? canonicalBaseUrl(opts.baseUrl, opts.wire)
+      : opts.baseUrl;
 
   // Gemini's OpenAI-compat endpoint rejects the `models/` prefix that its own
   // /models listing returns (issue #175). Normalize on the wire only; Settings
   // keeps the prefixed form so provider/model UX stays in sync with /models.
-  const effectiveModelId = normalizeGeminiModelId(model.modelId, opts.baseUrl);
+  const effectiveModelId = normalizeGeminiModelId(model.modelId, baseUrl);
 
   const pi = (await import('@mariozechner/pi-ai')) as unknown as {
     getModel: (provider: string, modelId: string) => PiModel | undefined;
@@ -399,7 +404,7 @@ export async function complete(
   let piModel = pi.getModel(model.provider, effectiveModelId);
   if (!piModel) {
     if (opts.wire !== undefined) {
-      piModel = synthesizeWireModel(model.provider, effectiveModelId, opts.wire, opts.baseUrl);
+      piModel = synthesizeWireModel(model.provider, effectiveModelId, opts.wire, baseUrl);
     } else if (model.provider === 'openrouter') {
       piModel = synthesizeOpenRouterModel(effectiveModelId);
     } else {
@@ -424,7 +429,7 @@ export async function complete(
   } = {
     apiKey,
   };
-  if (opts.baseUrl !== undefined) piOpts.baseUrl = opts.baseUrl;
+  if (baseUrl !== undefined) piOpts.baseUrl = baseUrl;
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.timeoutMs !== undefined) piOpts.timeoutMs = opts.timeoutMs;
@@ -459,10 +464,7 @@ export async function complete(
   // sub2api-issued key and you hit the plain API-key branch. Force the
   // identity headers for custom anthropic endpoints so the WAF admits us.
   // User-supplied httpHeaders keep precedence.
-  if (
-    shouldForceClaudeCodeIdentity(opts.wire, opts.baseUrl) &&
-    !looksLikeClaudeOAuthToken(apiKey)
-  ) {
+  if (shouldForceClaudeCodeIdentity(opts.wire, baseUrl) && !looksLikeClaudeOAuthToken(apiKey)) {
     piOpts.headers = { ...claudeCodeIdentityHeaders(), ...(piOpts.headers ?? {}) };
   }
 
