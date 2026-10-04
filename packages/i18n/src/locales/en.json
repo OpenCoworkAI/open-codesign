@@ -484,6 +484,7 @@
       "customKey": "Use a separate key",
       "keyPlaceholder": "Leave empty to keep {{mask}}",
       "newKeyPlaceholder": "Paste API key",
+      "requestBase64": "Request base64 response",
       "model": "Image model",
       "baseUrl": "Base URL",
       "quality": "Quality",

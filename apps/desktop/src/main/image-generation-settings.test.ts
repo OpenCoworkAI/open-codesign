@@ -13,6 +13,7 @@ import {
   isGenerateImageAssetEnabled,
   parseImageGenerationUpdate,
   resolveImageGenerationConfig,
+  toGenerateImageOptions,
   updateImageGenerationSettings,
 } from './image-generation-settings';
 
@@ -61,14 +62,18 @@ vi.mock('./logger', () => ({
   }),
 }));
 
-function makeConfig(imageEnabled: boolean): Config {
+function makeConfig(
+  imageEnabled: boolean,
+  baseUrl = 'https://api.openai.com/v1',
+  imageBaseUrl?: string,
+): Config {
   const providers: Record<string, ProviderEntry> = {
     openai: {
       id: 'openai',
       name: 'OpenAI',
       builtin: true,
       wire: 'openai-chat',
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl,
       defaultModel: 'gpt-5.4',
     },
   };
@@ -84,6 +89,7 @@ function makeConfig(imageEnabled: boolean): Config {
       provider: 'openai',
       credentialMode: 'inherit',
       model: 'gpt-image-2',
+      ...(imageBaseUrl === undefined ? {} : { baseUrl: imageBaseUrl }),
       quality: 'high',
       size: '1536x1024',
       outputFormat: 'png',
@@ -125,6 +131,105 @@ describe('image generation enablement', () => {
     const cfg = makeConfig(false);
     await expect(isGenerateImageAssetEnabled(cfg)).resolves.toBe(false);
     await expect(resolveImageGenerationConfig(cfg)).resolves.toBeNull();
+  });
+
+  it('keeps base64 requests disabled for existing settings', async () => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    const cfg = makeConfig(true);
+    expect((await imageSettingsToView(cfg.imageGeneration)).requestBase64).toBe(false);
+    const resolved = await resolveImageGenerationConfig(cfg);
+    if (resolved === null) throw new Error('Expected enabled image generation');
+    expect(toGenerateImageOptions(resolved, 'fixture').requestBase64).toBe(false);
+  });
+
+  it.each([
+    true,
+    false,
+  ])('persists and forwards the base64 preference (%s)', async (requestBase64) => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    mocks.cachedConfig = makeConfig(true);
+    const patch = parseImageGenerationUpdate({
+      requestBase64,
+      baseUrl: 'https://relay.example/v1',
+    });
+    const view = await updateImageGenerationSettings(patch);
+    expect(view).toMatchObject({ requestBase64, baseUrl: 'https://relay.example/v1' });
+    const saved = mocks.writeConfig.mock.calls[0]?.[0];
+    if (saved === undefined) throw new Error('Expected persisted configuration');
+    expect(saved.imageGeneration?.requestBase64).toBe(requestBase64);
+    const resolved = await resolveImageGenerationConfig(saved);
+    if (resolved === null) throw new Error('Expected enabled image generation');
+    expect(toGenerateImageOptions(resolved, 'fixture')).toMatchObject({
+      requestBase64,
+      baseUrl: 'https://relay.example/v1',
+    });
+  });
+
+  it('resets the gateway compatibility option when switching image providers', async () => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    mocks.cachedConfig = makeConfig(true);
+    await updateImageGenerationSettings({ requestBase64: true });
+    expect((await updateImageGenerationSettings({ provider: 'openrouter' })).requestBase64).toBe(
+      false,
+    );
+    expect((await updateImageGenerationSettings({ provider: 'openai' })).requestBase64).toBe(false);
+  });
+
+  it('preserves the inherited gateway when saving only the base64 preference', async () => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    const cfg = makeConfig(true, 'https://inherited-relay.example/v1');
+    mocks.cachedConfig = cfg;
+    expect((await imageSettingsToView(cfg.imageGeneration, cfg.providers)).baseUrl).toBe(
+      'https://inherited-relay.example/v1',
+    );
+    const view = await updateImageGenerationSettings(
+      parseImageGenerationUpdate({ requestBase64: true }),
+    );
+    expect(view.baseUrl).toBe('https://inherited-relay.example/v1');
+    const saved = mocks.writeConfig.mock.calls[0]?.[0];
+    if (saved === undefined) throw new Error('Expected persisted configuration');
+    expect(saved.imageGeneration?.baseUrl).toBeUndefined();
+    expect(saved.providers['openai']?.baseUrl).toBe('https://inherited-relay.example/v1');
+    await expect(resolveImageGenerationConfig(saved)).resolves.toMatchObject({
+      baseUrl: 'https://inherited-relay.example/v1',
+      requestBase64: true,
+    });
+  });
+
+  it('shows the provider default when custom credentials do not inherit the gateway', async () => {
+    const cfg = makeConfig(true, 'https://inherited-relay.example/v1');
+    const settings = cfg.imageGeneration;
+    if (settings === undefined) throw new Error('Expected image settings');
+    const view = await imageSettingsToView(
+      { ...settings, credentialMode: 'custom' },
+      cfg.providers,
+    );
+    expect(view.baseUrl).toBe('https://api.openai.com/v1');
+  });
+
+  it('preserves an explicit gateway while allowing a later explicit URL update', async () => {
+    getApiKeyForProviderMock.mockReturnValue('local-test-only');
+    const cfg = makeConfig(
+      true,
+      'https://inherited-relay.example/v1',
+      'https://image-relay.example/v1',
+    );
+    mocks.cachedConfig = cfg;
+    await updateImageGenerationSettings({ requestBase64: true });
+    if (mocks.cachedConfig === null) throw new Error('Expected persisted configuration');
+    await expect(resolveImageGenerationConfig(mocks.cachedConfig)).resolves.toMatchObject({
+      baseUrl: 'https://image-relay.example/v1',
+      requestBase64: true,
+    });
+    await updateImageGenerationSettings({ baseUrl: 'https://new-relay.example/v1' });
+    await expect(resolveImageGenerationConfig(mocks.cachedConfig)).resolves.toMatchObject({
+      baseUrl: 'https://new-relay.example/v1',
+      requestBase64: true,
+    });
+  });
+
+  it.each(['true', 1, null])('rejects malformed base64 preferences (%s)', (requestBase64) => {
+    expectThrowCode(() => parseImageGenerationUpdate({ requestBase64 }), ERROR_CODES.IPC_BAD_INPUT);
   });
 
   it('enables generate_image_asset when image generation is on and key is available', async () => {

@@ -484,6 +484,7 @@
       "customKey": "单独设置 Key",
       "keyPlaceholder": "留空则保留 {{mask}}",
       "newKeyPlaceholder": "粘贴 API Key",
+      "requestBase64": "请求 base64 响应",
       "model": "图像模型",
       "baseUrl": "接入地址",
       "quality": "画质",

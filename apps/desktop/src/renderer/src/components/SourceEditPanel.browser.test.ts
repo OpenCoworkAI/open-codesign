@@ -394,11 +394,13 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     const element = input.asElement();
     if (!element) throw new Error('Missing edit textarea');
     await element.evaluate((node) => {
-      if (node instanceof HTMLTextAreaElement) {
-        node.focus();
-        node.select();
-      }
+      if (node instanceof HTMLTextAreaElement) node.focus();
     });
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.keyboard.down(modifier);
+    // Headless shell needs an explicit native editing command for Select All.
+    await page.keyboard.press('A', { commands: ['selectAll'] });
+    await page.keyboard.up(modifier);
     await page.keyboard.type(value);
     await page.click(selector, { delay: clickDelay });
   }

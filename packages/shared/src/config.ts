@@ -147,6 +147,7 @@ export const ImageGenerationSettingsSchema = z
     credentialMode: ImageGenerationCredentialModeSchema.default('inherit'),
     model: z.string().min(1).default('gpt-image-2'),
     baseUrl: z.string().url().optional(),
+    requestBase64: z.boolean().optional(),
     apiKey: SecretRef.optional(),
     quality: ImageGenerationQualitySchema.default('high'),
     size: ImageGenerationSizeSchema.default('1536x1024'),

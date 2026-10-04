@@ -12,6 +12,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
+      "env": ["CODESIGN_CHROME_PATH"],
       "outputs": []
     },
     "typecheck": {
