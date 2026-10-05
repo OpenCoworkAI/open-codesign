@@ -1,4 +1,5 @@
-import type { ReasoningLevel, WireApi } from './config';
+import type { ProviderModelDiscoveryMode, ReasoningLevel, WireApi } from './config';
+import { looksLikeModelsListingUrl, usesRemoteModelsListing } from './model-discovery';
 
 export type ErrorCode =
   | '401'
@@ -90,6 +91,12 @@ export interface DiagnoseContext {
   status?: number;
   /** Raw attempted URL, if available */
   attemptedUrl?: string;
+  /**
+   * Declared listing strategy for this provider. When the mode does not
+   * expect GET /models, a 404 on that route is a listing limitation, not a
+   * uniform hard failure.
+   */
+  modelDiscoveryMode?: ProviderModelDiscoveryMode;
 }
 
 const BILLING_URLS: Record<string, string> = {
@@ -153,6 +160,19 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
   }
 
   if (normalised === '404') {
+    if (
+      ctx.modelDiscoveryMode !== undefined &&
+      !usesRemoteModelsListing(ctx.modelDiscoveryMode) &&
+      looksLikeModelsListingUrl(ctx.attemptedUrl)
+    ) {
+      return [
+        h({
+          cause: 'diagnostics.cause.modelsListingNotApplicable',
+          category: 'model-discovery-degraded',
+          severity: 'info',
+        }),
+      ];
+    }
     // If the baseUrl already encodes a version segment (/v1, /v4, /v1beta,
     // etc.), suggesting "add /v1" is wrong — Zhipu GLM uses /v4, AI Studio
     // uses /v1beta, and some Cloudflare Workers AI gateways already carry

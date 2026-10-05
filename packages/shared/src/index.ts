@@ -318,10 +318,12 @@ export type {
   ImageGenerationSize,
   OnboardingState,
   ProviderCapabilities,
+  ProviderCapabilityInput,
   ProviderEntry,
   ProviderModelDiscoveryMode,
   ProviderShortlist,
   ReasoningLevel,
+  ResolvedProviderCapabilities,
   SupportedOnboardingProvider,
   WireApi,
 } from './config';
@@ -331,6 +333,7 @@ export {
   ConfigSchema,
   ConfigV3Schema,
   defaultProviderCapabilities,
+  deriveModelDiscoveryMode,
   detectWireFromBaseUrl,
   hydrateConfig,
   IMAGE_GENERATION_SCHEMA_VERSION,
@@ -383,6 +386,27 @@ export { ERROR_CODE_DESCRIPTIONS, ERROR_CODES } from './error-codes';
 // from this barrel — it's main-process only. Import from
 // '@open-codesign/shared/fingerprint' directly.
 export type { FingerprintInput } from './fingerprint';
+export type {
+  ImportedProviderSource,
+  ListForProviderPlan,
+  ModelsListSource,
+  SettingsModelPickerKind,
+} from './model-discovery';
+export {
+  capabilitiesForDiscoveryMode,
+  capabilitiesForImportedProvider,
+  connectionTestProbesModelsEndpoint,
+  discoveryModeForCustomProvider,
+  discoveryModeForImport,
+  isDefaultAnthropicApiHost,
+  isListingCapableOfficialHost,
+  localModelsForDiscoveryMode,
+  looksLikeModelsListingUrl,
+  mergeDiscoveryMode,
+  resolveListForProviderPlan,
+  settingsModelPickerKind,
+  usesRemoteModelsListing,
+} from './model-discovery';
 export type { ProxyPresetId } from './proxy-presets';
 export {
   getPresetById,

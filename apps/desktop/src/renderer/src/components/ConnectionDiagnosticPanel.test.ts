@@ -1,3 +1,5 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@open-codesign/i18n', () => ({
@@ -8,7 +10,44 @@ vi.mock('../store', () => ({
   useCodesignStore: () => vi.fn(),
 }));
 
-import { isAbsoluteHttpUrl, shouldShowGatewayAllowlistHint } from './ConnectionDiagnosticPanel';
+import {
+  ConnectionDiagnosticPanel,
+  isAbsoluteHttpUrl,
+  shouldShowGatewayAllowlistHint,
+} from './ConnectionDiagnosticPanel';
+
+describe('ConnectionDiagnosticPanel modelDiscoveryMode', () => {
+  it('treats a /models 404 as a listing limitation when the provider does not list models', () => {
+    const html = renderToStaticMarkup(
+      createElement(ConnectionDiagnosticPanel, {
+        errorCode: '404',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        provider: 'glm',
+        modelDiscoveryMode: 'infer-only',
+        attemptedUrl: 'https://open.bigmodel.cn/api/paas/v4/models',
+        onApplyFix: () => undefined,
+        onTestAgain: () => undefined,
+      }),
+    );
+    expect(html).toContain('diagnostics.cause.modelsListingNotApplicable');
+  });
+
+  it('keeps a /models 404 as an endpoint failure when listing is expected', () => {
+    const html = renderToStaticMarkup(
+      createElement(ConnectionDiagnosticPanel, {
+        errorCode: '404',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        provider: 'glm',
+        modelDiscoveryMode: 'models',
+        attemptedUrl: 'https://open.bigmodel.cn/api/paas/v4/models',
+        onApplyFix: () => undefined,
+        onTestAgain: () => undefined,
+      }),
+    );
+    expect(html).toContain('diagnostics.cause.endpointNotFound');
+    expect(html).not.toContain('diagnostics.cause.modelsListingNotApplicable');
+  });
+});
 
 describe('isAbsoluteHttpUrl', () => {
   it('rejects an empty string so /v1 quick-fix cannot produce a bare "/v1"', () => {
