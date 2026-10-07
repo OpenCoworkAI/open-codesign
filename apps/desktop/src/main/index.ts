@@ -224,6 +224,9 @@ if (!IS_VITEST) {
         app.quit();
         return;
       }
+      // Windows shows toasts only for the AppUserModelID on the installer's
+      // Start Menu shortcut, which electron-builder sets to the appId.
+      if (process.platform === 'win32') app.setAppUserModelId('ai.opencowork.codesign');
       app.on('second-instance', () => {
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
