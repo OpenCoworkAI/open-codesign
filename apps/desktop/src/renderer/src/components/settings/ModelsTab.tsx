@@ -162,6 +162,8 @@ function LocalCpaImportCard({
 }
 
 interface AddProviderMenuProps {
+  hasApiRouteImported: boolean;
+  onAddApiRoute: () => void;
   open: boolean;
   setOpen: (v: boolean) => void;
   hasClaudeCodeImported: boolean;
@@ -175,6 +177,8 @@ interface AddProviderMenuProps {
 }
 
 function AddProviderMenu({
+  hasApiRouteImported,
+  onAddApiRoute,
   open,
   setOpen,
   hasClaudeCodeImported,
@@ -238,6 +242,13 @@ function AddProviderMenu({
       desc: t('settings.providers.import.ollamaMenuDesc'),
       disabled: hasOllamaImported,
       onClick: onAddOllama,
+    },
+    {
+      key: 'api-route',
+      label: SHORTLIST['api-route'].label,
+      desc: SHORTLIST['api-route'].keyHelpUrl,
+      disabled: hasApiRouteImported,
+      onClick: onAddApiRoute,
     },
     {
       key: 'custom',
@@ -353,9 +364,10 @@ export function ModelsTab() {
    */
   const [customProviderPreset, setCustomProviderPreset] = useState<
     | {
-        name: string;
-        baseUrl: string;
-        wire: WireApi;
+        builtinProvider?: 'api-route';
+        name?: string;
+        baseUrl?: string;
+        wire?: WireApi;
         defaultModel?: string;
         requiresApiKey?: boolean;
         hint?: string;
@@ -748,7 +760,9 @@ export function ModelsTab() {
           onSave={async () => {
             // If save came from a Claude Code banner (preset set), clear the
             // banner — the provider it was nagging about is now imported.
-            const cameFromClaudeCodeBanner = customProviderPreset !== undefined;
+            const cameFromClaudeCodeBanner =
+              customProviderPreset !== undefined &&
+              customProviderPreset.builtinProvider === undefined;
             setShowAddCustom(false);
             setCustomProviderPreset(undefined);
             if (cameFromClaudeCodeBanner) {
@@ -1018,6 +1032,14 @@ export function ModelsTab() {
         <div className="flex items-center justify-between gap-[var(--space-3)] min-h-[var(--size-control-sm)]">
           <SectionTitle>{t('settings.providers.sectionTitle')}</SectionTitle>
           <AddProviderMenu
+            hasApiRouteImported={rows.some((row) => row.provider === 'api-route')}
+            onAddApiRoute={() => {
+              setShowAddMenu(false);
+              setCustomProviderPreset({
+                builtinProvider: 'api-route',
+              });
+              setShowAddCustom(true);
+            }}
             open={showAddMenu}
             setOpen={setShowAddMenu}
             hasClaudeCodeImported={rows.some((r) => r.provider === 'claude-code-imported')}

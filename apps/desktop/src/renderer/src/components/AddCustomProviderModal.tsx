@@ -1,5 +1,11 @@
 import { useT } from '@open-codesign/i18n';
-import { canonicalBaseUrl, detectWireFromBaseUrl, type WireApi } from '@open-codesign/shared';
+import {
+  BUILTIN_PROVIDERS,
+  canonicalBaseUrl,
+  detectWireFromBaseUrl,
+  type SupportedOnboardingProvider,
+  type WireApi,
+} from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
 import { AlertCircle, Check, CheckCircle, Loader2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -15,6 +21,7 @@ interface Props {
    * rediscover the fields. Users can still edit every field before saving.
    */
   initialValues?: {
+    builtinProvider?: SupportedOnboardingProvider;
     name?: string;
     baseUrl?: string;
     wire?: WireApi;
@@ -142,22 +149,34 @@ export function AddCustomProviderModal({
 }: Props) {
   const t = useT();
   const isEdit = editTarget !== undefined;
-  const lockEndpoint = editTarget?.lockEndpoint === true;
-  const [name, setName] = useState(editTarget?.name ?? initialValues?.name ?? '');
-  const [baseUrl, setBaseUrl] = useState(editTarget?.baseUrl ?? initialValues?.baseUrl ?? '');
+  const builtinPreset = initialValues?.builtinProvider
+    ? BUILTIN_PROVIDERS[initialValues.builtinProvider]
+    : undefined;
+  const isBuiltin = builtinPreset !== undefined || editTarget?.builtin === true;
+  const lockEndpoint = builtinPreset !== undefined || editTarget?.lockEndpoint === true;
+  const [name, setName] = useState(
+    editTarget?.name ?? builtinPreset?.name ?? initialValues?.name ?? '',
+  );
+  const [baseUrl, setBaseUrl] = useState(
+    editTarget?.baseUrl ?? builtinPreset?.baseUrl ?? initialValues?.baseUrl ?? '',
+  );
   const [apiKey, setApiKey] = useState('');
   const [requiresApiKey, setRequiresApiKey] = useState(
-    (editTarget ?? initialValues)?.requiresApiKey !== false,
+    (editTarget?.requiresApiKey ??
+      builtinPreset?.requiresApiKey ??
+      initialValues?.requiresApiKey) !== false,
   );
   const [defaultModel, setDefaultModel] = useState(
-    editTarget?.defaultModel ?? initialValues?.defaultModel ?? '',
+    editTarget?.defaultModel ?? builtinPreset?.defaultModel ?? initialValues?.defaultModel ?? '',
   );
   const [wire, setWire] = useState<WireApi>(
-    editTarget?.wire ?? initialValues?.wire ?? 'openai-chat',
+    editTarget?.wire ?? builtinPreset?.wire ?? initialValues?.wire ?? 'openai-chat',
   );
   // In edit mode we trust the stored wire; in create mode we only auto-detect
   // if the caller didn't pin one.
-  const [wireAuto, setWireAuto] = useState(!isEdit && initialValues?.wire === undefined);
+  const [wireAuto, setWireAuto] = useState(
+    !isEdit && !isBuiltin && initialValues?.wire === undefined,
+  );
   const [test, setTest] = useState<TestState>({ kind: 'idle' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -271,7 +290,7 @@ export function AddCustomProviderModal({
   // Only show the TLS toggle for non-built-in providers — the runtime
   // force-ignores the field on built-ins, and surfacing it there would
   // mislead users into thinking the bypass would take effect.
-  const showTlsToggle = !isEdit || editTarget?.builtin !== true;
+  const showTlsToggle = !isBuiltin;
 
   function handleTlsToggle(nextChecked: boolean) {
     if (!nextChecked) {
@@ -363,6 +382,14 @@ export function AddCustomProviderModal({
           }
         }
         await window.codesign.config.updateProvider(update);
+      } else if (initialValues?.builtinProvider !== undefined) {
+        await window.codesign.config.setProviderAndModels({
+          provider: initialValues.builtinProvider,
+          apiKey: apiKey.trim(),
+          modelPrimary: defaultModel.trim(),
+          baseUrl: canonicalBaseUrl(baseUrl.trim(), wire),
+          setAsActive: initialSetAsActive,
+        });
       } else {
         const slug = slugify(name);
         const id = `custom-${slug}-${Date.now().toString(36).slice(-4)}`;
@@ -404,9 +431,9 @@ export function AddCustomProviderModal({
     return canTest && defaultModel.trim().length > 0 && name.trim().length > 0;
   })();
 
-  const title = isEdit
-    ? t('settings.providers.custom.editTitle')
-    : t('settings.providers.custom.title');
+  const title =
+    builtinPreset?.name ??
+    (isEdit ? t('settings.providers.custom.editTitle') : t('settings.providers.custom.title'));
 
   // Show the model dropdown when discovery found models AND user hasn't switched to manual entry.
   const showModelDropdown =
@@ -540,7 +567,7 @@ export function AddCustomProviderModal({
           )}
         </Field>
 
-        {!editTarget?.builtin && (
+        {!isBuiltin && (
           <label className="flex items-start gap-2 text-[var(--text-xs)] text-[var(--color-text-secondary)]">
             <input
               type="checkbox"

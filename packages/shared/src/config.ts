@@ -6,6 +6,7 @@ const ProviderIdEnum = z.enum([
   'anthropic',
   'openai',
   'atlascloud',
+  'api-route',
   'google',
   'openrouter',
   'groq',
@@ -21,6 +22,7 @@ export const SUPPORTED_ONBOARDING_PROVIDERS = [
   'anthropic',
   'openai',
   'atlascloud',
+  'api-route',
   'openrouter',
   'ollama',
 ] as const;
@@ -282,6 +284,23 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
       modelDiscoveryMode: 'models',
     },
   },
+  'api-route': {
+    id: 'api-route',
+    name: 'API Route',
+    builtin: true,
+    requiresApiKey: true,
+    wire: 'openai-chat',
+    baseUrl: 'https://global.api-route.com/v1',
+    envKey: 'API_ROUTE_API_KEY',
+    defaultModel: 'deepseek-v4-flash',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsReasoning: false,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
+  },
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -535,6 +554,13 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     keyHelpUrl: 'https://atlascloud.ai/',
     primary: ['qwen/qwen3.5-flash', 'deepseek-ai/deepseek-v4-pro'],
     defaultPrimary: 'qwen/qwen3.5-flash',
+  },
+  'api-route': {
+    provider: 'api-route',
+    label: 'API Route',
+    keyHelpUrl: 'https://www.api-route.com/tokens',
+    primary: ['deepseek-v4-flash'],
+    defaultPrimary: 'deepseek-v4-flash',
   },
   openrouter: {
     provider: 'openrouter',

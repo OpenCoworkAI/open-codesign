@@ -525,6 +525,27 @@ describe('generateViaAgent()', () => {
     expect(seed?.role).toBe('user');
   });
 
+  it.each([
+    undefined,
+    'https://custom.api-route.example/v1',
+  ])('routes API Route generation through the selected endpoint (%s)', async (baseUrl) => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'api-route', modelId: 'deepseek-v4-flash' },
+      apiKey: 'sk-api-route-test',
+      wire: 'openai-chat',
+      ...(baseUrl ? { baseUrl } : {}),
+    });
+    expect(agentCalls[0]?.options.initialState?.model).toMatchObject({
+      provider: 'api-route',
+      id: 'deepseek-v4-flash',
+      api: 'openai-completions',
+      baseUrl: baseUrl ?? 'https://global.api-route.com/v1',
+    });
+  });
+
   it('normalizes Gemini OpenAI-compat model IDs before constructing the Agent model', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent({

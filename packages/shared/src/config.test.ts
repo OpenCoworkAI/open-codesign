@@ -129,6 +129,29 @@ describe('config v3 schema', () => {
     expect(PROVIDER_SHORTLIST.atlascloud.primary).toContain('deepseek-ai/deepseek-v4-pro');
   });
 
+  it('includes API Route with key-based model discovery', () => {
+    expect(SUPPORTED_ONBOARDING_PROVIDERS).toContain('api-route');
+    expect(BUILTIN_PROVIDERS['api-route']).toMatchObject({
+      id: 'api-route',
+      name: 'API Route',
+      builtin: true,
+      wire: 'openai-chat',
+      baseUrl: 'https://global.api-route.com/v1',
+      envKey: 'API_ROUTE_API_KEY',
+      defaultModel: 'deepseek-v4-flash',
+      capabilities: {
+        supportsKeyless: false,
+        supportsModelsEndpoint: true,
+        modelDiscoveryMode: 'models',
+      },
+    });
+    expect(PROVIDER_SHORTLIST['api-route']).toMatchObject({
+      keyHelpUrl: 'https://www.api-route.com/tokens',
+      primary: ['deepseek-v4-flash'],
+      defaultPrimary: 'deepseek-v4-flash',
+    });
+  });
+
   it('rejects unknown wire values', () => {
     const bad = {
       version: 3,

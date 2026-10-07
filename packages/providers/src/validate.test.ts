@@ -141,6 +141,49 @@ describe('pingProvider', () => {
     expect(result).toEqual({ ok: true, modelCount: 1 });
   });
 
+  it.each([
+    undefined,
+    'https://global.api-route.com/v1',
+    'https://global.api-route.com/v1/chat/completions/',
+  ])('discovers API Route models with Bearer auth and one /v1 segment (%s)', async (baseUrl) => {
+    mockFetch(async (url, init) => {
+      expect(url).toBe('https://global.api-route.com/v1/models');
+      expect(init?.method).toBe('GET');
+      expect(init?.headers).toEqual({ authorization: 'Bearer sk-api-route-test' });
+      expect(init?.body).toBeUndefined();
+      return new Response(JSON.stringify({ object: 'list', data: [{ id: 'deepseek-v4-flash' }] }), {
+        status: 200,
+      });
+    });
+    expect(await pingProvider('api-route', 'sk-api-route-test', baseUrl)).toEqual({
+      ok: true,
+      modelCount: 1,
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [401, '401'],
+    [403, '401'],
+    [402, '402'],
+    [429, '429'],
+  ])('surfaces API Route validation errors (%s)', async (status, code) => {
+    mockFetch(async () => new Response('provider error', { status: Number(status) }));
+    expect(await pingProvider('api-route', 'sk-api-route-test')).toMatchObject({
+      ok: false,
+      code,
+      message: expect.stringContaining('api-route'),
+    });
+  });
+
+  it('requires an API Route key before discovery', async () => {
+    mockFetch(async () => new Response('{}'));
+    await expect(pingProvider('api-route', '')).rejects.toMatchObject({
+      code: 'PROVIDER_AUTH_MISSING',
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   it('respects custom baseUrl without /v1 suffix', async () => {
     mockFetch(async (url) => {
       expect(url).toBe('https://proxy.example/v1/models');

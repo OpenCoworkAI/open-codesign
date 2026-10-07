@@ -273,6 +273,7 @@ const BUILTIN_PUBLIC_BASE_URLS: Record<string, string> = {
   anthropic: 'https://api.anthropic.com',
   openai: 'https://api.openai.com/v1',
   atlascloud: 'https://api.atlascloud.ai/v1',
+  'api-route': 'https://global.api-route.com/v1',
   openrouter: 'https://openrouter.ai/api/v1',
 };
 
@@ -283,7 +284,7 @@ function buildPiModel(
   httpHeaders?: Record<string, string> | undefined,
   apiKey?: string,
 ): PiModel {
-  // Fall through to the canonical public endpoint for the 3 first-party
+  // Fall through to the canonical public endpoint for built-in
   // BYOK providers when the caller omitted baseUrl. This is a fact about
   // those endpoints (api.anthropic.com is anthropic), not a registry lookup for a
   // model registry — imported / custom providers still require baseUrl and
