@@ -105,6 +105,9 @@ export const EXPAND_DECK_SCRIPT = `(() => {
     body.style.height = 'auto';
     body.style.display = 'block';
     body.style.padding = '24px 0 0';
+    // Force layout now: without it the full-page capture can measure the page
+    // before the stacked slides are laid out and clip the image to the viewport.
+    void document.documentElement.scrollHeight;
     return frames.length;
   }
   return 0;
