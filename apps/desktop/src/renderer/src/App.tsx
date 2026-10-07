@@ -74,7 +74,9 @@ export function App() {
   useAgentStream();
   useEffect(() => {
     const off = window.codesign?.ask?.onRequest?.((request) => {
-      void notifyDesignInBackground(useCodesignStore.getState(), request.designId, 'ask');
+      notifyDesignInBackground(useCodesignStore.getState(), request.designId, 'ask').catch(
+        (error: unknown) => console.warn('[open-codesign] system notification failed:', error),
+      );
     });
     return () => {
       off?.();

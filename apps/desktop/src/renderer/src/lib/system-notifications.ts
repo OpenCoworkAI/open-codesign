@@ -15,9 +15,10 @@ export async function notifyDesignInBackground(
   kind: DesignNotificationKind,
 ): Promise<void> {
   const api = window.codesign;
-  if (!api || document.hasFocus()) return;
+  if (!api) return;
   const prefs = await api.preferences.get();
-  if (!prefs.systemNotifications) return;
+  // Focus is read after the setting so a user who returns meanwhile is not notified.
+  if (!prefs.systemNotifications || document.hasFocus()) return;
   const design = state.designs.find((item) => item.id === designId);
   const notification = new Notification(design?.name ?? 'Open CoDesign', {
     body: i18n.t(BODY_KEYS[kind]),

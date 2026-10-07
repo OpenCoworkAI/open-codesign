@@ -102,6 +102,7 @@ beforeEach(() => {
     setTimeout,
     codesign: {
       generate,
+      preferences: { get: vi.fn(async () => ({ systemNotifications: true })) },
       generationStatus: vi.fn(async () => ({ schemaVersion: 1, running: [] })),
       snapshots: {
         list: vi.fn(async () => []),
@@ -145,9 +146,6 @@ describe('agent stream / IPC completion ordering', () => {
         }
       },
     );
-    Object.assign(window.codesign ?? {}, {
-      preferences: { get: vi.fn(async () => ({ systemNotifications: true })) },
-    });
     windowFocused = false;
 
     emit('run_settled', 'completed-run', { outcome: 'completed' });

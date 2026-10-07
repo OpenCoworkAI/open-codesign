@@ -150,6 +150,7 @@ export function AdvancedTab() {
         <input
           type="checkbox"
           checked={prefs.systemNotifications}
+          aria-label={t('settings.advanced.systemNotifications')}
           onChange={(e) => void updatePref({ systemNotifications: e.target.checked })}
           className="h-4 w-4 accent-[var(--color-accent)]"
         />

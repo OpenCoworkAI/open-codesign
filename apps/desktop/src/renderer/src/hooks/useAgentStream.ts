@@ -512,10 +512,12 @@ export function useAgentStream(): void {
         handleSettled(event, replay);
         forgetCancelledGeneration(event.generationId);
         if (!replay && (event.outcome === 'completed' || event.outcome === 'failed')) {
-          void notifyDesignInBackground(
+          notifyDesignInBackground(
             useCodesignStore.getState(),
             event.designId,
             event.outcome === 'completed' ? 'done' : 'failed',
+          ).catch((error: unknown) =>
+            console.warn('[open-codesign] system notification failed:', error),
           );
         }
         return;

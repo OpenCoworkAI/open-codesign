@@ -81,6 +81,19 @@ describe('notifyDesignInBackground', () => {
     expect(FakeNotification.created).toHaveLength(0);
   });
 
+  it('stays quiet when the user returns while the setting is being read', async () => {
+    const api = window.codesign as unknown as {
+      preferences: { get: () => Promise<{ systemNotifications: boolean }> };
+    };
+    api.preferences.get = async () => {
+      hasFocus = true;
+      return { systemNotifications: true };
+    };
+    await notifyDesignInBackground(state(), 'design-1', 'done');
+
+    expect(FakeNotification.created).toHaveLength(0);
+  });
+
   it('respects the Advanced setting', async () => {
     systemNotifications = false;
     await notifyDesignInBackground(state(), 'design-1', 'done');
