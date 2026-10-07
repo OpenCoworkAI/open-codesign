@@ -27,6 +27,7 @@ import { readWorkspaceFileAt } from './workspace-reader';
 const FORMAT_FILTERS: Record<ExporterFormat, Electron.FileFilter[]> = {
   html: [{ name: 'HTML', extensions: ['html'] }],
   pdf: [{ name: 'PDF', extensions: ['pdf'] }],
+  png: [{ name: 'PNG image', extensions: ['png'] }],
   pptx: [{ name: 'PowerPoint', extensions: ['pptx'] }],
   zip: [{ name: 'ZIP archive', extensions: ['zip'] }],
   markdown: [{ name: 'Markdown', extensions: ['md'] }],
@@ -95,6 +96,7 @@ export function parseRequest(raw: unknown): ExportRequest {
   if (
     format !== 'html' &&
     format !== 'pdf' &&
+    format !== 'png' &&
     format !== 'pptx' &&
     format !== 'zip' &&
     format !== 'markdown'

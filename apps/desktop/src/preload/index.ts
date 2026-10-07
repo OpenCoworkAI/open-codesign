@@ -70,7 +70,7 @@ export interface ValidateKeyError {
   message: string;
 }
 
-export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip' | 'markdown';
+export type ExportFormat = 'html' | 'pdf' | 'png' | 'pptx' | 'zip' | 'markdown';
 export type WorkspaceFileKind =
   | 'html'
   | 'jsx'

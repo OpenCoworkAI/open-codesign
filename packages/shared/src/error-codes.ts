@@ -83,6 +83,7 @@ export const ERROR_CODES = {
   EXPORTER_UNKNOWN: 'EXPORTER_UNKNOWN',
   EXPORTER_NO_CHROME: 'EXPORTER_NO_CHROME',
   EXPORTER_PDF_FAILED: 'EXPORTER_PDF_FAILED',
+  EXPORTER_PNG_FAILED: 'EXPORTER_PNG_FAILED',
   EXPORTER_PPTX_FAILED: 'EXPORTER_PPTX_FAILED',
   EXPORTER_ZIP_UNSAFE_PATH: 'EXPORTER_ZIP_UNSAFE_PATH',
   EXPORTER_ZIP_FAILED: 'EXPORTER_ZIP_FAILED',
@@ -383,6 +384,11 @@ export const ERROR_CODE_DESCRIPTIONS: Record<CodesignErrorCode, ErrorCodeDescrip
   EXPORTER_PDF_FAILED: {
     userFacing: 'PDF export failed. Ensure Chrome is installed and try again.',
     userFacingKey: 'err.EXPORTER_PDF_FAILED',
+    category: 'other',
+  },
+  EXPORTER_PNG_FAILED: {
+    userFacing: 'PNG export failed. Ensure Chrome is installed and try again.',
+    userFacingKey: 'err.EXPORTER_PNG_FAILED',
     category: 'other',
   },
   EXPORTER_PPTX_FAILED: {

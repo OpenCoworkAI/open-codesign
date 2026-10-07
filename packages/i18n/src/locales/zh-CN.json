@@ -956,6 +956,10 @@
         "label": "PDF",
         "hint": "通过你本机已安装的 Chrome 渲染"
       },
+      "png": {
+        "label": "PNG",
+        "hint": "整页 2 倍图，通过本机 Chrome 渲染"
+      },
       "pptx": {
         "label": "PPTX",
         "hint": "高保真幻灯片；每个 <section> 一页"
@@ -1523,6 +1527,7 @@
     "EXPORTER_UNKNOWN": "未知的导出格式。",
     "EXPORTER_NO_CHROME": "未检测到 Chrome 或 Chromium，请安装后再进行 PDF 导出。",
     "EXPORTER_PDF_FAILED": "PDF 导出失败，请确认已安装 Chrome 后重试。",
+    "EXPORTER_PNG_FAILED": "PNG 导出失败，请确认已安装 Chrome 后重试。",
     "EXPORTER_PPTX_FAILED": "PowerPoint 导出失败。",
     "EXPORTER_ZIP_UNSAFE_PATH": "导出被阻止：有资源路径会越出 ZIP 包边界。",
     "EXPORTER_ZIP_FAILED": "ZIP 导出失败。",
