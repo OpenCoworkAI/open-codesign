@@ -101,6 +101,17 @@ describe('notifyDesignInBackground', () => {
     expect(FakeNotification.created).toHaveLength(0);
   });
 
+  it('logs a failed click instead of leaving an unhandled rejection', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    focusWindow.mockRejectedValueOnce(new Error('window gone'));
+    await notifyDesignInBackground(state(), 'design-1', 'done');
+
+    FakeNotification.created[0]?.onclick?.();
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
+    expect(switchDesign).toHaveBeenCalledWith('design-1');
+    warn.mockRestore();
+  });
+
   it('falls back to the app name and only focuses for an unknown design', async () => {
     await notifyDesignInBackground(state(), undefined, 'ask');
 

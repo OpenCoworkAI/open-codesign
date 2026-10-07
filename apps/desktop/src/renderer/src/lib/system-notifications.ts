@@ -24,7 +24,8 @@ export async function notifyDesignInBackground(
     body: i18n.t(BODY_KEYS[kind]),
   });
   notification.onclick = () => {
-    void api.focusWindow();
-    if (design) void state.switchDesign(design.id);
+    Promise.all([api.focusWindow(), design ? state.switchDesign(design.id) : undefined]).catch(
+      (error: unknown) => console.warn('[open-codesign] opening a notified design failed:', error),
+    );
   };
 }
