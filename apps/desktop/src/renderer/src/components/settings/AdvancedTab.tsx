@@ -71,6 +71,7 @@ export function AdvancedTab() {
     workspaceMemoryAutoUpdate: true,
     userMemoryAutoUpdate: false,
     proxyUrl: '',
+    systemNotifications: true,
   });
 
   useEffect(() => {
@@ -138,6 +139,18 @@ export function AdvancedTab() {
           type="checkbox"
           checked={prefs.checkForUpdatesOnStartup}
           onChange={(e) => void updatePref({ checkForUpdatesOnStartup: e.target.checked })}
+          className="h-4 w-4 accent-[var(--color-accent)]"
+        />
+      </Row>
+
+      <Row
+        label={t('settings.advanced.systemNotifications')}
+        hint={t('settings.advanced.systemNotificationsHint')}
+      >
+        <input
+          type="checkbox"
+          checked={prefs.systemNotifications}
+          onChange={(e) => void updatePref({ systemNotifications: e.target.checked })}
           className="h-4 w-4 accent-[var(--color-accent)]"
         />
       </Row>

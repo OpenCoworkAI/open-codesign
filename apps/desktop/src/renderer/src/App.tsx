@@ -16,6 +16,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { useAgentStream } from './hooks/useAgentStream';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useUpdateWiring } from './hooks/useUpdateWiring';
+import { notifyDesignInBackground } from './lib/system-notifications';
 
 // Settings opens in a separate view (Hub ↔ Workspace ↔ Settings). Keep it
 // out of the first-paint chunk — its ~2700-line tree + dynamic provider
@@ -71,6 +72,14 @@ export function App() {
   const [updateStore] = useState(() => createUpdateStore({ dismissedVersion: '' }));
   useUpdateWiring(updateStore);
   useAgentStream();
+  useEffect(() => {
+    const off = window.codesign?.ask?.onRequest?.((request) => {
+      void notifyDesignInBackground(useCodesignStore.getState(), request.designId, 'ask');
+    });
+    return () => {
+      off?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!window.codesign) {

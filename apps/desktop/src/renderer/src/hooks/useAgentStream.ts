@@ -15,6 +15,7 @@
 import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
 import { useEffect, useRef } from 'react';
 import type { AgentStreamEvent } from '../../../preload/index';
+import { notifyDesignInBackground } from '../lib/system-notifications';
 import { resolveReferencedWorkspacePreviewPath } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
 import { coerceUsageSnapshot } from '../store/slices/usage';
@@ -510,6 +511,13 @@ export function useAgentStream(): void {
       if (event.type === 'run_settled') {
         handleSettled(event, replay);
         forgetCancelledGeneration(event.generationId);
+        if (!replay && (event.outcome === 'completed' || event.outcome === 'failed')) {
+          void notifyDesignInBackground(
+            useCodesignStore.getState(),
+            event.designId,
+            event.outcome === 'completed' ? 'done' : 'failed',
+          );
+        }
         return;
       }
       if (

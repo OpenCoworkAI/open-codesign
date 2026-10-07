@@ -43,6 +43,7 @@ const design = {
   workspacePath: '/tmp/codesign-completion-test',
 };
 let listener: ((event: AgentStreamEvent) => void) | undefined;
+let windowFocused = true;
 const append = vi.fn(async (input: { designId: string; kind: string; payload: unknown }) => ({
   ...input,
   id: 'row',
@@ -89,6 +90,12 @@ beforeEach(() => {
     persistAgentRunSnapshot: vi.fn(async () => {}),
     tryAutoPolish: vi.fn(),
   });
+  windowFocused = true;
+  vi.stubGlobal('document', {
+    hasFocus: () => windowFocused,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
   vi.stubGlobal('window', {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -127,6 +134,34 @@ afterEach(() => {
 });
 
 describe('agent stream / IPC completion ordering', () => {
+  it('notifies through the OS only for live runs that complete or fail in the background', async () => {
+    const shown: Array<{ title: string; body: string }> = [];
+    vi.stubGlobal(
+      'Notification',
+      class {
+        onclick: (() => void) | null = null;
+        constructor(title: string, options: { body: string }) {
+          shown.push({ title, body: options.body });
+        }
+      },
+    );
+    Object.assign(window.codesign ?? {}, {
+      preferences: { get: vi.fn(async () => ({ systemNotifications: true })) },
+    });
+    windowFocused = false;
+
+    emit('run_settled', 'completed-run', { outcome: 'completed' });
+    emit('run_settled', 'failed-run', { outcome: 'failed' });
+    emit('run_settled', 'cancelled-run', { outcome: 'cancelled' });
+    emit('run_settled', 'interrupted-run', { outcome: 'interrupted' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(shown).toEqual([
+      { title: 'Aurora', body: 'Design ready' },
+      { title: 'Aurora', body: 'Generation failed' },
+    ]);
+  });
+
   it('keeps exactly one canonical active message through delivery, turn end and completion', async () => {
     const get = useCodesignStore.getState;
     const rows: ChatMessageRow[] = [];

@@ -17,7 +17,7 @@ import { getLogger } from './logger';
 
 const logger = getLogger('preferences-ipc');
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 // v1 → v2: raise the abandoned 120s timeout default (which aborted real
 // agentic runs mid-loop) to 600s. Values that happen to equal the old
 // default are treated as unmigrated defaults, not user intent.
@@ -47,6 +47,8 @@ export interface Preferences {
   /** HTTP/HTTPS proxy URL applied to Chromium and Node outbound traffic.
    *  Empty string disables the proxy. */
   proxyUrl: string;
+  /** Notify through the OS when a design run ends or asks a question while the window is in the background. */
+  systemNotifications: boolean;
 }
 
 interface PreferencesFile extends Preferences {
@@ -67,6 +69,7 @@ const DEFAULTS: Preferences = {
   workspaceMemoryAutoUpdate: true,
   userMemoryAutoUpdate: false,
   proxyUrl: '',
+  systemNotifications: true,
 };
 
 const PREFERENCE_UPDATE_FIELDS = [
@@ -79,6 +82,7 @@ const PREFERENCE_UPDATE_FIELDS = [
   'workspaceMemoryAutoUpdate',
   'userMemoryAutoUpdate',
   'proxyUrl',
+  'systemNotifications',
 ] as const;
 
 function assertKnownPreferenceFields(r: Record<string, unknown>): void {
@@ -137,7 +141,8 @@ function readPersistedBoolean(
     | 'checkForUpdatesOnStartup'
     | 'memoryEnabled'
     | 'workspaceMemoryAutoUpdate'
-    | 'userMemoryAutoUpdate',
+    | 'userMemoryAutoUpdate'
+    | 'systemNotifications',
   defaultValue: boolean,
 ): boolean {
   const value = r[key];
@@ -224,6 +229,11 @@ function parsePersistedFile(rawJson: unknown): Preferences {
       DEFAULTS.userMemoryAutoUpdate,
     ),
     proxyUrl: readPersistedString(parsed, 'proxyUrl', DEFAULTS.proxyUrl),
+    systemNotifications: readPersistedBoolean(
+      parsed,
+      'systemNotifications',
+      DEFAULTS.systemNotifications,
+    ),
   };
 }
 
@@ -332,6 +342,15 @@ function readMemoryAutoUpdate(
   return value;
 }
 
+function readSystemNotifications(r: Record<string, unknown>): boolean | undefined {
+  const value = r['systemNotifications'];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') {
+    throw new CodesignError('systemNotifications must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  return value;
+}
+
 function readDismissedVersion(r: Record<string, unknown>): string | undefined {
   const value = r['dismissedUpdateVersion'];
   if (value === undefined) return undefined;
@@ -389,6 +408,8 @@ function parsePreferences(raw: unknown): Partial<Preferences> {
   if (userMemoryAutoUpdate !== undefined) out.userMemoryAutoUpdate = userMemoryAutoUpdate;
   const proxyUrl = readProxyUrl(r);
   if (proxyUrl !== undefined) out.proxyUrl = proxyUrl;
+  const systemNotifications = readSystemNotifications(r);
+  if (systemNotifications !== undefined) out.systemNotifications = systemNotifications;
   return out;
 }
 

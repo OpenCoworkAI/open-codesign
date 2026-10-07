@@ -66,6 +66,7 @@ describe('readPersisted()', () => {
       workspaceMemoryAutoUpdate: true,
       userMemoryAutoUpdate: false,
       proxyUrl: '',
+      systemNotifications: true,
     });
   });
 
@@ -241,7 +242,7 @@ describe('readPersisted()', () => {
       schemaVersion: number;
       diagnosticsLastReadTs: number;
     };
-    expect(written.schemaVersion).toBe(9);
+    expect(written.schemaVersion).toBe(10);
     expect(written.diagnosticsLastReadTs).toBe(result.diagnosticsLastReadTs);
     expect(written.diagnosticsLastReadTs).toBeGreaterThanOrEqual(before);
     expect(written.diagnosticsLastReadTs).toBeLessThanOrEqual(after);
@@ -361,7 +362,7 @@ describe('preferences memory schema fields', () => {
       workspaceMemoryAutoUpdate: boolean;
       userMemoryAutoUpdate: boolean;
     };
-    expect(written.schemaVersion).toBe(9);
+    expect(written.schemaVersion).toBe(10);
     expect(written.memoryEnabled).toBe(false);
     expect(written.workspaceMemoryAutoUpdate).toBe(false);
     expect(written.userMemoryAutoUpdate).toBe(true);
@@ -401,6 +402,47 @@ describe('preferences memory schema fields', () => {
         proxyUrl: 42,
       }),
     ).rejects.toThrow(/proxyUrl must be a string/);
+  });
+
+  it('keeps system notifications on for files written before the setting existed', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 9, diagnosticsLastReadTs: 1, proxyUrl: '' }),
+    );
+
+    const prefs = await readPersisted();
+    expect(prefs.systemNotifications).toBe(true);
+  });
+
+  it('round-trips systemNotifications through preferences:v1:update', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 10, diagnosticsLastReadTs: 1, systemNotifications: true }),
+    );
+    const updated = await (
+      handlers['preferences:v1:update'] as (_e: null, raw: unknown) => Promise<unknown>
+    )(null, { systemNotifications: false });
+
+    expect((updated as { systemNotifications: boolean }).systemNotifications).toBe(false);
+    const lastCall = writeFileMock.mock.calls.at(-1);
+    if (!lastCall) throw new Error('writeFile was not called');
+    const written = JSON.parse(lastCall[1] as string) as {
+      schemaVersion: number;
+      systemNotifications: boolean;
+    };
+    expect(written.schemaVersion).toBe(10);
+    expect(written.systemNotifications).toBe(false);
+  });
+
+  it('rejects non-boolean systemNotifications updates and persisted values', async () => {
+    await expect(
+      (handlers['preferences:v1:update'] as (_e: null, raw: unknown) => Promise<unknown>)(null, {
+        systemNotifications: 'yes',
+      }),
+    ).rejects.toThrow(/systemNotifications must be a boolean/);
+
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 10, diagnosticsLastReadTs: 1, systemNotifications: 1 }),
+    );
+    await expect(readPersisted()).rejects.toThrow(/systemNotifications must be a boolean/);
   });
 });
 
