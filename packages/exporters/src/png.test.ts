@@ -11,6 +11,13 @@ const setContentMock = vi.fn();
 const evaluateMock = vi.fn();
 const screenshotMock = vi.fn();
 const closeMock = vi.fn();
+const { rmMock } = vi.hoisted(() => ({ rmMock: vi.fn() }));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  rmMock.mockImplementation(actual.rm);
+  return { ...actual, rm: rmMock };
+});
 
 vi.mock('puppeteer-core', () => ({
   default: { launch: launchMock },
@@ -86,6 +93,17 @@ describe('exportPng', () => {
       expect.objectContaining({ executablePath: '/tmp/fake-chrome' }),
     );
     expect(setViewportMock).toHaveBeenCalledWith({ width: 390, height: 844, deviceScaleFactor: 2 });
+  });
+
+  it('keeps a saved PNG when the temporary Chrome profile cannot be removed', async () => {
+    rmMock.mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'EBUSY' }));
+    const { exportPng } = await import('./png');
+    const dest = join(tempDir, 'locked-profile.png');
+
+    await expect(exportPng('<p>x</p>', dest)).resolves.toEqual({
+      bytes: fakePngBytes.length,
+      path: dest,
+    });
   });
 
   it('wraps browser failures in EXPORTER_PNG_FAILED and still closes Chrome', async () => {

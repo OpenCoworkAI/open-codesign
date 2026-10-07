@@ -60,6 +60,11 @@ export async function exportPng(
     );
   } finally {
     if (browser) await browser.close();
-    await rm(userDataDir, { recursive: true, force: true });
+    // The export result does not depend on removing Chrome's temporary profile.
+    try {
+      await rm(userDataDir, { recursive: true, force: true });
+    } catch {
+      /* noop */
+    }
   }
 }
