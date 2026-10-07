@@ -48,6 +48,7 @@ export async function exportPng(
     if (opts.settleMs && opts.settleMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, opts.settleMs));
     }
+    await page.evaluate(EXPAND_DECK_SCRIPT);
     const png = await page.screenshot({ type: 'png', fullPage: true });
     await writeFile(destinationPath, png);
     return { bytes: (await stat(destinationPath)).size, path: destinationPath };
@@ -68,3 +69,43 @@ export async function exportPng(
     }
   }
 }
+
+// Decks that show one <section> slide at a time (the built-in 16:9 scaffold
+// hides inactive slides with display: none) would otherwise export only the
+// visible slide. Each slide gets its own copy of the deck container, showing
+// that slide alone, and the copies replace the page body in slide order, as
+// PDF export does for decks. Uses the same slide-size checks as PDF export.
+// Returns the number of slides laid out, or 0 when the page is left as is.
+export const EXPAND_DECK_SCRIPT = `(() => {
+  const parents = new Set(Array.from(document.querySelectorAll('section'), (el) => el.parentElement));
+  for (const parent of parents) {
+    if (!parent || parent === document.body) continue;
+    const slides = Array.from(parent.children).filter((el) => el.tagName === 'SECTION');
+    const visible = slides.filter((el) => getComputedStyle(el).display !== 'none');
+    if (slides.length < 2 || visible.length !== 1) continue;
+    const rect = visible[0].getBoundingClientRect();
+    const ratio = rect.width / Math.max(1, rect.height);
+    if (rect.width < 480 || rect.height < 270 || ratio < 1.5 || ratio > 1.95) continue;
+    const display = getComputedStyle(visible[0]).display;
+    const frames = slides.map((_, index) => {
+      const frame = parent.cloneNode(true);
+      const copies = Array.from(frame.children).filter((el) => el.tagName === 'SECTION');
+      copies.forEach((el, i) => {
+        el.style.display = i === index ? display : 'none';
+      });
+      frame.style.margin = '0 auto 24px';
+      return frame;
+    });
+    const body = document.body;
+    for (const node of Array.from(body.querySelectorAll('style, link[rel="stylesheet"]'))) {
+      document.head.appendChild(node.cloneNode(true));
+    }
+    body.replaceChildren(...frames);
+    document.documentElement.style.height = 'auto';
+    body.style.height = 'auto';
+    body.style.display = 'block';
+    body.style.padding = '24px 0 0';
+    return frames.length;
+  }
+  return 0;
+})()`;

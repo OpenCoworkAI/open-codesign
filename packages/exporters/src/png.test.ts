@@ -55,7 +55,7 @@ afterAll(() => {
 
 describe('exportPng', () => {
   it('writes a full-page 2x screenshot of the rendered document', async () => {
-    const { exportPng } = await import('./png');
+    const { EXPAND_DECK_SCRIPT, exportPng } = await import('./png');
     const dest = join(tempDir, 'out.png');
 
     const result = await exportPng('<h1>hi</h1>', dest);
@@ -76,6 +76,10 @@ describe('exportPng', () => {
       timeout: 45_000,
     });
     expect(screenshotMock).toHaveBeenCalledWith({ type: 'png', fullPage: true });
+    expect(evaluateMock).toHaveBeenLastCalledWith(EXPAND_DECK_SCRIPT);
+    expect(evaluateMock.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      screenshotMock.mock.invocationCallOrder[0] ?? 0,
+    );
     expect(readFileSync(dest)).toEqual(fakePngBytes);
     expect(result).toEqual({ bytes: fakePngBytes.length, path: dest });
     expect(closeMock).toHaveBeenCalledTimes(1);
@@ -116,3 +120,60 @@ describe('exportPng', () => {
     expect(closeMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe.runIf(process.env['CODESIGN_EXPORT_BROWSER_TESTS'] === '1')(
+  'deck layout in system Chrome',
+  () => {
+    async function layoutInChrome(html: string) {
+      const { EXPAND_DECK_SCRIPT } = await import('./png');
+      const { findSystemChrome } =
+        await vi.importActual<typeof import('./chrome-discovery')>('./chrome-discovery');
+      const { default: puppeteer } =
+        await vi.importActual<typeof import('puppeteer-core')>('puppeteer-core');
+      const browser = await puppeteer.launch({
+        executablePath: await findSystemChrome(),
+        headless: true,
+      });
+      try {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 800 });
+        await page.setContent(html, { waitUntil: 'load' });
+        const laidOut = await page.evaluate(EXPAND_DECK_SCRIPT);
+        const tops = await page.$$eval('section', (sections) =>
+          sections
+            .filter((section) => section.getBoundingClientRect().height > 0)
+            .map((section) => section.getBoundingClientRect().top + window.scrollY),
+        );
+        return { laidOut, tops };
+      } finally {
+        await browser.close();
+      }
+    }
+
+    it('stacks every slide of the built-in 16:9 deck scaffold', async () => {
+      const scaffold = readFileSync(
+        new URL(
+          '../../../apps/desktop/resources/templates/scaffolds/decks/slide-16-9.html',
+          import.meta.url,
+        ),
+        'utf8',
+      );
+
+      const { laidOut, tops } = await layoutInChrome(scaffold);
+
+      expect(laidOut).toBe(2);
+      expect(tops).toHaveLength(2);
+      expect(tops[0]).toBeGreaterThanOrEqual(0);
+      expect(tops[1]).toBeGreaterThan(tops[0] ?? 0);
+    }, 60_000);
+
+    it('leaves pages whose sections are all visible unchanged', async () => {
+      const page = `<main>${'<section style="height:160px">Task</section>'.repeat(3)}</main>`;
+
+      const { laidOut, tops } = await layoutInChrome(page);
+
+      expect(laidOut).toBe(0);
+      expect(tops).toHaveLength(3);
+    }, 60_000);
+  },
+);
