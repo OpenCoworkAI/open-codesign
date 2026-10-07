@@ -1529,7 +1529,7 @@
     "PREFERENCES_INVALID_TIMEOUT": "The generation timeout value is invalid.",
     "SKILL_LOAD_FAILED": "One or more skills failed to load. Check your skill files for errors.",
     "EXPORTER_UNKNOWN": "Unknown export format requested.",
-    "EXPORTER_NO_CHROME": "Chrome or Chromium was not found. Install it to enable PDF export.",
+    "EXPORTER_NO_CHROME": "Chrome or Chromium was not found. Install it to enable PDF and PNG export.",
     "EXPORTER_PDF_FAILED": "PDF export failed. Ensure Chrome is installed and try again.",
     "EXPORTER_PNG_FAILED": "PNG export failed. Ensure Chrome is installed and try again.",
     "EXPORTER_PPTX_FAILED": "PowerPoint export failed.",

@@ -1525,7 +1525,7 @@
     "PREFERENCES_INVALID_TIMEOUT": "生成超时时长的设置无效。",
     "SKILL_LOAD_FAILED": "有 skill 加载失败，请检查 skill 文件是否有误。",
     "EXPORTER_UNKNOWN": "未知的导出格式。",
-    "EXPORTER_NO_CHROME": "未检测到 Chrome 或 Chromium，请安装后再进行 PDF 导出。",
+    "EXPORTER_NO_CHROME": "未检测到 Chrome 或 Chromium，请安装后再进行 PDF 或 PNG 导出。",
     "EXPORTER_PDF_FAILED": "PDF 导出失败，请确认已安装 Chrome 后重试。",
     "EXPORTER_PNG_FAILED": "PNG 导出失败，请确认已安装 Chrome 后重试。",
     "EXPORTER_PPTX_FAILED": "PowerPoint 导出失败。",

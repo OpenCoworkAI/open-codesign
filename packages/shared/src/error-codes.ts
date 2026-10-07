@@ -377,7 +377,7 @@ export const ERROR_CODE_DESCRIPTIONS: Record<CodesignErrorCode, ErrorCodeDescrip
     category: 'other',
   },
   EXPORTER_NO_CHROME: {
-    userFacing: 'Chrome or Chromium was not found. Install it to enable PDF export.',
+    userFacing: 'Chrome or Chromium was not found. Install it to enable PDF and PNG export.',
     userFacingKey: 'err.EXPORTER_NO_CHROME',
     category: 'other',
   },

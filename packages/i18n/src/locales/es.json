@@ -1352,7 +1352,7 @@
     "PREFERENCES_INVALID_TIMEOUT": "El valor del tiempo de espera de generación es inválido.",
     "SKILL_LOAD_FAILED": "Uno o más habilidades fallaron al cargar. Revisa tus archivos de habilidades para errores.",
     "EXPORTER_UNKNOWN": "Formato de exportación desconocido solicitado.",
-    "EXPORTER_NO_CHROME": "No se encontró Chrome o Chromium. Instálalo para habilitar la exportación a PDF.",
+    "EXPORTER_NO_CHROME": "No se encontró Chrome o Chromium. Instálalo para habilitar la exportación a PDF y PNG.",
     "EXPORTER_PDF_FAILED": "La exportación a PDF falló. Asegúrate de que Chrome esté instalado e inténtalo de nuevo.",
     "EXPORTER_PNG_FAILED": "La exportación a PNG falló. Asegúrate de que Chrome esté instalado e inténtalo de nuevo.",
     "EXPORTER_PPTX_FAILED": "La exportación a PowerPoint falló.",
