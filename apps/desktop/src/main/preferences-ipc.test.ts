@@ -404,13 +404,32 @@ describe('preferences memory schema fields', () => {
     ).rejects.toThrow(/proxyUrl must be a string/);
   });
 
-  it('keeps system notifications on for files written before the setting existed', async () => {
+  it('leaves system notifications off for installs upgraded from an earlier schema', async () => {
     readFileMock.mockResolvedValueOnce(
       JSON.stringify({ schemaVersion: 9, diagnosticsLastReadTs: 1, proxyUrl: '' }),
     );
 
     const prefs = await readPersisted();
-    expect(prefs.systemNotifications).toBe(true);
+    expect(prefs.systemNotifications).toBe(false);
+  });
+
+  it('keeps an upgraded install opted out when another preference is saved', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 9, diagnosticsLastReadTs: 1, proxyUrl: '' }),
+    );
+    await (handlers['preferences:v1:update'] as (_e: null, raw: unknown) => Promise<unknown>)(
+      null,
+      { proxyUrl: 'http://127.0.0.1:7890' },
+    );
+
+    const lastCall = writeFileMock.mock.calls.at(-1);
+    if (!lastCall) throw new Error('writeFile was not called');
+    const written = JSON.parse(lastCall[1] as string) as {
+      schemaVersion: number;
+      systemNotifications: boolean;
+    };
+    expect(written.schemaVersion).toBe(10);
+    expect(written.systemNotifications).toBe(false);
   });
 
   it('round-trips systemNotifications through preferences:v1:update', async () => {

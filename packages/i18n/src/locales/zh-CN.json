@@ -802,7 +802,7 @@
       "checkForUpdatesOnStartup": "启动时检查更新",
       "checkForUpdatesOnStartupHint": "启动 30 秒后自动检查新版本。",
       "systemNotifications": "系统通知",
-      "systemNotificationsHint": "Open CoDesign 在后台时，设计完成、生成失败或需要你回答问题时发送系统通知。",
+      "systemNotificationsHint": "Open CoDesign 在后台时，设计完成、生成失败或需要你回答问题时发送系统通知。在 macOS 上关闭最后一个窗口后不再通知，重新打开窗口后恢复。",
       "timeout": "生成超时",
       "timeoutHint": "超过该秒数后会中止生成请求。",
       "timeoutSeconds": "{{value}} 秒",

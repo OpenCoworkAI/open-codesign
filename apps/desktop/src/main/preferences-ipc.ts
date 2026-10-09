@@ -25,6 +25,10 @@ const V1_DEFAULT_TIMEOUT_SEC = 120;
 // v2 -> v3: 600s still clips slower long-form multi-turn runs, so the default
 // moves to 1200s.
 const V2_DEFAULT_TIMEOUT_SEC = 600;
+// v9 -> v10: system notifications. Installs upgraded from an earlier schema
+// keep them off until the user turns them on in Settings -> Advanced; new
+// installs start with them on.
+const SYSTEM_NOTIFICATIONS_SCHEMA_VERSION = 10;
 
 function prefsFile(): string {
   return join(configDir(), 'preferences.json');
@@ -232,7 +236,7 @@ function parsePersistedFile(rawJson: unknown): Preferences {
     systemNotifications: readPersistedBoolean(
       parsed,
       'systemNotifications',
-      DEFAULTS.systemNotifications,
+      persistedSchema < SYSTEM_NOTIFICATIONS_SCHEMA_VERSION ? false : DEFAULTS.systemNotifications,
     ),
   };
 }

@@ -624,7 +624,7 @@
       "checkForUpdatesOnStartup": "Buscar actualizaciones al inicio",
       "checkForUpdatesOnStartupHint": "Buscar automáticamente una nueva versión 30 segundos después del inicio.",
       "systemNotifications": "Notificaciones del sistema",
-      "systemNotificationsHint": "Avisarme cuando un diseño termine, falle o haga una pregunta mientras Open CoDesign está en segundo plano.",
+      "systemNotificationsHint": "Avisarme cuando un diseño termine, falle o haga una pregunta mientras Open CoDesign está en segundo plano. En macOS, los avisos se detienen al cerrar la última ventana, hasta que la vuelvas a abrir.",
       "timeout": "Tiempo de espera de generación",
       "timeoutHint": "Segundos antes de que una solicitud de generación se aborte.",
       "timeoutSeconds": "{{value}} s",

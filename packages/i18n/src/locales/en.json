@@ -802,7 +802,7 @@
       "checkForUpdatesOnStartup": "Check for updates on startup",
       "checkForUpdatesOnStartupHint": "Automatically check for a new release 30 seconds after launch.",
       "systemNotifications": "System notifications",
-      "systemNotificationsHint": "Notify me when a design finishes, fails, or asks a question while Open CoDesign is in the background.",
+      "systemNotificationsHint": "Notify me when a design finishes, fails, or asks a question while Open CoDesign is in the background. On macOS, notifications stop after you close the last window, until you open it again.",
       "timeout": "Generation timeout",
       "timeoutHint": "Seconds before a generation request is aborted.",
       "timeoutSeconds": "{{value}} s",
