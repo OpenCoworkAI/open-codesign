@@ -93,20 +93,46 @@ export const EXPAND_DECK_SCRIPT = `(() => {
     const ratio = rect.width / Math.max(1, rect.height);
     if (rect.width < 480 || rect.height < 270 || ratio < 1.5 || ratio > 1.95) continue;
     const display = getComputedStyle(active).display;
-    // The shown slide is marked by what only it carries (a class such as
-    // "active", data-active="true", no aria-hidden). Each copy moves those marks
-    // to its own slide, so styles tied to them, not just display, apply there.
+    // The shown slide carries a mark the others lack, such as an "active" class
+    // or data-active="true". Each copy moves that mark to its own slide, so
+    // styles tied to it, not just display, apply there. A class or attribute
+    // counts as the mark only if giving the shown slide the other slides' value
+    // hides it; ids, per-slide classes and content attributes stay in place.
     const others = slides.filter((el) => el !== active);
-    const activeClasses = Array.from(active.classList).filter((name) =>
-      others.every((el) => !el.classList.contains(name)),
+    const hidesActive = (change) => {
+      const saved = active.getAttributeNames().map((name) => [name, active.getAttribute(name)]);
+      active.style.transition = 'none';
+      change();
+      const style = getComputedStyle(active);
+      const hidden = style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0';
+      for (const name of active.getAttributeNames()) active.removeAttribute(name);
+      for (const [name, value] of saved) active.setAttribute(name, value);
+      return hidden;
+    };
+    const activeClasses = Array.from(active.classList).filter(
+      (name) =>
+        others.every((el) => !el.classList.contains(name)) &&
+        hidesActive(() => active.classList.remove(name)),
     );
     const otherClasses = Array.from(others[0].classList).filter(
-      (name) => !active.classList.contains(name) && others.every((el) => el.classList.contains(name)),
+      (name) =>
+        !active.classList.contains(name) &&
+        others.every((el) => el.classList.contains(name)) &&
+        hidesActive(() => active.classList.add(name)),
     );
+    const setMark = (el, name, value) => {
+      if (value === null) el.removeAttribute(name);
+      else el.setAttribute(name, value);
+    };
     const marks = Array.from(new Set(slides.flatMap((el) => el.getAttributeNames())))
       .filter((name) => name !== 'class' && name !== 'style')
       .map((name) => ({ name, shown: active.getAttribute(name), other: others[0].getAttribute(name) }))
-      .filter((mark) => mark.shown !== mark.other && others.every((el) => el.getAttribute(mark.name) === mark.other));
+      .filter(
+        (mark) =>
+          mark.shown !== mark.other &&
+          others.every((el) => el.getAttribute(mark.name) === mark.other) &&
+          hidesActive(() => setMark(active, mark.name, mark.other)),
+      );
     const frames = slides.map((_, index) => {
       const frame = parent.cloneNode(true);
       const copies = Array.from(frame.children).filter((el) => el.tagName === 'SECTION');
@@ -114,11 +140,7 @@ export const EXPAND_DECK_SCRIPT = `(() => {
         const shown = i === index;
         el.classList.remove(...(shown ? otherClasses : activeClasses));
         el.classList.add(...(shown ? activeClasses : otherClasses));
-        for (const mark of marks) {
-          const value = shown ? mark.shown : mark.other;
-          if (value === null) el.removeAttribute(mark.name);
-          else el.setAttribute(mark.name, value);
-        }
+        for (const mark of marks) setMark(el, mark.name, shown ? mark.shown : mark.other);
         el.style.display = shown ? display : 'none';
       });
       frame.style.margin = '0 auto 24px';
