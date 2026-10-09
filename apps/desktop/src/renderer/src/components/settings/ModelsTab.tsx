@@ -359,6 +359,7 @@ export function ModelsTab() {
         defaultModel?: string;
         requiresApiKey?: boolean;
         hint?: string;
+        presetId?: 'litellm';
       }
     | undefined
   >(undefined);
@@ -1057,6 +1058,7 @@ export function ModelsTab() {
                 defaultModel: '',
                 requiresApiKey: false,
                 hint: t('settings.providers.litellm.hint'),
+                presetId: 'litellm',
               });
               setShowAddCustom(true);
             }}

@@ -522,7 +522,13 @@
       "litellm": {
         "presetName": "LiteLLM Gateway",
         "presetDescription": "Gateway autoalojado compatible con OpenAI, clave API opcional",
-        "hint": "Apunta a un proxy LiteLLM que ya tengas en ejecución (LiteLLM no viene incluido). La URL predeterminada es http://localhost:4000/v1; edítala para despliegues remotos. El modo sin clave está activado para proxies sin master key; desactívalo y pega tu master key o virtual key si el gateway requiere autenticación. Para una URL localhost, permite abajo las pruebas en red privada."
+        "hint": "Apunta a un proxy LiteLLM que ya tengas en ejecución (LiteLLM no viene incluido). La URL predeterminada es http://localhost:4000/v1; edítala para despliegues remotos. El modo sin clave está activado para proxies sin master key; desactívalo y pega tu master key o virtual key si el gateway requiere autenticación. Para una URL localhost, permite abajo las pruebas en red privada.",
+        "diagnostics": {
+          "auth": "Configura la master key o virtual key de LiteLLM, o desactiva el modo sin clave si este proxy exige una clave.",
+          "notFound": "Comprueba que la URL base termina en /v1.",
+          "notFoundLocal": "Comprueba que la URL base termina en /v1 y que el proxy local de LiteLLM está en el puerto 4000.",
+          "unreachable": "Inicia el proxy de LiteLLM y vuelve a intentarlo."
+        }
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",

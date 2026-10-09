@@ -14,6 +14,7 @@ vi.mock('./tls-override', () => ({
 }));
 
 import { createHash } from 'node:crypto';
+import { hydrateConfig, LITELLM_CONNECTION_HINT_KEYS } from '@open-codesign/shared';
 import {
   _clearModelsCache,
   buildAuthHeaders,
@@ -26,11 +27,13 @@ import {
   fetchWithTimeout,
   getCacheKey,
   handleConfigV1TestEndpoint,
+  handleModelsV1ListForProvider,
   handleOllamaV1Probe,
   normalizeBaseUrl,
   normalizeOllamaBaseUrl,
   runProviderTest,
 } from './connection-ipc';
+import { setCachedConfig } from './onboarding/config-cache';
 import { withTlsBypass } from './tls-override';
 
 // ---------------------------------------------------------------------------
@@ -1626,6 +1629,310 @@ describe('TLS bypass routing', () => {
       expect(vi.mocked(withTlsBypass)).not.toHaveBeenCalled();
     } finally {
       restore();
+    }
+  });
+});
+
+describe('LiteLLM connection diagnostics', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    _clearModelsCache();
+  });
+
+  function statusFetch(status: number): () => void {
+    return installFakeFetch(() => ({ status, body: {} })).restore;
+  }
+
+  function refusedFetch(): () => void {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:4000'), {
+          code: 'ECONNREFUSED',
+        }),
+      });
+    }) as typeof fetch;
+    return () => {
+      globalThis.fetch = original;
+    };
+  }
+
+  it('hints for LiteLLM connection tests and stays quiet for other gateways', async () => {
+    const auth = statusFetch(401);
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://llm.example/v1',
+          apiKey: 'sk-test',
+          presetId: 'litellm',
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: 'auth',
+        hintKey: LITELLM_CONNECTION_HINT_KEYS.auth,
+      });
+    } finally {
+      auth();
+    }
+
+    const missing = statusFetch(404);
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'http://127.0.0.1:4000',
+          apiKey: 'sk-test',
+          allowPrivateNetwork: true,
+          presetId: 'litellm',
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        hintKey: LITELLM_CONNECTION_HINT_KEYS.notFoundLocal,
+      });
+    } finally {
+      missing();
+    }
+
+    const remoteMissing = statusFetch(404);
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://gateway.example/litellm/v1',
+          apiKey: 'sk-test',
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        hintKey: LITELLM_CONNECTION_HINT_KEYS.notFound,
+      });
+    } finally {
+      remoteMissing();
+    }
+
+    const portOnly = statusFetch(404);
+    try {
+      const res = await handleConfigV1TestEndpoint({
+        wire: 'openai-chat',
+        baseUrl: 'http://127.0.0.1:4000',
+        apiKey: 'sk-test',
+        allowPrivateNetwork: true,
+      });
+      expect(res).toEqual({ ok: false, error: 'not-a-model-endpoint', message: 'HTTP 404' });
+      expect(res).not.toHaveProperty('hintKey');
+    } finally {
+      portOnly();
+    }
+
+    const refused = refusedFetch();
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'http://localhost:4000/v1',
+          apiKey: '',
+          requiresApiKey: false,
+          allowPrivateNetwork: true,
+          presetId: 'litellm',
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: 'network',
+        hintKey: LITELLM_CONNECTION_HINT_KEYS.unreachable,
+      });
+    } finally {
+      refused();
+    }
+
+    const refusedOther = refusedFetch();
+    try {
+      const res = await handleConfigV1TestEndpoint({
+        wire: 'openai-chat',
+        baseUrl: 'http://localhost:4000/v1',
+        apiKey: '',
+        requiresApiKey: false,
+        allowPrivateNetwork: true,
+      });
+      expect(res).toMatchObject({ ok: false, error: 'network' });
+      expect(res).not.toHaveProperty('hintKey');
+    } finally {
+      refusedOther();
+    }
+
+    const other = statusFetch(401);
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://api.example/v1',
+          apiKey: 'sk-test',
+        }),
+      ).resolves.toEqual({ ok: false, error: 'auth', message: 'HTTP 401' });
+    } finally {
+      other();
+    }
+
+    const badPreset = statusFetch(200);
+    try {
+      await expect(
+        handleConfigV1TestEndpoint({
+          wire: 'openai-chat',
+          baseUrl: 'https://llm.example/v1',
+          apiKey: 'sk-test',
+          presetId: 'other',
+        }),
+      ).resolves.toMatchObject({ ok: false, error: 'bad-input' });
+    } finally {
+      badPreset();
+    }
+  });
+
+  it('hints when a saved LiteLLM provider fails its connection test', async () => {
+    const auth = statusFetch(401);
+    try {
+      await expect(
+        runProviderTest({
+          provider: 'custom-litellm-gateway-ab12',
+          name: 'Renamed gateway',
+          wire: 'openai-chat',
+          apiKey: 'sk-test',
+          baseUrl: 'https://llm.example/v1',
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        code: '401',
+        hintKey: LITELLM_CONNECTION_HINT_KEYS.auth,
+      });
+    } finally {
+      auth();
+    }
+
+    const missing = statusFetch(404);
+    try {
+      await expect(
+        runProviderTest({
+          provider: 'custom-other',
+          name: 'LiteLLM Gateway',
+          wire: 'openai-chat',
+          apiKey: '',
+          baseUrl: 'https://llm.example/v1',
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        code: '404',
+        hintKey: LITELLM_CONNECTION_HINT_KEYS.notFound,
+      });
+    } finally {
+      missing();
+    }
+
+    const localMissing = statusFetch(404);
+    try {
+      await expect(
+        runProviderTest({
+          provider: 'custom-litellm-gateway-ab12',
+          name: 'Renamed gateway',
+          wire: 'openai-chat',
+          apiKey: '',
+          baseUrl: 'http://localhost:4000/v1',
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        code: '404',
+        hintKey: LITELLM_CONNECTION_HINT_KEYS.notFoundLocal,
+      });
+    } finally {
+      localMissing();
+    }
+
+    const portOnly = statusFetch(404);
+    try {
+      const res = await runProviderTest({
+        provider: 'custom-other',
+        name: 'Other gateway',
+        wire: 'openai-chat',
+        apiKey: '',
+        baseUrl: 'http://localhost:4000/v1',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.hintKey).toBeUndefined();
+    } finally {
+      portOnly();
+    }
+
+    const unrelated = statusFetch(401);
+    try {
+      const res = await runProviderTest({
+        provider: 'custom-other',
+        name: 'Other gateway',
+        wire: 'openai-chat',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.example/v1',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.hintKey).toBeUndefined();
+    } finally {
+      unrelated();
+    }
+  });
+
+  it('hints when model discovery fails for a saved LiteLLM provider', async () => {
+    const load = (id: string, name: string, baseUrl: string) => {
+      setCachedConfig(
+        hydrateConfig({
+          version: 3,
+          activeProvider: id,
+          activeModel: 'gpt-4o-mini',
+          secrets: {},
+          providers: {
+            [id]: {
+              id,
+              name,
+              builtin: false,
+              wire: 'openai-chat',
+              baseUrl,
+              defaultModel: 'gpt-4o-mini',
+              requiresApiKey: false,
+            },
+          },
+        }),
+      );
+    };
+
+    const id = 'custom-litellm-gateway-ab12';
+    load(id, 'LiteLLM Gateway', 'https://llm.example/v1');
+    const auth = statusFetch(401);
+    try {
+      await expect(handleModelsV1ListForProvider(id)).resolves.toMatchObject({
+        ok: false,
+        code: 'HTTP',
+        hintKey: LITELLM_CONNECTION_HINT_KEYS.auth,
+      });
+    } finally {
+      auth();
+    }
+
+    _clearModelsCache();
+    const refused = refusedFetch();
+    try {
+      await expect(handleModelsV1ListForProvider(id)).resolves.toMatchObject({
+        ok: false,
+        code: 'NETWORK',
+        hintKey: LITELLM_CONNECTION_HINT_KEYS.unreachable,
+      });
+    } finally {
+      refused();
+    }
+
+    _clearModelsCache();
+    load('custom-other', 'Other gateway', 'https://api.example/v1');
+    const other = statusFetch(404);
+    try {
+      const res = await handleModelsV1ListForProvider('custom-other');
+      expect(res).toMatchObject({ ok: false, code: 'HTTP' });
+      expect(res).not.toHaveProperty('hintKey');
+    } finally {
+      other();
     }
   });
 });

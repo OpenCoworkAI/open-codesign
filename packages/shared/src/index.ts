@@ -383,6 +383,14 @@ export { ERROR_CODE_DESCRIPTIONS, ERROR_CODES } from './error-codes';
 // from this barrel — it's main-process only. Import from
 // '@open-codesign/shared/fingerprint' directly.
 export type { FingerprintInput } from './fingerprint';
+export {
+  isLiteLlmConnectionTarget,
+  LITELLM_CONNECTION_HINT_KEYS,
+  type LiteLlmTargetInput,
+  liteLlmEndpointPreset,
+  liteLlmHintKeyForHttpStatus,
+  liteLlmHintKeyForTransportError,
+} from './litellm-hints';
 export type { ProxyPresetId } from './proxy-presets';
 export {
   getPresetById,

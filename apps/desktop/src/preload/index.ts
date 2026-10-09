@@ -638,6 +638,7 @@ const api = {
       httpHeaders?: Record<string, string>;
       allowPrivateNetwork?: boolean;
       tlsRejectUnauthorized?: boolean;
+      presetId?: 'litellm';
     }) => ipcRenderer.invoke('config:v1:test-endpoint', input) as Promise<TestEndpointResponse>,
     listEndpointModels: (input: { wire: WireApi; baseUrl: string; apiKey: string }) =>
       ipcRenderer.invoke('config:v1:list-endpoint-models', input) as Promise<

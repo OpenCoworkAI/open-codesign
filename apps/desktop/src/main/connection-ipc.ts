@@ -7,7 +7,10 @@ import {
   type DiagnosticCategory,
   ERROR_CODES,
   ensureVersionedBase,
+  isLiteLlmConnectionTarget,
   isSupportedOnboardingProvider,
+  liteLlmHintKeyForHttpStatus,
+  liteLlmHintKeyForTransportError,
   type ProviderEntry,
   type SupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
@@ -51,6 +54,7 @@ const TEST_ENDPOINT_FIELDS = [
   'httpHeaders',
   'allowPrivateNetwork',
   'tlsRejectUnauthorized',
+  'presetId',
 ] as const;
 
 function assertKnownFields(
@@ -93,6 +97,8 @@ export interface ConnectionTestError {
   code: 'IPC_BAD_INPUT' | '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE';
   message: string;
   hint: string;
+  /** i18n key for a provider-specific hint. The renderer translates it. */
+  hintKey?: string;
   compatibility?: 'incompatible';
   reasonCategory?: DiagnosticCategory;
 }
@@ -106,6 +112,8 @@ export type ModelsListResponse =
       code: 'IPC_BAD_INPUT' | 'NETWORK' | 'HTTP' | 'PARSE';
       message: string;
       hint: string;
+      /** i18n key for a provider-specific hint. The renderer translates it. */
+      hintKey?: string;
     };
 
 function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
@@ -357,6 +365,22 @@ function classifyNetworkError(err: unknown): { code: ConnectionTestError['code']
   };
 }
 
+function withHintKey<T extends object>(
+  body: T,
+  hintKey: string | undefined,
+): T & { hintKey?: string } {
+  if (hintKey === undefined) return body;
+  return { ...body, hintKey };
+}
+
+function liteLlmHttpHint(litellm: boolean, status: number, baseUrl?: string): string | undefined {
+  return litellm ? liteLlmHintKeyForHttpStatus(status, baseUrl) : undefined;
+}
+
+function liteLlmTransportHint(litellm: boolean, err: unknown): string | undefined {
+  return litellm ? liteLlmHintKeyForTransportError(err) : undefined;
+}
+
 // Provider /models endpoints normally return in <1s. Anything past 10s means the
 // host is unreachable or stuck — better to surface a clear NETWORK error than to
 // pin the renderer's "Test connection" spinner forever.
@@ -492,6 +516,8 @@ export interface ActiveProviderCredentials {
   builtin?: boolean;
   /** Opt-in TLS verification bypass; only honored when `builtin === false`. */
   tlsRejectUnauthorized?: boolean;
+  /** Display name, used to recognize presets that are stored as custom providers. */
+  name?: string;
 }
 
 function resolveCredentialsForProvider(
@@ -535,6 +561,7 @@ function resolveCredentialsForProvider(
   }
   return {
     provider: providerId,
+    name: entry.name,
     wire: entry.wire,
     apiKey,
     baseUrl: entry.baseUrl,
@@ -607,6 +634,12 @@ export async function runProviderTest(
     return testChatGPTCodexOAuth();
   }
 
+  const litellm = isLiteLlmConnectionTarget({
+    providerId: creds.provider,
+    name: creds.name,
+    baseUrl: creds.baseUrl,
+  });
+
   // Bypass is the per-provider opt-in, force-gated so a tampered config can
   // never weaken TLS for built-in providers. Wrapping the whole body covers
   // both the GET /models probe and the inner POST inside tryDegradeProbe.
@@ -625,14 +658,18 @@ export async function runProviderTest(
       res = await fetchWithTimeout(url, { method: 'GET', headers });
     } catch (err) {
       const { code, hint } = classifyNetworkError(err);
-      return {
-        ok: false,
-        code,
-        message: err instanceof Error ? err.message : 'Network request failed',
-        hint,
-        compatibility: 'incompatible',
-        reasonCategory: code === 'ECONNREFUSED' ? 'network-unreachable' : 'unknown',
-      };
+      return withHintKey(
+        {
+          ok: false as const,
+          code,
+          message: err instanceof Error ? err.message : 'Network request failed',
+          hint,
+          compatibility: 'incompatible' as const,
+          reasonCategory:
+            code === 'ECONNREFUSED' ? ('network-unreachable' as const) : ('unknown' as const),
+        },
+        liteLlmTransportHint(litellm, err),
+      );
     }
     if (!res.ok) {
       // Some OpenAI-compatible gateways (Zhipu GLM, a handful of self-hosted
@@ -647,20 +684,29 @@ export async function runProviderTest(
           creds.wire === 'openai-responses' ||
           creds.wire === 'anthropic')
       ) {
-        const degraded = await tryDegradeProbe(creds.wire, normalizedBaseUrl, headers);
+        const degraded = await tryDegradeProbe(
+          creds.wire,
+          normalizedBaseUrl,
+          headers,
+          litellm,
+          creds.baseUrl,
+        );
         if (degraded !== null) return degraded;
         // Inference endpoint also 404'd (or the network dropped) — fall through
         // and report the original /models 404.
       }
       const { code, hint } = classifyHttpError(res.status);
-      return {
-        ok: false,
-        code,
-        message: `HTTP ${res.status}`,
-        hint,
-        compatibility: 'incompatible',
-        reasonCategory: connectionCategoryForStatus(res.status, normalizedBaseUrl),
-      };
+      return withHintKey(
+        {
+          ok: false as const,
+          code,
+          message: `HTTP ${res.status}`,
+          hint,
+          compatibility: 'incompatible' as const,
+          reasonCategory: connectionCategoryForStatus(res.status, normalizedBaseUrl),
+        },
+        liteLlmHttpHint(litellm, res.status, creds.baseUrl),
+      );
     }
     return { ok: true, probeMethod: 'models', compatibility: 'compatible' };
   });
@@ -670,6 +716,8 @@ async function tryDegradeProbe(
   wire: 'openai-chat' | 'openai-responses' | 'anthropic',
   normalizedBaseUrl: string,
   headers: Record<string, string>,
+  litellm: boolean,
+  baseUrl?: string,
 ): Promise<ConnectionTestResponse | null> {
   const probe = await probeInferenceEndpoint(wire, normalizedBaseUrl, headers);
   if (probe.kind === 'pass') {
@@ -687,14 +735,17 @@ async function tryDegradeProbe(
   }
   if (probe.kind === 'http' && probe.status !== 404) {
     const { code, hint } = classifyHttpError(probe.status);
-    return {
-      ok: false,
-      code,
-      message: `HTTP ${probe.status}`,
-      hint,
-      compatibility: 'incompatible',
-      reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
-    };
+    return withHintKey(
+      {
+        ok: false as const,
+        code,
+        message: `HTTP ${probe.status}`,
+        hint,
+        compatibility: 'incompatible' as const,
+        reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
+      },
+      liteLlmHttpHint(litellm, probe.status, baseUrl),
+    );
   }
   return null;
 }
@@ -972,7 +1023,7 @@ function resolveApiKeyForListing(
   }
 }
 
-async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListResponse> {
+export async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListResponse> {
   const resolved = resolveProviderForListing(raw);
   if ('ok' in resolved) return resolved;
   const { providerId, entry } = resolved;
@@ -995,11 +1046,22 @@ async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListRe
   const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.httpHeaders, entry.baseUrl);
 
   const bypass = entry.builtin !== true && entry.tlsRejectUnauthorized === true;
+  const litellm = isLiteLlmConnectionTarget({
+    providerId,
+    name: entry.name,
+    baseUrl: entry.baseUrl,
+  });
   const result = await withTlsBypass(bypass, () =>
-    fetchModelListResponse(url, headers, {
-      message: 'Unexpected models response shape',
-      hint: 'Check provider /models endpoint compatibility',
-    }),
+    fetchModelListResponse(
+      url,
+      headers,
+      {
+        message: 'Unexpected models response shape',
+        hint: 'Check provider /models endpoint compatibility',
+      },
+      litellm,
+      entry.baseUrl,
+    ),
   );
   if (result.ok) setCachedModels(providerId, entry.baseUrl, apiKey, result.models);
   return result;
@@ -1009,26 +1071,34 @@ async function fetchModelListResponse(
   url: string,
   headers: Record<string, string>,
   shapeError: { message: string; hint: string },
+  litellm = false,
+  baseUrl?: string,
 ): Promise<ModelsListResponse> {
   let res: Response;
   try {
     res = await fetchWithTimeout(url, { method: 'GET', headers });
   } catch (err) {
-    return {
-      ok: false,
-      code: 'NETWORK',
-      message: err instanceof Error ? err.message : String(err),
-      hint: 'Cannot reach provider /models endpoint',
-    };
+    return withHintKey(
+      {
+        ok: false as const,
+        code: 'NETWORK' as const,
+        message: err instanceof Error ? err.message : String(err),
+        hint: 'Cannot reach provider /models endpoint',
+      },
+      liteLlmTransportHint(litellm, err),
+    );
   }
 
   if (!res.ok) {
-    return {
-      ok: false,
-      code: 'HTTP',
-      message: `HTTP ${res.status}`,
-      hint: 'Model list request failed',
-    };
+    return withHintKey(
+      {
+        ok: false as const,
+        code: 'HTTP' as const,
+        message: `HTTP ${res.status}`,
+        hint: 'Model list request failed',
+      },
+      liteLlmHttpHint(litellm, res.status, baseUrl),
+    );
   }
 
   let body: unknown;
@@ -1101,14 +1171,21 @@ export async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndp
       fetchWithTimeout(url, { method: 'GET', headers }),
     );
   } catch (err) {
-    return {
-      ok: false,
-      error: 'network',
-      message: err instanceof Error ? err.message : 'Network request failed',
-    };
+    return withHintKey(
+      {
+        ok: false as const,
+        error: 'network',
+        message: err instanceof Error ? err.message : 'Network request failed',
+      },
+      liteLlmTransportHint(endpointTargetsLiteLlm(payload), err),
+    );
   }
 
-  const statusError = classifyTestEndpointStatus(res.status);
+  const statusError = classifyTestEndpointStatus(
+    res.status,
+    endpointTargetsLiteLlm(payload),
+    payload.baseUrl,
+  );
   if (statusError !== null) return statusError;
 
   let body: unknown;
@@ -1128,17 +1205,31 @@ export async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndp
   return { ok: true, modelCount: ids.length, models: ids };
 }
 
-function classifyTestEndpointStatus(status: number): TestEndpointResponse | null {
+function classifyTestEndpointStatus(
+  status: number,
+  litellm: boolean,
+  baseUrl: string,
+): TestEndpointResponse | null {
   if (status === 401 || status === 403) {
-    return { ok: false, error: 'auth', message: `HTTP ${status}` };
+    return withHintKey(
+      { ok: false as const, error: 'auth', message: `HTTP ${status}` },
+      liteLlmHttpHint(litellm, status, baseUrl),
+    );
   }
   if (status === 404) {
-    return { ok: false, error: 'not-a-model-endpoint', message: 'HTTP 404' };
+    return withHintKey(
+      { ok: false as const, error: 'not-a-model-endpoint', message: 'HTTP 404' },
+      liteLlmHttpHint(litellm, status, baseUrl),
+    );
   }
   if (status < 200 || status >= 300) {
     return { ok: false, error: `http-${status}`, message: `HTTP ${status}` };
   }
   return null;
+}
+
+function endpointTargetsLiteLlm(payload: TestEndpointPayload): boolean {
+  return isLiteLlmConnectionTarget({ presetId: payload.presetId, baseUrl: payload.baseUrl });
 }
 
 export async function handleOllamaV1Probe(raw: unknown): Promise<OllamaProbeResponse> {
@@ -1256,11 +1347,12 @@ interface TestEndpointPayload {
   httpHeaders?: Record<string, string>;
   allowPrivateNetwork?: boolean;
   tlsRejectUnauthorized?: boolean;
+  presetId?: 'litellm';
 }
 
 export type TestEndpointResponse =
   | { ok: true; modelCount: number; models: string[] }
-  | { ok: false; error: string; message: string };
+  | { ok: false; error: string; message: string; hintKey?: string };
 
 function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   if (typeof raw !== 'object' || raw === null) {
@@ -1285,11 +1377,13 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   if (trimmedApiKey.length === 0 && requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
+  const presetId = parseLiteLlmPresetId(r['presetId']);
   const out: TestEndpointPayload = {
     wire,
     baseUrl: parseHttpBaseUrl(baseUrl, 'baseUrl'),
     apiKey: trimmedApiKey,
     ...(requiresApiKey !== undefined ? { requiresApiKey } : {}),
+    ...(presetId !== undefined ? { presetId } : {}),
   };
   if (r['allowPrivateNetwork'] !== undefined) {
     if (typeof r['allowPrivateNetwork'] !== 'boolean') {
@@ -1306,6 +1400,14 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   const headers = parseTestEndpointHttpHeaders(r['httpHeaders']);
   if (headers !== undefined) out.httpHeaders = headers;
   return out;
+}
+
+function parseLiteLlmPresetId(value: unknown): 'litellm' | undefined {
+  if (value === undefined) return undefined;
+  if (value !== 'litellm') {
+    throw new CodesignError('presetId must be "litellm"', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  return 'litellm';
 }
 
 function parseTestEndpointHttpHeaders(value: unknown): Record<string, string> | undefined {

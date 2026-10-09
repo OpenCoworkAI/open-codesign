@@ -85,6 +85,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [models, setModels] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [discoveryHintKey, setDiscoveryHintKey] = useState<string | null>(null);
   const [providerRows, setProviderRows] = useState<ProviderRow[] | null>(null);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -130,8 +131,19 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
     setLoading(true);
     void window.codesign.models
       .listForProvider(provider)
-      .then((res) => setModels(res.ok ? res.models : []))
-      .catch(() => setModels([]))
+      .then((res) => {
+        if (res.ok) {
+          setModels(res.models);
+          setDiscoveryHintKey(null);
+        } else {
+          setModels([]);
+          setDiscoveryHintKey(res.hintKey ?? null);
+        }
+      })
+      .catch(() => {
+        setModels([]);
+        setDiscoveryHintKey(null);
+      })
       .finally(() => setLoading(false));
   }, [open, models, provider]);
 
@@ -321,8 +333,8 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
                 })}
               </div>
             ) : (
-              <div className="px-[var(--space-3)] py-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
-                {t('settings.providers.noModel')}
+              <div className="px-[var(--space-3)] py-[var(--space-2)] text-[var(--text-xs)] leading-5 text-[var(--color-text-muted)]">
+                {discoveryHintKey !== null ? t(discoveryHintKey) : t('settings.providers.noModel')}
               </div>
             )}
           </div>

@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProviderRow } from '../../../../preload/index';
 import { recordAction } from '../../lib/action-timeline';
+import { connectionFailureText } from '../../lib/connection-failure-text';
 import { useCodesignStore } from '../../store';
 
 /**
@@ -324,7 +325,7 @@ export function ProviderCard({
           code: 'CONNECTION_TEST_FAILED',
           scope: 'settings',
           title: t('settings.providers.toast.connectionFailed'),
-          description: res.hint || res.message,
+          description: connectionFailureText(t, res),
           context: { provider: row.provider },
         });
       }
@@ -439,6 +440,7 @@ export function RowModelSelector({
   const [primary, setPrimary] = useState(initial);
   const [models, setModels] = useState<string[] | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [discoveryHintKey, setDiscoveryHintKey] = useState<string | null>(null);
 
   useEffect(() => {
     setPrimary(
@@ -453,7 +455,13 @@ export function RowModelSelector({
     void window.codesign.models.listForProvider(provider).then((res) => {
       if (cancelled) return;
       setLoadingModels(false);
-      setModels(res.ok ? res.models : []);
+      if (res.ok) {
+        setModels(res.models);
+        setDiscoveryHintKey(null);
+      } else {
+        setModels([]);
+        setDiscoveryHintKey(res.hintKey ?? null);
+      }
     });
     return () => {
       cancelled = true;
@@ -513,18 +521,25 @@ export function RowModelSelector({
   );
 
   return (
-    <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
-      <Cpu className="w-3 h-3 shrink-0" />
-      {loadingModels ? (
-        <span className="inline-flex items-center gap-1 h-6 px-2 text-[var(--text-xs)]">
-          <Loader2 className="w-3 h-3 animate-spin" />
-        </span>
-      ) : options !== null ? (
-        <NativeSelect value={primary} onChange={handleChange} options={options} />
-      ) : (
-        <span className="h-6 px-2 inline-flex items-center font-mono text-[var(--text-xs)] text-[var(--color-text-primary)]">
-          {primary || t('settings.providers.noModel')}
-        </span>
+    <div className="mt-[var(--space-2)]">
+      <div className="flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
+        <Cpu className="w-3 h-3 shrink-0" />
+        {loadingModels ? (
+          <span className="inline-flex items-center gap-1 h-6 px-2 text-[var(--text-xs)]">
+            <Loader2 className="w-3 h-3 animate-spin" />
+          </span>
+        ) : options !== null ? (
+          <NativeSelect value={primary} onChange={handleChange} options={options} />
+        ) : (
+          <span className="h-6 px-2 inline-flex items-center font-mono text-[var(--text-xs)] text-[var(--color-text-primary)]">
+            {primary || t('settings.providers.noModel')}
+          </span>
+        )}
+      </div>
+      {discoveryHintKey !== null && (
+        <p className="mt-[var(--space-1)] text-[var(--text-xs)] leading-5 text-[var(--color-text-muted)]">
+          {t(discoveryHintKey)}
+        </p>
       )}
     </div>
   );
