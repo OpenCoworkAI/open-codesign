@@ -958,7 +958,7 @@
       },
       "png": {
         "label": "PNG",
-        "hint": "整页 2 倍图，通过本机 Chrome 渲染"
+        "hint": "整页 2 倍图，通过本机 Chrome 渲染；多页幻灯片（每个 <section> 一页）按顺序纵向拼成一张长图"
       },
       "pptx": {
         "label": "PPTX",

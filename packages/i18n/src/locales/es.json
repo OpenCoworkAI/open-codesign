@@ -780,7 +780,7 @@
       },
       "png": {
         "label": "PNG",
-        "hint": "Imagen de página completa a 2x, mediante tu Chrome instalado"
+        "hint": "Imagen de página completa a 2x, mediante tu Chrome instalado; las presentaciones (una diapositiva por <section>) se apilan en orden en una sola imagen alta"
       },
       "pptx": {
         "label": "PPTX",

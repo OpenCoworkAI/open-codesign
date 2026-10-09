@@ -958,7 +958,7 @@
       },
       "png": {
         "label": "PNG",
-        "hint": "Full-page image at 2x, via your installed Chrome"
+        "hint": "Full-page image at 2x, via your installed Chrome; slide decks (one slide per <section>) are stacked in order into one tall image"
       },
       "pptx": {
         "label": "PPTX",

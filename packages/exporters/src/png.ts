@@ -60,8 +60,13 @@ export async function exportPng(
       { cause: err },
     );
   } finally {
-    if (browser) await browser.close();
-    // The export result does not depend on removing Chrome's temporary profile.
+    // Cleanup must not replace the export result or the original error. When
+    // close() rejects, puppeteer has already fallen back to killing Chrome.
+    try {
+      await browser?.close();
+    } catch {
+      /* noop */
+    }
     try {
       await rm(userDataDir, { recursive: true, force: true });
     } catch {
@@ -83,15 +88,38 @@ export const EXPAND_DECK_SCRIPT = `(() => {
     const slides = Array.from(parent.children).filter((el) => el.tagName === 'SECTION');
     const visible = slides.filter((el) => getComputedStyle(el).display !== 'none');
     if (slides.length < 2 || visible.length !== 1) continue;
-    const rect = visible[0].getBoundingClientRect();
+    const active = visible[0];
+    const rect = active.getBoundingClientRect();
     const ratio = rect.width / Math.max(1, rect.height);
     if (rect.width < 480 || rect.height < 270 || ratio < 1.5 || ratio > 1.95) continue;
-    const display = getComputedStyle(visible[0]).display;
+    const display = getComputedStyle(active).display;
+    // The shown slide is marked by what only it carries (a class such as
+    // "active", data-active="true", no aria-hidden). Each copy moves those marks
+    // to its own slide, so styles tied to them, not just display, apply there.
+    const others = slides.filter((el) => el !== active);
+    const activeClasses = Array.from(active.classList).filter((name) =>
+      others.every((el) => !el.classList.contains(name)),
+    );
+    const otherClasses = Array.from(others[0].classList).filter(
+      (name) => !active.classList.contains(name) && others.every((el) => el.classList.contains(name)),
+    );
+    const marks = Array.from(new Set(slides.flatMap((el) => el.getAttributeNames())))
+      .filter((name) => name !== 'class' && name !== 'style')
+      .map((name) => ({ name, shown: active.getAttribute(name), other: others[0].getAttribute(name) }))
+      .filter((mark) => mark.shown !== mark.other && others.every((el) => el.getAttribute(mark.name) === mark.other));
     const frames = slides.map((_, index) => {
       const frame = parent.cloneNode(true);
       const copies = Array.from(frame.children).filter((el) => el.tagName === 'SECTION');
       copies.forEach((el, i) => {
-        el.style.display = i === index ? display : 'none';
+        const shown = i === index;
+        el.classList.remove(...(shown ? otherClasses : activeClasses));
+        el.classList.add(...(shown ? activeClasses : otherClasses));
+        for (const mark of marks) {
+          const value = shown ? mark.shown : mark.other;
+          if (value === null) el.removeAttribute(mark.name);
+          else el.setAttribute(mark.name, value);
+        }
+        el.style.display = shown ? display : 'none';
       });
       frame.style.margin = '0 auto 24px';
       return frame;

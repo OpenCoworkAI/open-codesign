@@ -66,6 +66,50 @@ describe.runIf(process.env['CODESIGN_EXPORT_BROWSER_TESTS'] === '1')(
       expect(tops).toHaveLength(3);
     }, 60_000);
 
+    it('applies the active-slide styles to every stacked slide', async () => {
+      const slides = ['one', 'two', 'three']
+        .map(
+          (id, i) =>
+            `<section id="${id}" class="slide${i === 0 ? ' active' : ' hidden'}"${i === 0 ? '' : ' aria-hidden="true"'}>${id}</section>`,
+        )
+        .join('');
+      const html = `<!doctype html><html><head><style>
+        body { margin: 0; }
+        .deck { width: 1280px; height: 720px; position: relative; }
+        .slide { position: absolute; inset: 0; display: none; opacity: 0; }
+        .slide.active { display: grid; opacity: 1; }
+        .slide.hidden { visibility: hidden; }
+        .slide[aria-hidden="true"] { color: transparent; }
+      </style></head><body><div class="deck">${slides}</div></body></html>`;
+      const browser = await puppeteer.launch({
+        executablePath: await findSystemChrome(),
+        headless: true,
+      });
+      try {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 800 });
+        await page.setContent(html, { waitUntil: 'load' });
+
+        expect(await page.evaluate(EXPAND_DECK_SCRIPT)).toBe(3);
+        const shown = await page.$$eval('section', (sections) =>
+          sections
+            .filter((section) => getComputedStyle(section).display !== 'none')
+            .map((section) => {
+              const style = getComputedStyle(section);
+              return `${section.id} ${style.opacity} ${style.visibility} ${style.color}`;
+            }),
+        );
+
+        expect(shown).toEqual([
+          'one 1 visible rgb(0, 0, 0)',
+          'two 1 visible rgb(0, 0, 0)',
+          'three 1 visible rgb(0, 0, 0)',
+        ]);
+      } finally {
+        await browser.close();
+      }
+    }, 60_000);
+
     it('captures the full height of a long stacked deck', async () => {
       const slides = Array.from(
         { length: 20 },

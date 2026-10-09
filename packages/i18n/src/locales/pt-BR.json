@@ -776,7 +776,7 @@
       },
       "png": {
         "label": "PNG",
-        "hint": "Imagem da página inteira em 2x, pelo Chrome instalado"
+        "hint": "Imagem da página inteira em 2x, pelo Chrome instalado; apresentações (um slide por <section>) são empilhadas em ordem numa única imagem alta"
       },
       "pptx": {
         "label": "PPTX",

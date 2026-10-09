@@ -119,4 +119,35 @@ describe('exportPng', () => {
     });
     expect(closeMock).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps a saved PNG and removes the profile when Chrome fails to close', async () => {
+    closeMock.mockRejectedValueOnce(new Error('close failed'));
+    const { exportPng } = await import('./png');
+    const dest = join(tempDir, 'close-fails.png');
+
+    await expect(exportPng('<p>x</p>', dest)).resolves.toEqual({
+      bytes: fakePngBytes.length,
+      path: dest,
+    });
+    expect(readFileSync(dest)).toEqual(fakePngBytes);
+    expect(rmMock).toHaveBeenCalledWith(expect.stringContaining('codesign-png-'), {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  it('reports the capture error and removes the profile when Chrome also fails to close', async () => {
+    screenshotMock.mockRejectedValueOnce(new Error('boom'));
+    closeMock.mockRejectedValueOnce(new Error('close failed'));
+    const { exportPng } = await import('./png');
+
+    await expect(exportPng('<p>x</p>', join(tempDir, 'both-fail.png'))).rejects.toMatchObject({
+      code: 'EXPORTER_PNG_FAILED',
+      message: 'PNG export failed: boom',
+    });
+    expect(rmMock).toHaveBeenCalledWith(expect.stringContaining('codesign-png-'), {
+      recursive: true,
+      force: true,
+    });
+  });
 });
