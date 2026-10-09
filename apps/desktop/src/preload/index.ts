@@ -272,6 +272,7 @@ export interface Preferences {
   workspaceMemoryAutoUpdate: boolean;
   userMemoryAutoUpdate: boolean;
   proxyUrl: string;
+  systemNotifications: boolean;
 }
 
 export interface MemoryFileRead {
@@ -1019,6 +1020,7 @@ const api = {
   },
   openExternal: (url: string) =>
     ipcRenderer.invoke('codesign:v1:open-external', url) as Promise<void>,
+  focusWindow: () => ipcRenderer.invoke('codesign:v1:focus-window') as Promise<void>,
   ask: {
     history: (filter?: { runId?: string; designId?: string }) =>
       ipcRenderer.invoke('ask:history', filter) as Promise<AskHistoryEntry[]>,
