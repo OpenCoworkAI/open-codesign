@@ -533,6 +533,35 @@ describe('durable run refresh recovery', () => {
     expect(append).not.toHaveBeenCalled();
   });
 
+  it('does not notify for run outcomes recovered after a refresh', async () => {
+    const shown: string[] = [];
+    vi.stubGlobal(
+      'Notification',
+      class {
+        onclick: (() => void) | null = null;
+        constructor(title: string) {
+          shown.push(title);
+        }
+      },
+    );
+    windowFocused = false;
+
+    await remount([
+      durable('turn_start', 1),
+      durable('run_settled', 2, { outcome: 'completed' }),
+      { ...durable('turn_start', 1), runId: 'durable-2', generationId: 'durable-2' },
+      {
+        ...durable('run_settled', 2, { outcome: 'failed', message: 'Old failure' }),
+        runId: 'durable-2',
+        generationId: 'durable-2',
+      },
+    ]);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
+    expect(shown).toEqual([]);
+  });
+
   it('replays persisted chat and terminal outcomes without duplicate writes or automatic generation', async () => {
     useCodesignStore.setState({ previewSource: 'Edited after generation' });
     await remount([
