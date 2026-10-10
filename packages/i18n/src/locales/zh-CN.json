@@ -968,6 +968,10 @@
         "label": "PPTX",
         "hint": "高保真幻灯片；每个 <section> 一页"
       },
+      "pptxNative": {
+        "label": "PPTX（可编辑，测试版）",
+        "hint": "可编辑的文本和形状；复杂视觉元素可能转为图片"
+      },
       "zip": {
         "label": "ZIP 包",
         "hint": "index.html + 资源文件 + README.md"

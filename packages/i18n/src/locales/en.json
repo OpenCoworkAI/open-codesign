@@ -968,6 +968,10 @@
         "label": "PPTX",
         "hint": "High-fidelity slides; one per <section>"
       },
+      "pptxNative": {
+        "label": "PPTX (editable, beta)",
+        "hint": "Editable text and shapes; complex visuals may become images"
+      },
       "zip": {
         "label": "ZIP bundle",
         "hint": "index.html + assets + README.md"

@@ -64,6 +64,7 @@ function normalizeExportSourcePath(raw: string): string {
 
 export interface ExportRequest {
   format: ExporterFormat;
+  renderMode?: 'image' | 'native';
   artifactSource: string;
   defaultFilename?: string;
   designId?: string;
@@ -76,6 +77,7 @@ export interface ExportResponse {
   status: 'saved' | 'cancelled';
   sourcesPath?: string;
   researchWarnings?: string[];
+  exportWarnings?: string[];
   path?: string;
   bytes?: number;
 }
@@ -107,7 +109,18 @@ export function parseRequest(raw: unknown): ExportRequest {
   if (typeof source !== 'string' || source.length === 0) {
     throw new CodesignError('export requires non-empty artifactSource', ERROR_CODES.IPC_BAD_INPUT);
   }
+  const renderMode = r['renderMode'];
+  if (
+    renderMode !== undefined &&
+    (format !== 'pptx' || (renderMode !== 'image' && renderMode !== 'native'))
+  ) {
+    throw new CodesignError(
+      'export renderMode must be image or native and is only supported for PPTX',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
   const out: ExportRequest = { format, artifactSource: source };
+  if (renderMode !== undefined) out.renderMode = renderMode;
   if (typeof defaultFilename === 'string' && defaultFilename.length > 0) {
     out.defaultFilename = defaultFilename;
   }
@@ -271,6 +284,7 @@ export function registerExporterIpc(
         : undefined;
     const result = await exportArtifact(req.format, resolved.artifactSource, destinationPath, {
       ...exportAssetOptions(resolved),
+      ...(req.renderMode !== undefined ? { renderMode: req.renderMode } : {}),
       ...(assets ? { assets } : {}),
     });
     let sourcesPath: string | undefined;
@@ -289,6 +303,7 @@ export function registerExporterIpc(
       status: 'saved',
       path: result.path,
       bytes: result.bytes,
+      ...(result.warnings ? { exportWarnings: result.warnings } : {}),
       ...(sourcesPath ? { sourcesPath } : {}),
       ...(companion || researchWarnings.length ? { researchWarnings } : {}),
     };
