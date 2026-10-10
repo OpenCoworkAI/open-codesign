@@ -62,6 +62,7 @@ import {
 } from '@open-codesign/shared';
 import type { TSchema } from '@sinclair/typebox';
 import type { ActiveRunMessages } from './active-messages.js';
+import { planContextBudget } from './context-budget.js';
 import { buildTransformContext } from './context-prune.js';
 import { resolveContextWindow } from './context-window.js';
 import { remapProviderError } from './errors.js';
@@ -1375,7 +1376,16 @@ async function generateViaAgentInternal(
     return retryAgent;
   };
 
-  let agent = createRetryAgent(historyAsAgentMessages);
+  const { history: budgetedHistory, ...budget } = planContextBudget({
+    contextWindow: piModel.contextWindow,
+    systemPrompt: augmentedSystemPrompt,
+    tools,
+    prompt: userContent,
+    promptImages: promptImages.length,
+    history: historyAsAgentMessages,
+  });
+  log.info('[generate] step=context_budget', { ...ctx, ...budget });
+  let agent = createRetryAgent(budgetedHistory);
   const admitRun = async (run: () => Promise<void>): Promise<void> => {
     assertNotCancelled();
     const target = agent;
