@@ -7,7 +7,7 @@ import { PreviewToolbarMenu } from './PreviewToolbarMenu';
 import './PreviewToolbar.css';
 
 const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200] as const;
-const EXPORT_FORMATS: ExportFormat[] = ['html', 'pdf', 'pptx', 'zip', 'markdown'];
+const EXPORT_FORMATS: ExportFormat[] = ['html', 'pdf', 'png', 'pptx', 'zip', 'markdown'];
 
 export function PreviewToolbar({
   canFullscreen = false,

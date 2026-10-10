@@ -782,6 +782,10 @@
         "label": "PDF",
         "hint": "Renderizado via seu Chrome instalado"
       },
+      "png": {
+        "label": "PNG",
+        "hint": "Imagem da página inteira em 2x, pelo Chrome instalado; apresentações (um slide por <section>) são empilhadas em ordem numa única imagem alta"
+      },
       "pptx": {
         "label": "PPTX",
         "hint": "Slides de alta fidelidade; um por <section>"
@@ -1349,8 +1353,9 @@
     "PREFERENCES_INVALID_TIMEOUT": "O valor do tempo limite de geração é inválido.",
     "SKILL_LOAD_FAILED": "Uma ou mais skills falharam ao carregar. Procure erros nos seus arquivos de skill.",
     "EXPORTER_UNKNOWN": "Formato de exportação desconhecido.",
-    "EXPORTER_NO_CHROME": "Chrome ou Chromium não encontrado. Instale um deles para habilitar a exportação em PDF.",
+    "EXPORTER_NO_CHROME": "Chrome ou Chromium não encontrado. Instale um deles para habilitar a exportação em PDF e PNG.",
     "EXPORTER_PDF_FAILED": "A exportação em PDF falhou. Garanta que o Chrome esteja instalado e tente novamente.",
+    "EXPORTER_PNG_FAILED": "A exportação em PNG falhou. Garanta que o Chrome esteja instalado e tente novamente.",
     "EXPORTER_PPTX_FAILED": "A exportação em PowerPoint falhou.",
     "EXPORTER_ZIP_UNSAFE_PATH": "A exportação foi bloqueada: um caminho de asset escaparia dos limites do arquivo ZIP.",
     "EXPORTER_ZIP_FAILED": "A exportação em ZIP falhou.",

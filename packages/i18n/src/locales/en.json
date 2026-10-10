@@ -964,6 +964,10 @@
         "label": "PDF",
         "hint": "Rendered via your installed Chrome"
       },
+      "png": {
+        "label": "PNG",
+        "hint": "Full-page image at 2x, via your installed Chrome; slide decks (one slide per <section>) are stacked in order into one tall image"
+      },
       "pptx": {
         "label": "PPTX",
         "hint": "High-fidelity slides; one per <section>"
@@ -1536,8 +1540,9 @@
     "PREFERENCES_INVALID_TIMEOUT": "The generation timeout value is invalid.",
     "SKILL_LOAD_FAILED": "One or more skills failed to load. Check your skill files for errors.",
     "EXPORTER_UNKNOWN": "Unknown export format requested.",
-    "EXPORTER_NO_CHROME": "Chrome or Chromium was not found. Install it to enable PDF export.",
+    "EXPORTER_NO_CHROME": "Chrome or Chromium was not found. Install it to enable PDF and PNG export.",
     "EXPORTER_PDF_FAILED": "PDF export failed. Ensure Chrome is installed and try again.",
+    "EXPORTER_PNG_FAILED": "PNG export failed. Ensure Chrome is installed and try again.",
     "EXPORTER_PPTX_FAILED": "PowerPoint export failed.",
     "EXPORTER_ZIP_UNSAFE_PATH": "Export was blocked: an asset path would escape the ZIP archive.",
     "EXPORTER_ZIP_FAILED": "ZIP export failed.",

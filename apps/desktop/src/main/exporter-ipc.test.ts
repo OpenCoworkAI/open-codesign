@@ -52,6 +52,10 @@ describe('parseRequest', () => {
     expect(result.defaultFilename).toBe('report.pdf');
   });
 
+  it('accepts a png request', () => {
+    expect(parseRequest({ format: 'png', artifactSource: '<html/>' }).format).toBe('png');
+  });
+
   it('accepts workspace source context for local asset exports', () => {
     const result = parseRequest({
       format: 'zip',
@@ -172,6 +176,7 @@ describe('export path helpers', () => {
     expect(ensureExportExtension('/tmp/report', 'pdf')).toBe('/tmp/report.pdf');
     expect(ensureExportExtension('/tmp/report.PDF', 'pdf')).toBe('/tmp/report.PDF');
     expect(ensureExportExtension('/tmp/report.txt', 'pdf')).toBe('/tmp/report.txt.pdf');
+    expect(ensureExportExtension('/tmp/home', 'png')).toBe('/tmp/home.png');
     expect(ensureExportExtension('/tmp/report.markdown', 'markdown')).toBe(
       '/tmp/report.markdown.md',
     );
