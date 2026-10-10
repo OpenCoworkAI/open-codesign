@@ -1316,7 +1316,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               brief: existingBrief,
               runPreferences,
               resourceState,
-              modelContextWindow: resolveContextWindow(active.model, active.contextWindow),
+              modelContextWindow: resolveContextWindow(active.model, baseUrl, active.contextWindow),
               workspaceState: {
                 sourcePath: payload.previousSource ? 'App.jsx' : null,
                 hasSource: Boolean(payload.previousSource?.trim()),

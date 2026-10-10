@@ -119,9 +119,11 @@ vi.mock('@open-codesign/core', async (importOriginal) => {
   };
 });
 
-vi.mock('@open-codesign/providers', () => ({
+vi.mock('@open-codesign/providers', async (importOriginal) => ({
   detectProviderFromKey: vi.fn(() => 'mock'),
   generateImage: vi.fn(),
+  normalizeGeminiModelId: (await importOriginal<typeof import('@open-codesign/providers')>())
+    .normalizeGeminiModelId,
 }));
 
 vi.mock('../provider-settings', () => ({

@@ -324,6 +324,8 @@ vi.mock('@mariozechner/pi-ai', () => ({
     contextWindow: 200000,
     maxTokens: 64000,
   }),
+  getModels: () => [],
+  getProviders: () => [],
 }));
 
 import { generateViaAgent, sanitizeOpenAIResponsesPayloadForStoreFalse } from './agent.js';
