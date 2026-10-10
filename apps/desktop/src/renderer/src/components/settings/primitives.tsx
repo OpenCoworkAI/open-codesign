@@ -650,7 +650,9 @@ export function ContextWindowInput({
   }, [saved]);
 
   async function save() {
-    if (!window.codesign?.config?.updateProvider) return;
+    // Leaving the window blurs the input without moving focus, so disabling it
+    // while saving can blur it again.
+    if (saving || !window.codesign?.config?.updateProvider) return;
     const trimmed = draft.trim();
     if (trimmed === saved) return;
     const next = trimmed === '' ? null : Number(trimmed);
