@@ -692,6 +692,8 @@
         "modelSaveFailed": "Failed to save model selection",
         "reasoningSaved": "Reasoning depth saved",
         "reasoningSaveFailed": "Failed to save reasoning depth",
+        "contextWindowSaved": "Context window saved",
+        "contextWindowSaveFailed": "Failed to save context window",
         "connectionOk": "Connection OK",
         "connectionFailed": "Connection failed"
       },
@@ -727,6 +729,13 @@
         "medium": "Medium",
         "high": "High",
         "xhigh": "Extra high"
+      },
+      "contextWindow": {
+        "label": "Context window",
+        "placeholder": "Auto",
+        "unit": "tokens",
+        "hint": "Leave empty to use the model catalog. Set it for local models and relays the catalog does not know.",
+        "invalid": "Enter a whole number of tokens greater than 0"
       }
     },
     "appearance": {

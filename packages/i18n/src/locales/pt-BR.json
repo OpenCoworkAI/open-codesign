@@ -510,6 +510,8 @@
         "modelSaveFailed": "Falha ao salvar a seleção de modelo",
         "reasoningSaved": "Profundidade de raciocínio salva",
         "reasoningSaveFailed": "Falha ao salvar a profundidade de raciocínio",
+        "contextWindowSaved": "Janela de contexto salva",
+        "contextWindowSaveFailed": "Falha ao salvar a janela de contexto",
         "connectionOk": "Conexão OK",
         "connectionFailed": "Falha na conexão",
         "saveFailed": "Falha ao salvar o provedor"
@@ -523,6 +525,13 @@
         "medium": "Média",
         "high": "Alta",
         "xhigh": "Muito alta"
+      },
+      "contextWindow": {
+        "label": "Janela de contexto",
+        "placeholder": "Auto",
+        "unit": "tokens",
+        "hint": "Deixe vazio para usar o catálogo de modelos. Defina para modelos locais e relays que o catálogo não conhece.",
+        "invalid": "Digite um número inteiro de tokens maior que 0"
       },
       "addKey": "Adicionar chave",
       "missingKey": "Chave ausente",

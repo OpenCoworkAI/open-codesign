@@ -63,6 +63,7 @@ import {
 import type { TSchema } from '@sinclair/typebox';
 import type { ActiveRunMessages } from './active-messages.js';
 import { buildTransformContext } from './context-prune.js';
+import { resolveContextWindow } from './context-window.js';
 import { remapProviderError } from './errors.js';
 import type { GenerateInput, GenerateOutput } from './index.js';
 import { reasoningForModel } from './index.js';
@@ -280,6 +281,7 @@ function buildPiModel(
   model: ModelRef,
   wire: WireApi | undefined,
   baseUrl: string | undefined,
+  contextWindow: number | undefined,
   httpHeaders?: Record<string, string> | undefined,
   apiKey?: string,
 ): PiModel {
@@ -314,7 +316,7 @@ function buildPiModel(
     reasoning: inferReasoning(wire, effectiveModelId, canonicalBase),
     input: supportsImageInput(wire, effectiveModelId) ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 200000,
+    contextWindow: resolveContextWindow(model, canonicalBase, contextWindow),
     maxTokens: 32000,
   };
   const compat = openAIChatCompatForBaseUrl(wire, canonicalBase);
@@ -972,6 +974,7 @@ async function generateViaAgentInternal(
     input.model,
     input.wire,
     input.baseUrl,
+    input.contextWindow,
     input.httpHeaders,
     initialApiKey,
   );

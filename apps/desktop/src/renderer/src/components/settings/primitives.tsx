@@ -10,6 +10,7 @@ import {
   Loader2,
   MoreHorizontal,
   Pencil,
+  Ruler,
   Sliders,
   Trash2,
 } from 'lucide-react';
@@ -414,6 +415,13 @@ export function ProviderCard({
           onUpdated={onRowChanged}
         />
       )}
+      {!hasError && row.hasKey !== false && (
+        <ContextWindowInput
+          provider={row.provider}
+          value={row.contextWindow}
+          onUpdated={onRowChanged}
+        />
+      )}
     </div>
   );
 }
@@ -618,6 +626,87 @@ export function ReasoningDepthSelector({
         options={options}
         disabled={saving}
       />
+    </div>
+  );
+}
+
+export function ContextWindowInput({
+  provider,
+  value,
+  onUpdated,
+}: {
+  provider: string;
+  value: number | undefined;
+  onUpdated: (row: ProviderRow) => void;
+}) {
+  const t = useT();
+  const pushToast = useCodesignStore((s) => s.pushToast);
+  const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
+  const saved = value === undefined ? '' : String(value);
+  const [draft, setDraft] = useState(saved);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setDraft(saved);
+  }, [saved]);
+
+  async function save() {
+    // Leaving the window blurs the input without moving focus, so disabling it
+    // while saving can blur it again.
+    if (saving || !window.codesign?.config?.updateProvider) return;
+    const trimmed = draft.trim();
+    if (trimmed === saved) return;
+    const next = trimmed === '' ? null : Number(trimmed);
+    if (next !== null && (!Number.isInteger(next) || next <= 0)) {
+      setDraft(saved);
+      pushToast({ variant: 'error', title: t('settings.providers.contextWindow.invalid') });
+      return;
+    }
+    setSaving(true);
+    try {
+      await window.codesign.config.updateProvider({ id: provider, contextWindow: next });
+      pushToast({ variant: 'success', title: t('settings.providers.toast.contextWindowSaved') });
+      if (window.codesign?.settings?.listProviders) {
+        const rows = await window.codesign.settings.listProviders();
+        const row = rows.find((r) => r.provider === provider);
+        if (row) onUpdated(row);
+      }
+    } catch (err) {
+      setDraft(saved);
+      reportableErrorToast({
+        code: 'PROVIDER_CONTEXT_WINDOW_SAVE_FAILED',
+        scope: 'settings',
+        title: t('settings.providers.toast.contextWindowSaveFailed'),
+        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
+        context: { provider },
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]"
+      title={t('settings.providers.contextWindow.hint')}
+    >
+      <Ruler className="w-3 h-3 shrink-0" />
+      <span>{t('settings.providers.contextWindow.label')}</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={draft}
+        placeholder={t('settings.providers.contextWindow.placeholder')}
+        aria-label={t('settings.providers.contextWindow.label')}
+        disabled={saving}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        className="h-8 w-24 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
+      />
+      <span>{t('settings.providers.contextWindow.unit')}</span>
     </div>
   );
 }

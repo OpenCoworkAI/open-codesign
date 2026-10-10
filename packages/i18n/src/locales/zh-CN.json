@@ -692,6 +692,8 @@
         "modelSaveFailed": "保存模型选择失败",
         "reasoningSaved": "已保存推理深度",
         "reasoningSaveFailed": "保存推理深度失败",
+        "contextWindowSaved": "已保存上下文窗口",
+        "contextWindowSaveFailed": "保存上下文窗口失败",
         "connectionOk": "连接正常",
         "connectionFailed": "连接失败"
       },
@@ -727,6 +729,13 @@
         "medium": "中",
         "high": "高",
         "xhigh": "最高"
+      },
+      "contextWindow": {
+        "label": "上下文窗口",
+        "placeholder": "自动",
+        "unit": "token",
+        "hint": "留空则使用模型目录中的值。本地模型和目录里没有的中转模型请手动填写。",
+        "invalid": "请输入大于 0 的整数 token 数"
       }
     },
     "appearance": {
