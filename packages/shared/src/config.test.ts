@@ -98,6 +98,31 @@ describe('config v3 schema', () => {
     expect(parsed.providers['custom-lite']?.reasoningLevel).toBe('off');
   });
 
+  it('accepts a positive integer provider context window and rejects others', () => {
+    const config = (contextWindow: unknown) => ({
+      version: 3,
+      activeProvider: 'ollama-local',
+      activeModel: 'qwen3:32b',
+      secrets: {},
+      providers: {
+        'ollama-local': {
+          id: 'ollama-local',
+          name: 'Ollama',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'http://localhost:11434/v1',
+          defaultModel: 'qwen3:32b',
+          contextWindow,
+        },
+      },
+    });
+    expect(ConfigV3Schema.parse(config(32_768)).providers['ollama-local']?.contextWindow).toBe(
+      32_768,
+    );
+    expect(ConfigV3Schema.safeParse(config(0)).success).toBe(false);
+    expect(ConfigV3Schema.safeParse(config(8192.5)).success).toBe(false);
+  });
+
   it('does not treat an explicit off override as reasoning support', () => {
     const caps = defaultProviderCapabilities('custom-lite', {
       wire: 'openai-chat',

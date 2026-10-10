@@ -95,6 +95,7 @@ vi.mock('@open-codesign/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@open-codesign/core')>();
   return {
     ...actual,
+    buildDesignContextPack: vi.fn(actual.buildDesignContextPack),
     generateViaAgent: vi.fn(async (input: unknown) => {
       coreCalls.generateInputs.push(input);
       generateControl.markStarted();
@@ -195,6 +196,7 @@ vi.mock('../ask-ipc', () => ({
 import {
   type AskInput,
   type AskResult,
+  buildDesignContextPack,
   generateViaAgent,
   makeAskTool,
   makeTextEditorTool,
@@ -205,6 +207,7 @@ import { requestAsk } from '../ask-ipc';
 import { makeRuntimeVerifier } from '../done-verify';
 import { runPreview } from '../preview-runtime';
 import { preparePromptContext } from '../prompt-context';
+import { resolveActiveModel } from '../provider-settings';
 import {
   appendSessionActiveMessage,
   appendSessionChatMessage,
@@ -837,6 +840,50 @@ describe('generate IPC workspace rename coordination', () => {
       hasDesignSystem: false,
       fileInventory: { paths: [], truncated: false, exhaustive: false },
     });
+
+    generateControl.release();
+    await generatePromise;
+  });
+
+  it("budgets context with the provider's configured context window", async () => {
+    vi.mocked(resolveActiveModel).mockReturnValueOnce({
+      model: { provider: 'mock-provider', modelId: 'mock-model' },
+      baseUrl: null,
+      wire: 'openai-chat',
+      httpHeaders: undefined,
+      queryParams: undefined,
+      reasoningLevel: undefined,
+      contextWindow: 32_768,
+      allowKeyless: false,
+      overridden: false,
+    });
+    const db = initTestDb();
+    const design = createDesign(db, 'Untitled design 1');
+    const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
+    await mkdir(workspace, { recursive: true });
+    updateDesignWorkspace(db, design.id, workspace);
+
+    registerSnapshotsIpc(db);
+    registerGenerateIpc({ db, getMainWindow: () => null });
+
+    const generate = getHandler('codesign:v1:generate');
+    const generatePromise = Promise.resolve(
+      generate(null, {
+        schemaVersion: 1,
+        prompt: 'Make a pricing page',
+        history: [],
+        model: { provider: 'mock-provider', modelId: 'mock-model' },
+        generationId: 'gen-context-window',
+        designId: design.id,
+      }),
+    );
+    pendingFixtureGeneration = generatePromise;
+
+    await generateControl.started;
+    expect(vi.mocked(buildDesignContextPack)).toHaveBeenCalledWith(
+      expect.objectContaining({ modelContextWindow: 32_768 }),
+    );
+    expect(coreCalls.generateInputs[0]).toMatchObject({ contextWindow: 32_768 });
 
     generateControl.release();
     await generatePromise;

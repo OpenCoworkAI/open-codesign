@@ -7,22 +7,9 @@ vi.mock('../electron-runtime', () => ({
 
 import {
   buildRunPreferenceAskInput,
-  contextWindowForContextPack,
   dropCurrentPromptEchoFromChatRows,
   shouldRunUserMemoryCandidateCapture,
 } from './generate';
-
-describe('generate IPC context budget helpers', () => {
-  it('uses active model contextWindow when the model object exposes it', () => {
-    expect(
-      contextWindowForContextPack({ provider: 'p', modelId: 'm', contextWindow: 64_000 }),
-    ).toBe(64_000);
-  });
-
-  it('falls back to the harness default when model metadata lacks contextWindow', () => {
-    expect(contextWindowForContextPack({ provider: 'p', modelId: 'm' })).toBe(200_000);
-  });
-});
 
 describe('generate IPC memory preference helpers', () => {
   it('captures user memory candidates only when the memory system and user auto-update are enabled', () => {

@@ -309,6 +309,11 @@ export async function runUpdateProvider(input: UpdateProviderInput): Promise<Onb
   } else if (input.reasoningLevel !== undefined) {
     updated.reasoningLevel = input.reasoningLevel;
   }
+  if (input.contextWindow === null) {
+    updated.contextWindow = undefined;
+  } else if (input.contextWindow !== undefined) {
+    updated.contextWindow = input.contextWindow;
+  }
   // tlsRejectUnauthorized tri-state: null clears the field (back to strict
   // TLS), true persists the opt-out, false also clears (omit-when-default).
   // Builtin providers force-ignore the flag at the connect / generate paths,

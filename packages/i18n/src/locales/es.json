@@ -516,6 +516,8 @@
         "modelSaveFailed": "Error al guardar la selección de modelo",
         "reasoningSaved": "Profundidad de razonamiento guardada",
         "reasoningSaveFailed": "Error al guardar la profundidad de razonamiento",
+        "contextWindowSaved": "Ventana de contexto guardada",
+        "contextWindowSaveFailed": "Error al guardar la ventana de contexto",
         "connectionOk": "Conexión OK",
         "connectionFailed": "Conexión fallida"
       },
@@ -550,6 +552,13 @@
         "medium": "Medio",
         "high": "Alto",
         "xhigh": "Extra alto"
+      },
+      "contextWindow": {
+        "label": "Ventana de contexto",
+        "placeholder": "Auto",
+        "unit": "tokens",
+        "hint": "Déjalo vacío para usar el catálogo de modelos. Indícalo para modelos locales y relays que el catálogo no conoce.",
+        "invalid": "Introduce un número entero de tokens mayor que 0"
       }
     },
     "appearance": {

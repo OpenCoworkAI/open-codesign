@@ -643,6 +643,21 @@ describe('generateViaAgent()', () => {
     });
   });
 
+  it('gives the agent model the configured context window', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-lmstudio', modelId: 'qwen3.6-35b-a3b' },
+      apiKey: 'sk-test',
+      baseUrl: 'http://127.0.0.1:1234/v1',
+      wire: 'openai-chat',
+      contextWindow: 32_768,
+    });
+
+    expect(agentCalls[0]?.options.initialState?.model?.contextWindow).toBe(32_768);
+  });
+
   it("keeps pi-agent-core's default stream when no request timeout is configured", async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent({
