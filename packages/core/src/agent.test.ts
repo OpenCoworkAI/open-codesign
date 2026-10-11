@@ -645,7 +645,7 @@ describe('generateViaAgent()', () => {
     });
   });
 
-  it('gives the agent model the configured context window', async () => {
+  it('gives the agent model the configured context window and a matching output limit', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent({
       prompt: 'design a dashboard',
@@ -658,6 +658,8 @@ describe('generateViaAgent()', () => {
     });
 
     expect(agentCalls[0]?.options.initialState?.model?.contextWindow).toBe(32_768);
+    // A quarter of the window, so the 32,000-token default does not overrun it.
+    expect(agentCalls[0]?.options.initialState?.model?.maxTokens).toBe(8_192);
   });
 
   it('fails before prompting when the run does not fit the context window', async () => {

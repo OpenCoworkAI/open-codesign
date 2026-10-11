@@ -1,5 +1,5 @@
 import type { AgentMessage } from '@mariozechner/pi-agent-core';
-import { DEFAULT_COMPACTION_SETTINGS, estimateTokens } from '@mariozechner/pi-coding-agent';
+import { estimateTokens } from '@mariozechner/pi-coding-agent';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 /** pi's estimate for one image (`estimateTokens` counts images in tool results as 1,200 tokens). */
@@ -7,6 +7,8 @@ const IMAGE_TOKENS = 1_200;
 
 export interface ContextBudgetInput {
   contextWindow: number;
+  /** The most output the run requests from the model. */
+  maxOutputTokens: number;
   systemPrompt: string;
   tools: ReadonlyArray<{ name: string; description: string; parameters: unknown }>;
   /** The run's user message, which also carries the brief, memory and attachments as text. */
@@ -28,16 +30,13 @@ export interface ContextBudget {
 
 /**
  * Fits a run into the model's context window, in tokens estimated the way pi
- * does (characters / 4). A quarter of the window, at most pi's compaction
- * reserve, stays free for the reply. The system prompt, tool definitions and
+ * does (characters / 4). A quarter of the window, at most the requested
+ * output, stays free for the reply. The system prompt, tool definitions and
  * prompt must fit, or the run fails before the request; history keeps its
  * newest messages that fit what remains, starting at a user message.
  */
 export function planContextBudget(input: ContextBudgetInput): ContextBudget {
-  const outputReserve = Math.min(
-    DEFAULT_COMPACTION_SETTINGS.reserveTokens,
-    Math.floor(input.contextWindow / 4),
-  );
+  const outputReserve = Math.min(input.maxOutputTokens, Math.floor(input.contextWindow / 4));
   const systemTokens = Math.ceil(input.systemPrompt.length / 4);
   const toolTokens = Math.ceil(
     JSON.stringify(

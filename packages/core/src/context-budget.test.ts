@@ -15,6 +15,7 @@ const assistant = (chars: number): AgentMessage =>
   }) as unknown as AgentMessage;
 
 const base = {
+  maxOutputTokens: 32_000,
   systemPrompt: 's'.repeat(4_000),
   tools: [],
   prompt: 'p'.repeat(400),
@@ -22,11 +23,11 @@ const base = {
 };
 
 describe('planContextBudget', () => {
-  it("keeps all history and reserves pi's compaction reserve in a large window", () => {
+  it('keeps all history and reserves the requested output in a large window', () => {
     const history = [user(400), assistant(400)];
     const budget = planContextBudget({ ...base, contextWindow: 200_000, history });
 
-    expect(budget.outputReserve).toBe(16_384);
+    expect(budget.outputReserve).toBe(32_000);
     expect(budget.systemTokens).toBe(1_000);
     expect(budget.promptTokens).toBe(100);
     expect(budget.history).toEqual(history);
