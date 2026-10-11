@@ -304,6 +304,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
                     type="button"
                     role="option"
                     aria-selected={isActive}
+                    title={m}
                     onClick={() => void switchModel(m)}
                     className={`relative w-full text-left px-[var(--space-3)] py-[var(--space-1_5)] text-[12px] [overflow-wrap:anywhere] transition-colors ${
                       isActive
