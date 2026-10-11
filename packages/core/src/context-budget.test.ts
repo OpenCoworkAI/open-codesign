@@ -59,6 +59,24 @@ describe('planContextBudget', () => {
     expect(budget.droppedHistory).toBe(2);
   });
 
+  it('counts tool definitions by name, description and parameters', () => {
+    const tool = {
+      name: 'read',
+      description: 'd'.repeat(3_935),
+      parameters: { type: 'object' },
+      label: 'l'.repeat(4_000),
+    };
+    // The serialized definition is 4,000 characters; `label` is not sent to the model.
+    expect(
+      planContextBudget({ ...base, contextWindow: 200_000, tools: [tool], history: [] }).toolTokens,
+    ).toBe(1_000);
+    // 2,400 - 600 reserve leaves 1,800: room for the system prompt and prompt, not the tool.
+    expect(() => planContextBudget({ ...base, contextWindow: 2_400, history: [] })).not.toThrow();
+    expect(() =>
+      planContextBudget({ ...base, contextWindow: 2_400, tools: [tool], history: [] }),
+    ).toThrow(expect.objectContaining({ code: 'GENERATION_CONTEXT_EXCEEDED' }));
+  });
+
   it('counts prompt images and fails before the request when the fixed parts do not fit', () => {
     expect(() =>
       planContextBudget({ ...base, contextWindow: 4_096, promptImages: 2, history: [] }),

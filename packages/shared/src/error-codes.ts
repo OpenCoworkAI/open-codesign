@@ -232,7 +232,7 @@ export const ERROR_CODE_DESCRIPTIONS: Record<CodesignErrorCode, ErrorCodeDescrip
   },
   GENERATION_CONTEXT_EXCEEDED: {
     userFacing:
-      "This run does not fit the model's context window. Set the provider's context window in Settings → Models, or use a model with a larger window.",
+      "This run does not fit the model's context window. Shorten the request or its attachments, set the provider's context window in Settings → Models, or use a model with a larger window.",
     userFacingKey: 'err.GENERATION_CONTEXT_EXCEEDED',
     category: 'generation',
   },

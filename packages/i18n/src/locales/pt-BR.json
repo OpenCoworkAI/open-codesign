@@ -1338,7 +1338,7 @@
     "INPUT_EMPTY_HTML": "Um HTML existente é obrigatório para esta operação.",
     "INPUT_UNSUPPORTED_MODE": "Este modo de geração não é suportado.",
     "GENERATION_TIMEOUT": "A geração excedeu o tempo limite. Tente um prompt mais curto ou aumente o tempo em Configurações.",
-    "GENERATION_CONTEXT_EXCEEDED": "Esta execução não cabe na janela de contexto do modelo. Defina a janela de contexto do provedor em Configurações → Modelos ou use um modelo com uma janela maior.",
+    "GENERATION_CONTEXT_EXCEEDED": "Esta execução não cabe na janela de contexto do modelo. Encurte a solicitação ou os anexos, defina a janela de contexto do provedor em Configurações → Modelos ou use um modelo com uma janela maior.",
     "GENERATION_INCOMPLETE": "O agente parou antes de concluir a verificação. Continue a execução para finalizar o artefato do espaço de trabalho.",
     "WORKSPACE_MISSING": "Este design não tem um espaço de trabalho vinculado. Reabra ou recrie o design.",
     "ARTIFACT_PROTOCOL_INVALID": "O artefato gerado não seguiu o protocolo obrigatório.",
