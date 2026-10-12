@@ -22,7 +22,7 @@ Claude Design 是 Anthropic 提供的托管 Web 应用，跑在 Claude Opus 上�
 
 **Claude Design** 适合：想零配置、已经有 Anthropic 订阅、不需要多模型或离线的用户。
 
-**Open CoDesign** 适合：需要 BYOK 成本控制、想用 Claude 之外的模型、在意本地隐私、需要本地版本历史、或需要多种导出格式的用户。
+**Open CoDesign** 适合：需要 BYOK 成本控制、想用 Claude 之外的模型、在意本地隐私、或需要本地版本历史的用户。
 
 ## 功能矩阵
 
@@ -37,9 +37,9 @@ Claude Design 是 Anthropic 提供的托管 Web 应用，跑在 Claude Opus 上�
 | 内置 demo               | **15 个即用模板**           | 空白画布      |
 | 数据位置                | **本机工作区文件 + JSONL session** | Anthropic 服务器 |
 | 版本历史                | **本地工作区 session**      | —             |
-| 导出                    | **HTML · PDF · PPTX · ZIP · Markdown** | HTML     |
-| 行内元素评论            | **支持（AI 只改写该区域）** | —             |
-| AI 可调滑块             | **支持**                    | —             |
+| 导出                    | **HTML · PDF · PPTX · ZIP · Markdown** | Canva · PDF · PPTX · HTML · 文件夹 |
+| 行内元素评论            | **支持（AI 只改写该区域）** | 支持          |
+| AI 可调滑块             | **支持**                    | 支持          |
 | 响应式框架              | **手机 · 平板 · 桌面**      | 有限          |
 | 价格                    | **应用免费，仅 provider 或订阅成本** | 订阅制        |
 

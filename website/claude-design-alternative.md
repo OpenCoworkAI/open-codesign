@@ -22,7 +22,7 @@ Claude Design is a hosted web app by Anthropic that runs Claude Opus on their in
 
 Pick **Claude Design** if you want zero setup, are happy on an Anthropic subscription, and don't need model flexibility or offline use.
 
-Pick **Open CoDesign** if you want BYOK cost control, any model beyond Claude, on-device privacy, local version history, or multiple export formats.
+Pick **Open CoDesign** if you want BYOK cost control, any model beyond Claude, on-device privacy, or local version history.
 
 ## Feature matrix
 
@@ -37,9 +37,9 @@ Pick **Open CoDesign** if you want BYOK cost control, any model beyond Claude, o
 | Demo prompts            | **15 ready-to-edit**        | Blank canvas  |
 | Data location           | **Workspace files + JSONL sessions on your machine** | Anthropic servers |
 | Version history         | **Local workspace sessions** | —             |
-| Export                  | **HTML · PDF · PPTX · ZIP · Markdown** | HTML       |
-| Inline element comments | **Yes (AI rewrites only the pinned region)** | — |
-| AI-tunable sliders      | **Yes**                     | —             |
+| Export                  | **HTML · PDF · PPTX · ZIP · Markdown** | Canva · PDF · PPTX · HTML · folder |
+| Inline element comments | **Yes (AI rewrites only the pinned region)** | Yes |
+| AI-tunable sliders      | **Yes**                     | Yes           |
 | Responsive frames       | **Phone · tablet · desktop** | Limited      |
 | Price                   | **Free app (provider or subscription cost only)** | Subscription  |
 
