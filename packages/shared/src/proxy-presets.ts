@@ -46,6 +46,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay',
   },
   {
+    id: 'cheaperinference',
+    label: 'Cheaper Inference',
+    provider: 'openai',
+    baseUrl: 'https://api.cheaperinference.com/v1',
+    notes: 'Multi-model relay',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
