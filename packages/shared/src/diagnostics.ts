@@ -82,6 +82,8 @@ export interface DiagnosticHypothesis {
   severity?: DiagnosticSeverity;
   /** Primary action the user should take */
   suggestedFix?: DiagnosticFix;
+  /** Machine-readable recovery category from provider error normalization. */
+  recoveryCategory?: string;
 }
 
 export interface DiagnoseContext {

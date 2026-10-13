@@ -104,6 +104,7 @@ export function extractUpstreamContext(err: unknown): Record<string, unknown> | 
     'retry_count',
     'redacted_body_head',
     'original_error_name',
+    'upstream_recovery_category',
   ];
   const out: Record<string, unknown> = {};
   for (const key of keys) {
@@ -148,6 +149,7 @@ export function pickUpstreamString(err: unknown, key: string): string | undefine
   return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function deriveGenerateHypothesis(
   err: unknown,
   cfg: OnboardingState | null,
@@ -159,6 +161,7 @@ export function deriveGenerateHypothesis(
   const code = extractCodesignErrorCode(err);
   const status = extractGenerateStatus(err);
   const message = err instanceof Error ? err.message : undefined;
+  const recoveryCategory = pickUpstreamString(err, 'upstream_recovery_category');
   const ctx = {
     provider,
     ...(baseUrl !== undefined && baseUrl !== null ? { baseUrl } : {}),
@@ -173,7 +176,13 @@ export function deriveGenerateHypothesis(
   // Skip the bare "unknown" hypothesis — appending "Unknown error" to a
   // toast that already shows the upstream message is just noise.
   if (primary === undefined || primary.cause === 'diagnostics.cause.unknown') {
+    if (recoveryCategory && recoveryCategory !== 'unknown') {
+      return { cause: 'diagnostics.cause.unknown', recoveryCategory };
+    }
     return undefined;
+  }
+  if (recoveryCategory && recoveryCategory !== 'unknown') {
+    primary.recoveryCategory = recoveryCategory;
   }
   return primary;
 }
@@ -227,10 +236,22 @@ export function buildGenerateErrorDescription(
   hypothesis: DiagnosticHypothesis | undefined,
 ): string {
   if (hypothesis === undefined) return originalMessage;
+  const parts: string[] = [originalMessage];
   const hint = tr(hypothesis.cause);
   // When the i18n key was missing, tr() falls back to returning the key
   // itself; don't double up "diagnostics.cause.x" in the toast.
-  if (hint === hypothesis.cause) return originalMessage;
-  if (originalMessage.includes(hint)) return originalMessage;
-  return `${originalMessage}\n\n${tr('diagnostics.mostLikelyCause')} ${hint}`;
+  if (hint !== hypothesis.cause && !originalMessage.includes(hint)) {
+    parts.push(`${tr('diagnostics.mostLikelyCause')} ${hint}`);
+  }
+  if (hypothesis.recoveryCategory && hypothesis.recoveryCategory !== 'unknown') {
+    const categoryLabel = hypothesis.recoveryCategory
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .replace(/\bTls\b/g, 'TLS')
+      .replace(/\bApi\b/g, 'API')
+      .replace(/\bSsl\b/g, 'SSL')
+      .replace(/\bUrl\b/g, 'URL');
+    parts.push(`Recovery: ${categoryLabel}`);
+  }
+  return parts.join('\n\n');
 }
