@@ -97,6 +97,8 @@ async function readTokens(
 ): Promise<DesignToken[] | 'invalid-json'> {
   if (kind === 'tailwind-config') return extractFromTailwindConfig(file);
   if (kind === 'dtcg-json') {
+    // importDtcgJson accepts any parsed value, so only malformed JSON marks a bad file.
+    // Read errors propagate instead of being reported as a skipped file.
     try {
       return importDtcgJson(JSON.parse(await readFile(file, 'utf-8')));
     } catch (error) {

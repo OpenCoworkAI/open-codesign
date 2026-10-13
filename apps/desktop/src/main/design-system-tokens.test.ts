@@ -123,6 +123,29 @@ describe('scanTokenSources', () => {
     expect(scan.skipped).toEqual([{ path: 'tokens.json', reason: 'invalid-json' }]);
   });
 
+  it('ignores valid JSON that is not shaped like DTCG tokens', async () => {
+    const root = await makeRepo({
+      'tokens.json': '[1, 2, 3]',
+      'a/tokens.json': 'null',
+      'b/tokens.json': '{"name": "pkg", "version": "1.0.0", "files": ["dist"]}',
+    });
+
+    const scan = await scanTokenSources(root);
+
+    expect(scan).toEqual({ sources: [], skipped: [], truncated: false });
+  });
+
+  it('ignores a Tailwind config and CSS that are not well formed', async () => {
+    const root = await makeRepo({
+      'tailwind.config.js': "module.exports = { theme: { colors: { brand: '#fff', ",
+      'broken.css': ':root { --color-a: #fff; @theme {',
+    });
+
+    const scan = await scanTokenSources(root);
+
+    expect(scan).toEqual({ sources: [], skipped: [], truncated: false });
+  });
+
   it('parses a Tailwind config as text and never runs it', async () => {
     const root = await makeRepo({});
     const marker = path.join(root, 'ran.txt');
