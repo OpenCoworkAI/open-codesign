@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { type DocumentTextLimits, readOoxmlText } from './document-text';
+import { type DocumentTextLimits, DocumentTooLargeError, readOoxmlText } from './document-text';
 
 const LIMITS: DocumentTextLimits = {
   maxSections: 16,
@@ -9,6 +9,7 @@ const LIMITS: DocumentTextLimits = {
   maxRowsPerSheet: 24,
   maxCellsPerRow: 8,
   maxLineChars: 260,
+  maxUnpackedBytes: 64 * 1024 * 1024,
 };
 
 async function archive(files: Record<string, string>): Promise<Uint8Array> {
@@ -287,6 +288,58 @@ describe('readOoxmlText: hostile input', () => {
     const start = performance.now();
     await readOoxmlText(bytes, format, LIMITS);
     expect(performance.now() - start).toBeLessThan(500);
+  });
+});
+
+describe('readOoxmlText: unpacked size', () => {
+  const MIB = 1024 * 1024;
+
+  async function packed(files: Record<string, Buffer | string>): Promise<Uint8Array> {
+    const zip = new JSZip();
+    for (const [name, content] of Object.entries(files)) {
+      zip.file(name, content, { compression: 'DEFLATE', compressionOptions: { level: 9 } });
+    }
+    return zip.generateAsync({ type: 'uint8array' });
+  }
+
+  it('stops an archive that expands far beyond what it weighs, without unpacking it', async () => {
+    const bytes = await packed({ 'word/document.xml': Buffer.alloc(40 * MIB, 0x20) });
+    expect(bytes.length).toBeLessThan(MIB);
+    const start = performance.now();
+    await expect(
+      readOoxmlText(bytes, 'docx', { ...LIMITS, maxUnpackedBytes: MIB }),
+    ).rejects.toBeInstanceOf(DocumentTooLargeError);
+    expect(performance.now() - start).toBeLessThan(2_000);
+  });
+
+  it('counts every part against the same budget', async () => {
+    const part = (n: number) => slide(`Slide ${n}`.padEnd(600 * 1024, ' '));
+    const bytes = await packed({
+      'ppt/slides/slide1.xml': part(1),
+      'ppt/slides/slide2.xml': part(2),
+      'ppt/slides/slide3.xml': part(3),
+    });
+    await expect(
+      readOoxmlText(bytes, 'pptx', { ...LIMITS, maxUnpackedBytes: MIB }),
+    ).rejects.toThrow(/more than 1048576 bytes/);
+    const roomy = await readOoxmlText(bytes, 'pptx', { ...LIMITS, maxUnpackedBytes: 4 * MIB });
+    expect(roomy.sections.map((section) => section.title)).toEqual([
+      'Slide 1',
+      'Slide 2',
+      'Slide 3',
+    ]);
+  });
+
+  it('reads a document that fits, and a budget of exactly its size', async () => {
+    const xml = `<w:document ${W}><w:body>${paragraph('Fits')}</w:body></w:document>`;
+    const bytes = await packed({ 'word/document.xml': xml });
+    const exact = Buffer.byteLength(xml);
+    expect(
+      (await readOoxmlText(bytes, 'docx', { ...LIMITS, maxUnpackedBytes: exact })).sections,
+    ).toEqual([{ title: 'Document', lines: ['Fits'] }]);
+    await expect(
+      readOoxmlText(bytes, 'docx', { ...LIMITS, maxUnpackedBytes: exact - 1 }),
+    ).rejects.toBeInstanceOf(DocumentTooLargeError);
   });
 });
 

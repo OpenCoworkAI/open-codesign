@@ -198,6 +198,9 @@ const PREVIEW_TEXT_LIMITS: DocumentTextLimits = {
   maxRowsPerSheet: 24,
   maxCellsPerRow: 8,
   maxLineChars: 260,
+  // Not a display limit: the preview never limited this, and 256 MiB only stops an archive that
+  // expands without bound.
+  maxUnpackedBytes: 256 * 1024 * 1024,
 };
 
 async function parseOpenXmlDocument(

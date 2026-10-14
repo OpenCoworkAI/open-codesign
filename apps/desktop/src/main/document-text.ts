@@ -21,6 +21,8 @@ export interface DocumentTextLimits {
   maxCellsPerRow: number;
   /** Characters kept of one line. */
   maxLineChars: number;
+  /** Bytes of XML read from the archive in all, after decompression. */
+  maxUnpackedBytes: number;
 }
 
 export interface DocumentTextSection {
@@ -175,10 +177,55 @@ function attrValue(attrs: string, name: string): string | null {
   return value === undefined ? null : decodeXmlEntities(value);
 }
 
-async function readZipText(zip: JSZip, name: string): Promise<string | null> {
-  const file = zip.file(name);
-  if (file === null) return null;
-  return file.async('string');
+/** The archive's XML was larger than the caller's budget once decompressed. */
+export class DocumentTooLargeError extends Error {
+  constructor(readonly limitBytes: number) {
+    super(`The document holds more than ${limitBytes} bytes of XML once unpacked`);
+    this.name = 'DocumentTooLargeError';
+  }
+}
+
+/**
+ * A zip archive whose parts are read as text under one budget. A part is streamed and the read
+ * stops as soon as the budget is spent, so a few kilobytes that expand to gigabytes cost only
+ * the budget.
+ */
+class OoxmlArchive {
+  private remaining: number;
+
+  constructor(
+    private readonly zip: JSZip,
+    private readonly limitBytes: number,
+  ) {
+    this.remaining = limitBytes;
+  }
+
+  names(): string[] {
+    return Object.keys(this.zip.files);
+  }
+
+  text(name: string): Promise<string | null> {
+    const file = this.zip.file(name);
+    if (file === null) return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      // JSZip returns its Node stream adapter, a Readable, which can be destroyed.
+      const stream = file.nodeStream('nodebuffer') as NodeJS.ReadableStream & { destroy(): void };
+      stream.on('data', (chunk: Buffer) => {
+        this.remaining -= chunk.length;
+        if (this.remaining < 0) {
+          // Destroying the stream also stops the unpacking: on a 300 MB part the process burned
+          // 4 ms of CPU afterwards, against 524 ms when the stream was left to finish.
+          stream.destroy();
+          reject(new DocumentTooLargeError(this.limitBytes));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+      stream.on('error', reject);
+    });
+  }
 }
 
 function appStats(coreXml: string | null, appXml: string | null): DocumentTextStat[] {
@@ -217,14 +264,18 @@ function parseDocx(documentXml: string | null, limits: DocumentTextLimits): Docu
   return item === null ? [] : [item];
 }
 
-async function parsePptx(zip: JSZip, limits: DocumentTextLimits): Promise<DocumentTextSection[]> {
-  const slideNames = Object.keys(zip.files)
+async function parsePptx(
+  archive: OoxmlArchive,
+  limits: DocumentTextLimits,
+): Promise<DocumentTextSection[]> {
+  const slideNames = archive
+    .names()
     .filter((name) => /^ppt\/slides\/slide\d+\.xml$/u.test(name))
     .sort((a, b) => slideNumber(a) - slideNumber(b))
     .slice(0, limits.maxSections);
   const sections: DocumentTextSection[] = [];
   for (const name of slideNames) {
-    const xml = await readZipText(zip, name);
+    const xml = await archive.text(name);
     if (xml === null) continue;
     const lines = compactLines(textRuns(xml), limits.maxLinesPerSlide, limits.maxLineChars);
     const item = section(`Slide ${slideNumber(name)}`, lines);
@@ -287,20 +338,24 @@ function parseWorksheetRows(
   return out;
 }
 
-async function parseXlsx(zip: JSZip, limits: DocumentTextLimits): Promise<DocumentTextSection[]> {
+async function parseXlsx(
+  archive: OoxmlArchive,
+  limits: DocumentTextLimits,
+): Promise<DocumentTextSection[]> {
   const [workbookXml, sharedStringsXml] = await Promise.all([
-    readZipText(zip, 'xl/workbook.xml'),
-    readZipText(zip, 'xl/sharedStrings.xml'),
+    archive.text('xl/workbook.xml'),
+    archive.text('xl/sharedStrings.xml'),
   ]);
   const sheetNames = parseSheetNames(workbookXml);
   const sharedStrings = parseSharedStrings(sharedStringsXml, limits);
-  const worksheetNames = Object.keys(zip.files)
+  const worksheetNames = archive
+    .names()
     .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/u.test(name))
     .sort((a, b) => sheetNumber(a) - sheetNumber(b))
     .slice(0, limits.maxSections);
   const sections: DocumentTextSection[] = [];
   for (const [index, name] of worksheetNames.entries()) {
-    const xml = await readZipText(zip, name);
+    const xml = await archive.text(name);
     if (xml === null) continue;
     const lines = parseWorksheetRows(xml, sharedStrings, limits);
     const item = section(sheetNames[index] ?? `Sheet ${index + 1}`, lines);
@@ -321,23 +376,26 @@ function sheetNumber(name: string): number {
   return match?.[1] === undefined ? Number.MAX_SAFE_INTEGER : Number.parseInt(match[1], 10);
 }
 
-/** Reads the text of a DOCX, PPTX or XLSX. Rejects when the bytes are not a zip archive. */
+/**
+ * Reads the text of a DOCX, PPTX or XLSX. Rejects when the bytes are not a zip archive, and
+ * with a DocumentTooLargeError when the XML it holds is larger than the budget once unpacked.
+ */
 export async function readOoxmlText(
   bytes: Uint8Array,
   format: OoxmlFormat,
   limits: DocumentTextLimits,
 ): Promise<DocumentText> {
-  const zip = await JSZip.loadAsync(bytes);
+  const archive = new OoxmlArchive(await JSZip.loadAsync(bytes), limits.maxUnpackedBytes);
   const [coreXml, appXml] = await Promise.all([
-    readZipText(zip, 'docProps/core.xml'),
-    readZipText(zip, 'docProps/app.xml'),
+    archive.text('docProps/core.xml'),
+    archive.text('docProps/app.xml'),
   ]);
   const stats = appStats(coreXml, appXml);
   const title = firstLocalElementText(coreXml, 'title');
   if (format === 'docx') {
-    const sections = parseDocx(await readZipText(zip, 'word/document.xml'), limits);
+    const sections = parseDocx(await archive.text('word/document.xml'), limits);
     return { title, stats, sections };
   }
-  if (format === 'pptx') return { title, stats, sections: await parsePptx(zip, limits) };
-  return { title, stats, sections: await parseXlsx(zip, limits) };
+  if (format === 'pptx') return { title, stats, sections: await parsePptx(archive, limits) };
+  return { title, stats, sections: await parseXlsx(archive, limits) };
 }
