@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import { type DesignToken, serializeDesignMd, validateDesignMd } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import { extractFromCssVars } from './cssVarExtractor.js';
-import { mapTokensToDesignFields, type TokenFile } from './designFields.js';
+import {
+  MAX_RESOLVED_LENGTH,
+  MAX_VAR_DEPTH,
+  mapTokensToDesignFields,
+  type TokenFile,
+} from './designFields.js';
 import { extractFromTailwindConfig } from './tailwindExtractor.js';
 
 const token = (
@@ -211,6 +216,36 @@ describe('mapTokensToDesignFields()', () => {
         ['open', 'undefined'],
       ]);
       expect(result.report.unresolved[0]).toMatchObject({ value: 'var(--nope)' });
+    });
+
+    it('stops a chain nested deeper than the limit and resolves the ones within it', () => {
+      const chain = Array.from({ length: MAX_VAR_DEPTH + 8 }, (_, i) =>
+        token('color', `c${i}`, i === 0 ? '#112233' : `var(--c${i - 1})`),
+      );
+      const result = map(...chain);
+      expect(Object.keys(result.fields.colors ?? {})).toEqual(
+        chain.slice(0, MAX_VAR_DEPTH).map((c) => c.name),
+      );
+      expect(result.report.unresolved.map((u) => u.reason)).toEqual(Array(8).fill('too-complex'));
+    });
+
+    // Each level names the one below twice, so resolving it in full takes 2^levels steps.
+    it('gives up on a value that grows past the limit instead of expanding it', () => {
+      const levels = 20;
+      const tokens = [
+        token('shadow', 'l0', '0 0 0 #000'),
+        ...Array.from({ length: levels }, (_, i) =>
+          token('shadow', `l${i + 1}`, `var(--l${i}), var(--l${i})`),
+        ),
+      ];
+      const start = performance.now();
+      const result = map(...tokens);
+      expect(performance.now() - start).toBeLessThan(250);
+      const tooComplex = result.report.unresolved.filter((u) => u.reason === 'too-complex');
+      expect(tooComplex.length).toBeGreaterThan(0);
+      for (const line of result.sections[0]?.content.split('\n') ?? []) {
+        expect(line.length).toBeLessThanOrEqual(MAX_RESOLVED_LENGTH + 20);
+      }
     });
 
     it('does not resolve through a value that only a theme variant defines', () => {

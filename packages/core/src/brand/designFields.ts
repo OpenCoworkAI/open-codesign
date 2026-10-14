@@ -26,6 +26,8 @@ export interface ImportOrigin {
   token: string;
 }
 
+export type UnresolvedReason = 'undefined' | 'cycle' | 'too-complex';
+
 export type UnsupportedReason = 'color-alpha' | 'color-format' | 'dimension' | 'type';
 
 export interface TokenImportReport {
@@ -33,8 +35,8 @@ export interface TokenImportReport {
   clamped: Array<{ path: string; original: string; hex: string } & ImportOrigin>;
   /** Values DESIGN.md cannot hold: alpha, another color format, a unit it does not take. */
   unsupported: Array<{ reason: UnsupportedReason; value: string } & ImportOrigin>;
-  /** A `var()` that points at no scanned token, or at itself. */
-  unresolved: Array<{ reason: 'undefined' | 'cycle'; value: string } & ImportOrigin>;
+  /** A `var()` that points at no scanned token, at itself, or through more than the limits allow. */
+  unresolved: Array<{ reason: UnresolvedReason; value: string } & ImportOrigin>;
   /** Values declared in a theme block other than the default one. */
   otherThemes: Array<{ block: string; value: string } & ImportOrigin>;
   /** A second value for a name already taken; the first one is kept. */
@@ -49,6 +51,10 @@ export interface TokenImport {
   origins: Record<string, ImportOrigin>;
   report: TokenImportReport;
 }
+
+/** A folder can hold someone else's CSS, so nested `var()` stops here instead of growing without bound. */
+export const MAX_VAR_DEPTH = 32;
+export const MAX_RESOLVED_LENGTH = 4_096;
 
 const DIMENSION = /^-?\d+(?:\.\d+)?(?:px|em|rem)$/;
 const UNITLESS = /^-?\d+(?:\.\d+)?$/;
@@ -73,10 +79,11 @@ function tokenKey(name: string, type: DesignToken['type']): string {
   return key === '' ? 'base' : key;
 }
 
-type Resolved = { ok: true; value: string } | { ok: false; reason: 'undefined' | 'cycle' };
+type Resolved = { ok: true; value: string } | { ok: false; reason: UnresolvedReason };
 
 /** Replaces each `var(--name, fallback)` with the scanned token it names. */
 function resolveVars(value: string, lookup: Map<string, string>, chain: string[]): Resolved {
+  if (chain.length > MAX_VAR_DEPTH) return { ok: false, reason: 'too-complex' };
   let out = '';
   let from = 0;
   while (from < value.length) {
@@ -110,6 +117,7 @@ function resolveVars(value: string, lookup: Map<string, string>, chain: string[]
     const resolved = resolveVars(source, lookup, [...chain, name]);
     if (!resolved.ok) return resolved;
     out += resolved.value;
+    if (out.length > MAX_RESOLVED_LENGTH) return { ok: false, reason: 'too-complex' };
     from = end + 1;
   }
   return { ok: true, value: out };
