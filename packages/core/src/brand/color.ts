@@ -18,9 +18,10 @@ export type ColorConversion =
   | { ok: false; reason: 'alpha' | 'format' };
 
 const FORMAT: ColorConversion = { ok: false, reason: 'format' };
-const NUMBER = '[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?';
+const NUMBER = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[+-]?\\d+)?';
 const COMPONENT_RE = new RegExp(`^(${NUMBER})(%|deg|grad|rad|turn)?$`, 'i');
-const FUNCTION_RE = /^(rgba?|hsla?|oklch)\(\s*([^()]*?)\s*\)$/i;
+// The body is matched greedily and split later, so whitespace has one way to match.
+const FUNCTION_RE = /^(rgba?|hsla?|oklch)\(([^()]*)\)$/i;
 const HEX_RE = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 interface Component {

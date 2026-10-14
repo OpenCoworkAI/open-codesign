@@ -178,4 +178,31 @@ describe('cssColorToHex()', () => {
   ])('reports the format of %j', (input) => {
     expect(cssColorToHex(input)).toEqual({ ok: false, reason: 'format' });
   });
+  // The input is CSS from a folder the user picked, which can be someone else's repository.
+  describe('long input', () => {
+    const LONG = 100_000;
+    const fast = (value: string) => {
+      const start = performance.now();
+      const result = cssColorToHex(value);
+      expect(performance.now() - start).toBeLessThan(250);
+      return result;
+    };
+
+    it.each([
+      ['whitespace inside the parentheses', `rgb(${'\t'.repeat(LONG)}(`],
+      ['whitespace before the closing parenthesis', `rgb(1${' '.repeat(LONG)}x)`],
+      ['digits before a bad suffix', `rgb(${'1'.repeat(LONG)}x 0 0)`],
+      ['an exponent without digits', `rgb(1${'e'.repeat(LONG)} 0 0)`],
+    ])('is rejected in linear time: %s', (_name, input) => {
+      expect(fast(input)).toEqual({ ok: false, reason: 'format' });
+    });
+
+    it('still converts a long run of whitespace between valid parts', () => {
+      expect(
+        fast(
+          `rgb(${' '.repeat(LONG)}255${' '.repeat(LONG)}0${' '.repeat(LONG)}0${' '.repeat(LONG)})`,
+        ),
+      ).toEqual(ok('#ff0000'));
+    });
+  });
 });
