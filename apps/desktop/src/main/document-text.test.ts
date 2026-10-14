@@ -251,6 +251,15 @@ describe('readOoxmlText: empty elements', () => {
     ]);
   });
 
+  it('does not read a tag whose attribute value ends with a slash as self-closing', async () => {
+    const bytes = await archive({
+      'word/document.xml': `<w:document ${W}><w:body><w:p w:note='a/' w:other="b/"><w:r><w:t>Kept</w:t></w:r></w:p></w:body></w:document>`,
+    });
+    expect((await readOoxmlText(bytes, 'docx', LIMITS)).sections).toEqual([
+      { title: 'Document', lines: ['Kept'] },
+    ]);
+  });
+
   it('does not let an empty paragraph take the next one with it', async () => {
     const bytes = await archive({
       'word/document.xml': `<w:document ${W}><w:body><w:p/>${paragraph('First')}<w:p/><w:p/>${paragraph('Second')}</w:body></w:document>`,

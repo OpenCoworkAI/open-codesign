@@ -107,4 +107,39 @@ describe('createWorkspaceDocumentPreview', () => {
       { title: '评分表', lines: ['Item · Points', 'Gameplay · 40'] },
     ]);
   });
+  it('keeps text that looks like markup in a docx, decoded once', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-docx-markup-preview-'));
+    const filePath = path.join(root, 'notes.docx');
+    await writeZip(filePath, {
+      'word/document.xml':
+        '<w:document><w:body><w:p><w:r><w:t>Fish &amp; chips, use &lt;b&gt; for bold, &amp;lt; stays</w:t></w:r></w:p></w:body></w:document>',
+    });
+
+    const preview = await createWorkspaceDocumentPreview({
+      absPath: filePath,
+      relPath: 'notes.docx',
+      generateThumbnail: async () => null,
+    });
+
+    expect(preview.sections).toEqual([
+      { title: 'Document', lines: ['Fish & chips, use <b> for bold, &lt; stays'] },
+    ]);
+  });
+
+  it('shows rtf text as written, not as XML', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-rtf-preview-'));
+    const filePath = path.join(root, 'notes.rtf');
+    await writeFile(filePath, '{\\rtf1\\ansi\nFish &amp; chips <b>bold</b>\nSecond line\n}');
+
+    const preview = await createWorkspaceDocumentPreview({
+      absPath: filePath,
+      relPath: 'notes.rtf',
+      generateThumbnail: async () => null,
+    });
+
+    expect(preview.format).toBe('rtf');
+    expect(preview.sections).toEqual([
+      { title: 'Document', lines: ['Fish &amp; chips <b>bold</b>', 'Second line'] },
+    ]);
+  });
 });
