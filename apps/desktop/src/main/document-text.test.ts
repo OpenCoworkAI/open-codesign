@@ -170,6 +170,47 @@ describe('readOoxmlText: XLSX', () => {
   });
 });
 
+describe('readOoxmlText: text that looks like markup', () => {
+  // `&lt;div&gt;` is the text <div>, and `&amp;lt;` is the text &lt;: each is decoded once.
+  const TEXT = 'Use &lt;div&gt; for layout, &amp;lt; stays, 5 &gt; 3';
+  const EXPECTED = 'Use <div> for layout, &lt; stays, 5 > 3';
+  const S_NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+
+  it('keeps it in a DOCX paragraph', async () => {
+    const bytes = await archive({
+      'word/document.xml': `<w:document ${W}><w:body>${paragraph(TEXT)}</w:body></w:document>`,
+    });
+    expect((await readOoxmlText(bytes, 'docx', LIMITS)).sections[0]?.lines).toEqual([EXPECTED]);
+  });
+
+  it('keeps it on a PPTX slide', async () => {
+    const bytes = await archive({ 'ppt/slides/slide1.xml': slide(TEXT) });
+    expect((await readOoxmlText(bytes, 'pptx', LIMITS)).sections[0]?.lines).toEqual([EXPECTED]);
+  });
+
+  it('keeps it in XLSX shared strings and inline strings', async () => {
+    const bytes = await archive({
+      'xl/workbook.xml': `<workbook ${S_NS}><sheets><sheet name="S &lt;1&gt;" sheetId="1"/></sheets></workbook>`,
+      'xl/sharedStrings.xml': `<sst ${S_NS}><si><t>${TEXT}</t></si></sst>`,
+      'xl/worksheets/sheet1.xml': `<worksheet ${S_NS}><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="inlineStr"><is><t>${TEXT}</t></is></c></row></sheetData></worksheet>`,
+    });
+    expect((await readOoxmlText(bytes, 'xlsx', LIMITS)).sections).toEqual([
+      { title: 'S <1>', lines: [`${EXPECTED} · ${EXPECTED}`] },
+    ]);
+  });
+
+  it('keeps it in the document title and in a line cut to the limit', async () => {
+    const bytes = await archive({
+      'word/document.xml': `<w:document ${W}><w:body>${paragraph('&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;')}</w:body></w:document>`,
+      'docProps/core.xml':
+        '<cp:coreProperties xmlns:cp="c" xmlns:dc="d"><dc:title>&lt;Draft&gt;</dc:title></cp:coreProperties>',
+    });
+    const text = await readOoxmlText(bytes, 'docx', { ...LIMITS, maxLineChars: 8 });
+    expect(text.title).toBe('<Draft>');
+    expect(text.sections[0]?.lines).toEqual(['<<<<<...']);
+  });
+});
+
 describe('readOoxmlText: empty elements', () => {
   const S_NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
   const workbook = `<workbook ${S_NS}><sheets><sheet name="S" sheetId="1"/></sheets></workbook>`;

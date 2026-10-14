@@ -80,8 +80,9 @@ function xmlTextContent(value: string): string {
   return decodeXmlEntities(stripTags(value));
 }
 
-export function cleanLine(value: string, maxChars: number): string {
-  const normalized = xmlTextContent(value).replace(/\s+/g, ' ').trim();
+/** Collapses whitespace and cuts to `maxChars`. The text is already decoded and is not read as XML again. */
+export function cleanLine(text: string, maxChars: number): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
   if (normalized.length <= maxChars) return normalized;
   return `${normalized.slice(0, maxChars - 3)}...`;
 }
@@ -159,7 +160,7 @@ function firstLocalElementText(xml: string | null, localName: string): string | 
   if (xml === null) return null;
   const value = localElementContents(xml, localName)[0];
   if (value === undefined) return null;
-  const text = cleanLine(value, METADATA_LINE_CHARS);
+  const text = cleanLine(xmlTextContent(value), METADATA_LINE_CHARS);
   return text.length > 0 ? text : null;
 }
 
