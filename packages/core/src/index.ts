@@ -42,6 +42,7 @@ export type {
   TokenFile,
   TokenImport,
   TokenImportReport,
+  UnresolvedReason,
   UnsupportedReason,
 } from './brand/index.js';
 export {

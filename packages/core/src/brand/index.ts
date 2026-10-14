@@ -6,6 +6,7 @@ export type {
   TokenFile,
   TokenImport,
   TokenImportReport,
+  UnresolvedReason,
   UnsupportedReason,
 } from './designFields.js';
 export { mapTokensToDesignFields } from './designFields.js';
