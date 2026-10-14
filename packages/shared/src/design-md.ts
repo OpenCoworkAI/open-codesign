@@ -23,7 +23,8 @@ export interface DesignMdDocument {
 const FRONTMATTER_MAX_CHARS = 64 * 1024;
 const BODY_PROMPT_MAX_CHARS = 2000;
 
-const ALLOWED_TOP_LEVEL = new Set([
+/** The top-level fields, in the order the serializer writes them. */
+const FRONTMATTER_FIELDS = [
   'version',
   'name',
   'description',
@@ -32,7 +33,9 @@ const ALLOWED_TOP_LEVEL = new Set([
   'rounded',
   'spacing',
   'components',
-]);
+] as const;
+
+const ALLOWED_TOP_LEVEL: ReadonlySet<string> = new Set(FRONTMATTER_FIELDS);
 
 const TYPOGRAPHY_KEYS = new Set([
   'fontFamily',
@@ -431,9 +434,7 @@ export function serializeDesignMd(input: {
   sections?: DesignMdBodySection[];
 }): string {
   // yaml leaves out the fields that are undefined.
-  const fields = Object.fromEntries(
-    [...ALLOWED_TOP_LEVEL].map((key) => [key, input.frontmatter[key as keyof DesignMdFrontmatter]]),
-  );
+  const fields = Object.fromEntries(FRONTMATTER_FIELDS.map((key) => [key, input.frontmatter[key]]));
   const frontmatter = stringifyYaml(fields, { lineWidth: 0 }).trimEnd();
   const body = orderedBodySections(input.sections ?? [])
     .map(renderSection)

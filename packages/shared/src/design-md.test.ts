@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type DesignMdFrontmatter,
   formatDesignMdForPrompt,
   parseDesignMd,
   serializeDesignMd,
@@ -288,6 +289,23 @@ describe('serializeDesignMd', () => {
     expect(doc.bodySections).toEqual([
       { heading: 'Overview', content: 'Imported from the project.' },
     ]);
+  });
+
+  it('writes every frontmatter field, so the field list and the type cannot drift', () => {
+    const everyField: Required<DesignMdFrontmatter> = {
+      version: 'alpha',
+      name: 'X',
+      description: 'Every field.',
+      colors: { primary: '#111111' },
+      typography: { body: { fontFamily: 'Inter' } },
+      rounded: { sm: '4px' },
+      spacing: { sm: '8px' },
+      components: { button: { backgroundColor: '#111111' } },
+    };
+    const raw = serializeDesignMd({ frontmatter: everyField });
+    expect(Object.keys(parseDesignMd(raw).frontmatter)).toEqual(Object.keys(everyField));
+    expect(parseDesignMd(raw).frontmatter).toEqual(everyField);
+    expect(validateDesignMd(raw)).toEqual([]);
   });
 
   it('keeps hex colors as strings', () => {
