@@ -61,8 +61,23 @@ function decodeXmlEntities(value: string): string {
     .replace(/&([a-z]+);/gi, (match, name: string) => XML_ENTITY_REPLACEMENTS.get(name) ?? match);
 }
 
+/** Removes every `<...>`; a `<` with no closing `>` stays, as does everything after it. */
+function stripTags(value: string): string {
+  let out = '';
+  let from = 0;
+  while (from < value.length) {
+    const open = value.indexOf('<', from);
+    if (open === -1) break;
+    const close = value.indexOf('>', open + 1);
+    if (close === -1) break;
+    out += value.slice(from, open);
+    from = close + 1;
+  }
+  return out + value.slice(from);
+}
+
 function xmlTextContent(value: string): string {
-  return decodeXmlEntities(value.replace(/<[^>]*>/g, ''));
+  return decodeXmlEntities(stripTags(value));
 }
 
 export function cleanLine(value: string, maxChars: number): string {
@@ -86,17 +101,58 @@ export function compactLines(
   return out;
 }
 
-function localElementContents(xml: string, localName: string): string[] {
-  const re = new RegExp(
-    `<(?:[A-Za-z0-9_.-]+:)?${localName}\\b[^>]*>([\\s\\S]*?)<\\/(?:[A-Za-z0-9_.-]+:)?${localName}>`,
-    'gi',
-  );
-  const out: string[] = [];
-  for (const match of xml.matchAll(re)) {
-    const content = match[1];
-    if (content !== undefined) out.push(content);
+interface XmlElement {
+  /** The text of the opening tag after the element name, without a closing `/`. */
+  attrs: string;
+  content: string;
+}
+
+const isNameCode = (code: number): boolean =>
+  (code >= 48 && code <= 58) || // 0-9 and ':'
+  (code >= 65 && code <= 90) ||
+  (code >= 97 && code <= 122) ||
+  code === 45 || // '-'
+  code === 46 || // '.'
+  code === 95; // '_'
+
+/**
+ * The outermost elements named `localName`, whatever their namespace prefix. One pass over the
+ * tags, so the time is linear in the size of the XML whatever it contains. A self-closing tag
+ * is an empty element; an element that is never closed is left out.
+ */
+function elements(xml: string, localName: string): XmlElement[] {
+  const wanted = localName.toLowerCase();
+  const out: XmlElement[] = [];
+  let open: { attrs: string; contentStart: number } | null = null;
+  let from = 0;
+  while (true) {
+    const lt = xml.indexOf('<', from);
+    if (lt === -1) break;
+    const gt = xml.indexOf('>', lt + 1);
+    if (gt === -1) break;
+    from = gt + 1;
+    const closing = xml.charCodeAt(lt + 1) === 47; // '/'
+    const nameStart = lt + (closing ? 2 : 1);
+    let nameEnd = nameStart;
+    while (nameEnd < gt && isNameCode(xml.charCodeAt(nameEnd))) nameEnd += 1;
+    const qualified = xml.slice(nameStart, nameEnd);
+    if (qualified.slice(qualified.lastIndexOf(':') + 1).toLowerCase() !== wanted) continue;
+    if (closing) {
+      if (open !== null) {
+        out.push({ attrs: open.attrs, content: xml.slice(open.contentStart, lt) });
+        open = null;
+      }
+    } else if (open === null) {
+      const attrs = xml.slice(nameEnd, gt);
+      if (attrs.endsWith('/')) out.push({ attrs: attrs.slice(0, -1), content: '' });
+      else open = { attrs, contentStart: gt + 1 };
+    }
   }
   return out;
+}
+
+function localElementContents(xml: string, localName: string): string[] {
+  return elements(xml, localName).map((element) => element.content);
 }
 
 function firstLocalElementText(xml: string | null, localName: string): string | null {
@@ -184,10 +240,7 @@ function slideNumber(name: string): number {
 function parseSheetNames(workbookXml: string | null): string[] {
   if (workbookXml === null) return [];
   const out: string[] = [];
-  const re = /<sheet\b([^>]*)\/?>/gi;
-  for (const match of workbookXml.matchAll(re)) {
-    const attrs = match[1];
-    if (attrs === undefined) continue;
+  for (const { attrs } of elements(workbookXml, 'sheet')) {
     const name = attrValue(attrs, 'name');
     if (name !== null && name.trim().length > 0) out.push(name.trim());
   }
@@ -213,10 +266,7 @@ function parseWorksheetRows(
   const out: string[] = [];
   for (const row of rows) {
     const cells: string[] = [];
-    const cellRe = /<c\b([^>]*)>([\s\S]*?)<\/c>/gi;
-    for (const cellMatch of row.matchAll(cellRe)) {
-      const attrs = cellMatch[1] ?? '';
-      const body = cellMatch[2] ?? '';
+    for (const { attrs, content: body } of elements(row, 'c')) {
       const type = attrValue(attrs, 't');
       const valueText = firstLocalElementText(body, 'v');
       let value: string | null = null;

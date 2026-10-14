@@ -170,6 +170,85 @@ describe('readOoxmlText: XLSX', () => {
   });
 });
 
+describe('readOoxmlText: empty elements', () => {
+  const S_NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+  const workbook = `<workbook ${S_NS}><sheets><sheet name="S" sheetId="1"/></sheets></workbook>`;
+  const strings = `<sst ${S_NS}><si><t>Hello</t></si><si><t>World</t></si></sst>`;
+  const sheet = (row: string) =>
+    `<worksheet ${S_NS}><sheetData><row r="1">${row}</row></sheetData></worksheet>`;
+
+  it('reads the cell after an empty styled cell as its own text, not as a string index', async () => {
+    const bytes = await archive({
+      'xl/workbook.xml': workbook,
+      'xl/sharedStrings.xml': strings,
+      'xl/worksheets/sheet1.xml': sheet(
+        '<c r="A1" s="1"/><c r="B1" t="s"><v>0</v></c><c r="C1" s="2"/><c r="D1" t="s"><v>1</v></c>',
+      ),
+    });
+    expect((await readOoxmlText(bytes, 'xlsx', LIMITS)).sections).toEqual([
+      { title: 'S', lines: ['Hello · World'] },
+    ]);
+  });
+
+  it('keeps the text of a paragraph nested in another, as one line', async () => {
+    const bytes = await archive({
+      'word/document.xml': `<w:document ${W}><w:body><w:p><w:r><w:t>A</w:t></w:r><w:p><w:r><w:t>B</w:t></w:r></w:p></w:p>${paragraph('C')}</w:body></w:document>`,
+    });
+    expect((await readOoxmlText(bytes, 'docx', LIMITS)).sections).toEqual([
+      { title: 'Document', lines: ['AB', 'C'] },
+    ]);
+  });
+
+  it('does not let an empty paragraph take the next one with it', async () => {
+    const bytes = await archive({
+      'word/document.xml': `<w:document ${W}><w:body><w:p/>${paragraph('First')}<w:p/><w:p/>${paragraph('Second')}</w:body></w:document>`,
+    });
+    expect((await readOoxmlText(bytes, 'docx', LIMITS)).sections).toEqual([
+      { title: 'Document', lines: ['First', 'Second'] },
+    ]);
+  });
+});
+
+// The XML is a file the user attached, which can come from anywhere. A scan that backtracks
+// takes seconds on these inputs; a single pass takes milliseconds.
+describe('readOoxmlText: hostile input', () => {
+  const COUNT = 300_000;
+  const S_NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+  const docx = (body: string) => ({
+    format: 'docx' as const,
+    part: 'word/document.xml',
+    xml: `<w:document ${W}><w:body>${body}</w:body></w:document>`,
+  });
+  const pptx = (body: string) => ({
+    format: 'pptx' as const,
+    part: 'ppt/slides/slide1.xml',
+    xml: `<p:sld ${A}>${body}</p:sld>`,
+  });
+  const xlsx = (row: string) => ({
+    format: 'xlsx' as const,
+    part: 'xl/worksheets/sheet1.xml',
+    xml: `<worksheet ${S_NS}><sheetData><row r="1">${row}</row></sheetData></worksheet>`,
+  });
+
+  it.each([
+    ['paragraphs that never close', docx('<w:p>'.repeat(COUNT))],
+    ['tags that never end', docx('<w:p'.repeat(COUNT))],
+    ['less-than signs in a run', docx(`<w:p><w:r><w:t>${'<'.repeat(COUNT)}</w:t></w:r></w:p>`)],
+    [
+      'less-than signs written as entities',
+      docx(`<w:p><w:r><w:t>${'&lt;'.repeat(COUNT)}</w:t></w:r></w:p>`),
+    ],
+    ['text runs that never close', pptx('<a:t>'.repeat(COUNT))],
+    ['cells that never close', xlsx('<c r="A1">'.repeat(COUNT))],
+    ['cells whose tags never end', xlsx('<c r="A1"'.repeat(COUNT))],
+  ])('reads %s in linear time', async (_name, { format, part, xml }) => {
+    const bytes = await archive({ [part]: xml });
+    const start = performance.now();
+    await readOoxmlText(bytes, format, LIMITS);
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+});
+
 describe('readOoxmlText: input that is not an archive', () => {
   it('rejects', async () => {
     await expect(
