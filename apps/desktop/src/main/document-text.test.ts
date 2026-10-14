@@ -1,6 +1,13 @@
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { type DocumentTextLimits, DocumentTooLargeError, readOoxmlText } from './document-text';
+import {
+  CELLS_CUT_MARK,
+  type DocumentTextLimits,
+  DocumentTooLargeError,
+  formatDocumentText,
+  omittedMark,
+  readOoxmlText,
+} from './document-text';
 
 const LIMITS: DocumentTextLimits = {
   maxSections: 16,
@@ -10,6 +17,7 @@ const LIMITS: DocumentTextLimits = {
   maxCellsPerRow: 8,
   maxLineChars: 260,
   maxUnpackedBytes: 64 * 1024 * 1024,
+  markCuts: false,
 };
 
 async function archive(files: Record<string, string>): Promise<Uint8Array> {
@@ -47,6 +55,8 @@ describe('readOoxmlText: DOCX', () => {
         { label: 'Author', value: 'Ada' },
       ],
       sections: [{ title: 'Document', lines: ['Hello world', 'Fish & chips AB'] }],
+      omittedSections: 0,
+      missingPart: null,
     });
   });
 
@@ -340,6 +350,140 @@ describe('readOoxmlText: unpacked size', () => {
     await expect(
       readOoxmlText(bytes, 'docx', { ...LIMITS, maxUnpackedBytes: exact - 1 }),
     ).rejects.toBeInstanceOf(DocumentTooLargeError);
+  });
+});
+
+describe('readOoxmlText: what a limit leaves out', () => {
+  const S_NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+  const MARKED: DocumentTextLimits = { ...LIMITS, markCuts: true };
+  const cell = (n: number) => `<c r="${String.fromCharCode(65 + n)}1"><v>${n}</v></c>`;
+  const row = (cells: number) => Array.from({ length: cells }, (_, n) => cell(n)).join('');
+  const sheet = (...rows: string[]) =>
+    `<worksheet ${S_NS}><sheetData>${rows.map((r, n) => `<row r="${n + 1}">${r}</row>`).join('')}</sheetData></worksheet>`;
+  const workbook = (...names: string[]) =>
+    `<workbook ${S_NS}><sheets>${names.map((name, n) => `<sheet name="${name}" sheetId="${n + 1}"/>`).join('')}</sheets></workbook>`;
+
+  it('ends a row cut at the cell limit with the cell mark, only when marking is on', async () => {
+    const bytes = await archive({
+      'xl/workbook.xml': workbook('S'),
+      'xl/worksheets/sheet1.xml': sheet(row(5), row(3)),
+    });
+    const limits = { ...MARKED, maxCellsPerRow: 3 };
+    expect((await readOoxmlText(bytes, 'xlsx', limits)).sections[0]?.lines).toEqual([
+      `0 · 1 · 2 · ${CELLS_CUT_MARK}`,
+      '0 · 1 · 2',
+    ]);
+    expect(
+      (await readOoxmlText(bytes, 'xlsx', { ...limits, markCuts: false })).sections[0]?.lines,
+    ).toEqual(['0 · 1 · 2', '0 · 1 · 2']);
+  });
+
+  it('says how many non-empty rows the row limit left out, and not the empty ones', async () => {
+    const bytes = await archive({
+      'xl/workbook.xml': workbook('S'),
+      'xl/worksheets/sheet1.xml': sheet(
+        row(1),
+        row(1),
+        row(1),
+        '<c r="A4" s="1"/>',
+        row(1),
+        row(1),
+      ),
+    });
+    const limits = { ...MARKED, maxRowsPerSheet: 2 };
+    expect((await readOoxmlText(bytes, 'xlsx', limits)).sections[0]?.lines).toEqual([
+      '0',
+      '0',
+      omittedMark(3, 'row'),
+    ]);
+    expect(
+      (await readOoxmlText(bytes, 'xlsx', { ...limits, markCuts: false })).sections[0]?.lines,
+    ).toEqual(['0', '0']);
+  });
+
+  it('says how many paragraphs and slide lines were left out', async () => {
+    const docx = await archive({
+      'word/document.xml': `<w:document ${W}><w:body>${['a', 'b', '', 'c', 'd'].map(paragraph).join('')}</w:body></w:document>`,
+    });
+    expect(
+      (await readOoxmlText(docx, 'docx', { ...MARKED, maxParagraphs: 2 })).sections[0]?.lines,
+    ).toEqual(['a', 'b', omittedMark(2, 'paragraph')]);
+    const pptx = await archive({ 'ppt/slides/slide1.xml': slide('a', 'b', 'c') });
+    expect(
+      (await readOoxmlText(pptx, 'pptx', { ...MARKED, maxLinesPerSlide: 2 })).sections[0]?.lines,
+    ).toEqual(['a', 'b', omittedMark(1, 'line')]);
+  });
+
+  it('counts the slides and sheets past the section limit, whatever the marking', async () => {
+    const pptx = await archive({
+      'ppt/slides/slide1.xml': slide('a'),
+      'ppt/slides/slide2.xml': slide('b'),
+      'ppt/slides/slide3.xml': slide('c'),
+    });
+    const xlsx = await archive({
+      'xl/workbook.xml': workbook('One', 'Two'),
+      'xl/worksheets/sheet1.xml': sheet(row(1)),
+      'xl/worksheets/sheet2.xml': sheet(row(1)),
+    });
+    for (const markCuts of [true, false]) {
+      const limits = { ...LIMITS, markCuts, maxSections: 1 };
+      expect((await readOoxmlText(pptx, 'pptx', limits)).omittedSections).toBe(2);
+      expect((await readOoxmlText(xlsx, 'xlsx', limits)).omittedSections).toBe(1);
+    }
+    expect((await readOoxmlText(pptx, 'pptx', LIMITS)).omittedSections).toBe(0);
+  });
+
+  it('writes the mark for one thing and for several', () => {
+    expect(omittedMark(1, 'row')).toBe('(1 more row not shown)');
+    expect(omittedMark(12, 'slide')).toBe('(12 more slides not shown)');
+  });
+
+  it('names the part an archive lacks', async () => {
+    const bytes = await archive({ 'unrelated.txt': 'x' });
+    expect((await readOoxmlText(bytes, 'docx', LIMITS)).missingPart).toBe('word/document.xml');
+    expect((await readOoxmlText(bytes, 'pptx', LIMITS)).missingPart).toBe('ppt/slides/slide1.xml');
+    expect((await readOoxmlText(bytes, 'xlsx', LIMITS)).missingPart).toBe('xl/workbook.xml');
+    const complete = await archive({
+      'word/document.xml': `<w:document ${W}><w:body>${paragraph('x')}</w:body></w:document>`,
+    });
+    expect((await readOoxmlText(complete, 'docx', LIMITS)).missingPart).toBeNull();
+  });
+});
+
+describe('formatDocumentText', () => {
+  const S_NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+
+  it('writes a DOCX as its paragraphs under the title', async () => {
+    const bytes = await archive({
+      'word/document.xml': `<w:document ${W}><w:body>${paragraph('First')}${paragraph('Second')}</w:body></w:document>`,
+      'docProps/core.xml':
+        '<cp:coreProperties xmlns:cp="c" xmlns:dc="d"><dc:title>Brief</dc:title></cp:coreProperties>',
+    });
+    expect(formatDocumentText(await readOoxmlText(bytes, 'docx', LIMITS), 'docx')).toBe(
+      'Title: Brief\n\nFirst\nSecond',
+    );
+  });
+
+  it('writes a PPTX by slide and says how many slides were left out', async () => {
+    const bytes = await archive({
+      'ppt/slides/slide1.xml': slide('Hello', 'World'),
+      'ppt/slides/slide2.xml': slide('Two'),
+      'ppt/slides/slide3.xml': slide('Three'),
+    });
+    const text = await readOoxmlText(bytes, 'pptx', { ...LIMITS, maxSections: 2 });
+    expect(formatDocumentText(text, 'pptx')).toBe(
+      'Slide 1:\nHello\nWorld\n\nSlide 2:\nTwo\n\n(1 more slide not shown)',
+    );
+  });
+
+  it('writes an XLSX by sheet', async () => {
+    const bytes = await archive({
+      'xl/workbook.xml': `<workbook ${S_NS}><sheets><sheet name="Budget" sheetId="1"/></sheets></workbook>`,
+      'xl/worksheets/sheet1.xml': `<worksheet ${S_NS}><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c></row></sheetData></worksheet>`,
+    });
+    expect(formatDocumentText(await readOoxmlText(bytes, 'xlsx', LIMITS), 'xlsx')).toBe(
+      'Sheet "Budget":\n1 · 2',
+    );
   });
 });
 

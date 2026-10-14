@@ -201,6 +201,7 @@ const PREVIEW_TEXT_LIMITS: DocumentTextLimits = {
   // Not a display limit: the preview never limited this, and 256 MiB only stops an archive that
   // expands without bound.
   maxUnpackedBytes: 256 * 1024 * 1024,
+  markCuts: false,
 };
 
 async function parseOpenXmlDocument(

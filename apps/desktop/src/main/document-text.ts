@@ -23,6 +23,8 @@ export interface DocumentTextLimits {
   maxLineChars: number;
   /** Bytes of XML read from the archive in all, after decompression. */
   maxUnpackedBytes: number;
+  /** Say in the text what a limit left out, for a reader that cannot see the file. */
+  markCuts: boolean;
 }
 
 export interface DocumentTextSection {
@@ -39,6 +41,27 @@ export interface DocumentText {
   title: string | null;
   stats: DocumentTextStat[];
   sections: DocumentTextSection[];
+  /** Slides or sheets past `maxSections`. */
+  omittedSections: number;
+  /** The part the format needs that the archive lacks, or null. */
+  missingPart: string | null;
+}
+
+interface ParsedSections {
+  sections: DocumentTextSection[];
+  omittedSections: number;
+  missingPart: string | null;
+}
+
+/** A row cut at `maxCellsPerRow` ends with this. */
+export const CELLS_CUT_MARK = '…';
+
+/** The line that says `count` more of something were left out by a limit. */
+export function omittedMark(
+  count: number,
+  noun: 'paragraph' | 'row' | 'line' | 'slide' | 'sheet',
+): string {
+  return `(${count} more ${noun}${count === 1 ? '' : 's'} not shown)`;
 }
 
 /** Metadata lines (title, author, counts) are short whatever the caller's line limit is. */
@@ -102,6 +125,23 @@ export function compactLines(
     if (out.length >= maxLines) break;
   }
   return out;
+}
+
+/** Like compactLines, and counts the non-empty lines past `maxLines` that were left out. */
+function collectLines(
+  values: Iterable<string>,
+  maxLines: number,
+  maxChars: number,
+): { lines: string[]; omitted: number } {
+  const lines: string[] = [];
+  let omitted = 0;
+  for (const value of values) {
+    const line = cleanLine(value, maxChars);
+    if (line.length === 0) continue;
+    if (lines.length < maxLines) lines.push(line);
+    else omitted += 1;
+  }
+  return { lines, omitted };
 }
 
 interface XmlElement {
@@ -249,39 +289,49 @@ export function section(title: string, lines: string[]): DocumentTextSection | n
   return { title, lines };
 }
 
-function parseDocx(documentXml: string | null, limits: DocumentTextLimits): DocumentTextSection[] {
-  if (documentXml === null) return [];
+function parseDocx(documentXml: string | null, limits: DocumentTextLimits): ParsedSections {
+  if (documentXml === null) {
+    return { sections: [], omittedSections: 0, missingPart: 'word/document.xml' };
+  }
   const paragraphs = localElementContents(documentXml, 'p');
-  const lines =
+  const { lines, omitted } = collectLines(
     paragraphs.length > 0
-      ? compactLines(
-          paragraphs.map((paragraph) => textRuns(paragraph).join('')),
-          limits.maxParagraphs,
-          limits.maxLineChars,
-        )
-      : compactLines(textRuns(documentXml), limits.maxParagraphs, limits.maxLineChars);
+      ? paragraphs.map((paragraph) => textRuns(paragraph).join(''))
+      : textRuns(documentXml),
+    limits.maxParagraphs,
+    limits.maxLineChars,
+  );
+  if (limits.markCuts && omitted > 0) lines.push(omittedMark(omitted, 'paragraph'));
   const item = section('Document', lines);
-  return item === null ? [] : [item];
+  return { sections: item === null ? [] : [item], omittedSections: 0, missingPart: null };
 }
 
 async function parsePptx(
   archive: OoxmlArchive,
   limits: DocumentTextLimits,
-): Promise<DocumentTextSection[]> {
-  const slideNames = archive
+): Promise<ParsedSections> {
+  const allSlides = archive
     .names()
     .filter((name) => /^ppt\/slides\/slide\d+\.xml$/u.test(name))
-    .sort((a, b) => slideNumber(a) - slideNumber(b))
-    .slice(0, limits.maxSections);
+    .sort((a, b) => slideNumber(a) - slideNumber(b));
   const sections: DocumentTextSection[] = [];
-  for (const name of slideNames) {
+  for (const name of allSlides.slice(0, limits.maxSections)) {
     const xml = await archive.text(name);
     if (xml === null) continue;
-    const lines = compactLines(textRuns(xml), limits.maxLinesPerSlide, limits.maxLineChars);
+    const { lines, omitted } = collectLines(
+      textRuns(xml),
+      limits.maxLinesPerSlide,
+      limits.maxLineChars,
+    );
+    if (limits.markCuts && omitted > 0) lines.push(omittedMark(omitted, 'line'));
     const item = section(`Slide ${slideNumber(name)}`, lines);
     if (item !== null) sections.push(item);
   }
-  return sections;
+  return {
+    sections,
+    omittedSections: Math.max(0, allSlides.length - limits.maxSections),
+    missingPart: allSlides.length === 0 ? 'ppt/slides/slide1.xml' : null,
+  };
 }
 
 function slideNumber(name: string): number {
@@ -309,52 +359,70 @@ function parseSharedStrings(sharedStringsXml: string | null, limits: DocumentTex
     .filter((line) => line.length > 0);
 }
 
+/** The first `maxCells` non-empty cells of a row, and whether the row has more. */
+function rowCells(
+  row: string,
+  sharedStrings: string[],
+  limits: DocumentTextLimits,
+  maxCells: number,
+): { cells: string[]; more: boolean } {
+  const cells: string[] = [];
+  for (const { attrs, content: body } of elements(row, 'c')) {
+    const type = attrValue(attrs, 't');
+    const valueText = firstLocalElementText(body, 'v');
+    let value: string | null = null;
+    if (type === 's' && valueText !== null) {
+      value = sharedStrings[Number.parseInt(valueText, 10)] ?? valueText;
+    } else if (type === 'inlineStr') {
+      value = cleanLine(textRuns(body).join(''), limits.maxLineChars);
+    } else {
+      value = valueText;
+    }
+    if (value === null || value.trim().length === 0) continue;
+    if (cells.length >= maxCells) return { cells, more: true };
+    cells.push(value.trim());
+  }
+  return { cells, more: false };
+}
+
 function parseWorksheetRows(
   xml: string,
   sharedStrings: string[],
   limits: DocumentTextLimits,
 ): string[] {
-  const rows = localElementContents(xml, 'row');
-  const out: string[] = [];
-  for (const row of rows) {
-    const cells: string[] = [];
-    for (const { attrs, content: body } of elements(row, 'c')) {
-      const type = attrValue(attrs, 't');
-      const valueText = firstLocalElementText(body, 'v');
-      let value: string | null = null;
-      if (type === 's' && valueText !== null) {
-        value = sharedStrings[Number.parseInt(valueText, 10)] ?? valueText;
-      } else if (type === 'inlineStr') {
-        value = cleanLine(textRuns(body).join(''), limits.maxLineChars);
-      } else {
-        value = valueText;
-      }
-      if (value !== null && value.trim().length > 0) cells.push(value.trim());
-      if (cells.length >= limits.maxCellsPerRow) break;
+  const lines: string[] = [];
+  let omitted = 0;
+  for (const row of localElementContents(xml, 'row')) {
+    if (lines.length >= limits.maxRowsPerSheet) {
+      if (!limits.markCuts) break;
+      if (rowCells(row, sharedStrings, limits, 1).cells.length > 0) omitted += 1;
+      continue;
     }
-    if (cells.length > 0) out.push(cells.join(' · '));
-    if (out.length >= limits.maxRowsPerSheet) break;
+    const { cells, more } = rowCells(row, sharedStrings, limits, limits.maxCellsPerRow);
+    if (cells.length === 0) continue;
+    const cut = more && limits.markCuts ? ` · ${CELLS_CUT_MARK}` : '';
+    lines.push(`${cells.join(' · ')}${cut}`);
   }
-  return out;
+  if (omitted > 0) lines.push(omittedMark(omitted, 'row'));
+  return lines;
 }
 
 async function parseXlsx(
   archive: OoxmlArchive,
   limits: DocumentTextLimits,
-): Promise<DocumentTextSection[]> {
+): Promise<ParsedSections> {
   const [workbookXml, sharedStringsXml] = await Promise.all([
     archive.text('xl/workbook.xml'),
     archive.text('xl/sharedStrings.xml'),
   ]);
   const sheetNames = parseSheetNames(workbookXml);
   const sharedStrings = parseSharedStrings(sharedStringsXml, limits);
-  const worksheetNames = archive
+  const allSheets = archive
     .names()
     .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/u.test(name))
-    .sort((a, b) => sheetNumber(a) - sheetNumber(b))
-    .slice(0, limits.maxSections);
+    .sort((a, b) => sheetNumber(a) - sheetNumber(b));
   const sections: DocumentTextSection[] = [];
-  for (const [index, name] of worksheetNames.entries()) {
+  for (const [index, name] of allSheets.slice(0, limits.maxSections).entries()) {
     const xml = await archive.text(name);
     if (xml === null) continue;
     const lines = parseWorksheetRows(xml, sharedStrings, limits);
@@ -368,7 +436,11 @@ async function parseXlsx(
     );
     if (item !== null) sections.push(item);
   }
-  return sections;
+  return {
+    sections,
+    omittedSections: Math.max(0, allSheets.length - limits.maxSections),
+    missingPart: workbookXml === null ? 'xl/workbook.xml' : null,
+  };
 }
 
 function sheetNumber(name: string): number {
@@ -392,10 +464,26 @@ export async function readOoxmlText(
   ]);
   const stats = appStats(coreXml, appXml);
   const title = firstLocalElementText(coreXml, 'title');
-  if (format === 'docx') {
-    const sections = parseDocx(await archive.text('word/document.xml'), limits);
-    return { title, stats, sections };
+  const parsed =
+    format === 'docx'
+      ? parseDocx(await archive.text('word/document.xml'), limits)
+      : format === 'pptx'
+        ? await parsePptx(archive, limits)
+        : await parseXlsx(archive, limits);
+  return { title, stats, ...parsed };
+}
+
+/** The text a reader gets in place of the file: the title, each slide or sheet, what was left out. */
+export function formatDocumentText(text: DocumentText, format: OoxmlFormat): string {
+  const blocks: string[] = [];
+  if (text.title !== null) blocks.push(`Title: ${text.title}`);
+  for (const item of text.sections) {
+    const heading = format === 'xlsx' ? `Sheet "${item.title}":` : `${item.title}:`;
+    const lines = item.lines.join('\n');
+    blocks.push(format === 'docx' ? lines : `${heading}\n${lines}`);
   }
-  if (format === 'pptx') return { title, stats, sections: await parsePptx(archive, limits) };
-  return { title, stats, sections: await parseXlsx(archive, limits) };
+  if (text.omittedSections > 0) {
+    blocks.push(omittedMark(text.omittedSections, format === 'pptx' ? 'slide' : 'sheet'));
+  }
+  return blocks.join('\n\n');
 }
