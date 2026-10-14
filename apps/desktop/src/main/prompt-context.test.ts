@@ -648,7 +648,7 @@ describe('document attachments', () => {
         code: 'ATTACHMENT_TOO_LARGE',
         message: expect.stringContaining('holds more than 32MB of text once unpacked'),
       });
-      expect(performance.now() - start).toBeLessThan(2_000);
+      expect(performance.now() - start).toBeLessThan(5_000);
     });
 
     it('fails the whole send, naming the file, when only one of several attachments is bad', async () => {

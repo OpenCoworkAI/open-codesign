@@ -17,7 +17,10 @@ export interface DocumentTextLimits {
   maxLinesPerSlide: number;
   /** Rows read from one sheet. */
   maxRowsPerSheet: number;
-  /** Cells read from one row. */
+  /**
+   * Cells read from one row. Each cell is cut at `maxLineChars`, so a row can be up to
+   * `maxCellsPerRow` × `maxLineChars` characters long.
+   */
   maxCellsPerRow: number;
   /** Characters kept of one line. */
   maxLineChars: number;

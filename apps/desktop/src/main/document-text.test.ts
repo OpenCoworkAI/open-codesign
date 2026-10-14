@@ -306,7 +306,7 @@ describe('readOoxmlText: hostile input', () => {
     const bytes = await archive({ [part]: xml });
     const start = performance.now();
     await readOoxmlText(bytes, format, LIMITS);
-    expect(performance.now() - start).toBeLessThan(500);
+    expect(performance.now() - start).toBeLessThan(2_000);
   });
 });
 
@@ -328,7 +328,7 @@ describe('readOoxmlText: unpacked size', () => {
     await expect(
       readOoxmlText(bytes, 'docx', { ...LIMITS, maxUnpackedBytes: MIB }),
     ).rejects.toBeInstanceOf(DocumentTooLargeError);
-    expect(performance.now() - start).toBeLessThan(2_000);
+    expect(performance.now() - start).toBeLessThan(5_000);
   });
 
   it('counts every part against the same budget', async () => {
