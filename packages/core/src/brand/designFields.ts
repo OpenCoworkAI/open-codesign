@@ -56,8 +56,19 @@ export interface TokenImport {
 export const MAX_VAR_DEPTH = 32;
 export const MAX_RESOLVED_LENGTH = 4_096;
 
-const DIMENSION = /^-?\d+(?:\.\d+)?(?:px|em|rem)$/;
-const UNITLESS = /^-?\d+(?:\.\d+)?$/;
+const DIMENSION = /^(-?)(\d+(?:\.\d+)?|\.\d+)(px|em|rem)$/i;
+const UNITLESS = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
+
+/**
+ * A CSS length in the form DESIGN.md takes: a digit before the point and a lowercase unit,
+ * which CSS does not require (`.5rem`, `1REM`). Null when the value is not a px, em or rem length.
+ */
+function normalizeDimension(value: string): string | null {
+  const match = DIMENSION.exec(value);
+  if (match === null) return null;
+  const [, sign = '', magnitude = '', unit = ''] = match;
+  return `${sign}${magnitude.startsWith('.') ? `0${magnitude}` : magnitude}${unit.toLowerCase()}`;
+}
 
 // The words each extractor puts in front of a token's own name: `colors.brand.500` (v3),
 // `color-brand-500` (v4), `font-family-sans` (CSS variables), `fontSize.lg`.
@@ -203,28 +214,32 @@ export function mapTokensToDesignFields(files: TokenFile[]): TokenImport {
           if (claim(`typography.${key}`, value, origin)) typography[key] = { fontFamily: value };
           break;
         case 'radius': {
-          const dimension = value === '0' ? '0px' : value;
-          if (!DIMENSION.test(dimension)) unsupported('dimension');
+          const dimension = value === '0' ? '0px' : normalizeDimension(value);
+          if (dimension === null) unsupported('dimension');
           else if (claim(`rounded.${key}`, dimension, origin)) rounded[key] = dimension;
           break;
         }
-        case 'spacing':
-          if (DIMENSION.test(value)) {
-            if (claim(`spacing.${key}`, value, origin)) spacing[key] = value;
+        case 'spacing': {
+          const dimension = normalizeDimension(value);
+          if (dimension !== null) {
+            if (claim(`spacing.${key}`, dimension, origin)) spacing[key] = dimension;
           } else if (UNITLESS.test(value)) {
-            if (claim(`spacing.${key}`, value, origin)) spacing[key] = Number(value);
+            const unitless = Number(value);
+            if (claim(`spacing.${key}`, String(unitless), origin)) spacing[key] = unitless;
           } else {
             unsupported('dimension');
           }
           break;
+        }
         case 'fontSize':
         case 'lineHeight': {
           const label = token.type === 'fontSize' ? 'font size' : 'line height';
-          const valid =
-            DIMENSION.test(value) || (token.type === 'lineHeight' && UNITLESS.test(value));
-          if (!valid) unsupported('dimension');
-          else if (claim(`Typography.${label}.${key}`, value, origin)) {
-            typographyLines.push(`- ${label} \`${key}\`: ${value}`);
+          const size =
+            normalizeDimension(value) ??
+            (token.type === 'lineHeight' && UNITLESS.test(value) ? value : null);
+          if (size === null) unsupported('dimension');
+          else if (claim(`Typography.${label}.${key}`, size, origin)) {
+            typographyLines.push(`- ${label} \`${key}\`: ${size}`);
           }
           break;
         }

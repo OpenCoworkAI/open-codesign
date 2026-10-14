@@ -137,6 +137,81 @@ describe('mapTokensToDesignFields()', () => {
     });
   });
 
+  describe('CSS spellings DESIGN.md does not take as written', () => {
+    // DESIGN.md wants a digit before the point and a lowercase unit; CSS allows neither.
+    it.each([
+      ['.5rem', '0.5rem'],
+      ['-.5rem', '-0.5rem'],
+      ['1REM', '1rem'],
+      ['.25EM', '0.25em'],
+      ['8PX', '8px'],
+      ['0.50rem', '0.50rem'],
+    ])('writes %s as %s for a radius and for spacing', (written, written_) => {
+      const result = map(
+        token('radius', 'radius-a', written),
+        token('spacing', 'spacing-a', written),
+      );
+      expect(result.fields).toEqual({ rounded: { a: written_ }, spacing: { a: written_ } });
+      expect(result.report.unsupported).toEqual([]);
+    });
+
+    it.each([
+      ['.5', 0.5],
+      ['-.5', -0.5],
+      ['1.50', 1.5],
+    ])('writes a unitless spacing %s as the number %s', (written, number) => {
+      expect(map(token('spacing', 'spacing-a', written)).fields.spacing).toEqual({ a: number });
+    });
+
+    it('accepts them for font sizes and line heights', () => {
+      const result = map(
+        token('fontSize', 'text-a', '.875REM'),
+        token('lineHeight', 'leading-a', '.5'),
+        token('lineHeight', 'leading-b', '1.5EM'),
+      );
+      expect(result.sections).toEqual([
+        {
+          heading: 'Typography',
+          content: '- font size `a`: 0.875rem\n- line height `a`: .5\n- line height `b`: 1.5em',
+        },
+      ]);
+    });
+
+    it('treats the same length spelled two ways as one value', () => {
+      const result = mapTokensToDesignFields([
+        file('a.css', token('radius', 'radius-md', '.5rem'), token('spacing', 'spacing-1', '.5')),
+        file('b.css', token('radius', 'radius-md', '0.5REM'), token('spacing', 'spacing-1', '0.5')),
+      ]);
+      expect(result.report.shadowed).toEqual([]);
+    });
+
+    it('still leaves out what is not a length', () => {
+      const result = map(
+        token('radius', 'radius-a', '5.rem'),
+        token('radius', 'radius-b', '.rem'),
+        token('spacing', 'spacing-a', '1.5vw'),
+        token('spacing', 'spacing-b', '..5'),
+      );
+      expect(result.fields).toEqual({});
+      expect(result.report.unsupported.map((u) => u.reason)).toEqual(Array(4).fill('dimension'));
+    });
+
+    it('produces a DESIGN.md that validates', () => {
+      const result = map(
+        token('radius', 'radius-a', '.5rem'),
+        token('radius', 'radius-b', '1REM'),
+        token('spacing', 'spacing-a', '-.5rem'),
+        token('spacing', 'spacing-b', '.5'),
+      );
+      expect(result.fields).toEqual({
+        rounded: { a: '0.5rem', b: '1rem' },
+        spacing: { a: '-0.5rem', b: 0.5 },
+      });
+      const raw = serializeDesignMd({ frontmatter: { name: 'X', ...result.fields } });
+      expect(validateDesignMd(raw)).toEqual([]);
+    });
+  });
+
   describe('other values', () => {
     it('writes a bare 0 as 0px for a radius and as the number 0 for spacing', () => {
       const result = map(token('radius', 'radius-none', '0'), token('spacing', 'spacing-0', '0'));
