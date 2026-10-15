@@ -591,17 +591,17 @@ describe('document attachments', () => {
 
   it('gives each sheet name the content of its own worksheet when the tabs are in reverse part order', async () => {
     const file = await attach('finance.xlsx', {
-      'xl/workbook.xml': workbook(['Revenue', 'rId1'], ['Expenses', 'rId2']),
+      'xl/workbook.xml': workbook(['Expenses', 'rId2'], ['Revenue', 'rId1']),
       'xl/_rels/workbook.xml.rels': relationships(
-        ['rId1', 'worksheet', 'worksheets/sheet2.xml'],
-        ['rId2', 'worksheet', 'worksheets/sheet1.xml'],
+        ['rId1', 'worksheet', 'worksheets/sheet1.xml'],
+        ['rId2', 'worksheet', 'worksheets/sheet2.xml'],
       ),
-      'xl/worksheets/sheet1.xml': oneCell('Rent 1200'),
-      'xl/worksheets/sheet2.xml': oneCell('Sales 5400'),
+      'xl/worksheets/sheet1.xml': oneCell('Revenue = 1000000'),
+      'xl/worksheets/sheet2.xml': oneCell('Expenses = 900000'),
     });
     const { attachments } = await preparePromptContext({ attachments: [file] });
     expect(attachments[0]?.excerpt).toBe(
-      'Sheet "Revenue":\nSales 5400\n\nSheet "Expenses":\nRent 1200',
+      'Sheet "Expenses":\nExpenses = 900000\n\nSheet "Revenue":\nRevenue = 1000000',
     );
   });
 
