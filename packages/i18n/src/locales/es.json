@@ -516,13 +516,21 @@
         "modelSaveFailed": "Error al guardar la selección de modelo",
         "reasoningSaved": "Profundidad de razonamiento guardada",
         "reasoningSaveFailed": "Error al guardar la profundidad de razonamiento",
+        "contextWindowSaved": "Ventana de contexto guardada",
+        "contextWindowSaveFailed": "Error al guardar la ventana de contexto",
         "connectionOk": "Conexión OK",
         "connectionFailed": "Conexión fallida"
       },
       "litellm": {
         "presetName": "LiteLLM Gateway",
         "presetDescription": "Gateway autoalojado compatible con OpenAI, clave API opcional",
-        "hint": "Apunta a un proxy LiteLLM que ya tengas en ejecución (LiteLLM no viene incluido). La URL predeterminada es http://localhost:4000/v1; edítala para despliegues remotos. El modo sin clave está activado para proxies sin master key; desactívalo y pega tu master key o virtual key si el gateway requiere autenticación. Para una URL localhost, permite abajo las pruebas en red privada."
+        "hint": "Apunta a un proxy LiteLLM que ya tengas en ejecución (LiteLLM no viene incluido). La URL predeterminada es http://localhost:4000/v1; edítala para despliegues remotos. El modo sin clave está activado para proxies sin master key; desactívalo y pega tu master key o virtual key si el gateway requiere autenticación. Para una URL localhost, permite abajo las pruebas en red privada.",
+        "diagnostics": {
+          "auth": "Configura la master key o virtual key de LiteLLM, o desactiva el modo sin clave si este proxy exige una clave.",
+          "notFound": "Comprueba que la URL base termina en /v1.",
+          "notFoundLocal": "Comprueba que la URL base termina en /v1 y que el proxy local de LiteLLM está en el puerto 4000.",
+          "unreachable": "Inicia el proxy de LiteLLM y vuelve a intentarlo."
+        }
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
@@ -544,6 +552,13 @@
         "medium": "Medio",
         "high": "Alto",
         "xhigh": "Extra alto"
+      },
+      "contextWindow": {
+        "label": "Ventana de contexto",
+        "placeholder": "Auto",
+        "unit": "tokens",
+        "hint": "Déjalo vacío para usar el catálogo de modelos. Indícalo para modelos locales y relays que el catálogo no conoce.",
+        "invalid": "Introduce un número entero de tokens mayor que 0"
       }
     },
     "appearance": {
@@ -623,6 +638,8 @@
       "beta": "Beta",
       "checkForUpdatesOnStartup": "Buscar actualizaciones al inicio",
       "checkForUpdatesOnStartupHint": "Buscar automáticamente una nueva versión 30 segundos después del inicio.",
+      "systemNotifications": "Notificaciones del sistema",
+      "systemNotificationsHint": "Avisarme cuando un diseño termine, falle o haga una pregunta mientras Open CoDesign está en segundo plano. En macOS, los avisos se detienen al cerrar la última ventana, hasta que la vuelvas a abrir.",
       "timeout": "Tiempo de espera de generación",
       "timeoutHint": "Segundos antes de que una solicitud de generación se aborte.",
       "timeoutSeconds": "{{value}} s",
@@ -778,6 +795,10 @@
         "label": "PDF",
         "hint": "Renderizado a través de tu Chrome instalado"
       },
+      "png": {
+        "label": "PNG",
+        "hint": "Imagen de página completa a 2x, mediante tu Chrome instalado; las presentaciones (una diapositiva por <section>) se apilan en orden en una sola imagen alta"
+      },
       "pptx": {
         "label": "PPTX",
         "hint": "Diapositivas de alta fidelidad; una por <section>"
@@ -802,6 +823,9 @@
     "designSystemCleared": "Sistema de diseño limpiado",
     "clearDesignSystemFailed": "No se pudo limpiar el sistema de diseño",
     "generationFailed": "Fallo en la generación",
+    "systemDesignReady": "Diseño listo",
+    "systemGenerationFailed": "Fallo en la generación",
+    "systemAskWaiting": "Esperando tu respuesta",
     "generationFailedApplyFix": "Aplicar corrección",
     "generationFailedBaseUrlUpdated": "URL base actualizada. Intenta la solicitud de nuevo.",
     "generationFailedFixUnavailable": "Autocorrección no disponible",
@@ -1041,6 +1065,7 @@
       "reasoningPolicy": "El endpoint rechazó los metadatos de razonamiento para este modelo. Reduce la profundidad de razonamiento e inténtalo de nuevo.",
       "modelIdShape": "El id del modelo seleccionado incluye un prefijo de proveedor que este endpoint no acepta.",
       "generationTimeout": "La generación alcanzó el tiempo límite configurado antes de que el modelo terminara.",
+      "contextWindowExceeded": "El prompt del sistema, las herramientas y esta solicitud necesitan más tokens de los que permite la ventana de contexto del modelo.",
       "relayStreamingBug": "La pasarela puede manejar mal los eventos SSE de la API OpenAI Responses (versiones antiguas de sub2api / claude2api / anyrouter cortan el flujo prematuramente).",
       "transportInterrupted": "La conexión con el proveedor terminó antes de completar el turno. Normalmente es un timeout de la pasarela o una interrupción de red.",
       "referenceUrlInvalid": "La URL de referencia no es válida o no es compatible.",
@@ -1057,6 +1082,7 @@
       "addV1": "Agregar /v1",
       "waitAndRetry": "Esperar y reintentar",
       "adjustGenerationTimeout": "Ajustar tiempo límite de generación",
+      "adjustContextWindow": "Revisar la ventana de contexto",
       "checkNetwork": "Revisar red / VPN",
       "checkVpn": "Revisar VPN / cortafuegos",
       "reportBug": "Reportar este error",
@@ -1326,6 +1352,7 @@
     "INPUT_EMPTY_HTML": "Se requiere el HTML existente para esta operación.",
     "INPUT_UNSUPPORTED_MODE": "Este modo de generación no es compatible.",
     "GENERATION_TIMEOUT": "La generación agotó el tiempo de espera. Prueba con una instrucción más corta o aumenta el tiempo de espera en Configuración.",
+    "GENERATION_CONTEXT_EXCEEDED": "Esta ejecución no cabe en la ventana de contexto del modelo. Acorta la solicitud o sus adjuntos, configura la ventana de contexto del proveedor en Ajustes → Modelos o usa un modelo con una ventana mayor.",
     "GENERATION_INCOMPLETE": "El agente se detuvo antes de completar la verificación. Continúa la ejecución para terminar el artefacto del espacio de trabajo.",
     "WORKSPACE_MISSING": "Este diseño no tiene un espacio de trabajo vinculado. Vuelve a abrirlo o recréalo.",
     "ARTIFACT_PROTOCOL_INVALID": "El artefacto generado no siguió el protocolo requerido.",
@@ -1352,8 +1379,9 @@
     "PREFERENCES_INVALID_TIMEOUT": "El valor del tiempo de espera de generación es inválido.",
     "SKILL_LOAD_FAILED": "Uno o más habilidades fallaron al cargar. Revisa tus archivos de habilidades para errores.",
     "EXPORTER_UNKNOWN": "Formato de exportación desconocido solicitado.",
-    "EXPORTER_NO_CHROME": "No se encontró Chrome o Chromium. Instálalo para habilitar la exportación a PDF.",
+    "EXPORTER_NO_CHROME": "No se encontró Chrome o Chromium. Instálalo para habilitar la exportación a PDF y PNG.",
     "EXPORTER_PDF_FAILED": "La exportación a PDF falló. Asegúrate de que Chrome esté instalado e inténtalo de nuevo.",
+    "EXPORTER_PNG_FAILED": "La exportación a PNG falló. Asegúrate de que Chrome esté instalado e inténtalo de nuevo.",
     "EXPORTER_PPTX_FAILED": "La exportación a PowerPoint falló.",
     "EXPORTER_ZIP_UNSAFE_PATH": "La exportación fue bloqueada: una ruta de activo escaparía del archivo ZIP.",
     "EXPORTER_ZIP_FAILED": "La exportación a ZIP falló.",

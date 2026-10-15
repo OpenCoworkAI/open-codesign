@@ -692,13 +692,21 @@
         "modelSaveFailed": "保存模型选择失败",
         "reasoningSaved": "已保存推理深度",
         "reasoningSaveFailed": "保存推理深度失败",
+        "contextWindowSaved": "已保存上下文窗口",
+        "contextWindowSaveFailed": "保存上下文窗口失败",
         "connectionOk": "连接正常",
         "connectionFailed": "连接失败"
       },
       "litellm": {
         "presetName": "LiteLLM Gateway",
         "presetDescription": "自托管的 OpenAI 兼容网关，API Key 可选",
-        "hint": "请指向你已在运行的 LiteLLM 代理（应用不内置 LiteLLM）。默认地址为 http://localhost:4000/v1，远程部署请修改 URL。默认开启无 Key 模式，适用于未配置 master key 的代理；若网关需要鉴权，请关闭该选项并粘贴 master key 或 virtual key。使用 localhost 地址时，请在下方允许测试本地/内网地址。"
+        "hint": "请指向你已在运行的 LiteLLM 代理（应用不内置 LiteLLM）。默认地址为 http://localhost:4000/v1，远程部署请修改 URL。默认开启无 Key 模式，适用于未配置 master key 的代理；若网关需要鉴权，请关闭该选项并粘贴 master key 或 virtual key。使用 localhost 地址时，请在下方允许测试本地/内网地址。",
+        "diagnostics": {
+          "auth": "请填写 LiteLLM 的 master key 或 virtual key；若代理要求鉴权，请关闭无 Key 模式。",
+          "notFound": "请确认 base URL 以 /v1 结尾。",
+          "notFoundLocal": "请确认 base URL 以 /v1 结尾，并且本地 LiteLLM 代理运行在 4000 端口。",
+          "unreachable": "请先启动 LiteLLM 代理，然后重试。"
+        }
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
@@ -721,6 +729,13 @@
         "medium": "中",
         "high": "高",
         "xhigh": "最高"
+      },
+      "contextWindow": {
+        "label": "上下文窗口",
+        "placeholder": "自动",
+        "unit": "token",
+        "hint": "留空则使用模型目录中的值。本地模型和目录里没有的中转模型请手动填写。",
+        "invalid": "请输入大于 0 的整数 token 数"
       }
     },
     "appearance": {
@@ -801,6 +816,8 @@
       "beta": "测试版",
       "checkForUpdatesOnStartup": "启动时检查更新",
       "checkForUpdatesOnStartupHint": "启动 30 秒后自动检查新版本。",
+      "systemNotifications": "系统通知",
+      "systemNotificationsHint": "Open CoDesign 在后台时，设计完成、生成失败或需要你回答问题时发送系统通知。在 macOS 上关闭最后一个窗口后不再通知，重新打开窗口后恢复。",
       "timeout": "生成超时",
       "timeoutHint": "超过该秒数后会中止生成请求。",
       "timeoutSeconds": "{{value}} 秒",
@@ -956,6 +973,10 @@
         "label": "PDF",
         "hint": "通过你本机已安装的 Chrome 渲染"
       },
+      "png": {
+        "label": "PNG",
+        "hint": "整页 2 倍图，通过本机 Chrome 渲染；多页幻灯片（每个 <section> 一页）按顺序纵向拼成一张长图"
+      },
       "pptx": {
         "label": "PPTX",
         "hint": "高保真幻灯片；每个 <section> 一页"
@@ -980,6 +1001,9 @@
     "designSystemCleared": "设计系统已清除",
     "clearDesignSystemFailed": "无法清除设计系统",
     "generationFailed": "生成失败",
+    "systemDesignReady": "设计已完成",
+    "systemGenerationFailed": "生成失败",
+    "systemAskWaiting": "等待你的回答",
     "generationFailedApplyFix": "应用修复",
     "generationFailedBaseUrlUpdated": "Base URL 已更新，请重试。",
     "generationFailedFixUnavailable": "自动修复不可用",
@@ -1216,6 +1240,7 @@
       "reasoningPolicy": "端点拒绝了该模型的 reasoning 元数据。请降低 reasoning 深度后重试。",
       "modelIdShape": "当前模型 ID 带有这个端点不接受的 Provider 前缀。",
       "generationTimeout": "生成已达到当前配置的超时时间，但模型还未完成。",
+      "contextWindowExceeded": "系统提示、工具定义和本次请求需要的 token 超过了模型的上下文窗口。",
       "relayStreamingBug": "网关可能错误处理了 OpenAI Responses API 的 SSE 事件（老版本 sub2api / claude2api / anyrouter 会把流提前截断）。",
       "transportInterrupted": "Provider 连接在本轮完成前中断，通常是网关超时或网络中断。",
       "referenceUrlInvalid": "Reference URL 无效或不受支持。",
@@ -1232,6 +1257,7 @@
       "addV1": "添加 /v1",
       "waitAndRetry": "等待后重试",
       "adjustGenerationTimeout": "调整生成超时时间",
+      "adjustContextWindow": "检查上下文窗口",
       "checkNetwork": "检查网络 / VPN",
       "checkVpn": "检查 VPN / 防火墙",
       "reportBug": "报告此 Bug",
@@ -1499,6 +1525,7 @@
     "INPUT_EMPTY_HTML": "此操作需要已有的 HTML 内容。",
     "INPUT_UNSUPPORTED_MODE": "不支持该生成模式。",
     "GENERATION_TIMEOUT": "生成超时，请缩短 prompt 或在设置中增加超时时间。",
+    "GENERATION_CONTEXT_EXCEEDED": "这次生成超出了模型的上下文窗口。请缩短请求或附件，在设置 → 模型里填写服务商的上下文窗口，或换用窗口更大的模型。",
     "GENERATION_INCOMPLETE": "Agent 在完成校验前停止了。请继续运行，以完成工作区 artifact。",
     "WORKSPACE_MISSING": "此设计未绑定工作区，请重新打开或重新创建设计。",
     "ARTIFACT_PROTOCOL_INVALID": "生成的 artifact 未遵循所需协议。",
@@ -1525,8 +1552,9 @@
     "PREFERENCES_INVALID_TIMEOUT": "生成超时时长的设置无效。",
     "SKILL_LOAD_FAILED": "有 skill 加载失败，请检查 skill 文件是否有误。",
     "EXPORTER_UNKNOWN": "未知的导出格式。",
-    "EXPORTER_NO_CHROME": "未检测到 Chrome 或 Chromium，请安装后再进行 PDF 导出。",
+    "EXPORTER_NO_CHROME": "未检测到 Chrome 或 Chromium，请安装后再进行 PDF 或 PNG 导出。",
     "EXPORTER_PDF_FAILED": "PDF 导出失败，请确认已安装 Chrome 后重试。",
+    "EXPORTER_PNG_FAILED": "PNG 导出失败，请确认已安装 Chrome 后重试。",
     "EXPORTER_PPTX_FAILED": "PowerPoint 导出失败。",
     "EXPORTER_ZIP_UNSAFE_PATH": "导出被阻止：有资源路径会越出 ZIP 包边界。",
     "EXPORTER_ZIP_FAILED": "ZIP 导出失败。",

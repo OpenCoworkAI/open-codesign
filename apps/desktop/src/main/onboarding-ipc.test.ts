@@ -570,6 +570,53 @@ describe('config:v1 provider mutations — fail-fast key handling', () => {
     expect(writeConfig).not.toHaveBeenCalled();
   });
 
+  it('stores, clears, and validates a provider context window', async () => {
+    const { hydrateConfig } = await import('@open-codesign/shared');
+    const { readConfig, writeConfig } = await import('./config');
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(readConfig).mockResolvedValueOnce(
+      hydrateConfig({
+        version: 3,
+        activeProvider: 'local-runtime',
+        activeModel: 'qwen3:32b',
+        secrets: {
+          'local-runtime': { ciphertext: 'enc:sk-test', mask: 'sk-***test' },
+        },
+        providers: {
+          'local-runtime': {
+            id: 'local-runtime',
+            name: 'Local Runtime',
+            builtin: false,
+            wire: 'openai-chat',
+            baseUrl: 'http://localhost:1234/v1',
+            defaultModel: 'qwen3:32b',
+          },
+        },
+      }),
+    );
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:update-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await handler({} as never, { id: 'local-runtime', contextWindow: 32_768 });
+    expect(
+      vi.mocked(writeConfig).mock.calls.at(-1)?.[0].providers['local-runtime']?.contextWindow,
+    ).toBe(32_768);
+
+    await handler({} as never, { id: 'local-runtime', contextWindow: null });
+    expect(
+      vi.mocked(writeConfig).mock.calls.at(-1)?.[0].providers['local-runtime']?.contextWindow,
+    ).toBeUndefined();
+
+    for (const contextWindow of [0, 4096.5, '32768']) {
+      await expect(handler({} as never, { id: 'local-runtime', contextWindow })).rejects.toThrow(
+        /contextWindow must be a positive integer or null/,
+      );
+    }
+  });
+
   it('rejects invalid provider updates instead of silently keeping old values', async () => {
     const { registerOnboardingIpc } = await import('./onboarding-ipc');
     registerOnboardingIpc();

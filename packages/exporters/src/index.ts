@@ -10,7 +10,7 @@
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type { LocalAssetOptions } from './assets';
 
-export const EXPORTER_FORMATS = ['html', 'pdf', 'pptx', 'zip', 'markdown'] as const;
+export const EXPORTER_FORMATS = ['html', 'pdf', 'png', 'pptx', 'zip', 'markdown'] as const;
 export type ExporterFormat = (typeof EXPORTER_FORMATS)[number];
 
 export type ExportOptions = LocalAssetOptions & {
@@ -42,6 +42,7 @@ export type { ExportHtmlOptions } from './html';
 export type { ExportMarkdownOptions, MarkdownMeta } from './markdown';
 export { htmlToMarkdown } from './markdown';
 export type { ExportPdfOptions } from './pdf';
+export type { ExportPngOptions } from './png';
 export type { ExportPptxOptions } from './pptx';
 export type { ExportZipOptions, ZipAsset } from './zip';
 
@@ -66,6 +67,10 @@ export async function exportArtifact(
   if (format === 'pdf') {
     const mod = await import('./pdf');
     return mod.exportPdf(artifactSource, destinationPath, opts);
+  }
+  if (format === 'png') {
+    const mod = await import('./png');
+    return mod.exportPng(artifactSource, destinationPath, opts);
   }
   if (format === 'pptx') {
     const mod = await import('./pptx');

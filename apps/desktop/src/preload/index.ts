@@ -70,7 +70,7 @@ export interface ValidateKeyError {
   message: string;
 }
 
-export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip' | 'markdown';
+export type ExportFormat = 'html' | 'pdf' | 'png' | 'pptx' | 'zip' | 'markdown';
 export type WorkspaceFileKind =
   | 'html'
   | 'jsx'
@@ -216,6 +216,8 @@ export interface ProviderRow {
   hasKey: boolean;
   requiresApiKey?: boolean;
   reasoningLevel?: ReasoningLevel;
+  /** Configured context window in tokens; absent when the model catalog decides. */
+  contextWindow?: number;
   /** Per-provider opt-in to skip TLS verification on outbound HTTPS.
    *  Built-in providers force-ignore this flag at runtime; only surfaced
    *  for custom/imported providers. See #229. */
@@ -274,6 +276,7 @@ export interface Preferences {
   workspaceMemoryAutoUpdate: boolean;
   userMemoryAutoUpdate: boolean;
   proxyUrl: string;
+  systemNotifications: boolean;
 }
 
 export interface MemoryFileRead {
@@ -618,6 +621,9 @@ const api = {
       /** `null` explicitly clears the override and falls back to the model
        *  default; a level string sets it; omit to leave untouched. */
       reasoningLevel?: ReasoningLevel | null;
+      /** Context window in tokens; `null` clears it so the model catalog
+       *  decides; omit to leave untouched. */
+      contextWindow?: number | null;
       /** Non-empty string rotates the stored secret; empty string clears it
        *  (keyless providers); omit to leave the existing secret untouched. */
       apiKey?: string;
@@ -640,6 +646,7 @@ const api = {
       httpHeaders?: Record<string, string>;
       allowPrivateNetwork?: boolean;
       tlsRejectUnauthorized?: boolean;
+      presetId?: 'litellm';
     }) => ipcRenderer.invoke('config:v1:test-endpoint', input) as Promise<TestEndpointResponse>,
     listEndpointModels: (input: { wire: WireApi; baseUrl: string; apiKey: string }) =>
       ipcRenderer.invoke('config:v1:list-endpoint-models', input) as Promise<
@@ -1020,6 +1027,7 @@ const api = {
   },
   openExternal: (url: string) =>
     ipcRenderer.invoke('codesign:v1:open-external', url) as Promise<void>,
+  focusWindow: () => ipcRenderer.invoke('codesign:v1:focus-window') as Promise<void>,
   ask: {
     history: (filter?: { runId?: string; designId?: string }) =>
       ipcRenderer.invoke('ask:history', filter) as Promise<AskHistoryEntry[]>,

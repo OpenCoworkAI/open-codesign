@@ -692,13 +692,21 @@
         "modelSaveFailed": "Failed to save model selection",
         "reasoningSaved": "Reasoning depth saved",
         "reasoningSaveFailed": "Failed to save reasoning depth",
+        "contextWindowSaved": "Context window saved",
+        "contextWindowSaveFailed": "Failed to save context window",
         "connectionOk": "Connection OK",
         "connectionFailed": "Connection failed"
       },
       "litellm": {
         "presetName": "LiteLLM Gateway",
         "presetDescription": "Self-hosted OpenAI-compatible gateway, API key optional",
-        "hint": "Point this at a LiteLLM proxy you already run (LiteLLM is not bundled). The default URL is http://localhost:4000/v1; edit it for remote deployments. Keyless mode is on for proxies without a master key; turn it off and paste your master or virtual key if the gateway requires auth. For a localhost URL, allow private-network testing below."
+        "hint": "Point this at a LiteLLM proxy you already run (LiteLLM is not bundled). The default URL is http://localhost:4000/v1; edit it for remote deployments. Keyless mode is on for proxies without a master key; turn it off and paste your master or virtual key if the gateway requires auth. For a localhost URL, allow private-network testing below.",
+        "diagnostics": {
+          "auth": "Set the LiteLLM master or virtual key, or turn off keyless mode if this proxy requires a key.",
+          "notFound": "Check that the base URL ends with /v1.",
+          "notFoundLocal": "Check that the base URL ends with /v1 and that the local LiteLLM proxy is running on port 4000.",
+          "unreachable": "Start the LiteLLM proxy and try again."
+        }
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
@@ -721,6 +729,13 @@
         "medium": "Medium",
         "high": "High",
         "xhigh": "Extra high"
+      },
+      "contextWindow": {
+        "label": "Context window",
+        "placeholder": "Auto",
+        "unit": "tokens",
+        "hint": "Leave empty to use the model catalog. Set it for local models and relays the catalog does not know.",
+        "invalid": "Enter a whole number of tokens greater than 0"
       }
     },
     "appearance": {
@@ -801,6 +816,8 @@
       "beta": "Beta",
       "checkForUpdatesOnStartup": "Check for updates on startup",
       "checkForUpdatesOnStartupHint": "Automatically check for a new release 30 seconds after launch.",
+      "systemNotifications": "System notifications",
+      "systemNotificationsHint": "Notify me when a design finishes, fails, or asks a question while Open CoDesign is in the background. On macOS, notifications stop after you close the last window, until you open it again.",
       "timeout": "Generation timeout",
       "timeoutHint": "Seconds before a generation request is aborted.",
       "timeoutSeconds": "{{value}} s",
@@ -956,6 +973,10 @@
         "label": "PDF",
         "hint": "Rendered via your installed Chrome"
       },
+      "png": {
+        "label": "PNG",
+        "hint": "Full-page image at 2x, via your installed Chrome; slide decks (one slide per <section>) are stacked in order into one tall image"
+      },
       "pptx": {
         "label": "PPTX",
         "hint": "High-fidelity slides; one per <section>"
@@ -980,6 +1001,9 @@
     "designSystemCleared": "Design system cleared",
     "clearDesignSystemFailed": "Unable to clear design system",
     "generationFailed": "Generation failed",
+    "systemDesignReady": "Design ready",
+    "systemGenerationFailed": "Generation failed",
+    "systemAskWaiting": "Waiting for your answer",
     "generationFailedApplyFix": "Apply fix",
     "generationFailedBaseUrlUpdated": "Base URL updated. Try the request again.",
     "generationFailedFixUnavailable": "Auto-fix unavailable",
@@ -1220,6 +1244,7 @@
       "reasoningPolicy": "The endpoint rejected reasoning metadata for this model. Lower the reasoning depth and try again.",
       "modelIdShape": "The selected model id includes a provider prefix this endpoint does not accept.",
       "generationTimeout": "The generation reached the configured timeout before the model finished.",
+      "contextWindowExceeded": "The system prompt, tools and this request need more tokens than the model's context window allows.",
       "relayStreamingBug": "The gateway may mishandle OpenAI Responses API SSE events (older sub2api / claude2api / anyrouter builds cut the stream short).",
       "transportInterrupted": "The provider connection ended before the turn completed. This is usually a gateway timeout or network interruption.",
       "referenceUrlInvalid": "The reference URL is invalid or not supported.",
@@ -1236,6 +1261,7 @@
       "addV1": "Add /v1",
       "waitAndRetry": "Wait and retry",
       "adjustGenerationTimeout": "Adjust generation timeout",
+      "adjustContextWindow": "Check the context window",
       "checkNetwork": "Check network / VPN",
       "checkVpn": "Check VPN / firewall",
       "reportBug": "Report this bug",
@@ -1503,6 +1529,7 @@
     "INPUT_EMPTY_HTML": "Existing HTML is required for this operation.",
     "INPUT_UNSUPPORTED_MODE": "This generation mode is not supported.",
     "GENERATION_TIMEOUT": "Generation timed out. Try a shorter prompt or increase the timeout in Settings.",
+    "GENERATION_CONTEXT_EXCEEDED": "This run does not fit the model's context window. Shorten the request or its attachments, set the provider's context window in Settings → Models, or use a model with a larger window.",
     "GENERATION_INCOMPLETE": "The agent stopped before completing verification. Continue the run to finish the workspace artifact.",
     "WORKSPACE_MISSING": "This design has no workspace bound. Reopen or recreate the design.",
     "ARTIFACT_PROTOCOL_INVALID": "The generated artifact did not follow the required protocol.",
@@ -1529,8 +1556,9 @@
     "PREFERENCES_INVALID_TIMEOUT": "The generation timeout value is invalid.",
     "SKILL_LOAD_FAILED": "One or more skills failed to load. Check your skill files for errors.",
     "EXPORTER_UNKNOWN": "Unknown export format requested.",
-    "EXPORTER_NO_CHROME": "Chrome or Chromium was not found. Install it to enable PDF export.",
+    "EXPORTER_NO_CHROME": "Chrome or Chromium was not found. Install it to enable PDF and PNG export.",
     "EXPORTER_PDF_FAILED": "PDF export failed. Ensure Chrome is installed and try again.",
+    "EXPORTER_PNG_FAILED": "PNG export failed. Ensure Chrome is installed and try again.",
     "EXPORTER_PPTX_FAILED": "PowerPoint export failed.",
     "EXPORTER_ZIP_UNSAFE_PATH": "Export was blocked: an asset path would escape the ZIP archive.",
     "EXPORTER_ZIP_FAILED": "ZIP export failed.",

@@ -37,6 +37,12 @@ export {
   SessionManager,
 } from './agent-session.js';
 export {
+  extractFromCssVars,
+  extractFromTailwindConfig,
+  importDtcgJson,
+} from './brand/index.js';
+export { DEFAULT_CONTEXT_WINDOW, resolveContextWindow } from './context-window.js';
+export {
   type BuildDesignContextPackInput,
   buildDesignContextPack,
   type ContextBudgetTrace,
@@ -225,6 +231,12 @@ export interface GenerateInput {
    * via `reasoningForModel`.
    */
   reasoningLevel?: ReasoningLevel | undefined;
+  /**
+   * Context window, in tokens, configured for the provider
+   * (`ProviderEntry.contextWindow`). When absent, core resolves it from pi-ai's
+   * catalog via `resolveContextWindow`.
+   */
+  contextWindow?: number | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;

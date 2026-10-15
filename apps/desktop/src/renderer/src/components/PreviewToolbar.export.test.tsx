@@ -49,12 +49,13 @@ function exportMenu() {
 }
 
 describe('preview export menu', () => {
-  it('keeps all default exports and adds a separate native PPTX action', () => {
+  it('keeps PNG and other default exports alongside a separate native PPTX action', () => {
     const { items, disabled } = exportMenu();
     expect(disabled).toBe(false);
     expect(items.map((item) => item.id)).toEqual([
       'html',
       'pdf',
+      'png',
       'pptx',
       'pptx-native',
       'zip',
@@ -64,6 +65,7 @@ describe('preview export menu', () => {
     expect(exportActive.mock.calls).toEqual([
       ['html'],
       ['pdf'],
+      ['png'],
       ['pptx'],
       ['pptx', 'native'],
       ['zip'],
