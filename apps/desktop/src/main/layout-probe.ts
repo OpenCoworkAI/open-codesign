@@ -164,17 +164,20 @@ export function collectLayoutSamples(limits: LayoutProbeLimits): LayoutSamples {
   }
   const context = canvas ? canvas.getContext('2d', { willReadFrequently: true }) : null;
   if (checks.contrast && !context) throw new Error('A 2D canvas is not available to read colours');
-  // Computed sRGB colours are `rgb()` or `rgba()` strings, which are read exactly; a canvas
-  // rounds alpha to 8 bits, so it is used only for the other spaces.
-  const legacyColor =
-    /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\s*\)$/;
+  // Computed sRGB colours are `rgb(r, g, b)` or `rgba(r, g, b, a)`, which are read exactly;
+  // a canvas rounds alpha to 8 bits, so it is used only for the other spaces.
+  const legacyColor = /^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/;
   const toRgba = (value: string): Rgba => {
     const known = colors.get(value);
     if (known) return known;
     const parts = legacyColor.exec(value);
     if (parts) {
-      const alpha = parts[4] === undefined ? 1 : Number.parseFloat(parts[4]) / (parts[5] ? 100 : 1);
-      const exact: Rgba = [Number(parts[1]), Number(parts[2]), Number(parts[3]), alpha];
+      const exact: Rgba = [
+        Number(parts[1]),
+        Number(parts[2]),
+        Number(parts[3]),
+        parts[4] === undefined ? 1 : Number(parts[4]),
+      ];
       colors.set(value, exact);
       return exact;
     }

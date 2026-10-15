@@ -21,6 +21,8 @@ describe.skipIf(!chrome)('tap targets and control names in system Chrome', () =>
   describe('tap targets', () => {
     // A small target is only a problem when another target is within 24 px of it (WCAG 2.2 SC 2.5.8).
     const neighbour = `<button aria-label="Neighbour" style="${square(44)}"></button>`;
+    // Wide enough to sit under a link in a sentence.
+    const bar = `<button aria-label="Bar" style="display:block;width:300px;height:44px;padding:0;border:0"></button>`;
 
     it('reports a small button next to another target at phone width, with its size', async () => {
       const issues = await targetsIn(
@@ -63,7 +65,7 @@ describe.skipIf(!chrome)('tap targets and control names in system Chrome', () =>
     it('does not ask a link inside a sentence to be 24 px', async () => {
       expect(
         await targetsIn(
-          `<p>Read <a href="#terms">the terms</a> before you start. ${neighbour}</p>`,
+          `<p style="margin:0">Read <a href="#terms">the terms</a> before you start.</p>${bar}`,
         ),
       ).toEqual([]);
       const issues = await targetsIn(
@@ -87,17 +89,21 @@ describe.skipIf(!chrome)('tap targets and control names in system Chrome', () =>
       ]);
     });
 
-    it('skips disabled, hidden and visually hidden controls', async () => {
-      expect(
-        await targetsIn(
-          `<button disabled aria-label="Off" style="${square(10)}"></button>
-           <button aria-label="Gone" style="${square(10)};display:none"></button>
-           <button aria-label="Ghost" style="${square(10)};visibility:hidden"></button>
-           <button aria-label="Faded" style="${square(10)};opacity:0"></button>
-           <span aria-hidden="true"><button aria-label="Decoration" style="${square(10)}"></button></span>
-           <label>Custom check <input type="checkbox" style="position:absolute;width:1px;height:1px;opacity:0"></label>`,
-        ),
-      ).toEqual([]);
+    it.each([
+      ['disabled', `<button disabled aria-label="Off" style="${square(10)}"></button>`],
+      ['not rendered', `<button aria-label="Gone" style="${square(10)};display:none"></button>`],
+      ['invisible', `<button aria-label="Ghost" style="${square(10)};visibility:hidden"></button>`],
+      ['transparent', `<button aria-label="Faded" style="${square(10)};opacity:0"></button>`],
+      [
+        'hidden from assistive technology',
+        `<span aria-hidden="true"><button aria-label="Decoration" style="${square(10)}"></button></span>`,
+      ],
+      [
+        'a visually hidden input whose label is the target',
+        '<label>Custom check <input type="checkbox" style="position:absolute;width:1px;height:1px;opacity:0"></label>',
+      ],
+    ])('skips a control that is %s, even with a target right next to it', async (_label, markup) => {
+      expect(await targetsIn(`<div style="display:flex">${markup}${neighbour}</div>`)).toEqual([]);
     });
 
     it('names the smallest first, at most five, and says how many more there were', async () => {
