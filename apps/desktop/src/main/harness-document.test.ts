@@ -21,50 +21,46 @@ const browser = vi.hoisted(() => ({
 
 vi.mock('@open-codesign/exporters', () => ({ findSystemChrome: async () => 'synthetic-chrome' }));
 vi.mock('./logger', () => ({ getLogger: () => ({ warn: vi.fn(), error: vi.fn() }) }));
-vi.mock('puppeteer-core', () => ({
-  default: {
-    launch: async () => {
-      const handlers = new Map<string, (arg: unknown) => void>();
-      const page = {
-        viewport: () => ({ width: 1280, height: 800 }),
-        setViewport: async () => {},
-        setRequestInterception: async () => {},
-        evaluateOnNewDocument: async () => {},
-        on: (event: string, handler: (arg: unknown) => void) => handlers.set(event, handler),
-        goto: async (url: string) => {
-          const request: FakeRequest = {
-            url: () => url,
-            isNavigationRequest: () => true,
-            resourceType: () => 'document',
-            respond: vi.fn(async () => {}),
-            continue: vi.fn(async () => {}),
-            abort: vi.fn(async () => {}),
-          };
-          browser.navigations.push({
-            url,
-            existedOnDisk: existsSync(fileURLToPath(url)),
-            request,
-          });
-          handlers.get('request')?.(request);
-          await vi.waitFor(() => expect(request.respond).toHaveBeenCalled());
-        },
-        evaluate: async (fn: { name: string }) =>
-          fn.name === 'collectLayoutSamples'
-            ? {
-                viewportWidth: 1280,
-                documentWidth: 1280,
-                rootClipsX: false,
-                overflowing: [],
-                clipped: [],
-                truncated: false,
-              }
-            : { nodes: 1, width: 1280, height: 800 },
-        close: async () => {},
-      };
-      return { newPage: async () => page, close: async () => {} };
+vi.mock('puppeteer-core', async () => {
+  const { samples } = await import('./layout-test-fixtures');
+  return {
+    default: {
+      launch: async () => {
+        const handlers = new Map<string, (arg: unknown) => void>();
+        const page = {
+          viewport: () => ({ width: 1280, height: 800 }),
+          setViewport: async () => {},
+          setRequestInterception: async () => {},
+          evaluateOnNewDocument: async () => {},
+          on: (event: string, handler: (arg: unknown) => void) => handlers.set(event, handler),
+          goto: async (url: string) => {
+            const request: FakeRequest = {
+              url: () => url,
+              isNavigationRequest: () => true,
+              resourceType: () => 'document',
+              respond: vi.fn(async () => {}),
+              continue: vi.fn(async () => {}),
+              abort: vi.fn(async () => {}),
+            };
+            browser.navigations.push({
+              url,
+              existedOnDisk: existsSync(fileURLToPath(url)),
+              request,
+            });
+            handlers.get('request')?.(request);
+            await vi.waitFor(() => expect(request.respond).toHaveBeenCalled());
+          },
+          evaluate: async (fn: { name: string }) =>
+            fn.name === 'collectLayoutSamples'
+              ? samples({ viewportWidth: 1280, documentWidth: 1280 })
+              : { nodes: 1, width: 1280, height: 800 },
+          close: async () => {},
+        };
+        return { newPage: async () => page, close: async () => {} };
+      },
     },
-  },
-}));
+  };
+});
 
 const workspace = mkdtempSync(join(tmpdir(), 'codesign-harness-doc-'));
 
