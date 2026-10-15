@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatDesignMdForPrompt, parseDesignMd, validateDesignMd } from './design-md';
+import {
+  type DesignMdFrontmatter,
+  formatDesignMdForPrompt,
+  parseDesignMd,
+  serializeDesignMd,
+  validateDesignMd,
+} from './design-md';
 
 const VALID_DESIGN_MD = `---
 version: alpha
@@ -256,5 +262,105 @@ Keep these colors.
     expect(formatted).toContain('Keep this overview.');
     expect(formatted).toContain('Keep these colors.');
     expect(formatted).toContain('[DESIGN.md body truncated to 2000 chars]');
+  });
+});
+
+describe('serializeDesignMd', () => {
+  const frontmatter = {
+    name: 'Imported: "Acme"',
+    version: 'alpha',
+    colors: { primary: '#1a1c1e', 'brand-500': '#fff' },
+    typography: {
+      sans: { fontFamily: 'Inter, ui-sans-serif, system-ui' },
+      mono: { fontFamily: '"JetBrains Mono", monospace' },
+    },
+    rounded: { lg: '0.5rem', none: '0px' },
+    spacing: { base: '0.25rem', zero: 0, '4': '1rem' },
+  };
+
+  it('writes a document that validates and parses back to the same fields', () => {
+    const raw = serializeDesignMd({
+      frontmatter,
+      sections: [{ heading: 'Overview', content: 'Imported from the project.' }],
+    });
+    expect(validateDesignMd(raw)).toEqual([]);
+    const doc = parseDesignMd(raw);
+    expect(doc.frontmatter).toEqual(frontmatter);
+    expect(doc.bodySections).toEqual([
+      { heading: 'Overview', content: 'Imported from the project.' },
+    ]);
+  });
+
+  it('writes every frontmatter field, so the field list and the type cannot drift', () => {
+    const everyField: Required<DesignMdFrontmatter> = {
+      version: 'alpha',
+      name: 'X',
+      description: 'Every field.',
+      colors: { primary: '#111111' },
+      typography: { body: { fontFamily: 'Inter' } },
+      rounded: { sm: '4px' },
+      spacing: { sm: '8px' },
+      components: { button: { backgroundColor: '#111111' } },
+    };
+    const raw = serializeDesignMd({ frontmatter: everyField });
+    expect(Object.keys(parseDesignMd(raw).frontmatter)).toEqual(Object.keys(everyField));
+    expect(parseDesignMd(raw).frontmatter).toEqual(everyField);
+    expect(validateDesignMd(raw)).toEqual([]);
+  });
+
+  it('keeps hex colors as strings', () => {
+    const raw = serializeDesignMd({
+      frontmatter: { name: 'X', colors: { a: '#fff', b: '#000000' } },
+    });
+    expect(parseDesignMd(raw).frontmatter['colors']).toEqual({ a: '#fff', b: '#000000' });
+  });
+
+  it('writes fields and sections in the canonical order whatever order they arrive in', () => {
+    const raw = serializeDesignMd({
+      frontmatter: {
+        spacing: { sm: '8px' },
+        colors: { a: '#ffffff' },
+        name: 'X',
+        version: 'alpha',
+      },
+      sections: [
+        { heading: 'Typography', content: 'Type.' },
+        { heading: 'Notes', content: 'Extra.' },
+        { heading: 'Overview', content: 'Intro.' },
+      ],
+    });
+    expect(Object.keys(parseDesignMd(raw).frontmatter)).toEqual([
+      'version',
+      'name',
+      'colors',
+      'spacing',
+    ]);
+    expect(parseDesignMd(raw).bodySections.map((section) => section.heading)).toEqual([
+      'Overview',
+      'Typography',
+      'Notes',
+    ]);
+    expect(validateDesignMd(raw)).toEqual([]);
+  });
+
+  it('writes only the frontmatter when there are no sections', () => {
+    const raw = serializeDesignMd({ frontmatter: { name: 'X' } });
+    expect(raw).toBe('---\nname: X\n---\n');
+    expect(parseDesignMd(raw).body).toBe('');
+  });
+
+  it('does not fold long values', () => {
+    const fontFamily = Array.from({ length: 40 }, (_, n) => `Font Number ${n}`).join(', ');
+    const raw = serializeDesignMd({
+      frontmatter: { name: 'X', typography: { t: { fontFamily } } },
+    });
+    expect(raw.split('\n').some((line) => line.includes(fontFamily))).toBe(true);
+    expect(parseDesignMd(raw).frontmatter['typography']).toEqual({ t: { fontFamily } });
+  });
+
+  it('keeps a multi-line description', () => {
+    const description = 'First line.\nSecond line: with a colon.';
+    const raw = serializeDesignMd({ frontmatter: { name: 'X', description } });
+    expect(parseDesignMd(raw).frontmatter['description']).toBe(description);
   });
 });

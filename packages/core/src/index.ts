@@ -36,10 +36,20 @@ export {
   ModelRegistry,
   SessionManager,
 } from './agent-session.js';
+export type {
+  DesignFields,
+  ImportOrigin,
+  TokenFile,
+  TokenImport,
+  TokenImportReport,
+  UnresolvedReason,
+  UnsupportedReason,
+} from './brand/index.js';
 export {
   extractFromCssVars,
   extractFromTailwindConfig,
   importDtcgJson,
+  mapTokensToDesignFields,
 } from './brand/index.js';
 export { DEFAULT_CONTEXT_WINDOW, resolveContextWindow } from './context-window.js';
 export {
