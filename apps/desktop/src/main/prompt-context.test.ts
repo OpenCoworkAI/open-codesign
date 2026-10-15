@@ -507,6 +507,20 @@ describe('document attachments', () => {
   const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
   const A = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
   const S = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+  const RELATIONSHIPS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const relationships = (...items: Array<[id: string, kind: string, target: string]>) =>
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items
+      .map(
+        ([id, kind, target]) =>
+          `<Relationship Id="${id}" Type="${RELATIONSHIPS}/${kind}" Target="${target}"/>`,
+      )
+      .join('')}</Relationships>`;
+  const workbook = (...tabs: Array<[name: string, id: string]>) =>
+    `<workbook ${S} xmlns:r="${RELATIONSHIPS}"><sheets>${tabs
+      .map(([name, id], n) => `<sheet name="${name}" sheetId="${n + 1}" r:id="${id}"/>`)
+      .join('')}</sheets></workbook>`;
+  const oneCell = (text: string) =>
+    `<worksheet ${S}><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${text}</t></is></c></row></sheetData></worksheet>`;
   const paragraph = (text: string) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
   const docx = (...paragraphs: string[]) => ({
     'word/document.xml': `<w:document ${W}><w:body>${paragraphs.map(paragraph).join('')}</w:body></w:document>`,
@@ -566,12 +580,75 @@ describe('document attachments', () => {
 
   it('reads an XLSX sheet by sheet', async () => {
     const file = await attach('content.xlsx', {
-      'xl/workbook.xml': `<workbook ${S}><sheets><sheet name="Copy" sheetId="1"/></sheets></workbook>`,
+      'xl/workbook.xml': workbook(['Copy', 'rId1']),
+      'xl/_rels/workbook.xml.rels': relationships(['rId1', 'worksheet', 'worksheets/sheet1.xml']),
       'xl/sharedStrings.xml': `<sst ${S}><si><t>Headline</t></si><si><t>Ship faster</t></si></sst>`,
       'xl/worksheets/sheet1.xml': `<worksheet ${S}><sheetData><row r="1"><c r="A1" s="1"/><c r="B1" t="s"><v>0</v></c></row><row r="2"><c r="A2" t="s"><v>1</v></c><c r="B2"><v>42</v></c></row></sheetData></worksheet>`,
     });
     const { attachments } = await preparePromptContext({ attachments: [file] });
     expect(attachments[0]?.excerpt).toBe('Sheet "Copy":\nHeadline\nShip faster · 42');
+  });
+
+  it('gives each sheet name the content of its own worksheet when the tabs are in reverse part order', async () => {
+    const file = await attach('finance.xlsx', {
+      'xl/workbook.xml': workbook(['Revenue', 'rId1'], ['Expenses', 'rId2']),
+      'xl/_rels/workbook.xml.rels': relationships(
+        ['rId1', 'worksheet', 'worksheets/sheet2.xml'],
+        ['rId2', 'worksheet', 'worksheets/sheet1.xml'],
+      ),
+      'xl/worksheets/sheet1.xml': oneCell('Rent 1200'),
+      'xl/worksheets/sheet2.xml': oneCell('Sales 5400'),
+    });
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]?.excerpt).toBe(
+      'Sheet "Revenue":\nSales 5400\n\nSheet "Expenses":\nRent 1200',
+    );
+  });
+
+  it('pairs sheet names with worksheets whose part names do not match the tab positions', async () => {
+    const file = await attach('regions.xlsx', {
+      'xl/workbook.xml': workbook(['North', 'rId4'], ['South', 'rId2'], ['East', 'rId9']),
+      'xl/_rels/workbook.xml.rels': relationships(
+        ['rId2', 'worksheet', 'worksheets/sheet10.xml'],
+        ['rId4', 'worksheet', 'worksheets/sheet3.xml'],
+        ['rId9', 'worksheet', '/xl/worksheets/east.xml'],
+      ),
+      'xl/worksheets/sheet3.xml': oneCell('north data'),
+      'xl/worksheets/sheet10.xml': oneCell('south data'),
+      'xl/worksheets/east.xml': oneCell('east data'),
+    });
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]?.excerpt).toBe(
+      'Sheet "North":\nnorth data\n\nSheet "South":\nsouth data\n\nSheet "East":\neast data',
+    );
+  });
+
+  it('fails the send, naming the file, when a sheet points at a worksheet the archive lacks', async () => {
+    const file = await attach('broken.xlsx', {
+      'xl/workbook.xml': workbook(['Revenue', 'rId1'], ['Expenses', 'rId2']),
+      'xl/_rels/workbook.xml.rels': relationships(
+        ['rId1', 'worksheet', 'worksheets/sheet1.xml'],
+        ['rId2', 'worksheet', 'worksheets/sheet2.xml'],
+      ),
+      'xl/worksheets/sheet1.xml': oneCell('Sales 5400'),
+    });
+    await expect(preparePromptContext({ attachments: [file] })).rejects.toMatchObject({
+      code: 'ATTACHMENT_READ_FAILED',
+      message: expect.stringContaining(
+        '"broken.xlsx" as a XLSX file: it has no xl/worksheets/sheet2.xml.',
+      ),
+    });
+  });
+
+  it('fails the send when the workbook has no relationships part', async () => {
+    const file = await attach('bare.xlsx', {
+      'xl/workbook.xml': workbook(['Revenue', 'rId1']),
+      'xl/worksheets/sheet1.xml': oneCell('Sales 5400'),
+    });
+    await expect(preparePromptContext({ attachments: [file] })).rejects.toMatchObject({
+      code: 'ATTACHMENT_READ_FAILED',
+      message: expect.stringContaining('it has no xl/_rels/workbook.xml.rels.'),
+    });
   });
 
   it('says what the limits left out of the text the model gets', async () => {

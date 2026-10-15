@@ -88,7 +88,10 @@ describe('createWorkspaceDocumentPreview', () => {
     const filePath = path.join(root, 'rubric.xlsx');
     await writeZip(filePath, {
       'docProps/app.xml': '<Properties><Worksheets>1</Worksheets></Properties>',
-      'xl/workbook.xml': '<workbook><sheets><sheet name="评分表" sheetId="1"/></sheets></workbook>',
+      'xl/workbook.xml':
+        '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="评分表" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels':
+        '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
       'xl/sharedStrings.xml':
         '<sst><si><t>Item</t></si><si><t>Points</t></si><si><t>Gameplay</t></si><si><t>40</t></si></sst>',
       'xl/worksheets/sheet1.xml':
@@ -107,6 +110,32 @@ describe('createWorkspaceDocumentPreview', () => {
       { title: '评分表', lines: ['Item · Points', 'Gameplay · 40'] },
     ]);
   });
+  it('shows each xlsx sheet with its own rows when the tabs are in reverse part order', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-xlsx-order-'));
+    const filePath = path.join(root, 'finance.xlsx');
+    const rows = (text: string) =>
+      `<worksheet><sheetData><row><c t="inlineStr"><is><t>${text}</t></is></c></row></sheetData></worksheet>`;
+    await writeZip(filePath, {
+      'xl/workbook.xml':
+        '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Revenue" sheetId="1" r:id="rId1"/><sheet name="Expenses" sheetId="2" r:id="rId2"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels':
+        '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+      'xl/worksheets/sheet1.xml': rows('Rent'),
+      'xl/worksheets/sheet2.xml': rows('Sales'),
+    });
+
+    const preview = await createWorkspaceDocumentPreview({
+      absPath: filePath,
+      relPath: 'references/finance.xlsx',
+      generateThumbnail: async () => null,
+    });
+
+    expect(preview.sections).toEqual([
+      { title: 'Revenue', lines: ['Sales'] },
+      { title: 'Expenses', lines: ['Rent'] },
+    ]);
+  });
+
   it('keeps text that looks like markup in a docx, decoded once', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codesign-docx-markup-preview-'));
     const filePath = path.join(root, 'notes.docx');

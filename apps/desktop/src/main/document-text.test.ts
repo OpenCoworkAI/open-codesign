@@ -29,6 +29,23 @@ async function archive(files: Record<string, string>): Promise<Uint8Array> {
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 const A = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
 const S = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+const OFFICE_RELATIONSHIPS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const relationship = (id: string, kind: string, target: string) =>
+  `<Relationship Id="${id}" Type="${OFFICE_RELATIONSHIPS}/${kind}" Target="${target}"/>`;
+const relationships = (...items: string[]) =>
+  `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items.join('')}</Relationships>`;
+const tab = (name: string, id: string) => `<sheet name="${name}" sheetId="1" r:id="${id}"/>`;
+const workbookXml = (...tabs: string[]) =>
+  `<workbook ${S} xmlns:r="${OFFICE_RELATIONSHIPS}"><sheets>${tabs.join('')}</sheets></workbook>`;
+/** The workbook part and its relationships, with tab n on the part `worksheets/sheet<n>.xml`. */
+const workbookParts = (...names: string[]) => ({
+  'xl/workbook.xml': workbookXml(...names.map((name, n) => tab(name, `rId${n + 1}`))),
+  'xl/_rels/workbook.xml.rels': relationships(
+    ...names.map((_, n) =>
+      relationship(`rId${n + 1}`, 'worksheet', `worksheets/sheet${n + 1}.xml`),
+    ),
+  ),
+});
 const paragraph = (text: string) => `<w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
 const slide = (...lines: string[]) =>
   `<p:sld ${A}><p:cSld><p:spTree>${lines
@@ -122,12 +139,10 @@ describe('readOoxmlText: PPTX', () => {
 describe('readOoxmlText: XLSX', () => {
   const sheet = (...rows: string[]) =>
     `<worksheet ${S}><sheetData>${rows.map((row, n) => `<row r="${n + 1}">${row}</row>`).join('')}</sheetData></worksheet>`;
-  const workbook = (...names: string[]) =>
-    `<workbook ${S}><sheets>${names.map((name, n) => `<sheet name="${name}" sheetId="${n + 1}" r:id="rId${n + 1}"/>`).join('')}</sheets></workbook>`;
 
   it('reads shared strings, inline strings and numbers, one row per line', async () => {
     const bytes = await archive({
-      'xl/workbook.xml': workbook('Budget &amp; plan', 'Notes'),
+      ...workbookParts('Budget &amp; plan', 'Notes'),
       'xl/sharedStrings.xml': `<sst ${S}><si><t>Item</t></si><si><r><t>Cost</t></r><r><t> (USD)</t></r></si><si><t>Rent</t></si></sst>`,
       'xl/worksheets/sheet1.xml': sheet(
         '<c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c>',
@@ -149,7 +164,7 @@ describe('readOoxmlText: XLSX', () => {
         (_, i) => `<c r="${String.fromCharCode(65 + i)}1"><v>${i}</v></c>`,
       ).join('');
     const bytes = await archive({
-      'xl/workbook.xml': workbook('One', 'Two', 'Three'),
+      ...workbookParts('One', 'Two', 'Three'),
       'xl/worksheets/sheet1.xml': sheet(cells(6), cells(6), cells(6)),
       'xl/worksheets/sheet2.xml': sheet(cells(2)),
       'xl/worksheets/sheet3.xml': sheet(cells(2)),
@@ -171,13 +186,202 @@ describe('readOoxmlText: XLSX', () => {
 
   it('falls back to the shared strings when no sheet has rows', async () => {
     const bytes = await archive({
-      'xl/workbook.xml': workbook('Empty'),
+      ...workbookParts('Empty'),
       'xl/sharedStrings.xml': `<sst ${S}><si><t>Only</t></si><si><t>strings</t></si></sst>`,
       'xl/worksheets/sheet1.xml': sheet(),
     });
     expect((await readOoxmlText(bytes, 'xlsx', LIMITS)).sections).toEqual([
       { title: 'Workbook', lines: ['Only', 'strings'] },
     ]);
+  });
+});
+
+describe('readOoxmlText: XLSX sheets are found through the workbook relationships', () => {
+  const sheet = (value: string) =>
+    `<worksheet ${S}><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${value}</t></is></c></row></sheetData></worksheet>`;
+  const read = async (files: Record<string, string>, limits = LIMITS) =>
+    readOoxmlText(await archive(files), 'xlsx', limits);
+
+  it('gives each tab the worksheet its relationship names when the tabs are in reverse part order', async () => {
+    const text = await read({
+      'xl/workbook.xml': workbookXml(tab('Revenue', 'rId1'), tab('Expenses', 'rId2')),
+      'xl/_rels/workbook.xml.rels': relationships(
+        relationship('rId1', 'worksheet', 'worksheets/sheet2.xml'),
+        relationship('rId2', 'worksheet', 'worksheets/sheet1.xml'),
+      ),
+      'xl/worksheets/sheet1.xml': sheet('rent'),
+      'xl/worksheets/sheet2.xml': sheet('sales'),
+    });
+    expect(text.sections).toEqual([
+      { title: 'Revenue', lines: ['sales'] },
+      { title: 'Expenses', lines: ['rent'] },
+    ]);
+    expect(text.missingPart).toBeNull();
+  });
+
+  it('reads parts whose names do not follow the tab positions, in tab order', async () => {
+    const text = await read({
+      'xl/workbook.xml': workbookXml(
+        tab('Tenth', 'rId7'),
+        tab('Ninth', 'rId3'),
+        tab('Summary', 'rId5'),
+      ),
+      'xl/_rels/workbook.xml.rels': relationships(
+        relationship('rId3', 'worksheet', 'worksheets/sheet9.xml'),
+        relationship('rId5', 'worksheet', 'worksheets/summary.xml'),
+        relationship('rId7', 'worksheet', 'worksheets/sheet10.xml'),
+      ),
+      'xl/worksheets/sheet9.xml': sheet('nine'),
+      'xl/worksheets/sheet10.xml': sheet('ten'),
+      'xl/worksheets/summary.xml': sheet('sum'),
+    });
+    expect(text.sections).toEqual([
+      { title: 'Tenth', lines: ['ten'] },
+      { title: 'Ninth', lines: ['nine'] },
+      { title: 'Summary', lines: ['sum'] },
+    ]);
+  });
+
+  it('follows absolute and parent-folder targets', async () => {
+    const text = await read({
+      'xl/workbook.xml': workbookXml(tab('Absolute', 'rId1'), tab('Parent', 'rId2')),
+      'xl/_rels/workbook.xml.rels': relationships(
+        relationship('rId1', 'worksheet', '/xl/data/one.xml'),
+        relationship('rId2', 'worksheet', '../xl/data/../data/two.xml'),
+      ),
+      'xl/data/one.xml': sheet('one'),
+      'xl/data/two.xml': sheet('two'),
+    });
+    expect(text.sections).toEqual([
+      { title: 'Absolute', lines: ['one'] },
+      { title: 'Parent', lines: ['two'] },
+    ]);
+  });
+
+  it('matches the relationship id and the attributes whatever their prefix, order and quotes', async () => {
+    const text = await read({
+      'xl/workbook.xml': `<workbook ${S} xmlns:rel="${OFFICE_RELATIONSHIPS}"><sheets><sheet rel:id='rId9' sheetId="4" name="Quoted"/></sheets></workbook>`,
+      'xl/_rels/workbook.xml.rels': `<Relationships><Relationship Target="worksheets/a.xml" Type="${OFFICE_RELATIONSHIPS}/worksheet" Id="rId9"/></Relationships>`,
+      'xl/worksheets/a.xml': sheet('a'),
+    });
+    expect(text.sections).toEqual([{ title: 'Quoted', lines: ['a'] }]);
+  });
+
+  it('reads a sheet name that ends like an attribute as the name, not as the relationship id', async () => {
+    const text = await read({
+      ...workbookParts('Q1 id='),
+      'xl/worksheets/sheet1.xml': sheet('q'),
+    });
+    expect(text.sections).toEqual([{ title: 'Q1 id=', lines: ['q'] }]);
+  });
+
+  it('keeps the next sheet on its own name when a tab has none', async () => {
+    const text = await read({
+      ...workbookParts('', 'Second'),
+      'xl/worksheets/sheet1.xml': sheet('first'),
+      'xl/worksheets/sheet2.xml': sheet('second'),
+    });
+    expect(text.sections).toEqual([
+      { title: 'Sheet 1', lines: ['first'] },
+      { title: 'Second', lines: ['second'] },
+    ]);
+  });
+
+  it('trims a sheet name and treats a blank one as none', async () => {
+    const text = await read({
+      ...workbookParts('  Padded  ', '   '),
+      'xl/worksheets/sheet1.xml': sheet('a'),
+      'xl/worksheets/sheet2.xml': sheet('b'),
+    });
+    expect(text.sections.map((item) => item.title)).toEqual(['Padded', 'Sheet 2']);
+  });
+
+  it('leaves out a chart sheet and does not count it', async () => {
+    const files = {
+      'xl/workbook.xml': workbookXml(
+        tab('Data', 'rId1'),
+        tab('Chart', 'rId2'),
+        tab('Totals', 'rId3'),
+      ),
+      'xl/_rels/workbook.xml.rels': relationships(
+        relationship('rId1', 'worksheet', 'worksheets/sheet1.xml'),
+        relationship('rId2', 'chartsheet', 'chartsheets/sheet1.xml'),
+        relationship('rId3', 'worksheet', 'worksheets/sheet2.xml'),
+      ),
+      'xl/worksheets/sheet1.xml': sheet('data'),
+      'xl/chartsheets/sheet1.xml': `<chartsheet ${S}/>`,
+      'xl/worksheets/sheet2.xml': sheet('totals'),
+    };
+    const all = await read(files);
+    expect(all.sections.map((item) => item.title)).toEqual(['Data', 'Totals']);
+    expect(all.omittedSections).toBe(0);
+    expect(all.missingPart).toBeNull();
+    const first = await read(files, { ...LIMITS, maxSections: 1 });
+    expect(first.sections.map((item) => item.title)).toEqual(['Data']);
+    expect(first.omittedSections).toBe(1);
+  });
+
+  it('applies the section limit to the tabs in order, not to the part names', async () => {
+    const text = await read(
+      {
+        'xl/workbook.xml': workbookXml(tab('Later', 'rId1'), tab('Earlier', 'rId2')),
+        'xl/_rels/workbook.xml.rels': relationships(
+          relationship('rId1', 'worksheet', 'worksheets/sheet2.xml'),
+          relationship('rId2', 'worksheet', 'worksheets/sheet1.xml'),
+        ),
+        'xl/worksheets/sheet1.xml': sheet('one'),
+        'xl/worksheets/sheet2.xml': sheet('two'),
+      },
+      { ...LIMITS, maxSections: 1 },
+    );
+    expect(text.sections).toEqual([{ title: 'Later', lines: ['two'] }]);
+    expect(text.omittedSections).toBe(1);
+  });
+
+  it('names the relationships part when the workbook has none', async () => {
+    const text = await read({
+      'xl/workbook.xml': workbookXml(tab('S', 'rId1')),
+      'xl/worksheets/sheet1.xml': sheet('x'),
+    });
+    expect(text.missingPart).toBe('xl/_rels/workbook.xml.rels');
+    expect(text.sections).toEqual([]);
+  });
+
+  it('names a sheet that has no relationship, and still reads the others', async () => {
+    const text = await read({
+      'xl/workbook.xml': workbookXml(tab('Lost', 'rId8'), tab('Kept', 'rId1')),
+      'xl/_rels/workbook.xml.rels': relationships(
+        relationship('rId1', 'worksheet', 'worksheets/sheet1.xml'),
+      ),
+      'xl/worksheets/sheet1.xml': sheet('kept'),
+    });
+    expect(text.missingPart).toBe('relationship for sheet "Lost" in xl/_rels/workbook.xml.rels');
+    expect(text.sections).toEqual([{ title: 'Kept', lines: ['kept'] }]);
+  });
+
+  it('names a sheet that has no relationship id', async () => {
+    const text = await read({
+      'xl/workbook.xml': workbookXml('<sheet name="Bare" sheetId="1"/>'),
+      'xl/_rels/workbook.xml.rels': relationships(
+        relationship('rId1', 'worksheet', 'worksheets/sheet1.xml'),
+      ),
+      'xl/worksheets/sheet1.xml': sheet('x'),
+    });
+    expect(text.missingPart).toBe('relationship for sheet "Bare" in xl/_rels/workbook.xml.rels');
+    expect(text.sections).toEqual([]);
+  });
+
+  it('names a worksheet part the archive lacks, and still reads the others', async () => {
+    const text = await read({
+      'xl/workbook.xml': workbookXml(tab('Gone', 'rId1'), tab('Here', 'rId2')),
+      'xl/_rels/workbook.xml.rels': relationships(
+        relationship('rId1', 'worksheet', 'worksheets/gone.xml'),
+        relationship('rId2', 'worksheet', 'worksheets/here.xml'),
+      ),
+      'xl/worksheets/here.xml': sheet('here'),
+    });
+    expect(text.missingPart).toBe('xl/worksheets/gone.xml');
+    expect(text.sections).toEqual([{ title: 'Here', lines: ['here'] }]);
   });
 });
 
@@ -201,7 +405,7 @@ describe('readOoxmlText: text that looks like markup', () => {
 
   it('keeps it in XLSX shared strings and inline strings', async () => {
     const bytes = await archive({
-      'xl/workbook.xml': `<workbook ${S_NS}><sheets><sheet name="S &lt;1&gt;" sheetId="1"/></sheets></workbook>`,
+      ...workbookParts('S &lt;1&gt;'),
       'xl/sharedStrings.xml': `<sst ${S_NS}><si><t>${TEXT}</t></si></sst>`,
       'xl/worksheets/sheet1.xml': `<worksheet ${S_NS}><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="inlineStr"><is><t>${TEXT}</t></is></c></row></sheetData></worksheet>`,
     });
@@ -224,14 +428,13 @@ describe('readOoxmlText: text that looks like markup', () => {
 
 describe('readOoxmlText: empty elements', () => {
   const S_NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
-  const workbook = `<workbook ${S_NS}><sheets><sheet name="S" sheetId="1"/></sheets></workbook>`;
   const strings = `<sst ${S_NS}><si><t>Hello</t></si><si><t>World</t></si></sst>`;
   const sheet = (row: string) =>
     `<worksheet ${S_NS}><sheetData><row r="1">${row}</row></sheetData></worksheet>`;
 
   it('reads the cell after an empty styled cell as its own text, not as a string index', async () => {
     const bytes = await archive({
-      'xl/workbook.xml': workbook,
+      ...workbookParts('S'),
       'xl/sharedStrings.xml': strings,
       'xl/worksheets/sheet1.xml': sheet(
         '<c r="A1" s="1"/><c r="B1" t="s"><v>0</v></c><c r="C1" s="2"/><c r="D1" t="s"><v>1</v></c>',
@@ -369,12 +572,10 @@ describe('readOoxmlText: what a limit leaves out', () => {
   const row = (cells: number) => Array.from({ length: cells }, (_, n) => cell(n)).join('');
   const sheet = (...rows: string[]) =>
     `<worksheet ${S_NS}><sheetData>${rows.map((r, n) => `<row r="${n + 1}">${r}</row>`).join('')}</sheetData></worksheet>`;
-  const workbook = (...names: string[]) =>
-    `<workbook ${S_NS}><sheets>${names.map((name, n) => `<sheet name="${name}" sheetId="${n + 1}"/>`).join('')}</sheets></workbook>`;
 
   it('ends a row cut at the cell limit with the cell mark, only when marking is on', async () => {
     const bytes = await archive({
-      'xl/workbook.xml': workbook('S'),
+      ...workbookParts('S'),
       'xl/worksheets/sheet1.xml': sheet(row(5), row(3)),
     });
     const limits = { ...MARKED, maxCellsPerRow: 3 };
@@ -389,7 +590,7 @@ describe('readOoxmlText: what a limit leaves out', () => {
 
   it('says how many non-empty rows the row limit left out, and not the empty ones', async () => {
     const bytes = await archive({
-      'xl/workbook.xml': workbook('S'),
+      ...workbookParts('S'),
       'xl/worksheets/sheet1.xml': sheet(
         row(1),
         row(1),
@@ -430,7 +631,7 @@ describe('readOoxmlText: what a limit leaves out', () => {
       'ppt/slides/slide3.xml': slide('c'),
     });
     const xlsx = await archive({
-      'xl/workbook.xml': workbook('One', 'Two'),
+      ...workbookParts('One', 'Two'),
       'xl/worksheets/sheet1.xml': sheet(row(1)),
       'xl/worksheets/sheet2.xml': sheet(row(1)),
     });
@@ -487,7 +688,7 @@ describe('formatDocumentText', () => {
 
   it('writes an XLSX by sheet', async () => {
     const bytes = await archive({
-      'xl/workbook.xml': `<workbook ${S_NS}><sheets><sheet name="Budget" sheetId="1"/></sheets></workbook>`,
+      ...workbookParts('Budget'),
       'xl/worksheets/sheet1.xml': `<worksheet ${S_NS}><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c></row></sheetData></worksheet>`,
     });
     expect(formatDocumentText(await readOoxmlText(bytes, 'xlsx', LIMITS), 'xlsx')).toBe(

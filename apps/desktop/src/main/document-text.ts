@@ -1,3 +1,4 @@
+import { posix } from 'node:path';
 import JSZip from 'jszip';
 
 /**
@@ -213,11 +214,15 @@ function textRuns(xml: string): string[] {
   return localElementContents(xml, 't').map(xmlTextContent);
 }
 
+/** The value of the attribute whose local name is `name`; attribute values are read whole, in order. */
 function attrValue(attrs: string, name: string): string | null {
-  const re = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i');
-  const match = re.exec(attrs);
-  const value = match?.[1] ?? match?.[2];
-  return value === undefined ? null : decodeXmlEntities(value);
+  const wanted = name.toLowerCase();
+  for (const match of attrs.matchAll(/([^\s=/]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/gu)) {
+    const [, qualified = '', double, single] = match;
+    if (qualified.slice(qualified.lastIndexOf(':') + 1).toLowerCase() !== wanted) continue;
+    return decodeXmlEntities(double ?? single ?? '');
+  }
+  return null;
 }
 
 /** The archive's XML was larger than the caller's budget once decompressed. */
@@ -342,16 +347,6 @@ function slideNumber(name: string): number {
   return match?.[1] === undefined ? Number.MAX_SAFE_INTEGER : Number.parseInt(match[1], 10);
 }
 
-function parseSheetNames(workbookXml: string | null): string[] {
-  if (workbookXml === null) return [];
-  const out: string[] = [];
-  for (const { attrs } of elements(workbookXml, 'sheet')) {
-    const name = attrValue(attrs, 'name');
-    if (name !== null && name.trim().length > 0) out.push(name.trim());
-  }
-  return out;
-}
-
 function parseSharedStrings(sharedStringsXml: string | null, limits: DocumentTextLimits): string[] {
   if (sharedStringsXml === null) return [];
   const items = localElementContents(sharedStringsXml, 'si');
@@ -410,26 +405,92 @@ function parseWorksheetRows(
   return lines;
 }
 
+const WORKBOOK_PART = 'xl/workbook.xml';
+const WORKBOOK_RELATIONSHIPS_PART = 'xl/_rels/workbook.xml.rels';
+
+/** The part a relationship in `source` names: an absolute target, or one relative to its folder. */
+function relatedPart(source: string, target: string): string {
+  return target.startsWith('/')
+    ? posix.normalize(target.slice(1))
+    : posix.join(posix.dirname(source), target);
+}
+
+interface Relationship {
+  type: string;
+  part: string;
+}
+
+function workbookRelationships(relationshipsXml: string): Map<string, Relationship> {
+  const out = new Map<string, Relationship>();
+  for (const { attrs } of elements(relationshipsXml, 'Relationship')) {
+    const id = attrValue(attrs, 'Id');
+    const type = attrValue(attrs, 'Type');
+    const target = attrValue(attrs, 'Target');
+    if (id === null || type === null || target === null) continue;
+    out.set(id, { type, part: relatedPart(WORKBOOK_PART, target) });
+  }
+  return out;
+}
+
+interface Worksheet {
+  title: string;
+  part: string;
+}
+
+/**
+ * The worksheets in tab order. A sheet's relationship says which part holds it; chart and
+ * dialog sheets have no cells and are left out. `missingPart` names the first sheet that has no
+ * relationship.
+ */
+function workbookWorksheets(
+  workbookXml: string,
+  relationships: Map<string, Relationship>,
+): { worksheets: Worksheet[]; missingPart: string | null } {
+  const worksheets: Worksheet[] = [];
+  let missingPart: string | null = null;
+  for (const [index, { attrs }] of elements(workbookXml, 'sheet').entries()) {
+    const title = attrValue(attrs, 'name')?.trim() || `Sheet ${index + 1}`;
+    const id = attrValue(attrs, 'id');
+    const relationship = id === null ? undefined : relationships.get(id);
+    if (relationship === undefined) {
+      missingPart ??= `relationship for sheet "${title}" in ${WORKBOOK_RELATIONSHIPS_PART}`;
+    } else if (relationship.type.endsWith('/worksheet')) {
+      worksheets.push({ title, part: relationship.part });
+    }
+  }
+  return { worksheets, missingPart };
+}
+
 async function parseXlsx(
   archive: OoxmlArchive,
   limits: DocumentTextLimits,
 ): Promise<ParsedSections> {
-  const [workbookXml, sharedStringsXml] = await Promise.all([
-    archive.text('xl/workbook.xml'),
+  const [workbookXml, relationshipsXml, sharedStringsXml] = await Promise.all([
+    archive.text(WORKBOOK_PART),
+    archive.text(WORKBOOK_RELATIONSHIPS_PART),
     archive.text('xl/sharedStrings.xml'),
   ]);
-  const sheetNames = parseSheetNames(workbookXml);
   const sharedStrings = parseSharedStrings(sharedStringsXml, limits);
-  const allSheets = archive
-    .names()
-    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/u.test(name))
-    .sort((a, b) => sheetNumber(a) - sheetNumber(b));
+  let missingPart: string | null = null;
+  let worksheets: Worksheet[] = [];
+  if (workbookXml === null) {
+    missingPart = WORKBOOK_PART;
+  } else if (relationshipsXml === null) {
+    missingPart = WORKBOOK_RELATIONSHIPS_PART;
+  } else {
+    ({ worksheets, missingPart } = workbookWorksheets(
+      workbookXml,
+      workbookRelationships(relationshipsXml),
+    ));
+  }
   const sections: DocumentTextSection[] = [];
-  for (const [index, name] of allSheets.slice(0, limits.maxSections).entries()) {
-    const xml = await archive.text(name);
-    if (xml === null) continue;
-    const lines = parseWorksheetRows(xml, sharedStrings, limits);
-    const item = section(sheetNames[index] ?? `Sheet ${index + 1}`, lines);
+  for (const { title, part } of worksheets.slice(0, limits.maxSections)) {
+    const xml = await archive.text(part);
+    if (xml === null) {
+      missingPart ??= part;
+      continue;
+    }
+    const item = section(title, parseWorksheetRows(xml, sharedStrings, limits));
     if (item !== null) sections.push(item);
   }
   if (sections.length === 0 && sharedStrings.length > 0) {
@@ -441,14 +502,9 @@ async function parseXlsx(
   }
   return {
     sections,
-    omittedSections: Math.max(0, allSheets.length - limits.maxSections),
-    missingPart: workbookXml === null ? 'xl/workbook.xml' : null,
+    omittedSections: Math.max(0, worksheets.length - limits.maxSections),
+    missingPart,
   };
-}
-
-function sheetNumber(name: string): number {
-  const match = /sheet(\d+)\.xml$/u.exec(name);
-  return match?.[1] === undefined ? Number.MAX_SAFE_INTEGER : Number.parseInt(match[1], 10);
 }
 
 /**
