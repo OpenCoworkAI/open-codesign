@@ -323,6 +323,139 @@ describe('mapTokensToDesignFields()', () => {
       }
     });
 
+    describe('a name that several references reach', () => {
+      /** `--l0: leaf`, and every later level names the one before it twice. */
+      const fanOut = (levels: number, leaf: string) => [
+        token('shadow', 'l0', leaf),
+        ...Array.from({ length: levels }, (_, i) =>
+          token('shadow', `l${i + 1}`, `var(--l${i})var(--l${i})`),
+        ),
+      ];
+      const within = (limitMs: number, work: () => void) => {
+        const start = performance.now();
+        work();
+        expect(performance.now() - start).toBeLessThan(limitMs);
+      };
+
+      // Expanding in full takes 2^levels steps (about 3.5 seconds at 22 before names were kept),
+      // and the empty output never reaches the length limit. A level count that keeps a regression
+      // to a failed test rather than a stuck one.
+      it('expands each name once, so a fan-out with an empty result is linear', async () => {
+        const levels = 22;
+        const declarations = ['--shadow-l0: var(--absent,);'];
+        for (let i = 1; i <= levels; i++) {
+          declarations.push(`--shadow-l${i}: var(--shadow-l${i - 1})var(--shadow-l${i - 1});`);
+        }
+        const dir = await mkdtemp(join(tmpdir(), 'design-fields-'));
+        const path = join(dir, 'tokens.css');
+        await writeFile(path, `:root { ${declarations.join('\n')} }`);
+        const tokens = await extractFromCssVars(path);
+
+        within(250, () => {
+          const result = mapTokensToDesignFields([{ path, tokens }]);
+          expect(tokens).toHaveLength(levels + 1);
+          expect(result.report.unresolved).toEqual([]);
+          expect(result.sections[0]?.content.split('\n')).toHaveLength(levels + 1);
+        });
+      });
+
+      it('gives every token that reaches the name the same value', () => {
+        const result = map(
+          token('color', 'base', '#112233'),
+          token('color', 'a', 'var(--base)'),
+          token('color', 'b', 'var(--base)'),
+          token('color', 'c', 'var(--a)'),
+        );
+
+        expect(result.fields.colors).toEqual({
+          base: '#112233',
+          a: '#112233',
+          b: '#112233',
+          c: '#112233',
+        });
+      });
+
+      // c0 to c31 nest within the limit. A token naming c30 adds one level and still fits; one
+      // naming c31 adds a level past the limit. Listing the chain from the deepest name first makes
+      // the names expand through their references before any later token reuses them.
+      it.each([
+        ['shallowest first', false],
+        ['deepest first', true],
+      ])('still counts the levels a name nests when a later token reuses it (%s)', (_order, reverse) => {
+        const chain = Array.from({ length: MAX_VAR_DEPTH }, (_, i) =>
+          token('color', `c${i}`, i === 0 ? '#112233' : `var(--c${i - 1})`),
+        );
+        const result = map(
+          ...(reverse ? chain.reverse() : chain),
+          token('color', 'fits', `var(--c${MAX_VAR_DEPTH - 2})`),
+          token('color', 'too-deep', `var(--c${MAX_VAR_DEPTH - 1})`),
+        );
+
+        expect(result.fields.colors).toHaveProperty('fits', '#112233');
+        expect(result.report.unresolved.map((u) => [u.token, u.reason])).toEqual([
+          ['too-deep', 'too-complex'],
+        ]);
+      });
+
+      it('reports the same depth limit whether a name was expanded before or not', () => {
+        const chain = (names: string[]) =>
+          names.map((name, i) =>
+            token('color', name, i === 0 ? '#112233' : `var(--${names[i - 1]})`),
+          );
+        const names = Array.from({ length: MAX_VAR_DEPTH + 4 }, (_, i) => `c${i}`);
+        const inOrder = map(...chain(names));
+        // The deepest token first: nothing is expanded before it.
+        const deepFirst = map(...chain(names).reverse());
+
+        expect(deepFirst.report.unresolved.map((u) => u.token).sort()).toEqual(
+          inOrder.report.unresolved.map((u) => u.token).sort(),
+        );
+        expect(Object.keys(deepFirst.fields.colors ?? {}).sort()).toEqual(
+          Object.keys(inOrder.fields.colors ?? {}).sort(),
+        );
+      });
+
+      it('still finds a cycle when other names were expanded first', () => {
+        const result = map(
+          token('color', 'base', '#112233'),
+          token('color', 'x', 'var(--base)'),
+          token('color', 'loop-a', 'var(--x) var(--loop-b)'),
+          token('color', 'loop-b', 'var(--loop-a)'),
+        );
+
+        expect(result.report.unresolved.map((u) => [u.token, u.reason])).toEqual([
+          ['loop-a', 'cycle'],
+          ['loop-b', 'cycle'],
+        ]);
+        expect(result.fields.colors).toEqual({ base: '#112233', x: '#112233' });
+      });
+
+      it('uses each reference its own fallback for a name nothing defines', () => {
+        const result = map(
+          token('color', 'one', 'var(--missing, #ff0000)'),
+          token('color', 'two', 'var(--missing, #0000ff)'),
+        );
+
+        expect(result.fields.colors).toEqual({ one: '#ff0000', two: '#0000ff' });
+      });
+
+      it('fails fast on a fan-out whose leaf names nothing', () => {
+        within(250, () => {
+          const result = map(...fanOut(30, 'var(--absent)'));
+          expect(result.report.unresolved.every((u) => u.reason === 'undefined')).toBe(true);
+          expect(result.report.unresolved).toHaveLength(31);
+        });
+      });
+
+      it('still gives up on a fan-out whose result grows past the length limit', () => {
+        within(250, () => {
+          const result = map(...fanOut(30, '0 0 0 #000'));
+          const reasons = new Set(result.report.unresolved.map((u) => u.reason));
+          expect(reasons).toEqual(new Set(['too-complex']));
+        });
+      });
+    });
+
     it('does not resolve through a value that only a theme variant defines', () => {
       const result = map(
         token('color', 'bg', '#000000', { block: '[data-theme="dark"]' }),

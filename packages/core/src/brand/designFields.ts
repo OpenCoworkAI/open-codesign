@@ -90,12 +90,29 @@ function tokenKey(name: string, type: DesignToken['type']): string {
   return key === '' ? 'base' : key;
 }
 
-type Resolved = { ok: true; value: string } | { ok: false; reason: UnresolvedReason };
+/** `below` is how many levels of `var()` the value nests, which the depth limit counts. */
+type Resolved =
+  | { ok: true; value: string; below: number }
+  | { ok: false; reason: UnresolvedReason };
+
+interface Expansion {
+  /** The default-block tokens a `var()` can name. */
+  lookup: Map<string, string>;
+  /**
+   * What each of those names expands to, once it has expanded. A name reached through two
+   * references is then expanded once, not once per reference: with `--b: var(--a) var(--a)` at
+   * every level, expanding in full takes 2^levels steps even when the result stays empty.
+   * Only a success is kept. It depends on the name alone, because a cycle needs a loop in the
+   * names, which a name that expanded does not reach.
+   */
+  resolved: Map<string, { value: string; below: number }>;
+}
 
 /** Replaces each `var(--name, fallback)` with the scanned token it names. */
-function resolveVars(value: string, lookup: Map<string, string>, chain: string[]): Resolved {
+function resolveVars(value: string, expansion: Expansion, chain: string[]): Resolved {
   if (chain.length > MAX_VAR_DEPTH) return { ok: false, reason: 'too-complex' };
   let out = '';
+  let below = 0;
   let from = 0;
   while (from < value.length) {
     const start = value.indexOf('var(', from);
@@ -122,16 +139,29 @@ function resolveVars(value: string, lookup: Map<string, string>, chain: string[]
     const name = (comma === -1 ? inner : inner.slice(0, comma)).trim().replace(/^--/, '');
     const fallback = comma === -1 ? undefined : inner.slice(comma + 1).trim();
     if (chain.includes(name)) return { ok: false, reason: 'cycle' };
-    const target = lookup.get(name);
-    const source = target ?? fallback;
-    if (source === undefined) return { ok: false, reason: 'undefined' };
-    const resolved = resolveVars(source, lookup, [...chain, name]);
-    if (!resolved.ok) return resolved;
-    out += resolved.value;
+    const known = expansion.resolved.get(name);
+    if (known !== undefined) {
+      // The depth limit counts the levels this name nests, as expanding it here would.
+      if (chain.length + 1 + known.below > MAX_VAR_DEPTH)
+        return { ok: false, reason: 'too-complex' };
+      out += known.value;
+      below = Math.max(below, known.below + 1);
+    } else {
+      const target = expansion.lookup.get(name);
+      const source = target ?? fallback;
+      if (source === undefined) return { ok: false, reason: 'undefined' };
+      const resolved = resolveVars(source, expansion, [...chain, name]);
+      if (!resolved.ok) return resolved;
+      if (target !== undefined) {
+        expansion.resolved.set(name, { value: resolved.value, below: resolved.below });
+      }
+      out += resolved.value;
+      below = Math.max(below, resolved.below + 1);
+    }
     if (out.length > MAX_RESOLVED_LENGTH) return { ok: false, reason: 'too-complex' };
     from = end + 1;
   }
-  return { ok: true, value: out };
+  return { ok: true, value: out, below };
 }
 
 export function mapTokensToDesignFields(files: TokenFile[]): TokenImport {
@@ -142,6 +172,7 @@ export function mapTokensToDesignFields(files: TokenFile[]): TokenImport {
       if (token.block === undefined && !lookup.has(token.name)) lookup.set(token.name, token.value);
     }
   }
+  const expansion: Expansion = { lookup, resolved: new Map() };
 
   const colors: Record<string, string> = {};
   const typography: Record<string, { fontFamily: string }> = {};
@@ -184,7 +215,7 @@ export function mapTokensToDesignFields(files: TokenFile[]): TokenImport {
         report.otherThemes.push({ block: token.block, value: token.value, ...origin });
         continue;
       }
-      const resolved = resolveVars(token.value, lookup, [token.name]);
+      const resolved = resolveVars(token.value, expansion, [token.name]);
       if (!resolved.ok) {
         report.unresolved.push({ reason: resolved.reason, value: token.value, ...origin });
         continue;
