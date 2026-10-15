@@ -19,7 +19,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
-import type { DoneError, DoneRuntimeVerifier } from '@open-codesign/core';
+import type { DoneError, DoneRuntimeResult, DoneRuntimeVerifier } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
 import { buildSrcdoc } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, Page } from 'puppeteer-core';
@@ -181,7 +181,7 @@ async function verifyWithSystemChrome(
   html: string,
   workspaceRoot?: string,
   signal?: AbortSignal,
-): Promise<DoneError[]> {
+): Promise<DoneRuntimeResult> {
   signal?.throwIfAborted();
   const executablePath = await findSystemChrome();
   const puppeteer = (await import('puppeteer-core')).default;
@@ -259,11 +259,11 @@ async function verifyWithSystemChrome(
     await rm(userDataDir, { recursive: true, force: true });
   }
 
-  return errors;
+  return { errors, warnings: [] };
 }
 
 export function makeRuntimeVerifier(options?: { workspaceRoot: string }): DoneRuntimeVerifier {
-  return async (artifactSource, context): Promise<DoneError[]> => {
+  return async (artifactSource, context): Promise<DoneRuntimeResult> => {
     context?.signal?.throwIfAborted();
     const workspaceRoot = options ? resolve(options.workspaceRoot) : undefined;
     const srcdoc = workspaceRoot

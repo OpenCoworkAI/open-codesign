@@ -7,8 +7,10 @@ import {
 import { CodesignError } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type LayoutIssue,
   MAX_ASSET_ERRORS,
   MAX_CONSOLE_ENTRIES,
+  MAX_LAYOUT_ISSUES,
   MAX_PREVIEW_STEPS,
   makePreviewTool,
   type PreviewInput,
@@ -345,6 +347,47 @@ describe('makePreviewTool', () => {
     const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
     expect(result.details.ok).toBe(true);
     expect(JSON.stringify(result.content)).toContain('isolated browser terminated');
+  });
+
+  describe('layout issues', () => {
+    const issue = (index: number): LayoutIssue => ({
+      check: 'horizontal-overflow',
+      viewportWidth: 390,
+      selector: `body > div:nth-of-type(${index})`,
+      message: `Element ${index} extends past the right edge`,
+      measured: 420,
+      limit: 390,
+    });
+
+    it('returns layout issues to the agent without failing the preview', async () => {
+      const runPreview = vi.fn().mockResolvedValue(cannedResult({ layoutIssues: [issue(1)] }));
+
+      const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+
+      expect(result.details.ok).toBe(true);
+      expect(result.details.layoutIssues).toEqual([issue(1)]);
+      expect(result.content[0]).toMatchObject({ text: expect.stringContaining('preview ok') });
+      expect(JSON.stringify(result.content)).toContain('Element 1 extends past the right edge');
+    });
+
+    it('caps layout issues to the documented budget', async () => {
+      const issues = Array.from({ length: MAX_LAYOUT_ISSUES + 10 }, (_, index) => issue(index));
+      const runPreview = vi.fn().mockResolvedValue(cannedResult({ layoutIssues: issues }));
+
+      const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+
+      expect(MAX_LAYOUT_ISSUES).toBe(20);
+      expect(result.details.layoutIssues).toEqual(issues.slice(0, MAX_LAYOUT_ISSUES));
+    });
+
+    it('leaves the field out when the host did not measure the layout', async () => {
+      const runPreview = vi.fn().mockResolvedValue(cannedResult());
+
+      const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+
+      expect(result.details).not.toHaveProperty('layoutIssues');
+      expect(result.content).toHaveLength(1);
+    });
   });
 
   it('propagates select steps and accepts empty and maximum-length option values', async () => {

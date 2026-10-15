@@ -74,12 +74,12 @@ function onlyNavigation() {
 
 describe('harness documents for sandboxed system Chrome (#455)', () => {
   it('serves the done verifier document from memory instead of a shared temp file', async () => {
-    const errors = await makeRuntimeVerifier()('<main id="verify-marker">ok</main>', {
+    const result = await makeRuntimeVerifier()('<main id="verify-marker">ok</main>', {
       path: 'index.html',
     });
 
     const navigation = onlyNavigation();
-    expect(errors).toEqual([]);
+    expect(result).toEqual({ errors: [], warnings: [] });
     expect(navigation.url).toMatch(/^file:.*verify\.html$/);
     expect(navigation.existedOnDisk).toBe(false);
     expect(navigation.request.continue).not.toHaveBeenCalled();

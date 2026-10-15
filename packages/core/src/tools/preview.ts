@@ -123,6 +123,22 @@ export const AssetError = Type.Object({
   type: Type.Optional(Type.String()),
 });
 
+/** Layout findings are advice: they never change `ok` or the `done` status. */
+export const MAX_LAYOUT_ISSUES = 20;
+
+export const LayoutIssue = Type.Object({
+  check: Type.Union([Type.Literal('horizontal-overflow'), Type.Literal('clipped-text')]),
+  /** Width of the viewport the page was measured at. */
+  viewportWidth: Type.Integer(),
+  /** A short CSS-style path to the element, for the agent to find it in the source. */
+  selector: Type.String(),
+  message: Type.String(),
+  /** What was measured, in CSS px, and the limit it was compared with. */
+  measured: Type.Number(),
+  limit: Type.Number(),
+});
+export type LayoutIssue = Static<typeof LayoutIssue>;
+
 export const PreviewResult = Type.Object({
   ok: Type.Boolean(),
   /** Set only when capabilities.vision === true. */
@@ -139,6 +155,7 @@ export const PreviewResult = Type.Object({
   }),
   reason: Type.Optional(Type.String()),
   warnings: Type.Optional(Type.Array(Type.String(), { maxItems: 5 })),
+  layoutIssues: Type.Optional(Type.Array(LayoutIssue, { maxItems: MAX_LAYOUT_ISSUES })),
   visibleText: Type.Optional(Type.String()),
   steps: Type.Optional(
     Type.Array(
@@ -163,6 +180,9 @@ export function trimPreviewResult(result: PreviewResult): PreviewResult {
     ...result,
     consoleErrors: result.consoleErrors.slice(0, MAX_CONSOLE_ENTRIES),
     assetErrors: result.assetErrors.slice(0, MAX_ASSET_ERRORS),
+    ...(result.layoutIssues !== undefined
+      ? { layoutIssues: result.layoutIssues.slice(0, MAX_LAYOUT_ISSUES) }
+      : {}),
   };
 }
 
@@ -170,6 +190,7 @@ function previewContent(summary: string, result: PreviewResult): Array<TextConte
   const content: Array<TextContent | ImageContent> = [{ type: 'text', text: summary }];
   if (
     result.warnings !== undefined ||
+    result.layoutIssues !== undefined ||
     result.steps !== undefined ||
     result.domOutline !== undefined ||
     result.visibleText !== undefined
@@ -179,6 +200,7 @@ function previewContent(summary: string, result: PreviewResult): Array<TextConte
       text: JSON.stringify({
         steps: result.steps,
         warnings: result.warnings,
+        layoutIssues: result.layoutIssues,
         visibleText: result.visibleText,
         domOutline: result.domOutline,
         metrics: result.metrics,

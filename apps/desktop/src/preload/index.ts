@@ -462,7 +462,9 @@ const api = {
     ipcRenderer.invoke('codesign:detect-provider', key) as Promise<string | null>,
   doneVerify: (artifact: string) =>
     ipcRenderer.invoke('done:verify:v1', { artifact }) as Promise<{
+      schemaVersion: 1;
       errors: Array<{ message: string; source?: string; lineno?: number }>;
+      warnings: Array<{ message: string; source?: string; lineno?: number }>;
     }>,
   generate: (payload: {
     prompt: string;
