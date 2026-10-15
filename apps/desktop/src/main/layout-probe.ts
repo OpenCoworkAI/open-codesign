@@ -1,8 +1,9 @@
 /**
- * Deterministic layout checks for the pages `preview` and `done` already open
- * in Chrome. The page-side function only collects raw measurements; the
- * decisions (what counts as overflow, how many findings to keep) are made here
- * on plain data so they can be tested without a browser.
+ * Deterministic layout and accessibility checks for the pages `preview` and
+ * `done` already open in Chrome. The page-side function only collects raw
+ * measurements; the decisions (what counts as overflow, low contrast, a small
+ * target) are made on that data in `layout-analysis.ts`, so they can be tested
+ * without a browser.
  *
  * Findings are advice. They never change `ok` or the `done` status, because a
  * heuristic can be wrong and a false positive must not cost a repair round.
@@ -15,6 +16,18 @@ import {
   MAX_LAYOUT_ISSUES,
 } from '@open-codesign/core';
 import type { Page } from 'puppeteer-core';
+import { analyzeLayoutSamples, selectIssues } from './layout-analysis';
+import {
+  ALL_CHECKS,
+  LAYOUT_BUDGET_MS,
+  LAYOUT_PROBE_LIMITS,
+  type LayoutProbeChecks,
+  type LayoutProbeLimits,
+  type LayoutSamples,
+  PHONE_VIEWPORT,
+  type Rgba,
+  type TextGroup,
+} from './layout-samples';
 import { boundedPreview } from './preview-interactions';
 
 // collectLayoutSamples is serialized into the page. Node's tsconfig has no DOM
@@ -22,11 +35,18 @@ import { boundedPreview } from './preview-interactions';
 interface PageStyle {
   display: string;
   position: string;
+  visibility: string;
+  opacity: string;
   overflowX: string;
   overflowY: string;
   textOverflow: string;
   webkitLineClamp?: string;
   animationName: string;
+  color: string;
+  backgroundColor: string;
+  backgroundImage: string;
+  fontSize: string;
+  fontWeight: string;
 }
 interface PageRect {
   left: number;
@@ -47,80 +67,45 @@ interface PageElement extends PageNode {
   parentElement: PageElement | null;
   children: ArrayLike<PageElement>;
   childNodes: ArrayLike<PageNode>;
+  disabled?: boolean;
+  value?: string;
+  alt?: string;
+  labels?: ArrayLike<PageNode>;
   getBoundingClientRect(): PageRect;
   querySelectorAll(selector: string): ArrayLike<PageElement>;
+  matches(selector: string): boolean;
+  closest(selector: string): PageElement | null;
+  getAttribute(name: string): string | null;
+}
+interface PageCanvasContext {
+  globalCompositeOperation: string;
+  fillStyle: string;
+  fillRect(x: number, y: number, width: number, height: number): void;
+  getImageData(x: number, y: number, width: number, height: number): { data: ArrayLike<number> };
+}
+interface PageCanvas {
+  width: number;
+  height: number;
+  getContext(type: '2d', options: { willReadFrequently: boolean }): PageCanvasContext | null;
 }
 declare const document: {
   documentElement: PageElement & { clientWidth: number; scrollWidth: number };
   body: PageElement | null;
   createRange(): { selectNodeContents(node: PageNode): void; getBoundingClientRect(): PageRect };
+  createElement(tag: 'canvas'): PageCanvas;
+  getElementById(id: string): PageElement | null;
 };
 declare const Node: { TEXT_NODE: number };
 declare function getComputedStyle(element: PageElement): PageStyle;
 declare function requestAnimationFrame(callback: () => void): number;
 
-/** The narrow viewport every page is also measured at. */
-export const PHONE_VIEWPORT = { width: 390, height: 844 } as const;
-/** Most elements one measurement visits; a larger page is measured only in part. */
-export const MAX_PROBE_ELEMENTS = 5000;
-/** Sub-pixel rounding is not overflow. */
-export const OVERFLOW_TOLERANCE_PX = 1;
-/** Text may stick out of a clipping box by this much before it counts as clipped. */
-export const CLIP_TOLERANCE_PX = 2;
-/** Elements named per viewport when the page scrolls sideways. */
-export const MAX_OVERFLOW_ELEMENTS = 3;
-/** Clipped texts named per viewport. */
-export const MAX_CLIPPED_TEXTS = 5;
-/** Time allowed for both measurements together. */
-export const LAYOUT_BUDGET_MS = 5000;
-
-export interface OverflowingElement {
-  selector: string;
-  /** Right edge of the element, in CSS px from the left of the viewport. */
-  right: number;
-}
-
-export interface ClippedText {
-  selector: string;
-  textRight: number;
-  boxRight: number;
-  textBottom: number;
-  boxBottom: number;
-}
-
-/** What the page-side function returns. Plain data, so it survives serialization. */
-export interface LayoutSamples {
-  viewportWidth: number;
-  documentWidth: number;
-  /** The page cannot scroll sideways, because the root or body hides horizontal overflow. */
-  rootClipsX: boolean;
-  overflowing: OverflowingElement[];
-  clipped: ClippedText[];
-  /** The element limit was reached, so the rest of the page was not measured. */
-  truncated: boolean;
-}
-
-export interface LayoutProbeLimits {
-  maxElements: number;
-  overflowTolerance: number;
-  clipTolerance: number;
-  maxOverflowElements: number;
-  maxClippedTexts: number;
-}
-
-export const LAYOUT_PROBE_LIMITS: LayoutProbeLimits = {
-  maxElements: MAX_PROBE_ELEMENTS,
-  overflowTolerance: OVERFLOW_TOLERANCE_PX,
-  clipTolerance: CLIP_TOLERANCE_PX,
-  maxOverflowElements: MAX_OVERFLOW_ELEMENTS,
-  maxClippedTexts: MAX_CLIPPED_TEXTS,
-};
-
 /**
- * Runs inside the page: plain DOM, `getComputedStyle` and `getBoundingClientRect`.
- * It must stay self-contained, because Puppeteer serializes it to source.
+ * Runs inside the page: plain DOM, `getComputedStyle`, `getBoundingClientRect`
+ * and a 1 × 1 canvas to turn any CSS colour into sRGB. It must stay
+ * self-contained, because Puppeteer serializes it to source.
  */
 export function collectLayoutSamples(limits: LayoutProbeLimits): LayoutSamples {
+  const { checks } = limits;
   const root = document.documentElement;
   const body = document.body;
   const clipsX = (value: string) => value === 'hidden' || value === 'clip';
@@ -136,6 +121,12 @@ export function collectLayoutSamples(limits: LayoutProbeLimits): LayoutSamples {
     rootClipsX,
     overflowing: [],
     clipped: [],
+    textGroups: [],
+    unmeasuredText: 0,
+    droppedTextGroups: 0,
+    omitted: 0,
+    smallTargets: [],
+    unnamedControls: [],
     truncated: false,
   };
   if (!body) return samples;
@@ -158,9 +149,46 @@ export function collectLayoutSamples(limits: LayoutProbeLimits): LayoutSamples {
     const path = parts.join(' > ');
     return (node === body || node === null ? path : `… > ${path}`).slice(0, 120);
   };
+  const hasText = (node: PageNode) => (node.textContent ?? '').trim() !== '';
+  const ownTextNodes = (element: PageElement) =>
+    Array.from(element.childNodes).filter(
+      (child) => child.nodeType === Node.TEXT_NODE && hasText(child),
+    );
 
-  const sideways = documentWidth - viewportWidth > limits.overflowTolerance && !rootClipsX;
+  // Any CSS colour, as sRGB: computed colours can be in other spaces (oklch, color-mix).
+  const colors = new Map<string, Rgba>();
+  const canvas = checks.contrast ? document.createElement('canvas') : null;
+  if (canvas) {
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+  const context = canvas ? canvas.getContext('2d', { willReadFrequently: true }) : null;
+  if (checks.contrast && !context) throw new Error('A 2D canvas is not available to read colours');
+  const toRgba = (value: string): Rgba => {
+    const known = colors.get(value);
+    if (known) return known;
+    if (!context) throw new Error('A 2D canvas is not available to read colours');
+    context.globalCompositeOperation = 'copy';
+    context.fillStyle = value;
+    context.fillRect(0, 0, 1, 1);
+    const data = context.getImageData(0, 0, 1, 1).data;
+    const color: Rgba = [
+      data[0] ?? 0,
+      data[1] ?? 0,
+      data[2] ?? 0,
+      Math.round(((data[3] ?? 0) / 255) * 1000) / 1000,
+    ];
+    colors.set(value, color);
+    return color;
+  };
+
+  const sideways =
+    checks.overflow && documentWidth - viewportWidth > limits.overflowTolerance && !rootClipsX;
   const extending = new Set<PageElement>();
+  const textGroups = new Map<string, TextGroup>();
+  const targets: Array<{ element: PageElement; box: PageRect }> = [];
+  const controlSelector =
+    'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"], [role="textbox"], [role="combobox"], [role="slider"]';
   const elements = body.querySelectorAll('*');
   const visited = Math.min(elements.length, limits.maxElements);
   samples.truncated = elements.length > limits.maxElements;
@@ -172,12 +200,50 @@ export function collectLayoutSamples(limits: LayoutProbeLimits): LayoutSamples {
     return false;
   };
 
+  const textOf = (node: PageNode | null) => (node?.textContent ?? '').replace(/\s+/g, ' ').trim();
+  const accessibleName = (element: PageElement): string => {
+    const labelledBy = (element.getAttribute('aria-labelledby') ?? '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((id) => textOf(document.getElementById(id)))
+      .join(' ')
+      .trim();
+    if (labelledBy) return labelledBy;
+    const label = (element.getAttribute('aria-label') ?? '').trim();
+    if (label) return label;
+    const tag = element.tagName.toLowerCase();
+    const type = (element.getAttribute('type') ?? '').toLowerCase();
+    if (tag === 'input') {
+      if (type === 'submit' || type === 'reset') return (element.value ?? '').trim() || type;
+      if (type === 'button') return (element.value ?? '').trim();
+      if (type === 'image') return (element.alt ?? '').trim();
+    }
+    const labelText = Array.from(element.labels ?? [])
+      .map((node) => textOf(node))
+      .join(' ')
+      .trim();
+    if (labelText) return labelText;
+    if (tag !== 'input' && tag !== 'select' && tag !== 'textarea') {
+      const text = textOf(element);
+      if (text) return text;
+    }
+    for (const inner of Array.from(element.querySelectorAll('img[alt], svg title, [aria-label]'))) {
+      const innerName =
+        (inner.getAttribute('alt') ?? '').trim() ||
+        (inner.getAttribute('aria-label') ?? '').trim() ||
+        (inner.tagName.toLowerCase() === 'title' ? textOf(inner) : '');
+      if (innerName) return innerName;
+    }
+    return (element.getAttribute('title') ?? '').trim();
+  };
+
   for (let index = 0; index < visited; index += 1) {
     const element = elements[index];
     if (!element) continue;
     const style = getComputedStyle(element);
     if (style.display === 'none') continue;
     const box = element.getBoundingClientRect();
+    const shown = style.visibility === 'visible';
 
     if (sideways && style.position !== 'fixed' && box.width > 0) {
       if (box.right > viewportWidth + limits.overflowTolerance && !clippedByAncestor(element)) {
@@ -185,48 +251,122 @@ export function collectLayoutSamples(limits: LayoutProbeLimits): LayoutSamples {
       }
     }
 
-    const clipsText = clipsX(style.overflowX) || clipsX(style.overflowY);
-    const intentional =
-      style.textOverflow === 'ellipsis' ||
-      (style.webkitLineClamp !== undefined && style.webkitLineClamp !== 'none') ||
-      style.animationName !== 'none';
-    if (
-      !clipsText ||
-      intentional ||
-      box.width < 1 ||
-      box.height < 1 ||
-      samples.clipped.length >= limits.maxClippedTexts
-    ) {
-      continue;
+    if (checks.clipped) {
+      const clipsText = clipsX(style.overflowX) || clipsX(style.overflowY);
+      const intentional =
+        style.textOverflow === 'ellipsis' ||
+        (style.webkitLineClamp !== undefined && style.webkitLineClamp !== 'none') ||
+        style.animationName !== 'none';
+      if (clipsText && !intentional && box.width >= 1 && box.height >= 1) {
+        for (const child of ownTextNodes(element)) {
+          const range = document.createRange();
+          range.selectNodeContents(child);
+          const text = range.getBoundingClientRect();
+          if (text.width < 1 || text.height < 1) continue;
+          const tolerance = limits.clipTolerance;
+          if (
+            text.right > box.right + tolerance ||
+            text.bottom > box.bottom + tolerance ||
+            text.left < box.left - tolerance ||
+            text.top < box.top - tolerance
+          ) {
+            if (samples.clipped.length < limits.maxClippedTexts) {
+              samples.clipped.push({
+                selector: selectorOf(element),
+                textRight: Math.round(text.right),
+                boxRight: Math.round(box.right),
+                textBottom: Math.round(text.bottom),
+                boxBottom: Math.round(box.bottom),
+              });
+            } else {
+              samples.omitted += 1;
+            }
+            break;
+          }
+        }
+      }
     }
-    for (const child of Array.from(element.childNodes)) {
-      if (child.nodeType !== Node.TEXT_NODE || !(child.textContent ?? '').trim()) continue;
-      const range = document.createRange();
-      range.selectNodeContents(child);
-      const text = range.getBoundingClientRect();
-      if (text.width < 1 || text.height < 1) continue;
-      const tolerance = limits.clipTolerance;
-      if (
-        text.right > box.right + tolerance ||
-        text.bottom > box.bottom + tolerance ||
-        text.left < box.left - tolerance ||
-        text.top < box.top - tolerance
-      ) {
-        samples.clipped.push({
-          selector: selectorOf(element),
-          textRight: Math.round(text.right),
-          boxRight: Math.round(box.right),
-          textBottom: Math.round(text.bottom),
-          boxBottom: Math.round(box.bottom),
-        });
-        break;
+
+    if (checks.contrast && shown && box.width >= 1 && box.height >= 1) {
+      if (ownTextNodes(element).length > 0) {
+        let opacity = 1;
+        for (let node: PageElement | null = element; node; node = node.parentElement) {
+          opacity *= Number(getComputedStyle(node).opacity);
+        }
+        // The backgrounds behind the text: its own ancestors, up to the first opaque one.
+        const layers: Rgba[] = [];
+        let pictured = false;
+        for (let node: PageElement | null = element; node; node = node.parentElement) {
+          const nodeStyle = getComputedStyle(node);
+          if (nodeStyle.backgroundImage !== 'none') {
+            pictured = true;
+            break;
+          }
+          const layer = toRgba(nodeStyle.backgroundColor);
+          if (layer[3] > 0) {
+            layers.push(layer);
+            if (layer[3] === 1) break;
+          }
+        }
+        if (pictured || opacity < limits.minMeasuredOpacity) {
+          samples.unmeasuredText += 1;
+        } else {
+          const size = Number.parseFloat(style.fontSize);
+          const large =
+            size >= limits.largeTextPx ||
+            (size >= limits.largeBoldTextPx &&
+              Number.parseInt(style.fontWeight, 10) >= limits.boldWeight);
+          const foreground = toRgba(style.color);
+          const key = `${foreground.join(',')}|${layers.map((layer) => layer.join(',')).join(';')}|${large}`;
+          const group = textGroups.get(key);
+          if (group) {
+            group.count += 1;
+          } else if (textGroups.size < limits.maxTextGroups) {
+            textGroups.set(key, {
+              selector: selectorOf(element),
+              count: 1,
+              foreground,
+              layers,
+              large,
+            });
+          } else {
+            samples.droppedTextGroups += 1;
+          }
+        }
+      }
+    }
+
+    if ((checks.targets || checks.names) && shown && element.matches(controlSelector)) {
+      if (!element.closest('[aria-hidden="true"]')) {
+        if (checks.names && accessibleName(element) === '') {
+          if (samples.unnamedControls.length < limits.maxUnnamedControls) {
+            const role = element.getAttribute('role');
+            samples.unnamedControls.push({
+              selector: selectorOf(element),
+              kind: `${element.tagName.toLowerCase()}${role ? ` role=${role}` : ''}`,
+            });
+          } else {
+            samples.omitted += 1;
+          }
+        }
+        // A control with no size, or hidden by opacity, is a visually hidden input whose label is the target.
+        const measurable = box.width >= 2 && box.height >= 2 && style.opacity !== '0';
+        if (
+          checks.targets &&
+          measurable &&
+          element.disabled !== true &&
+          style.display !== 'inline'
+        ) {
+          if (targets.length < limits.maxTargets) targets.push({ element, box });
+          else samples.truncated = true;
+        }
       }
     }
   }
 
   // Name the outermost elements that cross the edge: along each chain, the first box
   // that goes past it is where the overflow starts.
-  const outermost: OverflowingElement[] = [];
+  const outermost: Array<{ selector: string; right: number }> = [];
   for (const element of extending) {
     if (element.parentElement && extending.has(element.parentElement)) continue;
     outermost.push({
@@ -236,56 +376,37 @@ export function collectLayoutSamples(limits: LayoutProbeLimits): LayoutSamples {
   }
   outermost.sort((a, b) => b.right - a.right);
   samples.overflowing = outermost.slice(0, limits.maxOverflowElements);
+  samples.omitted += Math.max(0, outermost.length - limits.maxOverflowElements);
+
+  samples.textGroups = Array.from(textGroups.values());
+
+  // A small target passes when the square around its centre touches no other target.
+  const half = limits.minTargetSizePx / 2;
+  const small: Array<{ selector: string; width: number; height: number }> = [];
+  for (const { element, box } of targets) {
+    if (box.width >= limits.minTargetSizePx && box.height >= limits.minTargetSizePx) continue;
+    const centerX = (box.left + box.right) / 2;
+    const centerY = (box.top + box.bottom) / 2;
+    const crowded = targets.some(
+      (other) =>
+        other.element !== element &&
+        other.box.left < centerX + half &&
+        other.box.right > centerX - half &&
+        other.box.top < centerY + half &&
+        other.box.bottom > centerY - half,
+    );
+    if (crowded) {
+      small.push({
+        selector: selectorOf(element),
+        width: Math.round(box.width),
+        height: Math.round(box.height),
+      });
+    }
+  }
+  small.sort((a, b) => Math.min(a.width, a.height) - Math.min(b.width, b.height));
+  samples.smallTargets = small.slice(0, limits.maxSmallTargets);
+  samples.omitted += Math.max(0, small.length - limits.maxSmallTargets);
   return samples;
-}
-
-const formatPx = (value: number) => `${value.toLocaleString('en-US')} px`;
-
-/** Turns one measurement into findings. Pure, so the thresholds are testable without Chrome. */
-export function analyzeLayoutSamples(
-  samples: LayoutSamples,
-  limits: Pick<LayoutProbeLimits, 'overflowTolerance'> = LAYOUT_PROBE_LIMITS,
-): LayoutIssue[] {
-  const issues: LayoutIssue[] = [];
-  const { viewportWidth, documentWidth } = samples;
-
-  if (!samples.rootClipsX && documentWidth - viewportWidth > limits.overflowTolerance) {
-    if (samples.overflowing.length === 0) {
-      issues.push({
-        check: 'horizontal-overflow',
-        viewportWidth,
-        selector: 'html',
-        message: `The page is ${formatPx(documentWidth)} wide at a ${formatPx(viewportWidth)} viewport, so it scrolls sideways; no single element was identified.`,
-        measured: documentWidth,
-        limit: viewportWidth,
-      });
-    }
-    for (const element of samples.overflowing) {
-      issues.push({
-        check: 'horizontal-overflow',
-        viewportWidth,
-        selector: element.selector,
-        message: `${element.selector} reaches ${formatPx(element.right)}, past the ${formatPx(viewportWidth)} viewport edge, so the page scrolls sideways.`,
-        measured: element.right,
-        limit: viewportWidth,
-      });
-    }
-  }
-
-  for (const text of samples.clipped) {
-    const horizontal = text.textRight > text.boxRight;
-    issues.push({
-      check: 'clipped-text',
-      viewportWidth,
-      selector: text.selector,
-      message: horizontal
-        ? `${text.selector} hides part of its text: the text reaches ${formatPx(text.textRight)} but the box ends at ${formatPx(text.boxRight)} (viewport ${formatPx(viewportWidth)}).`
-        : `${text.selector} hides part of its text: the text reaches ${formatPx(text.textBottom)} from the top but the box ends at ${formatPx(text.boxBottom)} (viewport ${formatPx(viewportWidth)}).`,
-      measured: horizontal ? text.textRight : text.textBottom,
-      limit: horizontal ? text.boxRight : text.boxBottom,
-    });
-  }
-  return issues;
 }
 
 export interface LayoutInspection {
@@ -304,8 +425,8 @@ async function settleLayout(page: Page): Promise<void> {
   );
 }
 
-async function measure(page: Page): Promise<LayoutSamples> {
-  return page.evaluate(collectLayoutSamples, LAYOUT_PROBE_LIMITS);
+async function measure(page: Page, checks: LayoutProbeChecks): Promise<LayoutSamples> {
+  return page.evaluate(collectLayoutSamples, { ...LAYOUT_PROBE_LIMITS, checks });
 }
 
 /**
@@ -317,40 +438,68 @@ export async function inspectLayout(page: Page, signal?: AbortSignal): Promise<L
   return boundedPreview(runInspection(page), LAYOUT_BUDGET_MS, signal);
 }
 
+/** Contrast and names do not depend on width, so the phone pass skips them; tap targets matter there. */
+const CURRENT_WIDTH_CHECKS: LayoutProbeChecks = { ...ALL_CHECKS, targets: false };
+const PHONE_WIDTH_CHECKS: LayoutProbeChecks = {
+  overflow: true,
+  clipped: true,
+  contrast: false,
+  targets: true,
+  names: false,
+};
+
 async function runInspection(page: Page): Promise<LayoutInspection> {
   const original = page.viewport();
   if (original === null) throw new Error('The page has no viewport to measure');
-  const widths = original.width === PHONE_VIEWPORT.width ? [] : [PHONE_VIEWPORT];
+  const alreadyPhone = original.width === PHONE_VIEWPORT.width;
   const issues: LayoutIssue[] = [];
-  let truncated = false;
+  const measured: LayoutSamples[] = [];
   const take = (samples: LayoutSamples) => {
+    measured.push(samples);
     issues.push(...analyzeLayoutSamples(samples));
-    truncated ||= samples.truncated;
   };
 
-  take(await measure(page));
-  try {
-    for (const viewport of widths) {
-      await page.setViewport({ ...original, ...viewport });
+  take(await measure(page, alreadyPhone ? ALL_CHECKS : CURRENT_WIDTH_CHECKS));
+  if (!alreadyPhone) {
+    try {
+      await page.setViewport({ ...original, ...PHONE_VIEWPORT });
       await settleLayout(page);
-      take(await measure(page));
+      take(await measure(page, PHONE_WIDTH_CHECKS));
+    } finally {
+      await page.setViewport(original);
     }
-  } finally {
-    if (widths.length > 0) await page.setViewport(original);
   }
 
   const notes: string[] = [];
-  if (truncated) {
+  if (measured.some((samples) => samples.truncated)) {
     notes.push(
-      `Layout checks stopped after ${MAX_PROBE_ELEMENTS.toLocaleString('en-US')} elements; the rest of the page was not measured.`,
+      'Layout checks did not cover the whole page (more than 5,000 elements or 400 controls); the rest was not measured.',
+    );
+  }
+  const unmeasured = measured.reduce((sum, samples) => sum + samples.unmeasuredText, 0);
+  if (unmeasured > 0) {
+    notes.push(
+      `Contrast was not checked for ${unmeasured} text element${unmeasured === 1 ? '' : 's'} on a background image or gradient, or partly transparent.`,
+    );
+  }
+  const dropped = measured.reduce((sum, samples) => sum + samples.droppedTextGroups, 0);
+  if (dropped > 0) {
+    notes.push(
+      `${dropped} colour combination${dropped === 1 ? '' : 's'} beyond the first 200 were not checked for contrast.`,
+    );
+  }
+  const omitted = measured.reduce((sum, samples) => sum + samples.omitted, 0);
+  if (omitted > 0) {
+    notes.push(
+      `${omitted} more finding${omitted === 1 ? '' : 's'} past the per-check limits ${omitted === 1 ? 'was' : 'were'} not listed.`,
     );
   }
   if (issues.length > MAX_LAYOUT_ISSUES) {
     notes.push(
-      `Layout checks found ${issues.length} issues; only the first ${MAX_LAYOUT_ISSUES} are listed.`,
+      `Layout checks found ${issues.length} issues; ${MAX_LAYOUT_ISSUES} are listed, taken from each check in turn.`,
     );
   }
-  return { issues: issues.slice(0, MAX_LAYOUT_ISSUES), notes };
+  return { issues: selectIssues(issues, MAX_LAYOUT_ISSUES), notes };
 }
 
 /** What `done` shows for a measurement: each finding and note as a non-blocking warning. */

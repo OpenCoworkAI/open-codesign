@@ -2,155 +2,19 @@ import { LAYOUT_WARNING_SOURCE, type LayoutIssue, MAX_LAYOUT_ISSUES } from '@ope
 import type { Page } from 'puppeteer-core';
 import { describe, expect, it } from 'vitest';
 import {
-  analyzeLayoutSamples,
   collectLayoutSamples,
   inspectLayout,
-  LAYOUT_PROBE_LIMITS,
-  type LayoutSamples,
   layoutFailureWarning,
   layoutWarnings,
-  MAX_PROBE_ELEMENTS,
-  OVERFLOW_TOLERANCE_PX,
-  PHONE_VIEWPORT,
 } from './layout-probe';
-
-function samples(overrides: Partial<LayoutSamples> = {}): LayoutSamples {
-  return {
-    viewportWidth: 390,
-    documentWidth: 390,
-    rootClipsX: false,
-    overflowing: [],
-    clipped: [],
-    truncated: false,
-    ...overrides,
-  };
-}
-
-describe('analyzeLayoutSamples', () => {
-  it('reports a page that fits, or is off by less than the tolerance, as clean', () => {
-    expect(analyzeLayoutSamples(samples())).toEqual([]);
-    expect(analyzeLayoutSamples(samples({ documentWidth: 390 + OVERFLOW_TOLERANCE_PX }))).toEqual(
-      [],
-    );
-  });
-
-  it('names each element that makes the page scroll sideways, with the numbers', () => {
-    const issues = analyzeLayoutSamples(
-      samples({
-        documentWidth: 1412,
-        overflowing: [
-          { selector: 'table#prices', right: 1412 },
-          { selector: 'main > div.hero', right: 960 },
-        ],
-      }),
-    );
-
-    expect(issues).toEqual([
-      {
-        check: 'horizontal-overflow',
-        viewportWidth: 390,
-        selector: 'table#prices',
-        message:
-          'table#prices reaches 1,412 px, past the 390 px viewport edge, so the page scrolls sideways.',
-        measured: 1412,
-        limit: 390,
-      },
-      {
-        check: 'horizontal-overflow',
-        viewportWidth: 390,
-        selector: 'main > div.hero',
-        message:
-          'main > div.hero reaches 960 px, past the 390 px viewport edge, so the page scrolls sideways.',
-        measured: 960,
-        limit: 390,
-      },
-    ]);
-  });
-
-  it('still reports the overflow when no single element was identified', () => {
-    expect(analyzeLayoutSamples(samples({ documentWidth: 520 }))).toEqual([
-      {
-        check: 'horizontal-overflow',
-        viewportWidth: 390,
-        selector: 'html',
-        message:
-          'The page is 520 px wide at a 390 px viewport, so it scrolls sideways; no single element was identified.',
-        measured: 520,
-        limit: 390,
-      },
-    ]);
-  });
-
-  it('does not report overflow the page hides, because it cannot scroll sideways', () => {
-    expect(
-      analyzeLayoutSamples(
-        samples({
-          documentWidth: 900,
-          rootClipsX: true,
-          overflowing: [{ selector: 'div.wide', right: 900 }],
-        }),
-      ),
-    ).toEqual([]);
-  });
-
-  it('reports text a box clips on the side that sticks out', () => {
-    const issues = analyzeLayoutSamples(
-      samples({
-        viewportWidth: 1280,
-        documentWidth: 1280,
-        clipped: [
-          { selector: 'div#card', textRight: 340, boxRight: 300, textBottom: 60, boxBottom: 80 },
-          { selector: 'p.teaser', textRight: 200, boxRight: 300, textBottom: 190, boxBottom: 120 },
-        ],
-      }),
-    );
-
-    expect(issues).toEqual([
-      {
-        check: 'clipped-text',
-        viewportWidth: 1280,
-        selector: 'div#card',
-        message:
-          'div#card hides part of its text: the text reaches 340 px but the box ends at 300 px (viewport 1,280 px).',
-        measured: 340,
-        limit: 300,
-      },
-      {
-        check: 'clipped-text',
-        viewportWidth: 1280,
-        selector: 'p.teaser',
-        message:
-          'p.teaser hides part of its text: the text reaches 190 px from the top but the box ends at 120 px (viewport 1,280 px).',
-        measured: 190,
-        limit: 120,
-      },
-    ]);
-  });
-
-  it('lists overflow before clipped text, and reports clipped text on a page that hides overflow', () => {
-    const issues = analyzeLayoutSamples(
-      samples({
-        documentWidth: 600,
-        overflowing: [{ selector: 'div.wide', right: 600 }],
-        clipped: [
-          { selector: 'div#card', textRight: 340, boxRight: 300, textBottom: 60, boxBottom: 80 },
-        ],
-      }),
-    );
-    expect(issues.map((issue) => issue.check)).toEqual(['horizontal-overflow', 'clipped-text']);
-
-    const hidden = analyzeLayoutSamples(
-      samples({
-        documentWidth: 600,
-        rootClipsX: true,
-        clipped: [
-          { selector: 'div#card', textRight: 340, boxRight: 300, textBottom: 60, boxBottom: 80 },
-        ],
-      }),
-    );
-    expect(hidden.map((issue) => issue.check)).toEqual(['clipped-text']);
-  });
-});
+import {
+  ALL_CHECKS,
+  LAYOUT_PROBE_LIMITS,
+  type LayoutProbeLimits,
+  type LayoutSamples,
+  PHONE_VIEWPORT,
+} from './layout-samples';
+import { samples } from './layout-test-fixtures';
 
 describe('layout warnings', () => {
   it('shows each finding and note as a layout warning', () => {
@@ -163,9 +27,9 @@ describe('layout warnings', () => {
       limit: 390,
     };
 
-    expect(layoutWarnings({ issues: [issue], notes: ['Stopped after 5,000 elements.'] })).toEqual([
+    expect(layoutWarnings({ issues: [issue], notes: ['Not the whole page.'] })).toEqual([
       { source: LAYOUT_WARNING_SOURCE, message: 'The page scrolls sideways.' },
-      { source: LAYOUT_WARNING_SOURCE, message: 'Stopped after 5,000 elements.' },
+      { source: LAYOUT_WARNING_SOURCE, message: 'Not the whole page.' },
     ]);
     expect(layoutWarnings({ issues: [], notes: [] })).toEqual([]);
   });
@@ -182,6 +46,8 @@ describe('layout warnings', () => {
 interface FakePage {
   page: Page;
   viewports: Array<{ width: number; height: number }>;
+  /** The limits the page-side function was called with, one per measurement. */
+  calls: LayoutProbeLimits[];
 }
 
 /** A page whose measurements come from a script, one per call of the collector. */
@@ -190,24 +56,28 @@ function fakePage(
   measurements: Array<LayoutSamples | Error>,
 ): FakePage {
   const viewports: Array<{ width: number; height: number }> = [];
+  const calls: LayoutProbeLimits[] = [];
   const queue = [...measurements];
   const page = {
     viewport: () => original,
     setViewport: async (viewport: { width: number; height: number }) => {
       viewports.push(viewport);
     },
-    evaluate: async (fn: unknown) => {
+    evaluate: async (fn: unknown, limits: LayoutProbeLimits) => {
       if (fn !== collectLayoutSamples) return undefined;
+      calls.push(limits);
       const next = queue.shift();
       if (next === undefined) throw new Error('Unexpected extra measurement');
       if (next instanceof Error) throw next;
       return next;
     },
   };
-  return { page: page as unknown as Page, viewports };
+  return { page: page as unknown as Page, viewports, calls };
 }
 
 const desktop = { width: 1280, height: 800 };
+const atDesktop = (overrides: Partial<LayoutSamples> = {}) =>
+  samples({ viewportWidth: 1280, documentWidth: 1280, ...overrides });
 const overflowAtPhone = samples({
   documentWidth: 700,
   overflowing: [{ selector: 'table#prices', right: 700 }],
@@ -215,10 +85,7 @@ const overflowAtPhone = samples({
 
 describe('inspectLayout', () => {
   it('measures at the current width and at phone width, then restores the viewport', async () => {
-    const { page, viewports } = fakePage(desktop, [
-      samples({ viewportWidth: 1280, documentWidth: 1280 }),
-      overflowAtPhone,
-    ]);
+    const { page, viewports } = fakePage(desktop, [atDesktop(), overflowAtPhone]);
 
     const inspection = await inspectLayout(page);
 
@@ -229,8 +96,20 @@ describe('inspectLayout', () => {
     expect(viewports).toEqual([{ ...desktop, ...PHONE_VIEWPORT }, desktop]);
   });
 
-  it('does not resize a page that is already phone width', async () => {
-    const { page, viewports } = fakePage({ width: PHONE_VIEWPORT.width, height: 700 }, [
+  it('runs contrast and names at the current width, and tap targets at phone width', async () => {
+    const { page, calls } = fakePage(desktop, [atDesktop(), samples()]);
+
+    await inspectLayout(page);
+
+    expect(calls.map((call) => call.checks)).toEqual([
+      { overflow: true, clipped: true, contrast: true, targets: false, names: true },
+      { overflow: true, clipped: true, contrast: false, targets: true, names: false },
+    ]);
+    expect(calls.every((call) => call.maxElements === LAYOUT_PROBE_LIMITS.maxElements)).toBe(true);
+  });
+
+  it('runs every check in one pass on a page that is already phone width', async () => {
+    const { page, viewports, calls } = fakePage({ width: PHONE_VIEWPORT.width, height: 700 }, [
       overflowAtPhone,
     ]);
 
@@ -238,11 +117,12 @@ describe('inspectLayout', () => {
 
     expect(inspection.issues).toHaveLength(1);
     expect(viewports).toEqual([]);
+    expect(calls.map((call) => call.checks)).toEqual([ALL_CHECKS]);
   });
 
   it('restores the viewport and rejects when the phone measurement fails', async () => {
     const { page, viewports } = fakePage(desktop, [
-      samples({ viewportWidth: 1280, documentWidth: 1280 }),
+      atDesktop(),
       new Error('Execution context was destroyed'),
     ]);
 
@@ -257,42 +137,6 @@ describe('inspectLayout', () => {
     await expect(inspectLayout(page)).rejects.toThrow('The page has no viewport to measure');
   });
 
-  it('keeps the first findings and says so when there are more than the budget', async () => {
-    const clipped = Array.from({ length: MAX_LAYOUT_ISSUES }, (_, index) => ({
-      selector: `p.item-${index}`,
-      textRight: 400,
-      boxRight: 300,
-      textBottom: 20,
-      boxBottom: 40,
-    }));
-    const { page } = fakePage(desktop, [
-      samples({ viewportWidth: 1280, documentWidth: 1280, clipped }),
-      overflowAtPhone,
-    ]);
-
-    const inspection = await inspectLayout(page);
-
-    expect(inspection.issues).toHaveLength(MAX_LAYOUT_ISSUES);
-    expect(inspection.issues.every((issue) => issue.check === 'clipped-text')).toBe(true);
-    expect(inspection.notes).toEqual([
-      `Layout checks found ${MAX_LAYOUT_ISSUES + 1} issues; only the first ${MAX_LAYOUT_ISSUES} are listed.`,
-    ]);
-  });
-
-  it('says when the page was only measured in part', async () => {
-    const { page } = fakePage(desktop, [
-      samples({ viewportWidth: 1280, documentWidth: 1280, truncated: true }),
-      samples(),
-    ]);
-
-    const inspection = await inspectLayout(page);
-
-    expect(inspection.issues).toEqual([]);
-    expect(inspection.notes).toEqual([
-      `Layout checks stopped after ${MAX_PROBE_ELEMENTS.toLocaleString('en-US')} elements; the rest of the page was not measured.`,
-    ]);
-  });
-
   it('stops when the run is cancelled', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -301,13 +145,106 @@ describe('inspectLayout', () => {
     await expect(inspectLayout(page, controller.signal)).rejects.toThrow('Preview cancelled');
   });
 
+  describe('when there is more than the budget', () => {
+    const clipped = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        selector: `p.item-${index}`,
+        textRight: 400,
+        boxRight: 300,
+        textBottom: 20,
+        boxBottom: 40,
+      }));
+
+    it('lists the budget, one check at a time, and says how many there were', async () => {
+      const { page } = fakePage(desktop, [
+        atDesktop({
+          clipped: clipped(5),
+          textGroups: Array.from({ length: 30 }, (_, index) => ({
+            selector: `p.low-${index}`,
+            count: 1,
+            foreground: [200 - index, 200 - index, 200 - index, 1],
+            layers: [],
+            large: false,
+          })),
+        }),
+        samples({ unnamedControls: [{ selector: 'button.menu', kind: 'button' }] }),
+      ]);
+
+      const inspection = await inspectLayout(page);
+
+      expect(inspection.issues).toHaveLength(MAX_LAYOUT_ISSUES);
+      expect(new Set(inspection.issues.map((issue) => issue.check))).toEqual(
+        new Set(['clipped-text', 'low-contrast', 'missing-name']),
+      );
+      expect(inspection.notes).toEqual([
+        `Layout checks found 36 issues; ${MAX_LAYOUT_ISSUES} are listed, taken from each check in turn.`,
+      ]);
+    });
+
+    it('says how many findings went past the per-check limits', async () => {
+      const { page } = fakePage(desktop, [atDesktop({ omitted: 3 }), samples({ omitted: 1 })]);
+
+      const inspection = await inspectLayout(page);
+
+      expect(inspection.notes).toEqual([
+        '4 more findings past the per-check limits were not listed.',
+      ]);
+      const single = await inspectLayout(
+        fakePage(desktop, [atDesktop({ omitted: 1 }), samples()]).page,
+      );
+      expect(single.notes).toEqual(['1 more finding past the per-check limits was not listed.']);
+    });
+  });
+
+  describe('notes about the measurement', () => {
+    it('says when the page was only measured in part', async () => {
+      const { page } = fakePage(desktop, [atDesktop({ truncated: true }), samples()]);
+
+      const inspection = await inspectLayout(page);
+
+      expect(inspection.issues).toEqual([]);
+      expect(inspection.notes).toEqual([
+        'Layout checks did not cover the whole page (more than 5,000 elements or 400 controls); the rest was not measured.',
+      ]);
+    });
+
+    it('says how many text elements were not measured for contrast, and why', async () => {
+      const many = fakePage(desktop, [atDesktop({ unmeasuredText: 12 }), samples()]);
+      const one = fakePage(desktop, [atDesktop({ unmeasuredText: 1 }), samples()]);
+
+      expect((await inspectLayout(many.page)).notes).toEqual([
+        'Contrast was not checked for 12 text elements on a background image or gradient, or partly transparent.',
+      ]);
+      expect((await inspectLayout(one.page)).notes).toEqual([
+        'Contrast was not checked for 1 text element on a background image or gradient, or partly transparent.',
+      ]);
+    });
+
+    it('says how many colour combinations were past the limit', async () => {
+      const { page } = fakePage(desktop, [atDesktop({ droppedTextGroups: 3 }), samples()]);
+
+      expect((await inspectLayout(page)).notes).toEqual([
+        '3 colour combinations beyond the first 200 were not checked for contrast.',
+      ]);
+    });
+  });
+
   it('passes the documented limits to the page', () => {
-    expect(LAYOUT_PROBE_LIMITS).toEqual({
+    expect(LAYOUT_PROBE_LIMITS).toMatchObject({
       maxElements: 5000,
       overflowTolerance: 1,
       clipTolerance: 2,
       maxOverflowElements: 3,
       maxClippedTexts: 5,
+      largeTextPx: 24,
+      largeBoldTextPx: 18.66,
+      boldWeight: 700,
+      maxTextGroups: 200,
+      minMeasuredOpacity: 0.99,
+      minTargetSizePx: 24,
+      maxTargets: 400,
+      maxSmallTargets: 5,
+      maxUnnamedControls: 5,
     });
   });
 });

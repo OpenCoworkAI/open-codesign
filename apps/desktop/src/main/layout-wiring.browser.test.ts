@@ -5,7 +5,7 @@ import { LAYOUT_WARNING_SOURCE, trimPreviewResult } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeRuntimeVerifier } from './done-verify';
-import { PHONE_VIEWPORT } from './layout-probe';
+import { PHONE_VIEWPORT } from './layout-samples';
 import { runPreview } from './preview-runtime';
 
 vi.mock('./logger', () => ({ getLogger: () => ({ warn: vi.fn(), error: vi.fn() }) }));

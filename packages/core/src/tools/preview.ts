@@ -123,19 +123,25 @@ export const AssetError = Type.Object({
   type: Type.Optional(Type.String()),
 });
 
-/** Layout findings are advice: they never change `ok` or the `done` status. */
+/** Layout and accessibility findings are advice: they never change `ok` or the `done` status. */
 export const MAX_LAYOUT_ISSUES = 20;
 
 export const LayoutIssue = Type.Object({
-  check: Type.Union([Type.Literal('horizontal-overflow'), Type.Literal('clipped-text')]),
+  check: Type.Union([
+    Type.Literal('horizontal-overflow'),
+    Type.Literal('clipped-text'),
+    Type.Literal('low-contrast'),
+    Type.Literal('small-target'),
+    Type.Literal('missing-name'),
+  ]),
   /** Width of the viewport the page was measured at. */
   viewportWidth: Type.Integer(),
   /** A short CSS-style path to the element, for the agent to find it in the source. */
   selector: Type.String(),
   message: Type.String(),
-  /** What was measured, in CSS px, and the limit it was compared with. */
-  measured: Type.Number(),
-  limit: Type.Number(),
+  /** What was measured and the limit it was compared with (px, or a contrast ratio), when the check is a number. */
+  measured: Type.Optional(Type.Number()),
+  limit: Type.Optional(Type.Number()),
 });
 export type LayoutIssue = Static<typeof LayoutIssue>;
 

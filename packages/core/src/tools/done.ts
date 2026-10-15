@@ -40,7 +40,7 @@ const STOP_LINES = [
 
 /** Layout warnings are advice, so the agent may fix one it agrees with, but not by looping on `done`. */
 const LAYOUT_ADVICE_LINES = [
-  'The design is verified. The layout warnings below are advice, not errors.',
+  'The design is verified. The layout and accessibility warnings below are advice, not errors.',
   'If you agree one is a real defect, fix it with one edit and check it with',
   '`preview`; do not call `done` again. Otherwise your only remaining action',
   'is a short 2–3 sentence natural-language summary of the design decisions —',

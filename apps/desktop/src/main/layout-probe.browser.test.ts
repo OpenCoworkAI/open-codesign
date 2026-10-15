@@ -1,55 +1,14 @@
-import { randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { findSystemChrome } from '@open-codesign/exporters';
-import puppeteer, { type Browser, type Page } from 'puppeteer-core';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { inspectLayout, MAX_PROBE_ELEMENTS, PHONE_VIEWPORT } from './layout-probe';
+import { describe, expect, it } from 'vitest';
+import { chrome, DESKTOP, useChromePage } from './layout-browser-kit';
+import { inspectLayout } from './layout-probe';
+import { MAX_PROBE_ELEMENTS, PHONE_VIEWPORT } from './layout-samples';
 
-const chrome = await findSystemChrome().catch(() => null);
-const DESKTOP = { width: 1280, height: 800 };
 const LONG_TEXT = 'Long text that wraps over several lines and is cut off by its box. '.repeat(6);
 
 describe.skipIf(!chrome)('layout checks in system Chrome', () => {
-  let browser: Browser;
-  let page: Page;
-  let profile: string;
-
-  beforeAll(async () => {
-    if (!chrome) throw new Error('System Chrome unavailable');
-    profile = resolve(`.layout-probe-browser-${randomUUID()}`);
-    mkdirSync(profile);
-    browser = await puppeteer.launch({
-      executablePath: chrome,
-      headless: true,
-      userDataDir: profile,
-      args: ['--disable-background-networking'],
-    });
-  }, 30_000);
-
-  afterAll(async () => {
-    try {
-      await browser?.close();
-    } finally {
-      if (profile) rmSync(profile, { recursive: true, force: true });
-    }
-  }, 30_000);
-
-  beforeEach(async () => {
-    page = await browser.newPage();
-    await page.setViewport(DESKTOP);
-    await page.setRequestInterception(true);
-    page.on('request', (request) => void request.abort());
-  });
-
-  afterEach(async () => {
-    await page?.close();
-  });
-
+  const { page: pageOf, mount: mountMarkup } = useChromePage('layout-probe-browser');
   const mount = (body: string, head = '') =>
-    page.setContent(
-      `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}${head}</style></head><body>${body}</body></html>`,
-    );
+    mountMarkup(`${head ? `<style>${head}</style>` : ''}${body}`);
 
   describe('horizontal overflow', () => {
     it('names the element that scrolls the page sideways, at phone width only', async () => {
@@ -57,7 +16,7 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
         '<main><table id="prices" style="width:800px"><tr><td>Plan</td><td>Price</td></tr></table></main>',
       );
 
-      const { issues, notes } = await inspectLayout(page);
+      const { issues, notes } = await inspectLayout(pageOf());
 
       expect(notes).toEqual([]);
       expect(issues).toHaveLength(1);
@@ -74,9 +33,9 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
     it('puts the viewport back after measuring', async () => {
       await mount('<main>Hello</main>');
 
-      await inspectLayout(page);
+      await inspectLayout(pageOf());
 
-      expect(page.viewport()).toMatchObject(DESKTOP);
+      expect(pageOf().viewport()).toMatchObject(DESKTOP);
     });
 
     it('reports nothing for a page that reflows to fit', async () => {
@@ -85,7 +44,7 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
         '.row{display:flex;flex-wrap:wrap}.card{width:200px;height:80px}',
       );
 
-      expect((await inspectLayout(page)).issues).toEqual([]);
+      expect((await inspectLayout(pageOf())).issues).toEqual([]);
     });
 
     it('does not blame content inside a container that scrolls on its own', async () => {
@@ -93,7 +52,7 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
         '<div style="overflow-x:auto"><div style="width:1200px;height:20px">Wide strip</div></div>',
       );
 
-      expect((await inspectLayout(page)).issues).toEqual([]);
+      expect((await inspectLayout(pageOf())).issues).toEqual([]);
     });
 
     it('names the element that really overflows, not a wider one inside a scroller', async () => {
@@ -102,7 +61,7 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
          <div id="banner" style="width:800px;height:20px">Banner</div>`,
       );
 
-      const { issues } = await inspectLayout(page);
+      const { issues } = await inspectLayout(pageOf());
 
       expect(issues.map((issue) => issue.selector)).toEqual(['div#banner']);
     });
@@ -110,7 +69,7 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
     it('does not report overflow the page hides from the user', async () => {
       await mount('<div style="width:800px;height:20px">Wide</div>', 'body{overflow-x:hidden}');
 
-      expect((await inspectLayout(page)).issues).toEqual([]);
+      expect((await inspectLayout(pageOf())).issues).toEqual([]);
     });
 
     it('ignores a fixed-position element, which cannot scroll the page', async () => {
@@ -119,7 +78,7 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
          <div id="banner" style="width:800px;height:20px">Banner</div>`,
       );
 
-      const { issues } = await inspectLayout(page);
+      const { issues } = await inspectLayout(pageOf());
 
       expect(issues.map((issue) => issue.selector)).toEqual(['div#banner']);
     });
@@ -130,7 +89,7 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
         .join('');
       await mount(`<main>${boxes}</main>`);
 
-      const { issues } = await inspectLayout(page);
+      const { issues } = await inspectLayout(pageOf());
 
       expect(issues.map((issue) => issue.measured)).toEqual([900, 800, 700]);
     });
@@ -139,7 +98,9 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
   describe('clipped text', () => {
     const clippedAt = async (markup: string, head = '') => {
       await mount(markup, head);
-      return (await inspectLayout(page)).issues.filter((issue) => issue.check === 'clipped-text');
+      return (await inspectLayout(pageOf())).issues.filter(
+        (issue) => issue.check === 'clipped-text',
+      );
     };
 
     it('reports text that a fixed-height box cuts off, with a path to the element', async () => {
@@ -215,10 +176,10 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
   it('says so when the page has more elements than it measures', async () => {
     await mount(Array.from({ length: MAX_PROBE_ELEMENTS + 100 }, () => '<i></i>').join(''));
 
-    const { notes } = await inspectLayout(page);
+    const { notes } = await inspectLayout(pageOf());
 
     expect(notes).toEqual([
-      `Layout checks stopped after ${MAX_PROBE_ELEMENTS.toLocaleString('en-US')} elements; the rest of the page was not measured.`,
+      'Layout checks did not cover the whole page (more than 5,000 elements or 400 controls); the rest was not measured.',
     ]);
   });
 });
