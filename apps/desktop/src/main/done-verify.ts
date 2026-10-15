@@ -23,6 +23,7 @@ import type { DoneError, DoneRuntimeResult, DoneRuntimeVerifier } from '@open-co
 import { findSystemChrome } from '@open-codesign/exporters';
 import { buildSrcdoc } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, Page } from 'puppeteer-core';
+import { inspectLayout, layoutFailureWarning, layoutWarnings } from './layout-probe';
 import { boundedPreview } from './preview-interactions';
 import {
   buildWorkspacePreviewDocument,
@@ -187,6 +188,7 @@ async function verifyWithSystemChrome(
   const puppeteer = (await import('puppeteer-core')).default;
   const userDataDir = await mkdtemp(join(tmpdir(), 'codesign-done-chrome-'));
   const errors: DoneError[] = [];
+  const warnings: DoneError[] = [];
   const seen = new Set<string>();
   let browser: Browser | null = null;
   let page: Page | null = null;
@@ -245,6 +247,13 @@ async function verifyWithSystemChrome(
       signal,
     );
     await boundedPreview(settleAfterLoad(), SETTLE_AFTER_LOAD_MS + 100, signal);
+    // Layout findings are advice: a failed measurement is reported, never turned into an error.
+    try {
+      warnings.push(...layoutWarnings(await inspectLayout(page, signal)));
+    } catch (err) {
+      signal?.throwIfAborted();
+      warnings.push(layoutFailureWarning(err));
+    }
   } catch (err) {
     signal?.throwIfAborted();
     pushUniqueError(
@@ -259,7 +268,7 @@ async function verifyWithSystemChrome(
     await rm(userDataDir, { recursive: true, force: true });
   }
 
-  return { errors, warnings: [] };
+  return { errors, warnings };
 }
 
 export function makeRuntimeVerifier(options?: { workspaceRoot: string }): DoneRuntimeVerifier {

@@ -260,8 +260,13 @@ export function makePreviewTool(
         validatePreviewInput(params);
         const raw = await runPreview({ ...params, vision, ...(signal ? { signal } : {}) });
         const result = trimPreviewResult(raw);
+        const layoutCount = result.layoutIssues?.length ?? 0;
+        const layout =
+          layoutCount > 0
+            ? `, ${layoutCount} layout ${layoutCount === 1 ? 'issue' : 'issues'}`
+            : '';
         const summary = result.ok
-          ? `preview ok: ${result.metrics.nodes} nodes, ${result.consoleErrors.length} console errors, ${result.assetErrors.length} asset errors`
+          ? `preview ok: ${result.metrics.nodes} nodes, ${result.consoleErrors.length} console errors, ${result.assetErrors.length} asset errors${layout}`
           : `preview failed${result.reason ? `: ${result.reason}` : ''} (${result.consoleErrors.length} console errors, ${result.assetErrors.length} asset errors)`;
         return {
           content: previewContent(summary, result),

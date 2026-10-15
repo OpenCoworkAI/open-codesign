@@ -26,6 +26,7 @@ vi.mock('puppeteer-core', () => ({
     launch: async () => {
       const handlers = new Map<string, (arg: unknown) => void>();
       const page = {
+        viewport: () => ({ width: 1280, height: 800 }),
         setViewport: async () => {},
         setRequestInterception: async () => {},
         evaluateOnNewDocument: async () => {},
@@ -47,7 +48,17 @@ vi.mock('puppeteer-core', () => ({
           handlers.get('request')?.(request);
           await vi.waitFor(() => expect(request.respond).toHaveBeenCalled());
         },
-        evaluate: async () => ({ nodes: 1, width: 1280, height: 800 }),
+        evaluate: async (fn: { name: string }) =>
+          fn.name === 'collectLayoutSamples'
+            ? {
+                viewportWidth: 1280,
+                documentWidth: 1280,
+                rootClipsX: false,
+                overflowing: [],
+                clipped: [],
+                truncated: false,
+              }
+            : { nodes: 1, width: 1280, height: 800 },
         close: async () => {},
       };
       return { newPage: async () => page, close: async () => {} };

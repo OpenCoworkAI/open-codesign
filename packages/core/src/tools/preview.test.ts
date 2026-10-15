@@ -370,6 +370,25 @@ describe('makePreviewTool', () => {
       expect(JSON.stringify(result.content)).toContain('Element 1 extends past the right edge');
     });
 
+    it('counts layout issues in the summary line, and only when there are some', async () => {
+      const summaryOf = async (layoutIssues?: LayoutIssue[]) => {
+        const runPreview = vi
+          .fn()
+          .mockResolvedValue(cannedResult(layoutIssues ? { layoutIssues } : {}));
+        const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+        const first = result.content[0];
+        return first?.type === 'text' ? first.text : '';
+      };
+
+      expect(await summaryOf([issue(1)])).toBe(
+        'preview ok: 42 nodes, 0 console errors, 0 asset errors, 1 layout issue',
+      );
+      expect(await summaryOf([issue(1), issue(2)])).toBe(
+        'preview ok: 42 nodes, 0 console errors, 0 asset errors, 2 layout issues',
+      );
+      expect(await summaryOf()).toBe('preview ok: 42 nodes, 0 console errors, 0 asset errors');
+    });
+
     it('caps layout issues to the documented budget', async () => {
       const issues = Array.from({ length: MAX_LAYOUT_ISSUES + 10 }, (_, index) => issue(index));
       const runPreview = vi.fn().mockResolvedValue(cannedResult({ layoutIssues: issues }));
