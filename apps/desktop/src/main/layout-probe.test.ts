@@ -149,10 +149,9 @@ describe('inspectLayout', () => {
     const clipped = (count: number) =>
       Array.from({ length: count }, (_, index) => ({
         selector: `p.item-${index}`,
-        textRight: 400,
-        boxRight: 300,
-        textBottom: 20,
-        boxBottom: 40,
+        side: 'right' as const,
+        textEdge: 400,
+        boxEdge: 300,
       }));
 
     it('lists the budget, one check at a time, and says how many there were', async () => {

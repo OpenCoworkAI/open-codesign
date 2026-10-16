@@ -5,6 +5,7 @@
 
 import type { LayoutIssue } from '@open-codesign/core';
 import {
+  type ClippedText,
   LAYOUT_PROBE_LIMITS,
   type LayoutSamples,
   MIN_CONTRAST_RATIO,
@@ -95,21 +96,31 @@ function overflowIssues(samples: LayoutSamples, tolerance: number): LayoutIssue[
   }));
 }
 
+function clippedEdges({ side, textEdge, boxEdge }: ClippedText): string {
+  const text = formatPx(textEdge);
+  const box = formatPx(boxEdge);
+  switch (side) {
+    case 'right':
+      return `the text reaches ${text} but the box ends at ${box}`;
+    case 'bottom':
+      return `the text reaches ${text} from the top but the box ends at ${box}`;
+    case 'left':
+      return `the text starts at ${text} but the box starts at ${box}`;
+    case 'top':
+      return `the text starts at ${text} from the top but the box starts at ${box}`;
+  }
+}
+
 function clippedIssues(samples: LayoutSamples): LayoutIssue[] {
   const { viewportWidth } = samples;
-  return samples.clipped.map((text) => {
-    const horizontal = text.textRight > text.boxRight;
-    return {
-      check: 'clipped-text',
-      viewportWidth,
-      selector: text.selector,
-      message: horizontal
-        ? `${text.selector} hides part of its text: the text reaches ${formatPx(text.textRight)} but the box ends at ${formatPx(text.boxRight)} (viewport ${formatPx(viewportWidth)}).`
-        : `${text.selector} hides part of its text: the text reaches ${formatPx(text.textBottom)} from the top but the box ends at ${formatPx(text.boxBottom)} (viewport ${formatPx(viewportWidth)}).`,
-      measured: horizontal ? text.textRight : text.textBottom,
-      limit: horizontal ? text.boxRight : text.boxBottom,
-    };
-  });
+  return samples.clipped.map((text) => ({
+    check: 'clipped-text',
+    viewportWidth,
+    selector: text.selector,
+    message: `${text.selector} hides part of its text: ${clippedEdges(text)} (viewport ${formatPx(viewportWidth)}).`,
+    measured: text.textEdge,
+    limit: text.boxEdge,
+  }));
 }
 
 function contrastIssues(samples: LayoutSamples): LayoutIssue[] {

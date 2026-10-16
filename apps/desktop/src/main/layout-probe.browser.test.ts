@@ -117,6 +117,44 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
       expect(issues[0]?.measured).toBeGreaterThan(issues[0]?.limit ?? Number.POSITIVE_INFINITY);
     });
 
+    it.each([
+      [
+        'right',
+        `<div style="width:100px;white-space:nowrap;overflow:hidden">${LONG_TEXT}</div>`,
+        'the text reaches',
+        1,
+      ],
+      [
+        'bottom',
+        `<div style="width:100px;height:20px;overflow:hidden">${LONG_TEXT}</div>`,
+        'from the top but the box ends at',
+        1,
+      ],
+      [
+        'left',
+        '<div style="width:300px;overflow:hidden;text-indent:-80px">Indented off the left edge</div>',
+        'the text starts at',
+        -1,
+      ],
+      [
+        'left, when the text also sticks out of the right by less',
+        `<div style="width:100px;overflow:hidden;white-space:nowrap;text-indent:-300px;font:16px monospace">${'x'.repeat(50)}</div>`,
+        'the text starts at',
+        -1,
+      ],
+      [
+        'top',
+        '<div style="display:flex;align-items:flex-end;width:300px;height:20px;overflow:hidden;line-height:60px">Pushed above the top edge</div>',
+        'from the top but the box starts at',
+        -1,
+      ],
+    ])('names the %s side when text sticks out of it', async (_side, markup, wording, direction) => {
+      const [issue] = await clippedAt(markup);
+
+      expect(issue?.message).toContain(wording);
+      expect(Math.sign((issue?.measured ?? 0) - (issue?.limit ?? 0))).toBe(direction);
+    });
+
     it('ends the path at an element with an id and otherwise keeps three levels', async () => {
       const issues = await clippedAt(
         `<div><div><div><p id="deep" style="width:100px;height:20px;overflow:hidden">${LONG_TEXT}</p></div></div></div>`,
@@ -127,6 +165,14 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
         `<div><div><div><div><p style="width:100px;height:20px;overflow:hidden">${LONG_TEXT}</p></div></div></div></div>`,
       );
       expect(unnamed[0]?.selector).toBe('… > div > div > p');
+    });
+
+    it('reports text that sticks out by more than 2 px and not by 2 px', async () => {
+      const indented = (px: number) =>
+        `<div style="width:300px;overflow:hidden;text-indent:-${px}px">Indented</div>`;
+
+      expect(await clippedAt(indented(2))).toEqual([]);
+      expect(await clippedAt(indented(3))).toHaveLength(2);
     });
 
     it('leaves text alone that fits its box', async () => {

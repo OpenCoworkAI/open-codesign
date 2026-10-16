@@ -277,20 +277,25 @@ export function collectLayoutSamples(limits: LayoutProbeLimits): LayoutSamples {
           range.selectNodeContents(child);
           const text = range.getBoundingClientRect();
           if (text.width < 1 || text.height < 1) continue;
-          const tolerance = limits.clipTolerance;
-          if (
-            text.right > box.right + tolerance ||
-            text.bottom > box.bottom + tolerance ||
-            text.left < box.left - tolerance ||
-            text.top < box.top - tolerance
-          ) {
+          const sides = [
+            { side: 'right', beyond: text.right - box.right, text: text.right, box: box.right },
+            {
+              side: 'bottom',
+              beyond: text.bottom - box.bottom,
+              text: text.bottom,
+              box: box.bottom,
+            },
+            { side: 'left', beyond: box.left - text.left, text: text.left, box: box.left },
+            { side: 'top', beyond: box.top - text.top, text: text.top, box: box.top },
+          ] as const;
+          const worst = sides.reduce((most, next) => (next.beyond > most.beyond ? next : most));
+          if (worst.beyond > limits.clipTolerance) {
             if (samples.clipped.length < limits.maxClippedTexts) {
               samples.clipped.push({
                 selector: selectorOf(element),
-                textRight: Math.round(text.right),
-                boxRight: Math.round(box.right),
-                textBottom: Math.round(text.bottom),
-                boxBottom: Math.round(box.bottom),
+                side: worst.side,
+                textEdge: Math.round(worst.text),
+                boxEdge: Math.round(worst.box),
               });
             } else {
               samples.omitted += 1;

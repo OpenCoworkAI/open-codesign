@@ -51,12 +51,16 @@ export interface OverflowingElement {
   right: number;
 }
 
+/** The side of a clipping box that its text sticks out of the most. */
+export type ClippedSide = 'right' | 'bottom' | 'left' | 'top';
+
 export interface ClippedText {
   selector: string;
-  textRight: number;
-  boxRight: number;
-  textBottom: number;
-  boxBottom: number;
+  side: ClippedSide;
+  /** The text's edge on that side, in CSS px from the top left of the viewport. */
+  textEdge: number;
+  /** The box's edge on that side, in the same px. */
+  boxEdge: number;
 }
 
 /** Text elements that share a colour, the backgrounds behind it and a size class. */

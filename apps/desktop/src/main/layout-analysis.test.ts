@@ -158,8 +158,10 @@ describe('analyzeLayoutSamples: overflow and clipped text', () => {
         viewportWidth: 1280,
         documentWidth: 1280,
         clipped: [
-          { selector: 'div#card', textRight: 340, boxRight: 300, textBottom: 60, boxBottom: 80 },
-          { selector: 'p.teaser', textRight: 200, boxRight: 300, textBottom: 190, boxBottom: 120 },
+          { selector: 'div#card', side: 'right', textEdge: 340, boxEdge: 300 },
+          { selector: 'p.teaser', side: 'bottom', textEdge: 190, boxEdge: 120 },
+          { selector: 'span.badge', side: 'left', textEdge: 20, boxEdge: 40 },
+          { selector: 'h2.title', side: 'top', textEdge: 8, boxEdge: 30 },
         ],
       }),
     );
@@ -182,6 +184,24 @@ describe('analyzeLayoutSamples: overflow and clipped text', () => {
           'p.teaser hides part of its text: the text reaches 190 px from the top but the box ends at 120 px (viewport 1,280 px).',
         measured: 190,
         limit: 120,
+      },
+      {
+        check: 'clipped-text',
+        viewportWidth: 1280,
+        selector: 'span.badge',
+        message:
+          'span.badge hides part of its text: the text starts at 20 px but the box starts at 40 px (viewport 1,280 px).',
+        measured: 20,
+        limit: 40,
+      },
+      {
+        check: 'clipped-text',
+        viewportWidth: 1280,
+        selector: 'h2.title',
+        message:
+          'h2.title hides part of its text: the text starts at 8 px from the top but the box starts at 30 px (viewport 1,280 px).',
+        measured: 8,
+        limit: 30,
       },
     ]);
   });
@@ -312,9 +332,7 @@ describe('analyzeLayoutSamples: small targets and names', () => {
       samples({
         documentWidth: 600,
         overflowing: [{ selector: 'div.wide', right: 600 }],
-        clipped: [
-          { selector: 'div#card', textRight: 340, boxRight: 300, textBottom: 60, boxBottom: 80 },
-        ],
+        clipped: [{ selector: 'div#card', side: 'right', textEdge: 340, boxEdge: 300 }],
         textGroups: [group()],
         smallTargets: [{ selector: 'button.close', width: 16, height: 16 }],
         unnamedControls: [{ selector: 'button.menu', kind: 'button' }],
