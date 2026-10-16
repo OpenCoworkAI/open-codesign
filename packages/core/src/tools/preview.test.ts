@@ -12,6 +12,7 @@ import {
   MAX_CONSOLE_ENTRIES,
   MAX_LAYOUT_ISSUES,
   MAX_PREVIEW_STEPS,
+  MAX_PREVIEW_WARNINGS,
   makePreviewTool,
   type PreviewInput,
   type PreviewResult,
@@ -397,6 +398,19 @@ describe('makePreviewTool', () => {
 
       expect(MAX_LAYOUT_ISSUES).toBe(20);
       expect(result.details.layoutIssues).toEqual(issues.slice(0, MAX_LAYOUT_ISSUES));
+    });
+
+    it('caps warnings to the documented budget', async () => {
+      const warnings = Array.from(
+        { length: MAX_PREVIEW_WARNINGS + 1 },
+        (_, index) => `Note ${index}`,
+      );
+      const runPreview = vi.fn().mockResolvedValue(cannedResult({ warnings }));
+
+      const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+
+      expect(MAX_PREVIEW_WARNINGS).toBe(5);
+      expect(result.details.warnings).toEqual(warnings.slice(0, MAX_PREVIEW_WARNINGS));
     });
 
     it('leaves the field out when the host did not measure the layout', async () => {

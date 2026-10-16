@@ -123,6 +123,9 @@ export const AssetError = Type.Object({
   type: Type.Optional(Type.String()),
 });
 
+/** Warnings a preview result carries; the ones past it are cut. */
+export const MAX_PREVIEW_WARNINGS = 5;
+
 /** Layout and accessibility findings are advice: they never change `ok` or the `done` status. */
 export const MAX_LAYOUT_ISSUES = 20;
 
@@ -160,7 +163,7 @@ export const PreviewResult = Type.Object({
     loadMs: Type.Number(),
   }),
   reason: Type.Optional(Type.String()),
-  warnings: Type.Optional(Type.Array(Type.String(), { maxItems: 5 })),
+  warnings: Type.Optional(Type.Array(Type.String(), { maxItems: MAX_PREVIEW_WARNINGS })),
   layoutIssues: Type.Optional(Type.Array(LayoutIssue, { maxItems: MAX_LAYOUT_ISSUES })),
   visibleText: Type.Optional(Type.String()),
   steps: Type.Optional(
@@ -186,6 +189,9 @@ export function trimPreviewResult(result: PreviewResult): PreviewResult {
     ...result,
     consoleErrors: result.consoleErrors.slice(0, MAX_CONSOLE_ENTRIES),
     assetErrors: result.assetErrors.slice(0, MAX_ASSET_ERRORS),
+    ...(result.warnings !== undefined
+      ? { warnings: result.warnings.slice(0, MAX_PREVIEW_WARNINGS) }
+      : {}),
     ...(result.layoutIssues !== undefined
       ? { layoutIssues: result.layoutIssues.slice(0, MAX_LAYOUT_ISSUES) }
       : {}),
