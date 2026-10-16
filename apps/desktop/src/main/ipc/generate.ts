@@ -1093,8 +1093,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     ) {
       throw new CodesignError('done:verify:v1 expects { artifact: string }', 'IPC_BAD_INPUT');
     }
-    const errors = await sharedRuntimeVerifier((raw as { artifact: string }).artifact);
-    return { errors };
+    const { errors, warnings } = await sharedRuntimeVerifier(
+      (raw as { artifact: string }).artifact,
+    );
+    return { schemaVersion: 1, errors, warnings };
   });
 
   ipcMain.handle('codesign:v1:generate', async (_e, raw: unknown) => {

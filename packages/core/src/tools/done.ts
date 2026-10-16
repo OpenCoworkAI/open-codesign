@@ -26,6 +26,27 @@ const DoneParams = Type.Object({
 
 const DESIGN_MD_ENTRY = 'DESIGN.md';
 
+/** `source` of the advisory warnings the host's layout checks report. */
+export const LAYOUT_WARNING_SOURCE = 'layout';
+
+const STOP_LINES = [
+  'STOP. The design is verified. Your only remaining action is a short',
+  '2–3 sentence natural-language summary of the design decisions — no',
+  'code, no fenced blocks, no `<artifact>` tags, no file re-emission.',
+  'Do NOT call `done` again. Do NOT call any other tool. The host',
+  'extracts the artifact from the virtual filesystem automatically;',
+  "anything else you emit is wasted tokens and pollutes the user's chat.",
+];
+
+/** Layout warnings are advice, so the agent may fix one it agrees with, but not by looping on `done`. */
+const LAYOUT_ADVICE_LINES = [
+  'The design is verified. The layout and accessibility warnings below are advice, not errors.',
+  'If you agree one is a real defect, fix it with one edit and check it with',
+  '`preview`; do not call `done` again. Otherwise your only remaining action',
+  'is a short 2–3 sentence natural-language summary of the design decisions —',
+  'no code, no fenced blocks, no `<artifact>` tags, no file re-emission.',
+];
+
 export interface DoneError {
   message: string;
   source?: string;
@@ -117,7 +138,7 @@ function designMdWorkspaceFindings(
 function formatWarnings(warnings: DoneError[]): string {
   return warnings.length === 0
     ? ''
-    : `\n\nNon-blocking design metadata warnings:\n${warnings
+    : `\n\nNon-blocking warnings:\n${warnings
         .map((warning) => `- ${warning.source}: ${warning.message}`)
         .join('\n')}`;
 }
@@ -134,13 +155,20 @@ function requiredDesignMdErrors(fs: TextEditorFsCallbacks, activePath: string): 
   ];
 }
 
+/** What the host observed when it ran the artifact: console and load `errors`
+ *  that make `done` fail, and advisory `warnings` that never do. */
+export interface DoneRuntimeResult {
+  errors: DoneError[];
+  warnings: DoneError[];
+}
+
 /** Host-injected runtime verifier. Receives the raw artifact source (the
- *  agent's JSX module, NOT a fully-built srcdoc) and returns any console /
- *  load errors observed when the host actually executed it. */
+ *  agent's JSX module, NOT a fully-built srcdoc) and returns what the host
+ *  observed when it actually executed it. */
 export type DoneRuntimeVerifier = (
   artifactSource: string,
   context?: { path: string; signal?: AbortSignal },
-) => Promise<DoneError[]>;
+) => Promise<DoneRuntimeResult>;
 
 const VOID_ELEMENTS = new Set([
   'area',
@@ -528,14 +556,16 @@ export function makeDoneTool(
         ...(opts.requireDesignMd ? requiredDesignMdErrors(fs, path) : []),
         ...designFindings.errors,
       ];
+      const warnings: DoneError[] = [...designFindings.warnings];
       if (runtimeVerify && isRenderableDesignSourcePath(path)) {
         try {
-          const runtimeErrors = await runtimeVerify(file.content, {
+          const runtime = await runtimeVerify(file.content, {
             path,
             ...(signal ? { signal } : {}),
           });
           signal?.throwIfAborted();
-          errors.push(...runtimeErrors);
+          errors.push(...runtime.errors);
+          warnings.push(...runtime.warnings);
         } catch (err) {
           signal?.throwIfAborted();
           errors.push({
@@ -549,9 +579,10 @@ export function makeDoneTool(
         status,
         path,
         errors,
-        ...(designFindings.warnings.length > 0 ? { warnings: designFindings.warnings } : {}),
+        ...(warnings.length > 0 ? { warnings } : {}),
         ...(params.summary !== undefined ? { summary: params.summary } : {}),
       };
+      const hasLayoutAdvice = warnings.some((warning) => warning.source === LAYOUT_WARNING_SOURCE);
       const text =
         status === 'ok'
           ? [
@@ -559,16 +590,11 @@ export function makeDoneTool(
                 ? 'ok — no syntactic or runtime issues detected.'
                 : 'ok — no syntactic issues detected. (Runtime verification not configured in this host.)',
               '',
-              'STOP. The design is verified. Your only remaining action is a short',
-              '2–3 sentence natural-language summary of the design decisions — no',
-              'code, no fenced blocks, no `<artifact>` tags, no file re-emission.',
-              'Do NOT call `done` again. Do NOT call any other tool. The host',
-              'extracts the artifact from the virtual filesystem automatically;',
-              "anything else you emit is wasted tokens and pollutes the user's chat.",
+              ...(hasLayoutAdvice ? LAYOUT_ADVICE_LINES : STOP_LINES),
             ].join('\n')
           : `has_errors\n${errors.map((e) => `- ${e.source ? `${e.source}: ` : ''}${e.message}${e.lineno ? ` (line ${e.lineno})` : ''}`).join('\n')}`;
       return {
-        content: [{ type: 'text', text: text + formatWarnings(designFindings.warnings) }],
+        content: [{ type: 'text', text: text + formatWarnings(warnings) }],
         details,
       };
     },

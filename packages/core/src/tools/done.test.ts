@@ -72,7 +72,7 @@ components:
 `,
       ),
     });
-    const runtime = vi.fn(async () => []);
+    const runtime = vi.fn(async () => ({ errors: [], warnings: [] }));
     const result = await makeDoneTool(fs, runtime).execute('extensions', { path });
     expect(result.details.status).toBe('ok');
     expect(result.details.errors).toEqual([]);
@@ -88,10 +88,82 @@ components:
     }
     expect(result.content).toEqual([
       expect.objectContaining({
-        text: expect.stringContaining('Non-blocking design metadata warnings'),
+        text: expect.stringContaining('Non-blocking warnings'),
       }),
     ]);
     expect(runtime).toHaveBeenCalledTimes(path === 'App.jsx' ? 1 : 0);
+  });
+
+  describe('runtime warnings', () => {
+    const layoutWarning = {
+      source: 'layout',
+      message: 'The page is 132 px wider than a 390 px viewport (body > main.hero)',
+    };
+
+    it('lists layout warnings without failing the run, and lets the agent fix one without calling done again', async () => {
+      const fs = makeFs({ 'App.jsx': VALID_TASK_APP, 'DESIGN.md': VALID_DESIGN_MD });
+      const runtime = vi.fn(async () => ({ errors: [], warnings: [layoutWarning] }));
+
+      const result = await makeDoneTool(fs, runtime).execute('layout', { path: 'App.jsx' });
+
+      expect(result.details.status).toBe('ok');
+      expect(result.details.errors).toEqual([]);
+      expect(result.details.warnings).toEqual([layoutWarning]);
+      const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+      expect(text).toContain('Non-blocking warnings:');
+      expect(text).toContain(`- layout: ${layoutWarning.message}`);
+      expect(text).toContain('advice, not errors');
+      expect(text).toContain('do not call `done` again');
+      expect(text).not.toContain('STOP.');
+    });
+
+    it('keeps the stop instruction when no layout warning is present', async () => {
+      const fs = makeFs({
+        'App.jsx': VALID_TASK_APP,
+        'DESIGN.md': VALID_DESIGN_MD.replace(
+          '\n---\n',
+          '\ncomponents:\n  card:\n    borderRadius: 16px\n---\n',
+        ),
+      });
+      const runtime = vi.fn(async () => ({ errors: [], warnings: [] }));
+
+      const result = await makeDoneTool(fs, runtime).execute('metadata', { path: 'App.jsx' });
+
+      const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+      expect(result.details.status).toBe('ok');
+      expect(text).toContain('STOP.');
+      expect(text).not.toContain('advice, not errors');
+    });
+
+    it('reports layout warnings next to runtime errors', async () => {
+      const fs = makeFs({ 'App.jsx': VALID_TASK_APP, 'DESIGN.md': VALID_DESIGN_MD });
+      const error = { source: 'runtime', message: 'ReferenceError: missingTask is not defined' };
+      const runtime = vi.fn(async () => ({ errors: [error], warnings: [layoutWarning] }));
+
+      const result = await makeDoneTool(fs, runtime).execute('both', { path: 'App.jsx' });
+
+      expect(result.details.status).toBe('has_errors');
+      expect(result.details.errors).toEqual([error]);
+      expect(result.details.warnings).toEqual([layoutWarning]);
+      const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+      expect(text.startsWith('has_errors')).toBe(true);
+      expect(text).toContain(`- layout: ${layoutWarning.message}`);
+    });
+
+    it('does not report warnings when the verifier failed to run', async () => {
+      const fs = makeFs({ 'App.jsx': VALID_TASK_APP, 'DESIGN.md': VALID_DESIGN_MD });
+      const runtime = vi.fn(async () => {
+        throw new Error('Chrome is not installed');
+      });
+
+      const result = await makeDoneTool(fs, runtime).execute('failed', { path: 'App.jsx' });
+
+      expect(result.details.status).toBe('has_errors');
+      expect(result.details.errors).toEqual([
+        { source: 'runtime', message: 'Runtime verifier failed: Chrome is not installed' },
+      ]);
+      expect(result.details.warnings).toBeUndefined();
+    });
   });
 
   it('does not let metadata warnings hide runtime failures', async () => {
@@ -102,9 +174,10 @@ components:
         '\ncomponents:\n  card:\n    borderRadius: 16px\n---\n',
       ),
     });
-    const runtime = vi.fn(async () => [
-      { source: 'runtime', message: 'ReferenceError: missingTask is not defined' },
-    ]);
+    const runtime = vi.fn(async () => ({
+      errors: [{ source: 'runtime', message: 'ReferenceError: missingTask is not defined' }],
+      warnings: [],
+    }));
     const result = await makeDoneTool(fs, runtime).execute('runtime', { path: 'App.jsx' });
     expect(result.details.status).toBe('has_errors');
     expect(result.details.errors).toEqual([
@@ -275,13 +348,16 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
     const fs = makeFs({
       'index.html': '<!doctype html><html><body><main><h1>Hi</h1></main></body></html>',
     });
-    const runtimeVerify = vi.fn(async () => [
-      {
-        message: 'ReferenceError: TWEAK_DEFAULT is not defined',
-        source: 'console.error',
-        lineno: 12,
-      },
-    ]);
+    const runtimeVerify = vi.fn(async () => ({
+      errors: [
+        {
+          message: 'ReferenceError: TWEAK_DEFAULT is not defined',
+          source: 'console.error',
+          lineno: 12,
+        },
+      ],
+      warnings: [],
+    }));
     const tool = makeDoneTool(fs, runtimeVerify);
     const res = await tool.execute('id5', { summary: 'shipped' });
     expect(runtimeVerify).toHaveBeenCalledOnce();
@@ -298,7 +374,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
     const fs = makeFs({
       'index.html': '<!doctype html><html><body><main><h1>Hi</h1></main></body></html>',
     });
-    const runtimeVerify = vi.fn(async () => []);
+    const runtimeVerify = vi.fn(async () => ({ errors: [], warnings: [] }));
     const tool = makeDoneTool(fs, runtimeVerify);
     const res = await tool.execute('id6', {});
     expect(res.details.status).toBe('ok');
@@ -310,12 +386,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
     const fs = makeFs({
       'design-brief.md': '# Design brief\n\nA concise handoff document.',
     });
-    const runtimeVerify = vi.fn(async () => [
-      {
-        message: 'This verifier should only run for renderable sources.',
-        source: 'runtime',
-      },
-    ]);
+    const runtimeVerify = vi.fn(async () => ({
+      errors: [
+        {
+          message: 'This verifier should only run for renderable sources.',
+          source: 'runtime',
+        },
+      ],
+      warnings: [],
+    }));
     const tool = makeDoneTool(fs, runtimeVerify, { requireDesignMd: true });
     const res = await tool.execute('id-markdown-done', { path: 'design-brief.md' });
     expect(runtimeVerify).not.toHaveBeenCalled();

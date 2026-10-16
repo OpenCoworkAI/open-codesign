@@ -184,7 +184,7 @@ vi.mock('../memory-ipc', () => ({
 }));
 
 vi.mock('../done-verify', () => ({
-  makeRuntimeVerifier: vi.fn(() => async () => []),
+  makeRuntimeVerifier: vi.fn(() => async () => ({ errors: [], warnings: [] })),
 }));
 
 vi.mock('../preview-runtime', () => ({
@@ -418,6 +418,26 @@ describe('generate IPC workspace rename coordination', () => {
     expect(listSessionChatMessages({ db, sessionDir: db.sessionDir }, design.id)).toEqual(rows);
     expect(listSnapshots(db, design.id)).toEqual(snapshots);
     expect(vi.mocked(generateViaAgent)).toHaveBeenCalledOnce();
+  });
+
+  it('returns verifier errors and warnings from done:verify:v1 with a schema version', async () => {
+    const error = { message: 'ReferenceError: x is not defined', source: 'pageerror' };
+    const warning = {
+      message: 'The page is 132 px wider than a 390 px viewport',
+      source: 'layout',
+    };
+    vi.mocked(makeRuntimeVerifier).mockReturnValueOnce(async () => ({
+      errors: [error],
+      warnings: [warning],
+    }));
+    registerGenerateIpc({ db: initTestDb(), getMainWindow: () => null });
+
+    await expect(
+      getHandler('done:verify:v1')(null, { artifact: 'function App(){return null;}' }),
+    ).resolves.toEqual({ schemaVersion: 1, errors: [error], warnings: [warning] });
+    await expect(getHandler('done:verify:v1')(null, { artifact: 42 })).rejects.toThrow(
+      'done:verify:v1 expects { artifact: string }',
+    );
   });
 
   it('persists preparation failures and validates recovery cursors', async () => {

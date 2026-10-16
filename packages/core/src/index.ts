@@ -119,7 +119,9 @@ export {
 export {
   type DoneDetails,
   type DoneError,
+  type DoneRuntimeResult,
   type DoneRuntimeVerifier,
+  LAYOUT_WARNING_SOURCE,
   makeDoneTool,
 } from './tools/done.js';
 export {
@@ -137,6 +139,8 @@ export {
   type WorkspaceInspection,
 } from './tools/inspect-workspace.js';
 export {
+  type LayoutIssue,
+  MAX_LAYOUT_ISSUES,
   makePreviewTool,
   type PreviewInput,
   type PreviewResult,
