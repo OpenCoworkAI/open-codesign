@@ -166,12 +166,38 @@ components:
     });
   });
 
+  it.each([
+    'App.jsx',
+    'DESIGN.md',
+  ])('accepts top-level metadata extensions and CSS dimensions when finishing %s', async (path) => {
+    const fs = makeFs({
+      'App.jsx': VALID_TASK_APP,
+      'DESIGN.md': VALID_DESIGN_MD.replace('rounded:', 'radius:')
+        .replace('fontSize: 16px', 'fontSize: 16px\n    letterSpacing: 0')
+        .replace('sm: 4px', 'sm: .5rem')
+        .replace('spacing:', 'shadows:\n  card: "0 2px 8px #000000"\nspacing:'),
+    });
+    const result = await makeDoneTool(fs, async () => ({ errors: [], warnings: [] })).execute(
+      'top-level-extensions',
+      { path },
+    );
+    expect(result.details.status).toBe('ok');
+    expect(result.details.errors).toEqual([]);
+    expect(result.details.warnings).toEqual([
+      expect.objectContaining({ source: 'DESIGN.md', message: expect.stringContaining('radius:') }),
+      expect.objectContaining({
+        source: 'DESIGN.md',
+        message: expect.stringContaining('shadows:'),
+      }),
+    ]);
+  });
+
   it('does not let metadata warnings hide runtime failures', async () => {
     const fs = makeFs({
       'App.jsx': VALID_TASK_APP,
       'DESIGN.md': VALID_DESIGN_MD.replace(
         '\n---\n',
-        '\ncomponents:\n  card:\n    borderRadius: 16px\n---\n',
+        '\nshadows:\n  card: "0 2px 8px #000000"\n---\n',
       ),
     });
     const runtime = vi.fn(async () => ({
@@ -411,11 +437,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
   });
 
   it('reports DESIGN.md validation errors directly', async () => {
-    const fs = makeFs({ 'DESIGN.md': VALID_DESIGN_MD.replace('rounded:', 'radius:') });
+    const fs = makeFs({
+      'DESIGN.md': VALID_DESIGN_MD.replace('rounded:', 'radius:').replace(
+        'typography:',
+        'typography:\n  fontFamily: Inter',
+      ),
+    });
     const tool = makeDoneTool(fs);
     const res = await tool.execute('id-design-md-bad', { path: 'DESIGN.md' });
     expect(res.details.status).toBe('has_errors');
-    expect(res.details.errors.some((e) => /radius/.test(e.message))).toBe(true);
+    expect(res.details.errors.some((e) => /typography.fontFamily/.test(e.message))).toBe(true);
+    expect(res.details.warnings).toHaveLength(1);
   });
 
   it('validates existing DESIGN.md before accepting App.jsx', async () => {
