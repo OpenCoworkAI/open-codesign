@@ -1,4 +1,11 @@
 {
+  "sourceEntry": {
+    "primary": "主文件",
+    "needsSelection": "请选择要预览和编辑的文件。",
+    "choose": "选择文件",
+    "reload": "重新读取",
+    "useFile": "使用此文件"
+  },
   "activeMessages": {
     "queue": "排队追加消息",
     "steer": "调整下一步",
@@ -80,7 +87,8 @@
       "selectHint": "点击预览中的元素；仅可修改受支持的静态源码字段。",
       "unsupportedSelection": "此元素没有受支持的源码目标，动态或不明确的来源不可编辑。",
       "saved": "已保存到工作区",
-      "unavailable": "需要真实工作区 JSX/TSX 源码；生成过程中不可编辑。"
+      "unavailable": "需要真实工作区 HTML/JSX/TSX 源码；生成过程中不可编辑。",
+      "htmlHint": "HTML 编辑期间暂停页面脚本，确保点选元素与源码一致；退出编辑后恢复页面交互。"
     },
     "documentPreview": {
       "previewLabel": "文档预览",

@@ -89,6 +89,7 @@ import {
   notifyAutoManagedSourceRename,
   removeSourceEntryForRollback,
 } from './source-entry';
+import { registerSourceEntryIpc } from './source-entry-ipc';
 import { prepareWorkspaceWriteContent } from './workspace-file-content';
 import { normalizeWorkspacePath } from './workspace-path';
 import {
@@ -2347,6 +2348,7 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
 
   registerFilesWatcherIpc(db, getWin);
   registerSourceEditsIpc(db, getWin);
+  registerSourceEntryIpc(db, getWin);
 }
 
 function parseIdPayload(raw: unknown, channel: string): string {
@@ -2399,6 +2401,8 @@ export const SNAPSHOTS_CHANNELS_V1 = [
   'codesign:files:v1:unsubscribe',
   'codesign:source-edits:v1:inspect',
   'codesign:source-edits:v1:apply',
+  'codesign:source-entry:v1:get',
+  'codesign:source-entry:v1:select',
   'chat:v1:list',
   'chat:v1:append',
   'chat:v1:seed-from-snapshots',

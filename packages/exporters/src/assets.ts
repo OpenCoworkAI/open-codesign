@@ -1,6 +1,9 @@
 import path from 'node:path';
+import type { SourceIdentityV1 } from '@open-codesign/shared';
 
 export interface LocalAssetOptions {
+  /** Explicit source execution mode, supplied by the host source declaration. */
+  runtimeMode?: SourceIdentityV1['runtimeMode'] | undefined;
   /** Workspace-relative source path used to classify source and anchor relative assets. */
   sourcePath?: string | undefined;
   /** Directory used to resolve relative HTML references. */

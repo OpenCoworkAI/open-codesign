@@ -1,6 +1,10 @@
 import { useT } from '@open-codesign/i18n';
 import type { SourceEditSelection } from '@open-codesign/runtime';
-import type { SourceEditOperation, SourceEditTarget } from '@open-codesign/shared';
+import type {
+  SourceEditOperation,
+  SourceEditTarget,
+  SourceIdentityV1,
+} from '@open-codesign/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { inspectWorkspaceSourceEdit, persistWorkspaceSourceEdit } from './source-edit-persistence';
 
@@ -8,6 +12,7 @@ export interface SourceEditWorkspaceSource {
   path: string;
   content: string;
   workspaceDesignId?: string;
+  source?: SourceIdentityV1;
 }
 
 export function useWorkspaceSourceEdit(input: {
@@ -33,7 +38,7 @@ export function useWorkspaceSourceEdit(input: {
     !input.generating &&
     Boolean(input.designId) &&
     input.source?.workspaceDesignId === input.designId &&
-    /\.(jsx|tsx)$/i.test(input.source?.path ?? '') &&
+    /\.(jsx|tsx|html?)$/i.test(input.source?.path ?? '') &&
     Boolean(window.codesign?.sourceEdits);
   const eligible = allowed && !input.loading;
   const context = useMemo(
@@ -47,6 +52,7 @@ export function useWorkspaceSourceEdit(input: {
       enabled,
       refresh,
       sourceMode,
+      runtimeMode: input.source?.source?.runtimeMode,
     }),
     [
       input.designId,
@@ -58,6 +64,7 @@ export function useWorkspaceSourceEdit(input: {
       enabled,
       refresh,
       sourceMode,
+      input.source?.source?.runtimeMode,
     ],
   );
   const current = useRef(context);
@@ -199,6 +206,7 @@ export function useWorkspaceSourceEdit(input: {
         setInspected(null);
         setRefresh((value) => value + 1);
         input.onPersist({
+          ...(input.source?.source ? { source: input.source.source } : {}),
           path: result.path,
           content: result.content,
           workspaceDesignId: context.designId,
@@ -216,7 +224,7 @@ export function useWorkspaceSourceEdit(input: {
         }
       }
     },
-    [context, inspection, selection, input.onPersist, input.onSaved, t],
+    [context, inspection, selection, input.onPersist, input.onSaved, input.source?.source, t],
   );
 
   return {

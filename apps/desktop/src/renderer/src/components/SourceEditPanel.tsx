@@ -121,6 +121,11 @@ export function SourceEditPanel({
       <p className="m-0 text-[var(--text-sm)] text-[var(--color-text-muted)]">
         {t('canvas.sourceEdit.reloadWarning')}
       </p>
+      {/\.html?$/i.test(path) && !sourceMode ? (
+        <p className="m-0 text-[var(--text-sm)] text-[var(--color-text-muted)]">
+          {t('canvas.sourceEdit.htmlHint')}
+        </p>
+      ) : null}
       {message ? (
         <p role="status" className="m-0 text-[var(--text-sm)] text-[var(--color-text-secondary)]">
           {message}

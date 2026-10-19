@@ -17,6 +17,14 @@ async function rpc<T>(method: string, args: unknown[] = []): Promise<T> {
 }
 Object.defineProperty(window, 'codesign', {
   value: {
+    ...(new URL(window.location.href).searchParams.has('native')
+      ? {
+          sourceEntry: { get: (...args: [string]) => rpc('sourceEntry', args) } satisfies Pick<
+            CodesignApi['sourceEntry'],
+            'get'
+          >,
+        }
+      : {}),
     files: {
       read: (...args) => rpc('read', args),
       listDir: (...args) => rpc('listDir', args),

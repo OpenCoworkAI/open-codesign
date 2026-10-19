@@ -4,10 +4,13 @@ import {
   buildInteractivePreviewDocument,
   buildPreviewDocument,
   INTERACTIVE_PREVIEW_SANDBOX,
+  type SourceEditPreviewOptions,
 } from '@open-codesign/runtime';
 import type { SourceIdentityV1 } from '@open-codesign/shared';
 import puppeteer, { type Browser, type Frame, type Page } from 'puppeteer-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { analyzeSourceEdit } from '../../../main/source-edit-engine';
+import { resolveDesignPreviewSource } from './workspace-source';
 
 const chrome = await findSystemChrome().catch(() => null);
 const reactForm = `function App() {
@@ -59,6 +62,7 @@ describe.skipIf(!chrome)('interactive preview form boundary in system Chrome', (
     path = 'App.jsx',
     legacy = false,
     runtimeMode?: SourceIdentityV1['runtimeMode'],
+    sourceEdit?: SourceEditPreviewOptions,
   ) {
     const page = await browser.newPage();
     await page.setContent('<iframe title="fixture"></iframe>');
@@ -72,13 +76,85 @@ describe.skipIf(!chrome)('interactive preview form boundary in system Chrome', (
         sandbox: legacy ? 'allow-scripts' : INTERACTIVE_PREVIEW_SANDBOX,
         document: legacy
           ? buildPreviewDocument(source, { path, runtimeMode })
-          : buildInteractivePreviewDocument(source, { path, runtimeMode }),
+          : buildInteractivePreviewDocument(source, { path, runtimeMode, sourceEdit }),
       },
     );
     const frame = await (await page.$('iframe'))?.contentFrame();
     if (!frame) throw new Error('Missing fixture frame');
     return { page, frame };
   }
+
+  it('executes authored HTML interactions after resolving the host-declared nested source', async () => {
+    const source =
+      '<!doctype html><html><body><button id="increment">Add</button><output id="count">0</output><script>document.getElementById("increment").onclick=()=>{const out=document.getElementById("count");out.textContent=String(Number(out.textContent)+1);};</script><!-- artifact source lives in stale.jsx --></body></html>';
+    const resolved = await resolveDesignPreviewSource({
+      designId: 'html',
+      snapshotSource: 'function App(){return <p>Wrong source</p>}',
+      preferSnapshotSource: true,
+      getSourceEntry: async () => ({
+        schemaVersion: 1,
+        designId: 'html',
+        workspacePath: 'C:/design',
+        revision: '76741943-1171-44b6-a744-a1a3ece68fbc',
+        status: 'ready',
+        origin: 'declared',
+        source: {
+          schemaVersion: 1,
+          path: 'pages/start.htm',
+          format: 'html',
+          runtimeMode: 'native-html',
+        },
+        content: source,
+      }),
+    });
+
+    if (!resolved) throw new Error('Missing declared source');
+    const { page, frame } = await mount(
+      resolved.content,
+      resolved.path,
+      false,
+      resolved.source?.runtimeMode,
+    );
+    try {
+      await frame.waitForSelector('#increment');
+      await frame.click('#increment');
+      await frame.waitForFunction(() => document.getElementById('count')?.textContent === '1');
+      expect(await frame.$eval('#count', (node) => node.textContent)).toBe('1');
+    } finally {
+      await page.close();
+    }
+  }, 30_000);
+
+  it('pauses inline and external scripts and handlers without fetching or reporting failed script resources', async () => {
+    const source = `<!doctype html><html><body onload="document.body.dataset.ran='yes'"><h1>Original</h1><script>document.querySelector('h1').textContent='Changed';</script><script async src="${endpoint}/authored.js"></script></body></html>`;
+    const result = analyzeSourceEdit({ path: 'index.html', source });
+    if (result.status !== 'ready') throw new Error(result.message);
+    const baseline = requests.length;
+    const { page, frame } = await mount(source, 'index.html', false, 'native-html', {
+      ...result,
+      source,
+      previewRevision: 'html-edit-control',
+    });
+    try {
+      await frame.waitForSelector('h1[data-codesign-source-id]');
+      expect(await frame.$eval('h1', (node) => node.textContent)).toBe('Original');
+      expect(await frame.$eval('body', (node) => node.dataset['ran'])).toBeUndefined();
+      expect(
+        await frame.$eval('script[type="application/x-codesign-source-edit"]', (node) =>
+          node.getAttribute('src'),
+        ),
+      ).toBeNull();
+      await frame.evaluate(
+        () =>
+          new Promise<void>((done) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => done())),
+          ),
+      );
+      expect(requests.length).toBe(baseline);
+    } finally {
+      await page.close();
+    }
+  });
 
   it('reproduces the legacy block then allows React click and Enter with native validation', async () => {
     for (const legacy of [true, false]) {

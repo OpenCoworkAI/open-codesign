@@ -10,6 +10,8 @@ import {
   parseRequest,
   resolveExportSource,
 } from './exporter-ipc';
+import { createDesign, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
+import { initializeSourceEntry } from './source-entry';
 
 let tempDir = '';
 
@@ -179,6 +181,37 @@ describe('export path helpers', () => {
 });
 
 describe('resolveExportSource', () => {
+  it('exports the host-declared native source instead of stale JSX or HTML reference comments', async () => {
+    const workspace = join(tempDir, 'native-workspace');
+    mkdirSync(workspace, { recursive: true });
+    const content =
+      '<!doctype html><html><body><main>Native</main><script>document.title="Authored";</script><!-- artifact source lives in App.jsx --></body></html>';
+    writeFileSync(join(workspace, 'index.html'), content);
+    writeFileSync(join(workspace, 'App.jsx'), 'function App(){ return <main>Old</main>; }');
+    const db = { ...initInMemoryDb(), sessionDir: join(tempDir, 'sessions') };
+    const design = createDesign(db, 'Native');
+    updateDesignWorkspace(db, design.id, workspace);
+    await initializeSourceEntry(db, design.id);
+    const resolved = await resolveExportSource(
+      {
+        format: 'html',
+        designId: design.id,
+        artifactSource: '<main>Stale</main>',
+        workspacePath: 'C:/wrong',
+      },
+      { db },
+    );
+    expect(resolved).toMatchObject({
+      artifactSource: content,
+      sourcePath: 'index.html',
+      workspacePath: workspace.replaceAll('\\', '/'),
+      runtimeMode: 'native-html',
+    });
+    expect(exportAssetOptions(resolved)).toMatchObject({
+      sourcePath: 'index.html',
+      runtimeMode: 'native-html',
+    });
+  });
   it('prefers the current workspace source over the renderer preview cache', async () => {
     mkdirSync(join(tempDir, 'workspace'), { recursive: true });
     writeFileSync(

@@ -20,6 +20,59 @@ afterAll(() => {
 });
 
 describe('buildHtmlDocument', () => {
+  it.runIf(process.env['CODESIGN_EXPORT_BROWSER_TESTS'] === '1')(
+    'opens a portable native HTML export with local authored scripts offline',
+    async () => {
+      const { findSystemChrome } = await import('./chrome-discovery');
+      const { default: puppeteer } = await import('puppeteer-core');
+      writeFileSync(
+        join(tempDir, 'assets/native-counter.js'),
+        'function App(){return "ReactDOM.createRoot <App/>";}document.getElementById("increment").onclick=()=>{document.getElementById("count").textContent="1";};',
+      );
+      const source =
+        '<!doctype html><html><body><button id="increment">Add</button><output id="count">0</output><script src="../assets/native-counter.js"></script></body></html>';
+      const destination = join(tempDir, 'native-offline.html');
+      await exportHtml(source, destination, {
+        sourcePath: 'screens/start.htm',
+        runtimeMode: 'native-html',
+        assetBasePath: join(tempDir, 'screens'),
+        assetRootPath: tempDir,
+      });
+      const browser = await puppeteer.launch({
+        executablePath: await findSystemChrome(),
+        headless: true,
+      });
+      try {
+        const page = await browser.newPage();
+        const errors: string[] = [];
+        const external: string[] = [];
+        page.on('pageerror', (error) => errors.push(String(error)));
+        page.on('request', (request) => {
+          if (/^https?:/.test(request.url())) external.push(request.url());
+        });
+        await page.setOfflineMode(true);
+        await page.goto(pathToFileURL(destination).href);
+        await page.click('#increment');
+        expect(await page.$eval('#count', (node) => node.textContent)).toBe('1');
+        expect(errors).toEqual([]);
+        expect(external).toEqual([]);
+      } finally {
+        await browser.close();
+      }
+    },
+    30_000,
+  );
+  it('preserves authored scripts and JSX-looking literals when exporting native HTML', () => {
+    const script =
+      '<script>function App(){return "ReactDOM.createRoot <App/>";} document.title="Native";</script>';
+    const out = buildHtmlDocument(
+      `<!doctype html><html><body><main>Native</main>${script}</body></html>`,
+      { sourcePath: 'pages/start.htm', runtimeMode: 'native-html' },
+    );
+    expect(out).toContain(script);
+    expect(out).not.toContain('CODESIGN_STANDALONE_RUNTIME');
+    expect(out).not.toContain('window.Babel.transform');
+  });
   it('exports JSX source as browser-openable HTML with the standalone runtime', () => {
     const out = buildHtmlDocument(
       'function App() { return <div className="p-4">hi</div>; }\nReactDOM.createRoot(document.getElementById("root")).render(<App/>);',

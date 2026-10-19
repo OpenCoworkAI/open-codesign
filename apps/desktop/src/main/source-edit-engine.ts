@@ -13,6 +13,8 @@ import {
   type SourceEditTarget,
   type SourceEditUnsupported,
 } from '@open-codesign/shared';
+import { analyzeHtmlSourceEdit, planHtmlSourceEdit } from './html-source-edit-engine';
+import { validSourceEditStyle } from './source-edit-values';
 
 // A structural view keeps parser implementation types out of the wire contract.
 interface AstNode {
@@ -876,6 +878,7 @@ export function analyzeSourceEdit(input: {
   source: string;
   selectionMode?: SourceEditSelectionMode | undefined;
 }): SourceEditInspectResultV1 {
+  if (/\.html?$/i.test(input.path)) return analyzeHtmlSourceEdit(input);
   const result = analyze(input.path, input.source, input.selectionMode);
   if ('status' in result) return result;
   return {
@@ -925,28 +928,6 @@ function runtimeReservedValue(value: string): boolean {
   return false;
 }
 
-function validStyle(property: string, value: string): boolean {
-  if (value !== value.trim() || !value || /[\\;{}<>]|(?:url|expression|var)\s*\(/i.test(value))
-    return false;
-  if (property === 'color' || property === 'backgroundColor') {
-    return /^(?:#[\da-f]{3,4}|#[\da-f]{6}|#[\da-f]{8}|[a-z]+|(?:rgb|rgba|hsl|hsla)\([\d\s.,%/+-]+\))$/i.test(
-      value,
-    );
-  }
-  if (property === 'maxWidth' && value === 'none') return true;
-  const parts = value.split(/ +/);
-  const max =
-    property === 'padding' || property === 'borderRadius' ? 4 : property === 'gap' ? 2 : 1;
-  return (
-    parts.length <= max &&
-    parts.every(
-      (part) =>
-        /^(?:\d+(?:\.\d+)?|\.\d+)(?:px|em|rem|%|vh|vw|vmin|vmax|ch|ex)?$/.test(part) &&
-        Number.isFinite(Number.parseFloat(part)),
-    )
-  );
-}
-
 export function planSourceEdit(input: {
   path: string;
   source: string;
@@ -956,6 +937,7 @@ export function planSourceEdit(input: {
   scope: SourceEditScope;
   selectionMode?: SourceEditSelectionMode | undefined;
 }): SourceEditApplyResultV1 {
+  if (/\.html?$/i.test(input.path)) return planHtmlSourceEdit(input);
   if (input.scope !== 'source-definition')
     return reject(
       'invalid-scope',
@@ -982,7 +964,7 @@ export function planSourceEdit(input: {
     );
   if (
     operation.data.kind === 'set-style' &&
-    !validStyle(operation.data.property, operation.data.value)
+    !validSourceEditStyle(operation.data.property, operation.data.value)
   )
     return reject(
       'invalid-style',

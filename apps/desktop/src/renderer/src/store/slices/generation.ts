@@ -19,6 +19,7 @@ import { workspacePathComparisonKey } from '../../lib/workspace-path.js';
 import {
   hasWorkspaceSourceReference,
   inferPreviewSourcePath,
+  resolveDesignPreviewSource,
   resolveWorkspacePreviewSource,
 } from '../../preview/workspace-source.js';
 import type { CodesignState } from '../../store.js';
@@ -1157,8 +1158,17 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         const sourcePathHint = referencesWorkspaceSource
           ? LEGACY_SOURCE_ENTRY
           : inferPreviewSourcePath(source);
+        const declared =
+          designId !== null && window.codesign.sourceEntry
+            ? await resolveDesignPreviewSource({
+                designId,
+                getSourceEntry: get().refreshSourceEntry,
+              })
+            : undefined;
+        if (declared === null) throw new Error(tr('sourceEntry.needsSelection'));
         const resolved =
-          designId !== null
+          declared ??
+          (designId !== null
             ? await resolveWorkspacePreviewSource({
                 designId,
                 source,
@@ -1166,7 +1176,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
                 read: window.codesign.files?.read,
                 requireReferencedSource: referencesWorkspaceSource,
               })
-            : { content: source, path: sourcePathHint };
+            : { content: source, path: sourcePathHint });
         const artifactSource = resolved.content;
         if (designId !== null && artifactSource !== source) {
           const pool = recordPreviewSourceInPool(
@@ -1176,7 +1186,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
             artifactSource,
           );
           set({
-            previewSource: artifactSource,
+            ...(get().currentDesignId === designId ? { previewSource: artifactSource } : {}),
             previewSourceByDesign: pool.cache,
             recentDesignIds: pool.recent,
           });

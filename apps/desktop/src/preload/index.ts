@@ -32,6 +32,8 @@ import type {
   SourceEditApplyResultV1,
   SourceEditInspectRequestV1,
   SourceEditInspectResultV1,
+  SourceEntryResultV1,
+  SourceEntrySelectRequestV1,
   SourceIdentityV1,
   SupportedOnboardingProvider,
   WireApi,
@@ -691,6 +693,15 @@ const api = {
       ipcRenderer.invoke('ollama:v1:probe', baseUrl) as Promise<
         { ok: true; models: string[] } | { ok: false; code: string; message: string }
       >,
+  },
+  sourceEntry: {
+    get: (designId: string) =>
+      ipcRenderer.invoke('codesign:source-entry:v1:get', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<SourceEntryResultV1>,
+    select: (input: SourceEntrySelectRequestV1) =>
+      ipcRenderer.invoke('codesign:source-entry:v1:select', input) as Promise<SourceEntryResultV1>,
   },
   sourceEdits: {
     inspect: (input: SourceEditInspectRequestV1) =>

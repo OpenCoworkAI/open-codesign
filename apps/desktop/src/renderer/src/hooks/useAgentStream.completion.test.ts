@@ -127,6 +127,19 @@ afterEach(() => {
 });
 
 describe('agent stream / IPC completion ordering', () => {
+  it('streams the declared nested HTML source with its mode and ignores secondary entry-looking files', () => {
+    const source = {
+      schemaVersion: 1 as const,
+      path: 'pages/start.htm',
+      format: 'html' as const,
+      runtimeMode: 'native-html' as const,
+    };
+    emit('fs_updated', 'native-run', { path: source.path, content: '<main>Native</main>', source });
+    expect(useCodesignStore.getState().previewSource).toBe('<main>Native</main>');
+    expect(useCodesignStore.getState().previewIdentityByDesign[design.id]).toEqual(source);
+    emit('fs_updated', 'native-run', { path: 'App.jsx', content: 'Old React source' });
+    expect(useCodesignStore.getState().previewSource).toBe('<main>Native</main>');
+  });
   it('keeps exactly one canonical active message through delivery, turn end and completion', async () => {
     const get = useCodesignStore.getState;
     const rows: ChatMessageRow[] = [];

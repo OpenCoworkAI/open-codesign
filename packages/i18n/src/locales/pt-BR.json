@@ -1,4 +1,11 @@
 {
+  "sourceEntry": {
+    "primary": "Arquivo principal",
+    "needsSelection": "Escolha o arquivo para visualizar e editar.",
+    "choose": "Escolher arquivo",
+    "reload": "Recarregar",
+    "useFile": "Usar este arquivo"
+  },
   "activeMessages": {
     "queue": "Enfileirar acompanhamento",
     "steer": "Orientar próximo passo",

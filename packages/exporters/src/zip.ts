@@ -80,6 +80,7 @@ export async function exportZip(
     const exportHtml = buildHtmlDocument(exportSource, {
       prettify: false,
       sourcePath: opts.sourcePath,
+      runtimeMode: opts.runtimeMode,
     });
 
     const indexPath = path.join(stagingDir, 'index.html');

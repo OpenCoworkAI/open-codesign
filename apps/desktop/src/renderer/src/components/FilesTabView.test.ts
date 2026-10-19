@@ -74,6 +74,24 @@ describe('FilesTabView preview helpers', () => {
     expect(workspacePreviewPathForSelection(files, 'design-1', null)).toBe('App.jsx');
   });
 
+  it('defaults to the declared HTML entry even before a nested directory is expanded', () => {
+    const files: DesignFileEntry[] = [
+      { path: 'App.jsx', kind: 'jsx', size: 500, updatedAt: '2026-09-17' },
+    ];
+    expect(workspacePreviewPathForSelection(files, 'html', null, 'pages/start.htm')).toBe(
+      'pages/start.htm',
+    );
+    expect(workspacePreviewPathForSelection(files, 'html', null, null)).toBeNull();
+    expect(
+      workspacePreviewPathForSelection(
+        files,
+        'html',
+        { designId: 'html', path: 'App.jsx' },
+        'pages/start.htm',
+      ),
+    ).toBe('App.jsx');
+  });
+
   it('preserves an explicit document selection when a runnable artifact arrives', () => {
     const files: DesignFileEntry[] = [
       { path: 'DESIGN.md', kind: 'text', size: 100, updatedAt: '2026-09-17' },

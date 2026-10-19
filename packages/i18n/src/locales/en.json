@@ -1,4 +1,11 @@
 {
+  "sourceEntry": {
+    "primary": "Primary file",
+    "needsSelection": "Choose the file to preview and edit.",
+    "choose": "Choose file",
+    "reload": "Reload",
+    "useFile": "Use this file"
+  },
   "activeMessages": {
     "queue": "Queue follow-up",
     "steer": "Steer next step",
@@ -80,7 +87,8 @@
       "selectHint": "Select an element in the preview. Only supported static source fields can be edited.",
       "unsupportedSelection": "This element has no supported source target. Dynamic or ambiguous sources cannot be edited.",
       "saved": "Saved to workspace",
-      "unavailable": "Requires a real workspace JSX/TSX source; editing is disabled during generation."
+      "unavailable": "Requires a real workspace HTML/JSX/TSX source; editing is disabled during generation.",
+      "htmlHint": "HTML editing temporarily pauses page scripts so selected elements match the source. Exit editing to restore page interactions."
     },
     "documentPreview": {
       "previewLabel": "Document preview",

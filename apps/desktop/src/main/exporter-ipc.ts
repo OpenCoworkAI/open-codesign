@@ -17,10 +17,12 @@ import {
   DEFAULT_SOURCE_ENTRY,
   ERROR_CODES,
   LEGACY_SOURCE_ENTRY,
+  type SourceIdentityV1,
 } from '@open-codesign/shared';
 import type { BrowserWindow } from 'electron';
 import { app, dialog, ipcMain } from './electron-runtime';
 import { type Database, getDesign } from './snapshots-db';
+import { getSourceEntry } from './source-entry';
 import { buildSourcesMarkdown, loadResearchStore, writeUniqueSources } from './web-research-store';
 import { readWorkspaceFileAt } from './workspace-reader';
 
@@ -63,6 +65,7 @@ function normalizeExportSourcePath(raw: string): string {
 }
 
 export interface ExportRequest {
+  runtimeMode?: SourceIdentityV1['runtimeMode'];
   format: ExporterFormat;
   artifactSource: string;
   defaultFilename?: string;
@@ -174,6 +177,28 @@ export async function resolveExportSource(
     ...(workspacePath ? { workspacePath } : {}),
   };
 
+  if (fromDb && deps.db) {
+    const entry = await getSourceEntry(deps.db, fromDb.id);
+    if (entry.status === 'ready' || entry.status === 'planned') {
+      if (!req.sourcePath || req.sourcePath === entry.source.path) {
+        if (!entry.content?.trim())
+          throw new CodesignError('The primary source is empty.', ERROR_CODES.IPC_BAD_INPUT);
+        return {
+          ...base,
+          workspacePath: entry.workspacePath,
+          sourcePath: entry.source.path,
+          artifactSource: entry.content,
+          runtimeMode: entry.source.runtimeMode,
+        };
+      }
+    } else if (
+      !req.sourcePath &&
+      (entry.status === 'invalid' || entry.status === 'needs-selection')
+    ) {
+      throw new CodesignError(entry.message, ERROR_CODES.IPC_BAD_INPUT);
+    }
+  }
+
   if (!workspacePath) {
     return { ...base, sourcePath: req.sourcePath ?? DEFAULT_SOURCE_ENTRY };
   }
@@ -217,12 +242,14 @@ export async function resolveExportSource(
 
 export function exportAssetOptions(req: ExportRequest): ExportOptions {
   const sourcePath = req.sourcePath ?? DEFAULT_SOURCE_ENTRY;
-  if (!req.workspacePath) return { sourcePath };
+  const runtime = req.runtimeMode ? { runtimeMode: req.runtimeMode } : {};
+  if (!req.workspacePath) return { sourcePath, ...runtime };
   const sourceDir = path.dirname(sourcePath);
   return {
     assetRootPath: req.workspacePath,
     assetBasePath: path.resolve(req.workspacePath, sourceDir),
     sourcePath,
+    ...runtime,
   };
 }
 

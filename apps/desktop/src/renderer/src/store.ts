@@ -15,6 +15,8 @@ import type {
   ReportEventInput,
   ReportEventResult,
   SelectedElement,
+  SourceEntryResultV1,
+  SourceIdentityV1,
 } from '@open-codesign/shared';
 import { create } from 'zustand';
 import type {
@@ -50,6 +52,7 @@ import {
   type PendingEditEnrichment,
 } from './store/slices/generation';
 import { toSnapshotArtifactType } from './store/slices/snapshots';
+import { makeSourcesSlice } from './store/slices/sources';
 import {
   type CanvasTab,
   closeTabAt,
@@ -136,6 +139,10 @@ export interface CodesignState {
    *  PreviewPane renders one (display:none) iframe per entry so switching back
    *  to a recently visited design is instant — no IPC, no srcDoc reparse. */
   previewSourceByDesign: Record<string, string>;
+  previewIdentityByDesign: Record<string, SourceIdentityV1>;
+  sourceEntryByDesign: Record<string, SourceEntryResultV1>;
+  refreshSourceEntry: (designId: string) => Promise<SourceEntryResultV1 | null>;
+  selectDesignSource: (designId: string, path: string) => Promise<void>;
   /** Most-recent-first list of design ids in the preview pool. */
   recentDesignIds: string[];
   generationByDesign: Record<
@@ -414,7 +421,11 @@ export interface CodesignState {
   /** Live preview update from the agent's virtual fs edit tool.
    *  Gated by designId match against the active or generating design so a
    *  background run cannot stomp the preview the user is currently viewing. */
-  setPreviewSourceFromAgent: (input: { designId: string; content: string }) => void;
+  setPreviewSourceFromAgent: (input: {
+    designId: string;
+    content: string;
+    source?: SourceIdentityV1;
+  }) => void;
   /** Persist the current in-memory design source for a finished agentic run as
    *  a snapshot row. Without this, agentic runs never write to disk
    *  and reload boots back into the empty welcome state even when the agent
@@ -482,6 +493,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   activeMessageSendingByDesign: {},
   previewSource: null,
   previewSourceByDesign: {},
+  previewIdentityByDesign: {},
+  sourceEntryByDesign: {},
   recentDesignIds: [],
   generationByDesign: {},
   settledGenerationIds: new Set(),
@@ -588,6 +601,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   ...makeDiagnosticsSlice(set, get),
   ...makeGenerationSlice(set, get),
   ...makeDesignsSlice(set, get),
+  ...makeSourcesSlice(set, get),
   ...makeChatSlice(set, get),
   ...makeCommentsSlice(set, get),
 

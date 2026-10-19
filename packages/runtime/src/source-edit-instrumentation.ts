@@ -59,6 +59,7 @@ export function isSourceEditSelection(value: unknown): value is SourceEditSelect
 export function instrumentSourceForEditing(
   source: string,
   plan: SourceEditPreviewOptions,
+  format: 'jsx' | 'html' = 'jsx',
 ): {
   source: string;
   context: SourceEditOverlayContext;
@@ -87,7 +88,9 @@ export function instrumentSourceForEditing(
       target.end <= target.insertionOffset ||
       target.id !== `${target.start}:${target.end}` ||
       target.insertionOffset < target.start + target.tagName.length + 1 ||
-      source.slice(target.start, target.start + target.tagName.length + 1) !==
+      (format === 'html'
+        ? source.slice(target.start, target.start + target.tagName.length + 1).toLowerCase()
+        : source.slice(target.start, target.start + target.tagName.length + 1)) !==
         `<${target.tagName}` ||
       !/^[\s/>]$/.test(source[target.start + target.tagName.length + 1] ?? '') ||
       (source[target.insertionOffset] !== '>' &&

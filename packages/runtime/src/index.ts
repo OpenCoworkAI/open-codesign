@@ -761,6 +761,7 @@ function buildNativeHtmlDocument(
   source: string,
   opts: BuildPreviewDocumentOptions,
   standalone: boolean,
+  sourceEdit?: SourceEditOverlayContext,
 ): string {
   let tokens = scanNativeHtml(source);
   const needsShell = standalone && !tokens.some((token) => token.name === 'html' && !token.closing);
@@ -793,7 +794,12 @@ function buildNativeHtmlDocument(
     if (needsShell && !hasViewport)
       headContent += '<meta name="viewport" content="width=device-width, initial-scale=1.0" />';
   } else if (!hasMarker(PREVIEW_VIEWPORT_MARKER)) {
-    const support = previewViewportSupportTags();
+    const support = sourceEdit
+      ? previewViewportSupportTags().replace(
+          '<script data-open-codesign="preview-viewport">',
+          `<script nonce="codesign-${sourceEdit.previewRevision}" data-open-codesign="preview-viewport">`,
+        )
+      : previewViewportSupportTags();
     headContent += hasViewport ? support.replace(`${PREVIEW_VIEWPORT_META}\n`, '') : support;
   }
   if (headContent) {
@@ -807,13 +813,33 @@ function buildNativeHtmlDocument(
   }
   if (!standalone && !hasMarker(OVERLAY_MARKER)) {
     const offset = endTag('body')?.start ?? endTag('html')?.start ?? source.length;
-    edits.push({ start: offset, end: offset, text: overlayScriptTag() });
+    edits.push({
+      start: offset,
+      end: offset,
+      text: sourceEdit
+        ? `${OVERLAY_MARKER}<script nonce="codesign-${sourceEdit.previewRevision}">${buildOverlayScript(sourceEdit)}</script>`
+        : overlayScriptTag(),
+    });
   }
   if (standalone && !startTag('!doctype'))
     edits.push({ start: 0, end: 0, text: '<!doctype html>\n' });
   edits.sort((a, b) => b.start - a.start || b.end - a.end);
   for (const edit of edits)
     source = source.slice(0, edit.start) + edit.text + source.slice(edit.end);
+  return source;
+}
+
+function pauseHtmlScriptsForSourceEditing(source: string): string {
+  // Do this before adding host scripts. Inert external scripts should not raise
+  // failed-resource errors merely because this preview intentionally pauses them.
+  const scripts = scanNativeHtml(source).filter(
+    (token) => token.name === 'script' && !token.closing,
+  );
+  for (const script of scripts.reverse())
+    source =
+      source.slice(0, script.start) +
+      '<script type="application/x-codesign-source-edit">' +
+      source.slice(script.end);
   return source;
 }
 
@@ -856,22 +882,39 @@ export function buildInteractivePreviewDocument(
   opts: BuildInteractivePreviewDocumentOptions = {},
 ): string {
   let preview: string;
+  let editPolicy = '';
   if (opts.sourceEdit) {
     const kind = extensionKind(opts.path);
-    if (
-      opts.runtimeMode === 'native-html' ||
-      (kind !== 'jsx' && kind !== 'tsx') ||
-      looksLikeFullHtmlDocument(userSource) ||
-      userSource.includes(JSX_TEMPLATE_BEGIN)
-    ) {
-      throw new Error('Source edit preview supports only original JSX or TSX source.');
+    if (kind === 'html') {
+      if (!userSource.trimStart().startsWith('<'))
+        throw new Error('HTML source editing requires original HTML markup.');
+      const instrumented = instrumentSourceForEditing(userSource, opts.sourceEdit, 'html');
+      // The editable DOM must correspond to source definitions, not script-created clones.
+      // This policy precedes all authored bytes; only the host selection bridge may execute.
+      const nonce = `codesign-${opts.sourceEdit.previewRevision}`;
+      editPolicy = `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'; script-src-attr 'none'; object-src 'none'; frame-src 'none'" data-codesign-source-edit-policy />`;
+      preview = buildNativeHtmlDocument(
+        pauseHtmlScriptsForSourceEditing(instrumented.source.replace(/^\uFEFF/, '')),
+        opts,
+        false,
+        instrumented.context,
+      );
+    } else {
+      if (
+        opts.runtimeMode === 'native-html' ||
+        (kind !== 'jsx' && kind !== 'tsx') ||
+        looksLikeFullHtmlDocument(userSource) ||
+        userSource.includes(JSX_TEMPLATE_BEGIN)
+      ) {
+        throw new Error('Source edit preview supports only original JSX or TSX source.');
+      }
+      const instrumented = instrumentSourceForEditing(userSource, opts.sourceEdit);
+      preview = wrapJsxAsSrcdoc(instrumented.source, {
+        kind,
+        baseHref: opts.baseHref,
+        sourceEdit: instrumented.context,
+      });
     }
-    const instrumented = instrumentSourceForEditing(userSource, opts.sourceEdit);
-    preview = wrapJsxAsSrcdoc(instrumented.source, {
-      kind,
-      baseHref: opts.baseHref,
-      sourceEdit: instrumented.context,
-    });
   } else {
     preview = buildPreviewDocument(userSource, opts);
   }
@@ -880,6 +923,7 @@ export function buildInteractivePreviewDocument(
   // but browser-enforced CSP also blocks form.submit(), which bypasses events.
   return `<!doctype html>
 <meta http-equiv="Content-Security-Policy" content="form-action 'none'" data-codesign-form-policy />
+${editPolicy}
 ${document}`;
 }
 
