@@ -443,6 +443,22 @@ describe('preparePromptContext', () => {
     expect(result.projectContext.settingsJson).not.toContain('arbitrary');
   });
 
+  it('loads warning-only DESIGN.md as design context while preserving extensions', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-extensions-'));
+    const raw = VALID_DESIGN_MD.replace('rounded:', 'radius:')
+      .replace('fontSize: 16px', 'fontSize: 16px\n    letterSpacing: -.02em')
+      .replace('spacing:', 'shadows:\n  card: "0 2px 8px #000000"\nspacing:');
+    await fs.writeFile(path.join(dir, 'DESIGN.md'), raw, 'utf8');
+
+    const result = await preparePromptContext({ workspaceRoot: dir });
+
+    expect(result.projectContext.invalidDesignMd).toBeUndefined();
+    expect(result.projectContext.designMd).toContain('radius:\n  sm: 4px');
+    expect(result.projectContext.designMd).toContain('shadows:\n  card: "0 2px 8px #000000"');
+    expect(result.projectContext.designMd).toContain('letterSpacing: -.02em');
+    expect(await fs.readFile(path.join(dir, 'DESIGN.md'), 'utf8')).toBe(raw);
+  });
+
   it('passes invalid workspace DESIGN.md as repair context instead of blocking generation', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-design-'));
     await fs.writeFile(
@@ -463,7 +479,6 @@ Use a deep indigo welcome-email system.
 
     expect(result.projectContext.designMd).toBeUndefined();
     expect(result.projectContext.invalidDesignMd?.errors).toEqual([
-      'project: Unknown Google DESIGN.md top-level field "project"',
       'name: name is required',
       'version: version must be a string',
     ]);

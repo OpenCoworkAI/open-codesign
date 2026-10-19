@@ -62,6 +62,7 @@ import {
 } from '@open-codesign/shared';
 import type { TSchema } from '@sinclair/typebox';
 import type { ActiveRunMessages } from './active-messages.js';
+import { planContextBudget } from './context-budget.js';
 import { buildTransformContext } from './context-prune.js';
 import { resolveContextWindow } from './context-window.js';
 import { remapProviderError } from './errors.js';
@@ -99,6 +100,7 @@ import {
   recordScaffold,
 } from './resource-state.js';
 import { buildRunProtocolPreflight, type RunProtocolState } from './run-protocol.js';
+import { createToolLoopGuard } from './tool-loop-guard.js';
 import { availableToolNames } from './tool-manifest.js';
 import { makeAskTool } from './tools/ask.js';
 import { makeDecomposeToUiKitTool } from './tools/decompose-to-ui-kit.js';
@@ -666,6 +668,41 @@ function formatDoneRepairLimitText(details: DoneDetails): string {
   ].join('\n');
 }
 
+interface ToolLoopHalt {
+  cycle: string[];
+  repeats: number;
+}
+
+function repeatedCallsPredicate({ cycle, repeats }: ToolLoopHalt): string {
+  const names = cycle.map((name) => `\`${name}\``).join(' → ');
+  return cycle.length === 1
+    ? `called ${names} with the same arguments ${repeats} times in a row`
+    : `made the same sequence of calls (${names}) ${repeats} times in a row`;
+}
+
+function formatToolLoopWarning(loop: ToolLoopHalt): string {
+  return [
+    `You have ${repeatedCallsPredicate(loop)}.`,
+    'Repeating it will not change the result.',
+    'Change your approach: use different arguments or a different tool, or stop and tell the user what is blocking you.',
+  ].join(' ');
+}
+
+function formatToolLoopHalt(loop: ToolLoopHalt): string {
+  return [
+    `You have ${repeatedCallsPredicate(loop)}.`,
+    'STOP. Do not call any tool again.',
+    'The host is ending this run and keeping the workspace files. Do not claim the design is ready.',
+  ].join(' ');
+}
+
+function formatToolLoopIncomplete(loop: ToolLoopHalt): string {
+  return [
+    `The run was stopped because the model ${repeatedCallsPredicate(loop)}.`,
+    'The workspace files have been kept, but the design may be incomplete. Retry with a different instruction, or continue the run.',
+  ].join('\n');
+}
+
 function isReasoningContentRoundTripError(errorMessage: string | undefined): boolean {
   if (!errorMessage) return false;
   const message = errorMessage.toLowerCase();
@@ -987,6 +1024,9 @@ async function generateViaAgentInternal(
   let lastDoneDetails: DoneDetails | undefined;
   const doneProgress = { errorRounds: 0 };
   const repairLimitReached = () => doneProgress.errorRounds >= MAX_DONE_ERROR_ROUNDS;
+  const toolLoopGuard = createToolLoopGuard();
+  const toolLoop: { halt: ToolLoopHalt | null } = { halt: null };
+  const runHalted = () => repairLimitReached() || toolLoop.halt !== null;
   const assertNotCancelled = (signal?: AbortSignal): void => {
     if (input.signal?.aborted || signal?.aborted) {
       throw new CodesignError('Generation cancelled', ERROR_CODES.PROVIDER_ABORTED);
@@ -1315,14 +1355,28 @@ async function generateViaAgentInternal(
             m.role === 'user' || m.role === 'assistant' || m.role === 'toolResult',
         ),
       transformContext: buildTransformContext(log, deps.onAggressivePrune),
-      beforeToolCall: async (_context, signal) => {
+      beforeToolCall: async (context, signal) => {
         if (input.signal?.aborted || signal?.aborted) {
           return { block: true, reason: 'Generation cancelled' };
         }
         if (repairLimitReached()) {
           return { block: true, reason: 'Done repair limit reached; no further tools may run.' };
         }
-        return undefined;
+        if (toolLoop.halt !== null) {
+          return { block: true, reason: 'Repeated tool call; no further tools may run.' };
+        }
+        // `done` has its own cap, which reports the remaining verifier errors.
+        if (context.toolCall.name === 'done') return undefined;
+        const verdict = toolLoopGuard.check({ name: context.toolCall.name, args: context.args });
+        if (verdict.action === 'ok') return undefined;
+        const loop = { cycle: verdict.cycle, repeats: verdict.repeats };
+        if (verdict.action === 'warn') {
+          log.warn('[generate] step=tool_loop.warn', { ...ctx, ...loop });
+          return { block: true, reason: formatToolLoopWarning(loop) };
+        }
+        log.error('[generate] step=tool_loop.halt', { ...ctx, ...loop });
+        toolLoop.halt = loop;
+        return { block: true, reason: formatToolLoopHalt(loop) };
       },
       getApiKey: input.getApiKey
         ? async () => {
@@ -1360,6 +1414,7 @@ async function generateViaAgentInternal(
         runProtocolState.todosSet = false;
         lastDoneDetails = undefined;
         doneProgress.errorRounds = 0;
+        toolLoopGuard.reset();
       });
       deps.onEvent?.(event);
       if (event.type === 'turn_end') {
@@ -1369,13 +1424,31 @@ async function generateViaAgentInternal(
         if (repairLimitReached()) {
           throw new CodesignError('Done repair limit reached', ERROR_CODES.GENERATION_INCOMPLETE);
         }
+        if (toolLoop.halt !== null) {
+          throw new CodesignError(
+            formatToolLoopIncomplete(toolLoop.halt),
+            ERROR_CODES.GENERATION_INCOMPLETE,
+          );
+        }
       }
     });
     deps.activeMessages?.bind(retryAgent);
     return retryAgent;
   };
 
-  let agent = createRetryAgent(historyAsAgentMessages);
+  const { history: budgetedHistory, ...budget } = planContextBudget({
+    contextWindow: piModel.contextWindow,
+    maxOutputTokens: piModel.maxTokens,
+    systemPrompt: augmentedSystemPrompt,
+    tools,
+    prompt: userContent,
+    promptImages: promptImages.length,
+    history: historyAsAgentMessages,
+  });
+  log.info('[generate] step=context_budget', { ...ctx, ...budget });
+  // Request no more output than the budget reserves, so input and output fit the window.
+  piModel.maxTokens = budget.outputReserve;
+  let agent = createRetryAgent(budgetedHistory);
   const admitRun = async (run: () => Promise<void>): Promise<void> => {
     assertNotCancelled();
     const target = agent;
@@ -1468,7 +1541,7 @@ async function generateViaAgentInternal(
   while (true) {
     const checkMsg = findFinalAssistantMessage(agent.state.messages);
     if (!checkMsg || checkMsg.stopReason === 'stop') break;
-    if (input.signal?.aborted || repairLimitReached()) break;
+    if (input.signal?.aborted || runHalted()) break;
 
     const shouldRetryWithoutReasoning =
       !reasoningFallbackUsed &&
@@ -1552,8 +1625,7 @@ async function generateViaAgentInternal(
   if (!finalAssistant) {
     throw new CodesignError('Agent produced no assistant message', ERROR_CODES.PROVIDER_ERROR);
   }
-  const stoppedAfterDoneRepairLimit = repairLimitReached();
-  if (finalAssistant.stopReason !== 'stop' && !stoppedAfterDoneRepairLimit) {
+  if (finalAssistant.stopReason !== 'stop' && !runHalted()) {
     // Prefer the original `getApiKey` throw (e.g. PROVIDER_AUTH_MISSING after
     // mid-run logout) over pi-agent-core's flattened plain-string failure,
     // so the renderer's error-code routing stays consistent with the path
@@ -1586,6 +1658,13 @@ async function generateViaAgentInternal(
   log.info('[generate] step=send_request.ok', { ...ctx, ms: Date.now() - sendStart });
 
   deps.onComplete?.(agent.state.messages);
+
+  if (toolLoop.halt !== null) {
+    throw new CodesignError(
+      formatToolLoopIncomplete(toolLoop.halt),
+      ERROR_CODES.GENERATION_INCOMPLETE,
+    );
+  }
 
   if (lastDoneDetails?.status === 'has_errors') {
     const remaining = lastDoneDetails.errors

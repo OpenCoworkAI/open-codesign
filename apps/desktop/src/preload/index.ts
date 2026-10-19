@@ -185,12 +185,14 @@ export interface RenameDesignOptions {
 export interface ExportInvokeResponse {
   sourcesPath?: string;
   researchWarnings?: string[];
+  exportWarnings?: string[];
   status: 'saved' | 'cancelled';
   path?: string;
   bytes?: number;
 }
 export interface ExportInvokePayload {
   format: ExportFormat;
+  renderMode?: 'image' | 'native';
   artifactSource: string;
   defaultFilename?: string;
   designId?: string;

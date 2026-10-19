@@ -83,16 +83,27 @@ Components, Do's and Don'ts.
 
 ### Accepted Types And Keys
 
-- Top-level keys: `version`, `name`, `description`, `colors`, `typography`,
-  `rounded`, `spacing`, `components`. Version/name/description are strings.
+- Portable top-level keys: `version`, `name`, `description`, `colors`,
+  `typography`, `rounded`, `spacing`, `components`.
+  Version/name/description are strings. Unknown top-level fields are preserved
+  with non-blocking warnings. Prefer `rounded` for corner-radius tokens and
+  describe shadows under Markdown `## Elevation & Depth`. Do not automatically
+  rename or delete existing extensions, especially when `radius` and `rounded`
+  both exist.
 - Colors are quoted sRGB hex strings, not objects, token aliases, or `oklch()`.
 - Each typography token is an object with required string `fontFamily`.
   Optional keys: `fontSize`, `fontWeight`, `lineHeight`, `letterSpacing`,
   `fontFeature`, `fontVariation`. Size/letter spacing use `px`, `em`, or `rem`
   strings; weight is a number; line height is a number or dimension string.
+  Put a shared font family inside each relevant named typography object,
+  such as `typography.body.fontFamily`, not directly under `typography`.
   Font feature/variation are strings.
-- Rounded values are dimension strings. Spacing accepts numbers or dimension
-  strings. Prefer explicit units when recording visual distances.
+- Dimensions accept `px`, `em`, and `rem`, including `.02em` and `-.02em`.
+  The app also accepts numeric `0` and string `"0"`; prefer `0px` when writing
+  portable tokens. Nonzero unitless font sizes, letter spacing, and rounded
+  values remain errors; choose the intended unit rather than guessing it.
+  Spacing accepts numbers or dimension strings. Prefer explicit units when
+  recording visual distances.
 - Each component is an object whose portable properties are `backgroundColor`,
   `textColor`, `typography`, `rounded`, `padding`, `size`, `height`, `width`.
   Every property value is a string or string token reference, not an object
@@ -103,6 +114,8 @@ Components, Do's and Don'ts.
   Put narrative descriptions under Markdown `## Components`, not in token fields.
 
 These are the app's supported types, not a claim of full upstream conformance.
+Top-level extension warnings and unitless-zero acceptance are app compatibility
+policies, not requirements explicitly stated by the upstream specification.
 The [pinned upstream specification](https://github.com/google-labs-code/design.md/blob/9bf8eae67128b6cc55ad9bf86665767deb4c11cd/docs/spec.md#consumer-behavior-for-unknown-content)
 allows component extensions; warnings about them do not require deleting valid data.
 Respond to actual validator errors rather than hiding or bypassing the done gate.
@@ -135,5 +148,6 @@ during the next substantive token edit rather than expanding a narrow request.
 - Do not paste full source files, long meeting notes, or tool logs into
   `DESIGN.md`.
 - Do not copy brand hex values from memory.
-- Do not invent fields outside the Google-compatible top-level keys.
+- Prefer portable top-level keys when creating tokens; preserve intentional
+  existing extensions and respond to warnings without discarding user data.
 - Do not overwrite user-authored sections just to reformat them.
