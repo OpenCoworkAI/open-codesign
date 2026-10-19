@@ -126,12 +126,24 @@ export function PreviewToolbar({
       <PreviewToolbarMenu
         label={t('export.button')}
         disabled={disabled}
-        items={EXPORT_FORMATS.map((format) => ({
-          id: format,
-          label: t(`export.items.${format}.label`),
-          hint: t(`export.items.${format}.hint`),
-          onSelect: () => void exportActive(format),
-        }))}
+        items={EXPORT_FORMATS.flatMap((format) => [
+          {
+            id: format,
+            label: t(`export.items.${format}.label`),
+            hint: t(`export.items.${format}.hint`),
+            onSelect: () => void exportActive(format),
+          },
+          ...(format === 'pptx'
+            ? [
+                {
+                  id: 'pptx-native',
+                  label: t('export.items.pptxNative.label'),
+                  hint: t('export.items.pptxNative.hint'),
+                  onSelect: () => void exportActive('pptx', 'native'),
+                },
+              ]
+            : []),
+        ])}
       >
         <Download className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" aria-hidden />
         {t('export.button')}

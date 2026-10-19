@@ -19,6 +19,7 @@ function SlideShell({ children, n, total, eyebrow, tokens = {} }) {
   const t = { ...TWEAK_DEFAULTS, ...tokens };
   return (
     <div
+      data-pptx-slide
       style={{
         width: '100%',
         aspectRatio: '16 / 9',

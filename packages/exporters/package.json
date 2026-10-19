@@ -26,7 +26,8 @@
     "zip-lib": "^1.0.4"
   },
   "devDependencies": {
-    "@types/node": "^22.20.4",
+    "@types/node": "^22.20.5",
+    "@xmldom/xmldom": "0.8.13",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }

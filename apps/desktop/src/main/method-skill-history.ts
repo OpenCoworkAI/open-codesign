@@ -113,6 +113,10 @@ export const METHOD_SKILL_HISTORY = {
       '7adbe5d2a5d5718072c182b32a53bb6d7b4a09afebc1c4d00dd4699b20e4c148',
       '3198d492c76241f0cfd1ba5d2fb3eb06283c204a',
     ],
+    [
+      '4987762467f62779dc82b4b0f3c8379f1cf9901c905f3f088b2afe1af32326b5',
+      '3d3f66abf4d8e1405b9b4011ba792ce4007a308c',
+    ],
   ],
 } as const;
 

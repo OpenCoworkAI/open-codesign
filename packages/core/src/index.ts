@@ -36,6 +36,11 @@ export {
   ModelRegistry,
   SessionManager,
 } from './agent-session.js';
+export {
+  extractFromCssVars,
+  extractFromTailwindConfig,
+  importDtcgJson,
+} from './brand/index.js';
 export { DEFAULT_CONTEXT_WINDOW, resolveContextWindow } from './context-window.js';
 export {
   type BuildDesignContextPackInput,
