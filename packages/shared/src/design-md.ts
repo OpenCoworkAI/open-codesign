@@ -148,8 +148,11 @@ function validateString(
 }
 
 function validateDimension(findings: DesignMdFinding[], value: unknown, path: string): void {
-  if (typeof value !== 'string' || !/^-?\d+(?:\.\d+)?(?:px|em|rem)$/.test(value)) {
-    findings.push(error(path, 'Expected a dimension with px, em, or rem unit'));
+  if (value === 0 || value === '0') return;
+  if (typeof value !== 'string' || !/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|em|rem)$/.test(value)) {
+    findings.push(
+      error(path, 'Expected 0 or a dimension with px, em, or rem unit, e.g. "0px" or "0.02em"'),
+    );
   }
 }
 
@@ -196,7 +199,9 @@ function validateTypography(findings: DesignMdFinding[], value: unknown): void {
       findings.push(
         error(
           `typography.${tokenName}`,
-          'Typography token must be an object, e.g. { fontFamily: "system-ui", fontSize: "16px" }; put descriptive prose in the Markdown body',
+          tokenName === 'fontFamily'
+            ? 'fontFamily belongs inside each named typography token, e.g. typography: { body: { fontFamily: "system-ui", fontSize: "16px" } }; move the existing font family into the relevant token objects and preserve their other values'
+            : 'Typography token must be an object, e.g. { fontFamily: "system-ui", fontSize: "16px" }; put descriptive prose in the Markdown body',
         ),
       );
       continue;
@@ -331,7 +336,17 @@ export function validateDesignMd(raw: string): DesignMdFinding[] {
 
   for (const key of Object.keys(doc.frontmatter)) {
     if (!ALLOWED_TOP_LEVEL.has(key)) {
-      findings.push(error(key, `Unknown Google DESIGN.md top-level field "${key}"`));
+      const hint =
+        key === 'radius'
+          ? 'Prefer "rounded" for portable corner-radius tokens'
+          : key === 'shadows'
+            ? 'Describe shadows in the Markdown "Elevation & Depth" section for portability'
+            : 'Prefer supported token groups for portable design data';
+      findings.push({
+        severity: 'warning',
+        path: key,
+        message: `Unknown Google DESIGN.md top-level field "${key}" preserved as an extension; ${hint}. Existing data has not been renamed or removed`,
+      });
     }
   }
   validateString(findings, doc.frontmatter['name'], 'name', 'name is required');

@@ -36,7 +36,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@xmldom/xmldom@<0.8.13": "0.8.13",
+      "@xmldom/xmldom@<0.8.15": "0.8.15",
       "fast-xml-parser@<5.7.0": ">=5.7.0",
       "vitepress>vite": "6.4.2",
       "esbuild@<0.25.0": ">=0.25.0"
@@ -51,7 +51,7 @@
     "@iarna/toml": "^2.2.5",
     "@open-codesign/core": "workspace:*",
     "@open-codesign/shared": "workspace:*",
-    "@types/node": "^22.20.4",
+    "@types/node": "^22.20.5",
     "acorn": "^8.14.0",
     "husky": "^9.1.7",
     "tsx": "^4.22.3",

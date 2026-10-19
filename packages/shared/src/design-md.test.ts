@@ -138,14 +138,97 @@ components:
     expect(validateDesignMd(VALID_DESIGN_MD).filter((f) => f.severity === 'error')).toEqual([]);
   });
 
-  it('rejects non-Google top-level fields instead of silently converting them', () => {
-    const findings = validateDesignMd(VALID_DESIGN_MD.replace('rounded:', 'radius:'));
-    expect(findings).toContainEqual(
+  it('preserves unknown top-level fields with actionable non-blocking warnings', () => {
+    const raw = VALID_DESIGN_MD.replace('rounded:', 'radius:').replace(
+      'spacing:',
+      'shadows:\n  card: "0 2px 8px #000000"\ncustomMetadata:\n  tags: [editorial, premium]\nspacing:',
+    );
+    expect(validateDesignMd(raw)).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        path: 'radius',
+        message: expect.stringContaining('rounded'),
+      }),
+      expect.objectContaining({
+        severity: 'warning',
+        path: 'shadows',
+        message: expect.stringContaining('Elevation & Depth'),
+      }),
+      expect.objectContaining({ severity: 'warning', path: 'customMetadata' }),
+    ]);
+    const parsed = parseDesignMd(raw);
+    expect(parsed.frontmatter['radius']).toEqual({ sm: '4px', md: '8px' });
+    expect(parsed.frontmatter['rounded']).toBeUndefined();
+    expect(parsed.frontmatter['shadows']).toEqual({ card: '0 2px 8px #000000' });
+    expect(parsed.frontmatter['customMetadata']).toEqual({ tags: ['editorial', 'premium'] });
+    expect(formatDesignMdForPrompt(raw)).toContain(parsed.frontmatterText);
+  });
+
+  it.each([
+    '0',
+    '"0"',
+    '.02em',
+    '-.02em',
+    '.5px',
+    '-.5rem',
+    '0px',
+    '-0.02em',
+  ])('accepts CSS zero and dimension spellings across token groups: %s', (value) => {
+    const raw = VALID_DESIGN_MD.replace('fontSize: 48px', `fontSize: ${value}`)
+      .replace('lineHeight: 1.1', `lineHeight: ${value}`)
+      .replace('letterSpacing: -0.02em', `letterSpacing: ${value}`)
+      .replace('sm: 4px', `sm: ${value}`)
+      .replace('sm: 8px', `sm: ${value}`);
+    expect(validateDesignMd(raw)).toEqual([]);
+  });
+
+  it.each([
+    '0.5',
+    '"0.5"',
+    '16',
+    '".5"',
+    'true',
+    'null',
+    '[]',
+    '{}',
+    '.inf',
+    '1vw',
+    '1%',
+  ])('keeps nonzero unitless and malformed dimensions blocking: %s', (value) => {
+    expect(
+      validateDesignMd(
+        VALID_DESIGN_MD.replace('letterSpacing: -0.02em', `letterSpacing: ${value}`),
+      ),
+    ).toContainEqual(
+      expect.objectContaining({ severity: 'error', path: 'typography.h1.letterSpacing' }),
+    );
+  });
+
+  it('keeps typography structure errors blocking alongside top-level extension warnings', () => {
+    const raw = VALID_DESIGN_MD.replace('rounded:', 'radius:').replace(
+      'typography:',
+      'typography:\n  fontFamily: Public Sans',
+    );
+    expect(validateDesignMd(raw)).toEqual([
+      expect.objectContaining({ severity: 'warning', path: 'radius' }),
       expect.objectContaining({
         severity: 'error',
-        path: 'radius',
+        path: 'typography.fontFamily',
+        message: expect.stringContaining('typography: { body: { fontFamily:'),
       }),
-    );
+    ]);
+  });
+
+  it.each([
+    VALID_DESIGN_MD.replace('name: Heritage', 'name: Heritage\nname: Duplicate'),
+    VALID_DESIGN_MD.replace('name: Heritage', 'name: [unterminated'),
+    VALID_DESIGN_MD.replace('name: Heritage\n', ''),
+  ])('keeps invalid frontmatter blocking when extensions are present', (invalid) => {
+    expect(
+      validateDesignMd(invalid.replace('rounded:', 'radius:')).some(
+        (finding) => finding.severity === 'error',
+      ),
+    ).toBe(true);
   });
 
   it('rejects old typography weight keys instead of treating them as fontWeight', () => {
