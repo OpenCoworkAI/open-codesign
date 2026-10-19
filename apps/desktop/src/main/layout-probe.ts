@@ -21,6 +21,7 @@ import {
   ALL_CHECKS,
   LAYOUT_BUDGET_MS,
   LAYOUT_PROBE_LIMITS,
+  LAYOUT_RESTORE_BUDGET_MS,
   type LayoutProbeChecks,
   type LayoutProbeLimits,
   type LayoutSamples,
@@ -454,7 +455,7 @@ async function measure(page: Page, checks: LayoutProbeChecks): Promise<LayoutSam
  * silently reporting a clean page.
  */
 export async function inspectLayout(page: Page, signal?: AbortSignal): Promise<LayoutInspection> {
-  return boundedPreview(runInspection(page), LAYOUT_BUDGET_MS, signal);
+  return runInspection(page, signal);
 }
 
 /** Contrast and names do not depend on width, so the phone pass skips them; tap targets matter there. */
@@ -467,7 +468,17 @@ const PHONE_WIDTH_CHECKS: LayoutProbeChecks = {
   names: false,
 };
 
-async function runInspection(page: Page): Promise<LayoutInspection> {
+async function runInspection(page: Page, signal?: AbortSignal): Promise<LayoutInspection> {
+  const deadline = Date.now() + LAYOUT_BUDGET_MS;
+  // Bound each await so a timed-out operation cannot resume the inspection and
+  // resize a page after its caller has started collecting preview evidence.
+  const withinBudget = <T>(operation: () => Promise<T>): Promise<T> => {
+    if (signal?.aborted) return Promise.reject(new Error('Preview cancelled'));
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return Promise.reject(new Error('Preview operation timed out'));
+    return boundedPreview(operation(), remaining, signal);
+  };
+  if (signal?.aborted) throw new Error('Preview cancelled');
   const original = page.viewport();
   if (original === null) throw new Error('The page has no viewport to measure');
   const alreadyPhone = original.width === PHONE_VIEWPORT.width;
@@ -478,14 +489,16 @@ async function runInspection(page: Page): Promise<LayoutInspection> {
     issues.push(...analyzeLayoutSamples(samples));
   };
 
-  take(await measure(page, alreadyPhone ? ALL_CHECKS : CURRENT_WIDTH_CHECKS));
+  take(await withinBudget(() => measure(page, alreadyPhone ? ALL_CHECKS : CURRENT_WIDTH_CHECKS)));
   if (!alreadyPhone) {
     try {
-      await page.setViewport({ ...original, ...PHONE_VIEWPORT });
-      await settleLayout(page);
-      take(await measure(page, PHONE_WIDTH_CHECKS));
+      await withinBudget(() => page.setViewport({ ...original, ...PHONE_VIEWPORT }));
+      await withinBudget(() => settleLayout(page));
+      take(await withinBudget(() => measure(page, PHONE_WIDTH_CHECKS)));
     } finally {
-      await page.setViewport(original);
+      // Cleanup must finish before the caller resumes, even after cancellation
+      // or exhaustion of the measurement budget, but must itself stay bounded.
+      await boundedPreview(page.setViewport(original), LAYOUT_RESTORE_BUDGET_MS);
     }
   }
 

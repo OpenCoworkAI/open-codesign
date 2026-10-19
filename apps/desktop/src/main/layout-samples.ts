@@ -10,6 +10,8 @@ export const PHONE_VIEWPORT = { width: 390, height: 844 } as const;
 export const MAX_PROBE_ELEMENTS = 5000;
 /** Time allowed for all measurements together. */
 export const LAYOUT_BUDGET_MS = 5000;
+/** Cleanup has its own budget so a cancelled inspection can restore the preview viewport. */
+export const LAYOUT_RESTORE_BUDGET_MS = 1000;
 
 /** Sub-pixel rounding is not overflow. */
 export const OVERFLOW_TOLERANCE_PX = 1;
