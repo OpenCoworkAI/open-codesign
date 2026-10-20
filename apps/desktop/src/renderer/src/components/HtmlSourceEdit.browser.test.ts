@@ -216,6 +216,7 @@ describe('native HTML point edit: FilesTab → real IPC → atomic disk write �
     return frame;
   }
   async function save(label: string, value: string) {
+    if (label === 'Text') label = 'Text 1';
     const selector = `[aria-label="Save source definition: ${label}"]`;
     const button = await page.waitForSelector(selector);
     if (!button) throw new Error('Missing save button');
@@ -316,7 +317,7 @@ describe('native HTML point edit: FilesTab → real IPC → atomic disk write �
     const external = original.replace('原始标题 😀', 'Externally edited');
     await writeFile(join(workspace, 'index.html'), external);
     await save('Text', 'Must not overwrite');
-    await page.waitForFunction(() => document.body.innerText.includes('stale-source'));
+    await page.waitForFunction(() => document.body.innerText.includes('source changed'));
     expect(await disk()).toBe(external);
     expect(
       records.filter((record) => record.method === 'apply').map((record) => record.result),

@@ -139,6 +139,11 @@ export function registerSourceEditsIpc(db: Database, getWin: () => BrowserWindow
     async (event: unknown, raw: unknown): Promise<SourceEditInspectResultV1> => {
       const input = SourceEditInspectRequestV1.safeParse(raw);
       if (!input.success) return rejected('invalid-input', 'Invalid source inspection request.');
+      if (input.data.selectionMode === 'source')
+        return rejected(
+          'source-mode-removed',
+          'Source-list editing has been removed. Select the element in the current preview.',
+        );
       try {
         return await inSource(input.data, event, async (source) => {
           if (source.content !== input.data.expectedContent)
@@ -162,6 +167,11 @@ export function registerSourceEditsIpc(db: Database, getWin: () => BrowserWindow
     async (event: unknown, raw: unknown): Promise<SourceEditApplyResultV1> => {
       const input = SourceEditApplyRequestV1.safeParse(raw);
       if (!input.success) return rejected('invalid-input', 'Invalid source edit request.');
+      if (input.data.selectionMode === 'source')
+        return rejected(
+          'source-mode-removed',
+          'Source-list editing has been removed. Select the element in the current preview.',
+        );
       try {
         return await inSource(input.data, event, async (source) => {
           const { planSourceEdit } = await import('./source-edit-engine');

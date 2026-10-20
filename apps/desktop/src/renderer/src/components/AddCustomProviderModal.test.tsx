@@ -24,6 +24,27 @@ describe('AddCustomProviderModal', () => {
     expect(html).not.toMatch(/type="checkbox"[^>]*checked/);
   });
 
+  it('starts keyless with the preset hint when a preset opts out of API keys', () => {
+    const html = renderToStaticMarkup(
+      <AddCustomProviderModal
+        onSave={() => undefined}
+        onClose={() => undefined}
+        initialValues={{
+          name: 'LiteLLM Gateway',
+          baseUrl: 'http://localhost:4000/v1',
+          wire: 'openai-chat',
+          requiresApiKey: false,
+          hint: 'litellm-hint',
+        }}
+      />,
+    );
+
+    expect(html).toContain('litellm-hint');
+    expect(html).toContain('value="http://localhost:4000/v1"');
+    expect(html).toMatch(/type="checkbox"[^>]*checked/);
+    expect(html).toMatch(/type="password"[^>]*disabled/);
+  });
+
   it('hides the compatibility warning when editing a locked builtin endpoint', () => {
     const html = renderToStaticMarkup(
       <AddCustomProviderModal

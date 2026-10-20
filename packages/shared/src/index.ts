@@ -12,6 +12,12 @@ export {
   CommentContentExpectations,
   commentContentFingerprint,
 } from './comment-content';
+export {
+  SaveWebSearchSettingsInput,
+  WEB_SEARCH_SETTINGS_CHANNELS,
+  WebSearchSettingsState,
+  WebSearchTestResult,
+} from './web-search-settings';
 
 export const ProviderId = z.enum([
   'anthropic',
@@ -45,8 +51,10 @@ export {
   type DesignMdDocument,
   type DesignMdFinding,
   type DesignMdFindingSeverity,
+  type DesignMdFrontmatter,
   formatDesignMdForPrompt,
   parseDesignMd,
+  serializeDesignMd,
   validateDesignMd,
 } from './design-md';
 export * from './source-edits';
@@ -390,6 +398,14 @@ export { ERROR_CODE_DESCRIPTIONS, ERROR_CODES } from './error-codes';
 // from this barrel — it's main-process only. Import from
 // '@open-codesign/shared/fingerprint' directly.
 export type { FingerprintInput } from './fingerprint';
+export {
+  isLiteLlmConnectionTarget,
+  LITELLM_CONNECTION_HINT_KEYS,
+  type LiteLlmTargetInput,
+  liteLlmEndpointPreset,
+  liteLlmHintKeyForHttpStatus,
+  liteLlmHintKeyForTransportError,
+} from './litellm-hints';
 export type { ProxyPresetId } from './proxy-presets';
 export {
   getPresetById,
@@ -632,5 +648,15 @@ export {
   replaceEditmodeBlock,
   replaceTweakSchema,
 } from './editmode';
+
+export {
+  formatUsageCost,
+  formatUsageTokens,
+  nextLocalMidnight,
+  summarizeUsageBudget,
+  type UsageBudget,
+  type UsageRecord,
+  type UsageTotals,
+} from './usage-budget';
 
 export * from './web-research';

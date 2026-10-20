@@ -101,6 +101,7 @@ export type AppView = 'hub' | 'workspace' | 'settings';
 export type SettingsTab =
   | 'models'
   | 'images'
+  | 'webSearch'
   | 'memory'
   | 'appearance'
   | 'workspace'
@@ -330,7 +331,7 @@ export interface CodesignState {
   clearError: () => void;
   clearIframeErrors: () => void;
   pushIframeError: (message: string) => void;
-  exportActive: (format: ExportFormat) => Promise<void>;
+  exportActive: (format: ExportFormat, renderMode?: 'image' | 'native') => Promise<void>;
 
   pickInputFiles: () => Promise<void>;
   importFilesToWorkspace: (input: {

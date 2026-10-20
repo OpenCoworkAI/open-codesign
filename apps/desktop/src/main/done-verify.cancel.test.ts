@@ -30,7 +30,7 @@ describe('done verifier context without a workspace', () => {
   ])('forwards the current path and mode to the runtime: %j', async (context) => {
     chrome.launch.mockRejectedValue(new Error('Synthetic launch failure'));
     const source = '<html><body>React.createElement</body></html>';
-    const errors = await makeRuntimeVerifier()(source, context);
+    const { errors } = await makeRuntimeVerifier()(source, context);
     expect(errors.some((error) => error.message.includes('Synthetic launch failure'))).toBe(true);
     expect(buildPreviewDocument).toHaveBeenCalledExactlyOnceWith(source, {
       path: context.path,

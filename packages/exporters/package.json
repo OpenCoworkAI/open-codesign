@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./html": "./src/html.ts",
     "./pdf": "./src/pdf.ts",
+    "./png": "./src/png.ts",
     "./pptx": "./src/pptx.ts",
     "./zip": "./src/zip.ts",
     "./markdown": "./src/markdown.ts"
@@ -25,7 +26,8 @@
     "zip-lib": "^1.0.4"
   },
   "devDependencies": {
-    "@types/node": "^22.19.19",
+    "@types/node": "^22.20.5",
+    "@xmldom/xmldom": "0.8.15",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }

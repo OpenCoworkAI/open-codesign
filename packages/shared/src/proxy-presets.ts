@@ -60,6 +60,13 @@ export const PROXY_PRESETS = [
     notes: 'Edit URL to your deployment',
   },
   {
+    id: 'litellm',
+    label: 'LiteLLM Gateway',
+    provider: 'openai',
+    baseUrl: 'http://localhost:4000/v1',
+    notes: 'Self-hosted OpenAI-compatible gateway; key optional',
+  },
+  {
     id: 'cli-proxy-api',
     label: 'CLIProxyAPI',
     provider: 'anthropic',

@@ -39,6 +39,8 @@ async function canRunChrome(): Promise<boolean> {
 }
 
 const chromeAvailable = await canRunChrome();
+const puppeteer = (await import('puppeteer-core')).default;
+const launchChrome = puppeteer.launch.bind(puppeteer);
 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
 const describeIfChrome = chromeAvailable ? describe : describe.skip;
 
@@ -244,12 +246,10 @@ describeIfChrome('runPreview with real Chrome', () => {
     const folder = `bundled-${name}`;
     mkdirSync(join(tempDir, folder), { recursive: true });
     writeFileSync(join(tempDir, folder, 'main.htm'), source);
-    const puppeteer = (await import('puppeteer-core')).default;
-    const launch = puppeteer.launch.bind(puppeteer);
     const requests: string[] = [];
     const runtimeGlobals: boolean[] = [];
     const spy = vi.spyOn(puppeteer, 'launch').mockImplementation(async (options) => {
-      const browser = await launch(options);
+      const browser = await launchChrome(options);
       const newPage = browser.newPage.bind(browser);
       vi.spyOn(browser, 'newPage').mockImplementation(async () => {
         const page = await newPage();
@@ -317,7 +317,7 @@ describeIfChrome('runPreview with real Chrome', () => {
     } finally {
       spy.mockRestore();
     }
-  });
+  }, 30_000);
   it.each([
     'document',
     'fragment',
@@ -732,13 +732,11 @@ describeIfChrome('runPreview with real Chrome', () => {
   ])(
     'closes its own browser and profile after %s',
     async (scenario, handler, reason) => {
-      const puppeteer = (await import('puppeteer-core')).default;
-      const launch = puppeteer.launch.bind(puppeteer);
       const controller = new AbortController();
-      const browsers: Awaited<ReturnType<typeof launch>>[] = [];
+      const browsers: Awaited<ReturnType<typeof launchChrome>>[] = [];
       const profiles: string[] = [];
       const spy = vi.spyOn(puppeteer, 'launch').mockImplementation(async (options) => {
-        const browser = await launch(options);
+        const browser = await launchChrome(options);
         browsers.push(browser);
         if (options?.userDataDir) profiles.push(options.userDataDir);
         const newPage = browser.newPage.bind(browser);

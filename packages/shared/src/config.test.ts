@@ -5,6 +5,7 @@ import {
   defaultProviderCapabilities,
   detectWireFromBaseUrl,
   hydrateConfig,
+  ImageGenerationSettingsSchema,
   migrateLegacyToV3,
   PROVIDER_SHORTLIST,
   parseConfigFlexible,
@@ -14,6 +15,27 @@ import {
 } from './config';
 
 describe('config v3 schema', () => {
+  it.each([
+    true,
+    false,
+    undefined,
+  ])('preserves optional image response preferences (%s)', (requestBase64) => {
+    const settings = ImageGenerationSettingsSchema.parse({
+      schemaVersion: 1,
+      ...(requestBase64 === undefined ? {} : { requestBase64 }),
+    });
+    expect(settings.requestBase64).toBe(requestBase64);
+  });
+
+  it.each([
+    'true',
+    1,
+    null,
+  ])('rejects malformed image response preferences (%s)', (requestBase64) => {
+    expect(() =>
+      ImageGenerationSettingsSchema.parse({ schemaVersion: 1, requestBase64 }),
+    ).toThrow();
+  });
   it('parses a minimal v3 config', () => {
     const raw = {
       version: 3,
@@ -74,6 +96,31 @@ describe('config v3 schema', () => {
       },
     });
     expect(parsed.providers['custom-lite']?.reasoningLevel).toBe('off');
+  });
+
+  it('accepts a positive integer provider context window and rejects others', () => {
+    const config = (contextWindow: unknown) => ({
+      version: 3,
+      activeProvider: 'ollama-local',
+      activeModel: 'qwen3:32b',
+      secrets: {},
+      providers: {
+        'ollama-local': {
+          id: 'ollama-local',
+          name: 'Ollama',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'http://localhost:11434/v1',
+          defaultModel: 'qwen3:32b',
+          contextWindow,
+        },
+      },
+    });
+    expect(ConfigV3Schema.parse(config(32_768)).providers['ollama-local']?.contextWindow).toBe(
+      32_768,
+    );
+    expect(ConfigV3Schema.safeParse(config(0)).success).toBe(false);
+    expect(ConfigV3Schema.safeParse(config(8192.5)).success).toBe(false);
   });
 
   it('does not treat an explicit off override as reasoning support', () => {

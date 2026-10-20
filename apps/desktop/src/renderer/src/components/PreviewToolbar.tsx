@@ -7,7 +7,7 @@ import { PreviewToolbarMenu } from './PreviewToolbarMenu';
 import './PreviewToolbar.css';
 
 const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200] as const;
-const EXPORT_FORMATS: ExportFormat[] = ['html', 'pdf', 'pptx', 'zip', 'markdown'];
+const EXPORT_FORMATS: ExportFormat[] = ['html', 'pdf', 'png', 'pptx', 'zip', 'markdown'];
 
 export function PreviewToolbar({
   canFullscreen = false,
@@ -126,12 +126,24 @@ export function PreviewToolbar({
       <PreviewToolbarMenu
         label={t('export.button')}
         disabled={disabled}
-        items={EXPORT_FORMATS.map((format) => ({
-          id: format,
-          label: t(`export.items.${format}.label`),
-          hint: t(`export.items.${format}.hint`),
-          onSelect: () => void exportActive(format),
-        }))}
+        items={EXPORT_FORMATS.flatMap((format) => [
+          {
+            id: format,
+            label: t(`export.items.${format}.label`),
+            hint: t(`export.items.${format}.hint`),
+            onSelect: () => void exportActive(format),
+          },
+          ...(format === 'pptx'
+            ? [
+                {
+                  id: 'pptx-native',
+                  label: t('export.items.pptxNative.label'),
+                  hint: t('export.items.pptxNative.hint'),
+                  onSelect: () => void exportActive('pptx', 'native'),
+                },
+              ]
+            : []),
+        ])}
       >
         <Download className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" aria-hidden />
         {t('export.button')}

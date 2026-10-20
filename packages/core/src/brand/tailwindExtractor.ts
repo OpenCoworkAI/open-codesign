@@ -189,7 +189,9 @@ function inferTypeFromCssProp(prop: string, value: string): TokenType | null {
   // Order matters: specific shape patterns must run before broad keyword classifiers.
   // so Tailwind v4 `--text-*` size tokens are not misclassified as color.
   if (/font-size|text-size/.test(prop)) return 'fontSize';
-  if (/font-family/.test(prop)) return 'fontFamily';
+  // v4 names font families `--font-*` (`--font-sans`). `--font-weight-*` is not a family, and
+  // companions such as `--font-sans--font-feature-settings` carry a double hyphen.
+  if (/font-family|^font-(?!weight)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(prop)) return 'fontFamily';
   if (/line-height|leading/.test(prop)) return 'lineHeight';
   if (/radius|rounded/.test(prop)) return 'radius';
   if (/shadow/.test(prop)) return 'shadow';

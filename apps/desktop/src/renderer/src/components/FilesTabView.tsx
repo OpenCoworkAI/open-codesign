@@ -61,6 +61,9 @@ import {
   postClearPinToPreviewWindow,
   postModeToPreviewWindow,
   postPinSelectorToPreviewWindow,
+  postSourceEditAncestorToPreviewWindow,
+  requestSourceEditValidation,
+  type SourceEditAncestor,
   stablePreviewSourceKey,
 } from '../preview/helpers';
 import { useWorkspaceSourceEdit } from '../preview/useWorkspaceSourceEdit';
@@ -990,18 +993,21 @@ export function workspacePreviewDependencyKey(
   return [selected, source].filter((part): part is string => part !== null).join('|') || null;
 }
 
+interface WorkspacePreviewRequest {
+  path: string;
+  designId: string | null;
+  workspacePath: string | null | undefined;
+}
+
 export function isPreviewSourceUsableForSelectedPath(input: {
-  selectedPath: string;
-  previewSourcePath: string | null | undefined;
-  selectedPreviewKind: FilePreviewKind;
+  request: WorkspacePreviewRequest;
+  loadedRequest: WorkspacePreviewRequest | null | undefined;
 }): boolean {
-  const previewSourcePath = input.previewSourcePath;
-  if (!previewSourcePath) return false;
-  if (previewSourcePath === input.selectedPath) return true;
   return (
-    input.selectedPreviewKind === 'runtime' &&
-    isMainDesignSourcePath(input.selectedPath) &&
-    previewKindForFile(previewSourcePath, undefined) === 'runtime'
+    input.loadedRequest != null &&
+    input.loadedRequest.path === input.request.path &&
+    input.loadedRequest.designId === input.request.designId &&
+    input.loadedRequest.workspacePath === input.request.workspacePath
   );
 }
 
@@ -1015,7 +1021,11 @@ interface WorkspaceFilePreviewProps {
 
 interface WorkspaceFilePreviewMessageHandlerInput {
   sourceEditMode?: boolean;
-  onSourceEditSelected?: (selection?: SourceEditSelection) => void;
+  onSourceEditExit?: () => void;
+  onSourceEditSelected?: (
+    selection?: SourceEditSelection,
+    ancestors?: SourceEditAncestor[],
+  ) => void;
   onSelectionCleared?: (() => void) | undefined;
   sourcePath?: string | undefined;
   comments?: CommentRow[] | undefined;
@@ -1052,6 +1062,7 @@ export function findReusableWorkspaceFileCommentForSelector(input: {
 
 export function createWorkspaceFilePreviewMessageHandlers({
   sourceEditMode = false,
+  onSourceEditExit,
   onSourceEditSelected,
   onSelectionCleared,
   sourcePath,
@@ -1063,11 +1074,11 @@ export function createWorkspaceFilePreviewMessageHandlers({
   pushIframeError,
 }: WorkspaceFilePreviewMessageHandlerInput): PreviewMessageHandlers {
   return {
-    onPreviewEscape: handlePreviewFullscreenEscape,
+    onPreviewEscape: sourceEditMode ? () => onSourceEditExit?.() : handlePreviewFullscreenEscape,
     onSelectionCleared: () => onSelectionCleared?.(),
     onElementSelected: (msg) => {
       if (sourceEditMode) {
-        onSourceEditSelected?.(msg.sourceEdit);
+        onSourceEditSelected?.(msg.sourceEdit, msg.sourceEditAncestors ?? []);
         return;
       }
       selectCanvasElement({
@@ -1602,7 +1613,21 @@ export function WorkspaceFilePreview({
     previewKind === 'video' ||
     previewKind === 'audio' ||
     previewKind === 'pdf';
-  const [previewSource, setPreviewSource] = useState<WorkspacePreviewSource | null>(null);
+  const previewRequest = useMemo(
+    () => ({ path, designId: currentDesignId, workspacePath: currentDesign?.workspacePath }),
+    [path, currentDesignId, currentDesign?.workspacePath],
+  );
+  const [loadedPreview, setLoadedPreview] = useState<{
+    source: WorkspacePreviewSource;
+    request: WorkspacePreviewRequest;
+  } | null>(null);
+  const setPreviewSource = useCallback(
+    (source: WorkspacePreviewSource | null) =>
+      setLoadedPreview(source ? { source, request: previewRequest } : null),
+    [previewRequest],
+  );
+  const previewSource = loadedPreview?.source ?? null;
+  const [sourceReadEpoch, setSourceReadEpoch] = useState(0);
   const showTweakPanel =
     interactive &&
     shouldShowTweakPanelForFile({
@@ -1624,12 +1649,31 @@ export function WorkspaceFilePreview({
     srcDoc: string | null;
   } | null>(null);
   const activePreviewSource = isPreviewSourceUsableForSelectedPath({
-    selectedPath: path,
-    previewSourcePath: previewSource?.path,
-    selectedPreviewKind: previewKind,
+    request: previewRequest,
+    loadedRequest: loadedPreview?.request,
   })
     ? previewSource
     : null;
+  const unlistedSourcePath =
+    activePreviewSource?.workspaceDesignId === currentDesignId &&
+    activePreviewSource &&
+    !workspaceFiles.some((entry) => entry.path === activePreviewSource.path)
+      ? activePreviewSource.path
+      : null;
+
+  useEffect(() => {
+    if (!currentDesignId || !unlistedSourcePath) return;
+    // The lazy tree owns the watcher, but unopened directories have no metadata
+    // dependency to refresh a resolved preview source.
+    const off = window.codesign?.files?.onChanged?.((event) => {
+      if (event.designId !== currentDesignId) return;
+      setSourceReadPending(true);
+      setSourceReadEpoch((epoch) => epoch + 1);
+    });
+    return () => {
+      off?.();
+    };
+  }, [currentDesignId, unlistedSourcePath]);
 
   const sourceEdit = useWorkspaceSourceEdit({
     designId: currentDesignId,
@@ -1638,6 +1682,11 @@ export function WorkspaceFilePreview({
     available: interactive && renderable,
     loading: sourceReadPending,
     generating: isGenerating && generatingDesignId === currentDesignId,
+    validate: async (request, signal) => {
+      const win = iframeRef.current?.contentWindow;
+      const result = await requestSourceEditValidation(win, request, { signal });
+      return iframeRef.current?.contentWindow === win ? result : null;
+    },
     onPersist: setPreviewSource,
     onSaved: (warnings) =>
       useCodesignStore.getState().pushToast({
@@ -1647,9 +1696,7 @@ export function WorkspaceFilePreview({
       }),
   });
   const previewInteractionMode = sourceEdit.active
-    ? sourceEdit.sourceMode
-      ? 'default'
-      : 'comment'
+    ? 'source-edit'
     : interactive
       ? interactionMode
       : 'default';
@@ -1661,6 +1708,7 @@ export function WorkspaceFilePreview({
         event.data,
         createWorkspaceFilePreviewMessageHandlers({
           sourceEditMode: sourceEdit.active,
+          onSourceEditExit: sourceEdit.exit,
           onSourceEditSelected: sourceEdit.select,
           onSelectionCleared: () => {
             sourceEdit.clearSelection();
@@ -1690,6 +1738,7 @@ export function WorkspaceFilePreview({
     return () => window.removeEventListener('message', onMessage);
   }, [
     sourceEdit.active,
+    sourceEdit.exit,
     sourceEdit.select,
     sourceEdit.clearSelection,
     sourceEdit.inspection,
@@ -1742,6 +1791,7 @@ export function WorkspaceFilePreview({
     void currentDesignUpdatedAt;
     void currentDesign?.workspacePath;
     void previewDependencyKey;
+    void sourceReadEpoch;
     if ((!renderable && !textPreview) || !currentDesignId) {
       setPreviewSource(null);
       setReadError(null);
@@ -1775,18 +1825,18 @@ export function WorkspaceFilePreview({
         cancelled = true;
       };
     }
-    const sourceMode = chooseWorkspacePreviewSourceMode({
+    const previewSourceMode = chooseWorkspacePreviewSourceMode({
       path,
       hasReadApi: typeof read === 'function',
       hasPreviewSource: Boolean(currentPreviewSource),
       preferPreviewSource: prefersPreviewSource,
     });
-    if (sourceMode === 'preview-source-fallback' && currentPreviewSource) {
+    if (previewSourceMode === 'preview-source-fallback' && currentPreviewSource) {
       setPreviewSource({ content: currentPreviewSource, path });
       setReadError(null);
       return;
     }
-    if (sourceMode === 'unavailable' || !read) {
+    if (previewSourceMode === 'unavailable' || !read) {
       setPreviewSource(null);
       setReadError(t('canvas.filesTabEmpty'));
       return;
@@ -1819,6 +1869,8 @@ export function WorkspaceFilePreview({
     currentDesignUpdatedAt,
     currentDesign?.workspacePath,
     previewDependencyKey,
+    sourceReadEpoch,
+    setPreviewSource,
     path,
     currentPreviewSource,
     renderable,
@@ -1939,7 +1991,22 @@ export function WorkspaceFilePreview({
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col">
+    <div
+      className="relative flex h-full min-h-0 flex-col"
+      onKeyDown={(event) => {
+        // Preview hit-testing preserves parent focus, which may still be on the toolbar.
+        if (
+          !sourceEdit.active ||
+          event.key !== 'Escape' ||
+          event.nativeEvent.isComposing ||
+          event.nativeEvent.keyCode === 229
+        )
+          return;
+        event.preventDefault();
+        event.stopPropagation();
+        sourceEdit.exit();
+      }}
+    >
       {interactive && !previewFullscreen ? (
         <div className="flex shrink-0 justify-end border-b border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-1)]">
           <button
@@ -2000,13 +2067,24 @@ export function WorkspaceFilePreview({
                   busy={sourceEdit.busy}
                   message={sourceEdit.message}
                   onApply={sourceEdit.apply}
-                  onClose={sourceEdit.toggle}
-                  sourceMode={sourceEdit.sourceMode}
-                  canSelectSource={sourceEdit.canSelectSource}
-                  onSourceMode={sourceEdit.enableSourceSelection}
-                  sourceTargets={sourceEdit.sourceTargets}
+                  onClose={sourceEdit.exit}
+                  fieldStates={sourceEdit.fieldStates}
+                  ancestors={sourceEdit.ancestors}
+                  onSelectAncestor={(selector) => {
+                    if (
+                      !sourceEdit.inspection ||
+                      sourceEdit.busy ||
+                      !sourceEdit.ancestors.some((item) => item.selector === selector)
+                    )
+                      return;
+                    postSourceEditAncestorToPreviewWindow(
+                      iframeRef.current?.contentWindow,
+                      selector,
+                      sourceEdit.inspection,
+                      pushIframeError,
+                    );
+                  }}
                   source={activePreviewSource.content}
-                  onSelectSource={sourceEdit.selectSource}
                 />
               ) : null}
             </div>

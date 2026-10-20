@@ -132,6 +132,48 @@ vi.mock('@open-codesign/providers', () => ({
 }));
 
 describe('registerOnboardingIpc — channel versioning', () => {
+  it('routes search settings through safe versioned get/save/test handlers', async () => {
+    const { hydrateConfig, WEB_SEARCH_SETTINGS_CHANNELS } = await import('@open-codesign/shared');
+    const { setCachedConfig } = await import('./onboarding/config-cache');
+    const network = await import('./web-research-network');
+    const probe = vi.spyOn(network, 'testTavilyConnection').mockResolvedValue({ status: 'ok' });
+    setCachedConfig(
+      hydrateConfig({
+        version: 3,
+        activeProvider: '',
+        activeModel: '',
+        providers: {},
+        secrets: {},
+      }),
+    );
+    await registerIpcForTest();
+    try {
+      const get = handlers.get(WEB_SEARCH_SETTINGS_CHANNELS.get);
+      const save = handlers.get(WEB_SEARCH_SETTINGS_CHANNELS.save);
+      const test = handlers.get(WEB_SEARCH_SETTINGS_CHANNELS.test);
+      expect(get).toBeDefined();
+      expect(save).toBeDefined();
+      expect(test).toBeDefined();
+      expect(await get?.({})).toEqual({ enabled: false, hasKey: false });
+      expect(await save?.({}, { apiKey: 'tvly-ipc-fixture' })).toEqual({
+        enabled: false,
+        hasKey: true,
+      });
+      expect(await save?.({}, { enabled: true })).toEqual({ enabled: true, hasKey: true });
+      const listProviders = handlers.get('settings:v1:list-providers');
+      expect(listProviders).toBeDefined();
+      expect(await listProviders?.({})).toEqual([]);
+      expect(await get?.({})).toEqual({ enabled: true, hasKey: true });
+      expect(probe).not.toHaveBeenCalled();
+      expect(await test?.({})).toEqual({ status: 'ok' });
+      expect(probe).toHaveBeenCalledExactlyOnceWith('tvly-ipc-fixture', 15000);
+      expect(await save?.({}, { clearKey: true })).toEqual({ enabled: true, hasKey: false });
+      expect(await test?.({})).toEqual({ status: 'missing-key' });
+      expect(probe).toHaveBeenCalledOnce();
+    } finally {
+      probe.mockRestore();
+    }
+  }, 15_000);
   it('registers settings:v1:list-providers without the unversioned settings:list-providers shim', async () => {
     await registerIpcForTest();
 
@@ -526,6 +568,53 @@ describe('config:v1 provider mutations — fail-fast key handling', () => {
       }),
     ).rejects.toThrow(/Cannot clear API key/);
     expect(writeConfig).not.toHaveBeenCalled();
+  });
+
+  it('stores, clears, and validates a provider context window', async () => {
+    const { hydrateConfig } = await import('@open-codesign/shared');
+    const { readConfig, writeConfig } = await import('./config');
+    const { loadConfigOnBoot, registerOnboardingIpc } = await import('./onboarding-ipc');
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(readConfig).mockResolvedValueOnce(
+      hydrateConfig({
+        version: 3,
+        activeProvider: 'local-runtime',
+        activeModel: 'qwen3:32b',
+        secrets: {
+          'local-runtime': { ciphertext: 'enc:sk-test', mask: 'sk-***test' },
+        },
+        providers: {
+          'local-runtime': {
+            id: 'local-runtime',
+            name: 'Local Runtime',
+            builtin: false,
+            wire: 'openai-chat',
+            baseUrl: 'http://localhost:1234/v1',
+            defaultModel: 'qwen3:32b',
+          },
+        },
+      }),
+    );
+    await loadConfigOnBoot();
+    registerOnboardingIpc();
+    const handler = handlers.get('config:v1:update-provider');
+    if (!handler) throw new Error('handler missing');
+
+    await handler({} as never, { id: 'local-runtime', contextWindow: 32_768 });
+    expect(
+      vi.mocked(writeConfig).mock.calls.at(-1)?.[0].providers['local-runtime']?.contextWindow,
+    ).toBe(32_768);
+
+    await handler({} as never, { id: 'local-runtime', contextWindow: null });
+    expect(
+      vi.mocked(writeConfig).mock.calls.at(-1)?.[0].providers['local-runtime']?.contextWindow,
+    ).toBeUndefined();
+
+    for (const contextWindow of [0, 4096.5, '32768']) {
+      await expect(handler({} as never, { id: 'local-runtime', contextWindow })).rejects.toThrow(
+        /contextWindow must be a positive integer or null/,
+      );
+    }
   });
 
   it('rejects invalid provider updates instead of silently keeping old values', async () => {

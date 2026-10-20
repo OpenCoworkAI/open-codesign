@@ -16,6 +16,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { useAgentStream } from './hooks/useAgentStream';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useUpdateWiring } from './hooks/useUpdateWiring';
+import { notifyDesignInBackground } from './lib/system-notifications';
 
 // Settings opens in a separate view (Hub ↔ Workspace ↔ Settings). Keep it
 // out of the first-paint chunk — its ~2700-line tree + dynamic provider
@@ -43,6 +44,7 @@ export function App() {
   const designsViewOpen = useCodesignStore((s) => s.designsViewOpen);
   const closeDesignsView = useCodesignStore((s) => s.closeDesignsView);
   const createNewDesign = useCodesignStore((s) => s.createNewDesign);
+  const openNewDesignDialog = useCodesignStore((s) => s.openNewDesignDialog);
   const designToDelete = useCodesignStore((s) => s.designToDelete);
   const designToRename = useCodesignStore((s) => s.designToRename);
   const requestDeleteDesign = useCodesignStore((s) => s.requestDeleteDesign);
@@ -71,6 +73,16 @@ export function App() {
   const [updateStore] = useState(() => createUpdateStore({ dismissedVersion: '' }));
   useUpdateWiring(updateStore);
   useAgentStream();
+  useEffect(() => {
+    const off = window.codesign?.ask?.onRequest?.((request) => {
+      notifyDesignInBackground(useCodesignStore.getState(), request.designId, 'ask').catch(
+        (error: unknown) => console.warn('[open-codesign] system notification failed:', error),
+      );
+    });
+    return () => {
+      off?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!window.codesign) {
@@ -161,7 +173,7 @@ export function App() {
         combo: 'mod+n',
         handler: () => {
           if (!ready) return;
-          void createNewDesign();
+          openNewDesignDialog();
         },
       },
       {
@@ -208,7 +220,7 @@ export function App() {
       setInteractionMode,
       setView,
       closeDesignsView,
-      createNewDesign,
+      openNewDesignDialog,
       requestDeleteDesign,
       requestRenameDesign,
     ],

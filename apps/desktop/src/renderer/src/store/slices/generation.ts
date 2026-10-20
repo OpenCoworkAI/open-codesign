@@ -1141,8 +1141,11 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       });
     },
 
-    async exportActive(format: ExportFormat) {
-      recordAction({ type: 'design.export', data: { format } });
+    async exportActive(format: ExportFormat, renderMode?: 'image' | 'native') {
+      recordAction({
+        type: 'design.export',
+        data: { format, ...(renderMode !== undefined ? { renderMode } : {}) },
+      });
       const source = get().previewSource;
       if (!source) {
         set({ toastMessage: tr('notifications.noDesignToExport') });
@@ -1197,6 +1200,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
             : (get().designs.find((design) => design.id === designId) ?? null);
         const res = await window.codesign.export({
           format,
+          ...(renderMode !== undefined ? { renderMode } : {}),
           artifactSource,
           ...(designId !== null ? { designId } : {}),
           ...(activeDesign?.name ? { designName: activeDesign.name } : {}),
@@ -1210,6 +1214,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
               ...(res.sourcesPath
                 ? [tr('notifications.exportedTo', { path: res.sourcesPath })]
                 : []),
+              ...(res.exportWarnings ?? []),
               ...(res.researchWarnings ?? []),
             ].join('\n'),
           });

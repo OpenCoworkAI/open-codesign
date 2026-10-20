@@ -216,9 +216,11 @@ describe.skipIf(!chrome)('tweak keyboard persistence in system Chrome', () => {
     const input = await page.$(selector);
     if (!input) throw new Error('Missing input');
     await input.focus();
-    await page.keyboard.down('Control');
-    await page.keyboard.press('A');
-    await page.keyboard.up('Control');
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.keyboard.down(modifier);
+    // Headless shell needs an explicit native editing command for Select All.
+    await page.keyboard.press('A', { commands: ['selectAll'] });
+    await page.keyboard.up(modifier);
     await page.keyboard.type(value, { delay: 20 });
     expect(
       await input.evaluate((node) => node.isConnected && document.activeElement === node),

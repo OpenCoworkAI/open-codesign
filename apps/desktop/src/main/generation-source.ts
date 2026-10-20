@@ -165,16 +165,16 @@ export async function createGenerationSource(options: {
               'source-changed',
               'Runtime verification must use the exact current primary source.',
             );
-          const errors = await verifier(content, {
+          const result = await verifier(content, {
             ...context,
             path: context?.path ?? source?.path ?? 'App.jsx',
             ...(source ? { runtimeMode: source.runtimeMode } : {}),
             signal,
           });
           assertOwned();
-          if (source && errors.length === 0 && mutationSeq === startSeq)
+          if (source && result.errors.length === 0 && mutationSeq === startSeq)
             verified = { content, mutationSeq: startSeq };
-          return errors;
+          return result;
         });
       },
       async accept(accepted: { source: SourceIdentityV1; content: string }) {

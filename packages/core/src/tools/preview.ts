@@ -123,6 +123,31 @@ export const AssetError = Type.Object({
   type: Type.Optional(Type.String()),
 });
 
+/** Warnings a preview result carries; the ones past it are cut. */
+export const MAX_PREVIEW_WARNINGS = 5;
+
+/** Layout and accessibility findings are advice: they never change `ok` or the `done` status. */
+export const MAX_LAYOUT_ISSUES = 20;
+
+export const LayoutIssue = Type.Object({
+  check: Type.Union([
+    Type.Literal('horizontal-overflow'),
+    Type.Literal('clipped-text'),
+    Type.Literal('low-contrast'),
+    Type.Literal('small-target'),
+    Type.Literal('missing-name'),
+  ]),
+  /** Width of the viewport the page was measured at. */
+  viewportWidth: Type.Integer(),
+  /** A short CSS-style path to the element, for the agent to find it in the source. */
+  selector: Type.String(),
+  message: Type.String(),
+  /** What was measured and the limit it was compared with (px, or a contrast ratio), when the check is a number. */
+  measured: Type.Optional(Type.Number()),
+  limit: Type.Optional(Type.Number()),
+});
+export type LayoutIssue = Static<typeof LayoutIssue>;
+
 export const PreviewResult = Type.Object({
   ok: Type.Boolean(),
   /** Set only when capabilities.vision === true. */
@@ -138,7 +163,8 @@ export const PreviewResult = Type.Object({
     loadMs: Type.Number(),
   }),
   reason: Type.Optional(Type.String()),
-  warnings: Type.Optional(Type.Array(Type.String(), { maxItems: 5 })),
+  warnings: Type.Optional(Type.Array(Type.String(), { maxItems: MAX_PREVIEW_WARNINGS })),
+  layoutIssues: Type.Optional(Type.Array(LayoutIssue, { maxItems: MAX_LAYOUT_ISSUES })),
   visibleText: Type.Optional(Type.String()),
   steps: Type.Optional(
     Type.Array(
@@ -163,6 +189,12 @@ export function trimPreviewResult(result: PreviewResult): PreviewResult {
     ...result,
     consoleErrors: result.consoleErrors.slice(0, MAX_CONSOLE_ENTRIES),
     assetErrors: result.assetErrors.slice(0, MAX_ASSET_ERRORS),
+    ...(result.warnings !== undefined
+      ? { warnings: result.warnings.slice(0, MAX_PREVIEW_WARNINGS) }
+      : {}),
+    ...(result.layoutIssues !== undefined
+      ? { layoutIssues: result.layoutIssues.slice(0, MAX_LAYOUT_ISSUES) }
+      : {}),
   };
 }
 
@@ -170,6 +202,7 @@ function previewContent(summary: string, result: PreviewResult): Array<TextConte
   const content: Array<TextContent | ImageContent> = [{ type: 'text', text: summary }];
   if (
     result.warnings !== undefined ||
+    result.layoutIssues !== undefined ||
     result.steps !== undefined ||
     result.domOutline !== undefined ||
     result.visibleText !== undefined
@@ -179,6 +212,7 @@ function previewContent(summary: string, result: PreviewResult): Array<TextConte
       text: JSON.stringify({
         steps: result.steps,
         warnings: result.warnings,
+        layoutIssues: result.layoutIssues,
         visibleText: result.visibleText,
         domOutline: result.domOutline,
         metrics: result.metrics,
@@ -238,8 +272,13 @@ export function makePreviewTool(
         validatePreviewInput(params);
         const raw = await runPreview({ ...params, vision, ...(signal ? { signal } : {}) });
         const result = trimPreviewResult(raw);
+        const layoutCount = result.layoutIssues?.length ?? 0;
+        const layout =
+          layoutCount > 0
+            ? `, ${layoutCount} layout ${layoutCount === 1 ? 'issue' : 'issues'}`
+            : '';
         const summary = result.ok
-          ? `preview ok: ${result.metrics.nodes} nodes, ${result.consoleErrors.length} console errors, ${result.assetErrors.length} asset errors`
+          ? `preview ok: ${result.metrics.nodes} nodes, ${result.consoleErrors.length} console errors, ${result.assetErrors.length} asset errors${layout}`
           : `preview failed${result.reason ? `: ${result.reason}` : ''} (${result.consoleErrors.length} console errors, ${result.assetErrors.length} asset errors)`;
         return {
           content: previewContent(summary, result),

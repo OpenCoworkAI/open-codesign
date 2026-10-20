@@ -65,7 +65,7 @@ describe('generation source lifecycle', () => {
     expect(run.initialContent).toBeNull();
     const content = 'function App(){return <h1>React choice</h1>}';
     await writeFile(path.join(f.workspace, 'App.jsx'), content);
-    await run.verify(content, { path: 'App.jsx' }, async () => []);
+    await run.verify(content, { path: 'App.jsx' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     await run.confirm(true);
     expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({
@@ -121,7 +121,7 @@ describe('generation source lifecycle', () => {
     const run = await f.admit();
     const content = '<img src="assets/photo.png">';
     await writeFile(path.join(f.workspace, 'index.html'), content);
-    await run.verify(content, { path: 'index.html' }, async () => []);
+    await run.verify(content, { path: 'index.html' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     await run.confirm(true);
     expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'ready', content });
@@ -137,7 +137,7 @@ describe('generation source lifecycle', () => {
     const run = await f.admit();
     const content = '<p>Verified</p>';
     await writeFile(path.join(f.workspace, 'index.html'), content);
-    await run.verify(content, { path: 'index.html' }, async () => []);
+    await run.verify(content, { path: 'index.html' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     if (action === 'replace')
       await writeFile(path.join(f.workspace, 'index.html'), '<p>External</p>');
@@ -183,7 +183,7 @@ describe('generation source lifecycle', () => {
       ).toBe(content);
       expect(f.workspaces.size).toBe(1);
     }
-    await run.verify(content, { path: 'index.html' }, async () => []);
+    await run.verify(content, { path: 'index.html' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     await run.confirm(true);
     run.dispose();
@@ -194,7 +194,7 @@ describe('generation source lifecycle', () => {
     const run = await f.admit();
     const content = '<p>Verified</p>';
     await writeFile(path.join(f.workspace, 'index.html'), content);
-    await run.verify(content, { path: 'index.html' }, async () => []);
+    await run.verify(content, { path: 'index.html' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     const next = path.join(f.root, 'queued-rename');
     let release = () => {};
@@ -228,7 +228,7 @@ describe('generation source lifecycle', () => {
     const run = await f.admit();
     const content = '<p>Verified</p>';
     await writeFile(path.join(f.workspace, 'index.html'), content);
-    await run.verify(content, { path: 'index.html' }, async () => []);
+    await run.verify(content, { path: 'index.html' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     const next = path.join(f.root, 'after-commit');
     let renaming: Promise<unknown> | undefined;
@@ -294,7 +294,7 @@ describe('generation source lifecycle', () => {
       });
     const content = '<p>Verified</p>';
     await writeFile(path.join(f.workspace, 'index.html'), content);
-    await run.verify(content, { path: 'index.html' }, async () => []);
+    await run.verify(content, { path: 'index.html' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     let release = () => {};
     let entered = () => {};
@@ -329,7 +329,7 @@ describe('generation source lifecycle', () => {
     const run = await f.admit();
     const content = '<p>Verified</p>';
     await writeFile(path.join(f.workspace, 'index.html'), content);
-    await run.verify(content, { path: 'index.html' }, async () => []);
+    await run.verify(content, { path: 'index.html' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     const write = sourceEntryStore.writeSourceEntryFile;
     const spy = vi
@@ -356,7 +356,7 @@ describe('generation source lifecycle', () => {
     const run = await f.admit();
     const content = '<p>Verified</p>';
     await writeFile(path.join(f.workspace, 'index.html'), content);
-    await run.verify(content, { path: 'index.html' }, async () => []);
+    await run.verify(content, { path: 'index.html' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     const write = sourceEntryStore.writeSourceEntryFile;
     const spy = vi
@@ -379,7 +379,7 @@ describe('generation source lifecycle', () => {
     const run = await f.admit();
     const content = '<p>Verified</p>';
     await writeFile(path.join(f.workspace, 'index.html'), content);
-    await run.verify(content, { path: 'index.html' }, async () => []);
+    await run.verify(content, { path: 'index.html' }, async () => ({ errors: [], warnings: [] }));
     await run.accept({ source: SourceIdentityV1.parse(run.source), content });
     let release = () => {};
     let entered = () => {};
