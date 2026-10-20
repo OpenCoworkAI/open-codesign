@@ -77,13 +77,13 @@ importers:
     devDependencies:
       '@mariozechner/pi-agent-core':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.6.7)
+        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-ai':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.6.7)
+        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-coding-agent':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.6.7)
+        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@open-codesign/artifacts':
         specifier: workspace:*
         version: link:../../packages/artifacts
@@ -207,13 +207,13 @@ importers:
     dependencies:
       '@mariozechner/pi-agent-core':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.6.7)
+        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-ai':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.6.7)
+        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-coding-agent':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.6.7)
+        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@open-codesign/providers':
         specifier: workspace:*
         version: link:../providers
@@ -291,7 +291,7 @@ importers:
     dependencies:
       '@mariozechner/pi-ai':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.6.7)
+        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@open-codesign/shared':
         specifier: workspace:*
         version: link:../shared
@@ -2712,8 +2712,8 @@ packages:
   aws4@1.13.2:
     resolution: {integrity: sha512-lHe62zvbTB5eEABUVi/AwVh0ZKY9rMMDhmm+eeyuuUQbQ3+J+fONVQOZyj+DdrvD4BY33uYniyRJ4UJIaSKAfw==}
 
-  b4a@1.9.0:
-    resolution: {integrity: sha512-dpfcF9fDNR6++cthXR67iyhgqWy9CBouAvIWhIntzBG6cvK/cnIPiZQjBwi/ZqjjBEDGfoNDtmB0kTjroOJ3pQ==}
+  b4a@1.8.0:
+    resolution: {integrity: sha512-qRuSmNSkGQaHwNbM7J78Wwy+ghLEYF1zNrSeMxj4Kgw6y33O3mXcQ6Ie9fRvfU/YnxWkOchPXbaLb73TkIsfdg==}
     peerDependencies:
       react-native-b4a: '*'
     peerDependenciesMeta:
@@ -2730,28 +2730,32 @@ packages:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
 
-  bare-events@2.9.2:
-    resolution: {integrity: sha512-AIPKioV7/Y/8KfZ3AAhjPJxLLbY49S64Ym5DakZlUg75qQiTgUq9hEJoEwa4eUezPUlXRy/i5NpsKvo9jgKmoA==}
+  bare-events@2.8.2:
+    resolution: {integrity: sha512-riJjyv1/mHLIPX4RwiK+oW9/4c3TEUeORHKefKAKnZ5kyslbN+HXowtbaVEqt4IMUB7OXlfixcs6gsFeo/jhiQ==}
     peerDependencies:
       bare-abort-controller: '*'
     peerDependenciesMeta:
       bare-abort-controller:
         optional: true
 
-  bare-fs@4.8.4:
-    resolution: {integrity: sha512-MPC2eyrpbk3A873sK4y6rk+Iv4o2enxTjHZ8zH3HO0mjrpm5XjnguY2XmfidIsDV6vnjpbMBKUAJpV0ISD2SsQ==}
-    engines: {bare: '>=1.28.0'}
+  bare-fs@4.7.1:
+    resolution: {integrity: sha512-WDRsyVN52eAx/lBamKD6uyw8H4228h/x0sGGGegOamM2cd7Pag88GfMQalobXI+HaEUxpCkbKQUDOQqt9wawRw==}
+    engines: {bare: '>=1.16.0'}
     peerDependencies:
       bare-buffer: '*'
     peerDependenciesMeta:
       bare-buffer:
         optional: true
 
-  bare-path@3.1.2:
-    resolution: {integrity: sha512-ZyKbsuuqK6Ag0K8pX6V5Txq6XeJRvY+wXucnFGRjiyVYP9YWDpIQugk/b+enRYrEYBJaqLzghRQpXPMR7341Nw==}
+  bare-os@3.9.0:
+    resolution: {integrity: sha512-JTjuZyNIDpw+GytMO4a6TK1VXdVKKJr6DRxEHasyuYyShV2deuiHJK/ahGZlebc+SG0/wJCB9XK8gprBGDFi/Q==}
+    engines: {bare: '>=1.14.0'}
 
-  bare-stream@2.13.4:
-    resolution: {integrity: sha512-PcrQ8lVLbiJscNm1Kez+Yp4Gy4AHGcN1lzwjvf5NybWen7VvEgUfyfnXYJ2zNqWnzOfCb1Abq6lH8ti0syQszA==}
+  bare-path@3.0.0:
+    resolution: {integrity: sha512-tyfW2cQcB5NN8Saijrhqn0Zh7AnFNsnczRcuWODH0eYAXBsJ5gVxAUuNr7tsHSC6IZ77cA0SitzT+s47kot8Mw==}
+
+  bare-stream@2.13.0:
+    resolution: {integrity: sha512-3zAJRZMDFGjdn+RVnNpF9kuELw+0Fl3lpndM4NcEOhb9zwtSo/deETfuIwMSE5BXanA0FrN1qVjffGwAg2Y7EA==}
     peerDependencies:
       bare-abort-controller: '*'
       bare-buffer: '*'
@@ -2764,8 +2768,8 @@ packages:
       bare-events:
         optional: true
 
-  bare-url@2.5.5:
-    resolution: {integrity: sha512-iM9qJCruvpt2rPaLsrumVDru9pogI7PHziHIa9kTNRFt8C8HuSa+kI9kFezK+NvHEFnnz71rKGZ1EAilq/3V/Q==}
+  bare-url@2.4.2:
+    resolution: {integrity: sha512-/9a2j4ac6ckpmAHvod/ob7x439OAHst/drc2Clnq+reRYd/ovddwcF4LfoxHyNk5AuGBnPg+HqFjmE/Zpq6v0A==}
 
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
@@ -4930,8 +4934,8 @@ packages:
   std-env@4.3.0:
     resolution: {integrity: sha512-OtU/EgQ1kIm5KwqQpBC6ZEMXrZRui11w8zgfTWp8cdO9B8OaPsbA8bTHO2P+HNo1VlUTGMVBwPhydu6poeXiag==}
 
-  streamx@2.28.1:
-    resolution: {integrity: sha512-zEzXb0s5Cds7tqMH6rhZ05lcJydCWiQPEwiNngVqzsxCc962vLY4Uw+mW7od8kDH258k2Uz/JrOkdIAAhSh9VA==}
+  streamx@2.25.0:
+    resolution: {integrity: sha512-0nQuG6jf1w+wddNEEXCF4nTg3LtufWINB5eFEN+5TNZW7KWJp6x87+JFL43vaAUPyCfH1wID+mNVyW6OHtFamg==}
 
   string-width@4.2.3:
     resolution: {integrity: sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==}
@@ -4997,11 +5001,11 @@ packages:
     resolution: {integrity: sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A==}
     engines: {node: '>=6'}
 
-  tar-fs@3.1.3:
-    resolution: {integrity: sha512-/hU4AXnIdZu+Gvl1pk0oI5f5HxWsCJRtY2aFaJdk9VvyL48DWU6iU5WAIPG+wIi1YvWA6eTJvIviP/tMAZZNwQ==}
+  tar-fs@3.1.2:
+    resolution: {integrity: sha512-QGxxTxxyleAdyM3kpFs14ymbYmNFrfY+pHj7Z8FgtbZ7w2//VAgLMac7sT6nRpIHjppXO2AwwEOg0bPFVRcmXw==}
 
-  tar-stream@3.2.2:
-    resolution: {integrity: sha512-+8NeqHRjQWH9nYlwo2gamAMImZCVzI4UoEgDpWorBt9OEfppiZn+uSkskzQKPWIZyji/C8fpWO7u69G0DX0tbg==}
+  tar-stream@3.1.8:
+    resolution: {integrity: sha512-U6QpVRyCGHva435KoNWy9PRoi2IFYCgtEhq9nmrPPpbRacPs9IH4aJ3gbrFC8dPcXvdSZ4XXfXT5Fshbp2MtlQ==}
 
   tar@7.5.13:
     resolution: {integrity: sha512-tOG/7GyXpFevhXVh8jOPJrmtRpOTsYqUIkVdVooZYJS/z8WhfQUX8RJILmeuJNinGAMSu1veBr4asSHFt5/hng==}
@@ -5102,8 +5106,8 @@ packages:
   typebox@1.1.37:
     resolution: {integrity: sha512-jb7jp6KvOvvy5sd+11AfJ0/e0F0AS9RcOXd55oGi2ZnRHIGmFvrTaNF+ZidRmGBmmNTkM5KKl0Z37KzxJ+owEQ==}
 
-  typed-query-selector@2.12.3:
-    resolution: {integrity: sha512-/dtuMZyutHLlrxWhhC1uib00ELUr2dZ8C9B8YzZYsJmeE3V56OxRblrSM2UaF142pcMtak7ehZ6+poWGeehNIg==}
+  typed-query-selector@2.12.2:
+    resolution: {integrity: sha512-EOPFbyIub4ngnEdqi2yOcNeDLaX/0jcE1JoAXQDDMIthap7FoN795lc/SHfIq2d416VufXpM8z/lD+WRm2gfOQ==}
 
   typescript@6.0.3:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
@@ -5450,18 +5454,6 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.22.0:
-    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
-    engines: {node: '>=10.0.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: '>=5.0.2'
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-
   xmlbuilder@15.1.1:
     resolution: {integrity: sha512-yMqGBqtXyeN1e3TGYvgNgDVZ3j84W4cwkOXQswghol6APgZWaff9lnbvN7MHYJOiXsvGPXtjTYJEiC9J2wv9Eg==}
     engines: {node: '>=8.0'}
@@ -5538,9 +5530,6 @@ packages:
 
   zod@4.4.2:
     resolution: {integrity: sha512-IynmDyxsEsb9RKzO3J9+4SxXnl2FTFSzNBaKKaMV6tsSk0rw9gYw9gs+JFCq/qk2LCZ78KDwyj+Z289TijSkUw==}
-
-  zod@4.6.7:
-    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
   zustand@5.0.12:
     resolution: {integrity: sha512-i77ae3aZq4dhMlRhJVCYgMLKuSiZAaUPAct2AksxQ+gOtimhGMdXljRT21P5BNpeT4kXlLIckvkPM029OljD7g==}
@@ -5681,11 +5670,11 @@ snapshots:
 
   '@alloc/quick-lru@5.3.0': {}
 
-  '@anthropic-ai/sdk@0.91.1(zod@4.6.7)':
+  '@anthropic-ai/sdk@0.91.1(zod@4.4.2)':
     dependencies:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
-      zod: 4.6.7
+      zod: 4.4.2
 
   '@aws-crypto/crc32@5.2.0':
     dependencies:
@@ -6807,7 +6796,7 @@ snapshots:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
       protobufjs: 7.5.6
-      ws: 8.22.0
+      ws: 8.20.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -6938,9 +6927,9 @@ snapshots:
       std-env: 3.10.0
       yoctocolors: 2.1.2
 
-  '@mariozechner/pi-agent-core@0.72.1(ws@8.22.0)(zod@4.6.7)':
+  '@mariozechner/pi-agent-core@0.72.1(ws@8.20.0)(zod@4.4.2)':
     dependencies:
-      '@mariozechner/pi-ai': 0.72.1(ws@8.22.0)(zod@4.6.7)
+      '@mariozechner/pi-ai': 0.72.1(ws@8.20.0)(zod@4.4.2)
       typebox: 1.1.37
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
@@ -6951,19 +6940,19 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-ai@0.72.1(ws@8.22.0)(zod@4.6.7)':
+  '@mariozechner/pi-ai@0.72.1(ws@8.20.0)(zod@4.4.2)':
     dependencies:
-      '@anthropic-ai/sdk': 0.91.1(zod@4.6.7)
+      '@anthropic-ai/sdk': 0.91.1(zod@4.4.2)
       '@aws-sdk/client-bedrock-runtime': 3.1041.0
       '@google/genai': 1.51.0
       '@mistralai/mistralai': 2.2.1
       chalk: 5.6.2
-      openai: 6.26.0(ws@8.22.0)(zod@4.6.7)
+      openai: 6.26.0(ws@8.20.0)(zod@4.4.2)
       partial-json: 0.1.7
       proxy-agent: 6.5.0
       typebox: 1.1.37
       undici: 7.29.1
-      zod-to-json-schema: 3.25.2(zod@4.6.7)
+      zod-to-json-schema: 3.25.2(zod@4.4.2)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - aws-crt
@@ -6973,11 +6962,11 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-coding-agent@0.72.1(ws@8.22.0)(zod@4.6.7)':
+  '@mariozechner/pi-coding-agent@0.72.1(ws@8.20.0)(zod@4.4.2)':
     dependencies:
       '@mariozechner/jiti': 2.6.5
-      '@mariozechner/pi-agent-core': 0.72.1(ws@8.22.0)(zod@4.6.7)
-      '@mariozechner/pi-ai': 0.72.1(ws@8.22.0)(zod@4.6.7)
+      '@mariozechner/pi-agent-core': 0.72.1(ws@8.20.0)(zod@4.4.2)
+      '@mariozechner/pi-ai': 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-tui': 0.72.1
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 5.6.2
@@ -7019,9 +7008,9 @@ snapshots:
 
   '@mistralai/mistralai@2.2.1':
     dependencies:
-      ws: 8.22.0
-      zod: 4.6.7
-      zod-to-json-schema: 3.25.2(zod@4.6.7)
+      ws: 8.20.0
+      zod: 4.4.2
+      zod-to-json-schema: 3.25.2(zod@4.4.2)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -7125,7 +7114,7 @@ snapshots:
       progress: 2.0.3
       proxy-agent: 6.5.0
       semver: 7.8.5
-      tar-fs: 3.1.3
+      tar-fs: 3.1.2
       yargs: 17.7.3
     transitivePeerDependencies:
       - bare-abort-controller
@@ -8263,7 +8252,7 @@ snapshots:
 
   aws4@1.13.2: {}
 
-  b4a@1.9.0: {}
+  b4a@1.8.0: {}
 
   bail@2.0.2: {}
 
@@ -8271,34 +8260,37 @@ snapshots:
 
   balanced-match@4.0.4: {}
 
-  bare-events@2.9.2: {}
+  bare-events@2.8.2: {}
 
-  bare-fs@4.8.4:
+  bare-fs@4.7.1:
     dependencies:
-      bare-events: 2.9.2
-      bare-path: 3.1.2
-      bare-stream: 2.13.4(bare-events@2.9.2)
-      bare-url: 2.5.5
+      bare-events: 2.8.2
+      bare-path: 3.0.0
+      bare-stream: 2.13.0(bare-events@2.8.2)
+      bare-url: 2.4.2
       fast-fifo: 1.3.2
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
 
-  bare-path@3.1.2: {}
+  bare-os@3.9.0: {}
 
-  bare-stream@2.13.4(bare-events@2.9.2):
+  bare-path@3.0.0:
     dependencies:
-      b4a: 1.9.0
-      streamx: 2.28.1
+      bare-os: 3.9.0
+
+  bare-stream@2.13.0(bare-events@2.8.2):
+    dependencies:
+      streamx: 2.25.0
       teex: 1.0.1
     optionalDependencies:
-      bare-events: 2.9.2
+      bare-events: 2.8.2
     transitivePeerDependencies:
       - react-native-b4a
 
-  bare-url@2.5.5:
+  bare-url@2.4.2:
     dependencies:
-      bare-path: 3.1.2
+      bare-path: 3.0.0
 
   base64-js@1.5.1: {}
 
@@ -8990,7 +8982,7 @@ snapshots:
 
   events-universal@1.0.1:
     dependencies:
-      bare-events: 2.9.2
+      bare-events: 2.8.2
     transitivePeerDependencies:
       - bare-abort-controller
 
@@ -10305,10 +10297,10 @@ snapshots:
       regex: 6.1.0
       regex-recursion: 6.0.2
 
-  openai@6.26.0(ws@8.22.0)(zod@4.6.7):
+  openai@6.26.0(ws@8.20.0)(zod@4.4.2):
     optionalDependencies:
-      ws: 8.22.0
-      zod: 4.6.7
+      ws: 8.20.0
+      zod: 4.4.2
 
   ora@5.4.1:
     dependencies:
@@ -10559,9 +10551,9 @@ snapshots:
       chromium-bidi: 14.0.0(devtools-protocol@0.0.1608973)
       debug: 4.4.3
       devtools-protocol: 0.0.1608973
-      typed-query-selector: 2.12.3
+      typed-query-selector: 2.12.2
       webdriver-bidi-protocol: 0.4.1
-      ws: 8.22.0
+      ws: 8.20.0
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -10918,7 +10910,7 @@ snapshots:
 
   std-env@4.3.0: {}
 
-  streamx@2.28.1:
+  streamx@2.25.0:
     dependencies:
       events-universal: 1.0.1
       fast-fifo: 1.3.2
@@ -10996,24 +10988,24 @@ snapshots:
 
   tapable@2.3.3: {}
 
-  tar-fs@3.1.3:
+  tar-fs@3.1.2:
     dependencies:
       pump: 3.0.4
-      tar-stream: 3.2.2
+      tar-stream: 3.1.8
     optionalDependencies:
-      bare-fs: 4.8.4
-      bare-path: 3.1.2
+      bare-fs: 4.7.1
+      bare-path: 3.0.0
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
       - react-native-b4a
 
-  tar-stream@3.2.2:
+  tar-stream@3.1.8:
     dependencies:
-      b4a: 1.9.0
-      bare-fs: 4.8.4
+      b4a: 1.8.0
+      bare-fs: 4.7.1
       fast-fifo: 1.3.2
-      streamx: 2.28.1
+      streamx: 2.25.0
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -11037,7 +11029,7 @@ snapshots:
 
   teex@1.0.1:
     dependencies:
-      streamx: 2.28.1
+      streamx: 2.25.0
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
@@ -11056,7 +11048,7 @@ snapshots:
 
   text-decoder@1.2.7:
     dependencies:
-      b4a: 1.9.0
+      b4a: 1.8.0
     transitivePeerDependencies:
       - react-native-b4a
 
@@ -11133,7 +11125,7 @@ snapshots:
 
   typebox@1.1.37: {}
 
-  typed-query-selector@2.12.3: {}
+  typed-query-selector@2.12.2: {}
 
   typescript@6.0.3: {}
 
@@ -11501,8 +11493,6 @@ snapshots:
 
   ws@8.20.0: {}
 
-  ws@8.22.0: {}
-
   xmlbuilder@15.1.1: {}
 
   y18n@5.0.8: {}
@@ -11564,15 +11554,13 @@ snapshots:
       yauzl: 3.3.0
       yazl: 3.3.1
 
-  zod-to-json-schema@3.25.2(zod@4.6.7):
+  zod-to-json-schema@3.25.2(zod@4.4.2):
     dependencies:
-      zod: 4.6.7
+      zod: 4.4.2
 
   zod@3.25.76: {}
 
   zod@4.4.2: {}
-
-  zod@4.6.7: {}
 
   zustand@5.0.12(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.6.0(react@19.3.1)):
     optionalDependencies:
