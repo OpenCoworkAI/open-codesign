@@ -166,6 +166,19 @@ describe('HTML source-position editing', () => {
       html.replace('color:red', 'color:blue'),
     );
   });
+  it('handles long comment-separated priorities without backtracking and preserves their bytes', () => {
+    const comments = '/**/'.repeat(8000);
+    const html = `<h1 style="color:red !${comments}important${comments}; padding:4px">Text</h1>`;
+    expect(changed(html, { kind: 'set-style', property: 'color', value: 'blue' }).content).toBe(
+      html.replace('color:red', 'color:blue'),
+    );
+  });
+  it('does not treat quoted exclamations or non-priority suffixes as CSS priority', () => {
+    const html = '<h1 style="--label: \'!important\'; color:red /* keep */">Text</h1>';
+    expect(changed(html, { kind: 'set-style', property: 'color', value: 'blue' }).content).toBe(
+      '<h1 style="--label: \'!important\'; color:blue">Text</h1>',
+    );
+  });
   it.each([
     'url(https://example.com)',
     'red;display:none',

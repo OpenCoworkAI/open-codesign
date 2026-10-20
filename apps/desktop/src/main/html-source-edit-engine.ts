@@ -137,6 +137,19 @@ function attributeSpan(
   };
 }
 
+function skipCssTrivia(source: string, start: number, end: number): number {
+  let cursor = start;
+  while (cursor < end) {
+    if (/\s/.test(source[cursor] ?? '')) cursor++;
+    else if (source.startsWith('/*', cursor)) {
+      const close = source.indexOf('*/', cursor + 2);
+      if (close < 0 || close + 2 > end) return end + 1;
+      cursor = close + 2;
+    } else break;
+  }
+  return cursor;
+}
+
 /** Split declarations without treating quoted/commented/parenthesized semicolons as boundaries. */
 function cssValues(source: string): CssValue[] | null {
   const values: CssValue[] = [];
@@ -145,7 +158,8 @@ function cssValues(source: string): CssValue[] | null {
     colon = -1,
     quote = '',
     depth = 0,
-    comment = false;
+    comment = false,
+    priorityBang = -1;
   function declaration(end: number): boolean {
     const raw = source.slice(start, end);
     if (!raw.replace(/\/\*[\s\S]*?\*\//g, '').trim()) return true;
@@ -160,10 +174,16 @@ function cssValues(source: string): CssValue[] | null {
     while (/\s/.test(source[valueStart] ?? '') && valueStart < end) valueStart++;
     let valueEnd = end;
     while (valueEnd > valueStart && /\s/.test(source[valueEnd - 1] ?? '')) valueEnd--;
-    const important = /\s*!(?:\s|\/\*[\s\S]*?\*\/)*important(?:\s|\/\*[\s\S]*?\*\/)*$/i.exec(
-      source.slice(valueStart, valueEnd),
-    );
-    if (important) valueEnd = valueStart + important.index;
+    if (priorityBang >= valueStart) {
+      const keyword = skipCssTrivia(source, priorityBang + 1, valueEnd);
+      if (
+        source.slice(keyword, keyword + 9).toLowerCase() === 'important' &&
+        skipCssTrivia(source, keyword + 9, valueEnd) === valueEnd
+      ) {
+        valueEnd = priorityBang;
+        while (valueEnd > valueStart && /\s/.test(source[valueEnd - 1] ?? '')) valueEnd--;
+      }
+    }
     if (valueStart === valueEnd || names.has(name)) return false;
     names.add(name);
     values.push({
@@ -204,10 +224,12 @@ function cssValues(source: string): CssValue[] | null {
     if (char === '(') depth++;
     if (char === ')' && --depth < 0) return null;
     if (char === ':' && depth === 0 && colon < start) colon = i;
+    if (char === '!' && depth === 0 && colon >= start) priorityBang = i;
     if ((char === ';' || i === source.length) && depth === 0) {
       if (!declaration(i)) return null;
       start = i + 1;
       colon = -1;
+      priorityBang = -1;
     }
   }
   return quote || comment || depth ? null : values;

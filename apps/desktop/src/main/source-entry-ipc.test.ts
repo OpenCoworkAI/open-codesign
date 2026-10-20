@@ -109,7 +109,7 @@ describe('source entry IPC', () => {
       'Invalid source',
     );
     await expect(
-      invoke('select', { ...(await selection()), expectedWorkspacePath: 'C:/other' }),
+      invoke('select', { ...(await selection()), expectedWorkspacePath: path.join(root, 'other') }),
     ).rejects.toThrow('workspace changed');
   });
 });

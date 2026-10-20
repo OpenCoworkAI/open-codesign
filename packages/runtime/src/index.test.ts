@@ -489,6 +489,7 @@ describe.each([
 
   it.each([
     '<script>window.template = "</body>"; window.nativeReady = true;</script>',
+    '<script><!--\nwindow.example = "--!><script>double</script>"; window.nativeReady = true;\n</script>',
     '<script>window.example = "<script data-example=plain>"; /* <!-- <script> double escaped then reset --> */ window.nativeReady = true;</script>',
     '<script data-note="</head> >">window.template = \'<head><base href="fake"><meta name="viewport"><meta http-equiv="Content-Security-Policy" content="script-src none"></head>\';</script>',
     '<style>.sample::after { content: "</head><base href=fake>"; }</style>',

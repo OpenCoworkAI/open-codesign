@@ -564,8 +564,8 @@ ${PREVIEW_VIEWPORT_META}
 <script data-open-codesign="preview-viewport">
 (() => {
   const sync = () => {
-    document.documentElement.style.setProperty('--codesign-preview-width', \`\${window.innerWidth}px\`);
-    document.documentElement.style.setProperty('--codesign-preview-height', \`\${window.innerHeight}px\`);
+    document.documentElement.style.setProperty('--codesign-preview-width', String(window.innerWidth) + 'px');
+    document.documentElement.style.setProperty('--codesign-preview-height', String(window.innerHeight) + 'px');
   };
   sync();
   window.addEventListener('resize', sync, { passive: true });
@@ -635,22 +635,34 @@ function unsafeNativeHtml(): never {
 }
 
 function nativeRawTextEnd(source: string, start: number, name: string): number {
-  const pattern =
-    name === 'script'
-      ? /<!--|-->|<\/?script(?=[\t\n\f\r />])/gi
-      : new RegExp(`</${name}(?=[\\t\\n\\f\\r />])`, 'gi');
-  pattern.lastIndex = start;
   let scriptState: 'data' | 'escaped' | 'double-escaped' = 'data';
-  for (let match = pattern.exec(source); match; match = pattern.exec(source)) {
-    const token = match[0].toLowerCase();
-    if (name !== 'script') return match.index;
-    if (token === '<!--' && scriptState === 'data') scriptState = 'escaped';
-    else if (token === '-->') scriptState = 'data';
-    else if (token === '<script' && scriptState === 'escaped') scriptState = 'double-escaped';
-    else if (token === '</script') {
-      if (scriptState !== 'double-escaped') return match.index;
-      scriptState = 'escaped';
+  for (let cursor = start; cursor < source.length; cursor++) {
+    // Script escaped states use script-data transitions, not HTML comment-end parsing.
+    if (name === 'script' && source.startsWith('<!--', cursor)) {
+      if (scriptState === 'data') scriptState = 'escaped';
+      cursor += 3;
+      continue;
     }
+    if (name === 'script' && source.startsWith('-->', cursor)) {
+      scriptState = 'data';
+      cursor += 2;
+      continue;
+    }
+    if (source[cursor] !== '<') continue;
+    const closing = source[cursor + 1] === '/';
+    const nameStart = cursor + (closing ? 2 : 1);
+    if (
+      source.slice(nameStart, nameStart + name.length).toLowerCase() !== name ||
+      !/[\t\n\f\r />]/.test(source[nameStart + name.length] ?? '')
+    )
+      continue;
+    if (closing) {
+      if (name !== 'script' || scriptState !== 'double-escaped') return cursor;
+      scriptState = 'escaped';
+    } else if (name === 'script' && scriptState === 'escaped') {
+      scriptState = 'double-escaped';
+    }
+    cursor = nameStart + name.length - 1;
   }
   return unsafeNativeHtml();
 }
