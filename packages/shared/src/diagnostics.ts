@@ -1,4 +1,5 @@
 import type { ReasoningLevel, WireApi } from './config';
+import type { RecoveryCategory } from './recovery';
 
 export type ErrorCode =
   | '401'
@@ -83,7 +84,7 @@ export interface DiagnosticHypothesis {
   /** Primary action the user should take */
   suggestedFix?: DiagnosticFix;
   /** Machine-readable recovery category from provider error normalization. */
-  recoveryCategory?: string;
+  recoveryCategory?: RecoveryCategory;
 }
 
 export interface DiagnoseContext {

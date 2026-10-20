@@ -11,6 +11,7 @@ export {
   CommentContentExpectations,
   commentContentFingerprint,
 } from './comment-content';
+export { isRecoveryCategory, RECOVERY_CATEGORIES, type RecoveryCategory } from './recovery';
 export {
   SaveWebSearchSettingsInput,
   WEB_SEARCH_SETTINGS_CHANNELS,

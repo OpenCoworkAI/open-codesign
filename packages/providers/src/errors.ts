@@ -11,7 +11,10 @@
  * lines is fine", the duplication is intentional.
  */
 
+import type { RecoveryCategory } from '@open-codesign/shared';
 import { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
+
+export type { RecoveryCategory } from '@open-codesign/shared';
 
 const API_KEY_RE =
   /(sk-[A-Za-z0-9-_]{20,}|AIzaSy[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|[A-Za-z0-9+/]{43}=|[A-Fa-f0-9]{32,}|Bearer\s+[A-Za-z0-9._~+/=-]+)/g;
@@ -32,24 +35,6 @@ const REQUEST_ID_KEYS = [
  * hint ("Check your API key", "Try adding /v1", etc.) instead of a
  * generic "something went wrong" message.
  */
-export type RecoveryCategory =
-  | 'auth_key_invalid'
-  | 'auth_key_expired'
-  | 'auth_permission'
-  | 'endpoint_not_found'
-  | 'endpoint_missing_v1'
-  | 'wire_incompatible'
-  | 'gateway_incompatible'
-  | 'model_not_found'
-  | 'model_not_supported_role'
-  | 'rate_limit'
-  | 'billing'
-  | 'network_unreachable'
-  | 'network_timeout'
-  | 'upstream_server_error'
-  | 'request_too_large'
-  | 'tls_error'
-  | 'unknown';
 
 export interface NormalizedProviderError {
   upstream_provider: string;
@@ -92,7 +77,8 @@ function extractStatus(err: Record<string, unknown>): number | undefined {
   return pickNumber(err['statusCode']);
 }
 
-function extractCode(err: Record<string, unknown>): string | undefined {
+function extractCode(err: Record<string, unknown>, depth = 0): string | undefined {
+  if (depth > 4) return undefined;
   const direct = pickString(err['code']);
   if (direct !== undefined) return direct;
   const errorField = asRecord(err['error']);
@@ -101,7 +87,10 @@ function extractCode(err: Record<string, unknown>): string | undefined {
   const response = asRecord(err['response']);
   const data = response ? asRecord(response['data']) : undefined;
   const dataError = data ? asRecord(data['error']) : undefined;
-  return dataError ? pickString(dataError['code']) : undefined;
+  const viaData = dataError ? pickString(dataError['code']) : undefined;
+  if (viaData !== undefined) return viaData;
+  const cause = asRecord(err['cause']);
+  return cause ? extractCode(cause, depth + 1) : undefined;
 }
 
 function extractMessage(err: unknown, errRec: Record<string, unknown>): string {
@@ -196,9 +185,8 @@ function extractErrorName(err: unknown, errRec: Record<string, unknown>): string
  * Classify a provider error into a recovery category so the UI can show
  * a targeted hint instead of a generic failure message.
  *
- * Priority: status code > message patterns > network/system code > fallback.
+ * Priority: network/system code > HTTP status > specific message patterns > generic gateway fallback.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: deliberate per-status/message classification switch
 export function classifyRecoveryCategory(
   status: number | undefined,
   code: string | undefined,
@@ -236,18 +224,22 @@ export function classifyRecoveryCategory(
     if (status === 413 || (status === 400 && msg.includes('too large'))) {
       return 'request_too_large';
     }
-    if (status === 429) return 'rate_limit';
+    if (status === 429) {
+      return msg.includes('quota') ||
+        msg.includes('billing') ||
+        msg.includes('credit') ||
+        sysCode === 'insufficient_quota'
+        ? 'billing'
+        : 'rate_limit';
+    }
     if (status >= 500 && status < 600) {
-      if (msg.includes('not implemented') || msg.includes('unsupported')) {
+      if (status === 501 || looksLikeGatewayMissingMessagesApi(new Error(message))) {
         return 'gateway_incompatible';
       }
       return 'upstream_server_error';
     }
   }
 
-  if (msg.includes('not implemented') || msg.includes('unsupported') || msg.includes('501')) {
-    return 'gateway_incompatible';
-  }
   if (
     msg.includes('model') &&
     (msg.includes('not found') || msg.includes('not exist') || msg.includes('does not exist'))
@@ -261,6 +253,13 @@ export function classifyRecoveryCategory(
   ) {
     return 'model_not_supported_role';
   }
+  if (/base\s*url.*(?:missing|include|require).*\/v1/.test(msg)) {
+    return 'endpoint_missing_v1';
+  }
+  if (/unsupported (?:wire|protocol)|(?:wire|protocol).*(?:not supported|incompatible)/.test(msg)) {
+    return 'wire_incompatible';
+  }
+  if (looksLikeGatewayMissingMessagesApi(new Error(message))) return 'gateway_incompatible';
   if (msg.includes('quota') || msg.includes('billing') || msg.includes('credit')) {
     return 'billing';
   }
@@ -277,7 +276,7 @@ export function classifyRecoveryCategory(
     return 'auth_key_invalid';
   }
 
-  if (wire === 'anthropic' && looksLikeGatewayMissingMessagesApi({ message } as Error)) {
+  if (wire === 'anthropic' && looksLikeGatewayMissingMessagesApi(new Error(message))) {
     return 'gateway_incompatible';
   }
 
@@ -308,7 +307,7 @@ export function recoveryHintFor(category: RecoveryCategory): string {
     case 'model_not_found':
       return 'Check model ID spelling or try listing available models from your provider';
     case 'model_not_supported_role':
-      return 'The selected model does not support the developer/system role — try a different model or disable reasoning';
+      return 'The selected model does not support the developer/system role — choose a model that supports the required message roles';
     case 'rate_limit':
       return 'Rate limited — wait a moment and retry, or upgrade your provider plan';
     case 'billing':
@@ -316,7 +315,7 @@ export function recoveryHintFor(category: RecoveryCategory): string {
     case 'network_unreachable':
       return 'Cannot reach the server — check your network, base URL, and firewall settings';
     case 'network_timeout':
-      return 'Connection timed out — check your network, or increase timeout in advanced settings';
+      return 'Connection timed out — check your network, and retry when the provider is reachable';
     case 'upstream_server_error':
       return 'Upstream server error — the provider may be experiencing issues, try again later';
     case 'request_too_large':

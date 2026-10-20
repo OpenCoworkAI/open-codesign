@@ -1,5 +1,5 @@
 import type { DiagnosticHypothesis, OnboardingState } from '@open-codesign/shared';
-import { diagnoseGenerateFailure } from '@open-codesign/shared';
+import { diagnoseGenerateFailure, isRecoveryCategory } from '@open-codesign/shared';
 import { tr } from '../lib/locale.js';
 
 export type ToastVariant = 'success' | 'error' | 'info';
@@ -149,7 +149,6 @@ export function pickUpstreamString(err: unknown, key: string): string | undefine
   return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing complexity, see #118
 export function deriveGenerateHypothesis(
   err: unknown,
   cfg: OnboardingState | null,
@@ -161,7 +160,8 @@ export function deriveGenerateHypothesis(
   const code = extractCodesignErrorCode(err);
   const status = extractGenerateStatus(err);
   const message = err instanceof Error ? err.message : undefined;
-  const recoveryCategory = pickUpstreamString(err, 'upstream_recovery_category');
+  const candidate = pickUpstreamString(err, 'upstream_recovery_category');
+  const recoveryCategory = isRecoveryCategory(candidate) ? candidate : undefined;
   const ctx = {
     provider,
     ...(baseUrl !== undefined && baseUrl !== null ? { baseUrl } : {}),
@@ -240,18 +240,15 @@ export function buildGenerateErrorDescription(
   const hint = tr(hypothesis.cause);
   // When the i18n key was missing, tr() falls back to returning the key
   // itself; don't double up "diagnostics.cause.x" in the toast.
-  if (hint !== hypothesis.cause && !originalMessage.includes(hint)) {
+  if (
+    hypothesis.cause !== 'diagnostics.cause.unknown' &&
+    hint !== hypothesis.cause &&
+    !originalMessage.includes(hint)
+  ) {
     parts.push(`${tr('diagnostics.mostLikelyCause')} ${hint}`);
   }
   if (hypothesis.recoveryCategory && hypothesis.recoveryCategory !== 'unknown') {
-    const categoryLabel = hypothesis.recoveryCategory
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-      .replace(/\bTls\b/g, 'TLS')
-      .replace(/\bApi\b/g, 'API')
-      .replace(/\bSsl\b/g, 'SSL')
-      .replace(/\bUrl\b/g, 'URL');
-    parts.push(`Recovery: ${categoryLabel}`);
+    parts.push(tr(`diagnostics.recovery.${hypothesis.recoveryCategory}`));
   }
   return parts.join('\n\n');
 }

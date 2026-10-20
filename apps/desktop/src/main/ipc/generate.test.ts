@@ -8,8 +8,52 @@ vi.mock('../electron-runtime', () => ({
 import {
   buildRunPreferenceAskInput,
   dropCurrentPromptEchoFromChatRows,
+  normalizeGenerationFailure,
   shouldRunUserMemoryCandidateCapture,
 } from './generate';
+
+describe('generation failure recovery context', () => {
+  function normalize(err: unknown) {
+    return normalizeGenerationFailure({
+      err,
+      signal: new AbortController().signal,
+      provider: 'custom-relay',
+      modelId: 'test-model',
+      baseUrl: 'https://relay.example/v1',
+      wire: 'openai-chat',
+    });
+  }
+
+  it('tags an unsupported role without misclassifying the gateway', () => {
+    const err = Object.assign(new Error('unsupported role: developer'), { status: 400 });
+    expect(normalize(err).error).toMatchObject({
+      upstream_recovery_category: 'model_not_supported_role',
+      upstream_status: 400,
+      upstream_provider: 'custom-relay',
+      upstream_model_id: 'test-model',
+    });
+  });
+
+  it('keeps nested network cause identity for renderer diagnostics', () => {
+    const err = new TypeError('fetch failed', { cause: { code: 'ECONNREFUSED' } });
+    expect(normalize(err).error).toMatchObject({
+      upstream_recovery_category: 'network_unreachable',
+      upstream_code: 'ECONNREFUSED',
+    });
+  });
+
+  it('uses structured SDK error messages and preserves upstream context', () => {
+    const err = {
+      response: { status: 400, data: { error: { message: 'unsupported role: system' } } },
+      upstream_provider: 'original-provider',
+    };
+    expect(normalize(err).error).toMatchObject({
+      upstream_recovery_category: 'model_not_supported_role',
+      upstream_status: 400,
+      upstream_provider: 'original-provider',
+    });
+  });
+});
 
 describe('generate IPC memory preference helpers', () => {
   it('captures user memory candidates only when the memory system and user auto-update are enabled', () => {

@@ -25,6 +25,7 @@ import {
   complete,
   detectProviderFromKey,
   generateImage,
+  normalizeProviderError,
 } from '@open-codesign/providers';
 import {
   ActiveRunMessageInputV1,
@@ -251,22 +252,7 @@ function extractUpstreamHttpStatus(err: unknown): number | undefined {
   return undefined;
 }
 
-/**
- * Pull a system-level error code (e.g. 'ECONNREFUSED', 'ETIMEDOUT')
- * from an error object so recovery classification can detect network issues.
- */
-function extractUpstreamSystemCode(err: unknown): string | undefined {
-  if (typeof err !== 'object' || err === null) return undefined;
-  const rec = err as Record<string, unknown>;
-  const direct = rec['code'];
-  if (typeof direct === 'string' && direct.length > 0) return direct;
-  if (err instanceof Error && (err as NodeJS.ErrnoException).code !== undefined) {
-    return (err as NodeJS.ErrnoException).code;
-  }
-  return undefined;
-}
-
-function normalizeGenerationFailure(opts: {
+export function normalizeGenerationFailure(opts: {
   err: unknown;
   signal: AbortSignal;
   provider: string;
@@ -275,8 +261,9 @@ function normalizeGenerationFailure(opts: {
   wire: string | undefined;
 }): { error: unknown; upstreamStatus: number | undefined } {
   const upstreamStatus = extractUpstreamHttpStatus(opts.err);
-  const upstreamMessage = opts.err instanceof Error ? opts.err.message : String(opts.err ?? '');
-  const upstreamCode = extractUpstreamSystemCode(opts.err);
+  const normalized = normalizeProviderError(opts.err, opts.provider, 0, opts.wire);
+  const upstreamMessage = normalized.upstream_message;
+  const upstreamCode = normalized.upstream_code;
   const recoveryCategory = classifyRecoveryCategory(
     upstreamStatus,
     upstreamCode,
@@ -299,6 +286,9 @@ function normalizeGenerationFailure(opts: {
     }
     if (errAsRec['upstream_wire'] === undefined && opts.wire !== undefined) {
       errAsRec['upstream_wire'] = opts.wire;
+    }
+    if (upstreamCode !== undefined && errAsRec['upstream_code'] === undefined) {
+      errAsRec['upstream_code'] = upstreamCode;
     }
     if (errAsRec['upstream_recovery_category'] === undefined) {
       errAsRec['upstream_recovery_category'] = recoveryCategory;
