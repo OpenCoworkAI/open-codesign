@@ -95,6 +95,7 @@ vi.mock('@open-codesign/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@open-codesign/core')>();
   return {
     ...actual,
+    buildDesignContextPack: vi.fn(actual.buildDesignContextPack),
     generateViaAgent: vi.fn(async (input: unknown) => {
       coreCalls.generateInputs.push(input);
       generateControl.markStarted();
@@ -118,9 +119,11 @@ vi.mock('@open-codesign/core', async (importOriginal) => {
   };
 });
 
-vi.mock('@open-codesign/providers', () => ({
+vi.mock('@open-codesign/providers', async (importOriginal) => ({
   detectProviderFromKey: vi.fn(() => 'mock'),
   generateImage: vi.fn(),
+  normalizeGeminiModelId: (await importOriginal<typeof import('@open-codesign/providers')>())
+    .normalizeGeminiModelId,
 }));
 
 vi.mock('../provider-settings', () => ({
@@ -181,7 +184,7 @@ vi.mock('../memory-ipc', () => ({
 }));
 
 vi.mock('../done-verify', () => ({
-  makeRuntimeVerifier: vi.fn(() => async () => []),
+  makeRuntimeVerifier: vi.fn(() => async () => ({ errors: [], warnings: [] })),
 }));
 
 vi.mock('../preview-runtime', () => ({
@@ -195,6 +198,7 @@ vi.mock('../ask-ipc', () => ({
 import {
   type AskInput,
   type AskResult,
+  buildDesignContextPack,
   generateViaAgent,
   makeAskTool,
   makeTextEditorTool,
@@ -205,6 +209,7 @@ import { requestAsk } from '../ask-ipc';
 import { makeRuntimeVerifier } from '../done-verify';
 import { runPreview } from '../preview-runtime';
 import { preparePromptContext } from '../prompt-context';
+import { resolveActiveModel } from '../provider-settings';
 import {
   appendSessionActiveMessage,
   appendSessionChatMessage,
@@ -413,6 +418,26 @@ describe('generate IPC workspace rename coordination', () => {
     expect(listSessionChatMessages({ db, sessionDir: db.sessionDir }, design.id)).toEqual(rows);
     expect(listSnapshots(db, design.id)).toEqual(snapshots);
     expect(vi.mocked(generateViaAgent)).toHaveBeenCalledOnce();
+  });
+
+  it('returns verifier errors and warnings from done:verify:v1 with a schema version', async () => {
+    const error = { message: 'ReferenceError: x is not defined', source: 'pageerror' };
+    const warning = {
+      message: 'The page is 132 px wider than a 390 px viewport',
+      source: 'layout',
+    };
+    vi.mocked(makeRuntimeVerifier).mockReturnValueOnce(async () => ({
+      errors: [error],
+      warnings: [warning],
+    }));
+    registerGenerateIpc({ db: initTestDb(), getMainWindow: () => null });
+
+    await expect(
+      getHandler('done:verify:v1')(null, { artifact: 'function App(){return null;}' }),
+    ).resolves.toEqual({ schemaVersion: 1, errors: [error], warnings: [warning] });
+    await expect(getHandler('done:verify:v1')(null, { artifact: 42 })).rejects.toThrow(
+      'done:verify:v1 expects { artifact: string }',
+    );
   });
 
   it('persists preparation failures and validates recovery cursors', async () => {
@@ -837,6 +862,50 @@ describe('generate IPC workspace rename coordination', () => {
       hasDesignSystem: false,
       fileInventory: { paths: [], truncated: false, exhaustive: false },
     });
+
+    generateControl.release();
+    await generatePromise;
+  });
+
+  it("budgets context with the provider's configured context window", async () => {
+    vi.mocked(resolveActiveModel).mockReturnValueOnce({
+      model: { provider: 'mock-provider', modelId: 'mock-model' },
+      baseUrl: null,
+      wire: 'openai-chat',
+      httpHeaders: undefined,
+      queryParams: undefined,
+      reasoningLevel: undefined,
+      contextWindow: 32_768,
+      allowKeyless: false,
+      overridden: false,
+    });
+    const db = initTestDb();
+    const design = createDesign(db, 'Untitled design 1');
+    const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
+    await mkdir(workspace, { recursive: true });
+    updateDesignWorkspace(db, design.id, workspace);
+
+    registerSnapshotsIpc(db);
+    registerGenerateIpc({ db, getMainWindow: () => null });
+
+    const generate = getHandler('codesign:v1:generate');
+    const generatePromise = Promise.resolve(
+      generate(null, {
+        schemaVersion: 1,
+        prompt: 'Make a pricing page',
+        history: [],
+        model: { provider: 'mock-provider', modelId: 'mock-model' },
+        generationId: 'gen-context-window',
+        designId: design.id,
+      }),
+    );
+    pendingFixtureGeneration = generatePromise;
+
+    await generateControl.started;
+    expect(vi.mocked(buildDesignContextPack)).toHaveBeenCalledWith(
+      expect.objectContaining({ modelContextWindow: 32_768 }),
+    );
+    expect(coreCalls.generateInputs[0]).toMatchObject({ contextWindow: 32_768 });
 
     generateControl.release();
     await generatePromise;

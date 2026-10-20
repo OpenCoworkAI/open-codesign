@@ -22,7 +22,7 @@ Claude Design is a hosted web app by Anthropic that runs Claude Opus on their in
 
 Pick **Claude Design** if you want zero setup, are happy on an Anthropic subscription, and don't need model flexibility or offline use.
 
-Pick **Open CoDesign** if you want BYOK cost control, any model beyond Claude, on-device privacy, local version history, or multiple export formats.
+Pick **Open CoDesign** if you want BYOK cost control, any model beyond Claude, on-device privacy, or local version history.
 
 ## Feature matrix
 
@@ -37,9 +37,9 @@ Pick **Open CoDesign** if you want BYOK cost control, any model beyond Claude, o
 | Demo prompts            | **15 ready-to-edit**        | Blank canvas  |
 | Data location           | **Workspace files + JSONL sessions on your machine** | Anthropic servers |
 | Version history         | **Local workspace sessions** | —             |
-| Export                  | **HTML · PDF · PPTX · ZIP · Markdown** | HTML       |
-| Inline element comments | **Yes (AI rewrites only the pinned region)** | — |
-| AI-tunable sliders      | **Yes**                     | —             |
+| Export                  | **HTML · PDF · PPTX · ZIP · Markdown** | Canva · PDF · PPTX · HTML |
+| Inline element comments | **Yes (AI rewrites only the pinned region)** | Yes |
+| AI-tunable sliders      | **Yes**                     | Yes           |
 | Responsive frames       | **Phone · tablet · desktop** | Limited      |
 | Price                   | **Free app (provider or subscription cost only)** | Subscription  |
 
@@ -48,7 +48,7 @@ Pick **Open CoDesign** if you want BYOK cost control, any model beyond Claude, o
 - **BYOK means cost control.** Ship drafts on a cheap model (DeepSeek, local Ollama, GPT-4o-mini), polish on Claude Opus only when it matters.
 - **Data stays on-device.** Your prompts, designs, and any codebase scans never leave your laptop unless you send them to a model provider yourself.
 - **Local version history.** Every iteration is a snapshot you can diff and roll back.
-- **Interactive surface.** Click an element, leave a note, watch the model rewrite only that region. Drag AI-generated sliders to tune color, spacing, and typography without re-prompting.
+- **Interactive edits on your own model.** Click an element, leave a note, and the model you chose rewrites only that region. Drag AI-generated sliders to tune color, spacing, and typography without re-prompting.
 - **Real exports.** PDF via your local Chrome, PPTX via `pptxgenjs`, ZIP asset bundle, Markdown with frontmatter — all lazy-loaded so the cold-start bundle stays lean.
 - **Import or sign in with what you already have.** One click pulls API-key provider configs out of Claude Code or Codex, and ChatGPT subscription users can sign in directly.
 

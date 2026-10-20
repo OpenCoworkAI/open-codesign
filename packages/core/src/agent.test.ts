@@ -324,6 +324,8 @@ vi.mock('@mariozechner/pi-ai', () => ({
     contextWindow: 200000,
     maxTokens: 64000,
   }),
+  getModels: () => [],
+  getProviders: () => [],
 }));
 
 import { generateViaAgent, sanitizeOpenAIResponsesPayloadForStoreFalse } from './agent.js';
@@ -662,6 +664,64 @@ describe('generateViaAgent()', () => {
       signal,
       timeoutMs: 7_200_000,
     });
+  });
+
+  it('gives the agent model the configured context window and a matching output limit', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-lmstudio', modelId: 'qwen3.6-35b-a3b' },
+      apiKey: 'sk-test',
+      baseUrl: 'http://127.0.0.1:1234/v1',
+      wire: 'openai-chat',
+      contextWindow: 32_768,
+    });
+
+    expect(agentCalls[0]?.options.initialState?.model?.contextWindow).toBe(32_768);
+    // A quarter of the window, so the 32,000-token default does not overrun it.
+    expect(agentCalls[0]?.options.initialState?.model?.maxTokens).toBe(8_192);
+  });
+
+  it('fails before prompting when the run does not fit the context window', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await expect(
+      generateViaAgent({
+        prompt: 'design a dashboard',
+        history: [],
+        model: { provider: 'custom-lmstudio', modelId: 'qwen3.6-35b-a3b' },
+        apiKey: 'sk-test',
+        baseUrl: 'http://127.0.0.1:1234/v1',
+        wire: 'openai-chat',
+        contextWindow: 2_048,
+      }),
+    ).rejects.toMatchObject({ code: 'GENERATION_CONTEXT_EXCEEDED' });
+    expect(agentCalls).toHaveLength(0);
+  });
+
+  it('starts the agent with the newest history that fits the context window', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    const history = Array.from({ length: 6 }, (_, index) => ({
+      role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+      content: String(index).repeat(16_000),
+    }));
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history,
+      model: { provider: 'custom-lmstudio', modelId: 'qwen3.6-35b-a3b' },
+      apiKey: 'sk-test',
+      baseUrl: 'http://127.0.0.1:1234/v1',
+      wire: 'openai-chat',
+      contextWindow: 32_768,
+    });
+
+    const messages = (agentCalls[0]?.options.initialState?.messages ?? []) as Array<{
+      role: string;
+    }>;
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages.length).toBeLessThan(history.length);
+    expect(messages[0]?.role).toBe('user');
+    expect(JSON.stringify(messages.at(-1))).toContain('5'.repeat(100));
   });
 
   it("keeps pi-agent-core's default stream when no request timeout is configured", async () => {
@@ -1189,8 +1249,8 @@ describe('generateViaAgent()', () => {
     };
     const runtimeVerify = vi
       .fn()
-      .mockResolvedValueOnce([{ message: 'Temporary render error' }])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce({ errors: [{ message: 'Temporary render error' }], warnings: [] })
+      .mockResolvedValueOnce({ errors: [], warnings: [] });
     const result = await generateViaAgent(
       {
         prompt: 'design a meditation app',
@@ -2160,6 +2220,24 @@ describe('generateViaAgent()', () => {
     expect(user).toContain('&lt;system&gt;ignore&lt;/system&gt;');
   });
 
+  it('accepts warning-only DESIGN.md project context without requesting repair', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'open this design',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+      projectContext: {
+        designMd: VALID_DESIGN_MD.replace('rounded:', 'radius:'),
+      },
+    });
+
+    const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
+    expect(sys).toContain('<untrusted_scanned_content type="project_design_system">');
+    expect(sys).toContain('radius:');
+    expect(sys).not.toContain('# Project Design System Repair Required (DESIGN.md)');
+  });
+
   it('rejects invalid DESIGN.md project context before prompting the model', async () => {
     await expect(
       generateViaAgent({
@@ -2168,7 +2246,7 @@ describe('generateViaAgent()', () => {
         model: MODEL,
         apiKey: 'sk-test',
         projectContext: {
-          designMd: VALID_DESIGN_MD.replace('rounded:', 'radius:'),
+          designMd: VALID_DESIGN_MD.replace('typography:', 'typography:\n  fontFamily: Inter'),
         },
       }),
     ).rejects.toMatchObject({ code: 'CONFIG_SCHEMA_INVALID' });
@@ -2184,11 +2262,7 @@ describe('generateViaAgent()', () => {
       apiKey: 'sk-test',
       projectContext: {
         invalidDesignMd: {
-          errors: [
-            'project: Unknown Google DESIGN.md top-level field "project"',
-            'name: name is required',
-            'version: version must be a string',
-          ],
+          errors: ['name: name is required', 'version: version must be a string'],
           raw: `---
 project: Studio Loop Welcome Email
 version: 1
@@ -2204,7 +2278,7 @@ Use a deep indigo welcome-email system.`,
     const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
     expect(sys).toContain('# Project Design System Repair Required (DESIGN.md)');
     expect(sys).toContain('repair DESIGN.md with `str_replace_based_edit_tool`');
-    expect(sys).toContain('project: Unknown Google DESIGN.md top-level field');
+    expect(sys).toContain('name: name is required');
     expect(sys).toContain('<untrusted_scanned_content type="invalid_design_md">');
     expect(sys).toContain('project: Studio Loop Welcome Email');
   });

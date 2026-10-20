@@ -20,8 +20,9 @@ export interface ExportPptxOptions {
   /**
    * `image` preserves visual fidelity by rendering HTML with system Chrome.
    * `editable` keeps the legacy title/bullet extraction path.
+   * `native` renders supported slide DOM as editable text, shapes and images (beta).
    */
-  renderMode?: 'image' | 'editable';
+  renderMode?: 'image' | 'editable' | 'native' | undefined;
   /** Override the discovered Chrome binary path for image rendering. */
   chromePath?: string;
   /** setContent timeout in milliseconds. Defaults to 45 seconds. */
@@ -70,7 +71,12 @@ export async function exportPptx(
     pres.layout = 'LAYOUT_WIDE';
     if (opts.deckTitle) pres.title = opts.deckTitle;
 
-    if ((opts.renderMode ?? 'image') === 'image') {
+    let warnings: string[] = [];
+    if (opts.renderMode === 'native') {
+      const { renderNativeSlides } = await import('./pptx-native');
+      const { addNativeSlides } = await import('./pptx-model');
+      warnings = addNativeSlides(pres, await renderNativeSlides(artifactSource, opts));
+    } else if ((opts.renderMode ?? 'image') === 'image') {
       const screenshots = await renderSlideScreenshots(artifactSource, opts);
       for (const screenshot of screenshots) {
         const slide = pres.addSlide();
@@ -125,7 +131,7 @@ export async function exportPptx(
 
     await pres.writeFile({ fileName: destinationPath });
     const stat = await fs.stat(destinationPath);
-    return { bytes: stat.size, path: destinationPath };
+    return { bytes: stat.size, path: destinationPath, ...(warnings.length ? { warnings } : {}) };
   } catch (err) {
     throw new CodesignError(
       `PPTX export failed: ${err instanceof Error ? err.message : String(err)}`,

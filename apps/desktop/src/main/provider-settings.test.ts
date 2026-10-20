@@ -484,6 +484,24 @@ describe('resolveActiveModel', () => {
     expect(result.reasoningLevel).toBe('off');
   });
 
+  it('threads through the per-provider context window for the canonical active', () => {
+    const cfg = makeCfg({
+      provider: 'ollama',
+      modelPrimary: 'qwen3:32b',
+      secrets: {},
+      providers: {
+        ollama: {
+          ...BUILTIN_PROVIDERS.ollama,
+          defaultModel: 'qwen3:32b',
+          contextWindow: 32_768,
+        },
+      },
+    });
+    const result = resolveActiveModel(cfg, { provider: 'ollama', modelId: 'qwen3:32b' });
+
+    expect(result.contextWindow).toBe(32_768);
+  });
+
   it('ignores stale hint baseUrl entry and returns active provider baseUrl on override', () => {
     const cfg = makeCfg({
       provider: 'openrouter',

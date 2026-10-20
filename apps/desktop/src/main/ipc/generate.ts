@@ -16,6 +16,7 @@ import {
   inspectWorkspaceFiles,
   loadDesignSkills,
   loadFrameTemplates,
+  resolveContextWindow,
   routeRunPreferences,
   updateDesignSessionBrief,
 } from '@open-codesign/core';
@@ -98,15 +99,6 @@ import { listWorkspaceFilesAt, readWorkspaceFilesAt } from '../workspace-reader'
 import { finalAssistantTextForTurn } from './assistant-text';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
 import { summarizeToolResultForStream, toolExecutionStatusForStream } from './tool-log';
-
-const DEFAULT_CONTEXT_WINDOW_FOR_CONTEXT_PACK = 200_000;
-
-export function contextWindowForContextPack(model: unknown): number {
-  const value = (model as { contextWindow?: unknown } | null)?.contextWindow;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : DEFAULT_CONTEXT_WINDOW_FOR_CONTEXT_PACK;
-}
 
 /**
  * Whether outbound pi-ai requests for the given provider should bypass TLS
@@ -1101,8 +1093,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     ) {
       throw new CodesignError('done:verify:v1 expects { artifact: string }', 'IPC_BAD_INPUT');
     }
-    const errors = await sharedRuntimeVerifier((raw as { artifact: string }).artifact);
-    return { errors };
+    const { errors, warnings } = await sharedRuntimeVerifier(
+      (raw as { artifact: string }).artifact,
+    );
+    return { schemaVersion: 1, errors, warnings };
   });
 
   ipcMain.handle('codesign:v1:generate', async (_e, raw: unknown) => {
@@ -1324,7 +1318,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               brief: existingBrief,
               runPreferences,
               resourceState,
-              modelContextWindow: contextWindowForContextPack(active.model),
+              modelContextWindow: resolveContextWindow(active.model, baseUrl, active.contextWindow),
               workspaceState: {
                 sourcePath: payload.previousSource ? 'App.jsx' : null,
                 hasSource: Boolean(payload.previousSource?.trim()),
@@ -1361,6 +1355,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
+                    : {}),
+                  ...(active.contextWindow !== undefined
+                    ? { contextWindow: active.contextWindow }
                     : {}),
                   ...(allowKeyless ? { allowKeyless: true } : {}),
                   signal: controller.signal,
@@ -1720,6 +1717,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
+                    : {}),
+                  ...(active.contextWindow !== undefined
+                    ? { contextWindow: active.contextWindow }
                     : {}),
                   ...(allowKeyless ? { allowKeyless: true } : {}),
                   signal: controller.signal,

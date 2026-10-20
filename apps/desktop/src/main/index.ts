@@ -103,7 +103,22 @@ function createWindow(): void {
     },
   });
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show());
+  // On software-rendered systems (e.g. VMware SVGA → SwiftShader fallback)
+  // the compositor never produces a first frame for a hidden window, so
+  // ready-to-show never fires and the window stays invisible forever while
+  // the app runs healthy underneath. The fallback timer shows the window
+  // anyway; on healthy systems ready-to-show fires well within 2s and
+  // startup stays flicker-free.
+  const showFallback = setTimeout(() => {
+    if (mainWindow !== null && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+  }, 2000);
+  mainWindow.on('ready-to-show', () => {
+    clearTimeout(showFallback);
+    mainWindow?.show();
+  });
+  mainWindow.on('closed', () => clearTimeout(showFallback));
   // Null the reference on close so stale IPC sends from async emitters
   // (autoUpdater, long-running generate runs) become clean no-ops rather
   // than throwing "Object has been destroyed" on a discarded webContents.
@@ -224,6 +239,9 @@ if (!IS_VITEST) {
         app.quit();
         return;
       }
+      // Windows shows toasts only for the AppUserModelID on the installer's
+      // Start Menu shortcut, which electron-builder sets to the appId.
+      if (process.platform === 'win32') app.setAppUserModelId('ai.opencowork.codesign');
       app.on('second-instance', () => {
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();

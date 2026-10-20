@@ -510,6 +510,8 @@
         "modelSaveFailed": "Falha ao salvar a seleção de modelo",
         "reasoningSaved": "Profundidade de raciocínio salva",
         "reasoningSaveFailed": "Falha ao salvar a profundidade de raciocínio",
+        "contextWindowSaved": "Janela de contexto salva",
+        "contextWindowSaveFailed": "Falha ao salvar a janela de contexto",
         "connectionOk": "Conexão OK",
         "connectionFailed": "Falha na conexão",
         "saveFailed": "Falha ao salvar o provedor"
@@ -524,12 +526,25 @@
         "high": "Alta",
         "xhigh": "Muito alta"
       },
+      "contextWindow": {
+        "label": "Janela de contexto",
+        "placeholder": "Auto",
+        "unit": "tokens",
+        "hint": "Deixe vazio para usar o catálogo de modelos. Defina para modelos locais e relays que o catálogo não conhece.",
+        "invalid": "Digite um número inteiro de tokens maior que 0"
+      },
       "addKey": "Adicionar chave",
       "missingKey": "Chave ausente",
       "litellm": {
         "presetName": "LiteLLM Gateway",
         "presetDescription": "Gateway auto-hospedado compatível com OpenAI, chave de API opcional",
-        "hint": "Aponte para um proxy LiteLLM que você já executa (o LiteLLM não vem incluído). A URL padrão é http://localhost:4000/v1; edite-a para implantações remotas. O modo sem chave vem ativado para proxies sem master key; desative-o e cole sua master key ou virtual key se o gateway exigir autenticação. Para uma URL localhost, permita abaixo os testes em rede privada."
+        "hint": "Aponte para um proxy LiteLLM que você já executa (o LiteLLM não vem incluído). A URL padrão é http://localhost:4000/v1; edite-a para implantações remotas. O modo sem chave vem ativado para proxies sem master key; desative-o e cole sua master key ou virtual key se o gateway exigir autenticação. Para uma URL localhost, permita abaixo os testes em rede privada.",
+        "diagnostics": {
+          "auth": "Defina a master key ou virtual key do LiteLLM, ou desative o modo sem chave se este proxy exigir uma chave.",
+          "notFound": "Confira se a URL base termina com /v1.",
+          "notFoundLocal": "Confira se a URL base termina com /v1 e se o proxy local do LiteLLM está na porta 4000.",
+          "unreachable": "Inicie o proxy LiteLLM e tente novamente."
+        }
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
@@ -619,6 +634,8 @@
       "beta": "Beta",
       "checkForUpdatesOnStartup": "Verificar atualizações ao iniciar",
       "checkForUpdatesOnStartupHint": "Verifica automaticamente se há nova versão 30 segundos após iniciar o app.",
+      "systemNotifications": "Notificações do sistema",
+      "systemNotificationsHint": "Avisar quando um design terminar, falhar ou fizer uma pergunta enquanto o Open CoDesign estiver em segundo plano. No macOS, os avisos param depois que você fecha a última janela, até abri-la de novo.",
       "timeout": "Tempo limite de geração",
       "timeoutHint": "Segundos antes de uma geração ser abortada.",
       "timeoutSeconds": "{{value}} s",
@@ -774,9 +791,17 @@
         "label": "PDF",
         "hint": "Renderizado via seu Chrome instalado"
       },
+      "png": {
+        "label": "PNG",
+        "hint": "Imagem da página inteira em 2x, pelo Chrome instalado; apresentações (um slide por <section>) são empilhadas em ordem numa única imagem alta"
+      },
       "pptx": {
         "label": "PPTX",
         "hint": "Slides de alta fidelidade; um por <section>"
+      },
+      "pptxNative": {
+        "label": "PPTX (editável, beta)",
+        "hint": "Texto e formas editáveis; elementos visuais complexos podem virar imagens"
       },
       "zip": {
         "label": "Pacote ZIP",
@@ -794,6 +819,9 @@
     "designSystemCleared": "Design system removido",
     "clearDesignSystemFailed": "Não foi possível remover o design system",
     "generationFailed": "Falha na geração",
+    "systemDesignReady": "Design pronto",
+    "systemGenerationFailed": "Falha na geração",
+    "systemAskWaiting": "Aguardando sua resposta",
     "cancellationFailed": "Falha no cancelamento",
     "inlineCommentFailed": "Falha no comentário inline",
     "commentNeedsSnapshot": "Gere um design antes de deixar um comentário",
@@ -1029,6 +1057,7 @@
       "reasoningPolicy": "O endpoint rejeitou metadados de reasoning para este modelo. Reduza a profundidade de reasoning e tente novamente.",
       "modelIdShape": "O id do modelo selecionado inclui um prefixo de provedor que este endpoint não aceita.",
       "generationTimeout": "A geração atingiu o tempo limite configurado antes de o modelo terminar.",
+      "contextWindowExceeded": "O prompt do sistema, as ferramentas e esta solicitação precisam de mais tokens do que a janela de contexto do modelo permite.",
       "relayStreamingBug": "O gateway pode tratar incorretamente eventos SSE da OpenAI Responses API e cortar o stream cedo.",
       "transportInterrupted": "A conexão com o provedor terminou antes da conclusão. Normalmente é timeout do gateway ou interrupção de rede.",
       "referenceUrlInvalid": "A URL de referência é inválida ou não é suportada.",
@@ -1045,6 +1074,7 @@
       "addV1": "Adicionar /v1",
       "waitAndRetry": "Aguardar e tentar novamente",
       "adjustGenerationTimeout": "Ajustar tempo limite da geração",
+      "adjustContextWindow": "Verificar a janela de contexto",
       "checkNetwork": "Verificar rede / VPN",
       "checkVpn": "Verificar VPN / firewall",
       "reportBug": "Reportar este bug",
@@ -1312,6 +1342,7 @@
     "INPUT_EMPTY_HTML": "Um HTML existente é obrigatório para esta operação.",
     "INPUT_UNSUPPORTED_MODE": "Este modo de geração não é suportado.",
     "GENERATION_TIMEOUT": "A geração excedeu o tempo limite. Tente um prompt mais curto ou aumente o tempo em Configurações.",
+    "GENERATION_CONTEXT_EXCEEDED": "Esta execução não cabe na janela de contexto do modelo. Encurte a solicitação ou os anexos, defina a janela de contexto do provedor em Configurações → Modelos ou use um modelo com uma janela maior.",
     "GENERATION_INCOMPLETE": "O agente parou antes de concluir a verificação. Continue a execução para finalizar o artefato do espaço de trabalho.",
     "WORKSPACE_MISSING": "Este design não tem um espaço de trabalho vinculado. Reabra ou recrie o design.",
     "ARTIFACT_PROTOCOL_INVALID": "O artefato gerado não seguiu o protocolo obrigatório.",
@@ -1338,8 +1369,9 @@
     "PREFERENCES_INVALID_TIMEOUT": "O valor do tempo limite de geração é inválido.",
     "SKILL_LOAD_FAILED": "Uma ou mais skills falharam ao carregar. Procure erros nos seus arquivos de skill.",
     "EXPORTER_UNKNOWN": "Formato de exportação desconhecido.",
-    "EXPORTER_NO_CHROME": "Chrome ou Chromium não encontrado. Instale um deles para habilitar a exportação em PDF.",
+    "EXPORTER_NO_CHROME": "Chrome ou Chromium não encontrado. Instale um deles para habilitar a exportação em PDF e PNG.",
     "EXPORTER_PDF_FAILED": "A exportação em PDF falhou. Garanta que o Chrome esteja instalado e tente novamente.",
+    "EXPORTER_PNG_FAILED": "A exportação em PNG falhou. Garanta que o Chrome esteja instalado e tente novamente.",
     "EXPORTER_PPTX_FAILED": "A exportação em PowerPoint falhou.",
     "EXPORTER_ZIP_UNSAFE_PATH": "A exportação foi bloqueada: um caminho de asset escaparia dos limites do arquivo ZIP.",
     "EXPORTER_ZIP_FAILED": "A exportação em ZIP falhou.",
