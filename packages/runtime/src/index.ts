@@ -40,7 +40,13 @@ export type { IframeErrorMessage } from './iframe-errors';
 export { isIframeErrorMessage } from './iframe-errors';
 export type { ElementRectsMessage, OverlayMessage } from './overlay';
 export { isElementRectsMessage, isOverlayMessage, OVERLAY_SCRIPT } from './overlay';
-export type { SourceEditPreviewOptions, SourceEditSelection } from './source-edit-instrumentation';
+export type { SourceEditFieldState } from './source-edit-binding';
+export type {
+  SourceEditAncestor,
+  SourceEditPreviewOptions,
+  SourceEditSelection,
+} from './source-edit-instrumentation';
+export { isSourceEditSelection } from './source-edit-instrumentation';
 export { isTweakCompatibilityNotice } from './tweaks-bridge';
 
 const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
@@ -379,11 +385,12 @@ ${baseTag(opts.baseHref)}${runtimeFontLinks(jsx)}<style>*,*::before,*::after{box
 <script>${TWEAKS_BRIDGE_SETUP}</script>
 ${jsxRuntimeComponentScripts()}
 ${applyInitialTweaksScript(normalized)}
+${opts.sourceEdit ? `<script>${buildOverlayScript(opts.sourceEdit)}</script>` : ''}
 ${JSX_TEMPLATE_BEGIN}
 ${compileAndRunScript(normalized, kind, { liveTweaks: true })}
 ${JSX_TEMPLATE_END}
 <script>${TWEAKS_BRIDGE_LISTENER}</script>
-<script>${opts.sourceEdit ? buildOverlayScript(opts.sourceEdit) : OVERLAY_SCRIPT}</script>
+${opts.sourceEdit ? '' : `<script>${OVERLAY_SCRIPT}</script>`}
 </body>
 </html>`;
 }

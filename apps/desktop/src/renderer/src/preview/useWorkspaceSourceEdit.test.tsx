@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWorkspaceSourceEdit } from './useWorkspaceSourceEdit';
 
 vi.mock('@open-codesign/i18n', () => ({ useT: () => translate }));
-const translate = (key: string) => key;
+let translate = (key: string) => key;
 const hash = 'a'.repeat(64);
 const target: SourceEditTarget = {
   id: '1:20',
@@ -54,6 +54,7 @@ const inspect = vi.fn();
 const apply = vi.fn();
 const onPersist = vi.fn();
 const onSaved = vi.fn();
+const validate = vi.fn();
 function workspaceSource() {
   if (!props.source) throw new Error('Missing workspace fixture');
   return props.source;
@@ -79,6 +80,7 @@ async function enableAndSelect() {
   );
 }
 beforeEach(() => {
+  translate = (key: string) => key;
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   inspect.mockReset().mockResolvedValue(ready);
   apply.mockReset().mockImplementation(async (request: SourceEditApplyRequestV1) => ({
@@ -87,6 +89,12 @@ beforeEach(() => {
   }));
   onPersist.mockReset();
   onSaved.mockReset();
+  validate.mockReset().mockImplementation(async (request) => ({
+    targetId: request.targetId,
+    sourceHash: request.sourceHash,
+    previewRevision: request.previewRevision,
+    fieldStates: [{ key: request.fieldKey, status: 'ready' }],
+  }));
   Object.defineProperty(window, 'codesign', {
     configurable: true,
     value: { sourceEdits: { inspect, apply } },
@@ -99,6 +107,7 @@ beforeEach(() => {
     generating: false,
     onPersist,
     onSaved,
+    validate,
   };
   container = document.createElement('div');
   document.body.append(container);
@@ -180,6 +189,58 @@ describe('revision-bound local source edits', () => {
     expect(onSaved).not.toHaveBeenCalled();
     expect(api.message).toBeTruthy();
   });
+  it.each([
+    'inspect-rejected',
+    'save-rejected',
+    'inspect-throw',
+    'save-throw',
+    'refresh-warning',
+  ] as const)('localizes Chinese %s instead of displaying backend English', async (outcome) => {
+    const { i18n, initI18n } =
+      await vi.importActual<typeof import('@open-codesign/i18n')>('@open-codesign/i18n');
+    await initI18n('zh-CN');
+    translate = (key: string) => String(i18n.t(key, { lng: 'zh-CN' }));
+    const raw = 'Raw backend English failure';
+    const rejected = {
+      schemaVersion: 1,
+      status: 'rejected',
+      reason: 'source-conflict',
+      message: raw,
+    };
+    if (outcome === 'inspect-rejected') inspect.mockResolvedValue(rejected);
+    if (outcome === 'inspect-throw') inspect.mockRejectedValue(new Error(raw));
+    if (outcome.startsWith('inspect')) {
+      await render();
+      await act(async () => api.toggle());
+    } else {
+      await enableAndSelect();
+      if (outcome === 'save-rejected') apply.mockResolvedValue(rejected);
+      if (outcome === 'save-throw') apply.mockRejectedValue(new Error(raw));
+      if (outcome === 'refresh-warning')
+        apply.mockImplementation(async (request: SourceEditApplyRequestV1) => ({
+          ...applied,
+          previewRevision: request.previewRevision,
+          warnings: [raw, 'Another refresh failure'],
+        }));
+      await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+    }
+    if (outcome === 'refresh-warning') {
+      expect(onSaved).toHaveBeenCalledExactlyOnceWith([
+        translate('canvas.sourceEdit.refreshWarning'),
+      ]);
+      expect(onPersist).toHaveBeenCalledOnce();
+    } else {
+      expect(api.message).toMatch(/[\u4e00-\u9fff]/);
+      expect(api.message).not.toContain(raw);
+      expect(api.message).not.toContain('source-conflict');
+      expect(api.message).not.toContain('canvas.sourceEdit.');
+      if (outcome === 'inspect-throw')
+        expect(api.message).toBe(translate('canvas.sourceEdit.inspectFailed'));
+      if (outcome === 'save-throw')
+        expect(api.message).toBe(translate('canvas.sourceEdit.saveFailed'));
+      expect(onSaved).not.toHaveBeenCalled();
+    }
+  });
   it('reports a successful disk save with nonfatal notification warnings', async () => {
     await enableAndSelect();
     apply.mockImplementation(async (request: SourceEditApplyRequestV1) => ({
@@ -189,7 +250,7 @@ describe('revision-bound local source edits', () => {
     }));
     await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
     expect(onPersist).toHaveBeenCalledOnce();
-    expect(onSaved).toHaveBeenCalledWith(['Refresh notification failed']);
+    expect(onSaved).toHaveBeenCalledWith(['canvas.sourceEdit.refreshWarning']);
   });
   it.each([
     'design',
@@ -267,6 +328,113 @@ describe('revision-bound local source edits', () => {
     expect(inspect).toHaveBeenLastCalledWith(
       expect.objectContaining({ expectedContent: '<p>Longer tweak value</p>' }),
     );
+  });
+  it('has one preview-only inspection path with no source-picker bypass', async () => {
+    await enableAndSelect();
+    expect(api).not.toHaveProperty('sourceMode');
+    expect(api).not.toHaveProperty('enableSourceSelection');
+    expect(api).not.toHaveProperty('sourceTargets');
+    expect(inspect.mock.calls[0]?.[0]).not.toHaveProperty('selectionMode');
+    await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+    expect(validate).toHaveBeenCalledOnce();
+    expect(apply.mock.calls[0]?.[0]).not.toHaveProperty('selectionMode');
+  });
+  it('fails closed when a production target has no field states', async () => {
+    inspect.mockResolvedValue({
+      ...ready,
+      targets: [{ ...target, textLayout: [{ kind: 'text', value: 'Old' }] }],
+    });
+    await enableAndSelect();
+    expect(api.selection?.id).toBe(target.id);
+    await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+    expect(apply).not.toHaveBeenCalled();
+    expect(validate).not.toHaveBeenCalled();
+    expect(api.message).toBe('canvas.sourceEdit.validationFailed');
+  });
+  it('keeps a known element selected while gating static and dynamic fields independently', async () => {
+    inspect.mockResolvedValue({
+      ...ready,
+      targets: [
+        {
+          ...target,
+          textLayout: [{ kind: 'text', value: 'Old' }, { kind: 'dynamic' }],
+          editableFields: [
+            ...target.editableFields,
+            { kind: 'set-text', textId: '8:10', value: 'Other' },
+          ],
+        },
+      ],
+    });
+    await enableAndSelect();
+    const revision = api.inspection?.previewRevision;
+    if (!revision) throw new Error('no revision');
+    await act(async () =>
+      api.select({
+        targetId: target.id,
+        sourceHash: hash,
+        previewRevision: revision,
+        fieldStates: [
+          { key: 'text:only', status: 'ready' },
+          { key: 'text:8:10', status: 'ambiguous' },
+        ],
+      }),
+    );
+    expect(api.selection?.editableFields).toHaveLength(2);
+    await act(async () => api.apply({ kind: 'set-text', textId: '8:10', value: 'No' }));
+    expect(apply).not.toHaveBeenCalled();
+    await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+    expect(apply).toHaveBeenCalledOnce();
+  });
+  it.each([
+    null,
+    { targetId: target.id, sourceHash: hash, previewRevision: 'old' },
+  ])('rejects missing/stale commit validation before IPC apply: %j', async (reply) => {
+    await enableAndSelect();
+    validate.mockResolvedValue(reply);
+    await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+    expect(apply).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(api.selection?.id).toBe(target.id);
+    expect(api.message).toBe('canvas.sourceEdit.validationFailed');
+  });
+  it('rejects a field that changes after it was selected', async () => {
+    await enableAndSelect();
+    validate.mockImplementation(async (request) => ({
+      ...request,
+      fieldStates: [{ key: request.fieldKey, status: 'changed' }],
+    }));
+    await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+    expect(apply).not.toHaveBeenCalled();
+    expect(api.fieldStates?.[0]?.status).toBe('changed');
+  });
+  it('aborts pending validation and ignores late replies after source/context changes', async () => {
+    await enableAndSelect();
+    const pending = deferred<Awaited<ReturnType<typeof props.validate>>>();
+    validate.mockReturnValue(pending.promise);
+    let saving: Promise<void> | undefined;
+    await act(async () => {
+      saving = api.apply({ kind: 'set-text', value: 'New' });
+    });
+    const request = validate.mock.calls[0]?.[0];
+    const signal = validate.mock.calls[0]?.[1] as AbortSignal;
+    props = { ...props, source: { ...workspaceSource(), content: 'external' } };
+    await render();
+    expect(signal.aborted).toBe(true);
+    await act(async () => {
+      pending.resolve({ ...request, fieldStates: [{ key: 'text:only', status: 'ready' }] });
+      await saving;
+    });
+    expect(apply).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+  it('stores ancestor choices separately even without a source target and clears them on context changes', async () => {
+    await enableAndSelect();
+    await act(async () => api.select(undefined, [{ selector: '/main[1]', tagName: 'main' }]));
+    expect(api.selection).toBeNull();
+    expect(api.ancestors).toEqual([{ selector: '/main[1]', tagName: 'main' }]);
+    props = { ...props, loading: true };
+    await render();
+    expect(api.ancestors).toEqual([]);
   });
   it('cannot inspect or select while generation owns the workspace', async () => {
     props = { ...props, generating: true };

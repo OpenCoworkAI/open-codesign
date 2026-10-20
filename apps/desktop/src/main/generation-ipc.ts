@@ -104,6 +104,20 @@ export function listInFlightGenerations(
     .sort((a, b) => a.designId.localeCompare(b.designId));
 }
 
+// Node's setTimeout caps delay at int32 (~24.8 days). Larger values overflow
+// and fire immediately, which would abort generation instantly.
+const TIMEOUT_MAX_MS = 2_147_483_647;
+
+/**
+ * Per-request HTTP timeout matching the run-level generation timeout, so the
+ * provider SDK's 10-minute default no longer cuts long local-model turns.
+ * A disabled run timeout (`0`) maps to the largest delay timers accept.
+ */
+export function generationRequestTimeoutMs(timeoutSec: number): number {
+  if (!Number.isFinite(timeoutSec) || timeoutSec <= 0) return TIMEOUT_MAX_MS;
+  return Math.min(timeoutSec * 1000, TIMEOUT_MAX_MS);
+}
+
 export interface GenerationTimeoutLogger {
   warn: (event: string, payload: Record<string, unknown>) => void;
 }
@@ -146,9 +160,6 @@ export async function armGenerationTimeout(
   }
   if (timeoutSec === 0) return () => {};
 
-  // Node's setTimeout caps delay at int32 (~24.8 days). Larger values overflow
-  // and fire immediately, which would abort generation instantly.
-  const TIMEOUT_MAX_MS = 2_147_483_647;
   const ms = Math.min(timeoutSec * 1000, TIMEOUT_MAX_MS);
 
   const handle = setTimeout(() => {

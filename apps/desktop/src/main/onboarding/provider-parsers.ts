@@ -54,6 +54,9 @@ export interface UpdateProviderInput {
   queryParams?: Record<string, string>;
   wire?: WireApi;
   reasoningLevel?: ReasoningLevel | null;
+  /** Context window in tokens. `null` clears it so core resolves the window
+   *  from pi-ai's catalog; `undefined` leaves the existing value alone. */
+  contextWindow?: number | null;
   /** When present AND non-empty, re-encrypt and replace the stored secret.
    *  Empty string means "clear stored secret" for providers that became
    *  keyless (e.g. switched to local Ollama). `undefined` means "leave alone". */
@@ -88,6 +91,7 @@ const UPDATE_PROVIDER_FIELDS = [
   'queryParams',
   'wire',
   'reasoningLevel',
+  'contextWindow',
   'apiKey',
   'requiresApiKey',
   'tlsRejectUnauthorized',
@@ -395,6 +399,18 @@ export function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
       );
     }
     out.reasoningLevel = parsed.data;
+  }
+  if (r['contextWindow'] === null) {
+    out.contextWindow = null;
+  } else if (r['contextWindow'] !== undefined) {
+    const value = r['contextWindow'];
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+      throw new CodesignError(
+        'contextWindow must be a positive integer or null',
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+    out.contextWindow = value;
   }
   if (r['apiKey'] !== undefined) {
     if (typeof r['apiKey'] !== 'string') {

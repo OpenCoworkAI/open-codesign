@@ -8,6 +8,7 @@ import {
   publicWebUrl,
   readableHtml,
   requestPublicUrl,
+  testTavilyConnection,
 } from './web-research-network';
 
 const settings = {
@@ -265,6 +266,153 @@ it('aborts the in-flight request, not only a wrapper promise', async () => {
   await expect(pending).rejects.toThrow(/cancelled/);
   expect(realSignal?.aborted).toBe(true);
   expect(destroy).toHaveBeenCalledOnce();
+});
+
+describe('Tavily connection probe', () => {
+  it.each([
+    [200, 'ok'],
+    [401, 'invalid-key'],
+    [429, 'rate-limit'],
+    [432, 'quota'],
+    [433, 'quota'],
+    [500, 'service-error'],
+    [201, 'unexpected-response'],
+    [204, 'unexpected-response'],
+    [301, 'unexpected-response'],
+    [302, 'unexpected-response'],
+    [307, 'unexpected-response'],
+    [308, 'unexpected-response'],
+    [400, 'unexpected-response'],
+    [402, 'unexpected-response'],
+    [403, 'unexpected-response'],
+    [404, 'unexpected-response'],
+    [408, 'unexpected-response'],
+    [502, 'unexpected-response'],
+    [503, 'unexpected-response'],
+    [504, 'unexpected-response'],
+  ] as const)('maps HTTP %s to %s without retries or redirects', async (httpStatus, status) => {
+    const fake = transport([
+      {
+        status: httpStatus,
+        headers: { location: 'https://other.example/steal' },
+        body: JSON.stringify({ results: [], error: settings.apiKey }),
+      },
+    ]);
+    expect(await testTavilyConnection(settings.apiKey, 1000, fake)).toEqual({ status, httpStatus });
+    expect(fake.seen).toHaveLength(1);
+    expect(fake.resolve).toHaveBeenCalledOnce();
+  });
+  it('sends one fixed minimal basic search using Bearer auth and the bounded transport', async () => {
+    const fake = transport([{ body: '{"results":[]}' }]);
+    expect(await testTavilyConnection(settings.apiKey, 1000, fake)).toEqual({
+      status: 'ok',
+      httpStatus: 200,
+    });
+    expect(fake.seen).toHaveLength(1);
+    const sent = fake.seen[0];
+    expect(sent?.url.href).toBe('https://api.tavily.com/search');
+    expect(sent?.options.method).toBe('POST');
+    expect(sent?.options.agent).toBe(false);
+    expect(sent?.options.headers).toMatchObject({
+      Authorization: `Bearer ${settings.apiKey}`,
+      'Content-Type': 'application/json',
+      'Accept-Encoding': 'identity',
+    });
+    expect(JSON.parse(sent?.body ?? '{}')).toEqual({
+      query: 'Tavily',
+      max_results: 1,
+      search_depth: 'basic',
+      include_answer: false,
+      include_raw_content: false,
+      auto_parameters: false,
+    });
+    expect(sent?.body).not.toContain(settings.apiKey);
+    expect(fake.resolve).toHaveBeenCalledWith('api.tavily.com');
+    const lookup = vi.fn();
+    sent?.options.lookup?.('api.tavily.com', { all: false }, lookup);
+    expect(lookup).toHaveBeenCalledWith(null, '93.184.216.34', 4);
+  });
+  it.each([
+    '<html>secret-never-log</html>',
+    'not JSON secret-never-log',
+    '{"results":',
+    'null',
+    '[]',
+    '{}',
+    '{"results":null}',
+    '{"results":{}}',
+    '{"results":"secret-never-log"}',
+  ])('rejects malformed successful replies without leaking content: %s', async (body) => {
+    const fake = transport([{ body }]);
+    expect(await testTavilyConnection(settings.apiKey, 1000, fake)).toEqual({
+      status: 'unexpected-response',
+      httpStatus: 200,
+    });
+    expect(fake.seen).toHaveLength(1);
+  });
+  it('redacts arbitrary transport errors, even errors claiming to be timeouts', async () => {
+    for (const message of [
+      settings.apiKey,
+      `TimeoutError ${settings.apiKey}`,
+      `HTTP ${settings.apiKey}`,
+    ]) {
+      const fake = transport([]);
+      fake.resolve.mockRejectedValue(new Error(message));
+      expect(await testTavilyConnection(settings.apiKey, 1000, fake)).toEqual({
+        status: 'network-error',
+      });
+      expect(fake.resolve).toHaveBeenCalledOnce();
+      expect(fake.seen).toHaveLength(0);
+    }
+  });
+  it('enforces public DNS and the 1 MiB response bound', async () => {
+    const privateDns = transport([]);
+    privateDns.resolve.mockResolvedValue([{ address: '127.0.0.1', family: 4 }]);
+    expect(await testTavilyConnection(settings.apiKey, 1000, privateDns)).toEqual({
+      status: 'network-error',
+    });
+    expect(privateDns.seen).toHaveLength(0);
+    const huge = transport([{ body: settings.apiKey.repeat(100000) }]);
+    expect(await testTavilyConnection(settings.apiKey, 1000, huge)).toEqual({
+      status: 'network-error',
+    });
+    expect(huge.seen).toHaveLength(1);
+  });
+  it('times out stalled DNS and aborts the single in-flight request', async () => {
+    const resolve = vi.fn(() => new Promise<never>(() => {}));
+    expect(await testTavilyConnection(settings.apiKey, 10, { resolve })).toEqual({
+      status: 'timeout',
+    });
+    expect(resolve).toHaveBeenCalledOnce();
+    let signal: AbortSignal | undefined;
+    const send = vi.fn((_url: URL, options: RequestOptions) => {
+      signal = options.signal;
+      const req = new EventEmitter() as ClientRequest;
+      req.write = (() => true) as ClientRequest['write'];
+      req.end = (() => req) as ClientRequest['end'];
+      options.signal?.addEventListener(
+        'abort',
+        () => req.emit('error', new Error(settings.apiKey)),
+        { once: true },
+      );
+      return req;
+    });
+    expect(
+      await testTavilyConnection(settings.apiKey, 10, {
+        resolve: async () => [{ address: '8.8.8.8', family: 4 }],
+        request: send as typeof request,
+      }),
+    ).toEqual({ status: 'timeout' });
+    expect(signal?.aborted).toBe(true);
+    expect(send).toHaveBeenCalledOnce();
+  });
+  it('does not consume the active research network budget', async () => {
+    const fake = transport([{ body: '{"results":[]}' }, { body: 'page' }]);
+    const network = createWebResearchNetwork({ ...settings, maxCalls: 1 }, fake);
+    await testTavilyConnection(settings.apiKey, 1000, fake);
+    await expect(network.fetch('https://example.com')).resolves.toMatchObject({ text: 'page' });
+    await expect(network.fetch('https://example.com')).rejects.toThrow(/budget/);
+  });
 });
 
 describe('HTML5 text extraction (not an HTML sanitizer)', () => {

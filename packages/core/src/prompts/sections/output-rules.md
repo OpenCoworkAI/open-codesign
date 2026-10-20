@@ -7,6 +7,7 @@
 - `App.jsx` is JSX for the host runtime, not standalone HTML. Define `App` and end with `ReactDOM.createRoot(document.getElementById('root')).render(<App />);`.
 - The host supplies the document shell and libraries. Do not put imports, CDN loaders, `<!doctype>`, `<html>`, `<head>`, `<body>`, a root div, or a global `render(<App />)` helper in `App.jsx`.
 - Keep connected screens in one source unless multiple files are needed. Use named components, readable multiline JSX and CSS, and component-sized edits. Checkpoints must be syntactically complete with defined dependencies, not half-components or unclosed tags/braces.
+- Multiple pages: one source, matching `id` and `data-oc-screen`, `<a href="#id">`, shared chrome outside.
 
 ## Content and interaction
 

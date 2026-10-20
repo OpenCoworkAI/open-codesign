@@ -1,7 +1,14 @@
 import { useT } from '@open-codesign/i18n';
-import type { SourceEditOperation, SourceEditTarget } from '@open-codesign/shared';
+import type { SourceEditSelection } from '@open-codesign/runtime';
+import {
+  type SourceEditOperation,
+  type SourceEditTarget,
+  sourceEditFieldKey,
+} from '@open-codesign/shared';
 import { Save, X } from 'lucide-react';
 import { type FormEvent, useId } from 'react';
+import { type SourceEditAncestor, sourceEditFieldState } from '../preview/helpers';
+import { sourceEditOriginMessage, sourceEditReasonMessage } from '../preview/source-edit-messages';
 
 export interface SourceEditPanelProps {
   path: string;
@@ -10,19 +17,19 @@ export interface SourceEditPanelProps {
   message: string | null;
   onApply: (operation: SourceEditOperation) => Promise<void>;
   onClose: () => void;
-  sourceMode?: boolean;
-  canSelectSource?: boolean;
-  onSourceMode?: () => void;
-  sourceTargets?: SourceEditTarget[];
+  fieldStates?: SourceEditSelection['fieldStates'];
+  ancestors?: SourceEditAncestor[];
+  onSelectAncestor?: (selector: string) => void;
   source?: string;
-  onSelectSource?: (id: string) => void;
 }
 
 export function sourceEditFieldLabel(
   operation: SourceEditOperation,
   t: (key: string) => string,
+  index?: number,
 ): string {
-  if (operation.kind === 'set-text') return t('canvas.sourceEdit.text');
+  if (operation.kind === 'set-text')
+    return `${t('canvas.sourceEdit.text')}${index === undefined ? '' : ` ${index + 1}`}`;
   if (operation.kind === 'set-attribute') return operation.name;
   return operation.property;
 }
@@ -30,10 +37,14 @@ export function sourceEditFieldLabel(
 function SourceEditField({
   operation,
   disabled,
+  label,
+  reason,
   onApply,
 }: {
   operation: SourceEditOperation;
   disabled: boolean;
+  label: string;
+  reason: string | undefined;
   onApply: SourceEditPanelProps['onApply'];
 }) {
   const t = useT();
@@ -46,7 +57,7 @@ function SourceEditField({
   return (
     <form onSubmit={submit} className="grid gap-[var(--space-1)]">
       <label htmlFor={id} className="text-[var(--text-sm)] text-[var(--color-text-secondary)]">
-        {sourceEditFieldLabel(operation, t)}
+        {label}
       </label>
       <div className="flex items-start gap-[var(--space-1)]">
         <textarea
@@ -54,6 +65,7 @@ function SourceEditField({
           name="value"
           defaultValue={operation.value}
           disabled={disabled}
+          aria-describedby={reason ? `${id}-reason` : undefined}
           rows={operation.kind === 'set-text' ? 3 : 1}
           maxLength={operation.kind === 'set-style' ? 1000 : 100000}
           className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-background)] p-[var(--space-2)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] disabled:opacity-50"
@@ -62,12 +74,17 @@ function SourceEditField({
           type="submit"
           disabled={disabled}
           title={t('canvas.sourceEdit.apply')}
-          aria-label={`${t('canvas.sourceEdit.apply')}: ${sourceEditFieldLabel(operation, t)}`}
+          aria-label={`${t('canvas.sourceEdit.apply')}: ${label}`}
           className="inline-flex size-[var(--size-control-md)] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
         >
           <Save className="size-[var(--space-4)]" aria-hidden />
         </button>
       </div>
+      {reason ? (
+        <p id={`${id}-reason`} className="m-0 text-[var(--text-sm)] text-[var(--color-text-muted)]">
+          {reason}
+        </p>
+      ) : null}
     </form>
   );
 }
@@ -79,20 +96,29 @@ export function SourceEditPanel({
   message,
   onApply,
   onClose,
-  sourceMode = false,
-  canSelectSource = false,
-  onSourceMode,
-  sourceTargets = [],
+  fieldStates,
+  ancestors = [],
+  onSelectAncestor,
   source = '',
-  onSelectSource,
 }: SourceEditPanelProps) {
   const t = useT();
   const heading = useId();
-  const sourceSelect = useId();
+  let textIndex = 0;
   return (
     <aside
       aria-labelledby={heading}
       aria-busy={busy}
+      onKeyDown={(event) => {
+        if (
+          event.key !== 'Escape' ||
+          event.nativeEvent.isComposing ||
+          event.nativeEvent.keyCode === 229
+        )
+          return;
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
       className="flex min-h-0 flex-1 flex-col gap-[var(--space-3)] overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-4)] shadow-[var(--shadow-soft)]"
     >
       <div className="flex items-center justify-between gap-[var(--space-2)]">
@@ -121,6 +147,26 @@ export function SourceEditPanel({
       <p className="m-0 text-[var(--text-sm)] text-[var(--color-text-muted)]">
         {t('canvas.sourceEdit.reloadWarning')}
       </p>
+      {ancestors.length ? (
+        <nav
+          aria-label={t('canvas.sourceEdit.ancestors')}
+          className="flex flex-wrap gap-[var(--space-1)]"
+        >
+          {ancestors.map((ancestor) => (
+            <button
+              key={ancestor.selector}
+              type="button"
+              disabled={busy || !onSelectAncestor}
+              title={ancestor.selector}
+              aria-label={`${t('canvas.sourceEdit.selectAncestor')}: ${ancestor.tagName}`}
+              onClick={() => onSelectAncestor?.(ancestor.selector)}
+              className="rounded-[var(--radius-sm)] border border-[var(--color-border)] p-[var(--space-1)] text-[var(--text-sm)] disabled:opacity-50"
+            >
+              &lt;{ancestor.tagName}&gt;
+            </button>
+          ))}
+        </nav>
+      ) : null}
       {message ? (
         <p role="status" className="m-0 text-[var(--text-sm)] text-[var(--color-text-secondary)]">
           {message}
@@ -131,68 +177,65 @@ export function SourceEditPanel({
           {t('common.loading')}
         </p>
       ) : null}
-      {canSelectSource && !busy ? (
-        <button
-          type="button"
-          onClick={onSourceMode}
-          className="rounded-[var(--radius-sm)] border border-[var(--color-border)] p-[var(--space-2)] text-[var(--text-sm)]"
-        >
-          {t('canvas.sourceEdit.chooseSource')}
-        </button>
-      ) : null}
-      {sourceMode ? (
-        <div className="grid gap-[var(--space-2)] text-[var(--text-sm)]">
-          <p>{t('canvas.sourceEdit.sourceHint')}</p>
-          <label htmlFor={sourceSelect}>{t('canvas.sourceEdit.sourceField')}</label>
-          <select
-            id={sourceSelect}
-            value={target?.id ?? ''}
-            disabled={busy}
-            onChange={(event) => onSelectSource?.(event.target.value)}
-            className="min-w-0 w-full border border-[var(--color-border)] bg-[var(--color-background)] p-[var(--space-2)]"
-          >
-            <option value="">{t('canvas.sourceEdit.chooseSource')}</option>
-            {sourceTargets.map((item) => (
-              <option key={item.id} value={item.id}>
-                {source.slice(0, item.start).split('\n').length}: &lt;{item.tagName}&gt;{' '}
-                {item.editableFields
-                  .map((field) => field.value)
-                  .join(' · ')
-                  .replace(/\s+/g, ' ')
-                  .slice(0, 100)}
-              </option>
-            ))}
-          </select>
-          {!busy && sourceTargets.length === 0 ? (
-            <p>{t('canvas.sourceEdit.noSourceFields')}</p>
-          ) : null}
-          {target ? (
-            <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-all">
-              {source.slice(target.start, Math.min(target.end, target.start + 1000))}
-            </pre>
-          ) : null}
-        </div>
-      ) : null}
-      {!sourceMode && !canSelectSource && !target && !busy ? (
+      {!target && !busy ? (
         <p className="m-0 text-[var(--text-sm)] text-[var(--color-text-muted)]">
           {t('canvas.sourceEdit.selectHint')}
         </p>
       ) : null}
-      {target?.editableFields.map((operation) => (
-        <SourceEditField
-          key={`${target.id}:${operation.kind}:${operation.kind === 'set-style' ? operation.property : operation.kind === 'set-attribute' ? operation.name : 'text'}`}
-          operation={operation}
-          disabled={busy}
-          onApply={onApply}
-        />
-      ))}
-      {target?.unsupported.map((item) => (
-        <p
-          key={`${item.field}:${item.reason}`}
-          className="m-0 text-[var(--text-sm)] text-[var(--color-text-muted)]"
+      {target?.editableFields.map((operation) => {
+        const origin =
+          operation.kind === 'set-text'
+            ? target.textSources?.find((item) => item.textId === operation.textId)
+            : undefined;
+        const state = sourceEditFieldState(target, operation, fieldStates);
+        const label = sourceEditFieldLabel(
+          operation,
+          t,
+          operation.kind === 'set-text' ? textIndex++ : undefined,
+        );
+        const reason =
+          state.status === 'ready' ? undefined : t(`canvas.sourceEdit.fieldState.${state.status}`);
+        return (
+          <div
+            key={`${target.id}:${sourceEditFieldKey(operation)}`}
+            className="grid gap-[var(--space-2)]"
+          >
+            {origin ? (
+              <div className="text-[var(--text-sm)] text-[var(--color-text-muted)]">
+                <p>
+                  {sourceEditOriginMessage(t)} · {path}:
+                  {source.slice(0, origin.start).split('\n').length}
+                </p>
+                <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-all">
+                  {source.slice(origin.start, origin.end)}
+                </pre>
+                <details>
+                  <summary>{t('canvas.sourceEdit.diagnostics')}</summary>
+                  <code className="break-all">{origin.origin}</code>
+                </details>
+              </div>
+            ) : null}
+            <SourceEditField
+              operation={operation}
+              disabled={busy || state.status !== 'ready'}
+              label={label}
+              reason={reason}
+              onApply={onApply}
+            />
+          </div>
+        );
+      })}
+      {target?.unsupported.map((item, index) => (
+        <div
+          key={`${item.field}:${item.reason}:${index}`}
+          className="text-[var(--text-sm)] text-[var(--color-text-muted)]"
         >
-          {item.message} ({item.reason})
-        </p>
+          <p className="m-0">{sourceEditReasonMessage(item.reason, t)}</p>
+          <details>
+            <summary>{t('canvas.sourceEdit.diagnostics')}</summary>
+            <code className="break-all">{item.reason}</code>
+          </details>
+        </div>
       ))}
     </aside>
   );

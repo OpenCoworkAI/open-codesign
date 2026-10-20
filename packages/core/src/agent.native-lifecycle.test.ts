@@ -73,6 +73,15 @@ const create = (path: string, text: string) =>
     `create-${path}`,
   );
 const done = () => call('done', { path: 'App.jsx' });
+const view = (path = 'App.jsx') =>
+  call('str_replace_based_edit_tool', { command: 'view', path }, `view-${path}`);
+const missingEdit = () =>
+  call('str_replace_based_edit_tool', {
+    command: 'str_replace',
+    path: 'App.jsx',
+    old_str: 'not in the file',
+    new_str: 'unused',
+  });
 const ask = () =>
   call('ask', { questions: [{ id: 'q', type: 'freeform', prompt: 'Required fact?' }] });
 
@@ -111,11 +120,30 @@ function response(
 }
 
 function script(batches: Array<Call[] | string>) {
-  native.stream.mockImplementation((model) => {
+  const requests: AgentMessage[][] = [];
+  native.stream.mockImplementation((model, context) => {
+    requests.push([...context.messages]);
     const batch = batches.shift();
     if (batch === undefined) throw new Error('Unexpected extra provider call');
     return response(model, typeof batch === 'string' ? [{ type: 'text', text: batch }] : batch);
   });
+  return requests;
+}
+
+type ToolEnd = { toolName: string; isError: boolean; text: string };
+type OnEvent = NonNullable<NonNullable<Parameters<typeof generateViaAgent>[1]>['onEvent']>;
+function collectToolEnds(into: ToolEnd[], then?: (end: ToolEnd) => void): OnEvent {
+  return (event) => {
+    if (event.type !== 'tool_execution_end') return;
+    const content = (event.result as { content: Array<{ type: string; text?: string }> }).content;
+    const end = {
+      toolName: event.toolName,
+      isError: event.isError,
+      text: content.map((part) => part.text ?? '').join(''),
+    };
+    into.push(end);
+    then?.(end);
+  };
 }
 
 let root: string;
@@ -194,7 +222,7 @@ describe('production generateViaAgent with installed pi', () => {
       async (source: string, context?: { path: string; signal?: AbortSignal }) => {
         expect(context?.signal).toBeInstanceOf(AbortSignal);
         expect(source).toBe(readFileSync(join(root, 'App.jsx'), 'utf8'));
-        return [];
+        return { errors: [], warnings: [] };
       },
     );
     const checks: DoneDetails[] = [];
@@ -410,7 +438,10 @@ describe('production generateViaAgent with installed pi', () => {
     const controller = new AbortController();
     const active = new ActiveRunMessages('design', 'run', () => {}, controller.signal);
     const ended: AgentMessage[][] = [];
-    const verify = vi.fn(async () => [{ message: 'Broken runtime', source: 'runtime' }]);
+    const verify = vi.fn(async () => ({
+      errors: [{ message: 'Broken runtime', source: 'runtime' }],
+      warnings: [],
+    }));
     script([
       [todos()],
       ...Array.from({ length: 5 }, (_, n) => [
@@ -459,5 +490,208 @@ describe('production generateViaAgent with installed pi', () => {
     expect(
       native.agents[0]?.state.messages.filter((message) => message.role === 'user'),
     ).toHaveLength(1);
+  });
+  describe('repeated tool calls', () => {
+    // Only the repeated call reads this file, so its view count is the number of executions.
+    const PROBE = 'probe.txt';
+    const seedProbe = () => writeFileSync(join(root, PROBE), 'Probe');
+    const repeatedViews = (times: number) => Array.from({ length: times }, () => [view(PROBE)]);
+    const probeViews = (spy: { mock: { calls: unknown[][] } }) =>
+      spy.mock.calls.filter(([path]) => path === PROBE).length;
+
+    it('blocks the third identical call and lets the model read the reason as the tool result', async () => {
+      seed();
+      seedProbe();
+      const viewSpy = vi.spyOn(fs, 'view');
+      const ends: ToolEnd[] = [];
+      const requests = script([
+        [todos()],
+        ...repeatedViews(3),
+        [create('notes.txt', 'Changed approach')],
+        'Finished',
+      ]);
+      const result = await generateViaAgent(input, { fs, onEvent: collectToolEnds(ends) });
+      expect(result.message).toBe('Finished');
+      const views = ends.filter((end) => end.toolName === 'str_replace_based_edit_tool');
+      expect(views.slice(0, 2).map((end) => end.isError)).toEqual([false, false]);
+      expect(views[2]).toMatchObject({ isError: true });
+      expect(views[2]?.text).toContain(
+        '`str_replace_based_edit_tool` with the same arguments 3 times in a row',
+      );
+      expect(views[2]?.text).toContain('Change your approach');
+      expect(probeViews(viewSpy)).toBe(2);
+      const next = requests[4] ?? [];
+      expect(next.at(-1)).toMatchObject({ role: 'toolResult', isError: true });
+      expect(JSON.stringify(next.at(-1))).toContain('Change your approach');
+      expect(next.filter((message) => message.role === 'user')).toHaveLength(1);
+      expect(writes).toEqual(['notes.txt']);
+    });
+
+    it('ends the run at the fifth identical call without another model request, keeping files and queued messages', async () => {
+      seed();
+      seedProbe();
+      const controller = new AbortController();
+      const receipts: ActiveRunMessageV1[] = [];
+      const active = new ActiveRunMessages(
+        'design',
+        'run',
+        (row) => receipts.push(row),
+        controller.signal,
+      );
+      const viewSpy = vi.spyOn(fs, 'view');
+      const ends: ToolEnd[] = [];
+      const onComplete = vi.fn();
+      script([[todos()], [create('kept.txt', 'Kept')], ...repeatedViews(5), 'Must not complete']);
+      const running = generateViaAgent(
+        { ...input, signal: controller.signal },
+        {
+          fs,
+          activeMessages: active,
+          onComplete,
+          onEvent: collectToolEnds(ends, (end) => {
+            if (!end.text.includes('STOP')) return;
+            for (const mode of ['steer', 'follow-up'] as const) {
+              active.submit({
+                schemaVersion: 1,
+                designId: 'design',
+                generationId: 'run',
+                messageId: mode,
+                mode,
+                text: 'Queued before the stop',
+              });
+            }
+          }),
+        },
+      );
+      await expect(running).rejects.toMatchObject({
+        code: 'GENERATION_INCOMPLETE',
+        message: expect.stringContaining(
+          '`str_replace_based_edit_tool` with the same arguments 5 times in a row',
+        ),
+      });
+      expect(native.stream).toHaveBeenCalledTimes(7);
+      expect(probeViews(viewSpy)).toBe(2);
+      expect(ends.filter((end) => end.isError).map((end) => end.text.includes('STOP'))).toEqual([
+        false,
+        false,
+        true,
+      ]);
+      expect(readFileSync(join(root, 'kept.txt'), 'utf8')).toBe('Kept');
+      expect(readFileSync(join(root, 'App.jsx'), 'utf8')).toBe(SOURCE);
+      expect(controller.signal.aborted).toBe(false);
+      expect(onComplete).toHaveBeenCalledOnce();
+      const [pi] = native.agents;
+      await pi?.waitForIdle();
+      expect(pi?.state.isStreaming).toBe(false);
+      expect(pi?.hasQueuedMessages()).toBe(false);
+      expect(pi?.state.messages.filter((message) => message.role === 'user')).toHaveLength(1);
+      expect(receipts.map((row) => `${row.messageId}:${row.status}`)).toEqual([
+        'steer:pending',
+        'follow-up:pending',
+        'steer:not-delivered',
+        'follow-up:not-delivered',
+      ]);
+    });
+
+    it('does not run the calls that follow the halting call in the same response', async () => {
+      seed();
+      seedProbe();
+      script([
+        [todos()],
+        ...repeatedViews(4),
+        [view(PROBE), create('later.txt', 'must not write')],
+      ]);
+      await expect(generateViaAgent(input, { fs })).rejects.toMatchObject({
+        code: 'GENERATION_INCOMPLETE',
+      });
+      expect(native.stream).toHaveBeenCalledTimes(6);
+      expect(writes).toEqual([]);
+    });
+
+    it('halts a cycle of calls that repeats unchanged, across the view and a failing edit', async () => {
+      seed();
+      script([
+        [todos()],
+        ...Array.from({ length: 5 }, () => [view(), missingEdit()]),
+        'Must not complete',
+      ]);
+      await expect(generateViaAgent(input, { fs })).rejects.toMatchObject({
+        code: 'GENERATION_INCOMPLETE',
+        message: expect.stringContaining(
+          'the same sequence of calls (`str_replace_based_edit_tool` → `str_replace_based_edit_tool`) 5 times in a row',
+        ),
+      });
+      expect(native.stream).toHaveBeenCalledTimes(6);
+    });
+
+    it('keeps allowing the same read between different edits', async () => {
+      seed();
+      const ends: ToolEnd[] = [];
+      script([
+        [todos()],
+        ...Array.from({ length: 6 }, (_, n) => [create(`part${n}.txt`, `Part ${n}`), view()]),
+        'Finished',
+      ]);
+      const result = await generateViaAgent(input, { fs, onEvent: collectToolEnds(ends) });
+      expect(result.message).toBe('Finished');
+      expect(ends.some((end) => end.isError)).toBe(false);
+      expect(writes).toHaveLength(6);
+    });
+
+    it('leaves repeated done calls to the done repair limit', async () => {
+      seed();
+      const verify = vi.fn(async () => ({
+        errors: [{ message: 'Broken runtime', source: 'runtime' }],
+        warnings: [],
+      }));
+      script([[todos()], ...Array.from({ length: 5 }, () => [done()]), 'Must not complete']);
+      await expect(generateViaAgent(input, { fs, runtimeVerify: verify })).rejects.toMatchObject({
+        code: 'GENERATION_INCOMPLETE',
+        message: expect.stringContaining('3 done() error rounds'),
+      });
+      expect(verify).toHaveBeenCalledTimes(3);
+      expect(native.stream).toHaveBeenCalledTimes(4);
+    });
+
+    it('starts counting again after a queued user message is delivered', async () => {
+      seed();
+      seedProbe();
+      const controller = new AbortController();
+      const receipts: ActiveRunMessageV1[] = [];
+      const active = new ActiveRunMessages(
+        'design',
+        'run',
+        (row) => receipts.push(row),
+        controller.signal,
+      );
+      const ends: ToolEnd[] = [];
+      script([[todos()], ...repeatedViews(4), 'Finished']);
+      let views = 0;
+      const result = await generateViaAgent(
+        { ...input, signal: controller.signal },
+        {
+          fs,
+          activeMessages: active,
+          onEvent: collectToolEnds(ends, (end) => {
+            if (end.toolName !== 'str_replace_based_edit_tool') return;
+            views += 1;
+            if (views === 2) {
+              active.submit({
+                schemaVersion: 1,
+                designId: 'design',
+                generationId: 'run',
+                messageId: 'steer',
+                mode: 'steer',
+                text: 'Keep going',
+              });
+            }
+          }),
+        },
+      );
+      expect(result.message).toBe('Finished');
+      expect(ends.filter((end) => end.toolName === 'str_replace_based_edit_tool')).toHaveLength(4);
+      expect(ends.some((end) => end.isError)).toBe(false);
+      expect(receipts.at(-1)?.status).toBe('delivered');
+    });
   });
 });

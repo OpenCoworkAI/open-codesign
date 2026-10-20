@@ -36,6 +36,22 @@ export {
   ModelRegistry,
   SessionManager,
 } from './agent-session.js';
+export type {
+  DesignFields,
+  ImportOrigin,
+  TokenFile,
+  TokenImport,
+  TokenImportReport,
+  UnresolvedReason,
+  UnsupportedReason,
+} from './brand/index.js';
+export {
+  extractFromCssVars,
+  extractFromTailwindConfig,
+  importDtcgJson,
+  mapTokensToDesignFields,
+} from './brand/index.js';
+export { DEFAULT_CONTEXT_WINDOW, resolveContextWindow } from './context-window.js';
 export {
   type BuildDesignContextPackInput,
   buildDesignContextPack,
@@ -113,7 +129,9 @@ export {
 export {
   type DoneDetails,
   type DoneError,
+  type DoneRuntimeResult,
   type DoneRuntimeVerifier,
+  LAYOUT_WARNING_SOURCE,
   makeDoneTool,
 } from './tools/done.js';
 export {
@@ -131,6 +149,8 @@ export {
   type WorkspaceInspection,
 } from './tools/inspect-workspace.js';
 export {
+  type LayoutIssue,
+  MAX_LAYOUT_ISSUES,
   makePreviewTool,
   type PreviewInput,
   type PreviewResult,
@@ -225,6 +245,12 @@ export interface GenerateInput {
    * via `reasoningForModel`.
    */
   reasoningLevel?: ReasoningLevel | undefined;
+  /**
+   * Context window, in tokens, configured for the provider
+   * (`ProviderEntry.contextWindow`). When absent, core resolves it from pi-ai's
+   * catalog via `resolveContextWindow`.
+   */
+  contextWindow?: number | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
@@ -270,6 +296,12 @@ export interface GenerateInput {
    */
   mode?: Extract<PromptComposeOptions['mode'], 'create'> | undefined;
   signal?: AbortSignal | undefined;
+  /**
+   * Per-HTTP-request timeout forwarded to pi-ai's `timeoutMs`. Without it the
+   * OpenAI / Anthropic SDKs cut every request at their 10-minute default,
+   * regardless of the run-level generation timeout.
+   */
+  requestTimeoutMs?: number | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
   logger?: CoreLogger | undefined;
   /**

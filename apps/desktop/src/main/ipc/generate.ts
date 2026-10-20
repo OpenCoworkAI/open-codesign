@@ -16,6 +16,7 @@ import {
   inspectWorkspaceFiles,
   loadDesignSkills,
   loadFrameTemplates,
+  resolveContextWindow,
   routeRunPreferences,
   updateDesignSessionBrief,
 } from '@open-codesign/core';
@@ -29,6 +30,8 @@ import {
   deriveResourceStateFromChatRows,
   GeneratePayloadV1,
   ListActiveMessagesInputV1,
+  summarizeUsageBudget,
+  type UsageTotals,
 } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
 import type { BrowserWindow as ElectronBrowserWindow, WebContents } from 'electron';
@@ -42,6 +45,7 @@ import {
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
+  generationRequestTimeoutMs,
   listInFlightGenerations,
   withInFlightGenerationForDesign,
 } from '../generation-ipc';
@@ -58,7 +62,6 @@ import {
   workspaceNameFromPath,
 } from '../memory-ipc';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from '../onboarding-ipc';
-
 import { readPersisted as readPreferences } from '../preferences-ipc';
 import { runPreview } from '../preview-runtime';
 import { preparePromptContext } from '../prompt-context';
@@ -90,21 +93,12 @@ import {
 import { registerSourceEditBusyCheck } from '../source-edits-ipc';
 import { withTlsBypass } from '../tls-override';
 import { createResearchHost, createWebResearchAuthorization } from '../web-research';
-import { createWebResearchNetwork } from '../web-research-network';
+import { createWebResearchRun } from '../web-research-run';
 import { withStableWorkspacePath } from '../workspace-path-lock';
 import { listWorkspaceFilesAt, readWorkspaceFilesAt } from '../workspace-reader';
 import { finalAssistantTextForTurn } from './assistant-text';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
 import { summarizeToolResultForStream, toolExecutionStatusForStream } from './tool-log';
-
-const DEFAULT_CONTEXT_WINDOW_FOR_CONTEXT_PACK = 200_000;
-
-export function contextWindowForContextPack(model: unknown): number {
-  const value = (model as { contextWindow?: unknown } | null)?.contextWindow;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : DEFAULT_CONTEXT_WINDOW_FOR_CONTEXT_PACK;
-}
 
 /**
  * Whether outbound pi-ai requests for the given provider should bypass TLS
@@ -510,6 +504,32 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     return recovered;
   });
 
+  const emptyUsage = (): UsageTotals => ({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
+  ipcMain.handle('codesign:v1:usage-budget', async (_event, raw: unknown) => {
+    const input = raw as { schemaVersion?: unknown; designId?: unknown } | null;
+    if (
+      !input ||
+      input.schemaVersion !== 1 ||
+      typeof input.designId !== 'string' ||
+      input.designId.length === 0 ||
+      input.designId.length > 512
+    ) {
+      throw new CodesignError('Invalid usage budget request', 'IPC_BAD_INPUT');
+    }
+    const empty = {
+      schemaVersion: 1 as const,
+      design: emptyUsage(),
+      today: emptyUsage(),
+      week: emptyUsage(),
+    };
+    if (!journal) return empty;
+    const records = await journal.usageRecords();
+    return {
+      schemaVersion: 1 as const,
+      ...summarizeUsageBudget(records, input.designId, Date.now()),
+    };
+  });
+
   const recordFinalError = (scope: string, runId: string, err: unknown): void => {
     if (db === null) return;
     const code = err instanceof CodesignError ? (err.code as string) : 'PROVIDER_UPSTREAM_ERROR';
@@ -690,6 +710,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     designId: string,
     previousSource: string | null,
     workspaceRoot: string,
+    researchRun: ReturnType<typeof createWebResearchRun>,
     attachmentsForRuntimeFs?: Parameters<typeof createRuntimeTextEditorFs>[0]['attachments'],
     memoryCallbacks?: {
       onAggressivePrune?: () => void;
@@ -700,9 +721,14 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       publishEvent(event);
     };
     const baseCtx = { designId, generationId: id } as const;
+    const cfg = getCachedConfig();
+    const { settings: researchSettings, network } = researchRun;
     const toolStartedAt = new Map<string, number>();
     const templatesRoot = path_module.join(app.getPath('userData'), 'templates');
     const currentWorkspaceRoot = () => requireWorkspaceRootForDesign(designId).workspaceRoot;
+    const requestTimeoutMs = generationRequestTimeoutMs(
+      (await readPreferences()).generationTimeoutSec,
+    );
     const [frames, designSkills, initialWorkspaceFiles] = await Promise.all([
       loadFrameTemplates(path_module.join(templatesRoot, 'frames')),
       loadDesignSkills(path_module.join(templatesRoot, 'design-skills')),
@@ -721,32 +747,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       frames,
       designSkills,
     });
-    const cfg = getCachedConfig();
-    const researchSettings = cfg?.webSearch ?? {
-      enabled: false,
-      maxCalls: 12,
-      timeoutMs: 15000,
-      maxChars: 10000,
-    };
-    // Keep credentials in this process and resolve only when a network tool is used.
-    let network: ReturnType<typeof createWebResearchNetwork> | undefined;
-    const getResearchNetwork = () => {
-      if (!network) {
-        const stored = cfg?.secrets['tavily'];
-        network = createWebResearchNetwork({
-          ...researchSettings,
-          ...(stored && researchSettings.enabled
-            ? { apiKey: decryptSecret(stored.ciphertext) }
-            : {}),
-        });
-      }
-      return network;
-    };
     const research = createResearchHost({
-      network: {
-        search: (query, count, signal) => getResearchNetwork().search(query, count, signal),
-        fetch: (url, signal) => getResearchNetwork().fetch(url, signal),
-      },
+      network,
       inWorkspace: (fn) => withStableWorkspacePath(designId, () => fn(currentWorkspaceRoot())),
       authorize: createWebResearchAuthorization(researchSettings, (questions, signal) =>
         requestAsk(id, questions, () => getMainWindow(), {
@@ -825,6 +827,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         const judgeOpts: Parameters<typeof complete>[2] = {
           apiKey: input.apiKey ?? '',
           maxTokens,
+          timeoutMs: requestTimeoutMs,
           userImages,
           ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
           ...(input.wire ? { wire: input.wire } : {}),
@@ -857,6 +860,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     return generateViaAgent(
       {
         ...input,
+        requestTimeoutMs,
         templatesRoot,
         askBridge: (askInput, signal) =>
           requestAsk(id, askInput, () => getMainWindow(), {
@@ -1089,8 +1093,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     ) {
       throw new CodesignError('done:verify:v1 expects { artifact: string }', 'IPC_BAD_INPUT');
     }
-    const errors = await sharedRuntimeVerifier((raw as { artifact: string }).artifact);
-    return { errors };
+    const { errors, warnings } = await sharedRuntimeVerifier(
+      (raw as { artifact: string }).artifact,
+    );
+    return { schemaVersion: 1, errors, warnings };
   });
 
   ipcMain.handle('codesign:v1:generate', async (_e, raw: unknown) => {
@@ -1116,6 +1122,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               'CONFIG_MISSING',
             );
           }
+          const researchRun = createWebResearchRun(cfg, decryptSecret);
           const active = resolveActiveModel(cfg, payload.model);
           const allowKeyless = active.allowKeyless;
           const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
@@ -1311,7 +1318,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               brief: existingBrief,
               runPreferences,
               resourceState,
-              modelContextWindow: contextWindowForContextPack(active.model),
+              modelContextWindow: resolveContextWindow(active.model, baseUrl, active.contextWindow),
               workspaceState: {
                 sourcePath: payload.previousSource ? 'App.jsx' : null,
                 hasSource: Boolean(payload.previousSource?.trim()),
@@ -1349,6 +1356,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
                     : {}),
+                  ...(active.contextWindow !== undefined
+                    ? { contextWindow: active.contextWindow }
+                    : {}),
                   ...(allowKeyless ? { allowKeyless: true } : {}),
                   signal: controller.signal,
                   logger: coreLogger,
@@ -1357,6 +1367,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 designId,
                 payload.previousSource ?? null,
                 workspaceRoot,
+                researchRun,
                 promptContext.attachments,
                 {
                   onAggressivePrune: () => {
@@ -1626,6 +1637,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               'CONFIG_MISSING',
             );
           }
+          const researchRun = createWebResearchRun(cfg, decryptSecret);
           // Inline-comment edits don't need to be tied to whatever provider was
           // pinned in the original generate; resolve fresh against the canonical
           // active provider so a switch in Settings takes effect immediately.
@@ -1706,6 +1718,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
                     : {}),
+                  ...(active.contextWindow !== undefined
+                    ? { contextWindow: active.contextWindow }
+                    : {}),
                   ...(allowKeyless ? { allowKeyless: true } : {}),
                   signal: controller.signal,
                   logger: coreLogger,
@@ -1714,6 +1729,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 payload.designId,
                 payload.artifactSource,
                 workspaceRoot,
+                researchRun,
                 promptContext.attachments,
               ),
             );

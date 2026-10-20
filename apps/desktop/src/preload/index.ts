@@ -26,6 +26,7 @@ import type {
   ReportEventInput,
   ReportEventResult,
   ResourceStateV1,
+  SaveWebSearchSettingsInput,
   SelectedElement,
   SnapshotCreateInput,
   SourceEditApplyRequestV1,
@@ -33,6 +34,8 @@ import type {
   SourceEditInspectRequestV1,
   SourceEditInspectResultV1,
   SupportedOnboardingProvider,
+  WebSearchSettingsState,
+  WebSearchTestResult,
   WireApi,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
@@ -67,7 +70,7 @@ export interface ValidateKeyError {
   message: string;
 }
 
-export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip' | 'markdown';
+export type ExportFormat = 'html' | 'pdf' | 'png' | 'pptx' | 'zip' | 'markdown';
 export type WorkspaceFileKind =
   | 'html'
   | 'jsx'
@@ -182,12 +185,14 @@ export interface RenameDesignOptions {
 export interface ExportInvokeResponse {
   sourcesPath?: string;
   researchWarnings?: string[];
+  exportWarnings?: string[];
   status: 'saved' | 'cancelled';
   path?: string;
   bytes?: number;
 }
 export interface ExportInvokePayload {
   format: ExportFormat;
+  renderMode?: 'image' | 'native';
   artifactSource: string;
   defaultFilename?: string;
   designId?: string;
@@ -211,6 +216,8 @@ export interface ProviderRow {
   hasKey: boolean;
   requiresApiKey?: boolean;
   reasoningLevel?: ReasoningLevel;
+  /** Configured context window in tokens; absent when the model catalog decides. */
+  contextWindow?: number;
   /** Per-provider opt-in to skip TLS verification on outbound HTTPS.
    *  Built-in providers force-ignore this flag at runtime; only surfaced
    *  for custom/imported providers. See #229. */
@@ -269,6 +276,7 @@ export interface Preferences {
   workspaceMemoryAutoUpdate: boolean;
   userMemoryAutoUpdate: boolean;
   proxyUrl: string;
+  systemNotifications: boolean;
 }
 
 export interface MemoryFileRead {
@@ -436,12 +444,27 @@ export interface RunRecoveryResult {
   events: AgentStreamEvent[];
 }
 
+export interface UsageBudgetTotals {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface UsageBudgetResult {
+  schemaVersion: 1;
+  design: UsageBudgetTotals;
+  today: UsageBudgetTotals;
+  week: UsageBudgetTotals;
+}
+
 const api = {
   detectProvider: (key: string) =>
     ipcRenderer.invoke('codesign:detect-provider', key) as Promise<string | null>,
   doneVerify: (artifact: string) =>
     ipcRenderer.invoke('done:verify:v1', { artifact }) as Promise<{
+      schemaVersion: 1;
       errors: Array<{ message: string; source?: string; lineno?: number }>;
+      warnings: Array<{ message: string; source?: string; lineno?: number }>;
     }>,
   generate: (payload: {
     prompt: string;
@@ -468,6 +491,11 @@ const api = {
       schemaVersion: 1,
       cursors,
     }) as Promise<RunRecoveryResult>,
+  usageBudget: (designId: string) =>
+    ipcRenderer.invoke('codesign:v1:usage-budget', {
+      schemaVersion: 1,
+      designId,
+    }) as Promise<UsageBudgetResult>,
   generationStatus: () =>
     ipcRenderer.invoke('codesign:v1:generation-status') as Promise<GenerationStatusResult>,
   sendActiveMessage: (payload: ActiveRunMessageInputV1) =>
@@ -595,6 +623,9 @@ const api = {
       /** `null` explicitly clears the override and falls back to the model
        *  default; a level string sets it; omit to leave untouched. */
       reasoningLevel?: ReasoningLevel | null;
+      /** Context window in tokens; `null` clears it so the model catalog
+       *  decides; omit to leave untouched. */
+      contextWindow?: number | null;
       /** Non-empty string rotates the stored secret; empty string clears it
        *  (keyless providers); omit to leave the existing secret untouched. */
       apiKey?: string;
@@ -617,6 +648,7 @@ const api = {
       httpHeaders?: Record<string, string>;
       allowPrivateNetwork?: boolean;
       tlsRejectUnauthorized?: boolean;
+      presetId?: 'litellm';
     }) => ipcRenderer.invoke('config:v1:test-endpoint', input) as Promise<TestEndpointResponse>,
     listEndpointModels: (input: { wire: WireApi; baseUrl: string; apiKey: string }) =>
       ipcRenderer.invoke('config:v1:list-endpoint-models', input) as Promise<
@@ -637,6 +669,12 @@ const api = {
     get: () => ipcRenderer.invoke('preferences:v1:get') as Promise<Preferences>,
     update: (patch: Partial<Preferences>) =>
       ipcRenderer.invoke('preferences:v1:update', patch) as Promise<Preferences>,
+  },
+  webSearch: {
+    get: () => ipcRenderer.invoke('settings:v1:get-web-search') as Promise<WebSearchSettingsState>,
+    save: (input: SaveWebSearchSettingsInput) =>
+      ipcRenderer.invoke('settings:v1:save-web-search', input) as Promise<WebSearchSettingsState>,
+    test: () => ipcRenderer.invoke('settings:v1:test-web-search') as Promise<WebSearchTestResult>,
   },
   memory: {
     getUser: () => ipcRenderer.invoke('memory:v1:get-user') as Promise<MemoryFileRead | null>,
@@ -991,6 +1029,7 @@ const api = {
   },
   openExternal: (url: string) =>
     ipcRenderer.invoke('codesign:v1:open-external', url) as Promise<void>,
+  focusWindow: () => ipcRenderer.invoke('codesign:v1:focus-window') as Promise<void>,
   ask: {
     history: (filter?: { runId?: string; designId?: string }) =>
       ipcRenderer.invoke('ask:history', filter) as Promise<AskHistoryEntry[]>,

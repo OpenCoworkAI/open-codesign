@@ -4,7 +4,35 @@ Open CoDesign can research a slide topic, save facts/data, build slides, and del
 
 ## Configure
 
-Finish normal model onboarding first. Close the app and add these sections to the active `config.toml` (normally `~/.config/open-codesign/config.toml`; respects `XDG_CONFIG_HOME` and custom storage locations):
+Open **Settings → Web Search** (**设置 → 联网搜索**). No manual file editing or restart is needed:
+
+1. Paste a Tavily API key into the password field and choose **Save key**. Obtain a key from the [official Tavily dashboard](https://app.tavily.com). The UI shows **Configured**, never the saved key. Enter a new key and save to replace it; an empty input does not erase it.
+2. Turn **Web search** on or off. This retains the saved key and existing custom limits. Saving other settings also retains the search settings and credentials.
+3. Optionally click **Test connection** to test the **saved** key. Unsaved input is not tested. This explicit action works even with search disabled and does not enable search or authorize any task.
+4. **Clear key** removes only the Tavily credential. It does not change the search switch, custom limits, model credentials, or key-independent public webpage reading.
+
+Changes apply to subsequent new runs (including the next turn in an existing design). Running tasks retain their starting configuration and credential snapshot; clearing or replacing a key does not implicitly change an in-flight task. Stop an active task if it must no longer use its previously authorized access. Saving/enabling never grants blanket networking permission: each new run still uses the existing **Allow this run / Deny** dialog.
+
+Search queries are sent to Tavily; webpage requests go directly to the requested public host. Never paste a key into chat or a design workspace. Key input is transient UI state and is cleared after saving; saved credentials are resolved only in the main process. Get/save/test IPC responses contain only configuration status or bounded diagnostic codes, never credentials, request headers, provider response bodies, or raw errors. No new credential store is introduced: the existing OS-backed `safe:` storage (or `plain:` fallback when unavailable) and active app configuration are reused.
+
+### Test connection
+
+The button sends exactly one bounded `POST https://api.tavily.com/search` request with Bearer authentication, fixed query `Tavily`, `max_results: 1`, `search_depth: "basic"`, `auto_parameters: false`, and no generated answer or raw content. It is not run on open, save, toggle, or clear. It consumes **1 Tavily API credit** for a successful basic search, but does **not** consume a task's call budget, grant/bypass task authorization, or save research/chat/workspace records. There is no automatic retry or fallback.
+
+The [official Search API reference](https://docs.tavily.com/documentation/api-reference/endpoint/search) documents this request, credit cost, and error statuses (also available as [Markdown/OpenAPI](https://docs.tavily.com/documentation/api-reference/endpoint/search.md)):
+
+- `401`: missing/invalid API key (the app checks for missing local credentials before requesting).
+- `429`: rate limited; wait before retrying.
+- `432` / `433`: key/plan usage limit or pay-as-you-go limit exceeded; check the Tavily dashboard.
+- Local deadline expiry: timeout, not evidence that the key is invalid.
+- DNS/TLS/connection failures: network failure, without guessing the specific cause.
+- Server errors or other HTTP statuses: service/unknown response with the HTTP status, not a claim of invalid credentials. Malformed successful replies are reported as unexpected responses, not success.
+
+Unreadable encrypted credentials are shown as needing replacement, without exposing decryption errors. A successful test confirms that single request only, not future quota or service availability.
+
+### Existing manual configuration
+
+Existing supported manual configuration and custom storage locations remain compatible. If configuring manually while the app is closed, the active `config.toml` (normally `~/.config/open-codesign/config.toml`; respects `XDG_CONFIG_HOME` and custom storage locations) supports:
 
 ```toml
 [webSearch]
@@ -17,13 +45,13 @@ maxChars = 10000
 ciphertext = "plain:YOUR_TAVILY_API_KEY"
 ```
 
-Restart the app. Do not paste the key into chat or a design workspace. The `ciphertext` name is the existing credential-storage format; `plain:` is its supported human-readable local form. Existing `safe:` credentials are also handled by the main-process credential resolver. Provider settings and OAuth changes retain the search configuration.
+The `ciphertext` name is the existing credential-storage format; `plain:` is its supported human-readable local form. Existing `safe:` and readable legacy encrypted credentials are also handled by the main-process resolver. Provider settings and OAuth changes retain the search configuration. Manual edits made outside the app are read on launch, not watched live; use Settings for immediate updates to new runs.
 
 If an older build fails to start with `Failed to decrypt a legacy API key`, an entry without `plain:` or `safe:` is being interpreted as legacy encrypted data. Check the entry you added: a newly copied Tavily key must be `ciphertext = "plain:tvly-..."`, not just `ciphertext = "tvly-..."`. Do not prefix existing encrypted values with `plain:`; replace them with a freshly copied key if needed. The log alone does not identify which entry failed. Credential migration now preserves unreadable entries and logs their provider ID without aborting startup; that credential still needs repair before use.
 
 Search is disabled by default. Its first network call asks through the existing structured-question dialog for this run's bounded public-web access: choose **Allow this run** or **Deny**. Denial or cancellation prevents the request. Permission is not carried into later runs; this v1 does not persist a network allowlist. A missing Tavily key is an explicit search error, not an empty result or simulated success. Public webpage reading does not require a Tavily key. Search queries are sent to Tavily; page requests go directly to the requested public host. Credentials are never tool arguments or results.
 
-If a tool reports **Web access is disabled**, the run loaded a missing or false `webSearch.enabled`; this is not an HTTP error from the target website. A Tavily key alone does not enable networking. Fully quit the app, check the active config directory shown in Settings (not a workspace config), add or update the top-level `[webSearch]` section above, then restart and start a new turn. Older builds could drop this section when saving provider/model, import, image or design-system settings; those save paths now preserve it, including an explicit `false`. If an older build already removed the section, it needs to be added again.
+If a tool reports **Web access is disabled**, open **Settings → Web Search**, enable it, then start a new turn. If Tavily credentials are missing or unreadable, save/replace the key there and start a new turn. These errors include Settings guidance; they are not HTTP errors from a target website. A Tavily key alone does not enable networking. Older builds could drop the search section when saving provider/model, import, image or design-system settings; current save paths preserve it, including an explicit `false`. If it was previously lost, enable it again in Settings.
 
 Settings limits: `maxCalls` 1–50 (search and fetch combined per run, including failed network attempts); `timeoutMs` 1,000–60,000; `maxChars` 1,000–12,000 (per fetched body). Search allows 1–5 results and at most 2,000 snippet characters per result. Each HTTP response is limited to 1 MiB, and page fetches allow at most five redirects. Records are limited to 8 MiB per workspace.
 
@@ -90,6 +118,9 @@ Existing lightweight HTML string helpers are not a full HTML5 parser; using a br
 Focused checks:
 
 ```sh
-pnpm --filter @open-codesign/desktop exec vitest run src/main/web-research-network.test.ts src/main/web-research.test.ts src/main/exporter-ipc.test.ts
+pnpm --filter @open-codesign/shared exec vitest run src/config.test.ts src/web-search-settings.test.ts
+pnpm --filter @open-codesign/desktop exec vitest run src/main/web-search-settings.test.ts src/main/onboarding-ipc.test.ts src/main/web-research-network.test.ts src/main/web-research-run.test.ts src/main/keychain.test.ts src/main/onboarding/config-cache.test.ts
+pnpm --filter @open-codesign/desktop exec vitest run src/renderer/src/components/settings/WebSearchTab.test.tsx src/renderer/src/components/Settings.test.ts src/preload/web-search.test.ts
+pnpm --filter @open-codesign/desktop exec vitest run src/main/web-research.test.ts src/main/exporter-ipc.test.ts
 pnpm --filter @open-codesign/core exec vitest run src/tool-manifest.test.ts src/agent.test.ts
 ```

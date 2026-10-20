@@ -6,7 +6,7 @@ import {
   type StoredDesignSystem,
 } from '@open-codesign/shared';
 
-const IGNORED_DIRS = new Set([
+export const IGNORED_DIRS = new Set([
   '.git',
   '.idea',
   '.next',

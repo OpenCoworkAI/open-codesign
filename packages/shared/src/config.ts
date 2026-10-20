@@ -147,6 +147,7 @@ export const ImageGenerationSettingsSchema = z
     credentialMode: ImageGenerationCredentialModeSchema.default('inherit'),
     model: z.string().min(1).default('gpt-image-2'),
     baseUrl: z.string().url().optional(),
+    requestBase64: z.boolean().optional(),
     apiKey: SecretRef.optional(),
     quality: ImageGenerationQualitySchema.default('high'),
     size: ImageGenerationSizeSchema.default('1536x1024'),
@@ -181,6 +182,13 @@ export const ProviderEntrySchema = z
      * per endpoint. The UI surfaces this as a "Reasoning depth" dropdown.
      */
     reasoningLevel: ReasoningLevelSchema.optional(),
+    /**
+     * Context window, in tokens, of the models served through this provider.
+     * Overrides pi-ai's model catalog in core's `resolveContextWindow`; needed
+     * for local runtimes and relays whose windows the catalog does not know.
+     * The UI surfaces this as "Context window".
+     */
+    contextWindow: z.number().int().positive().optional(),
     capabilities: ProviderCapabilitiesSchema.optional(),
     /**
      * Per-provider opt-in to skip TLS certificate verification on outbound

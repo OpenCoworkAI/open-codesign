@@ -1,0 +1,46 @@
+diff --git a/dist/pptxgen.cjs.js b/dist/pptxgen.cjs.js
+index 55ae0b9eb49b1c87dc2ac2ec9d7c1fa215ddab8d..b3287011e893a0baeed6320fa75a47b67d3e0656 100644
+--- a/dist/pptxgen.cjs.js
++++ b/dist/pptxgen.cjs.js
+@@ -5960,7 +5960,7 @@ function genXmlTextRunProperties(opts, isDefault) {
+             runProps += `<a:effectLst>${createGlowElement(opts.glow, DEF_TEXT_GLOW)}</a:effectLst>`;
+         if (opts.fontFace) {
+             // NOTE: 'cs' = Complex Script, 'ea' = East Asian (use "-120" instead of "0" - per Issue #174); ea must come first (Issue #174)
+-            runProps += `<a:latin typeface="${opts.fontFace}" pitchFamily="34" charset="0"/><a:ea typeface="${opts.fontFace}" pitchFamily="34" charset="-122"/><a:cs typeface="${opts.fontFace}" pitchFamily="34" charset="-120"/>`;
++            runProps += `<a:latin typeface="${encodeXmlEntities(opts.fontFace)}" pitchFamily="34" charset="0"/><a:ea typeface="${encodeXmlEntities(opts.fontFace)}" pitchFamily="34" charset="-122"/><a:cs typeface="${encodeXmlEntities(opts.fontFace)}" pitchFamily="34" charset="-120"/>`;
+         }
+     }
+     // Hyperlink support
+@@ -6349,8 +6349,8 @@ function makeXmlContTypes(slides, slideLayouts, masterSlide) {
+     // STEP 2: Add presentation and slide master(s)/slide(s)
+     strXml += '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>';
+     strXml += '<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>';
++    strXml += '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>';
+     slides.forEach((slide, idx) => {
+-        strXml += `<Override PartName="/ppt/slideMasters/slideMaster${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>`;
+         strXml += `<Override PartName="/ppt/slides/slide${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
+         // Add charts if any
+         slide._relsChart.forEach(rel => {
+diff --git a/dist/pptxgen.es.js b/dist/pptxgen.es.js
+index cac9ba92a862c3e9e0e52c2319138d78596e5309..5e8818df6ec1410a0595a7756c30064cb49fc8ee 100644
+--- a/dist/pptxgen.es.js
++++ b/dist/pptxgen.es.js
+@@ -5958,7 +5958,7 @@ function genXmlTextRunProperties(opts, isDefault) {
+             runProps += `<a:effectLst>${createGlowElement(opts.glow, DEF_TEXT_GLOW)}</a:effectLst>`;
+         if (opts.fontFace) {
+             // NOTE: 'cs' = Complex Script, 'ea' = East Asian (use "-120" instead of "0" - per Issue #174); ea must come first (Issue #174)
+-            runProps += `<a:latin typeface="${opts.fontFace}" pitchFamily="34" charset="0"/><a:ea typeface="${opts.fontFace}" pitchFamily="34" charset="-122"/><a:cs typeface="${opts.fontFace}" pitchFamily="34" charset="-120"/>`;
++            runProps += `<a:latin typeface="${encodeXmlEntities(opts.fontFace)}" pitchFamily="34" charset="0"/><a:ea typeface="${encodeXmlEntities(opts.fontFace)}" pitchFamily="34" charset="-122"/><a:cs typeface="${encodeXmlEntities(opts.fontFace)}" pitchFamily="34" charset="-120"/>`;
+         }
+     }
+     // Hyperlink support
+@@ -6347,8 +6347,8 @@ function makeXmlContTypes(slides, slideLayouts, masterSlide) {
+     // STEP 2: Add presentation and slide master(s)/slide(s)
+     strXml += '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>';
+     strXml += '<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>';
++    strXml += '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>';
+     slides.forEach((slide, idx) => {
+-        strXml += `<Override PartName="/ppt/slideMasters/slideMaster${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>`;
+         strXml += `<Override PartName="/ppt/slides/slide${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
+         // Add charts if any
+         slide._relsChart.forEach(rel => {

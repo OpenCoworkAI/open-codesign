@@ -11,7 +11,7 @@
  * PDF exporter's discovery rules (no bundled Chromium — PRINCIPLES §1).
  */
 
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
@@ -27,6 +27,7 @@ import {
   resolveArtifactSourceReferencePath,
 } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
+import { inspectLayout, layoutFailureWarning } from './layout-probe';
 import { getLogger } from './logger';
 import { boundedPreview, collectVisibleEvidence, runPreviewSteps } from './preview-interactions';
 import { resolveSafeWorkspaceChildPath } from './workspace-reader';
@@ -180,7 +181,6 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
     });
 
     const previewFilePath = join(userDataDir, 'preview.html');
-    await writeFile(previewFilePath, html, 'utf8');
     const previewUrl = pathToFileURL(previewFilePath).href;
     let initialNavigation = true;
     if (hasSteps) {
@@ -201,7 +201,7 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
         }
         initialNavigation = false;
       }
-      void handlePreviewRequest(req, absWorkspace, previewFilePath);
+      void handlePreviewRequest(req, absWorkspace, previewFilePath, html);
     });
     await boundedPreview(
       page.goto(previewUrl, {
@@ -253,6 +253,15 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
       ...(steps !== undefined ? { steps } : {}),
       ...(reason ? { reason } : {}),
     };
+
+    // Layout findings are advice: a failed measurement is reported, never turned into a failed preview.
+    try {
+      const inspection = await inspectLayout(page, opts.signal);
+      if (inspection.issues.length > 0) result.layoutIssues = inspection.issues;
+      if (inspection.notes.length > 0) result.warnings = inspection.notes;
+    } catch (err) {
+      result.warnings = [layoutFailureWarning(err).message];
+    }
 
     if (opts.vision) {
       const png = await boundedPreview(
@@ -334,12 +343,9 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
         try {
           await boundedPreview(closing, 2000);
           if (report) {
-            report.warnings = [
-              `Graceful preview shutdown failed; isolated browser was terminated: ${error instanceof Error ? error.message : String(error)}`,
-            ];
-            getLogger('preview').warn('preview.cleanup.recovered', {
-              message: report.warnings[0],
-            });
+            const message = `Graceful preview shutdown failed; isolated browser was terminated: ${error instanceof Error ? error.message : String(error)}`;
+            report.warnings = [...(report.warnings ?? []), message];
+            getLogger('preview').warn('preview.cleanup.recovered', { message });
           }
         } catch (terminationError) {
           cleanupFailed(terminationError);
@@ -418,12 +424,35 @@ export async function isPreviewFileUrlAllowed(
   }
 }
 
+/**
+ * Sandboxed Chrome builds (Snap, Flatpak) get a private /tmp, so a harness file
+ * written under os.tmpdir() is invisible to them (ERR_FILE_NOT_FOUND). The
+ * harness document is therefore served from memory at its file:// URL, which
+ * keeps relative workspace assets and the file-URL allowlist working.
+ */
+export function isHarnessDocumentRequest(rawUrl: string, documentPath: string): boolean {
+  try {
+    return fileURLToPath(new URL(rawUrl)) === documentPath;
+  } catch {
+    return false;
+  }
+}
+
+export async function respondWithHarnessDocument(req: HTTPRequest, html: string): Promise<void> {
+  await req.respond({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
+}
+
 async function handlePreviewRequest(
   req: HTTPRequest,
   absWorkspace: string,
   previewFilePath: string,
+  html: string,
 ): Promise<void> {
   try {
+    if (isHarnessDocumentRequest(req.url(), previewFilePath)) {
+      await respondWithHarnessDocument(req, html);
+      return;
+    }
     if (!(await isPreviewFileUrlAllowed(req.url(), absWorkspace, previewFilePath))) {
       await req.abort('blockedbyclient');
       return;

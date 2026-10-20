@@ -28,7 +28,7 @@ Object.defineProperty(window, 'codesign', {
     } satisfies CodesignApi['sourceEdits'],
   },
 });
-await initI18n('en');
+await initI18n(new URLSearchParams(window.location.search).get('locale') ?? 'en');
 const design = await rpc<Design>('design');
 useCodesignStore.setState({
   currentDesignId: design.id,
