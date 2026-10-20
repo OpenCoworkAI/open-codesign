@@ -32,7 +32,8 @@
     "smoke": "tsx scripts/smoke-models.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "turbo run build && changeset publish"
+    "release": "turbo run build && changeset publish",
+    "cli": "tsx apps/cli/src/main.ts"
   },
   "pnpm": {
     "overrides": {

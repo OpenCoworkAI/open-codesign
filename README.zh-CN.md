@@ -326,6 +326,10 @@ Open CoDesign 在 [LINUX DO](https://linux.do/) 社区首发，感谢佬友们�
 
 ## 参与贡献
 
+需要脱离桌面窗口进行自动化时，可以使用 [Agent-native CLI](./apps/cli/README.md)
+检查环境、读取工作区设计状态和导出 HTML。在源码仓库根目录运行
+`pnpm --silent cli --help`，文档包含 Windows PowerShell 调用方式。
+
 请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。开始写代码前建议先开 issue，发 PR 前请先运行 `pnpm lint && pnpm typecheck && pnpm test`。
 
 ## 许可证

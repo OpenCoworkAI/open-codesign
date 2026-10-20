@@ -54,6 +54,31 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  apps/cli:
+    dependencies:
+      '@open-codesign/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@open-codesign/exporters':
+        specifier: workspace:*
+        version: link:../../packages/exporters
+      '@open-codesign/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      smol-toml:
+        specifier: ^1.9.0
+        version: 1.9.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@22.20.5)(happy-dom@20.9.0)(vite@8.0.10(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+
   apps/desktop:
     dependencies:
       '@babel/parser':
