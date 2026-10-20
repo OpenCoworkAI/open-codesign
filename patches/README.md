@@ -18,4 +18,6 @@ corepack pnpm@10.33.4 patch-commit <extracted-directory> --patches-dir patches
 corepack pnpm@10.33.4 --filter @open-codesign/exporters exec vitest run src/pptx-model.test.ts
 ```
 
-XML parsing uses the existing MIT-licensed `@xmldom/xmldom` 0.8.13 version as an explicit, test-only devDependency. It adds no shipped/runtime dependency.
+The root `pnpm.overrides` also removes `image-size` specifically from `pptxgenjs@4.0.1`. The published CJS and ESM entry points do not import it; their only `sizeOf` reference is inside a commented-out block. Removing this unused dependency avoids shipping the vulnerable 1.x parsers without forcing PptxGenJS onto a different major API. Recheck the override when upgrading PptxGenJS. Both entry points and image embedding are covered by the exporter tests.
+
+XML parsing uses MIT-licensed `@xmldom/xmldom` as an explicit, test-only devDependency. It adds no shipped/runtime dependency.
