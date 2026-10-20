@@ -1,4 +1,4 @@
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 export type DesignMdFindingSeverity = 'error' | 'warning' | 'info';
 
@@ -23,7 +23,8 @@ export interface DesignMdDocument {
 const FRONTMATTER_MAX_CHARS = 64 * 1024;
 const BODY_PROMPT_MAX_CHARS = 2000;
 
-const ALLOWED_TOP_LEVEL = new Set([
+/** The top-level fields, in the order the serializer writes them. */
+const FRONTMATTER_FIELDS = [
   'version',
   'name',
   'description',
@@ -32,7 +33,9 @@ const ALLOWED_TOP_LEVEL = new Set([
   'rounded',
   'spacing',
   'components',
-]);
+] as const;
+
+const ALLOWED_TOP_LEVEL: ReadonlySet<string> = new Set(FRONTMATTER_FIELDS);
 
 const TYPOGRAPHY_KEYS = new Set([
   'fontFamily',
@@ -148,8 +151,11 @@ function validateString(
 }
 
 function validateDimension(findings: DesignMdFinding[], value: unknown, path: string): void {
-  if (typeof value !== 'string' || !/^-?\d+(?:\.\d+)?(?:px|em|rem)$/.test(value)) {
-    findings.push(error(path, 'Expected a dimension with px, em, or rem unit'));
+  if (value === 0 || value === '0') return;
+  if (typeof value !== 'string' || !/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|em|rem)$/.test(value)) {
+    findings.push(
+      error(path, 'Expected 0 or a dimension with px, em, or rem unit, e.g. "0px" or "0.02em"'),
+    );
   }
 }
 
@@ -193,7 +199,14 @@ function validateTypography(findings: DesignMdFinding[], value: unknown): void {
   }
   for (const [tokenName, rawToken] of Object.entries(value)) {
     if (!isRecord(rawToken)) {
-      findings.push(error(`typography.${tokenName}`, 'Typography token must be an object'));
+      findings.push(
+        error(
+          `typography.${tokenName}`,
+          tokenName === 'fontFamily'
+            ? 'fontFamily belongs inside each named typography token, e.g. typography: { body: { fontFamily: "system-ui", fontSize: "16px" } }; move the existing font family into the relevant token objects and preserve their other values'
+            : 'Typography token must be an object, e.g. { fontFamily: "system-ui", fontSize: "16px" }; put descriptive prose in the Markdown body',
+        ),
+      );
       continue;
     }
     for (const key of Object.keys(rawToken)) {
@@ -271,16 +284,25 @@ function validateComponents(findings: DesignMdFinding[], value: unknown): void {
   for (const [componentName, rawComponent] of Object.entries(value)) {
     if (!isRecord(rawComponent)) {
       findings.push(
-        error(`components.${componentName}`, 'Component token group must be an object'),
+        error(
+          `components.${componentName}`,
+          'Component token group must be an object, e.g. { backgroundColor: "#ffffff", rounded: "8px" }; property values must be strings, with descriptions in the Markdown body',
+        ),
       );
       continue;
     }
     for (const [property, rawValue] of Object.entries(rawComponent)) {
       if (!COMPONENT_KEYS.has(property)) {
-        findings.push(
-          error(`components.${componentName}.${property}`, 'Unknown component property'),
-        );
-        continue;
+        // DESIGN.md alpha explicitly preserves unknown component properties with warnings.
+        // https://github.com/google-labs-code/design.md/blob/9bf8eae67128b6cc55ad9bf86665767deb4c11cd/docs/spec.md#consumer-behavior-for-unknown-content
+        if (typeof rawValue === 'string') {
+          findings.push({
+            severity: 'warning',
+            path: `components.${componentName}.${property}`,
+            message:
+              'Unknown component property preserved as an extension; portable properties: backgroundColor, textColor, typography, rounded, padding, size, height, width. Keep intentional extension semantics; put narrative descriptions in the Markdown body',
+          });
+        }
       }
       validateTokenReferenceOrString(findings, rawValue, `components.${componentName}.${property}`);
     }
@@ -317,7 +339,17 @@ export function validateDesignMd(raw: string): DesignMdFinding[] {
 
   for (const key of Object.keys(doc.frontmatter)) {
     if (!ALLOWED_TOP_LEVEL.has(key)) {
-      findings.push(error(key, `Unknown Google DESIGN.md top-level field "${key}"`));
+      const hint =
+        key === 'radius'
+          ? 'Prefer "rounded" for portable corner-radius tokens'
+          : key === 'shadows'
+            ? 'Describe shadows in the Markdown "Elevation & Depth" section for portability'
+            : 'Prefer supported token groups for portable design data';
+      findings.push({
+        severity: 'warning',
+        path: key,
+        message: `Unknown Google DESIGN.md top-level field "${key}" preserved as an extension; ${hint}. Existing data has not been renamed or removed`,
+      });
     }
   }
   validateString(findings, doc.frontmatter['name'], 'name', 'name is required');
@@ -342,11 +374,11 @@ export function formatDesignMdForPrompt(raw: string): string {
   return ['---', doc.frontmatterText.trimEnd(), '---', '', body].join('\n');
 }
 
-function orderedBodySections(doc: DesignMdDocument): DesignMdBodySection[] {
-  if (doc.bodySections.length === 0) return [];
+function orderedBodySections(sections: DesignMdBodySection[]): DesignMdBodySection[] {
+  if (sections.length === 0) return [];
   const known: DesignMdBodySection[] = [];
   const unknown: DesignMdBodySection[] = [];
-  for (const section of doc.bodySections) {
+  for (const section of sections) {
     const canonical = canonicalSectionHeading(section.heading);
     if (KNOWN_SECTION_INDEX.has(canonical)) known.push({ ...section, heading: canonical });
     else unknown.push(section);
@@ -370,7 +402,7 @@ function formatBodySectionsForPrompt(doc: DesignMdDocument): string {
       : doc.body;
   }
 
-  const rendered = orderedBodySections(doc).map(renderSection);
+  const rendered = orderedBodySections(doc.bodySections).map(renderSection);
   const full = rendered.join('\n\n');
   if (full.length <= BODY_PROMPT_MAX_CHARS) return full;
 
@@ -393,4 +425,34 @@ function formatBodySectionsForPrompt(doc: DesignMdDocument): string {
     break;
   }
   return `${out.join('\n\n')}${suffix}`;
+}
+
+/** The frontmatter fields `validateDesignMd` accepts, in the order they are written. */
+export interface DesignMdFrontmatter {
+  name: string;
+  version?: string;
+  description?: string;
+  colors?: Record<string, string>;
+  typography?: Record<string, Record<string, unknown>>;
+  rounded?: Record<string, string>;
+  spacing?: Record<string, string | number>;
+  components?: Record<string, Record<string, string>>;
+}
+
+/**
+ * Writes a DESIGN.md: the frontmatter in the canonical field order, then the body sections
+ * in the canonical section order. Strings such as `#1a1c1e` are quoted so they stay strings,
+ * and long values are not folded. `validateDesignMd` reports anything the fields get wrong.
+ */
+export function serializeDesignMd(input: {
+  frontmatter: DesignMdFrontmatter;
+  sections?: DesignMdBodySection[];
+}): string {
+  // yaml leaves out the fields that are undefined.
+  const fields = Object.fromEntries(FRONTMATTER_FIELDS.map((key) => [key, input.frontmatter[key]]));
+  const frontmatter = stringifyYaml(fields, { lineWidth: 0 }).trimEnd();
+  const body = orderedBodySections(input.sections ?? [])
+    .map(renderSection)
+    .join('\n\n');
+  return body === '' ? `---\n${frontmatter}\n---\n` : `---\n${frontmatter}\n---\n\n${body}\n`;
 }

@@ -40,29 +40,9 @@ function setting(value: PromptFeatureMode | PromptFeatureSetting): PromptFeature
   return value;
 }
 
-function featureMode(value: PromptFeatureMode | PromptFeatureSetting): PromptFeatureMode {
-  return setting(value).mode;
-}
-
 function describeSetting(name: string, value: PromptFeatureSetting): string {
   const reason = value.reason ? ` — ${value.reason}` : '';
   return `- ${name}: ${value.mode} (${value.provenance}, ${value.confidence})${reason}`;
-}
-
-function workflowForFeatures(profile: PromptFeatureProfile | undefined): string {
-  if (profile !== undefined && featureMode(profile.tweaks) === 'disabled') {
-    return WORKFLOW.replace(
-      '8. **Expose tweaks selectively** — call `tweaks()` only when the user asked for controls, answered that controls would help, or the artifact has 2-5 obvious high-leverage values. Skip tweak work for narrow edits, throwaway sketches, or when the user declines; they can ask for controls in a later turn.',
-      '8. **Skip tweaks** — Do not create EDITMODE tweak controls or call `tweaks()` in this turn. The user can ask for controls in a later turn.',
-    );
-  }
-  if (profile !== undefined && featureMode(profile.tweaks) === 'enabled') {
-    return WORKFLOW.replace(
-      '8. **Expose tweaks selectively** — call `tweaks()` only when the user asked for controls, answered that controls would help, or the artifact has 2-5 obvious high-leverage values. Skip tweak work for narrow edits, throwaway sketches, or when the user declines; they can ask for controls in a later turn.',
-      '8. **Expose tweaks** — Create 2-5 high-leverage EDITMODE controls and call `tweaks()` after the first complete pass.',
-    );
-  }
-  return WORKFLOW;
 }
 
 function featureRoutingSection(profile: PromptFeatureProfile | undefined): string | null {
@@ -76,17 +56,19 @@ function featureRoutingSection(profile: PromptFeatureProfile | undefined): strin
   lines.push(describeSetting('reusableSystem', reusableSystem));
   lines.push('');
   if (tweaks.mode === 'disabled' && tweaks.provenance === 'explicit') {
-    lines.push('The user explicitly declined EDITMODE tweak controls for this run.');
+    lines.push(
+      'The user explicitly declined EDITMODE tweak controls. Do not create controls or call `tweaks()` this turn.',
+    );
   } else if (tweaks.mode === 'disabled') {
     lines.push(
-      'Tweak controls look unnecessary from context; keep them available only if they clearly help.',
+      'Tweak controls look unnecessary from context; this is a soft preference, not a prohibition.',
     );
   } else if (tweaks.mode === 'enabled') {
     lines.push(
-      'Create 2-5 high-leverage EDITMODE controls for the artifact and call `tweaks()` before `done(path)`.',
+      'Expose useful source-backed EDITMODE decisions after the main behavior works, then call `tweaks()` when available.',
     );
   } else {
-    lines.push('When available, decide agentically whether tweak controls improve iteration.');
+    lines.push('Use tweak controls only when they materially improve iteration.');
   }
   if (bitmapAssets.mode === 'disabled' && bitmapAssets.provenance === 'explicit') {
     lines.push('The user explicitly declined generated bitmap assets for this run.');
@@ -111,7 +93,7 @@ function featureRoutingSection(profile: PromptFeatureProfile | undefined): strin
 export function composeFull(mode: PromptMode, featureProfile?: PromptFeatureProfile): string[] {
   const sections: string[] = [
     IDENTITY,
-    workflowForFeatures(featureProfile),
+    WORKFLOW,
     OUTPUT_RULES,
     DESIGN_METHODOLOGY,
     PRE_FLIGHT,

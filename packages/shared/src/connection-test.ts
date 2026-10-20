@@ -65,6 +65,8 @@ export interface ConnectionTestError {
   code: 'IPC_BAD_INPUT' | '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE' | 'INVOKE_DIVERGED';
   message: string;
   hint: string;
+  /** i18n key for a provider-specific hint. The renderer translates it. */
+  hintKey?: string;
   compatibility?: 'incompatible' | 'diverges';
   reasonCategory?: DiagnosticCategory;
   invokeParity?: InvokeParity;

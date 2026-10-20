@@ -28,6 +28,7 @@ import {
 
 export interface EffectiveProviderContract {
   providerId: string;
+  providerName?: string;
   modelId: string;
   wire: WireApi;
   storedBaseUrl: string;
@@ -46,6 +47,7 @@ export interface EffectiveProviderContract {
   authMode: InvokeAuthMode;
   overridden: boolean;
   reasoningLevel: ActiveModelResolution['reasoningLevel'];
+  contextWindow: ActiveModelResolution['contextWindow'];
 }
 
 export function canonicalInvokeBaseUrl(
@@ -81,6 +83,7 @@ export function buildEffectiveProviderContract(
   resolved: ProviderModelResolution,
   apiKey: string,
   overridden: boolean,
+  providerName?: string,
 ): EffectiveProviderContract {
   const storedBaseUrl = resolved.baseUrl ?? '';
   const canonical = canonicalBaseUrl(storedBaseUrl, resolved.wire);
@@ -94,6 +97,7 @@ export function buildEffectiveProviderContract(
   }
   return {
     providerId: resolved.model.provider,
+    ...(providerName !== undefined ? { providerName } : {}),
     modelId: resolved.model.modelId,
     wire: resolved.wire,
     storedBaseUrl,
@@ -112,6 +116,7 @@ export function buildEffectiveProviderContract(
     authMode: invokeAuthMode(resolved.wire, apiKey),
     overridden,
     reasoningLevel: resolved.reasoningLevel,
+    contextWindow: resolved.contextWindow,
   };
 }
 
@@ -134,7 +139,12 @@ export async function resolveEffectiveInvokeContract(input: {
       active.allowKeyless,
       creds,
     );
-    return buildEffectiveProviderContract(active, apiKey, active.overridden);
+    return buildEffectiveProviderContract(
+      active,
+      apiKey,
+      active.overridden,
+      cfg.providers[active.model.provider]?.name,
+    );
   }
   const providerId = input.providerId;
   if (providerId === undefined || providerId.length === 0) {
@@ -145,7 +155,7 @@ export async function resolveEffectiveInvokeContract(input: {
   }
   const resolved = resolveProviderModel(cfg, providerId);
   const apiKey = await resolveCredentialForProvider(providerId, resolved.allowKeyless, creds);
-  return buildEffectiveProviderContract(resolved, apiKey, false);
+  return buildEffectiveProviderContract(resolved, apiKey, false, cfg.providers[providerId]?.name);
 }
 
 export function connectionErrorFromUnknown(err: unknown): ConnectionTestError {

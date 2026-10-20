@@ -26,6 +26,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useMemo } from 'react';
+import { ErrorDetails } from './ErrorDetails';
 
 export interface WorkingCardProps {
   calls: ChatToolCallPayload[];
@@ -689,7 +690,7 @@ function ActivityRowView({ row }: { row: ActivityRow }) {
       </div>
       {row.errorText ? (
         <div className="mt-[var(--space-1)] pl-[calc(20px+var(--space-2))] text-[11px] leading-[1.35] text-[var(--color-error)] break-words">
-          {row.errorText}
+          <ErrorDetails message={row.errorText} />
         </div>
       ) : null}
     </div>

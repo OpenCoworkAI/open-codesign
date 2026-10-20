@@ -5,6 +5,7 @@ import path from 'node:path';
 import { type DesignSessionBriefV1, SessionManager } from '@open-codesign/core';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  appendSessionActiveMessage,
   appendSessionChatMessage,
   appendSessionComment,
   appendSessionDesignBrief,
@@ -12,6 +13,7 @@ import {
   appendSessionToolStatus,
   CHAT_TOOL_STATUS_CUSTOM_TYPE,
   CONTEXT_BRIEF_CUSTOM_TYPE,
+  listSessionActiveMessages,
   listSessionChatMessages,
   listSessionComments,
   markSessionCommentsApplied,
@@ -50,6 +52,55 @@ function brief(goal: string): DesignSessionBriefV1 {
 }
 
 describe('session design brief storage', () => {
+  it('persists pending receipts without sending them as context and replays delivered chat exactly once', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-active-message-'));
+    try {
+      const db = initSnapshotsDb(path.join(root, 'design-store.json'));
+      const design = createDesign(db, 'Messages');
+      updateDesignWorkspace(db, design.id, root);
+      const opts = { db, sessionDir: db.sessionDir };
+      const pending = {
+        schemaVersion: 1 as const,
+        designId: design.id,
+        generationId: 'run',
+        messageId: 'one',
+        mode: 'follow-up' as const,
+        text: 'Keep this request',
+        status: 'pending' as const,
+        createdAt: new Date().toISOString(),
+      };
+      appendSessionActiveMessage(opts, pending);
+      expect(listSessionChatMessages(opts, design.id)).toEqual([]);
+      expect(listSessionActiveMessages(opts, design.id)).toEqual([pending]);
+      appendSessionChatMessage(opts, {
+        designId: design.id,
+        kind: 'assistant_text',
+        payload: { text: 'Current turn' },
+      });
+      appendSessionActiveMessage(opts, { ...pending, status: 'delivered' });
+      appendSessionActiveMessage(opts, { ...pending, status: 'delivered' });
+      appendSessionActiveMessage(opts, {
+        ...pending,
+        messageId: 'two',
+        text: 'Unsent',
+        status: 'not-delivered',
+      });
+      const reopened = initSnapshotsDb(path.join(root, 'design-store.json'));
+      const rows = listSessionChatMessages(
+        { db: reopened, sessionDir: reopened.sessionDir },
+        design.id,
+      );
+      expect(rows.map((row) => row.kind)).toEqual(['assistant_text', 'user']);
+      expect(rows[1]?.payload).toMatchObject({ text: 'Keep this request', activeMessageId: 'one' });
+      expect(rows.map((row) => row.seq)).toEqual([0, 1]);
+      expect(listSessionActiveMessages(opts, design.id).map((row) => row.status)).toEqual([
+        'delivered',
+        'not-delivered',
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it('touches design activity when appending chat and tool events', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codesign-session-chat-'));
     vi.useFakeTimers();
@@ -379,10 +430,16 @@ describe('session design brief storage', () => {
         outerHTML: '<section id="hero">Hello</section>',
         rect: { top: 1, left: 2, width: 3, height: 4 },
         text: 'Make it bolder',
+        sourcePath: 'screens/tablet.html',
       });
 
       expect(listSessionComments(opts, design.id)).toMatchObject([
-        { id: row.id, status: 'pending', text: 'Make it bolder' },
+        {
+          id: row.id,
+          status: 'pending',
+          text: 'Make it bolder',
+          sourcePath: 'screens/tablet.html',
+        },
       ]);
 
       expect(

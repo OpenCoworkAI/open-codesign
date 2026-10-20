@@ -32,6 +32,7 @@ export type DiagnosticCategory =
   | 'relay-stream-cutoff'
   | 'gateway-waf-blocked'
   | 'generation-timeout'
+  | 'context-window-exceeded'
   | 'model-discovery-degraded'
   | 'invoke-contract-diverged'
   | 'transport-interrupted'
@@ -363,6 +364,21 @@ export function diagnoseGenerateFailure(ctx: GenerateFailureContext): Diagnostic
           kind: 'openSettings',
           label: 'diagnostics.fix.adjustGenerationTimeout',
           settingsTab: 'advanced',
+        },
+      }),
+    ];
+  }
+
+  if (code === 'GENERATION_CONTEXT_EXCEEDED') {
+    return [
+      h({
+        cause: 'diagnostics.cause.contextWindowExceeded',
+        category: 'context-window-exceeded',
+        severity: 'error',
+        suggestedFix: {
+          kind: 'openSettings',
+          label: 'diagnostics.fix.adjustContextWindow',
+          settingsTab: 'models',
         },
       }),
     ];

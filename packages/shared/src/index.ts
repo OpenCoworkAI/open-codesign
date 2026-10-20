@@ -1,8 +1,27 @@
 import { z } from 'zod';
 
+export {
+  ActiveRunMessageInputV1,
+  ActiveRunMessageV1,
+  ListActiveMessagesInputV1,
+} from './active-messages';
+export { AskCancelledV1 } from './ask';
+export {
+  CommentApplyResultV1,
+  CommentContentExpectations,
+  commentContentFingerprint,
+} from './comment-content';
+export {
+  SaveWebSearchSettingsInput,
+  WEB_SEARCH_SETTINGS_CHANNELS,
+  WebSearchSettingsState,
+  WebSearchTestResult,
+} from './web-search-settings';
+
 export const ProviderId = z.enum([
   'anthropic',
   'openai',
+  'atlascloud',
   'google',
   'openrouter',
   'groq',
@@ -31,11 +50,15 @@ export {
   type DesignMdDocument,
   type DesignMdFinding,
   type DesignMdFindingSeverity,
+  type DesignMdFrontmatter,
   formatDesignMdForPrompt,
   parseDesignMd,
+  serializeDesignMd,
   validateDesignMd,
 } from './design-md';
+export * from './source-edits';
 export { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from './source-entries';
+export { inspectTweakSource, type TweakSourceState } from './tweak-source';
 
 export const DesignParam = z.discriminatedUnion('type', [
   z.object({
@@ -164,6 +187,7 @@ export type ElementSelectionRect = z.infer<typeof ElementSelectionRect>;
 
 export const SelectedElement = z
   .object({
+    sourcePath: z.string().min(1).optional(),
     selector: z.string().min(1),
     tag: z.string().min(1),
     outerHTML: z.string(),
@@ -373,6 +397,14 @@ export { ERROR_CODE_DESCRIPTIONS, ERROR_CODES } from './error-codes';
 // from this barrel — it's main-process only. Import from
 // '@open-codesign/shared/fingerprint' directly.
 export type { FingerprintInput } from './fingerprint';
+export {
+  isLiteLlmConnectionTarget,
+  LITELLM_CONNECTION_HINT_KEYS,
+  type LiteLlmTargetInput,
+  liteLlmEndpointPreset,
+  liteLlmHintKeyForHttpStatus,
+  liteLlmHintKeyForTransportError,
+} from './litellm-hints';
 export type { ProxyPresetId } from './proxy-presets';
 export {
   getPresetById,
@@ -615,3 +647,15 @@ export {
   replaceEditmodeBlock,
   replaceTweakSchema,
 } from './editmode';
+
+export {
+  formatUsageCost,
+  formatUsageTokens,
+  nextLocalMidnight,
+  summarizeUsageBudget,
+  type UsageBudget,
+  type UsageRecord,
+  type UsageTotals,
+} from './usage-budget';
+
+export * from './web-research';

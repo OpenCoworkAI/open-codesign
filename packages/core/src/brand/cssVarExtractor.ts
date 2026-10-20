@@ -49,16 +49,20 @@ function looksLikeLength(value: string): boolean {
 }
 
 // Extract all CSS custom-property declarations from `:root` or `[data-theme]`
-// blocks in the given CSS source text.
-function extractDeclarations(source: string): Array<{ prop: string; value: string }> {
-  const results: Array<{ prop: string; value: string }> = [];
+// blocks in the given CSS source text. `block` is the selector of a `[data-theme]`
+// block and stays unset for `:root`, the default.
+function extractDeclarations(
+  source: string,
+): Array<{ prop: string; value: string; block?: string }> {
+  const results: Array<{ prop: string; value: string; block?: string }> = [];
 
-  const blockRe = /(?::root|\[data-theme[^\]]*\])\s*\{([^}]*)\}/g;
+  const blockRe = /(:root|\[data-theme[^\]]*\])\s*\{([^}]*)\}/g;
   const blockMatches = [...source.matchAll(blockRe)];
 
   for (const blockMatch of blockMatches) {
-    const body = blockMatch[1];
-    if (!body) continue;
+    const selector = blockMatch[1];
+    const body = blockMatch[2];
+    if (!selector || !body) continue;
 
     const declRe = /--([\w-]+)\s*:\s*([^;]+);/g;
     const declMatches = [...body.matchAll(declRe)];
@@ -66,7 +70,9 @@ function extractDeclarations(source: string): Array<{ prop: string; value: strin
     for (const dm of declMatches) {
       const prop = dm[1]?.trim();
       const value = dm[2]?.trim();
-      if (prop && value) results.push({ prop, value });
+      if (prop && value) {
+        results.push({ prop, value, ...(selector === ':root' ? {} : { block: selector }) });
+      }
     }
   }
 
@@ -78,7 +84,7 @@ export async function extractFromCssVars(filePath: string): Promise<DesignToken[
   const declarations = extractDeclarations(source);
   const tokens: DesignToken[] = [];
 
-  for (const { prop, value } of declarations) {
+  for (const { prop, value, block } of declarations) {
     const tokenType = inferType(prop, value);
     if (!tokenType) continue;
 
@@ -89,6 +95,7 @@ export async function extractFromCssVars(filePath: string): Promise<DesignToken[
       value,
       origin: 'css-vars',
       group: prop.split('-').slice(0, 3).join('-'),
+      ...(block !== undefined ? { block } : {}),
     });
   }
 

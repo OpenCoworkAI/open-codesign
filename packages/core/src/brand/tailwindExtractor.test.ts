@@ -104,6 +104,27 @@ describe('extractFromTailwindConfig()', () => {
     expect(names).toContain('color-brand-primary');
   });
 
+  it('classifies v4 --font-* theme variables as font families', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tw-extract-'));
+    const file = join(dir, 'tailwind.css');
+    await writeFile(
+      file,
+      [
+        '@theme {',
+        '  --font-sans: Inter, ui-sans-serif, system-ui;',
+        '  --font-display-serif: "Fraunces", serif;',
+        '  --font-sans--font-feature-settings: "cv11";',
+        '  --font-weight-bold: 700;',
+        '}',
+      ].join('\n'),
+    );
+    const tokens = await extractFromTailwindConfig(file);
+    expect(tokens.map((t) => [t.name, t.type, t.value])).toEqual([
+      ['font-sans', 'fontFamily', 'Inter, ui-sans-serif, system-ui'],
+      ['font-display-serif', 'fontFamily', '"Fraunces", serif'],
+    ]);
+  });
+
   it('ignores `}` inside a CSS comment (v4)', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'tw-extract-'));
     const file = join(dir, 'tailwind.css');

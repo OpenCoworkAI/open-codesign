@@ -19,6 +19,12 @@ describe('tool-manifest', () => {
       'generate_image_asset',
       'tweaks',
       'ask',
+      'web_search',
+      'web_fetch',
+      'research_evidence',
+      'research_slide',
+      'research_export',
+      'research_records',
     ]);
     const currentNames = TOOL_MANIFEST_V1.tools
       .filter((tool) => tool.status === 'current')

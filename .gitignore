@@ -50,6 +50,7 @@ npm-debug.log*
 pnpm-debug.log*
 
 # Local data
+.Codex/workspace/
 .claude/workspace/
 .claude/worktrees/
 *.local

@@ -5,6 +5,7 @@ import type { AskRequest } from '../../../preload/index';
 import {
   advanceAskQueue,
   answerValueForImportedFiles,
+  dismissAskRequest,
   enqueueAskRequest,
   enqueueAskRequests,
   sanitizeInlineSvg,
@@ -47,6 +48,27 @@ describe('sanitizeInlineSvg', () => {
 });
 
 describe('AskModal queue helpers', () => {
+  it('dismisses only the matching active request and advances without answering', () => {
+    const first = request('ask-1');
+    const second = request('ask-2');
+    expect(dismissAskRequest({ active: first, queue: [second] }, first)).toEqual({
+      active: second,
+      queue: [],
+    });
+  });
+
+  it('preserves active answer state when a queued or unrelated request is cancelled', () => {
+    const first = request('ask-1');
+    const second = request('ask-2');
+    const third = request('ask-3');
+    const state = { active: first, queue: [second, third] };
+    const next = dismissAskRequest(state, second);
+    expect(next.active).toBe(first);
+    expect(next.queue).toEqual([third]);
+    expect(dismissAskRequest(state, { ...first, sessionId: 'other-session' })).toBe(state);
+    expect(dismissAskRequest(state, request('stale'))).toBe(state);
+  });
+
   it('queues concurrent requests without replacing the active request', () => {
     const first = request('ask-1');
     const second = request('ask-2');

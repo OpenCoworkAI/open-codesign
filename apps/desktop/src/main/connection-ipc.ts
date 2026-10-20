@@ -11,7 +11,10 @@ import {
   ERROR_CODES,
   ensureVersionedBase,
   inferenceEndpointUrl,
+  isLiteLlmConnectionTarget,
   isSupportedOnboardingProvider,
+  liteLlmHintKeyForHttpStatus,
+  liteLlmHintKeyForTransportError,
   modelsEndpointUrl,
   modelsProbeRelationForWire,
   type ProviderEntry,
@@ -60,9 +63,11 @@ const TEST_ENDPOINT_FIELDS = [
   'wire',
   'baseUrl',
   'apiKey',
+  'requiresApiKey',
   'httpHeaders',
   'allowPrivateNetwork',
   'tlsRejectUnauthorized',
+  'presetId',
 ] as const;
 
 function assertKnownFields(
@@ -89,6 +94,8 @@ export type ModelsListResponse =
       code: 'IPC_BAD_INPUT' | 'NETWORK' | 'HTTP' | 'PARSE';
       message: string;
       hint: string;
+      /** i18n key for a provider-specific hint. The renderer translates it. */
+      hintKey?: string;
     };
 
 function parseConnectionTestPayload(raw: unknown): ConnectionTestPayloadV1 {
@@ -340,6 +347,22 @@ function classifyNetworkError(err: unknown): { code: ConnectionTestError['code']
   };
 }
 
+function withHintKey<T extends object>(
+  body: T,
+  hintKey: string | undefined,
+): T & { hintKey?: string } {
+  if (hintKey === undefined) return body;
+  return { ...body, hintKey };
+}
+
+function liteLlmHttpHint(litellm: boolean, status: number, baseUrl?: string): string | undefined {
+  return litellm ? liteLlmHintKeyForHttpStatus(status, baseUrl) : undefined;
+}
+
+function liteLlmTransportHint(litellm: boolean, err: unknown): string | undefined {
+  return litellm ? liteLlmHintKeyForTransportError(err) : undefined;
+}
+
 // Provider /models endpoints normally return in <1s. Anything past 10s means the
 // host is unreachable or stuck — better to surface a clear NETWORK error than to
 // pin the renderer's "Test connection" spinner forever.
@@ -475,6 +498,8 @@ export interface ActiveProviderCredentials {
   builtin?: boolean;
   /** Opt-in TLS verification bypass; only honored when `builtin === false`. */
   tlsRejectUnauthorized?: boolean;
+  /** Display name, used to recognize presets that are stored as custom providers. */
+  name?: string;
 }
 
 function invokeCredentialDeps() {
@@ -502,6 +527,7 @@ function contractFromCredentials(creds: ActiveProviderCredentials): EffectivePro
   const allowKeyless = creds.apiKey.length === 0;
   return {
     providerId: creds.provider,
+    ...(creds.name !== undefined ? { providerName: creds.name } : {}),
     modelId: 'probe',
     wire: creds.wire,
     storedBaseUrl: creds.baseUrl,
@@ -520,6 +546,7 @@ function contractFromCredentials(creds: ActiveProviderCredentials): EffectivePro
     authMode: invokeAuthMode(creds.wire, creds.apiKey),
     overridden: false,
     reasoningLevel: undefined,
+    contextWindow: undefined,
   };
 }
 
@@ -584,7 +611,21 @@ export async function testInvokeContract(
       contract.canonicalBaseUrl,
       contract.authHeaders,
     );
-    return classifyInvokeAndModelsProbes(contract, models, invoke);
+    const result = classifyInvokeAndModelsProbes(contract, models, invoke);
+    if (result.ok) return result;
+    const litellm = isLiteLlmConnectionTarget({
+      providerId: contract.providerId,
+      name: contract.providerName,
+      baseUrl: contract.storedBaseUrl,
+    });
+    return withHintKey(
+      result,
+      invoke.kind === 'http'
+        ? liteLlmHttpHint(litellm, invoke.status, contract.storedBaseUrl)
+        : invoke.kind === 'network'
+          ? liteLlmTransportHint(litellm, invoke.error ?? new Error(invoke.message))
+          : undefined,
+    );
   });
 }
 
@@ -666,11 +707,12 @@ function invokeFailureFields(
       reasonCategory: connectionCategoryForStatus(invoke.status, canonicalBaseUrl),
     };
   }
-  const err = new Error(invoke.kind === 'network' ? invoke.message : 'Network request failed');
+  const message = invoke.kind === 'network' ? invoke.message : 'Network request failed';
+  const err = invoke.kind === 'network' ? (invoke.error ?? new Error(message)) : new Error(message);
   const { code, hint } = classifyNetworkError(err);
   return {
     code,
-    message: err.message,
+    message,
     hint,
     reasonCategory: code === 'ECONNREFUSED' ? 'network-unreachable' : 'unknown',
   };
@@ -681,7 +723,11 @@ async function probeGet(url: string, headers: Record<string, string>): Promise<P
   try {
     res = await fetchWithTimeout(url, { method: 'GET', headers });
   } catch (err) {
-    return { kind: 'network', message: err instanceof Error ? err.message : String(err) };
+    return {
+      kind: 'network',
+      message: err instanceof Error ? err.message : String(err),
+      error: err,
+    };
   }
   if (res.ok) return { kind: 'pass' };
   return { kind: 'http', status: res.status };
@@ -690,7 +736,7 @@ async function probeGet(url: string, headers: Record<string, string>): Promise<P
 type ProbeResult =
   | { kind: 'pass' }
   | { kind: 'http'; status: number }
-  | { kind: 'network'; message: string };
+  | { kind: 'network'; message: string; error?: unknown };
 
 /**
  * POST a minimal inference request to verify the endpoint is alive when GET
@@ -738,7 +784,11 @@ async function probeInferenceEndpoint(
       body,
     });
   } catch (err) {
-    return { kind: 'network', message: err instanceof Error ? err.message : String(err) };
+    return {
+      kind: 'network',
+      message: err instanceof Error ? err.message : String(err),
+      error: err,
+    };
   }
   if (res.ok) return { kind: 'pass' };
   if (res.status === 404 || res.status >= 500) return { kind: 'http', status: res.status };
@@ -979,7 +1029,7 @@ function resolveApiKeyForListing(
   }
 }
 
-async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListResponse> {
+export async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListResponse> {
   const resolved = resolveProviderForListing(raw);
   if ('ok' in resolved) return resolved;
   const { providerId, entry } = resolved;
@@ -1002,11 +1052,22 @@ async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListRe
   const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.httpHeaders, entry.baseUrl);
 
   const bypass = entry.builtin !== true && entry.tlsRejectUnauthorized === true;
+  const litellm = isLiteLlmConnectionTarget({
+    providerId,
+    name: entry.name,
+    baseUrl: entry.baseUrl,
+  });
   const result = await withTlsBypass(bypass, () =>
-    fetchModelListResponse(url, headers, {
-      message: 'Unexpected models response shape',
-      hint: 'Check provider /models endpoint compatibility',
-    }),
+    fetchModelListResponse(
+      url,
+      headers,
+      {
+        message: 'Unexpected models response shape',
+        hint: 'Check provider /models endpoint compatibility',
+      },
+      litellm,
+      entry.baseUrl,
+    ),
   );
   if (result.ok) setCachedModels(providerId, entry.baseUrl, apiKey, result.models);
   return result;
@@ -1016,26 +1077,34 @@ async function fetchModelListResponse(
   url: string,
   headers: Record<string, string>,
   shapeError: { message: string; hint: string },
+  litellm = false,
+  baseUrl?: string,
 ): Promise<ModelsListResponse> {
   let res: Response;
   try {
     res = await fetchWithTimeout(url, { method: 'GET', headers });
   } catch (err) {
-    return {
-      ok: false,
-      code: 'NETWORK',
-      message: err instanceof Error ? err.message : String(err),
-      hint: 'Cannot reach provider /models endpoint',
-    };
+    return withHintKey(
+      {
+        ok: false as const,
+        code: 'NETWORK' as const,
+        message: err instanceof Error ? err.message : String(err),
+        hint: 'Cannot reach provider /models endpoint',
+      },
+      liteLlmTransportHint(litellm, err),
+    );
   }
 
   if (!res.ok) {
-    return {
-      ok: false,
-      code: 'HTTP',
-      message: `HTTP ${res.status}`,
-      hint: 'Model list request failed',
-    };
+    return withHintKey(
+      {
+        ok: false as const,
+        code: 'HTTP' as const,
+        message: `HTTP ${res.status}`,
+        hint: 'Model list request failed',
+      },
+      liteLlmHttpHint(litellm, res.status, baseUrl),
+    );
   }
 
   let body: unknown;
@@ -1108,14 +1177,21 @@ export async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndp
       fetchWithTimeout(url, { method: 'GET', headers }),
     );
   } catch (err) {
-    return {
-      ok: false,
-      error: 'network',
-      message: err instanceof Error ? err.message : 'Network request failed',
-    };
+    return withHintKey(
+      {
+        ok: false as const,
+        error: 'network',
+        message: err instanceof Error ? err.message : 'Network request failed',
+      },
+      liteLlmTransportHint(endpointTargetsLiteLlm(payload), err),
+    );
   }
 
-  const statusError = classifyTestEndpointStatus(res.status);
+  const statusError = classifyTestEndpointStatus(
+    res.status,
+    endpointTargetsLiteLlm(payload),
+    payload.baseUrl,
+  );
   if (statusError !== null) return statusError;
 
   let body: unknown;
@@ -1135,17 +1211,31 @@ export async function handleConfigV1TestEndpoint(raw: unknown): Promise<TestEndp
   return { ok: true, modelCount: ids.length, models: ids };
 }
 
-function classifyTestEndpointStatus(status: number): TestEndpointResponse | null {
+function classifyTestEndpointStatus(
+  status: number,
+  litellm: boolean,
+  baseUrl: string,
+): TestEndpointResponse | null {
   if (status === 401 || status === 403) {
-    return { ok: false, error: 'auth', message: `HTTP ${status}` };
+    return withHintKey(
+      { ok: false as const, error: 'auth', message: `HTTP ${status}` },
+      liteLlmHttpHint(litellm, status, baseUrl),
+    );
   }
   if (status === 404) {
-    return { ok: false, error: 'not-a-model-endpoint', message: 'HTTP 404' };
+    return withHintKey(
+      { ok: false as const, error: 'not-a-model-endpoint', message: 'HTTP 404' },
+      liteLlmHttpHint(litellm, status, baseUrl),
+    );
   }
   if (status < 200 || status >= 300) {
     return { ok: false, error: `http-${status}`, message: `HTTP ${status}` };
   }
   return null;
+}
+
+function endpointTargetsLiteLlm(payload: TestEndpointPayload): boolean {
+  return isLiteLlmConnectionTarget({ presetId: payload.presetId, baseUrl: payload.baseUrl });
 }
 
 export async function handleOllamaV1Probe(raw: unknown): Promise<OllamaProbeResponse> {
@@ -1259,14 +1349,16 @@ interface TestEndpointPayload {
   wire: WireApi;
   baseUrl: string;
   apiKey: string;
+  requiresApiKey?: boolean;
   httpHeaders?: Record<string, string>;
   allowPrivateNetwork?: boolean;
   tlsRejectUnauthorized?: boolean;
+  presetId?: 'litellm';
 }
 
 export type TestEndpointResponse =
   | { ok: true; modelCount: number; models: string[] }
-  | { ok: false; error: string; message: string };
+  | { ok: false; error: string; message: string; hintKey?: string };
 
 function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   if (typeof raw !== 'object' || raw === null) {
@@ -1284,13 +1376,20 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
     throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const trimmedApiKey = apiKey.trim();
-  if (trimmedApiKey.length === 0) {
+  const requiresApiKey = r['requiresApiKey'];
+  if (requiresApiKey !== undefined && typeof requiresApiKey !== 'boolean') {
+    throw new CodesignError('requiresApiKey must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  if (trimmedApiKey.length === 0 && requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
+  const presetId = parseLiteLlmPresetId(r['presetId']);
   const out: TestEndpointPayload = {
     wire,
     baseUrl: parseHttpBaseUrl(baseUrl, 'baseUrl'),
     apiKey: trimmedApiKey,
+    ...(requiresApiKey !== undefined ? { requiresApiKey } : {}),
+    ...(presetId !== undefined ? { presetId } : {}),
   };
   if (r['allowPrivateNetwork'] !== undefined) {
     if (typeof r['allowPrivateNetwork'] !== 'boolean') {
@@ -1307,6 +1406,14 @@ function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
   const headers = parseTestEndpointHttpHeaders(r['httpHeaders']);
   if (headers !== undefined) out.httpHeaders = headers;
   return out;
+}
+
+function parseLiteLlmPresetId(value: unknown): 'litellm' | undefined {
+  if (value === undefined) return undefined;
+  if (value !== 'litellm') {
+    throw new CodesignError('presetId must be "litellm"', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  return 'litellm';
 }
 
 function parseTestEndpointHttpHeaders(value: unknown): Record<string, string> | undefined {

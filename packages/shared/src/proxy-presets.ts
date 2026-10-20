@@ -39,6 +39,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay',
   },
   {
+    id: 'requesty',
+    label: 'Requesty',
+    provider: 'openai',
+    baseUrl: 'https://router.requesty.ai/v1',
+    notes: 'Multi-model relay',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
@@ -51,6 +58,13 @@ export const PROXY_PRESETS = [
     provider: 'openai',
     baseUrl: 'http://localhost:3000/v1',
     notes: 'Edit URL to your deployment',
+  },
+  {
+    id: 'litellm',
+    label: 'LiteLLM Gateway',
+    provider: 'openai',
+    baseUrl: 'http://localhost:4000/v1',
+    notes: 'Self-hosted OpenAI-compatible gateway; key optional',
   },
   {
     id: 'cli-proxy-api',

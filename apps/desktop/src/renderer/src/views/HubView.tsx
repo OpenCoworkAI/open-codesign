@@ -1,3 +1,4 @@
+import type { LocalizedExample } from '@open-codesign/templates';
 import { useEffect, useState } from 'react';
 import { useCodesignStore } from '../store';
 import { DesignSystemsTab } from './hub/DesignSystemsTab';
@@ -6,7 +7,7 @@ import { RecentTab } from './hub/RecentTab';
 import { YourDesignsTab } from './hub/YourDesignsTab';
 
 export interface HubViewProps {
-  onUseExamplePrompt?: (prompt: string) => void;
+  onUseExamplePrompt?: (example: LocalizedExample) => void | Promise<void>;
 }
 
 // Once a tab is visited we keep it mounted (toggled via `hidden`) so the
@@ -40,7 +41,7 @@ export function HubView({ onUseExamplePrompt }: HubViewProps = {}) {
           ) : null}
           {mounted.has('examples') ? (
             <div hidden={hubTab !== 'examples'}>
-              <ExamplesTab onUsePrompt={(example) => onUseExamplePrompt?.(example.prompt)} />
+              <ExamplesTab onUsePrompt={(example) => onUseExamplePrompt?.(example)} />
             </div>
           ) : null}
           {mounted.has('resources') ? (

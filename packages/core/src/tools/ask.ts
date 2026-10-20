@@ -271,7 +271,7 @@ function validateAskQuestion(
   }
 }
 
-export type AskBridge = (input: AskInput) => Promise<AskResult>;
+export type AskBridge = (input: AskInput, signal?: AbortSignal) => Promise<AskResult>;
 
 const MAX_ASK_VALUE_CHARS = 500;
 
@@ -304,12 +304,22 @@ export function makeAskTool(askBridge: AskBridge): AgentTool<typeof AskInput, As
     description:
       'Render a structured questionnaire (1–25 questions, 5 types: text-options / ' +
       'svg-options / slider / file / freeform) to the user and wait for answers. ' +
-      'Use BEFORE implementing when the request is ambiguous or when aesthetic / ' +
-      'content direction is unclear, including optional work such as tweak controls. ' +
+      'Ask only for a genuinely blocking fact, unavailable required reference, required format, ' +
+      'or materially different outcome that cannot be reasonably inferred, or an explicit ' +
+      'ask-first / brief-interview request. Read available files and prior answers first. ' +
+      'Choose reversible style, layout, and ordinary details; build a preview before optional refinement, ' +
+      'including tweak controls. For concepts, label nonessential unknown event details as pending; ' +
+      'never invent official dates, sponsors, or legal facts. ' +
+      'Batch related critical questions with a concise rationale explaining why work cannot proceed. ' +
+      'Do not repeat answered questions. Cancelled, empty, or partial answers are not consent; ' +
+      'report remaining blockers rather than pretending they were resolved. ' +
+      'This tool does not replace permission gates or authorize paid/external/destructive actions. ' +
       "Returns `{status: 'answered', answers}` or " +
       "`{status: 'cancelled', answers: []}`.",
     parameters: AskInput,
-    async execute(_toolCallId, params): Promise<AgentToolResult<AskResult>> {
+    executionMode: 'sequential',
+    async execute(_toolCallId, params, signal): Promise<AgentToolResult<AskResult>> {
+      signal?.throwIfAborted();
       const valid = validateAskInput(params);
       if (!valid.ok) {
         return {
@@ -317,7 +327,18 @@ export function makeAskTool(askBridge: AskBridge): AgentTool<typeof AskInput, As
           details: { status: 'cancelled', answers: [] },
         };
       }
-      const result = await askBridge(params);
+      let detachAbort: (() => void) | undefined;
+      const result = await new Promise<AskResult>((resolve, reject) => {
+        const abort = () => reject(signal?.reason ?? new Error('Ask cancelled'));
+        signal?.addEventListener('abort', abort, { once: true });
+        detachAbort = () => signal?.removeEventListener('abort', abort);
+        if (signal?.aborted) {
+          abort();
+          return;
+        }
+        Promise.resolve(askBridge(params, signal)).then(resolve, reject);
+      }).finally(() => detachAbort?.());
+      signal?.throwIfAborted();
       return {
         content: [{ type: 'text', text: summarizeAskResult(result) }],
         details: result,

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "demoDate": "2026-09-17",
+  "tasks": [
+    {
+      "id": "t1",
+      "projectId": "p1",
+      "title": "Choose three cover concepts",
+      "due": "2026-09-17",
+      "completed": false,
+      "notes": "Compare a typographic direction with two illustrated covers."
+    },
+    {
+      "id": "t2",
+      "projectId": "p1",
+      "title": "Send the color study",
+      "due": "2026-09-16",
+      "completed": false,
+      "notes": "Include the warm and cool variants."
+    },
+    {
+      "id": "t3",
+      "projectId": "p1",
+      "title": "Collect print dimensions",
+      "due": "2026-09-17",
+      "completed": true,
+      "notes": "A5, with bleed confirmed."
+    },
+    {
+      "id": "t4",
+      "projectId": "p2",
+      "title": "Pick up library holds",
+      "due": "2026-09-17",
+      "completed": false,
+      "notes": "Before 18:00."
+    },
+    {
+      "id": "t5",
+      "projectId": "p2",
+      "title": "Plan weekend meals",
+      "due": "2026-09-19",
+      "completed": false,
+      "notes": ""
+    }
+  ]
+}

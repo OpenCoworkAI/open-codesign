@@ -2,6 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { buildRunProtocolPreflight, formatRunProtocolPreflightAnswers } from './run-protocol.js';
 
 describe('run protocol preflight', () => {
+  it('retains missing-source clarification without reference evidence', () => {
+    const result = buildRunProtocolPreflight({
+      prompt: 'Reproduce the supplied source.',
+      historyCount: 0,
+      workspaceState: { hasSource: false },
+      runPreferences: {
+        schemaVersion: 1,
+        tweaks: 'auto',
+        bitmapAssets: 'auto',
+        reusableSystem: 'auto',
+      },
+      routerQuestions: [
+        {
+          id: 'missing-source-files',
+          type: 'freeform',
+          prompt: 'Please provide the missing source files.',
+        },
+      ],
+    });
+    expect(result.requiresClarification).toBe(true);
+    expect(result.clarificationQuestions).toHaveLength(1);
+  });
   it('does not invent clarification questions when the semantic router did not ask any', () => {
     const result = buildRunProtocolPreflight({
       prompt: 'make something cool',

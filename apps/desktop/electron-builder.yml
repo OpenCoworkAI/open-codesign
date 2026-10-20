@@ -23,6 +23,8 @@ files:
   - "!**/{test,tests,__tests__,coverage,docs,doc,example,examples}/**"
   - "!**/*.{test,spec}.*"
 extraResources:
+  - from: resources/demo-inputs
+    to: demo-inputs
   - from: resources/templates
     to: templates
 asar: true

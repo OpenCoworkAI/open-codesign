@@ -28,7 +28,10 @@ export interface ProviderRow {
   wire: WireApi;
   defaultModel: string;
   hasKey: boolean;
+  requiresApiKey?: boolean;
   reasoningLevel?: ReasoningLevel;
+  /** Configured context window in tokens; absent when core resolves it. */
+  contextWindow?: number;
   /** Per-provider TLS verification opt-out (#229). Only surfaced for
    *  custom / imported providers; the runtime force-ignores it on built-ins. */
   tlsRejectUnauthorized?: boolean;
@@ -113,6 +116,9 @@ export function toProviderRows(
   for (const provider of allIds) {
     const ref = cfg.secrets?.[provider];
     const entry = resolveEntryFor(cfg, provider);
+    // Secrets also contain non-model credentials such as Tavily. Only actual
+    // model entries (or recognized legacy builtins) belong in the model list.
+    if (entry === null) continue;
 
     let maskedKey = '';
     let rowError: ProviderRow['error'];
@@ -160,7 +166,9 @@ export function toProviderRows(
       // Missing secrets count as configured only for providers that explicitly
       // declare keyless mode in their ProviderEntry/capabilities.
       hasKey: ref !== undefined || isKeylessProviderAllowed(provider, entry),
+      requiresApiKey: !isKeylessProviderAllowed(provider, entry),
       ...(entry?.reasoningLevel !== undefined ? { reasoningLevel: entry.reasoningLevel } : {}),
+      ...(entry?.contextWindow !== undefined ? { contextWindow: entry.contextWindow } : {}),
       ...(entry?.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
       ...(rowError !== undefined ? { error: rowError } : {}),
     });
@@ -218,6 +226,7 @@ export interface ProviderModelResolution {
   httpHeaders: Record<string, string> | undefined;
   queryParams: Record<string, string> | undefined;
   reasoningLevel: ReasoningLevel | undefined;
+  contextWindow: number | undefined;
   allowKeyless: boolean;
   builtin: boolean;
   tlsRejectUnauthorized: boolean | undefined;
@@ -253,6 +262,7 @@ function providerModelFromEntry(
     httpHeaders: entry.httpHeaders,
     queryParams: entry.queryParams,
     reasoningLevel: entry.reasoningLevel,
+    contextWindow: entry.contextWindow,
     allowKeyless,
     builtin: entry.builtin === true,
     tlsRejectUnauthorized: entry.tlsRejectUnauthorized,

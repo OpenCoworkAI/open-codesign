@@ -265,6 +265,20 @@ describe('diagnoseGenerateFailure', () => {
     expect(result[0]?.suggestedFix?.settingsTab).toBe('advanced');
   });
 
+  it('points context window overflows at the provider context window setting', () => {
+    const result = diagnoseGenerateFailure({
+      ...ctx,
+      code: 'GENERATION_CONTEXT_EXCEEDED',
+      message:
+        "This run needs about 9000 tokens before any chat history, plus 2048 for the reply, but the model's context window is 8192 tokens.",
+    });
+
+    expect(result[0]?.category).toBe('context-window-exceeded');
+    expect(result[0]?.cause).toBe('diagnostics.cause.contextWindowExceeded');
+    expect(result[0]?.suggestedFix?.kind).toBe('openSettings');
+    expect(result[0]?.suggestedFix?.settingsTab).toBe('models');
+  });
+
   it('maps reference URL errors by CodesignError code before provider heuristics', () => {
     const result = diagnoseGenerateFailure({
       ...ctx,

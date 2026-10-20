@@ -1,6 +1,6 @@
 {
   "name": "@open-codesign/providers",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -19,6 +19,6 @@
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.12"
   }
 }

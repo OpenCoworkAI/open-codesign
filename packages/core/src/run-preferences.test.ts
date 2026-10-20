@@ -1,12 +1,58 @@
-import { describe, expect, it } from 'vitest';
+import { completeWithRetry } from '@open-codesign/providers';
+import { describe, expect, it, vi } from 'vitest';
 import {
   applyRunPreferenceAnswers,
   defaultRunPreferences,
   normalizeRunPreferencesRouterResult,
+  RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT,
+  routeRunPreferences,
   runPreferencesFromJson,
 } from './run-preferences.js';
 
+vi.mock('@open-codesign/providers', () => ({ completeWithRetry: vi.fn() }));
+
+describe('live preference routing without an interview', () => {
+  it('ignores legacy model questions while preserving routed explicit preferences', async () => {
+    vi.mocked(completeWithRetry).mockResolvedValueOnce({
+      content: JSON.stringify({
+        preferences: {
+          tweaks: 'no',
+          routing: { tweaks: { provenance: 'explicit', confidence: 'high' } },
+        },
+        needsClarification: true,
+        clarificationRationale: 'Pick a style before building',
+        clarificationQuestions: [{ id: 'style', type: 'freeform', prompt: 'Which visual style?' }],
+      }),
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    const result = await routeRunPreferences({
+      prompt: 'Make a poster',
+      existingPreferences: null,
+      model: { provider: 'mock', modelId: 'mock' },
+      apiKey: 'test',
+    });
+    expect(result).toMatchObject({
+      preferences: { tweaks: 'no', routing: { tweaks: { provenance: 'explicit' } } },
+      needsClarification: false,
+    });
+    expect(result.clarificationQuestions).toBeUndefined();
+    expect(result.clarificationRationale).toBeUndefined();
+    expect(RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT).toContain('not an interview stage');
+    expect(RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT).not.toContain('Prefer 1 question');
+  });
+});
+
 describe('run preferences semantic router normalization', () => {
+  it('distinguishes known reference files from generated source and unknown inventory omissions', () => {
+    expect(RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT).toContain('workspaceState.fileInventory.paths');
+    expect(RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT).toContain('unknown, not proven absent');
+    expect(RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT).toContain(
+      'Never ask the user to re-upload listed files',
+    );
+    expect(RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT).toContain('including workspace DESIGN.md');
+  });
   it('normalizes complete router output with routing metadata', () => {
     const result = normalizeRunPreferencesRouterResult(
       {
