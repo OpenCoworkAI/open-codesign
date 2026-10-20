@@ -61,6 +61,10 @@ describe('rewriteUpstreamMessage', () => {
 });
 
 describe('remapProviderError', () => {
+  it('handles long non-model access errors without a backtracking model matcher', () => {
+    const err = new Error(`don't haveaccess${'access'.repeat(20_000)}`);
+    expect(remapProviderError(err, 'chatgpt-codex', 'openai-codex-responses')).toBe(err);
+  });
   it('preserves the unsupported Codex model error and adds a model recovery path', () => {
     const message =
       "HTTP 400: The 'account-model' model is not supported when using Codex with a ChatGPT account.";
