@@ -31,7 +31,9 @@ describe('provider recovery classification', () => {
     [503, undefined, 'unavailable', 'upstream_server_error'],
     [503, undefined, 'unsupported response_format', 'upstream_server_error'],
     [undefined, undefined, 'base URL must include /v1', 'endpoint_missing_v1'],
+    [undefined, undefined, 'The /v1 path is required in the base URL', 'endpoint_missing_v1'],
     [undefined, undefined, 'unsupported wire', 'wire_incompatible'],
+    [undefined, undefined, 'protocol openai-responses is not supported', 'wire_incompatible'],
   ])('classifies status %s / %s / %s as %s', (status, code, message, category) => {
     expect(classifyRecoveryCategory(status, code, message)).toBe(category);
     expect(recoveryHintFor(category as Parameters<typeof recoveryHintFor>[0])).toBeTruthy();
@@ -46,6 +48,11 @@ describe('provider recovery classification', () => {
       recovery_category: 'network_timeout',
       retry_count: 2,
     });
+  });
+
+  it('handles long upstream text without guessing a missing version or incompatible wire', () => {
+    const message = 'baseurlmissing include wire '.repeat(10_000);
+    expect(classifyRecoveryCategory(undefined, undefined, message)).toBe('unknown');
   });
 
   it('does not follow a cyclic error cause forever', () => {

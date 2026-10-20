@@ -253,10 +253,17 @@ export function classifyRecoveryCategory(
   ) {
     return 'model_not_supported_role';
   }
-  if (/base\s*url.*(?:missing|include|require).*\/v1/.test(msg)) {
+  if (
+    (msg.includes('base url') || msg.includes('baseurl') || msg.includes('base_url')) &&
+    (msg.includes('missing') || msg.includes('include') || msg.includes('require')) &&
+    msg.includes('/v1')
+  ) {
     return 'endpoint_missing_v1';
   }
-  if (/unsupported (?:wire|protocol)|(?:wire|protocol).*(?:not supported|incompatible)/.test(msg)) {
+  if (
+    /\b(?:wire|protocol)\b/.test(msg) &&
+    (msg.includes('unsupported') || msg.includes('not supported') || msg.includes('incompatible'))
+  ) {
     return 'wire_incompatible';
   }
   if (looksLikeGatewayMissingMessagesApi(new Error(message))) return 'gateway_incompatible';
