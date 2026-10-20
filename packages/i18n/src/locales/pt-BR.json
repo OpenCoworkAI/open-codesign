@@ -1149,6 +1149,25 @@
       "openFailedCopyHint": "Copie a URL da issue e abra manualmente.",
       "openFailedTitle": "Não foi possível abrir o navegador",
       "recentlyReportedNoNumber": "Você reportou isso {{relative}}."
+    },
+    "recovery": {
+      "auth_key_invalid": "Confira ou substitua a chave de API nas configurações do provedor.",
+      "auth_key_expired": "Entre novamente ou substitua a chave de API expirada.",
+      "auth_permission": "Confira as permissões da chave de API no painel do provedor.",
+      "endpoint_not_found": "Confira a URL base, o caminho e a porta do provedor.",
+      "endpoint_missing_v1": "Confira se este provedor exige /v1 na URL base.",
+      "wire_incompatible": "Selecione um protocolo de API compatível nas configurações avançadas.",
+      "gateway_incompatible": "Este gateway não implementa a API selecionada. Escolha um protocolo compatível ou outro provedor.",
+      "model_not_found": "Confira o ID do modelo ou escolha um modelo disponível.",
+      "model_not_supported_role": "Escolha um modelo compatível com os papéis de mensagem system e developer necessários.",
+      "rate_limit": "Aguarde antes de tentar novamente ou confira os limites de solicitações.",
+      "billing": "Confira o faturamento e a cota restante do provedor.",
+      "network_unreachable": "Confira a conexão de rede, a URL do provedor e o firewall.",
+      "network_timeout": "Confira a rede e tente novamente quando o provedor estiver acessível.",
+      "upstream_server_error": "O provedor apresentou um erro no servidor. Tente novamente mais tarde.",
+      "request_too_large": "Reduza o tamanho dos anexos, o texto da solicitação ou o histórico.",
+      "tls_error": "Confira o certificado e a configuração TLS do provedor.",
+      "unknown": "Abra o diagnóstico para consultar os detalhes do erro."
     }
   },
   "demos": {

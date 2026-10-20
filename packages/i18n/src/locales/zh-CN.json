@@ -1332,6 +1332,25 @@
         "upstreamRetry": "重试次数",
         "upstreamBodyHead": "响应体开头"
       }
+    },
+    "recovery": {
+      "auth_key_invalid": "在服务商设置中检查或更换 API 密钥。",
+      "auth_key_expired": "重新登录，或在服务商设置中更换已过期的 API 密钥。",
+      "auth_permission": "在服务商控制台检查 API 密钥的权限。",
+      "endpoint_not_found": "检查服务商的基础地址、路径和端口。",
+      "endpoint_missing_v1": "检查此服务商是否要求在基础地址中包含 /v1。",
+      "wire_incompatible": "在高级设置中选择此服务商支持的 API 协议。",
+      "gateway_incompatible": "此网关尚未实现所选 API，请选择支持的协议或其他服务商。",
+      "model_not_found": "检查模型 ID，或在服务商设置中选择可用模型。",
+      "model_not_supported_role": "选择支持所需 system 和 developer 消息角色的模型。",
+      "rate_limit": "稍后重试，或检查服务商的请求频率限制。",
+      "billing": "检查服务商的账单状态和剩余额度。",
+      "network_unreachable": "检查网络连接、服务商地址和防火墙。",
+      "network_timeout": "检查网络连接，待服务商恢复可访问后重试。",
+      "upstream_server_error": "服务商出现服务器错误，请稍后重试。",
+      "request_too_large": "缩小附件、缩短提示词，或减少对话历史。",
+      "tls_error": "检查服务商证书和 TLS 配置。",
+      "unknown": "打开诊断查看错误详情。"
     }
   },
   "demos": {

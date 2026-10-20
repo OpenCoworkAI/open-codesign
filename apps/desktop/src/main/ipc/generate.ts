@@ -20,7 +20,13 @@ import {
   routeRunPreferences,
   updateDesignSessionBrief,
 } from '@open-codesign/core';
-import { complete, detectProviderFromKey, generateImage } from '@open-codesign/providers';
+import {
+  classifyRecoveryCategory,
+  complete,
+  detectProviderFromKey,
+  generateImage,
+  normalizeProviderError,
+} from '@open-codesign/providers';
 import {
   ActiveRunMessageInputV1,
   ApplyCommentPayload,
@@ -246,7 +252,7 @@ function extractUpstreamHttpStatus(err: unknown): number | undefined {
   return undefined;
 }
 
-function normalizeGenerationFailure(opts: {
+export function normalizeGenerationFailure(opts: {
   err: unknown;
   signal: AbortSignal;
   provider: string;
@@ -255,6 +261,15 @@ function normalizeGenerationFailure(opts: {
   wire: string | undefined;
 }): { error: unknown; upstreamStatus: number | undefined } {
   const upstreamStatus = extractUpstreamHttpStatus(opts.err);
+  const normalized = normalizeProviderError(opts.err, opts.provider, 0, opts.wire);
+  const upstreamMessage = normalized.upstream_message;
+  const upstreamCode = normalized.upstream_code;
+  const recoveryCategory = classifyRecoveryCategory(
+    upstreamStatus,
+    upstreamCode,
+    upstreamMessage,
+    opts.wire,
+  );
   if (opts.err !== null && typeof opts.err === 'object') {
     const errAsRec = opts.err as Record<string, unknown>;
     if (upstreamStatus !== undefined && errAsRec['upstream_status'] === undefined) {
@@ -271,6 +286,12 @@ function normalizeGenerationFailure(opts: {
     }
     if (errAsRec['upstream_wire'] === undefined && opts.wire !== undefined) {
       errAsRec['upstream_wire'] = opts.wire;
+    }
+    if (upstreamCode !== undefined && errAsRec['upstream_code'] === undefined) {
+      errAsRec['upstream_code'] = upstreamCode;
+    }
+    if (errAsRec['upstream_recovery_category'] === undefined) {
+      errAsRec['upstream_recovery_category'] = recoveryCategory;
     }
   }
   return {

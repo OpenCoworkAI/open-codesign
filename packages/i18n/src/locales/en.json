@@ -1336,6 +1336,25 @@
         "upstreamRetry": "Retry",
         "upstreamBodyHead": "Body head"
       }
+    },
+    "recovery": {
+      "auth_key_invalid": "Check or replace the API key in provider settings.",
+      "auth_key_expired": "Sign in again or replace the expired API key in provider settings.",
+      "auth_permission": "Check the API key permissions in the provider dashboard.",
+      "endpoint_not_found": "Check the provider base URL, path, and port.",
+      "endpoint_missing_v1": "Check whether this provider requires /v1 in its base URL.",
+      "wire_incompatible": "Select an API protocol supported by this provider in advanced settings.",
+      "gateway_incompatible": "This gateway does not implement the selected API. Choose a supported protocol or another provider.",
+      "model_not_found": "Check the model ID or choose an available model in provider settings.",
+      "model_not_supported_role": "Choose a model that supports the required system and developer message roles.",
+      "rate_limit": "Wait before retrying, or check the provider rate limits.",
+      "billing": "Check the provider billing status and remaining quota.",
+      "network_unreachable": "Check your network connection, provider URL, and firewall.",
+      "network_timeout": "Check network connectivity and retry when the provider is reachable.",
+      "upstream_server_error": "The provider is experiencing a server error. Try again later.",
+      "request_too_large": "Reduce attachment size, prompt length, or conversation history.",
+      "tls_error": "Check the provider certificate and TLS configuration.",
+      "unknown": "Open diagnostics to inspect the error details."
     }
   },
   "demos": {

@@ -1157,6 +1157,25 @@
         "upstreamRetry": "Reintento",
         "upstreamBodyHead": "Encabezado del cuerpo"
       }
+    },
+    "recovery": {
+      "auth_key_invalid": "Comprueba o sustituye la clave API en la configuración del proveedor.",
+      "auth_key_expired": "Inicia sesión de nuevo o sustituye la clave API caducada.",
+      "auth_permission": "Comprueba los permisos de la clave API en el panel del proveedor.",
+      "endpoint_not_found": "Comprueba la URL base, la ruta y el puerto del proveedor.",
+      "endpoint_missing_v1": "Comprueba si este proveedor requiere /v1 en la URL base.",
+      "wire_incompatible": "Selecciona un protocolo API compatible en la configuración avanzada.",
+      "gateway_incompatible": "Esta pasarela no implementa la API seleccionada. Elige un protocolo compatible u otro proveedor.",
+      "model_not_found": "Comprueba el ID del modelo o elige un modelo disponible.",
+      "model_not_supported_role": "Elige un modelo compatible con los roles de mensaje system y developer requeridos.",
+      "rate_limit": "Espera antes de reintentar o comprueba los límites de solicitudes.",
+      "billing": "Comprueba la facturación y la cuota restante del proveedor.",
+      "network_unreachable": "Comprueba la conexión de red, la URL del proveedor y el cortafuegos.",
+      "network_timeout": "Comprueba la red y reintenta cuando el proveedor sea accesible.",
+      "upstream_server_error": "El proveedor tiene un error del servidor. Inténtalo más tarde.",
+      "request_too_large": "Reduce el tamaño de los adjuntos, el texto de la solicitud o el historial.",
+      "tls_error": "Comprueba el certificado y la configuración TLS del proveedor.",
+      "unknown": "Abre el diagnóstico para consultar los detalles del error."
     }
   },
   "demos": {

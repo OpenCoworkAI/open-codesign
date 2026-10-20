@@ -11,6 +11,11 @@
  * lines is fine", the duplication is intentional.
  */
 
+import type { RecoveryCategory } from '@open-codesign/shared';
+import { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
+
+export type { RecoveryCategory } from '@open-codesign/shared';
+
 const API_KEY_RE =
   /(sk-[A-Za-z0-9-_]{20,}|AIzaSy[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|[A-Za-z0-9+/]{43}=|[A-Fa-f0-9]{32,}|Bearer\s+[A-Za-z0-9._~+/=-]+)/g;
 const REDACTION = '***REDACTED***';
@@ -24,6 +29,13 @@ const REQUEST_ID_KEYS = [
   'x-amzn-requestid',
 ];
 
+/**
+ * Stable taxonomy for recovery actions. When the UI receives a
+ * NormalizedProviderError, it can use this category to show a targeted
+ * hint ("Check your API key", "Try adding /v1", etc.) instead of a
+ * generic "something went wrong" message.
+ */
+
 export interface NormalizedProviderError {
   upstream_provider: string;
   upstream_status: number | undefined;
@@ -33,6 +45,8 @@ export interface NormalizedProviderError {
   retry_count: number;
   redacted_body_head: string | undefined;
   original_error_name: string;
+  /** Machine-readable recovery category so the UI can show a targeted hint. */
+  recovery_category: RecoveryCategory;
 }
 
 function scrub(s: string): string {
@@ -63,7 +77,8 @@ function extractStatus(err: Record<string, unknown>): number | undefined {
   return pickNumber(err['statusCode']);
 }
 
-function extractCode(err: Record<string, unknown>): string | undefined {
+function extractCode(err: Record<string, unknown>, depth = 0): string | undefined {
+  if (depth > 4) return undefined;
   const direct = pickString(err['code']);
   if (direct !== undefined) return direct;
   const errorField = asRecord(err['error']);
@@ -72,7 +87,10 @@ function extractCode(err: Record<string, unknown>): string | undefined {
   const response = asRecord(err['response']);
   const data = response ? asRecord(response['data']) : undefined;
   const dataError = data ? asRecord(data['error']) : undefined;
-  return dataError ? pickString(dataError['code']) : undefined;
+  const viaData = dataError ? pickString(dataError['code']) : undefined;
+  if (viaData !== undefined) return viaData;
+  const cause = asRecord(err['cause']);
+  return cause ? extractCode(cause, depth + 1) : undefined;
 }
 
 function extractMessage(err: unknown, errRec: Record<string, unknown>): string {
@@ -163,21 +181,184 @@ function extractErrorName(err: unknown, errRec: Record<string, unknown>): string
   return 'UnknownError';
 }
 
+/**
+ * Classify a provider error into a recovery category so the UI can show
+ * a targeted hint instead of a generic failure message.
+ *
+ * Priority: network/system code > HTTP status > specific message patterns > generic gateway fallback.
+ */
+export function classifyRecoveryCategory(
+  status: number | undefined,
+  code: string | undefined,
+  message: string,
+  wire?: string | undefined,
+): RecoveryCategory {
+  const msg = message.toLowerCase();
+  const sysCode = (code ?? '').toLowerCase();
+
+  if (sysCode === 'econnrefused' || sysCode === 'enotfound' || sysCode === 'econnreset') {
+    return 'network_unreachable';
+  }
+  if (sysCode === 'etimedout' || sysCode === 'eai_again') {
+    return 'network_timeout';
+  }
+  if (sysCode.includes('ssl') || sysCode.includes('cert') || sysCode.includes('tls')) {
+    return 'tls_error';
+  }
+
+  if (status !== undefined) {
+    if (status === 401) {
+      if (msg.includes('expired') || msg.includes('revoked')) return 'auth_key_expired';
+      if (msg.includes('permission') || msg.includes('insufficient')) return 'auth_permission';
+      return 'auth_key_invalid';
+    }
+    if (status === 403) {
+      if (msg.includes('permission') || msg.includes('insufficient')) return 'auth_permission';
+      return 'auth_key_invalid';
+    }
+    if (status === 402) return 'billing';
+    if (status === 404) {
+      if (msg.includes('model')) return 'model_not_found';
+      return 'endpoint_not_found';
+    }
+    if (status === 413 || (status === 400 && msg.includes('too large'))) {
+      return 'request_too_large';
+    }
+    if (status === 429) {
+      return msg.includes('quota') ||
+        msg.includes('billing') ||
+        msg.includes('credit') ||
+        sysCode === 'insufficient_quota'
+        ? 'billing'
+        : 'rate_limit';
+    }
+    if (status >= 500 && status < 600) {
+      if (status === 501 || looksLikeGatewayMissingMessagesApi(new Error(message))) {
+        return 'gateway_incompatible';
+      }
+      return 'upstream_server_error';
+    }
+  }
+
+  if (
+    msg.includes('model') &&
+    (msg.includes('not found') || msg.includes('not exist') || msg.includes('does not exist'))
+  ) {
+    return 'model_not_found';
+  }
+  if (
+    msg.includes('developer role') ||
+    msg.includes('system role') ||
+    msg.includes('unsupported role')
+  ) {
+    return 'model_not_supported_role';
+  }
+  if (
+    (msg.includes('base url') || msg.includes('baseurl') || msg.includes('base_url')) &&
+    (msg.includes('missing') || msg.includes('include') || msg.includes('require')) &&
+    msg.includes('/v1')
+  ) {
+    return 'endpoint_missing_v1';
+  }
+  if (
+    /\b(?:wire|protocol)\b/.test(msg) &&
+    (msg.includes('unsupported') || msg.includes('not supported') || msg.includes('incompatible'))
+  ) {
+    return 'wire_incompatible';
+  }
+  if (looksLikeGatewayMissingMessagesApi(new Error(message))) return 'gateway_incompatible';
+  if (msg.includes('quota') || msg.includes('billing') || msg.includes('credit')) {
+    return 'billing';
+  }
+  if (msg.includes('rate limit') || msg.includes('too many requests')) {
+    return 'rate_limit';
+  }
+  if (msg.includes('expired') || msg.includes('revoked')) {
+    return 'auth_key_expired';
+  }
+  if (
+    msg.includes('invalid') &&
+    (msg.includes('api key') || msg.includes('apikey') || msg.includes('auth'))
+  ) {
+    return 'auth_key_invalid';
+  }
+
+  if (wire === 'anthropic' && looksLikeGatewayMissingMessagesApi(new Error(message))) {
+    return 'gateway_incompatible';
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Return a user-facing recovery hint for a given recovery category.
+ * The returned text is English-only; downstream UI layers may optionally
+ * map these to i18n keys.
+ */
+export function recoveryHintFor(category: RecoveryCategory): string {
+  switch (category) {
+    case 'auth_key_invalid':
+      return 'Check your API key is correct and active in provider settings';
+    case 'auth_key_expired':
+      return 'Your API key may have expired — generate a new one and update provider settings';
+    case 'auth_permission':
+      return 'Your API key may lack required permissions — check provider dashboard';
+    case 'endpoint_not_found':
+      return 'Verify your base URL is correct (typo, wrong path, or wrong port)';
+    case 'endpoint_missing_v1':
+      return 'Try adding /v1 to your base URL — many OpenAI-compatible gateways require it';
+    case 'wire_incompatible':
+      return 'Try switching wire type in advanced provider settings';
+    case 'gateway_incompatible':
+      return 'This gateway does not support the selected wire — try switching to a compatible wire or a different provider';
+    case 'model_not_found':
+      return 'Check model ID spelling or try listing available models from your provider';
+    case 'model_not_supported_role':
+      return 'The selected model does not support the developer/system role — choose a model that supports the required message roles';
+    case 'rate_limit':
+      return 'Rate limited — wait a moment and retry, or upgrade your provider plan';
+    case 'billing':
+      return 'Check your billing status and quota in your provider dashboard';
+    case 'network_unreachable':
+      return 'Cannot reach the server — check your network, base URL, and firewall settings';
+    case 'network_timeout':
+      return 'Connection timed out — check your network, and retry when the provider is reachable';
+    case 'upstream_server_error':
+      return 'Upstream server error — the provider may be experiencing issues, try again later';
+    case 'request_too_large':
+      return 'Request payload too large — reduce attachment size, prompt length, or conversation history';
+    case 'tls_error':
+      return 'SSL/TLS certificate error — check TLS settings in advanced provider configuration';
+    default:
+      return 'An unexpected error occurred — check the diagnostics panel for details';
+  }
+}
+
 export function normalizeProviderError(
   err: unknown,
   provider: string,
   retryCount: number,
+  wire?: string | undefined,
 ): NormalizedProviderError {
   const rec = asRecord(err) ?? {};
   const rawMessage = extractMessage(err, rec);
+  const upstreamStatus = extractStatus(rec);
+  const upstreamCode = extractCode(rec);
+  const upstreamMessage = scrub(rawMessage);
   return {
     upstream_provider: provider,
-    upstream_status: extractStatus(rec),
-    upstream_code: extractCode(rec),
-    upstream_message: scrub(rawMessage),
+    upstream_status: upstreamStatus,
+    upstream_code: upstreamCode,
+    upstream_message: upstreamMessage,
     upstream_request_id: extractRequestId(rec),
     retry_count: retryCount,
     redacted_body_head: extractBodyHead(rec),
     original_error_name: extractErrorName(err, rec),
+    recovery_category: classifyRecoveryCategory(
+      upstreamStatus,
+      upstreamCode,
+      upstreamMessage,
+      wire,
+    ),
   };
 }
