@@ -41,7 +41,7 @@ import {
   normalizeOllamaBaseUrl,
   runProviderTest,
 } from './connection-ipc';
-import { setCachedConfig } from './onboarding/config-cache';
+import { getCachedConfig, setCachedConfig } from './onboarding/config-cache';
 import { withTlsBypass } from './tls-override';
 
 // ---------------------------------------------------------------------------
@@ -105,6 +105,23 @@ describe('ChatGPT model suggestions for saved providers', () => {
       ok: false,
       message: 'Unreadable Codex config',
       hint: expect.stringContaining('Settings > Models'),
+    });
+  });
+
+  it('keeps a custom Codex-wire provider’s explicit model hints', async () => {
+    const cfg = getCachedConfig();
+    const entry = cfg?.providers['chatgpt-codex'];
+    if (!cfg || !entry) throw new Error('Missing test config');
+    setCachedConfig({
+      ...cfg,
+      providers: {
+        ...cfg.providers,
+        'custom-codex': { ...entry, id: 'custom-codex', modelsHint: ['custom-model'] },
+      },
+    });
+    expect(await handleModelsV1ListForProvider('custom-codex')).toEqual({
+      ok: true,
+      models: ['custom-model'],
     });
   });
 });

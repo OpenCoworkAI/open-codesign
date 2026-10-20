@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import {
   BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   canonicalBaseUrl,
   type DiagnosticCategory,
@@ -1031,7 +1032,7 @@ export async function handleModelsV1ListForProvider(raw: unknown): Promise<Model
 
   // Use the maintained pi catalog and local Codex selection as suggestions.
   // Never use persisted legacy hints as an allowlist or an entitlement check.
-  if (entry.wire === 'openai-codex-responses') {
+  if (providerId === CHATGPT_CODEX_PROVIDER_ID && entry.wire === 'openai-codex-responses') {
     try {
       const options = await getCodexModelOptions();
       const cfg = getCachedConfig();
