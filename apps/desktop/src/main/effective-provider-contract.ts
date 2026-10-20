@@ -1,6 +1,5 @@
 import { looksLikeClaudeOAuthToken } from '@open-codesign/providers';
 import {
-  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   type Config,
   type ConnectionTestError,
@@ -177,7 +176,6 @@ export function connectionErrorFromUnknown(err: unknown): ConnectionTestError {
         : 'Open Settings and import Codex again, or add an API key for this provider',
       compatibility: 'incompatible',
       reasonCategory: 'auth',
-      invokeParity: 'aligned',
     };
   }
   return {
@@ -187,11 +185,5 @@ export function connectionErrorFromUnknown(err: unknown): ConnectionTestError {
     hint: 'Re-add the provider from Settings',
     compatibility: 'incompatible',
     reasonCategory: 'bad-input',
-    invokeParity: 'aligned',
   };
-}
-
-/** ChatGPT Codex generate never uses a stored API-key row; it always refreshes OAuth. */
-export function isCodexOAuthProvider(providerId: string, wire: WireApi): boolean {
-  return providerId === CHATGPT_CODEX_PROVIDER_ID || wire === 'openai-codex-responses';
 }

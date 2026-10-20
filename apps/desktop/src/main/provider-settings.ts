@@ -1,5 +1,6 @@
 import {
   BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   type Config,
   ERROR_CODES,
@@ -262,7 +263,12 @@ function providerModelFromEntry(
   missingSecretMessage: string,
 ): ProviderModelResolution {
   const allowKeyless = isKeylessProviderAllowed(providerId, entry);
-  if (cfg.secrets[providerId] === undefined && !allowKeyless) {
+  // ChatGPT credentials live in the refreshable OAuth store, not config.secrets.
+  if (
+    providerId !== CHATGPT_CODEX_PROVIDER_ID &&
+    cfg.secrets[providerId] === undefined &&
+    !allowKeyless
+  ) {
     throw new CodesignError(missingSecretMessage, ERROR_CODES.PROVIDER_KEY_MISSING);
   }
   const caps = resolveProviderCapabilities(providerId, entry);
@@ -277,8 +283,8 @@ function providerModelFromEntry(
     allowKeyless,
     builtin: entry.builtin === true,
     tlsRejectUnauthorized: entry.tlsRejectUnauthorized,
-    supportsModelsEndpoint: caps.supportsModelsEndpoint === true,
-    modelDiscoveryMode: caps.modelDiscoveryMode ?? 'models',
+    supportsModelsEndpoint: caps.supportsModelsEndpoint,
+    modelDiscoveryMode: caps.modelDiscoveryMode,
   };
 }
 
