@@ -48,6 +48,19 @@ export const MINIMAX_ENDPOINTS = {
 
 export const MINIMAX_MODEL_CATALOG = [
   {
+    modelId: 'MiniMax-M3.1-Flash',
+    contextWindow: 1_000_000,
+    maxOutputTokens: 524_288,
+    pricingUsdPerMillionTokens: {
+      input: 0.15,
+      output: 0.6,
+      cacheRead: 0.015,
+      cacheWrite: null,
+    },
+    inputModalities: ['text', 'image', 'video'],
+    thinking: ['adaptive'],
+  },
+  {
     modelId: 'MiniMax-M3',
     contextWindow: 1_000_000,
     pricingUsdPerMillionTokens: {
@@ -59,7 +72,7 @@ export const MINIMAX_MODEL_CATALOG = [
     pricingTiersUsdPerMillionTokens: [
       {
         serviceTier: 'standard',
-        inputTokensLte: 512_000,
+        inputLength: 'up to 512k',
         input: 0.3,
         output: 1.2,
         cacheRead: 0.06,
@@ -67,7 +80,7 @@ export const MINIMAX_MODEL_CATALOG = [
       },
       {
         serviceTier: 'standard',
-        inputTokensGt: 512_000,
+        inputLength: 'above 512k',
         input: 0.6,
         output: 2.4,
         cacheRead: 0.12,
@@ -75,7 +88,7 @@ export const MINIMAX_MODEL_CATALOG = [
       },
       {
         serviceTier: 'priority',
-        inputTokensLte: 512_000,
+        inputLength: 'up to 512k',
         input: 0.45,
         output: 1.8,
         cacheRead: 0.09,
@@ -83,7 +96,7 @@ export const MINIMAX_MODEL_CATALOG = [
       },
       {
         serviceTier: 'priority',
-        inputTokensGt: 512_000,
+        inputLength: 'above 512k',
         input: 0.9,
         output: 3.6,
         cacheRead: 0.18,
@@ -92,18 +105,6 @@ export const MINIMAX_MODEL_CATALOG = [
     ],
     inputModalities: ['text', 'image', 'video'],
     thinking: ['adaptive', 'disabled'],
-  },
-  {
-    modelId: 'MiniMax-M2.7',
-    contextWindow: 204_800,
-    pricingUsdPerMillionTokens: {
-      input: 0.3,
-      output: 1.2,
-      cacheRead: 0.06,
-      cacheWrite: 0.375,
-    },
-    inputModalities: ['text'],
-    thinking: ['always_on'],
   },
 ] as const;
 

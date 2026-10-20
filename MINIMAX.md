@@ -1,43 +1,46 @@
 # MiniMax Provider
 
-Open CoDesign includes MiniMax as a built-in provider. The default entry uses the global English OpenAI-compatible endpoint and exposes `MiniMax-M3` and `MiniMax-M2.7` as static model choices.
+Open CoDesign includes MiniMax as a built-in provider. The default entry uses the international OpenAI-compatible endpoint and offers `MiniMax-M3.1-Flash` first, followed by `MiniMax-M3`. Existing saved model IDs and custom provider configurations remain unchanged.
 
 ## Configuration
 
 - Provider ID: `minimax`
 - API key environment variable: `MINIMAX_API_KEY`
-- Default model: `MiniMax-M3`
-- Model choices: `MiniMax-M3`, `MiniMax-M2.7`
-- Official documentation: `https://platform.minimax.io/docs/api-reference/api-overview`
-- China documentation: `https://platform.minimaxi.com/docs/api-reference/api-overview`
+- Default model: `MiniMax-M3.1-Flash`
+- Model choices: `MiniMax-M3.1-Flash`, `MiniMax-M3`
+- Official documentation: https://platform.minimax.io/docs/guides/models-intro.md
 
-The built-in provider uses `https://api.minimax.io/v1`. To use another region or wire format, add a custom provider in Settings and use one of these public bases:
+The built-in provider uses `https://api.minimax.io/v1`. To use another region or wire format, add a custom provider in Settings:
 
-| Region | Wire | Base URL | Documentation |
-| --- | --- | --- | --- |
-| `global_en` | OpenAI-compatible | `https://api.minimax.io/v1` | `https://platform.minimax.io/docs` |
-| `global_en` | Anthropic-compatible | `https://api.minimax.io/anthropic` | `https://platform.minimax.io/docs` |
-| `cn_zh` | OpenAI-compatible | `https://api.minimaxi.com/v1` | `https://platform.minimaxi.com/docs` |
-| `cn_zh` | Anthropic-compatible | `https://api.minimaxi.com/anthropic` | `https://platform.minimaxi.com/docs` |
+| Region | Wire | Base URL |
+| --- | --- | --- |
+| International | OpenAI-compatible | `https://api.minimax.io/v1` |
+| International | Anthropic-compatible | `https://api.minimax.io/anthropic` |
+| China | OpenAI-compatible | `https://api.minimaxi.com/v1` |
+| China | Anthropic-compatible | `https://api.minimaxi.com/anthropic` |
 
-For an Anthropic-compatible entry, enter the base directly without adding `/v1`. Open CoDesign derives the versioned `/v1/messages` request path internally. For an OpenAI-compatible entry, keep `/v1` in the public base; the client appends the chat-completions path.
+For an Anthropic-compatible entry, enter the base without `/v1`; the adapter derives `/v1/messages`. The default OpenAI-compatible entry uses Chat Completions. MiniMax also documents native Responses at the international `/v1/responses` endpoint; a custom Responses entry retains client-side history instead of using server-side conversation storage. Regional and gateway availability must be checked with the selected service.
 
 ## Model catalog
 
-Prices are USD per million tokens. The model metadata below mirrors the shared provider registry.
+Prices are USD per million tokens. Cache-write pricing is unknown.
 
-| Model | Context | Input | Output | Cache read | Cache write | Input modalities | Thinking |
-| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| `MiniMax-M3` | 1,000,000 | 0.60 | 2.40 | 0.12 | null | Text, image, video | Adaptive, disabled |
-| `MiniMax-M2.7` | 204,800 | 0.30 | 1.20 | 0.06 | 0.375 | Text | Always on |
+| Model | Context | Input | Output | Cache read | Input modalities | Thinking |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| `MiniMax-M3.1-Flash` | 1,000,000 | 0.15 | 0.60 | 0.015 | Text, image, video | Adaptive only |
+| `MiniMax-M3` | 1,000,000 | 0.60 | 2.40 | 0.12 | Text, image, video | Adaptive, disabled |
 
-`MiniMax-M3` has tiered pricing based on input length and service tier:
+Flash supports up to 524,288 output tokens. Its default effort is `max`; low, medium, high, and xhigh are also supported. The application's `minimal` setting maps to low, and `off` retains adaptive thinking because Flash cannot disable it. These settings are normalized for direct MiniMax endpoints in both completion and agent requests. Gateway payloads retain their own contracts.
+
+M3 ignores reasoning effort. Its Chat Completions default is adaptive, while Anthropic-compatible and Responses requests default to thinking disabled. An explicit enabled reasoning level enables adaptive thinking.
+
+M3 pricing depends on input length and service tier. The catalog's headline rate is the longer-input standard rate:
 
 | Service tier | Input length | Input | Output | Cache read |
 | --- | --- | ---: | ---: | ---: |
-| Standard | Up to 512,000 | 0.30 | 1.20 | 0.06 |
-| Standard | Above 512,000 | 0.60 | 2.40 | 0.12 |
-| Priority | Up to 512,000 | 0.45 | 1.80 | 0.09 |
-| Priority | Above 512,000 | 0.90 | 3.60 | 0.18 |
+| Standard | Up to 512k | 0.30 | 1.20 | 0.06 |
+| Standard | Above 512k | 0.60 | 2.40 | 0.12 |
+| Priority | Up to 512k | 0.45 | 1.80 | 0.09 |
+| Priority | Above 512k | 0.90 | 3.60 | 0.18 |
 
-The desktop provider adapter keeps MiniMax OpenAI-compatible models on the chat-completions path and does not enable the OpenAI developer-role reasoning flag for these model IDs.
+Ordinary built-in gateway choices retain only current MiniMax text routes returned by that gateway's catalog. This filtering does not rewrite saved active selections, custom catalogs, or nontext entries.

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export { currentModelChoices } from './model-choices';
+
 export const ProviderId = z.enum([
   'anthropic',
   'openai',

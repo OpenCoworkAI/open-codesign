@@ -20,6 +20,7 @@ import {
   shouldForceClaudeCodeIdentity,
 } from './claude-code-compat';
 import { normalizeGeminiModelId } from './gemini-compat';
+import { isDirectMiniMaxModel, normalizeMiniMaxPayload } from './minimax-compat';
 
 /** Subset of pi-ai's `ThinkingLevel` we expose. Maps directly to its `reasoning`
  * field, which Anthropic adapters translate to extended-thinking effort/budget
@@ -444,6 +445,18 @@ export async function complete(
     piOpts.headers = { ...claudeCodeIdentityHeaders(), ...(piOpts.headers ?? {}) };
   }
 
+  if (isDirectMiniMaxModel(effectiveModelId, opts.baseUrl)) {
+    const previousOnPayload = piOpts.onPayload;
+    piOpts.onPayload = (payload) =>
+      normalizeMiniMaxPayload(
+        previousOnPayload ? previousOnPayload(payload) : payload,
+        effectiveModelId,
+        opts.baseUrl,
+        piModel.api,
+        opts.reasoning,
+      );
+  }
+
   validateCodexImageInputs(opts);
   const result = await pi.completeSimple(piModel, piContext, piOpts);
 
@@ -596,6 +609,7 @@ export type {
   ImageSize,
 } from './images';
 export { defaultImageBaseUrl, defaultImageModel, generateImage } from './images';
+export { isDirectMiniMaxModel, normalizeMiniMaxPayload } from './minimax-compat';
 export type {
   BackoffOptions,
   CompleteWithRetryOptions,

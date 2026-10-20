@@ -4,6 +4,7 @@ import {
   BUILTIN_PROVIDERS,
   CodesignError,
   canonicalBaseUrl,
+  currentModelChoices,
   type DiagnosticCategory,
   ERROR_CODES,
   ensureVersionedBase,
@@ -883,9 +884,11 @@ async function handleModelsV1List(raw: unknown): Promise<ModelsListResponse> {
   }
 
   const { provider, apiKey, baseUrl } = payload;
+  const entry = BUILTIN_PROVIDERS[provider];
+  if (provider === 'minimax') return { ok: true, models: currentModelChoices(entry, []) };
 
   const cached = getCachedModels(provider, baseUrl, apiKey);
-  if (cached !== null) return { ok: true, models: cached };
+  if (cached !== null) return { ok: true, models: currentModelChoices(entry, cached) };
 
   const ep = buildModelsEndpoint(provider, baseUrl);
   const authHeaders = buildAuthHeaders(provider, apiKey, baseUrl);
@@ -898,7 +901,10 @@ async function handleModelsV1List(raw: unknown): Promise<ModelsListResponse> {
       hint: 'Unexpected response shape — check provider /models endpoint compatibility',
     },
   );
-  if (result.ok) setCachedModels(provider, baseUrl, apiKey, result.models);
+  if (result.ok) {
+    setCachedModels(provider, baseUrl, apiKey, result.models);
+    return { ...result, models: currentModelChoices(entry, result.models) };
+  }
   return result;
 }
 
@@ -980,7 +986,7 @@ async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListRe
   // endpoint requires OAuth bearer + ChatGPT-Account-Id headers that this
   // keyless discovery path cannot supply) short-circuit with modelsHint.
   if (entry.modelsHint !== undefined && entry.modelsHint.length > 0) {
-    return { ok: true, models: entry.modelsHint };
+    return { ok: true, models: currentModelChoices(entry, entry.modelsHint) };
   }
 
   const keyResult = resolveApiKeyForListing(providerId, entry);
@@ -988,7 +994,7 @@ async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListRe
   const { apiKey } = keyResult;
 
   const cached = getCachedModels(providerId, entry.baseUrl, apiKey);
-  if (cached !== null) return { ok: true, models: cached };
+  if (cached !== null) return { ok: true, models: currentModelChoices(entry, cached) };
 
   const { url } = buildEndpointForWire(entry.wire, entry.baseUrl);
   const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.httpHeaders, entry.baseUrl);
@@ -1000,7 +1006,10 @@ async function handleModelsV1ListForProvider(raw: unknown): Promise<ModelsListRe
       hint: 'Check provider /models endpoint compatibility',
     }),
   );
-  if (result.ok) setCachedModels(providerId, entry.baseUrl, apiKey, result.models);
+  if (result.ok) {
+    setCachedModels(providerId, entry.baseUrl, apiKey, result.models);
+    return { ...result, models: currentModelChoices(entry, result.models) };
+  }
   return result;
 }
 

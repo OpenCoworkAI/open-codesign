@@ -17,14 +17,14 @@ import {
 
 describe('config v3 schema', () => {
   it('registers MiniMax models and all configured endpoint variants', () => {
-    expect(MINIMAX_MODEL_IDS).toEqual(['MiniMax-M3', 'MiniMax-M2.7']);
+    expect(MINIMAX_MODEL_IDS).toEqual(['MiniMax-M3.1-Flash', 'MiniMax-M3']);
     expect(BUILTIN_PROVIDERS.minimax).toMatchObject({
       id: 'minimax',
       wire: 'openai-chat',
       baseUrl: MINIMAX_ENDPOINTS.global_en.openaiBaseUrl,
       envKey: 'MINIMAX_API_KEY',
-      defaultModel: 'MiniMax-M3',
-      modelsHint: ['MiniMax-M3', 'MiniMax-M2.7'],
+      defaultModel: 'MiniMax-M3.1-Flash',
+      modelsHint: ['MiniMax-M3.1-Flash', 'MiniMax-M3'],
     });
     expect(
       Object.values(MINIMAX_ENDPOINTS).flatMap((endpoint) => [
@@ -44,6 +44,19 @@ describe('config v3 schema', () => {
     ).toBe(true);
     expect(MINIMAX_MODEL_CATALOG).toMatchObject([
       {
+        modelId: 'MiniMax-M3.1-Flash',
+        contextWindow: 1_000_000,
+        maxOutputTokens: 524_288,
+        pricingUsdPerMillionTokens: {
+          input: 0.15,
+          output: 0.6,
+          cacheRead: 0.015,
+          cacheWrite: null,
+        },
+        inputModalities: ['text', 'image', 'video'],
+        thinking: ['adaptive'],
+      },
+      {
         modelId: 'MiniMax-M3',
         contextWindow: 1_000_000,
         pricingUsdPerMillionTokens: {
@@ -55,15 +68,9 @@ describe('config v3 schema', () => {
         inputModalities: ['text', 'image', 'video'],
         thinking: ['adaptive', 'disabled'],
       },
-      {
-        modelId: 'MiniMax-M2.7',
-        contextWindow: 204_800,
-        inputModalities: ['text'],
-        thinking: ['always_on'],
-      },
     ]);
-    expect(MINIMAX_MODEL_CATALOG[0]?.pricingTiersUsdPerMillionTokens).toHaveLength(4);
-    expect(MINIMAX_MODEL_CATALOG[1]?.pricingUsdPerMillionTokens.cacheWrite).toBe(0.375);
+    expect(MINIMAX_MODEL_CATALOG[1]?.pricingTiersUsdPerMillionTokens).toHaveLength(4);
+    expect(MINIMAX_MODEL_CATALOG[0]?.pricingUsdPerMillionTokens.cacheWrite).toBeNull();
   });
 
   it('parses a minimal v3 config', () => {

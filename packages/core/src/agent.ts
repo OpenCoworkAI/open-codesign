@@ -37,10 +37,12 @@ import {
   classifyError,
   claudeCodeIdentityHeaders,
   inferReasoning,
+  isDirectMiniMaxModel,
   isProviderAbortedTransportError,
   isTransportLevelError,
   looksLikeClaudeOAuthToken,
   normalizeGeminiModelId,
+  normalizeMiniMaxPayload,
   shouldForceClaudeCodeIdentity,
   withBackoff,
 } from '@open-codesign/providers';
@@ -1314,8 +1316,20 @@ export async function generateViaAgent(
     messages: AgentMessage[],
     retryThinkingLevel = thinkingLevel,
   ): Agent => {
-    const onPayload =
-      piModel.api === 'openai-responses' ? sanitizeOpenAIResponsesPayloadForStoreFalse : undefined;
+    const onPayload = isDirectMiniMaxModel(piModel.id, piModel.baseUrl)
+      ? (payload: unknown) =>
+          normalizeMiniMaxPayload(
+            payload,
+            piModel.id,
+            piModel.baseUrl,
+            piModel.api,
+            input.reasoningLevel === undefined && retryThinkingLevel === 'off'
+              ? undefined
+              : retryThinkingLevel,
+          )
+      : piModel.api === 'openai-responses'
+        ? sanitizeOpenAIResponsesPayloadForStoreFalse
+        : undefined;
     const retryAgent = new Agent({
       initialState: {
         systemPrompt: augmentedSystemPrompt,
