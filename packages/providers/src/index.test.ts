@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const getModelMock = vi.fn();
 const completeSimpleMock = vi.fn();
 
-vi.mock('@mariozechner/pi-ai', () => ({
+vi.mock('@earendil-works/pi-ai', () => ({
   getModel: (...args: unknown[]) => getModelMock(...args),
   completeSimple: (...args: unknown[]) => completeSimpleMock(...args),
 }));

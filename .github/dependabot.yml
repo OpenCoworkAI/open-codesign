@@ -17,7 +17,7 @@ updates:
     groups:
       pi:
         patterns:
-          - "@mariozechner/pi-*"
+          - "@earendil-works/pi-*"
       typescript:
         patterns:
           - typescript

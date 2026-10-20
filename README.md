@@ -378,7 +378,7 @@ Have a different priority in mind? [Open an issue](https://github.com/OpenCowork
 ## Built on
 
 - Electron + React 19 + Vite 6 + Tailwind v4
-- `@mariozechner/pi-ai` and `pi-coding-agent` (model/provider and agent-loop primitives)
+- `@earendil-works/pi-ai` and `pi-coding-agent` (model/provider and agent-loop primitives)
 - `electron-builder`
 
 ## Reporting issues

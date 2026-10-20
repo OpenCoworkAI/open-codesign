@@ -42,7 +42,7 @@
  * blocks.
  */
 
-import type { AgentMessage } from '@mariozechner/pi-agent-core';
+import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 
 const TEXT_BLOCK_LIMIT = 8 * 1024;

@@ -35,7 +35,7 @@ A bird's-eye view. Detailed module READMEs live in each `packages/*/README.md`.
 |---|---|
 | `apps/desktop` | Electron shell — main process owns disk, workspace files, JSONL sessions, IPC, and desktop integration. Renderer hosts React UI. No provider SDK logic here. |
 | `packages/core` | Generation orchestration. Prompt + design system + history → providers → artifact stream → events. |
-| `packages/providers` | Wraps `@mariozechner/pi-ai` and adds the missing capabilities. App code never imports a provider SDK directly. |
+| `packages/providers` | Wraps `@earendil-works/pi-ai` and adds the missing capabilities. App code never imports a provider SDK directly. |
 | `packages/runtime` | Sandbox preview. Iframe `srcdoc` + esbuild-wasm + import maps + overlay scripts for inline comments and sliders. |
 | `packages/ui` | Design tokens (CSS variables) + Radix-based primitives + Tailwind preset. |
 | `packages/artifacts` | Zod schemas for HTML / SVG / slide deck / asset bundle + `<artifact>` streaming parser. |

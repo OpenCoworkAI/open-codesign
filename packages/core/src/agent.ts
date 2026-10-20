@@ -1,7 +1,7 @@
 /**
  * Agent runtime wrapper — the live generate path in v0.2.
  *
- * Routes a `generate()`-shaped request through `@mariozechner/pi-agent-core`
+ * Routes a `generate()`-shaped request through `@earendil-works/pi-agent-core`
  * with the v0.2 design tool set (set_title, set_todos,
  * str_replace_based_edit_tool, done, generate_image_asset, skill, scaffold,
  * preview, tweaks, ask — see `defaultTools` below). Streams `turn_start` /
@@ -26,13 +26,13 @@ import {
   type AgentMessage,
   type AgentTool,
   type AgentToolResult,
-} from '@mariozechner/pi-agent-core';
+} from '@earendil-works/pi-agent-core';
 import {
   type ImageContent as PiAiImageContent,
   type Message as PiAiMessage,
   type Model as PiAiModel,
   streamSimple,
-} from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-ai';
 import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
   classifyError,
@@ -127,7 +127,7 @@ import { makeWebResearchTools, WEB_RESEARCH_GUIDANCE } from './tools/web-researc
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via
  *  pi-ai). Declared here so this file does not take a direct dependency on
- *  `@mariozechner/pi-ai`'s types; keep this shape in lockstep with the real
+ *  `@earendil-works/pi-ai`'s types; keep this shape in lockstep with the real
  *  pi-ai `AssistantMessage` whenever pi-agent-core is upgraded. */
 interface PiAssistantMessage {
   role: 'assistant';

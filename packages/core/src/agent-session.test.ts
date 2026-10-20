@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { AuthStorage } from '@mariozechner/pi-coding-agent';
+import { AuthStorage } from '@earendil-works/pi-coding-agent';
 import { describe, expect, it } from 'vitest';
 import { createCodesignSession } from './agent-session.js';
 
