@@ -46,7 +46,7 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "^2.5.15",
     "@changesets/cli": "^2.31.1",
     "@iarna/toml": "^2.2.5",
     "@open-codesign/core": "workspace:*",
