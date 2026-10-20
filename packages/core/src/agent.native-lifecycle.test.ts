@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Agent, AgentMessage, AgentOptions, StreamFn } from '@earendil-works/pi-agent-core';
 import { type AssistantMessage, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
-import type { ActiveRunMessageV1 } from '@open-codesign/shared';
+import { type ActiveRunMessageV1, CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActiveRunMessages } from './active-messages';
 import { generateViaAgent } from './agent';
@@ -491,6 +491,24 @@ describe('production generateViaAgent with installed pi', () => {
       native.agents[0]?.state.messages.filter((message) => message.role === 'user'),
     ).toHaveLength(1);
   });
+  it('propagates an unrelated observer failure without treating it as a controlled halt', async () => {
+    seed();
+    const failure = new CodesignError('Observer failed', ERROR_CODES.GENERATION_INCOMPLETE);
+    const onComplete = vi.fn();
+    script([[todos()], 'Must not continue']);
+    await expect(
+      generateViaAgent(input, {
+        fs,
+        onComplete,
+        onEvent: (event) => {
+          if (event.type === 'turn_end') throw failure;
+        },
+      }),
+    ).rejects.toBe(failure);
+    expect(native.stream).toHaveBeenCalledOnce();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
   describe('repeated tool calls', () => {
     // Only the repeated call reads this file, so its view count is the number of executions.
     const PROBE = 'probe.txt';

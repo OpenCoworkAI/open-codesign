@@ -1331,6 +1331,18 @@ async function generateViaAgentInternal(
   // original lets the post-agent branch rethrow it as-is, so the renderer
   // sees the same code the initial IPC-level resolution would emit.
   let capturedGetApiKeyError: unknown = null;
+  let turnBoundaryHalt: CodesignError | null = null;
+  const agentsWithEndEvent = new WeakSet<Agent>();
+  const forwardAgentEvent = (event: AgentEvent): void => {
+    deps.activeMessages?.handleEvent(event, () => {
+      resourceState.lastDone = null;
+      runProtocolState.todosSet = false;
+      lastDoneDetails = undefined;
+      doneProgress.errorRounds = 0;
+      toolLoopGuard.reset();
+    });
+    deps.onEvent?.(event);
+  };
   const requestTimeoutMs = input.requestTimeoutMs;
 
   // Factory for creating agents with a given message history. Used for both
@@ -1409,26 +1421,25 @@ async function generateViaAgentInternal(
         : {}),
     });
     retryAgent.subscribe((event) => {
-      deps.activeMessages?.handleEvent(event, () => {
-        resourceState.lastDone = null;
-        runProtocolState.todosSet = false;
-        lastDoneDetails = undefined;
-        doneProgress.errorRounds = 0;
-        toolLoopGuard.reset();
-      });
-      deps.onEvent?.(event);
+      if (event.type === 'agent_end') agentsWithEndEvent.add(retryAgent);
+      forwardAgentEvent(event);
       if (event.type === 'turn_end') {
         assertNotCancelled();
         // Agent does not expose the low-level shouldStopAfterTurn hook. Fail the
         // settled batch at its native event boundary, before pi drains queues.
         if (repairLimitReached()) {
-          throw new CodesignError('Done repair limit reached', ERROR_CODES.GENERATION_INCOMPLETE);
+          turnBoundaryHalt = new CodesignError(
+            'Done repair limit reached',
+            ERROR_CODES.GENERATION_INCOMPLETE,
+          );
+          throw turnBoundaryHalt;
         }
         if (toolLoop.halt !== null) {
-          throw new CodesignError(
+          turnBoundaryHalt = new CodesignError(
             formatToolLoopIncomplete(toolLoop.halt),
             ERROR_CODES.GENERATION_INCOMPLETE,
           );
+          throw turnBoundaryHalt;
         }
       }
     });
@@ -1454,10 +1465,23 @@ async function generateViaAgentInternal(
     const target = agent;
     const abort = () => target.abort();
     input.signal?.addEventListener('abort', abort, { once: true });
+    let controlledHalt = false;
     try {
       assertNotCancelled();
-      await run();
+      try {
+        await run();
+      } catch (err) {
+        // pi now propagates listener exceptions. Our own turn-boundary halt
+        // still needs transcript completion before the normal incomplete result.
+        if (err !== turnBoundaryHalt) throw err;
+        controlledHalt = true;
+      }
       await target.waitForIdle();
+      if (controlledHalt && !agentsWithEndEvent.has(target)) {
+        // The subscriber exception also bypasses pi's native agent_end event.
+        agentsWithEndEvent.add(target);
+        forwardAgentEvent({ type: 'agent_end', messages: target.state.messages });
+      }
       assertNotCancelled();
     } finally {
       input.signal?.removeEventListener('abort', abort);
