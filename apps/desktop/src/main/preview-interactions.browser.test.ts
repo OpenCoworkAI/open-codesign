@@ -143,21 +143,22 @@ describe.skipIf(!chrome)('preview control actionability in system Chrome', () =>
     expect(await recordedEvents()).toContain(`${event}:${step.selector.slice(1)};`);
   });
 
-  it.each(
-    actions,
-  )('blocks $action on directly disabled $selector in the first legend', async (step) => {
-    await mount(`<fieldset disabled><legend>${controls}</legend></fieldset>`);
-    await page.$eval(step.selector, (element) => element.setAttribute('disabled', ''));
-    await expectBlocked(step);
-  });
+  it.each(actions)(
+    'blocks $action on directly disabled $selector in the first legend',
+    async (step) => {
+      await mount(`<fieldset disabled><legend>${controls}</legend></fieldset>`);
+      await page.$eval(step.selector, (element) => element.setAttribute('disabled', ''));
+      await expectBlocked(step);
+    },
+  );
 
-  it.each([
-    'inert',
-    'aria-disabled="true"',
-  ])('still blocks first-legend controls beneath %s', async (attribute) => {
-    await mount(
-      `<fieldset disabled><legend><div ${attribute}>${controls}</div></legend></fieldset>`,
-    );
-    await expectBlocked({ action: 'fill', selector: '#input', value: 'changed' });
-  });
+  it.each(['inert', 'aria-disabled="true"'])(
+    'still blocks first-legend controls beneath %s',
+    async (attribute) => {
+      await mount(
+        `<fieldset disabled><legend><div ${attribute}>${controls}</div></legend></fieldset>`,
+      );
+      await expectBlocked({ action: 'fill', selector: '#input', value: 'changed' });
+    },
+  );
 });

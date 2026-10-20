@@ -39,13 +39,12 @@ import { applyComment, buildApplyCommentUserPrompt, reasoningForModel } from './
 const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
 
 describe('reasoningForModel', () => {
-  it.each([
-    'openai',
-    'custom-coproxy-local',
-    'openrouter',
-  ])('uses supported Astra reasoning for %s', (provider) => {
-    expect(reasoningForModel({ provider, modelId: 'gpt-6-astra' })).toBe('low');
-  });
+  it.each(['openai', 'custom-coproxy-local', 'openrouter'])(
+    'uses supported Astra reasoning for %s',
+    (provider) => {
+      expect(reasoningForModel({ provider, modelId: 'gpt-6-astra' })).toBe('low');
+    },
+  );
 
   it('preserves defaults for other custom models', () => {
     expect(

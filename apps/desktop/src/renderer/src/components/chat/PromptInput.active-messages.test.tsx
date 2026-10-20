@@ -76,51 +76,54 @@ beforeEach(() => {
 });
 
 describe('active composer callbacks', () => {
-  it.each([
-    '',
-    ' \n  ',
-  ])('does not offer or submit active messages for a blank draft %j', (draft) => {
-    useCodesignStore.setState({ composerDrafts: { a: draft, b: 'Other draft' } });
-    const active = vi.fn(async () => {});
-    const normal = vi.fn();
-    const tree = PromptInput({
-      onSubmit: normal,
-      onActiveSubmit: active,
-      onCancel: vi.fn(),
-      isGenerating: true,
-    });
-    expect(
-      findElement(tree, (element) => element.props.className === 'codesign-active-message-actions'),
-    ).toBeUndefined();
-    expect(findElement(tree, (element) => element.type === 'details')).toBeUndefined();
-    expect(
-      findElement(tree, (element) => element.props['aria-label']?.startsWith('Stop') === true),
-    ).toBeDefined();
-    findElement(tree, (element) => element.type === 'textarea')?.props.onKeyDown?.(keyEvent());
-    expect(active).not.toHaveBeenCalled();
-    expect(normal).not.toHaveBeenCalled();
-    expect(useCodesignStore.getState().composerDrafts).toEqual({ a: draft, b: 'Other draft' });
-  });
+  it.each(['', ' \n  '])(
+    'does not offer or submit active messages for a blank draft %j',
+    (draft) => {
+      useCodesignStore.setState({ composerDrafts: { a: draft, b: 'Other draft' } });
+      const active = vi.fn(async () => {});
+      const normal = vi.fn();
+      const tree = PromptInput({
+        onSubmit: normal,
+        onActiveSubmit: active,
+        onCancel: vi.fn(),
+        isGenerating: true,
+      });
+      expect(
+        findElement(
+          tree,
+          (element) => element.props.className === 'codesign-active-message-actions',
+        ),
+      ).toBeUndefined();
+      expect(findElement(tree, (element) => element.type === 'details')).toBeUndefined();
+      expect(
+        findElement(tree, (element) => element.props['aria-label']?.startsWith('Stop') === true),
+      ).toBeDefined();
+      findElement(tree, (element) => element.type === 'textarea')?.props.onKeyDown?.(keyEvent());
+      expect(active).not.toHaveBeenCalled();
+      expect(normal).not.toHaveBeenCalled();
+      expect(useCodesignStore.getState().composerDrafts).toEqual({ a: draft, b: 'Other draft' });
+    },
+  );
 
-  it.each([
-    { key: 'Enter' },
-    { key: 'Enter', ctrlKey: true },
-  ])('queues %j rather than generating, and lets acceptance own draft clearing', (input) => {
-    const active = vi.fn(async () => {});
-    const normal = vi.fn();
-    const tree = PromptInput({
-      onSubmit: normal,
-      onActiveSubmit: active,
-      onCancel: vi.fn(),
-      isGenerating: true,
-    });
-    const event = keyEvent(input);
-    findElement(tree, (element) => element.type === 'textarea')?.props.onKeyDown?.(event);
-    expect(active).toHaveBeenCalledWith('  Follow up  ', 'follow-up');
-    expect(normal).not.toHaveBeenCalled();
-    expect(event.preventDefault).toHaveBeenCalled();
-    expect(useCodesignStore.getState().composerDrafts['a']).toBe('  Follow up  ');
-  });
+  it.each([{ key: 'Enter' }, { key: 'Enter', ctrlKey: true }])(
+    'queues %j rather than generating, and lets acceptance own draft clearing',
+    (input) => {
+      const active = vi.fn(async () => {});
+      const normal = vi.fn();
+      const tree = PromptInput({
+        onSubmit: normal,
+        onActiveSubmit: active,
+        onCancel: vi.fn(),
+        isGenerating: true,
+      });
+      const event = keyEvent(input);
+      findElement(tree, (element) => element.type === 'textarea')?.props.onKeyDown?.(event);
+      expect(active).toHaveBeenCalledWith('  Follow up  ', 'follow-up');
+      expect(normal).not.toHaveBeenCalled();
+      expect(event.preventDefault).toHaveBeenCalled();
+      expect(useCodesignStore.getState().composerDrafts['a']).toBe('  Follow up  ');
+    },
+  );
 
   it('preserves Shift+Enter and composition Enter including native IME fallbacks', () => {
     const active = vi.fn(async () => {});

@@ -196,24 +196,27 @@ describe('generated page text-definition coverage', () => {
     `[].__proto__.map = function(){data.title='A';return []}; data.rows.map(row=>row.title)`,
     `[].__proto__.map = function(){this[0].title='A';return []}; data.rows.map(row=>row.title)`,
     `[].constructor.prototype.map = function(){this[0].title='A';return []}; data.rows.map(row=>row.title)`,
-  ])('refuses overwritten TSX/data initializers even when displayed text initially matches: %s', (mutation) => {
-    const source = `const data={title:'A',rows:[{title:'A'}]}; ${mutation}; function App(){return <><h1>{data.title}</h1><h2>{data.rows[0].title}</h2></>}`;
-    const result = analyzeSourceEdit({ path: 'App.tsx', source });
-    if (result.status !== 'ready') throw new Error(result.message);
-    for (const target of result.targets) {
-      expect(target.editableFields).toEqual([]);
-      expect(
-        planSourceEdit({
-          path: 'App.tsx',
-          source,
-          expectedSourceHash: result.sourceHash,
-          targetId: target.id,
-          scope: 'source-definition',
-          operation: { kind: 'set-text', textId: target.textSources?.[0]?.textId, value: 'B' },
-        }),
-      ).toMatchObject({ status: 'rejected', reason: 'unsupported-field' });
-    }
-  });
+  ])(
+    'refuses overwritten TSX/data initializers even when displayed text initially matches: %s',
+    (mutation) => {
+      const source = `const data={title:'A',rows:[{title:'A'}]}; ${mutation}; function App(){return <><h1>{data.title}</h1><h2>{data.rows[0].title}</h2></>}`;
+      const result = analyzeSourceEdit({ path: 'App.tsx', source });
+      if (result.status !== 'ready') throw new Error(result.message);
+      for (const target of result.targets) {
+        expect(target.editableFields).toEqual([]);
+        expect(
+          planSourceEdit({
+            path: 'App.tsx',
+            source,
+            expectedSourceHash: result.sourceHash,
+            targetId: target.id,
+            scope: 'source-definition',
+            operation: { kind: 'set-text', textId: target.textSources?.[0]?.textId, value: 'B' },
+          }),
+        ).toMatchObject({ status: 'rejected', reason: 'unsupported-field' });
+      }
+    },
+  );
   it('keeps existing attribute and style candidates beside opaque effects', () => {
     const source = `function App(){React.useEffect(()=>{},[]);return <h1 title="Title" style={{gap:2}}>Text</h1>}`;
     expect(inspect(source).targets[0]?.editableFields).toEqual([

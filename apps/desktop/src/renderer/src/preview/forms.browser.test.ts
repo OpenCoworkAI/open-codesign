@@ -144,18 +144,22 @@ describe.skipIf(!chrome)('interactive preview form boundary in system Chrome', (
   it.each([
     '<html><script>ATTACK</script><head></head><body>Early</body></html>',
     '<!doctype html><html><head/><script>ATTACK</script><body>Malformed</body></html>',
-  ])('applies CSP before early authored scripts: %s', async (template) => {
-    const baseline = requests.length;
-    const source = template.replace(
-      'ATTACK',
-      `var f=document.createElement('form');f.action=${JSON.stringify(endpoint)};f.method='post';document.documentElement.append(f);f.submit();window.open(${JSON.stringify(endpoint)},'_blank');`,
-    );
-    const { page, frame } = await mount(source, 'index.html');
-    try {
-      await frame.waitForSelector('form');
-      await expectNoTransmission(page, frame, baseline);
-    } finally {
-      await page.close();
-    }
-  }, 30_000);
+  ])(
+    'applies CSP before early authored scripts: %s',
+    async (template) => {
+      const baseline = requests.length;
+      const source = template.replace(
+        'ATTACK',
+        `var f=document.createElement('form');f.action=${JSON.stringify(endpoint)};f.method='post';document.documentElement.append(f);f.submit();window.open(${JSON.stringify(endpoint)},'_blank');`,
+      );
+      const { page, frame } = await mount(source, 'index.html');
+      try {
+        await frame.waitForSelector('form');
+        await expectNoTransmission(page, frame, baseline);
+      } finally {
+        await page.close();
+      }
+    },
+    30_000,
+  );
 });

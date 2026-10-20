@@ -264,16 +264,14 @@ describe('RunJournal', () => {
     expect(await readdir(directory)).toEqual([]);
   });
 
-  it.each([
-    -1,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    1.5,
-  ])('rejects invalid startedAt %s', async (time) => {
-    await expect(start(new RunJournal(directory), 'run-a', 'design-a', time)).rejects.toThrow(
-      'startedAt',
-    );
-  });
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, 1.5])(
+    'rejects invalid startedAt %s',
+    async (time) => {
+      await expect(start(new RunJournal(directory), 'run-a', 'design-a', time)).rejects.toThrow(
+        'startedAt',
+      );
+    },
+  );
 
   it('rejects bad append identities and unknown runs without consuming a sequence', async () => {
     const journal = new RunJournal(directory);
@@ -286,14 +284,14 @@ describe('RunJournal', () => {
     expect((await journal.append(event())).seq).toBe(1);
   });
 
-  it.each([
-    -1,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    1.5,
-  ])('rejects invalid cursor %s', async (cursor) => {
-    await expect(new RunJournal(directory).recover({ 'run-a': cursor })).rejects.toThrow('cursor');
-  });
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, 1.5])(
+    'rejects invalid cursor %s',
+    async (cursor) => {
+      await expect(new RunJournal(directory).recover({ 'run-a': cursor })).rejects.toThrow(
+        'cursor',
+      );
+    },
+  );
 
   it('rejects invalid cursor container and path-like cursor keys', async () => {
     const journal = new RunJournal(directory);

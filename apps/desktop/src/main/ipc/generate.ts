@@ -457,8 +457,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   ipcMain.handle('codesign:v1:recover-runs', async (_event, raw: unknown) => {
     const input = raw as { schemaVersion?: unknown; cursors?: unknown } | null;
     if (
-      !input ||
-      input.schemaVersion !== 1 ||
+      input?.schemaVersion !== 1 ||
       !input.cursors ||
       typeof input.cursors !== 'object' ||
       Array.isArray(input.cursors)
@@ -508,8 +507,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   ipcMain.handle('codesign:v1:usage-budget', async (_event, raw: unknown) => {
     const input = raw as { schemaVersion?: unknown; designId?: unknown } | null;
     if (
-      !input ||
-      input.schemaVersion !== 1 ||
+      input?.schemaVersion !== 1 ||
       typeof input.designId !== 'string' ||
       input.designId.length === 0 ||
       input.designId.length > 512
@@ -1093,8 +1091,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     ) {
       throw new CodesignError('done:verify:v1 expects { artifact: string }', 'IPC_BAD_INPUT');
     }
-    const errors = await sharedRuntimeVerifier((raw as { artifact: string }).artifact);
-    return { errors };
+    const { errors, warnings } = await sharedRuntimeVerifier(
+      (raw as { artifact: string }).artifact,
+    );
+    return { schemaVersion: 1, errors, warnings };
   });
 
   ipcMain.handle('codesign:v1:generate', async (_e, raw: unknown) => {

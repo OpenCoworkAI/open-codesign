@@ -222,7 +222,7 @@ describe('production generateViaAgent with installed pi', () => {
       async (source: string, context?: { path: string; signal?: AbortSignal }) => {
         expect(context?.signal).toBeInstanceOf(AbortSignal);
         expect(source).toBe(readFileSync(join(root, 'App.jsx'), 'utf8'));
-        return [];
+        return { errors: [], warnings: [] };
       },
     );
     const checks: DoneDetails[] = [];
@@ -296,46 +296,46 @@ describe('production generateViaAgent with installed pi', () => {
     expect(contexts[4]?.filter((m) => m.role === 'user')).toHaveLength(2);
   });
 
-  it.each([
-    false,
-    true,
-  ])('rejects aborted prompt admission (history=%s) without model calls or writes', async (history) => {
-    const controller = new AbortController();
-    controller.abort();
-    await expect(
-      generateViaAgent(
-        {
-          ...input,
-          signal: controller.signal,
-          history: history ? [{ role: 'user', content: 'Prior turn' }] : [],
-        },
-        { fs },
-      ),
-    ).rejects.toMatchObject({ code: 'PROVIDER_ABORTED' });
-    expect(native.stream).not.toHaveBeenCalled();
-    expect(writes).toEqual([]);
-  });
+  it.each([false, true])(
+    'rejects aborted prompt admission (history=%s) without model calls or writes',
+    async (history) => {
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        generateViaAgent(
+          {
+            ...input,
+            signal: controller.signal,
+            history: history ? [{ role: 'user', content: 'Prior turn' }] : [],
+          },
+          { fs },
+        ),
+      ).rejects.toMatchObject({ code: 'PROVIDER_ABORTED' });
+      expect(native.stream).not.toHaveBeenCalled();
+      expect(writes).toEqual([]);
+    },
+  );
 
-  it.each([
-    'fetch failed: terminated',
-    'reasoning_content is missing',
-  ])('rejects recovery admission cancelled from onRetry: %s', async (error) => {
-    native.stream.mockImplementation((model) => response(model, [], error));
-    const controller = new AbortController();
-    await expect(
-      generateViaAgent(
-        {
-          ...input,
-          signal: controller.signal,
-          reasoningLevel: 'low',
-          history: [{ role: 'user', content: 'Prior turn' }],
-        },
-        { fs, onRetry: () => controller.abort() },
-      ),
-    ).rejects.toMatchObject({ code: 'PROVIDER_ABORTED' });
-    expect(native.stream).toHaveBeenCalledTimes(1);
-    expect(writes).toEqual([]);
-  });
+  it.each(['fetch failed: terminated', 'reasoning_content is missing'])(
+    'rejects recovery admission cancelled from onRetry: %s',
+    async (error) => {
+      native.stream.mockImplementation((model) => response(model, [], error));
+      const controller = new AbortController();
+      await expect(
+        generateViaAgent(
+          {
+            ...input,
+            signal: controller.signal,
+            reasoningLevel: 'low',
+            history: [{ role: 'user', content: 'Prior turn' }],
+          },
+          { fs, onRetry: () => controller.abort() },
+        ),
+      ).rejects.toMatchObject({ code: 'PROVIDER_ABORTED' });
+      expect(native.stream).toHaveBeenCalledTimes(1);
+      expect(writes).toEqual([]);
+    },
+  );
 
   it('makes production ask a native sequential barrier for sibling editor and done calls', async () => {
     seed();
@@ -356,89 +356,92 @@ describe('production generateViaAgent with installed pi', () => {
     expect(writes).toEqual(['approved.txt']);
   });
 
-  it.each([
-    'follow-up',
-    'steer',
-  ] as const)('cancels unresolved ask without stale sibling writes or auto-replaying %s', async (mode) => {
-    seed();
-    const controller = new AbortController();
-    const receipts: ActiveRunMessageV1[] = [];
-    const active = new ActiveRunMessages(
-      'design',
-      'run',
-      (row) => receipts.push(row),
-      controller.signal,
-    );
-    let answer!: (value: AskResult) => void;
-    const bridge = vi.fn(
-      () =>
-        new Promise<AskResult>((resolve) => {
-          answer = resolve;
-        }),
-    );
-    script([[todos()], [ask(), create('after-stop.txt', 'must not write'), done()]]);
-    const running = generateViaAgent(
-      { ...input, signal: controller.signal, askBridge: bridge },
-      { fs, activeMessages: active },
-    );
-    const rejected = expect(running).rejects.toMatchObject({ code: 'PROVIDER_ABORTED' });
-    await vi.waitFor(() => expect(bridge).toHaveBeenCalledOnce());
-    active.submit({
-      schemaVersion: 1,
-      designId: 'design',
-      generationId: 'run',
-      messageId: 'queued',
-      mode,
-      text: 'Preserve me for explicit recovery',
-    });
-    controller.abort();
-    await rejected;
-    answer({ status: 'cancelled', answers: [] });
-    await Promise.resolve();
-    expect(writes).toEqual([]);
-    expect(native.stream).toHaveBeenCalledTimes(2);
-    expect(receipts.map((row) => row.status)).toEqual(['pending', 'not-delivered']);
-    expect(native.agents[0]?.hasQueuedMessages()).toBe(false);
-  });
-
-  it.each([
-    'preview',
-    'done',
-  ] as const)('forwards the live pi signal through wrappers to %s and cancels siblings', async (tool) => {
-    seed();
-    const controller = new AbortController();
-    let observed: AbortSignal | undefined;
-    const wait = (signal?: AbortSignal): Promise<never> => {
-      observed = signal;
-      return new Promise((_resolve, reject) =>
-        signal?.addEventListener('abort', () => reject(new Error('Cancelled executor')), {
-          once: true,
-        }),
+  it.each(['follow-up', 'steer'] as const)(
+    'cancels unresolved ask without stale sibling writes or auto-replaying %s',
+    async (mode) => {
+      seed();
+      const controller = new AbortController();
+      const receipts: ActiveRunMessageV1[] = [];
+      const active = new ActiveRunMessages(
+        'design',
+        'run',
+        (row) => receipts.push(row),
+        controller.signal,
       );
-    };
-    script([
-      [todos()],
-      [call(tool, { path: 'App.jsx' }), create('after-stop.txt', 'must not write'), done()],
-    ]);
-    const running = generateViaAgent(
-      { ...input, signal: controller.signal, runPreview: (options) => wait(options.signal) },
-      { fs, runtimeVerify: (_source, context) => wait(context?.signal) },
-    );
-    const rejected = expect(running).rejects.toMatchObject({ code: 'PROVIDER_ABORTED' });
-    await vi.waitFor(() => expect(observed).toBeInstanceOf(AbortSignal));
-    controller.abort();
-    await rejected;
-    expect(observed?.aborted).toBe(true);
-    expect(writes).toEqual([]);
-    expect(native.stream).toHaveBeenCalledTimes(2);
-  });
+      let answer!: (value: AskResult) => void;
+      const bridge = vi.fn(
+        () =>
+          new Promise<AskResult>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      script([[todos()], [ask(), create('after-stop.txt', 'must not write'), done()]]);
+      const running = generateViaAgent(
+        { ...input, signal: controller.signal, askBridge: bridge },
+        { fs, activeMessages: active },
+      );
+      const rejected = expect(running).rejects.toMatchObject({ code: 'PROVIDER_ABORTED' });
+      await vi.waitFor(() => expect(bridge).toHaveBeenCalledOnce());
+      active.submit({
+        schemaVersion: 1,
+        designId: 'design',
+        generationId: 'run',
+        messageId: 'queued',
+        mode,
+        text: 'Preserve me for explicit recovery',
+      });
+      controller.abort();
+      await rejected;
+      answer({ status: 'cancelled', answers: [] });
+      await Promise.resolve();
+      expect(writes).toEqual([]);
+      expect(native.stream).toHaveBeenCalledTimes(2);
+      expect(receipts.map((row) => row.status)).toEqual(['pending', 'not-delivered']);
+      expect(native.agents[0]?.hasQueuedMessages()).toBe(false);
+    },
+  );
+
+  it.each(['preview', 'done'] as const)(
+    'forwards the live pi signal through wrappers to %s and cancels siblings',
+    async (tool) => {
+      seed();
+      const controller = new AbortController();
+      let observed: AbortSignal | undefined;
+      const wait = (signal?: AbortSignal): Promise<never> => {
+        observed = signal;
+        return new Promise((_resolve, reject) =>
+          signal?.addEventListener('abort', () => reject(new Error('Cancelled executor')), {
+            once: true,
+          }),
+        );
+      };
+      script([
+        [todos()],
+        [call(tool, { path: 'App.jsx' }), create('after-stop.txt', 'must not write'), done()],
+      ]);
+      const running = generateViaAgent(
+        { ...input, signal: controller.signal, runPreview: (options) => wait(options.signal) },
+        { fs, runtimeVerify: (_source, context) => wait(context?.signal) },
+      );
+      const rejected = expect(running).rejects.toMatchObject({ code: 'PROVIDER_ABORTED' });
+      await vi.waitFor(() => expect(observed).toBeInstanceOf(AbortSignal));
+      controller.abort();
+      await rejected;
+      expect(observed?.aborted).toBe(true);
+      expect(writes).toEqual([]);
+      expect(native.stream).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('stops a mixed done/write batch at the third failed verification without a fourth provider/verifier attempt', async () => {
     seed();
     const controller = new AbortController();
     const active = new ActiveRunMessages('design', 'run', () => {}, controller.signal);
     const ended: AgentMessage[][] = [];
-    const verify = vi.fn(async () => [{ message: 'Broken runtime', source: 'runtime' }]);
+    const verify = vi.fn(async () => ({
+      errors: [{ message: 'Broken runtime', source: 'runtime' }],
+      warnings: [],
+    }));
     script([
       [todos()],
       ...Array.from({ length: 5 }, (_, n) => [
@@ -637,7 +640,10 @@ describe('production generateViaAgent with installed pi', () => {
 
     it('leaves repeated done calls to the done repair limit', async () => {
       seed();
-      const verify = vi.fn(async () => [{ message: 'Broken runtime', source: 'runtime' }]);
+      const verify = vi.fn(async () => ({
+        errors: [{ message: 'Broken runtime', source: 'runtime' }],
+        warnings: [],
+      }));
       script([[todos()], ...Array.from({ length: 5 }, () => [done()]), 'Must not complete']);
       await expect(generateViaAgent(input, { fs, runtimeVerify: verify })).rejects.toMatchObject({
         code: 'GENERATION_INCOMPLETE',

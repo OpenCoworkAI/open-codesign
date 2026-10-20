@@ -269,29 +269,29 @@ describe('persistTweakTokensToWorkspace', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it.each([
-    'design switch',
-    'generation start',
-  ])('rejects a save invalidated during its read by %s', async () => {
-    let writable = true;
-    const read = vi.fn<WorkspacePreviewRead>(async (_designId, path) => {
-      writable = false;
-      return { path, content: jsxSource };
-    });
-    const write = vi.fn<WorkspacePreviewWrite>();
-    await expect(
-      persistTweakTokensToWorkspace({
-        designId: 'original-design',
-        path: 'App.jsx',
-        previewSource: jsxSource,
-        tokens: { accent: '#123456' },
-        read,
-        write,
-        canWrite: () => writable,
-      }),
-    ).rejects.toThrow('cancelled');
-    expect(write).not.toHaveBeenCalled();
-  });
+  it.each(['design switch', 'generation start'])(
+    'rejects a save invalidated during its read by %s',
+    async () => {
+      let writable = true;
+      const read = vi.fn<WorkspacePreviewRead>(async (_designId, path) => {
+        writable = false;
+        return { path, content: jsxSource };
+      });
+      const write = vi.fn<WorkspacePreviewWrite>();
+      await expect(
+        persistTweakTokensToWorkspace({
+          designId: 'original-design',
+          path: 'App.jsx',
+          previewSource: jsxSource,
+          tokens: { accent: '#123456' },
+          read,
+          write,
+          canWrite: () => writable,
+        }),
+      ).rejects.toThrow('cancelled');
+      expect(write).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('mergeTweakTokenChanges', () => {
@@ -328,14 +328,13 @@ describe('mergeTweakTokenChanges', () => {
     );
   });
 
-  it.each([
-    1000,
-    Number.POSITIVE_INFINITY,
-    Number.NaN,
-  ])('rejects unsafe numeric input %s', (gap) => {
-    const source = `${base}\nconst TWEAK_SCHEMA = /*TWEAK-SCHEMA-BEGIN*/{"gap":{"kind":"number","min":8,"max":32,"step":2}}/*TWEAK-SCHEMA-END*/;`;
-    expect(() => mergeTweakTokenChanges(source, source, { gap })).toThrow('supported range');
-  });
+  it.each([1000, Number.POSITIVE_INFINITY, Number.NaN])(
+    'rejects unsafe numeric input %s',
+    (gap) => {
+      const source = `${base}\nconst TWEAK_SCHEMA = /*TWEAK-SCHEMA-BEGIN*/{"gap":{"kind":"number","min":8,"max":32,"step":2}}/*TWEAK-SCHEMA-END*/;`;
+      expect(() => mergeTweakTokenChanges(source, source, { gap })).toThrow('supported range');
+    },
+  );
 
   it('rejects invalid options and primitive type changes', () => {
     const source = `${base}\nconst TWEAK_SCHEMA = /*TWEAK-SCHEMA-BEGIN*/{"heading":{"kind":"enum","options":["Original","Alternative"]}}/*TWEAK-SCHEMA-END*/;`;

@@ -49,24 +49,24 @@ describe('source edit IPC persistence boundary', () => {
       ),
     ).toEqual(result);
   });
-  it.each([
-    undefined,
-    'stale',
-  ])('rejects missing or mismatched preview echo %s', async (previewRevision) => {
-    const apply = vi.fn(async () => ({
-      schemaVersion: 1 as const,
-      status: 'applied' as const,
-      path: 'App.jsx',
-      content: '<p>New</p>',
-      sourceHash: 'b'.repeat(64),
-      scope: 'source-definition' as const,
-      patch: { start: 3, end: 6, expectedText: 'Old', replacement: 'New' },
-      ...(previewRevision ? { previewRevision } : {}),
-    }));
-    await expect(persistWorkspaceSourceEdit(applyRequest, apply)).rejects.toThrow(
-      'preview revision',
-    );
-  });
+  it.each([undefined, 'stale'])(
+    'rejects missing or mismatched preview echo %s',
+    async (previewRevision) => {
+      const apply = vi.fn(async () => ({
+        schemaVersion: 1 as const,
+        status: 'applied' as const,
+        path: 'App.jsx',
+        content: '<p>New</p>',
+        sourceHash: 'b'.repeat(64),
+        scope: 'source-definition' as const,
+        patch: { start: 3, end: 6, expectedText: 'Old', replacement: 'New' },
+        ...(previewRevision ? { previewRevision } : {}),
+      }));
+      await expect(persistWorkspaceSourceEdit(applyRequest, apply)).rejects.toThrow(
+        'preview revision',
+      );
+    },
+  );
   it('fails closed on a malformed ACK', async () => {
     const apply = vi.fn(async () => ({ status: 'success' })) as unknown as Parameters<
       typeof persistWorkspaceSourceEdit

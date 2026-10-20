@@ -76,21 +76,21 @@ describe('local exporter assets', () => {
     expect(archive).toBe(source);
   });
 
-  it.each([
-    '"',
-    "'",
-  ])('encodes archive path segments without adding quotes inside %s JSX strings', (quote) => {
-    const asset = 'assets/brand%20images/it%27s%20%22local%22%20%28draft%29%25%23%3F.svg';
-    const suffix = '?version=2&name=some%20name#icon';
-    const source = `function App() { return <div style={{backgroundImage:${quote}url(../${asset}${suffix})${quote}}} />; }`;
-    const out = rewriteHtmlLocalAssetReferences(source, {
-      assetBasePath: join(tempDir, 'screens'),
-      assetRootPath: tempDir,
-    });
+  it.each(['"', "'"])(
+    'encodes archive path segments without adding quotes inside %s JSX strings',
+    (quote) => {
+      const asset = 'assets/brand%20images/it%27s%20%22local%22%20%28draft%29%25%23%3F.svg';
+      const suffix = '?version=2&name=some%20name#icon';
+      const source = `function App() { return <div style={{backgroundImage:${quote}url(../${asset}${suffix})${quote}}} />; }`;
+      const out = rewriteHtmlLocalAssetReferences(source, {
+        assetBasePath: join(tempDir, 'screens'),
+        assetRootPath: tempDir,
+      });
 
-    expect(out).toBe(source.replace(`../${asset}`, asset));
-    expect(rewriteHtmlLocalAssetReferences(out, { assetRootPath: tempDir })).toBe(out);
-  });
+      expect(out).toBe(source.replace(`../${asset}`, asset));
+      expect(rewriteHtmlLocalAssetReferences(out, { assetRootPath: tempDir })).toBe(out);
+    },
+  );
 
   it('encodes archive attribute and srcset URLs while preserving descriptors and suffixes', () => {
     const asset = 'assets/brand%20images/it%27s%20%28local%29.svg';

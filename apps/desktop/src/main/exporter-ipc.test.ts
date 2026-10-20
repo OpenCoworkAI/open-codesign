@@ -55,21 +55,14 @@ describe('parseRequest', () => {
     ).toMatchObject({ renderMode });
   });
 
-  it.each([
-    'editable',
-    '',
-    'Native',
-    ' native ',
-    null,
-    true,
-    1,
-    {},
-    [],
-  ])('rejects invalid PPTX renderMode %j', (renderMode) => {
-    expect(() =>
-      parseRequest({ format: 'pptx', artifactSource: '<section />', renderMode }),
-    ).toThrowError(expect.objectContaining({ code: 'IPC_BAD_INPUT' }));
-  });
+  it.each(['editable', '', 'Native', ' native ', null, true, 1, {}, []])(
+    'rejects invalid PPTX renderMode %j',
+    (renderMode) => {
+      expect(() =>
+        parseRequest({ format: 'pptx', artifactSource: '<section />', renderMode }),
+      ).toThrowError(expect.objectContaining({ code: 'IPC_BAD_INPUT' }));
+    },
+  );
 
   it.each(['html', 'pdf', 'zip', 'markdown'])('rejects renderMode on %s exports', (format) => {
     for (const renderMode of ['image', 'native']) {

@@ -88,31 +88,30 @@ async function exportDesign(
 }
 
 describe('PPTX IPC wiring', () => {
-  it.each([
-    undefined,
-    'image',
-    'native',
-  ] as const)('forwards mode %s with resolved source and asset options', async (renderMode) => {
-    const result = await exportDesign('pptx', renderMode);
-    expect(result.status).toBe('saved');
-    expect(mocks.exportArtifact).toHaveBeenCalledWith(
-      'pptx',
-      source,
-      join(directory, 'export.pptx'),
-      expect.objectContaining({
-        sourcePath: 'deck.html',
-        assetRootPath: directory,
-        assetBasePath: directory,
-      }),
-    );
-    const options = mocks.exportArtifact.mock.calls[0]?.[3];
-    if (renderMode === undefined) {
-      expect(options).not.toHaveProperty('renderMode');
-    } else {
-      expect(options).toHaveProperty('renderMode', renderMode);
-    }
-    expect(result).not.toHaveProperty('exportWarnings');
-  });
+  it.each([undefined, 'image', 'native'] as const)(
+    'forwards mode %s with resolved source and asset options',
+    async (renderMode) => {
+      const result = await exportDesign('pptx', renderMode);
+      expect(result.status).toBe('saved');
+      expect(mocks.exportArtifact).toHaveBeenCalledWith(
+        'pptx',
+        source,
+        join(directory, 'export.pptx'),
+        expect.objectContaining({
+          sourcePath: 'deck.html',
+          assetRootPath: directory,
+          assetBasePath: directory,
+        }),
+      );
+      const options = mocks.exportArtifact.mock.calls[0]?.[3];
+      if (renderMode === undefined) {
+        expect(options).not.toHaveProperty('renderMode');
+      } else {
+        expect(options).toHaveProperty('renderMode', renderMode);
+      }
+      expect(result).not.toHaveProperty('exportWarnings');
+    },
+  );
 
   it('returns exporter warnings separately from failed research companion warnings', async () => {
     const warnings = ['Slide 2 uses an image fallback.'];
@@ -164,41 +163,43 @@ describe('PPTX IPC wiring', () => {
 });
 
 describe('optional research companion export', () => {
-  it.each([
-    'html',
-    'pdf',
-    'pptx',
-    'zip',
-    'markdown',
-  ] as const)('keeps the primary %s export when saved research is corrupt', async (format) => {
-    await writeFile(join(directory, '.codesign', 'research.json'), '{corrupt');
-    const result = await exportDesign(format);
-    expect(result.status).toBe('saved');
-    expect(result.sourcesPath).toBeUndefined();
-    expect(result.researchWarnings).toEqual([
-      expect.stringContaining('Cannot restore research records'),
-    ]);
-    expect(result.path).toBeDefined();
-    expect(await readFile(result.path ?? '', 'utf8')).toBe(source);
-    expect(mocks.exportArtifact).toHaveBeenCalledOnce();
-    expect(mocks.exportArtifact.mock.calls[0]?.[3]).not.toHaveProperty('assets');
-    expect(mocks.slides).not.toHaveBeenCalled();
-    expect(await readFile(join(directory, '.codesign', 'research.json'), 'utf8')).toBe('{corrupt');
-  });
+  it.each(['html', 'pdf', 'pptx', 'zip', 'markdown'] as const)(
+    'keeps the primary %s export when saved research is corrupt',
+    async (format) => {
+      await writeFile(join(directory, '.codesign', 'research.json'), '{corrupt');
+      const result = await exportDesign(format);
+      expect(result.status).toBe('saved');
+      expect(result.sourcesPath).toBeUndefined();
+      expect(result.researchWarnings).toEqual([
+        expect.stringContaining('Cannot restore research records'),
+      ]);
+      expect(result.path).toBeDefined();
+      expect(await readFile(result.path ?? '', 'utf8')).toBe(source);
+      expect(mocks.exportArtifact).toHaveBeenCalledOnce();
+      expect(mocks.exportArtifact.mock.calls[0]?.[3]).not.toHaveProperty('assets');
+      expect(mocks.slides).not.toHaveBeenCalled();
+      expect(await readFile(join(directory, '.codesign', 'research.json'), 'utf8')).toBe(
+        '{corrupt',
+      );
+    },
+  );
 
   it.each([
     'Every research slide needs a unique stable data-slide-id.',
     'Research slides require inspectable text/SVG charts, not canvas/iframe/video.',
     'Research deck did not render. Repair preview/runtime errors.',
     'System browser not available for source snapshots.',
-  ])('returns a warning instead of failing a primary export when companion preparation fails: %s', async (message) => {
-    mocks.slides.mockRejectedValueOnce(new Error(message));
-    const result = await exportDesign();
-    expect(result.status).toBe('saved');
-    expect(result.researchWarnings).toEqual([`Sources companion was not exported: ${message}`]);
-    expect(result.sourcesPath).toBeUndefined();
-    expect(await readFile(result.path ?? '', 'utf8')).toBe(source);
-  });
+  ])(
+    'returns a warning instead of failing a primary export when companion preparation fails: %s',
+    async (message) => {
+      mocks.slides.mockRejectedValueOnce(new Error(message));
+      const result = await exportDesign();
+      expect(result.status).toBe('saved');
+      expect(result.researchWarnings).toEqual([`Sources companion was not exported: ${message}`]);
+      expect(result.sourcesPath).toBeUndefined();
+      expect(await readFile(result.path ?? '', 'utf8')).toBe(source);
+    },
+  );
 
   it('keeps a saved primary file when writing its companion fails', async () => {
     vi.mocked(writeUniqueSources).mockRejectedValueOnce(

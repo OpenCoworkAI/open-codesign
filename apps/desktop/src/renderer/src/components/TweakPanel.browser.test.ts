@@ -683,30 +683,30 @@ function App() { return <h1>{heading}</h1>; }`,
     expect(await tokens()).toEqual(parseEditmodeBlock(source)?.tokens);
   });
 
-  it.each([
-    'file',
-    'design',
-  ] as const)('resets controls on a %s switch and ignores an old ACK', async (kind) => {
-    ackDelay = 900;
-    await replace('fieldset input[type="text"]', 'Original design draft');
-    await expect.poll(() => writes.length).toBe(1);
-    const design = kind === 'design' ? 'second' : 'first';
-    const path = kind === 'file' ? 'Other.jsx' : 'App.jsx';
-    const content = source.replace('Convergence v2', 'blue');
-    await writeFile(file(design, path), content);
-    await page.evaluate(
-      ({ design, path, content }) => window.tweakFixture.replace(design, { path, content }),
-      { design, path, content },
-    );
-    await page.waitForFunction(
-      () => document.querySelector<HTMLInputElement>('fieldset label + input')?.value === 'blue',
-    );
-    const input = await replace('fieldset label + input', '#123456');
-    await expect.poll(async () => (await tokens(design, path))?.['heading']).toBe('#123456');
-    await pause(1_000);
-    expect(await input.evaluate((node) => document.activeElement === node)).toBe(true);
-    expect((await tokens())?.['heading']).toBe('Original design draft');
-  });
+  it.each(['file', 'design'] as const)(
+    'resets controls on a %s switch and ignores an old ACK',
+    async (kind) => {
+      ackDelay = 900;
+      await replace('fieldset input[type="text"]', 'Original design draft');
+      await expect.poll(() => writes.length).toBe(1);
+      const design = kind === 'design' ? 'second' : 'first';
+      const path = kind === 'file' ? 'Other.jsx' : 'App.jsx';
+      const content = source.replace('Convergence v2', 'blue');
+      await writeFile(file(design, path), content);
+      await page.evaluate(
+        ({ design, path, content }) => window.tweakFixture.replace(design, { path, content }),
+        { design, path, content },
+      );
+      await page.waitForFunction(
+        () => document.querySelector<HTMLInputElement>('fieldset label + input')?.value === 'blue',
+      );
+      const input = await replace('fieldset label + input', '#123456');
+      await expect.poll(async () => (await tokens(design, path))?.['heading']).toBe('#123456');
+      await pause(1_000);
+      expect(await input.evaluate((node) => document.activeElement === node)).toBe(true);
+      expect((await tokens())?.['heading']).toBe('Original design draft');
+    },
+  );
 
   it('cancels a save still awaiting a read on file switch', async () => {
     readDelay = 900;

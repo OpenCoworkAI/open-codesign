@@ -158,25 +158,25 @@ describe('source-definition span editing support matrix', () => {
     const target = inspect(source).targets[0];
     expect(source.slice(target?.insertionOffset)).toBe('/>;}');
   });
-  it.each([
-    'React.useState',
-    'useState',
-  ])('edits static header/layout beside %s state and pure setter handlers', (hook) => {
-    const source = `function App(){ const [count,setCount]=${hook}(0); return <main style={{gap:8}}><header title="Static">Welcome</header><button onClick={()=>setCount(c=>c+1)}>{count}</button></main>; }`;
-    const result = inspect(source);
-    expect(result.targets.find((target) => target.tagName === 'button')?.editableFields).toEqual(
-      [],
-    );
-    expect(applied(source, { kind: 'set-text', value: 'Updated' }).content).toContain(
-      '>{"Updated"}</header>',
-    );
-    expect(
-      applied(source, { kind: 'set-attribute', name: 'title', value: 'Title' }).content,
-    ).toContain('title={"Title"}');
-    expect(
-      applied(source, { kind: 'set-style', property: 'gap', value: '16' }, 'main').content,
-    ).toContain('gap:16');
-  });
+  it.each(['React.useState', 'useState'])(
+    'edits static header/layout beside %s state and pure setter handlers',
+    (hook) => {
+      const source = `function App(){ const [count,setCount]=${hook}(0); return <main style={{gap:8}}><header title="Static">Welcome</header><button onClick={()=>setCount(c=>c+1)}>{count}</button></main>; }`;
+      const result = inspect(source);
+      expect(result.targets.find((target) => target.tagName === 'button')?.editableFields).toEqual(
+        [],
+      );
+      expect(applied(source, { kind: 'set-text', value: 'Updated' }).content).toContain(
+        '>{"Updated"}</header>',
+      );
+      expect(
+        applied(source, { kind: 'set-attribute', name: 'title', value: 'Title' }).content,
+      ).toContain('title={"Title"}');
+      expect(
+        applied(source, { kind: 'set-style', property: 'gap', value: '16' }, 'main').content,
+      ).toContain('gap:16');
+    },
+  );
   it.each([
     '()=>setCount(count+1)',
     '()=>{setCount(c=>{return c+1});}',
@@ -330,18 +330,14 @@ describe('public review regressions: script entries and effects', () => {
   ])('keeps direct literal candidates beside non-state or reflected hooks: %s', (effect) => {
     expectLiteralCandidates(`function App(){${effect};return <header>Hello</header>}`);
   });
-  it.each([
-    'self',
-    'global',
-    'globalThis',
-    'top',
-    'parent',
-    'this',
-  ])('keeps direct literal candidates beside the %s global/reflection entry', (entry) => {
-    expectLiteralCandidates(
-      `function App(){${entry}['document'].getElementsByTagName('header')[0].append(' injected');return <header>Hello</header>}`,
-    );
-  });
+  it.each(['self', 'global', 'globalThis', 'top', 'parent', 'this'])(
+    'keeps direct literal candidates beside the %s global/reflection entry',
+    (entry) => {
+      expectLiteralCandidates(
+        `function App(){${entry}['document'].getElementsByTagName('header')[0].append(' injected');return <header>Hello</header>}`,
+      );
+    },
+  );
 });
 
 describe('preview candidates do not execute or globally reject scheduling code', () => {
@@ -428,9 +424,12 @@ describe('conservative rejection and independent revalidation', () => {
     'function useState(){return [0,evil]} function App(){const [count,setCount]=useState(0);return <header onClick={()=>setCount(0)}>Static</header>}',
     'function App(){const [count,setCount]=React.useState(0);return <header>{items.map(setCount=><button onClick={()=>setCount(0)}>Click</button>)}</header>}',
     'function App(){const [count,setCount]=React.useState(0);return <header onClick={count=>setCount(count)}>Static</header>}',
-  ])('does not let opaque hook/setter/value bindings hide direct literal candidates: %s', (source) => {
-    expectLiteralCandidates(source);
-  });
+  ])(
+    'does not let opaque hook/setter/value bindings hide direct literal candidates: %s',
+    (source) => {
+      expectLiteralCandidates(source);
+    },
+  );
   it('rejects stale hashes before locating targets', () => {
     const inspected = inspect(simple);
     expect(

@@ -66,81 +66,80 @@ const userTexts = (messages: AgentMessage[]) =>
     );
 
 describe('native pi active message delivery', () => {
-  it.each([
-    'write',
-    'ask',
-    'permission',
-  ])('steers only after the full %s tool batch and follows up after the agent would stop', async (toolName) => {
-    const changes: ActiveRunMessageV1[] = [];
-    const receipts = new ActiveRunMessages('design', 'run', (row) => changes.push(row));
-    const entered = deferred(),
-      release = deferred();
-    const order: string[] = [];
-    const contexts: unknown[][] = [];
-    let calls = 0;
-    const agent = new Agent({
-      initialState: {
-        model,
-        tools: [
-          {
-            name: toolName,
-            label: 'Gated tool',
-            description: 'Gated deterministic tool',
-            parameters: Type.Object({}),
-            execute: async (id) => {
-              order.push(id);
-              if (id === 'one') {
-                entered.resolve();
-                await release.promise;
-              }
-              return { content: [{ type: 'text', text: 'written' }], details: {} };
+  it.each(['write', 'ask', 'permission'])(
+    'steers only after the full %s tool batch and follows up after the agent would stop',
+    async (toolName) => {
+      const changes: ActiveRunMessageV1[] = [];
+      const receipts = new ActiveRunMessages('design', 'run', (row) => changes.push(row));
+      const entered = deferred(),
+        release = deferred();
+      const order: string[] = [];
+      const contexts: unknown[][] = [];
+      let calls = 0;
+      const agent = new Agent({
+        initialState: {
+          model,
+          tools: [
+            {
+              name: toolName,
+              label: 'Gated tool',
+              description: 'Gated deterministic tool',
+              parameters: Type.Object({}),
+              execute: async (id) => {
+                order.push(id);
+                if (id === 'one') {
+                  entered.resolve();
+                  await release.promise;
+                }
+                return { content: [{ type: 'text', text: 'written' }], details: {} };
+              },
             },
-          },
-        ],
-      },
-      streamFn: async (_model, context) => {
-        contexts.push(userTexts(context.messages));
-        calls += 1;
-        if (calls === 1)
-          return response(
-            [
-              { type: 'toolCall', id: 'one', name: toolName, arguments: {} },
-              { type: 'toolCall', id: 'two', name: toolName, arguments: {} },
-            ],
-            'toolUse',
-          );
-        return response([{ type: 'text', text: 'finished' }]);
-      },
-    });
-    receipts.bind(agent);
-    agent.subscribe((e) =>
-      receipts.handleEvent(e, () => {
-        order.push('delivered');
-      }),
-    );
-    const running = agent.prompt('initial');
-    await entered.promise;
-    receipts.submit(input('later'));
-    receipts.submit(input('redirect', 'steer'));
-    receipts.submit(input('last'));
-    expect(changes.map((r) => r.status)).toEqual(['pending', 'pending', 'pending']);
-    expect(order).toEqual(['one', 'two']);
-    release.resolve();
-    await running;
-    expect(order).toEqual(['one', 'two', 'delivered', 'delivered', 'delivered']);
-    expect(contexts).toEqual([
-      ['initial'],
-      ['initial', 'redirect'],
-      ['initial', 'redirect', 'later'],
-      ['initial', 'redirect', 'later', 'last'],
-    ]);
-    expect(changes.filter((r) => r.status === 'delivered').map((r) => r.messageId)).toEqual([
-      'redirect',
-      'later',
-      'last',
-    ]);
-    expect(() => receipts.submit(input('late'))).toThrow(/not accepting/);
-  });
+          ],
+        },
+        streamFn: async (_model, context) => {
+          contexts.push(userTexts(context.messages));
+          calls += 1;
+          if (calls === 1)
+            return response(
+              [
+                { type: 'toolCall', id: 'one', name: toolName, arguments: {} },
+                { type: 'toolCall', id: 'two', name: toolName, arguments: {} },
+              ],
+              'toolUse',
+            );
+          return response([{ type: 'text', text: 'finished' }]);
+        },
+      });
+      receipts.bind(agent);
+      agent.subscribe((e) =>
+        receipts.handleEvent(e, () => {
+          order.push('delivered');
+        }),
+      );
+      const running = agent.prompt('initial');
+      await entered.promise;
+      receipts.submit(input('later'));
+      receipts.submit(input('redirect', 'steer'));
+      receipts.submit(input('last'));
+      expect(changes.map((r) => r.status)).toEqual(['pending', 'pending', 'pending']);
+      expect(order).toEqual(['one', 'two']);
+      release.resolve();
+      await running;
+      expect(order).toEqual(['one', 'two', 'delivered', 'delivered', 'delivered']);
+      expect(contexts).toEqual([
+        ['initial'],
+        ['initial', 'redirect'],
+        ['initial', 'redirect', 'later'],
+        ['initial', 'redirect', 'later', 'last'],
+      ]);
+      expect(changes.filter((r) => r.status === 'delivered').map((r) => r.messageId)).toEqual([
+        'redirect',
+        'later',
+        'last',
+      ]);
+      expect(() => receipts.submit(input('late'))).toThrow(/not accepting/);
+    },
+  );
 
   it('deduplicates admissions, isolates runs and preserves undelivered text on cancellation', async () => {
     const controller = new AbortController();

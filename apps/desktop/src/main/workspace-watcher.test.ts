@@ -142,55 +142,51 @@ describe('files-watcher subscribe / unsubscribe', () => {
     expect(watchMock).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    'ENOENT',
-    'ENOTDIR',
-  ])('does not reject when the bound workspace is unavailable with %s', (code) => {
-    reset();
-    const err = Object.assign(new Error('workspace unavailable'), { code });
-    watchMock.mockImplementation(() => {
-      throw err;
-    });
-    getDesignMock.mockReturnValue({
-      id: 'd1',
-      workspacePath: tempWorkspace(`codesign-watch-${code.toLowerCase()}`),
-    });
-    registerFilesWatcherIpc({} as never, () => null);
-    const sub = getHandler('codesign:files:v1:subscribe');
+  it.each(['ENOENT', 'ENOTDIR'])(
+    'does not reject when the bound workspace is unavailable with %s',
+    (code) => {
+      reset();
+      const err = Object.assign(new Error('workspace unavailable'), { code });
+      watchMock.mockImplementation(() => {
+        throw err;
+      });
+      getDesignMock.mockReturnValue({
+        id: 'd1',
+        workspacePath: tempWorkspace(`codesign-watch-${code.toLowerCase()}`),
+      });
+      registerFilesWatcherIpc({} as never, () => null);
+      const sub = getHandler('codesign:files:v1:subscribe');
 
-    expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
+      expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
 
-    expect(watchMock).toHaveBeenCalledTimes(1);
-    expect(__test.watchers.has('d1')).toBe(false);
-  });
+      expect(watchMock).toHaveBeenCalledTimes(1);
+      expect(__test.watchers.has('d1')).toBe(false);
+    },
+  );
 
-  it.each([
-    'EPERM',
-    'EACCES',
-    'EISDIR',
-    'EINVAL',
-    'ENOSPC',
-    'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM',
-  ])('falls back to polling when native watch fails with %s', (code) => {
-    reset();
-    const err = Object.assign(new Error('native watch unavailable'), { code });
-    watchMock.mockImplementation(() => {
-      throw err;
-    });
-    getDesignMock.mockReturnValue({
-      id: 'd1',
-      workspacePath: tempWorkspace(`codesign-watch-${code.toLowerCase()}`),
-    });
-    registerFilesWatcherIpc({} as never, () => null);
-    const sub = getHandler('codesign:files:v1:subscribe');
+  it.each(['EPERM', 'EACCES', 'EISDIR', 'EINVAL', 'ENOSPC', 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM'])(
+    'falls back to polling when native watch fails with %s',
+    (code) => {
+      reset();
+      const err = Object.assign(new Error('native watch unavailable'), { code });
+      watchMock.mockImplementation(() => {
+        throw err;
+      });
+      getDesignMock.mockReturnValue({
+        id: 'd1',
+        workspacePath: tempWorkspace(`codesign-watch-${code.toLowerCase()}`),
+      });
+      registerFilesWatcherIpc({} as never, () => null);
+      const sub = getHandler('codesign:files:v1:subscribe');
 
-    expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
+      expect(sub(null, { schemaVersion: 1, designId: 'd1' })).toEqual({ ok: true });
 
-    const entry = __test.watchers.get('d1');
-    expect(watchMock).toHaveBeenCalledTimes(1);
-    expect(entry?.watcher).toBeNull();
-    expect(entry?.pollTimer).not.toBeNull();
-  });
+      const entry = __test.watchers.get('d1');
+      expect(watchMock).toHaveBeenCalledTimes(1);
+      expect(entry?.watcher).toBeNull();
+      expect(entry?.pollTimer).not.toBeNull();
+    },
+  );
 
   it('switches an active watcher to polling on runtime permission errors', () => {
     reset();

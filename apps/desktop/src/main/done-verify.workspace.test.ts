@@ -33,23 +33,27 @@ describe.skipIf(!chromeAvailable)('done workspace assets in system Chrome', () =
     await rm(fixture, { recursive: true, force: true });
   });
 
-  it.each([
-    'App.jsx',
-    'screens/App.jsx',
-  ])('matches preview for relative assets in %s', async (path) => {
-    const prefix = path.startsWith('screens/') ? '../' : '';
-    const source = sourceFor(`${prefix}logo.svg`, `${prefix}art/poster.svg`);
-    await writeFile(join(workspace, path), source);
-    expect(await makeRuntimeVerifier({ workspaceRoot: workspace })(source, { path })).toEqual([]);
-    const preview = await runPreview({ workspaceRoot: workspace, path, vision: false });
-    expect(preview.ok).toBe(true);
-    expect(preview.assetErrors).toEqual([]);
-  }, 60_000);
+  it.each(['App.jsx', 'screens/App.jsx'])(
+    'matches preview for relative assets in %s',
+    async (path) => {
+      const prefix = path.startsWith('screens/') ? '../' : '';
+      const source = sourceFor(`${prefix}logo.svg`, `${prefix}art/poster.svg`);
+      await writeFile(join(workspace, path), source);
+      expect(await makeRuntimeVerifier({ workspaceRoot: workspace })(source, { path })).toEqual({
+        errors: [],
+        warnings: [],
+      });
+      const preview = await runPreview({ workspaceRoot: workspace, path, vision: false });
+      expect(preview.ok).toBe(true);
+      expect(preview.assetErrors).toEqual([]);
+    },
+    60_000,
+  );
 
   it('reports a missing relative asset with its URL', async () => {
     const source = sourceFor('logo.svg', 'missing.svg');
     await writeFile(join(workspace, 'App.jsx'), source);
-    const errors = await makeRuntimeVerifier({ workspaceRoot: workspace })(source, {
+    const { errors } = await makeRuntimeVerifier({ workspaceRoot: workspace })(source, {
       path: 'App.jsx',
     });
     expect(errors.some((error) => error.message.includes('missing.svg'))).toBe(true);
@@ -60,7 +64,7 @@ describe.skipIf(!chromeAvailable)('done workspace assets in system Chrome', () =
     await writeFile(outside, svg);
     const source = sourceFor('logo.svg', pathToFileURL(outside).href);
     await writeFile(join(workspace, 'App.jsx'), source);
-    const errors = await makeRuntimeVerifier({ workspaceRoot: workspace })(source, {
+    const { errors } = await makeRuntimeVerifier({ workspaceRoot: workspace })(source, {
       path: 'App.jsx',
     });
     expect(

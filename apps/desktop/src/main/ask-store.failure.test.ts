@@ -84,32 +84,32 @@ afterEach(async () => {
 });
 
 describe('ask journal append failure recovery', () => {
-  it.each([
-    'partial',
-    'flush',
-  ] as const)('rolls back %s write failure to the acknowledged byte length before accepting a different retry', async (failure) => {
-    const store = new AskStore(path);
-    await store.create(request);
-    const acknowledged = await readFile(path, 'utf8');
-    failures.append = failure;
-    await expect(store.settle('question', answer)).rejects.toThrow('Injected');
-    expect(await readFile(path, 'utf8')).toBe(acknowledged);
-    expect(failures.rollbackSyncs).toBe(1);
-    expect(await store.history()).toEqual([expect.objectContaining({ status: 'pending' })]);
-    const corrected = {
-      status: 'answered' as const,
-      answers: [{ questionId: 'style', value: 'Warm 温暖' }],
-    };
-    await store.settle('question', corrected);
-    await store.settle('question', corrected);
-    expect((await new AskStore(path).history())[0]).toMatchObject({
-      status: 'answered',
-      result: corrected,
-    });
-    const lines = (await readFile(path, 'utf8')).trim().split('\n');
-    expect(lines).toHaveLength(2);
-    expect(lines.map((line) => JSON.parse(line).status)).toEqual(['pending', 'answered']);
-  });
+  it.each(['partial', 'flush'] as const)(
+    'rolls back %s write failure to the acknowledged byte length before accepting a different retry',
+    async (failure) => {
+      const store = new AskStore(path);
+      await store.create(request);
+      const acknowledged = await readFile(path, 'utf8');
+      failures.append = failure;
+      await expect(store.settle('question', answer)).rejects.toThrow('Injected');
+      expect(await readFile(path, 'utf8')).toBe(acknowledged);
+      expect(failures.rollbackSyncs).toBe(1);
+      expect(await store.history()).toEqual([expect.objectContaining({ status: 'pending' })]);
+      const corrected = {
+        status: 'answered' as const,
+        answers: [{ questionId: 'style', value: 'Warm 温暖' }],
+      };
+      await store.settle('question', corrected);
+      await store.settle('question', corrected);
+      expect((await new AskStore(path).history())[0]).toMatchObject({
+        status: 'answered',
+        result: corrected,
+      });
+      const lines = (await readFile(path, 'utf8')).trim().split('\n');
+      expect(lines).toHaveLength(2);
+      expect(lines.map((line) => JSON.parse(line).status)).toEqual(['pending', 'answered']);
+    },
+  );
 
   it('rolls back a partially written first request to an empty journal and permits retry', async () => {
     const store = new AskStore(path);
@@ -122,28 +122,28 @@ describe('ask journal append failure recovery', () => {
     expect((await new AskStore(path).history())[0]?.status).toBe('interrupted');
   });
 
-  it.each([
-    'truncate',
-    'sync',
-  ] as const)('poisons mutations when rollback %s fails while retaining readable pending history', async (rollback) => {
-    const store = new AskStore(path);
-    await store.create(request);
-    failures.append = 'partial';
-    failures.rollback = rollback;
-    await expect(store.settle('question', answer)).rejects.toThrow('restart the app');
-    const appends = failures.appends;
-    await expect(store.settle('question', answer)).rejects.toThrow('restart the app');
-    await expect(store.create({ ...request, requestId: 'another' })).rejects.toThrow(
-      'restart the app',
-    );
-    expect(failures.appends).toBe(appends);
-    expect(await store.history()).toEqual([expect.objectContaining({ status: 'pending' })]);
-    // A new host may repair the torn tail, but never resurrects the abandoned resolver.
-    const reopened = new AskStore(path);
-    expect((await reopened.history())[0]?.status).toBe('interrupted');
-    await reopened.create({ ...request, requestId: 'new-host' });
-    expect((await reopened.history())[1]?.status).toBe('pending');
-  });
+  it.each(['truncate', 'sync'] as const)(
+    'poisons mutations when rollback %s fails while retaining readable pending history',
+    async (rollback) => {
+      const store = new AskStore(path);
+      await store.create(request);
+      failures.append = 'partial';
+      failures.rollback = rollback;
+      await expect(store.settle('question', answer)).rejects.toThrow('restart the app');
+      const appends = failures.appends;
+      await expect(store.settle('question', answer)).rejects.toThrow('restart the app');
+      await expect(store.create({ ...request, requestId: 'another' })).rejects.toThrow(
+        'restart the app',
+      );
+      expect(failures.appends).toBe(appends);
+      expect(await store.history()).toEqual([expect.objectContaining({ status: 'pending' })]);
+      // A new host may repair the torn tail, but never resurrects the abandoned resolver.
+      const reopened = new AskStore(path);
+      expect((await reopened.history())[0]?.status).toBe('interrupted');
+      await reopened.create({ ...request, requestId: 'new-host' });
+      expect((await reopened.history())[1]?.status).toBe('pending');
+    },
+  );
 
   it('does not reload through a poisoned interruption append in the same host', async () => {
     await new AskStore(path).create(request);

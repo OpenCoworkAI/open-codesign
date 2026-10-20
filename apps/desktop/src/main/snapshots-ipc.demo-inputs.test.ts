@@ -51,37 +51,34 @@ describe('new design demo input IPC', () => {
     expect(listDesigns(db)).toEqual([]);
     expect(await readdir(path.join(root, 'CoDesign'))).toEqual([]);
   });
-  it.each([
-    'daymark',
-    'common-ground',
-    'trailhead',
-  ] as const)('returns %s only after its real input files exist', async (demoInputId) => {
-    const { create } = setup();
-    const design = await create(null, { schemaVersion: 1, name: 'Demo', demoInputId });
-    expect(design.workspacePath).toBeTruthy();
-    const files = await readdir(design.workspacePath ?? '');
-    expect(files.filter((file) => file !== '.codesign').sort()).toEqual(
-      [...DEMO_INPUTS[demoInputId].files].sort(),
-    );
-    expect(files).not.toContain('App.jsx');
-    expect(
-      await readFile(path.join(design.workspacePath ?? '', 'product-brief.md'), 'utf8'),
-    ).toContain('MIT');
-  });
+  it.each(['daymark', 'common-ground', 'trailhead'] as const)(
+    'returns %s only after its real input files exist',
+    async (demoInputId) => {
+      const { create } = setup();
+      const design = await create(null, { schemaVersion: 1, name: 'Demo', demoInputId });
+      expect(design.workspacePath).toBeTruthy();
+      const files = await readdir(design.workspacePath ?? '');
+      expect(files.filter((file) => file !== '.codesign').sort()).toEqual(
+        [...DEMO_INPUTS[demoInputId].files].sort(),
+      );
+      expect(files).not.toContain('App.jsx');
+      expect(
+        await readFile(path.join(design.workspacePath ?? '', 'product-brief.md'), 'utf8'),
+      ).toContain('MIT');
+    },
+  );
 
-  it.each([
-    '../daymark',
-    '__proto__',
-    '',
-    42,
-  ])('rejects unknown bundle %s before creating anything', async (demoInputId) => {
-    const { db, create } = setup();
-    await expect(
-      create(null, { schemaVersion: 1, name: 'Unsafe', demoInputId }),
-    ).rejects.toMatchObject({ code: 'IPC_BAD_INPUT' });
-    expect(listDesigns(db)).toEqual([]);
-    expect(await readdir(root)).toEqual([]);
-  });
+  it.each(['../daymark', '__proto__', '', 42])(
+    'rejects unknown bundle %s before creating anything',
+    async (demoInputId) => {
+      const { db, create } = setup();
+      await expect(
+        create(null, { schemaVersion: 1, name: 'Unsafe', demoInputId }),
+      ).rejects.toMatchObject({ code: 'IPC_BAD_INPUT' });
+      expect(listDesigns(db)).toEqual([]);
+      expect(await readdir(root)).toEqual([]);
+    },
+  );
 
   it('rejects explicit workspace paths and preserves existing content', async () => {
     const workspacePath = path.join(root, 'existing');

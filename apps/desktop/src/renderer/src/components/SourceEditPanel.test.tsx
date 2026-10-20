@@ -169,42 +169,42 @@ describe('SourceEditPanel', () => {
     expect(container.querySelector('[contenteditable]')).toBeNull();
     expect(container.querySelector('select')).toBeNull();
   });
-  it.each([
-    'en',
-    'zh-CN',
-  ] as const)('localizes unsupported fields and source origins in %s without translating code', async (locale) => {
-    const { i18n, initI18n } =
-      await vi.importActual<typeof import('@open-codesign/i18n')>('@open-codesign/i18n');
-    await initI18n(locale);
-    translate = (key: string) => String(i18n.t(key, { lng: locale }));
-    const rawOrigin = 'const title → string literal (all uses of this definition)';
-    await mount(false, {
-      source: "const title='Old';",
-      target: { ...target, textSources: [{ start: 12, end: 17, origin: rawOrigin }] },
-    });
-    expect(container.textContent).toContain(translate('canvas.sourceEdit.origin'));
-    expect(container.textContent).toContain('App.jsx:1');
-    expect(container.querySelector('pre')?.textContent).toBe("'Old'");
-    const originDetails = container.querySelectorAll('details')[0];
-    expect(originDetails?.open).toBe(false);
-    expect(originDetails?.querySelector('code')?.textContent).toBe(rawOrigin);
-    const primary = container.cloneNode(true) as HTMLDivElement;
-    for (const detail of primary.querySelectorAll('details')) detail.remove();
-    expect(primary.textContent).not.toContain(rawOrigin);
-    expect(primary.textContent).not.toContain('dynamic-style');
-    expect(container.textContent).not.toContain('Computed styles are not editable');
-    const details = container.querySelectorAll('details')[1];
-    expect(details?.open).toBe(false);
-    expect(details?.querySelector('summary')?.textContent).toBe(
-      translate('canvas.sourceEdit.diagnostics'),
-    );
-    expect(details?.querySelector('code')?.textContent).toBe('dynamic-style');
-    expect(details?.previousElementSibling?.textContent).toMatch(
-      locale === 'zh-CN' ? /[\u4e00-\u9fff]/ : /[A-Za-z]/,
-    );
-    expect(details?.previousElementSibling?.textContent).not.toContain('dynamic-style');
-    expect(container.textContent).not.toContain('canvas.sourceEdit.');
-  });
+  it.each(['en', 'zh-CN'] as const)(
+    'localizes unsupported fields and source origins in %s without translating code',
+    async (locale) => {
+      const { i18n, initI18n } =
+        await vi.importActual<typeof import('@open-codesign/i18n')>('@open-codesign/i18n');
+      await initI18n(locale);
+      translate = (key: string) => String(i18n.t(key, { lng: locale }));
+      const rawOrigin = 'const title → string literal (all uses of this definition)';
+      await mount(false, {
+        source: "const title='Old';",
+        target: { ...target, textSources: [{ start: 12, end: 17, origin: rawOrigin }] },
+      });
+      expect(container.textContent).toContain(translate('canvas.sourceEdit.origin'));
+      expect(container.textContent).toContain('App.jsx:1');
+      expect(container.querySelector('pre')?.textContent).toBe("'Old'");
+      const originDetails = container.querySelectorAll('details')[0];
+      expect(originDetails?.open).toBe(false);
+      expect(originDetails?.querySelector('code')?.textContent).toBe(rawOrigin);
+      const primary = container.cloneNode(true) as HTMLDivElement;
+      for (const detail of primary.querySelectorAll('details')) detail.remove();
+      expect(primary.textContent).not.toContain(rawOrigin);
+      expect(primary.textContent).not.toContain('dynamic-style');
+      expect(container.textContent).not.toContain('Computed styles are not editable');
+      const details = container.querySelectorAll('details')[1];
+      expect(details?.open).toBe(false);
+      expect(details?.querySelector('summary')?.textContent).toBe(
+        translate('canvas.sourceEdit.diagnostics'),
+      );
+      expect(details?.querySelector('code')?.textContent).toBe('dynamic-style');
+      expect(details?.previousElementSibling?.textContent).toMatch(
+        locale === 'zh-CN' ? /[\u4e00-\u9fff]/ : /[A-Za-z]/,
+      );
+      expect(details?.previousElementSibling?.textContent).not.toContain('dynamic-style');
+      expect(container.textContent).not.toContain('canvas.sourceEdit.');
+    },
+  );
   it('shows ancestor navigation even when the selected element has no source target', async () => {
     const onSelectAncestor = vi.fn();
     await mount(false, {

@@ -132,102 +132,101 @@ describe.skipIf(!chrome)('active composer fake gate in system Chrome', () => {
     throw new Error(`Missing button: ${text}`);
   }
 
-  it.each([
-    'en',
-    'zh-CN',
-    'es',
-    'pt-BR',
-  ])('keeps %s running controls compact with production CSS at narrow widths', async (locale) => {
-    for (const width of [260, 300]) {
-      await page.setViewport({ width, height: 540, deviceScaleFactor: 1.5 });
-      await page.goto(`${endpoint}?locale=${locale}`);
-      await page.waitForSelector('textarea');
-      const emptyHeight = await page.$eval('form', (node) => node.getBoundingClientRect().height);
-      expect(emptyHeight).toBeLessThanOrEqual(130);
-      expect(await page.$('.codesign-active-message-actions')).toBeNull();
-      expect(await page.$('.codesign-active-message-help')).toBeNull();
-      expect(await page.$eval('textarea', (node) => node.value)).toBe('');
-      expect(await page.$('form button[type="button"]')).not.toBeNull();
-      await page.type('textarea', ' ');
-      expect(await page.$('.codesign-active-message-actions')).toBeNull();
-      await page.type('textarea', 'Additional instruction');
-      await page.waitForSelector('.codesign-active-message-actions');
-      const geometry = await page.evaluate(() => {
-        const form = document.querySelector('form');
-        const textarea = document.querySelector('textarea');
-        const help = document.querySelector<HTMLDetailsElement>('.codesign-active-message-help');
-        if (!form || !textarea || !help) throw new Error('Missing composer');
-        return {
-          height: form.getBoundingClientRect().height,
-          width: form.getBoundingClientRect().width,
-          scrollWidth: form.scrollWidth,
-          font: getComputedStyle(textarea).fontSize,
-          helpOpen: help.open,
-          helpHeight: help.querySelector('summary')?.getBoundingClientRect().height,
-          buttons: [...document.querySelectorAll('.codesign-active-message-button')].map(
-            (button) => ({
-              height: button.getBoundingClientRect().height,
-              right: button.getBoundingClientRect().right,
-              font: getComputedStyle(button).fontSize,
-            }),
+  it.each(['en', 'zh-CN', 'es', 'pt-BR'])(
+    'keeps %s running controls compact with production CSS at narrow widths',
+    async (locale) => {
+      for (const width of [260, 300]) {
+        await page.setViewport({ width, height: 540, deviceScaleFactor: 1.5 });
+        await page.goto(`${endpoint}?locale=${locale}`);
+        await page.waitForSelector('textarea');
+        const emptyHeight = await page.$eval('form', (node) => node.getBoundingClientRect().height);
+        expect(emptyHeight).toBeLessThanOrEqual(130);
+        expect(await page.$('.codesign-active-message-actions')).toBeNull();
+        expect(await page.$('.codesign-active-message-help')).toBeNull();
+        expect(await page.$eval('textarea', (node) => node.value)).toBe('');
+        expect(await page.$('form button[type="button"]')).not.toBeNull();
+        await page.type('textarea', ' ');
+        expect(await page.$('.codesign-active-message-actions')).toBeNull();
+        await page.type('textarea', 'Additional instruction');
+        await page.waitForSelector('.codesign-active-message-actions');
+        const geometry = await page.evaluate(() => {
+          const form = document.querySelector('form');
+          const textarea = document.querySelector('textarea');
+          const help = document.querySelector<HTMLDetailsElement>('.codesign-active-message-help');
+          if (!form || !textarea || !help) throw new Error('Missing composer');
+          return {
+            height: form.getBoundingClientRect().height,
+            width: form.getBoundingClientRect().width,
+            scrollWidth: form.scrollWidth,
+            font: getComputedStyle(textarea).fontSize,
+            helpOpen: help.open,
+            helpHeight: help.querySelector('summary')?.getBoundingClientRect().height,
+            buttons: [...document.querySelectorAll('.codesign-active-message-button')].map(
+              (button) => ({
+                height: button.getBoundingClientRect().height,
+                right: button.getBoundingClientRect().right,
+                font: getComputedStyle(button).fontSize,
+              }),
+            ),
+          };
+        });
+        expect(geometry.height).toBeLessThanOrEqual(180);
+        expect(geometry.scrollWidth).toBeLessThanOrEqual(Math.ceil(geometry.width));
+        expect(geometry.font).toBe('15px');
+        expect(geometry.helpOpen).toBe(false);
+        expect(geometry.helpHeight).toBe(32);
+        expect(
+          await page.$eval('.codesign-active-message-help-panel', (node) => node.checkVisibility()),
+        ).toBe(false);
+        expect(geometry.buttons).toHaveLength(2);
+        for (const button of geometry.buttons) {
+          expect(button.height).toBe(40);
+          expect(button.right).toBeLessThanOrEqual(width);
+          expect(button.font).toBe('13px');
+        }
+        await page.focus('.codesign-active-message-help > summary');
+        await page.keyboard.press('Enter');
+        expect(
+          await page.$eval('.codesign-active-message-help', (node) => node.hasAttribute('open')),
+        ).toBe(true);
+        const expanded = await page.evaluate(() => ({
+          formHeight: document.querySelector('form')?.getBoundingClientRect().height,
+          panelHeight: document
+            .querySelector('.codesign-active-message-help-panel')
+            ?.getBoundingClientRect().height,
+        }));
+        expect(expanded.formHeight).toBe(geometry.height);
+        expect(expanded.panelHeight).toBeLessThanOrEqual(216);
+        await page.focus('.codesign-active-message-help-panel');
+        await page.keyboard.press('Escape');
+        expect(
+          await page.$eval('.codesign-active-message-help', (node) => node.hasAttribute('open')),
+        ).toBe(false);
+        expect(
+          await page.$eval(
+            '.codesign-active-message-help > summary',
+            (node) => document.activeElement === node,
           ),
-        };
-      });
-      expect(geometry.height).toBeLessThanOrEqual(180);
-      expect(geometry.scrollWidth).toBeLessThanOrEqual(Math.ceil(geometry.width));
-      expect(geometry.font).toBe('15px');
-      expect(geometry.helpOpen).toBe(false);
-      expect(geometry.helpHeight).toBe(32);
-      expect(
-        await page.$eval('.codesign-active-message-help-panel', (node) => node.checkVisibility()),
-      ).toBe(false);
-      expect(geometry.buttons).toHaveLength(2);
-      for (const button of geometry.buttons) {
-        expect(button.height).toBe(40);
-        expect(button.right).toBeLessThanOrEqual(width);
-        expect(button.font).toBe('13px');
+        ).toBe(true);
+        await page.focus('textarea');
+        const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+        await page.keyboard.down(modifier);
+        // Headless shell needs an explicit native editing command for Select All.
+        await page.keyboard.press('A', { commands: ['selectAll'] });
+        await page.keyboard.up(modifier);
+        await page.keyboard.press('Backspace');
+        await page.waitForSelector('.codesign-active-message-actions', { hidden: true });
+        expect(await page.$('.codesign-active-message-help')).toBeNull();
+        expect(await page.$eval('form', (node) => node.getBoundingClientRect().height)).toBe(
+          emptyHeight,
+        );
+        expect(await page.$eval('textarea', (node) => document.activeElement === node)).toBe(true);
+        expect((await snapshot()).calls).toHaveLength(0);
+        expect((await snapshot()).draft).toBe('');
       }
-      await page.focus('.codesign-active-message-help > summary');
-      await page.keyboard.press('Enter');
-      expect(
-        await page.$eval('.codesign-active-message-help', (node) => node.hasAttribute('open')),
-      ).toBe(true);
-      const expanded = await page.evaluate(() => ({
-        formHeight: document.querySelector('form')?.getBoundingClientRect().height,
-        panelHeight: document
-          .querySelector('.codesign-active-message-help-panel')
-          ?.getBoundingClientRect().height,
-      }));
-      expect(expanded.formHeight).toBe(geometry.height);
-      expect(expanded.panelHeight).toBeLessThanOrEqual(216);
-      await page.focus('.codesign-active-message-help-panel');
-      await page.keyboard.press('Escape');
-      expect(
-        await page.$eval('.codesign-active-message-help', (node) => node.hasAttribute('open')),
-      ).toBe(false);
-      expect(
-        await page.$eval(
-          '.codesign-active-message-help > summary',
-          (node) => document.activeElement === node,
-        ),
-      ).toBe(true);
-      await page.focus('textarea');
-      const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
-      await page.keyboard.down(modifier);
-      // Headless shell needs an explicit native editing command for Select All.
-      await page.keyboard.press('A', { commands: ['selectAll'] });
-      await page.keyboard.up(modifier);
-      await page.keyboard.press('Backspace');
-      await page.waitForSelector('.codesign-active-message-actions', { hidden: true });
-      expect(await page.$('.codesign-active-message-help')).toBeNull();
-      expect(await page.$eval('form', (node) => node.getBoundingClientRect().height)).toBe(
-        emptyHeight,
-      );
-      expect(await page.$eval('textarea', (node) => document.activeElement === node)).toBe(true);
-      expect((await snapshot()).calls).toHaveLength(0);
-      expect((await snapshot()).draft).toBe('');
-    }
-  }, 30_000);
+    },
+    30_000,
+  );
 
   it('normal Send clears the selected draft and enters a compact empty running state', async () => {
     await page.goto(`${endpoint}?idle=1`);
@@ -252,24 +251,24 @@ describe.skipIf(!chrome)('active composer fake gate in system Chrome', () => {
     ).toBeLessThanOrEqual(130);
   });
 
-  it.each([
-    'Queue follow-up',
-    'Steer next step',
-  ])('restores textarea focus when accepted %s removes the focused control', async (label) => {
-    await page.type('textarea', 'Explicit additional message');
-    await clickButton(label);
-    await page.waitForFunction(() => window.activeMessageFixture.snapshot().calls.length === 1);
-    await page.evaluate(() => window.activeMessageFixture.accept(0));
-    await page.waitForSelector('.codesign-active-message-actions', { hidden: true });
-    expect((await snapshot()).draft).toBe('');
-    expect(await page.$eval('textarea', (node) => document.activeElement === node)).toBe(true);
-    await page.keyboard.type('Next instruction');
-    expect((await snapshot()).draft).toBe('Next instruction');
-    expect(await page.$('.codesign-active-message-help')).not.toBeNull();
-    expect(
-      await page.$eval('.codesign-active-message-help', (node) => node.hasAttribute('open')),
-    ).toBe(false);
-  });
+  it.each(['Queue follow-up', 'Steer next step'])(
+    'restores textarea focus when accepted %s removes the focused control',
+    async (label) => {
+      await page.type('textarea', 'Explicit additional message');
+      await clickButton(label);
+      await page.waitForFunction(() => window.activeMessageFixture.snapshot().calls.length === 1);
+      await page.evaluate(() => window.activeMessageFixture.accept(0));
+      await page.waitForSelector('.codesign-active-message-actions', { hidden: true });
+      expect((await snapshot()).draft).toBe('');
+      expect(await page.$eval('textarea', (node) => document.activeElement === node)).toBe(true);
+      await page.keyboard.type('Next instruction');
+      expect((await snapshot()).draft).toBe('Next instruction');
+      expect(await page.$('.codesign-active-message-help')).not.toBeNull();
+      expect(
+        await page.$eval('.codesign-active-message-help', (node) => node.hasAttribute('open')),
+      ).toBe(false);
+    },
+  );
 
   it('does not steal focus after the user moves elsewhere before acceptance', async () => {
     await page.type('textarea', 'Explicit additional message');
@@ -399,26 +398,26 @@ describe.skipIf(!chrome)('active composer fake gate in system Chrome', () => {
     expect((await snapshot()).generateCalls).toBe(0);
   });
 
-  it.each([
-    false,
-    true,
-  ])('preserves the draft on not-delivered outcome (event before ACK: %s)', async (eventBeforeAck) => {
-    await page.type('textarea', 'Never discard an undelivered draft');
-    await page.keyboard.press('Enter');
-    await page.waitForFunction(() => window.activeMessageFixture.snapshot().calls.length === 1);
-    await page.evaluate(
-      (eventBeforeAck) => window.activeMessageFixture.settleUndelivered(0, eventBeforeAck),
-      eventBeforeAck,
-    );
-    await page.waitForFunction(() =>
-      document.querySelector('output')?.textContent?.includes('stopped before delivery'),
-    );
-    const state = await snapshot();
-    expect(state.draft).toBe('Never discard an undelivered draft');
-    expect(state.rows[0]?.status).toBe('not-delivered');
-    expect(state.calls).toHaveLength(1);
-    expect(state.generateCalls).toBe(0);
-  });
+  it.each([false, true])(
+    'preserves the draft on not-delivered outcome (event before ACK: %s)',
+    async (eventBeforeAck) => {
+      await page.type('textarea', 'Never discard an undelivered draft');
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => window.activeMessageFixture.snapshot().calls.length === 1);
+      await page.evaluate(
+        (eventBeforeAck) => window.activeMessageFixture.settleUndelivered(0, eventBeforeAck),
+        eventBeforeAck,
+      );
+      await page.waitForFunction(() =>
+        document.querySelector('output')?.textContent?.includes('stopped before delivery'),
+      );
+      const state = await snapshot();
+      expect(state.draft).toBe('Never discard an undelivered draft');
+      expect(state.rows[0]?.status).toBe('not-delivered');
+      expect(state.calls).toHaveLength(1);
+      expect(state.generateCalls).toBe(0);
+    },
+  );
 
   it.each(['file', 'comment', 'url'] as const)('never silently sends %s context', async (kind) => {
     await page.evaluate((kind) => window.activeMessageFixture.setContext(kind), kind);

@@ -27,6 +27,7 @@ import {
   resolveArtifactSourceReferencePath,
 } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
+import { inspectLayout, layoutFailureWarning } from './layout-probe';
 import { getLogger } from './logger';
 import { boundedPreview, collectVisibleEvidence, runPreviewSteps } from './preview-interactions';
 import { resolveSafeWorkspaceChildPath } from './workspace-reader';
@@ -253,6 +254,15 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
       ...(reason ? { reason } : {}),
     };
 
+    // Layout findings are advice: a failed measurement is reported, never turned into a failed preview.
+    try {
+      const inspection = await inspectLayout(page, opts.signal);
+      if (inspection.issues.length > 0) result.layoutIssues = inspection.issues;
+      if (inspection.notes.length > 0) result.warnings = inspection.notes;
+    } catch (err) {
+      result.warnings = [layoutFailureWarning(err).message];
+    }
+
     if (opts.vision) {
       const png = await boundedPreview(
         page.screenshot({ type: 'png', encoding: 'base64' }),
@@ -333,12 +343,9 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
         try {
           await boundedPreview(closing, 2000);
           if (report) {
-            report.warnings = [
-              `Graceful preview shutdown failed; isolated browser was terminated: ${error instanceof Error ? error.message : String(error)}`,
-            ];
-            getLogger('preview').warn('preview.cleanup.recovered', {
-              message: report.warnings[0],
-            });
+            const message = `Graceful preview shutdown failed; isolated browser was terminated: ${error instanceof Error ? error.message : String(error)}`;
+            report.warnings = [...(report.warnings ?? []), message];
+            getLogger('preview').warn('preview.cleanup.recovered', { message });
           }
         } catch (terminationError) {
           cleanupFailed(terminationError);

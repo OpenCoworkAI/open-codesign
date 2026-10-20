@@ -171,36 +171,35 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe('FilesTab source edit integration', () => {
-  it.each([
-    'App.jsx',
-    'Screen.jsx',
-    'Screen.tsx',
-  ])('inspects the resolved sibling %s for a nested HTML selection', async (sourceName) => {
-    const sourcePath = `pages/${sourceName}`;
-    read.mockImplementation(async (_designId: string, path: string) => ({
-      path,
-      content:
-        path === 'pages/preview.html'
-          ? `<!doctype html><!-- artifact source lives in ${sourceName} -->`
-          : '<p>Old</p>',
-    }));
-    await mount('pages/preview.html');
-    expect(read).toHaveBeenCalledWith('a', sourcePath);
-    expect(container.querySelector('iframe')?.srcdoc).toContain('<p>Old</p>');
-    await toggle();
-    expect(inspect).toHaveBeenLastCalledWith({
-      schemaVersion: 1,
-      designId: 'a',
-      path: sourcePath,
-      expectedContent: '<p>Old</p>',
-    });
-    await emit({
-      targetId: target.id,
-      sourceHash: hash,
-      previewRevision: lastRevision().previewRevision,
-    });
-    expect(container.querySelector('textarea')?.value).toBe('Old');
-  });
+  it.each(['App.jsx', 'Screen.jsx', 'Screen.tsx'])(
+    'inspects the resolved sibling %s for a nested HTML selection',
+    async (sourceName) => {
+      const sourcePath = `pages/${sourceName}`;
+      read.mockImplementation(async (_designId: string, path: string) => ({
+        path,
+        content:
+          path === 'pages/preview.html'
+            ? `<!doctype html><!-- artifact source lives in ${sourceName} -->`
+            : '<p>Old</p>',
+      }));
+      await mount('pages/preview.html');
+      expect(read).toHaveBeenCalledWith('a', sourcePath);
+      expect(container.querySelector('iframe')?.srcdoc).toContain('<p>Old</p>');
+      await toggle();
+      expect(inspect).toHaveBeenLastCalledWith({
+        schemaVersion: 1,
+        designId: 'a',
+        path: sourcePath,
+        expectedContent: '<p>Old</p>',
+      });
+      await emit({
+        targetId: target.id,
+        sourceHash: hash,
+        previewRevision: lastRevision().previewRevision,
+      });
+      expect(container.querySelector('textarea')?.value).toBe('Old');
+    },
+  );
 
   it('does not reuse a previous file while another read is pending or accept its delayed result', async () => {
     const pending = deferred<WorkspacePreviewReadResult>();

@@ -19,10 +19,11 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
-import type { DoneError, DoneRuntimeVerifier } from '@open-codesign/core';
+import type { DoneError, DoneRuntimeResult, DoneRuntimeVerifier } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
 import { buildSrcdoc } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, Page } from 'puppeteer-core';
+import { inspectLayout, layoutFailureWarning, layoutWarnings } from './layout-probe';
 import { boundedPreview } from './preview-interactions';
 import {
   buildWorkspacePreviewDocument,
@@ -181,12 +182,13 @@ async function verifyWithSystemChrome(
   html: string,
   workspaceRoot?: string,
   signal?: AbortSignal,
-): Promise<DoneError[]> {
+): Promise<DoneRuntimeResult> {
   signal?.throwIfAborted();
   const executablePath = await findSystemChrome();
   const puppeteer = (await import('puppeteer-core')).default;
   const userDataDir = await mkdtemp(join(tmpdir(), 'codesign-done-chrome-'));
   const errors: DoneError[] = [];
+  const warnings: DoneError[] = [];
   const seen = new Set<string>();
   let browser: Browser | null = null;
   let page: Page | null = null;
@@ -245,6 +247,13 @@ async function verifyWithSystemChrome(
       signal,
     );
     await boundedPreview(settleAfterLoad(), SETTLE_AFTER_LOAD_MS + 100, signal);
+    // Layout findings are advice: a failed measurement is reported, never turned into an error.
+    try {
+      warnings.push(...layoutWarnings(await inspectLayout(page, signal)));
+    } catch (err) {
+      signal?.throwIfAborted();
+      warnings.push(layoutFailureWarning(err));
+    }
   } catch (err) {
     signal?.throwIfAborted();
     pushUniqueError(
@@ -259,11 +268,11 @@ async function verifyWithSystemChrome(
     await rm(userDataDir, { recursive: true, force: true });
   }
 
-  return errors;
+  return { errors, warnings };
 }
 
 export function makeRuntimeVerifier(options?: { workspaceRoot: string }): DoneRuntimeVerifier {
-  return async (artifactSource, context): Promise<DoneError[]> => {
+  return async (artifactSource, context): Promise<DoneRuntimeResult> => {
     context?.signal?.throwIfAborted();
     const workspaceRoot = options ? resolve(options.workspaceRoot) : undefined;
     const srcdoc = workspaceRoot

@@ -224,22 +224,21 @@ describe('OVERLAY_SCRIPT fragment navigation', () => {
     expect(stopPropagation).not.toHaveBeenCalled();
   });
 
-  it.each([
-    '#missing',
-    '/missing-page',
-    'https://example.com',
-  ])('retains the navigation boundary for %s', (href) => {
-    const h = runOverlayWithHarness();
-    const preventDefault = vi.fn();
-    const stopPropagation = vi.fn();
-    h.documentListeners.get('click')?.({
-      target: { tagName: 'A', href, getAttribute: () => href },
-      preventDefault,
-      stopPropagation,
-    });
-    expect(preventDefault).toHaveBeenCalledOnce();
-    expect(stopPropagation).toHaveBeenCalledOnce();
-  });
+  it.each(['#missing', '/missing-page', 'https://example.com'])(
+    'retains the navigation boundary for %s',
+    (href) => {
+      const h = runOverlayWithHarness();
+      const preventDefault = vi.fn();
+      const stopPropagation = vi.fn();
+      h.documentListeners.get('click')?.({
+        target: { tagName: 'A', href, getAttribute: () => href },
+        preventDefault,
+        stopPropagation,
+      });
+      expect(preventDefault).toHaveBeenCalledOnce();
+      expect(stopPropagation).toHaveBeenCalledOnce();
+    },
+  );
 
   function screenDouble(id: string) {
     const attrs: Record<string, string> = { 'data-oc-screen': id };
@@ -827,18 +826,17 @@ describe('source provenance selection hints', () => {
       ]),
     ).toHaveProperty('sourceEdit');
   });
-  it.each([
-    'Changed by an effect',
-    'Save now',
-    ' Save now!',
-  ])('refuses DOM text changed from the inspected definition: %s', (textContent) => {
-    const h = runOverlayWithHarness(
-      buildOverlayScript({ ...context, directTexts: { '10:50': ' Save now' } }),
-    );
-    expect(
-      click(h, 'preview-1:10:50', 'BUTTON', undefined, [{ nodeType: 3, textContent }]),
-    ).not.toHaveProperty('sourceEdit');
-  });
+  it.each(['Changed by an effect', 'Save now', ' Save now!'])(
+    'refuses DOM text changed from the inspected definition: %s',
+    (textContent) => {
+      const h = runOverlayWithHarness(
+        buildOverlayScript({ ...context, directTexts: { '10:50': ' Save now' } }),
+      );
+      expect(
+        click(h, 'preview-1:10:50', 'BUTTON', undefined, [{ nodeType: 3, textContent }]),
+      ).not.toHaveProperty('sourceEdit');
+    },
+  );
   it('never guesses an ancestor origin or trusts unknown marker/tag pairs', () => {
     for (const [marker, tagName] of [
       [null, 'SPAN'],
@@ -855,17 +853,15 @@ describe('source provenance selection hints', () => {
       expect(click(h, marker, tagName, parent)).not.toHaveProperty('sourceEdit');
     }
   });
-  it.each([
-    '10:50',
-    'author-value',
-    'preview-old:10:50',
-    'preview-1:99:100',
-  ])('ignores authored, stale or unmapped attribute values: %s', (marker) => {
-    const h = runOverlayWithHarness(buildOverlayScript(context));
-    const selection = click(h, marker);
-    expect(isOverlayMessage(selection)).toBe(true);
-    expect(selection).not.toHaveProperty('sourceEdit');
-  });
+  it.each(['10:50', 'author-value', 'preview-old:10:50', 'preview-1:99:100'])(
+    'ignores authored, stale or unmapped attribute values: %s',
+    (marker) => {
+      const h = runOverlayWithHarness(buildOverlayScript(context));
+      const selection = click(h, marker);
+      expect(isOverlayMessage(selection)).toBe(true);
+      expect(selection).not.toHaveProperty('sourceEdit');
+    },
+  );
   it('does not treat a current-looking marker as provenance without an injected target', () => {
     const h = runOverlayWithHarness(buildOverlayScript({ ...context, targets: {} }));
     expect(click(h, 'preview-1:10:50')).not.toHaveProperty('sourceEdit');

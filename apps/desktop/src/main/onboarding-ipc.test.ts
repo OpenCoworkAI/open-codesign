@@ -747,31 +747,30 @@ describe('config:v1 custom provider keyless opt-in', () => {
     ).toBe(false);
   });
 
-  it.each([
-    undefined,
-    true,
-  ])('keeps strict creation defaults (requiresApiKey=%s)', async (requiresApiKey) => {
-    const { writeConfig } = await import('./config');
-    await expect(invoke('config:v1:add-provider', { ...provider, requiresApiKey })).rejects.toThrow(
-      /apiKey must be a non-empty string/,
-    );
-    expect(writeConfig).not.toHaveBeenCalled();
-  });
+  it.each([undefined, true])(
+    'keeps strict creation defaults (requiresApiKey=%s)',
+    async (requiresApiKey) => {
+      const { writeConfig } = await import('./config');
+      await expect(
+        invoke('config:v1:add-provider', { ...provider, requiresApiKey }),
+      ).rejects.toThrow(/apiKey must be a non-empty string/);
+      expect(writeConfig).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each([
-    null,
-    'false',
-    0,
-  ])('rejects malformed auth mode (%s) in add and update', async (requiresApiKey) => {
-    const { writeConfig } = await import('./config');
-    await expect(invoke('config:v1:add-provider', { ...provider, requiresApiKey })).rejects.toThrow(
-      /requiresApiKey must be a boolean/,
-    );
-    await expect(
-      invoke('config:v1:update-provider', { id: provider.id, requiresApiKey }),
-    ).rejects.toThrow(/requiresApiKey must be a boolean/);
-    expect(writeConfig).not.toHaveBeenCalled();
-  });
+  it.each([null, 'false', 0])(
+    'rejects malformed auth mode (%s) in add and update',
+    async (requiresApiKey) => {
+      const { writeConfig } = await import('./config');
+      await expect(
+        invoke('config:v1:add-provider', { ...provider, requiresApiKey }),
+      ).rejects.toThrow(/requiresApiKey must be a boolean/);
+      await expect(
+        invoke('config:v1:update-provider', { id: provider.id, requiresApiKey }),
+      ).rejects.toThrow(/requiresApiKey must be a boolean/);
+      expect(writeConfig).not.toHaveBeenCalled();
+    },
+  );
 
   it('requires a stored or newly supplied key when switching back to keyed mode', async () => {
     const { writeConfig } = await import('./config');
@@ -1842,111 +1841,110 @@ describe('detectChatgptSubscription — non-ENOENT failure handling', () => {
 });
 
 describe('web search settings survive unrelated config saves', () => {
-  it.each([
-    true,
-    false,
-    undefined,
-  ])('preserves enabled=%s and custom limits through settings, imports and reload', async (enabled) => {
-    const { BUILTIN_PROVIDERS, hydrateConfig, parseConfigFlexible, toPersistedV3 } = await import(
-      '@open-codesign/shared'
-    );
-    const cache = await import('./onboarding/config-cache');
-    const crud = await import('./onboarding/providers-crud');
-    const imports = await import('./onboarding/external-imports');
-    const { writeConfig } = await import('./config');
-    const webSearch =
-      enabled === undefined
-        ? undefined
-        : { enabled, maxCalls: 7, timeoutMs: 23000, maxChars: 6000 };
-    const cfg = hydrateConfig({
-      version: 3,
-      activeProvider: 'openai',
-      activeModel: 'gpt-test',
-      providers: { openai: BUILTIN_PROVIDERS.openai, anthropic: BUILTIN_PROVIDERS.anthropic },
-      secrets: {
-        openai: { ciphertext: 'enc:openai-fixture' },
-        anthropic: { ciphertext: 'enc:anthropic-fixture' },
-        tavily: { ciphertext: 'enc:tavily-fixture' },
-      },
-      ...(webSearch ? { webSearch } : {}),
-    });
-    const imported = { ...BUILTIN_PROVIDERS.openai, id: 'imported-fixture', builtin: false };
-    const mutations: Record<string, () => Promise<unknown>> = {
-      switchModel: () =>
-        crud.runSetActiveProvider({ provider: 'openai', modelPrimary: 'another-model' }),
-      switchProvider: () =>
-        crud.runSetActiveProvider({ provider: 'anthropic', modelPrimary: 'claude-test' }),
-      updateProvider: () => crud.runUpdateProvider({ id: 'openai', name: 'Renamed' }),
-      saveProvider: () =>
-        crud.runSetProviderAndModels({
-          provider: 'openai',
-          modelPrimary: 'another-model',
-          apiKey: 'fixture-new-key',
-          setAsActive: true,
-        }),
-      addCustomProvider: () =>
-        crud.runAddCustomProvider({
-          id: 'new-fixture',
-          name: 'New fixture',
-          wire: 'openai-chat',
-          baseUrl: 'https://example.com/v1',
-          defaultModel: 'fixture-model',
-          apiKey: 'fixture-key',
-          setAsActive: false,
-        }),
-      deleteProvider: () => crud.runDeleteProvider('anthropic'),
-      clearDesignSystem: () => cache.setDesignSystem(null),
-      importCodex: () =>
-        imports.runImportCodex({
-          providers: [imported],
-          activeProvider: imported.id,
-          activeModel: imported.defaultModel,
-          envKeyMap: {},
-          apiKeyMap: { [imported.id]: 'fixture-key' },
-          warnings: [],
-        }),
-      importClaude: () =>
-        imports.runImportClaudeCode({
-          provider: imported,
-          apiKey: 'fixture-key',
-          apiKeySource: 'settings-json',
-          userType: 'has-api-key',
-          hasOAuthEvidence: false,
-          activeModel: imported.defaultModel,
-          settingsPath: '/fixture/settings.json',
-          warnings: [],
-        }),
-      importGemini: () =>
-        imports.runImportGemini({
-          kind: 'found',
-          provider: imported,
-          apiKey: 'fixture-key',
-          apiKeySource: 'shell-env',
-          keyPath: null,
-          warnings: [],
-        }),
-      importOpencode: () =>
-        imports.runImportOpencode({
-          providers: [imported],
-          apiKeyMap: { [imported.id]: 'fixture-key' },
-          activeProvider: imported.id,
-          activeModel: imported.defaultModel,
-          warnings: [],
-        }),
-    };
-    for (const [operation, mutate] of Object.entries(mutations)) {
-      cache.setCachedConfig(structuredClone(cfg));
-      vi.mocked(writeConfig).mockClear();
-      await mutate();
-      const saved = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
-      expect(saved, operation).toBeDefined();
-      if (!saved) throw new Error(`Missing config for ${operation}`);
-      expect({ operation, webSearch: saved.webSearch }).toEqual({ operation, webSearch });
-      expect(cache.getCachedConfig()?.webSearch, operation).toEqual(webSearch);
-      expect(saved.secrets['tavily'], operation).toEqual(cfg.secrets['tavily']);
-      expect(parseConfigFlexible(toPersistedV3(saved)).webSearch, operation).toEqual(webSearch);
-    }
-  });
+  it.each([true, false, undefined])(
+    'preserves enabled=%s and custom limits through settings, imports and reload',
+    async (enabled) => {
+      const { BUILTIN_PROVIDERS, hydrateConfig, parseConfigFlexible, toPersistedV3 } = await import(
+        '@open-codesign/shared'
+      );
+      const cache = await import('./onboarding/config-cache');
+      const crud = await import('./onboarding/providers-crud');
+      const imports = await import('./onboarding/external-imports');
+      const { writeConfig } = await import('./config');
+      const webSearch =
+        enabled === undefined
+          ? undefined
+          : { enabled, maxCalls: 7, timeoutMs: 23000, maxChars: 6000 };
+      const cfg = hydrateConfig({
+        version: 3,
+        activeProvider: 'openai',
+        activeModel: 'gpt-test',
+        providers: { openai: BUILTIN_PROVIDERS.openai, anthropic: BUILTIN_PROVIDERS.anthropic },
+        secrets: {
+          openai: { ciphertext: 'enc:openai-fixture' },
+          anthropic: { ciphertext: 'enc:anthropic-fixture' },
+          tavily: { ciphertext: 'enc:tavily-fixture' },
+        },
+        ...(webSearch ? { webSearch } : {}),
+      });
+      const imported = { ...BUILTIN_PROVIDERS.openai, id: 'imported-fixture', builtin: false };
+      const mutations: Record<string, () => Promise<unknown>> = {
+        switchModel: () =>
+          crud.runSetActiveProvider({ provider: 'openai', modelPrimary: 'another-model' }),
+        switchProvider: () =>
+          crud.runSetActiveProvider({ provider: 'anthropic', modelPrimary: 'claude-test' }),
+        updateProvider: () => crud.runUpdateProvider({ id: 'openai', name: 'Renamed' }),
+        saveProvider: () =>
+          crud.runSetProviderAndModels({
+            provider: 'openai',
+            modelPrimary: 'another-model',
+            apiKey: 'fixture-new-key',
+            setAsActive: true,
+          }),
+        addCustomProvider: () =>
+          crud.runAddCustomProvider({
+            id: 'new-fixture',
+            name: 'New fixture',
+            wire: 'openai-chat',
+            baseUrl: 'https://example.com/v1',
+            defaultModel: 'fixture-model',
+            apiKey: 'fixture-key',
+            setAsActive: false,
+          }),
+        deleteProvider: () => crud.runDeleteProvider('anthropic'),
+        clearDesignSystem: () => cache.setDesignSystem(null),
+        importCodex: () =>
+          imports.runImportCodex({
+            providers: [imported],
+            activeProvider: imported.id,
+            activeModel: imported.defaultModel,
+            envKeyMap: {},
+            apiKeyMap: { [imported.id]: 'fixture-key' },
+            warnings: [],
+          }),
+        importClaude: () =>
+          imports.runImportClaudeCode({
+            provider: imported,
+            apiKey: 'fixture-key',
+            apiKeySource: 'settings-json',
+            userType: 'has-api-key',
+            hasOAuthEvidence: false,
+            activeModel: imported.defaultModel,
+            settingsPath: '/fixture/settings.json',
+            warnings: [],
+          }),
+        importGemini: () =>
+          imports.runImportGemini({
+            kind: 'found',
+            provider: imported,
+            apiKey: 'fixture-key',
+            apiKeySource: 'shell-env',
+            keyPath: null,
+            warnings: [],
+          }),
+        importOpencode: () =>
+          imports.runImportOpencode({
+            providers: [imported],
+            apiKeyMap: { [imported.id]: 'fixture-key' },
+            activeProvider: imported.id,
+            activeModel: imported.defaultModel,
+            warnings: [],
+          }),
+      };
+      for (const [operation, mutate] of Object.entries(mutations)) {
+        cache.setCachedConfig(structuredClone(cfg));
+        vi.mocked(writeConfig).mockClear();
+        await mutate();
+        const saved = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+        expect(saved, operation).toBeDefined();
+        if (!saved) throw new Error(`Missing config for ${operation}`);
+        expect({ operation, webSearch: saved.webSearch }).toEqual({ operation, webSearch });
+        expect(cache.getCachedConfig()?.webSearch, operation).toEqual(webSearch);
+        expect(saved.secrets['tavily'], operation).toEqual(cfg.secrets['tavily']);
+        expect(parseConfigFlexible(toPersistedV3(saved)).webSearch, operation).toEqual(webSearch);
+      }
+    },
+  );
 
   it('retains Tavily credentials and web settings when the last model provider is deleted', async () => {
     const { BUILTIN_PROVIDERS, hydrateConfig } = await import('@open-codesign/shared');

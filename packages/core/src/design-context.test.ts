@@ -285,19 +285,22 @@ describe('buildDesignContextPack', () => {
         { questionId: 'q', value: 'No' },
       ],
     },
-  ])('does not infer facts or consent from unavailable or invalid answer details: %j', (details) => {
-    const pack = buildDesignContextPack({
-      chatRows: [
-        chatRow(0, 'tool_call', {
-          toolName: 'ask',
-          status: 'done',
-          args: { questions: [{ id: 'q', type: 'freeform', prompt: 'Question?' }] },
-          result: { details },
-        }),
-      ],
-    });
-    expect(pack.history).toEqual([]);
-  });
+  ])(
+    'does not infer facts or consent from unavailable or invalid answer details: %j',
+    (details) => {
+      const pack = buildDesignContextPack({
+        chatRows: [
+          chatRow(0, 'tool_call', {
+            toolName: 'ask',
+            status: 'done',
+            args: { questions: [{ id: 'q', type: 'freeform', prompt: 'Question?' }] },
+            result: { details },
+          }),
+        ],
+      });
+      expect(pack.history).toEqual([]);
+    },
+  );
 
   it('escapes embedded instructions and rejects malformed question records', () => {
     const payload = {

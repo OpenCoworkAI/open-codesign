@@ -126,4 +126,31 @@ describe('extractFromCssVars()', () => {
     expect(byName.get('border-radius-md')?.type).toBe('radius');
     expect(byName.get('border-color-muted')?.type).toBe('color');
   });
+  it('records the selector of a [data-theme] block and leaves :root tokens unchanged', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'css-vars-'));
+    const file = join(dir, 'tokens.css');
+    await writeFile(
+      file,
+      [
+        ':root {',
+        '  --color-bg: #ffffff;',
+        '}',
+        '[data-theme="dark"] {',
+        '  --color-bg: #000000;',
+        '}',
+        ':root[data-theme=contrast] {',
+        '  --color-bg: #111111;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const tokens = await extractFromCssVars(file);
+
+    expect(tokens.map((t) => [t.value, t.block])).toEqual([
+      ['#ffffff', undefined],
+      ['#000000', '[data-theme="dark"]'],
+      ['#111111', '[data-theme=contrast]'],
+    ]);
+    expect('block' in (tokens[0] ?? {})).toBe(false);
+  });
 });
