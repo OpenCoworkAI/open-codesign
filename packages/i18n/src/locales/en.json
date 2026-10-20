@@ -117,9 +117,16 @@
     },
     "newDesignDialog": {
       "title": "New design",
-      "subtitle": "Optionally choose a local folder to sync your design files.",
+      "subtitle": "Create a design in a new folder, or continue working in an existing folder.",
+      "advanced": "Advanced options",
+      "format": "Design format",
+      "htmlOption": "HTML (default)",
+      "htmlDescription": "HTML: a portable page with HTML, CSS and JavaScript.",
+      "reactDescription": "React: a design authored with JSX components.",
+      "existingFormat": "An existing folder keeps its current format. Choose its primary file if needed; files are not converted.",
+      "formatPersistence": "Future edits keep the design's format. Choosing a primary file does not convert it to another format.",
       "noWorkspace": "No folder selected",
-      "skip": "Skip",
+      "skip": "Use new folder",
       "confirm": "Create"
     },
     "workspace": {

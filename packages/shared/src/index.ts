@@ -52,6 +52,7 @@ export {
 export * from './source-edits';
 export {
   DEFAULT_SOURCE_ENTRY,
+  DesignAuthoringFormat,
   DesignSourceEntryV1,
   LEGACY_SOURCE_ENTRY,
   NEW_HTML_SOURCE_ENTRY,

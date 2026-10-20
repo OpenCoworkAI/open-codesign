@@ -169,14 +169,21 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       set({ newDesignDialogOpen: false });
     },
 
-    async createNewDesign(workspacePath?: string | null, demoInputId?: string) {
+    async createNewDesign(workspacePath, demoInputId, authoringFormat) {
       if (!window.codesign) return null;
       const name = nextUntitledDesignName(get().designs);
       try {
         const design =
-          demoInputId === undefined
-            ? await window.codesign.snapshots.createDesign(name, workspacePath)
-            : await window.codesign.snapshots.createDesign(name, workspacePath, demoInputId);
+          authoringFormat !== undefined
+            ? await window.codesign.snapshots.createDesign(
+                name,
+                workspacePath,
+                demoInputId,
+                authoringFormat,
+              )
+            : demoInputId === undefined
+              ? await window.codesign.snapshots.createDesign(name, workspacePath)
+              : await window.codesign.snapshots.createDesign(name, workspacePath, demoInputId);
         set((state) => buildFreshDesignState(state, design.id));
         void get().syncActiveMessages(design.id);
         await get().loadDesigns();

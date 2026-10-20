@@ -13,6 +13,7 @@ import type {
   CommentRow,
   CommentStatus,
   Design,
+  DesignAuthoringFormat,
   DesignSnapshot,
   ExternalConfigsDetection,
   GeneratePayloadV1,
@@ -788,12 +789,18 @@ const api = {
   snapshots: {
     listDesigns: () =>
       ipcRenderer.invoke('snapshots:v1:list-designs', { schemaVersion: 1 }) as Promise<Design[]>,
-    createDesign: (name: string, workspacePath?: string | null, demoInputId?: string) =>
+    createDesign: (
+      name: string,
+      workspacePath?: string | null,
+      demoInputId?: string,
+      authoringFormat?: DesignAuthoringFormat,
+    ) =>
       ipcRenderer.invoke('snapshots:v1:create-design', {
         schemaVersion: 1,
         name,
         ...(workspacePath !== undefined ? { workspacePath } : {}),
         ...(demoInputId !== undefined ? { demoInputId } : {}),
+        ...(authoringFormat !== undefined ? { authoringFormat } : {}),
       }) as Promise<Design>,
     getDesign: (id: string) =>
       ipcRenderer.invoke('snapshots:v1:get-design', {

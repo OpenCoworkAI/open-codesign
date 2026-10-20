@@ -12,7 +12,7 @@ The v0.2 direction is no longer a single-prompt generator. Each design is a long
 
 The original inspiration was Claude Design. The product boundary is now clearer: Open CoDesign borrows proven coding-agent mechanics, then adds design-specific tools and a local-first workspace model.
 
-Product model: a `Design` owns a workspace. The agent edits design source files in that workspace; the preview runtime turns those sources into a rendered web document; exporters turn the rendered/source document into standard outputs such as HTML, PDF, PPTX, ZIP, or Markdown. In v0.2 the default source entry is `App.jsx`; `index.html` is reserved for standalone exports or legacy workspace files.
+Product model: a `Design` owns a workspace. The agent edits design source files in that workspace; the preview runtime turns those sources into a rendered web document; exporters turn the rendered/source document into standard outputs such as HTML, PDF, PPTX, ZIP, or Markdown. New blank designs default to native HTML (`index.html`); advanced creation options can select React (`App.jsx`). Existing/imported designs retain their source identity and runtime. Agent revisions follow the selected format. Selecting an existing primary file identifies an entry; it does not convert source formats. Any future format-conversion workflow must be explicit, preserve originals and revalidate the result.
 
 `docs/` is gitignored. Maintainers may have internal plans, handoffs, and research locally; public contributors may not. Do not cite `docs/**` in public PR review comments unless the file exists in the public checkout.
 
@@ -123,7 +123,7 @@ Do not reintroduce a verifier subagent, snip tool, custom bash tool, custom list
 - Forms use native `<form>` and `FormData`.
 - Animations use Tailwind transitions. Do not introduce framer-motion or motion.
 - App chrome must use `packages/ui` tokens. Generated design sources and exports may define their own visual system.
-- Sandbox preview remains Electron iframe `srcdoc` plus runtime tooling. `App.jsx` JSX source is wrapped by the runtime for preview/export; exported `index.html` is the standalone deliverable.
+- Sandbox preview remains Electron iframe `srcdoc` plus runtime tooling. Explicit native HTML is rendered literally; legacy JSX/TSX is wrapped by the runtime for preview/export. An `.html` suffix can also identify a legacy export wrapper, so use the host-declared source identity rather than the extension alone.
 
 ## Repository Layout
 

@@ -235,6 +235,12 @@ JSX previews and standalone exports use `system-ui` by default without downloadi
 
 Credentials stay in `~/.config/open-codesign/config.toml` and the ChatGPT OAuth token store under the app config directory. Nothing leaves your machine unless your chosen model route requires it.
 
+### Design format
+
+New blank designs use **HTML** by default. Open **Advanced options** in the New design dialog to choose **React** instead. HTML designs use native HTML/CSS/JavaScript in `index.html`; React designs start from `App.jsx`. Future agent edits keep the selected format.
+
+Choosing an existing folder preserves its current source format. If several source files could be the entry, select the primary file explicitly. Choosing a primary file does not convert the source. Format conversion requires a separate explicit workflow that preserves originals and verifies the result; automatic conversion is not provided.
+
 ### 3. Type your first prompt
 
 Pick one of **fifteen built-in demos** — landing page, dashboard, pitch slide, pricing, mobile app, chat UI, event calendar, blog article, receipt/invoice, portfolio, settings panel, and more — or describe your own. A sandboxed prototype appears in seconds.

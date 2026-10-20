@@ -99,9 +99,16 @@
     },
     "newDesignDialog": {
       "title": "Nuevo diseño",
-      "subtitle": "Opcionalmente elige una carpeta local para sincronizar tus archivos de diseño.",
+      "subtitle": "Crea un diseño en una carpeta nueva o continúa en una carpeta existente.",
+      "advanced": "Opciones avanzadas",
+      "format": "Formato del diseño",
+      "htmlOption": "HTML (predeterminado)",
+      "htmlDescription": "HTML: una página portable con HTML, CSS y JavaScript.",
+      "reactDescription": "React: un diseño creado con componentes JSX.",
+      "existingFormat": "Una carpeta existente conserva su formato. Elige su archivo principal si es necesario; los archivos no se convierten.",
+      "formatPersistence": "Las ediciones futuras conservan el formato del diseño. Elegir un archivo principal no convierte su formato.",
       "noWorkspace": "Ninguna carpeta seleccionada",
-      "skip": "Omitir",
+      "skip": "Usar carpeta nueva",
       "confirm": "Crear"
     },
     "workspace": {

@@ -29,6 +29,7 @@ import {
   CommentContentExpectations,
   CommentKind,
   CommentRect,
+  DesignAuthoringFormat,
 } from '@open-codesign/shared';
 import { withWorkspaceFileWriter } from '@open-codesign/shared/workspace-file-lock';
 import { isDemoInputId } from '@open-codesign/templates/demo-inputs';
@@ -1350,6 +1351,18 @@ export function registerSnapshotsIpc(db: Database): void {
       const name = (r['name'] as string).trim();
       const requestedWorkspacePath = parseCreateDesignWorkspacePath(r);
       const demoInputId = r['demoInputId'];
+      const authoringFormat = r['authoringFormat'];
+      if (
+        authoringFormat !== undefined &&
+        (!DesignAuthoringFormat.safeParse(authoringFormat).success ||
+          requestedWorkspacePath !== undefined ||
+          demoInputId !== undefined)
+      ) {
+        throw new CodesignError(
+          'authoringFormat must be html or react and only applies to a new blank design',
+          'IPC_BAD_INPUT',
+        );
+      }
       if (
         demoInputId !== undefined &&
         (!isDemoInputId(demoInputId) || requestedWorkspacePath !== undefined)
@@ -1382,7 +1395,11 @@ export function registerSnapshotsIpc(db: Database): void {
           requestedWorkspacePath === undefined ? 'blank-canvas' : 'work-on-project',
         );
         if (requestedWorkspacePath === undefined && demoInputId === undefined) {
-          await initializeSourceEntry(db, design.id);
+          await initializeSourceEntry(
+            db,
+            design.id,
+            authoringFormat === 'react' ? 'react' : 'html',
+          );
         }
         return bound;
       } catch (err) {

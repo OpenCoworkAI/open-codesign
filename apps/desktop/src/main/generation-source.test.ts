@@ -53,6 +53,28 @@ async function fixture(planned = true) {
 }
 
 describe('generation source lifecycle', () => {
+  it('keeps an explicitly selected React identity through generation verification and reopen', async () => {
+    const f = await fixture(false);
+    await initializeSourceEntry(f.db, f.design.id, 'react');
+    const run = await f.admit();
+    expect(run.source).toMatchObject({
+      path: 'App.jsx',
+      format: 'jsx',
+      runtimeMode: 'legacy-auto',
+    });
+    expect(run.initialContent).toBeNull();
+    const content = 'function App(){return <h1>React choice</h1>}';
+    await writeFile(path.join(f.workspace, 'App.jsx'), content);
+    await run.verify(content, { path: 'App.jsx' }, async () => []);
+    await run.accept({ source: SourceIdentityV1.parse(run.source), content });
+    await run.confirm(true);
+    expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({
+      status: 'ready',
+      content,
+      source: { path: 'App.jsx', format: 'jsx', runtimeMode: 'legacy-auto' },
+    });
+    run.dispose();
+  });
   it('admits planned missing source, not renderer guesses', async () => {
     const f = await fixture();
     const run = await f.admit();

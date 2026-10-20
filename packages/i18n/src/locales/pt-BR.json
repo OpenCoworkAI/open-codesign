@@ -99,9 +99,16 @@
     },
     "newDesignDialog": {
       "title": "Novo design",
-      "subtitle": "Opcionalmente escolha uma pasta local para sincronizar seus arquivos de design.",
+      "subtitle": "Crie um design em uma nova pasta ou continue em uma pasta existente.",
+      "advanced": "Opções avançadas",
+      "format": "Formato do design",
+      "htmlOption": "HTML (padrão)",
+      "htmlDescription": "HTML: uma página portátil com HTML, CSS e JavaScript.",
+      "reactDescription": "React: um design criado com componentes JSX.",
+      "existingFormat": "Uma pasta existente mantém seu formato. Escolha o arquivo principal se necessário; os arquivos não são convertidos.",
+      "formatPersistence": "As próximas edições mantêm o formato do design. Escolher um arquivo principal não converte seu formato.",
       "noWorkspace": "Nenhuma pasta selecionada",
-      "skip": "Pular",
+      "skip": "Usar nova pasta",
       "confirm": "Criar"
     },
     "workspace": {

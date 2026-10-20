@@ -4,6 +4,9 @@ export const DEFAULT_SOURCE_ENTRY = 'App.jsx' as const;
 export const LEGACY_SOURCE_ENTRY = 'index.html' as const;
 export const NEW_HTML_SOURCE_ENTRY = 'index.html' as const;
 
+export const DesignAuthoringFormat = z.enum(['html', 'react']);
+export type DesignAuthoringFormat = z.infer<typeof DesignAuthoringFormat>;
+
 const NonEmptyText = z.string().refine((value) => value.trim().length > 0, 'Must not be blank');
 const Revision = z.string().uuid();
 const WindowsReservedName = /^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³]|CONIN\$|CONOUT\$)$/i;

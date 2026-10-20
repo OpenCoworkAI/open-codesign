@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { Stats } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import {
+  DEFAULT_SOURCE_ENTRY,
   type Design,
+  DesignAuthoringFormat,
   type DesignSourceEntryV1,
   NEW_HTML_SOURCE_ENTRY,
   SourceEntryPath,
@@ -355,7 +357,9 @@ export function notifyAutoManagedSourceRename(event: AutoManagedSourceRename): v
 export async function initializeSourceEntry(
   db: Database,
   designId: string,
+  authoringFormat: DesignAuthoringFormat = 'html',
 ): Promise<DesignSourceEntryV1 & { phase: 'planned' }> {
+  DesignAuthoringFormat.parse(authoringFormat);
   return withStableWorkspacePath(designId, () =>
     withWorkspaceFileWriter(sourceEntryFile(db, designId), async () => {
       const design = requireDesign(db, designId);
@@ -372,12 +376,20 @@ export async function initializeSourceEntry(
         workspacePath,
         revision: randomUUID(),
         phase: 'planned' as const,
-        source: {
-          schemaVersion: 1 as const,
-          path: NEW_HTML_SOURCE_ENTRY,
-          format: 'html' as const,
-          runtimeMode: 'native-html' as const,
-        },
+        source:
+          authoringFormat === 'react'
+            ? {
+                schemaVersion: 1 as const,
+                path: DEFAULT_SOURCE_ENTRY,
+                format: 'jsx' as const,
+                runtimeMode: 'legacy-auto' as const,
+              }
+            : {
+                schemaVersion: 1 as const,
+                path: NEW_HTML_SOURCE_ENTRY,
+                format: 'html' as const,
+                runtimeMode: 'native-html' as const,
+              },
       };
       await readSource(workspacePath, entry.source.path, true);
       await writeSourceEntryFile(db, designId, entry, previous, async () => {

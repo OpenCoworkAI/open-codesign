@@ -46,6 +46,49 @@ function setup() {
 }
 
 describe('new design demo input IPC', () => {
+  it.each([
+    [undefined, 'index.html', 'html', 'native-html'],
+    ['html', 'index.html', 'html', 'native-html'],
+    ['react', 'App.jsx', 'jsx', 'legacy-auto'],
+  ])('persists authoring choice %s as a planned source identity', async (authoringFormat, sourcePath, format, runtimeMode) => {
+    const { db, create } = setup();
+    const design = await create(null, { schemaVersion: 1, name: 'Choice', authoringFormat });
+    expect(await getSourceEntry(db, design.id)).toMatchObject({
+      status: 'planned',
+      content: null,
+      source: { path: sourcePath, format, runtimeMode },
+    });
+    expect(await readSourceEntryFile(db, design.id)).toMatchObject({ phase: 'planned' });
+    expect(await readdir(design.workspacePath ?? '')).not.toContain(sourcePath);
+  });
+
+  it.each([
+    null,
+    '',
+    'vue',
+    'HTML',
+    42,
+    {},
+    ['react'],
+  ])('rejects invalid authoring choice %j before allocating a design', async (authoringFormat) => {
+    const { db, create } = setup();
+    await expect(
+      create(null, { schemaVersion: 1, name: 'Invalid', authoringFormat }),
+    ).rejects.toMatchObject({ code: 'IPC_BAD_INPUT' });
+    expect(listDesigns(db)).toEqual([]);
+  });
+
+  it.each([
+    { workspacePath: 'existing' },
+    { demoInputId: 'daymark' },
+  ])('rejects a format override on existing or seeded designs: %j', async (options) => {
+    const { db, create } = setup();
+    await expect(
+      create(null, { schemaVersion: 1, name: 'Existing', authoringFormat: 'react', ...options }),
+    ).rejects.toMatchObject({ code: 'IPC_BAD_INPUT' });
+    expect(listDesigns(db)).toEqual([]);
+  });
+
   it('does not assign the native default to an explicitly imported workspace', async () => {
     const { db, create } = setup();
     const workspacePath = path.join(root, 'imported');
