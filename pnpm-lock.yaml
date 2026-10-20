@@ -73,8 +73,8 @@ importers:
         specifier: ^24.42.0
         version: 24.42.0
       undici:
-        specifier: ^7.29.1
-        version: 7.29.1
+        specifier: 8.10.2
+        version: 8.10.2
     devDependencies:
       '@earendil-works/pi-agent-core':
         specifier: ^0.79.0
@@ -10286,7 +10286,8 @@ snapshots:
 
   undici@6.29.1: {}
 
-  undici@7.29.1: {}
+  undici@7.29.1:
+    optional: true
 
   undici@8.10.2: {}
 
