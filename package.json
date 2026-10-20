@@ -37,6 +37,7 @@
   "pnpm": {
     "overrides": {
       "@xmldom/xmldom@<0.8.15": "0.8.15",
+      "pptxgenjs@4.0.1>image-size": "-",
       "fast-xml-parser@<5.7.0": ">=5.7.0",
       "vitepress>vite": "6.4.2",
       "esbuild@<0.25.0": ">=0.25.0"
