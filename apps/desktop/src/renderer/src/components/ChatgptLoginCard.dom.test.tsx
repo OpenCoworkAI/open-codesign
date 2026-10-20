@@ -51,3 +51,15 @@ it('requires a choice instead of silently selecting the first catalog suggestion
   expect(container.querySelector('button')?.disabled).toBe(true);
   expect(login).not.toHaveBeenCalled();
 });
+
+it('identifies suggestion-loading failures while leaving manual model entry available', async () => {
+  models.mockRejectedValue(new Error('catalog unavailable'));
+  await act(async () => root.render(<ChatgptLoginCard />));
+  expect(pushToast).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: 'settings.providers.chatgptLogin.modelsFailedTitle',
+      description: 'catalog unavailable',
+    }),
+  );
+  expect(container.querySelector('input')?.disabled).toBe(false);
+});

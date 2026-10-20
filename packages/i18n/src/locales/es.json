@@ -380,6 +380,7 @@
         "statusFailedTitle": "Error al verificar el estado de ChatGPT",
         "unknownError": "Error desconocido",
         "unsupportedCountryRegion": "El inicio de sesión de suscripción de ChatGPT no está disponible para esta cuenta, país, región o territorio.",
+        "modelsFailedTitle": "No se pudieron cargar los modelos sugeridos de ChatGPT",
         "modelLabel": "ID del modelo de ChatGPT",
         "modelHelp": "Usa el modelo local de Codex cuando está disponible. Las sugerencias vienen del catálogo de la aplicación; el acceso depende de tu cuenta de ChatGPT. Puedes escribir otro ID y editarlo después en Modelos."
       },

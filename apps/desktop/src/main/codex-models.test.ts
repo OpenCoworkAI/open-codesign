@@ -10,6 +10,16 @@ vi.mock('@mariozechner/pi-ai', () => ({
 beforeEach(() => vi.mocked(readCodexConfig).mockReset());
 
 describe('ChatGPT model suggestions', () => {
+  it('prefills a realistic config that explicitly selects the built-in openai provider', async () => {
+    const { parseCodexConfig } =
+      await vi.importActual<typeof import('./imports/codex-config')>('./imports/codex-config');
+    const imported = await parseCodexConfig(
+      'model_provider = "openai"\nmodel = "local-codex-model"\n',
+    );
+    expect(imported.providers).toEqual([]);
+    vi.mocked(readCodexConfig).mockResolvedValue(imported);
+    expect((await getCodexModelOptions()).suggestedModel).toBe('local-codex-model');
+  });
   it('keeps a local Codex model missing from the maintained pi catalog', async () => {
     vi.mocked(readCodexConfig).mockResolvedValue({
       providers: [],

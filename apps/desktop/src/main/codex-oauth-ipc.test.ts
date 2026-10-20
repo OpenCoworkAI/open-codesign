@@ -167,6 +167,22 @@ describe('codex-oauth:v1:status', () => {
   });
 });
 
+describe('codex-oauth:v1:models', () => {
+  it('prefills the saved default before the local Codex suggestion', async () => {
+    fakeCachedConfig = {
+      activeProvider: '',
+      activeModel: '',
+      secrets: {},
+      providers: { 'chatgpt-codex': { defaultModel: 'saved-user-model' } },
+    };
+    await register();
+    expect(await handlers.get('codex-oauth:v1:models')?.()).toEqual({
+      suggestedModel: 'saved-user-model',
+      models: EXPECTED_CHATGPT_CODEX_MODELS,
+    });
+  });
+});
+
 describe('codex-oauth:v1:login', () => {
   it('can cancel while reading the local model configuration', async () => {
     let release: ((value: { suggestedModel: string; models: string[] }) => void) | undefined;
@@ -211,7 +227,19 @@ describe('codex-oauth:v1:login', () => {
     });
   });
 
-  it('preserves active/default model and provider overrides on reauthentication', async () => {
+  it.each([
+    { requested: undefined, active: 'my-active-model', defaultModel: 'my-default-model' },
+    { requested: 'my-default-model', active: 'my-active-model', defaultModel: 'my-default-model' },
+    {
+      requested: 'chosen-account-model',
+      active: 'chosen-account-model',
+      defaultModel: 'chosen-account-model',
+    },
+  ])('honors the reauthentication choice $requested while preserving provider overrides', async ({
+    requested,
+    active,
+    defaultModel,
+  }) => {
     fakeCachedConfig = {
       activeProvider: 'chatgpt-codex',
       activeModel: 'my-active-model',
@@ -224,6 +252,7 @@ describe('codex-oauth:v1:login', () => {
           wire: 'openai-codex-responses',
           baseUrl: 'https://chatgpt.com/backend-api',
           defaultModel: 'my-default-model',
+          modelsHint: ['legacy-model'],
           reasoningLevel: 'low',
           contextWindow: 200000,
         },
@@ -238,14 +267,15 @@ describe('codex-oauth:v1:login', () => {
       accountId: 'acct',
     });
     await register();
-    await handlers.get('codex-oauth:v1:login')?.(undefined, 'catalog-model');
-    expect(fakeCachedConfig?.activeModel).toBe('my-active-model');
+    await handlers.get('codex-oauth:v1:login')?.(undefined, requested);
+    expect(fakeCachedConfig?.activeModel).toBe(active);
     expect(fakeCachedConfig?.providers['chatgpt-codex']).toMatchObject({
       name: 'My subscription',
-      defaultModel: 'my-default-model',
+      defaultModel,
       reasoningLevel: 'low',
       contextWindow: 200000,
     });
+    expect(fakeCachedConfig?.providers['chatgpt-codex']).not.toHaveProperty('modelsHint');
   });
 
   it('runs the happy path: opens browser, writes token, injects provider, persists config', async () => {
@@ -519,8 +549,10 @@ describe('migrateStaleCodexEntryIfNeeded', () => {
     expect(rewritten['wire']).toBe('openai-codex-responses');
     expect(rewritten['baseUrl']).toBe('https://chatgpt.com/backend-api');
     expect(rewritten['defaultModel']).toBe('gpt-5.3-codex');
-    expect(rewritten['modelsHint']).toEqual(['gpt-5.4', 'gpt-5.1-codex-max', 'gpt-5.1']);
+    expect(rewritten['modelsHint']).toBeUndefined();
     expect(fakeCachedConfig?.activeModel).toBe('gpt-5.1-codex-max');
+    expect(writeConfigMock).toHaveBeenCalledTimes(1);
+    await migrateStaleCodexEntryIfNeeded();
     expect(writeConfigMock).toHaveBeenCalledTimes(1);
   });
 

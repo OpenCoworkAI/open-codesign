@@ -1039,11 +1039,13 @@ export async function handleModelsV1ListForProvider(raw: unknown): Promise<Model
       return {
         ok: true,
         models: [
-          ...new Set([
-            ...(cfg?.activeProvider === providerId ? [cfg.activeModel] : []),
-            entry.defaultModel,
-            ...options.models,
-          ]),
+          ...new Set(
+            [
+              ...(cfg?.activeProvider === providerId ? [cfg.activeModel] : []),
+              entry.defaultModel,
+              ...options.models,
+            ].filter(Boolean),
+          ),
         ],
       };
     } catch (err) {

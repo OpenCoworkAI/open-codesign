@@ -161,7 +161,7 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
         if (!cancelled)
           pushToast({
             variant: 'error',
-            title: t('settings.providers.chatgptLogin.statusFailedTitle'),
+            title: t('settings.providers.chatgptLogin.modelsFailedTitle'),
             description:
               err instanceof Error
                 ? err.message

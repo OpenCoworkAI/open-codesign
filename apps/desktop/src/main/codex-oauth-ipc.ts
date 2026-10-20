@@ -108,6 +108,7 @@ async function runStatus(): Promise<CodexOAuthStatus> {
 
 async function persistProviderMutation(
   mutate: (providers: Record<string, ProviderEntry>) => Record<string, ProviderEntry>,
+  selectedModel?: string,
 ): Promise<void> {
   const cfg = getCachedConfig();
   const prevProviders: Record<string, ProviderEntry> = cfg?.providers ?? {};
@@ -115,7 +116,10 @@ async function persistProviderMutation(
   const next: Config = hydrateConfig({
     version: 3,
     activeProvider: cfg?.activeProvider ?? '',
-    activeModel: cfg?.activeModel ?? '',
+    activeModel:
+      cfg?.activeProvider === CHATGPT_CODEX_PROVIDER_ID && selectedModel !== undefined
+        ? selectedModel
+        : (cfg?.activeModel ?? ''),
     secrets: cfg?.secrets ?? {},
     providers: nextProviders,
     ...(cfg?.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
@@ -153,6 +157,7 @@ async function claimActiveProviderIfUnset(): Promise<void> {
 async function runLoginFlow(
   abortController: AbortController,
   model: string,
+  modelChanged: boolean,
 ): Promise<CodexOAuthStatus> {
   const pkce = generatePkce();
   const state = randomBytes(16).toString('hex');
@@ -187,16 +192,20 @@ async function runLoginFlow(
       updatedAt: Date.now(),
     };
     await getCodexTokenStore().write(stored);
-    await persistProviderMutation((providers) => {
-      const previous = providers[CHATGPT_CODEX_PROVIDER_ID];
-      providers[CHATGPT_CODEX_PROVIDER_ID] = {
-        ...previous,
-        ...CHATGPT_CODEX_PROVIDER,
-        name: previous?.name ?? CHATGPT_CODEX_PROVIDER.name,
-        defaultModel: previous?.defaultModel ?? model,
-      };
-      return providers;
-    });
+    await persistProviderMutation(
+      (providers) => {
+        const previous = providers[CHATGPT_CODEX_PROVIDER_ID];
+        const { modelsHint: _legacyHints, ...retained } = previous ?? {};
+        providers[CHATGPT_CODEX_PROVIDER_ID] = {
+          ...retained,
+          ...CHATGPT_CODEX_PROVIDER,
+          name: previous?.name ?? CHATGPT_CODEX_PROVIDER.name,
+          defaultModel: modelChanged ? model : (previous?.defaultModel ?? model),
+        };
+        return providers;
+      },
+      modelChanged ? model : undefined,
+    );
     await claimActiveProviderIfUnset();
     logger.info('codex.oauth.login.ok', { accountId: stored.accountId, hasEmail: email !== null });
     return toStatus(stored);
@@ -248,7 +257,11 @@ async function runLogin(raw?: unknown): Promise<CodexOAuthStatus> {
         ERROR_CODES.CONFIG_MISSING,
       );
     }
-    return runLoginFlow(abortController, model);
+    return runLoginFlow(
+      abortController,
+      model,
+      typeof raw === 'string' && model !== existing?.defaultModel,
+    );
   })();
   const trackedPromise = promise.finally(() => {
     if (activeLoginAbortController === abortController) {
@@ -311,13 +324,15 @@ export async function migrateStaleCodexEntryIfNeeded(): Promise<void> {
   const providerIsStale =
     entry.wire !== CHATGPT_CODEX_PROVIDER.wire ||
     entry.baseUrl !== CHATGPT_CODEX_PROVIDER.baseUrl ||
+    entry.modelsHint !== undefined ||
     entry.capabilities?.modelDiscoveryMode !== 'manual';
 
   if (!providerIsStale) return;
 
+  const { modelsHint: _legacyHints, ...retained } = entry;
   const nextProviders = {
     ...cfg.providers,
-    [CHATGPT_CODEX_PROVIDER_ID]: { ...entry, ...CHATGPT_CODEX_PROVIDER, name: entry.name },
+    [CHATGPT_CODEX_PROVIDER_ID]: { ...retained, ...CHATGPT_CODEX_PROVIDER, name: entry.name },
   };
   const next: Config = hydrateConfig({
     version: 3,
