@@ -74,6 +74,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
   let db: ReturnType<typeof initInMemoryDb>;
   let errors: string[] = [];
   const records: { method: string; result: unknown }[] = [];
+  let beforeApplyRecord: (() => Promise<void>) | undefined;
   const verified: string[] = [];
   const cases: {
     name: string;
@@ -159,6 +160,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
                       method === 'inspect'
                         ? SourceEditInspectResultV1.parse(raw)
                         : SourceEditApplyResultV1.parse(raw);
+                    if (method === 'apply') await beforeApplyRecord?.();
                     records.push({ method, result });
                   } else throw new Error(`Unknown fixture bridge method: ${method}`);
                   res.setHeader('Content-Type', 'application/json');
@@ -188,6 +190,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
   beforeEach(async () => {
     await writeFile(join(workspace, 'App.jsx'), original);
     records.length = 0;
+    beforeApplyRecord = undefined;
     errors = [];
     await openPage();
   }, 60_000);
@@ -465,7 +468,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       )
       .toEqual([value]);
   }
-  function assertExactPatch(
+  async function assertExactPatch(
     before: string,
     after: string,
     from: string,
@@ -473,6 +476,10 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     start = before.indexOf(from),
   ) {
     expect(after).toBe(before.slice(0, start) + to + before.slice(start + from.length));
+    // Atomic disk replacement can finish before the IPC handler acknowledges it.
+    await expect
+      .poll(() => records.filter((record) => record.method === 'apply').at(-1)?.result)
+      .toMatchObject({ status: 'applied', content: after });
     const applied = records.filter((record) => record.method === 'apply').at(-1);
     const result = SourceEditApplyResultV1.parse(applied?.result);
     if (result.status !== 'applied') throw new Error('Expected atomic writer acknowledgment');
@@ -643,7 +650,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await saveText('Alex', 'Alex Rivera');
     const expected = resumeFixture.replace("'Alex'", '"Alex Rivera"');
     await expect.poll(disk).toBe(expected);
-    assertExactPatch(resumeFixture, await disk(), "'Alex'", '"Alex Rivera"');
+    await assertExactPatch(resumeFixture, await disk(), "'Alex'", '"Alex Rivera"');
     await assertPreviewText('h1', 'Alex Rivera');
     await assertPreviewText('footer', 'Alex Rivera');
     await assertPreviewText('#independent-name', 'Alex');
@@ -695,7 +702,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       expect(await textLabel(previous)).toMatch(/^Text \d+$/);
       await saveText(previous, value);
       await expect.poll(disk).toBe(resumeFixture.replace(from, to));
-      assertExactPatch(resumeFixture, await disk(), from, to);
+      await assertExactPatch(resumeFixture, await disk(), from, to);
       await assertPreviewText(selector, value);
       await assertPreviewText('h1', 'Alex');
       await assertPreviewText('#city', 'City');
@@ -724,7 +731,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await save(firstLabel, 'Group ');
     let expected = resumeFixture.replace('Team <strong>', '{"Group "}<strong>');
     await expect.poll(disk).toBe(expected);
-    assertExactPatch(resumeFixture, await disk(), 'Team ', '{"Group "}');
+    await assertExactPatch(resumeFixture, await disk(), 'Team ', '{"Group "}');
     await expect
       .poll(async () =>
         (await artifact()).$$eval('.helper', (nodes) => nodes.map((node) => node.textContent)),
@@ -736,7 +743,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     const beforeSecond = expected;
     expected = expected.replace("{'ready'}", '{"set"}');
     await expect.poll(disk).toBe(expected);
-    assertExactPatch(beforeSecond, await disk(), "{'ready'}", '{"set"}');
+    await assertExactPatch(beforeSecond, await disk(), "{'ready'}", '{"set"}');
     await expect
       .poll(async () =>
         (await artifact()).$$eval('.helper', (nodes) => nodes.map((node) => node.textContent)),
@@ -752,7 +759,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     const beforeMap = expected;
     expected = expected.replace('>Shared map</p>)', '>{"Shared definition"}</p>)');
     await expect.poll(disk).toBe(expected);
-    assertExactPatch(beforeMap, await disk(), 'Shared map', '{"Shared definition"}');
+    await assertExactPatch(beforeMap, await disk(), 'Shared map', '{"Shared definition"}');
     await expect
       .poll(async () =>
         (await artifact()).$$eval('.static-map', (nodes) => nodes.map((node) => node.textContent)),
@@ -817,20 +824,32 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await saveText('Cart (', 'Basket (');
     let expected = previewOnlyFixture.replace('Cart (', '{"Basket ("}');
     await expect.poll(disk).toBe(expected);
-    assertExactPatch(previewOnlyFixture, await disk(), 'Cart (', '{"Basket ("}');
+    await assertExactPatch(previewOnlyFixture, await disk(), 'Cart (', '{"Basket ("}');
     await assertPreviewText('#cart', 'Basket (0)');
     await selectText('#cart', ')');
-    await saveText(')', ' items)');
-    const beforeSuffix = expected;
-    expected = expected.replace('{count})</button>', '{count}{" items)"}</button>');
-    await expect.poll(disk).toBe(expected);
-    assertExactPatch(
-      beforeSuffix,
-      await disk(),
-      ')',
-      '{" items)"}',
-      beforeSuffix.indexOf('{count})') + '{count}'.length,
-    );
+    let releaseAcknowledgement = () => {};
+    const acknowledgementGate = new Promise<void>((resolve) => {
+      releaseAcknowledgement = resolve;
+    });
+    beforeApplyRecord = () => acknowledgementGate;
+    try {
+      await saveText(')', ' items)');
+      const beforeSuffix = expected;
+      expected = expected.replace('{count})</button>', '{count}{" items)"}</button>');
+      await expect.poll(disk).toBe(expected);
+      const confirmation = assertExactPatch(
+        beforeSuffix,
+        await disk(),
+        ')',
+        '{" items)"}',
+        beforeSuffix.indexOf('{count})') + '{count}'.length,
+      );
+      releaseAcknowledgement();
+      await confirmation;
+    } finally {
+      releaseAcknowledgement();
+      beforeApplyRecord = undefined;
+    }
     await assertPreviewText('#cart', 'Basket (0 items)');
     expect((await validationReplies()).length).toBeGreaterThanOrEqual(2);
     await page.click('button::-p-text(Edit source)');
@@ -870,7 +889,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await saveText('Unavailable', 'Coming soon');
     const expected = previewOnlyFixture.replace('Unavailable', '{"Coming soon"}');
     await expect.poll(disk).toBe(expected);
-    assertExactPatch(previewOnlyFixture, await disk(), 'Unavailable', '{"Coming soon"}');
+    await assertExactPatch(previewOnlyFixture, await disk(), 'Unavailable', '{"Coming soon"}');
     await assertPreviewText('#disabled', 'Coming soon');
     await page.reload();
     await assertPreviewText('#disabled', 'Coming soon');
@@ -904,7 +923,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     );
     await saveText('Cart (', 'Bag (');
     await expect.poll(disk).toBe(previewOnlyFixture.replace('Cart (', '{"Bag ("}'));
-    assertExactPatch(previewOnlyFixture, await disk(), 'Cart (', '{"Bag ("}');
+    await assertExactPatch(previewOnlyFixture, await disk(), 'Cart (', '{"Bag ("}');
     await assertPreviewText('#cart', 'Bag (0)');
     expect(
       await (await artifact()).$eval('#cart-icon rect', (node) => node.getAttribute('width')),
@@ -928,7 +947,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     );
     await saveText('Right', 'Independent');
     await expect.poll(disk).toBe(previewOnlyFixture.replace('Right', '{"Independent"}'));
-    assertExactPatch(previewOnlyFixture, await disk(), 'Right', '{"Independent"}');
+    await assertExactPatch(previewOnlyFixture, await disk(), 'Right', '{"Independent"}');
     await assertPreviewText('#independent', 'Left anchorIndependent');
     await assertPreviewText('#between', 'Stable text');
     verified.push(
