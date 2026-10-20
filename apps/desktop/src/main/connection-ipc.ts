@@ -7,6 +7,7 @@ import {
   type ConnectionTestResponse,
   type ConnectionTestResult,
   canonicalBaseUrl,
+  connectionTestProbesModelsEndpoint,
   type DiagnosticCategory,
   ERROR_CODES,
   ensureVersionedBase,
@@ -16,8 +17,10 @@ import {
   liteLlmHintKeyForHttpStatus,
   liteLlmHintKeyForTransportError,
   modelsEndpointUrl,
-  modelsProbeRelationForWire,
+  modelsProbeRelationForProvider,
   type ProviderEntry,
+  type ProviderModelDiscoveryMode,
+  resolveListForProviderPlan,
   type SupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
   type WireApi,
@@ -88,12 +91,18 @@ function assertKnownFields(
 export type { ConnectionTestError, ConnectionTestResponse, ConnectionTestResult };
 
 export type ModelsListResponse =
-  | { ok: true; models: string[] }
+  | {
+      ok: true;
+      models: string[];
+      discoveryMode?: ProviderModelDiscoveryMode;
+      source?: 'remote' | 'static-hint' | 'local';
+    }
   | {
       ok: false;
       code: 'IPC_BAD_INPUT' | 'NETWORK' | 'HTTP' | 'PARSE';
       message: string;
       hint: string;
+      discoveryMode?: ProviderModelDiscoveryMode;
       /** i18n key for a provider-specific hint. The renderer translates it. */
       hintKey?: string;
     };
@@ -498,6 +507,9 @@ export interface ActiveProviderCredentials {
   builtin?: boolean;
   /** Opt-in TLS verification bypass; only honored when `builtin === false`. */
   tlsRejectUnauthorized?: boolean;
+  /** Listing strategy for this provider. Defaults to `models` when omitted so
+   *  existing tests and older callers keep probing GET /models. */
+  modelDiscoveryMode?: ProviderModelDiscoveryMode;
   /** Display name, used to recognize presets that are stored as custom providers. */
   name?: string;
 }
@@ -520,7 +532,11 @@ function noConfigError(): ConnectionTestError {
 }
 
 function contractFromCredentials(creds: ActiveProviderCredentials): EffectiveProviderContract {
-  const relation = modelsProbeRelationForWire(creds.wire);
+  const modelDiscoveryMode = creds.modelDiscoveryMode ?? 'models';
+  const relation = modelsProbeRelationForProvider(creds.wire, {
+    modelDiscoveryMode,
+    supportsModelsEndpoint: connectionTestProbesModelsEndpoint(modelDiscoveryMode),
+  });
   const canonical = canonicalBaseUrl(creds.baseUrl, creds.wire);
   const modelsUrl =
     relation === 'optional-discovery' ? modelsEndpointUrl(creds.baseUrl, creds.wire) : null;
@@ -1034,11 +1050,14 @@ export async function handleModelsV1ListForProvider(raw: unknown): Promise<Model
   if ('ok' in resolved) return resolved;
   const { providerId, entry } = resolved;
 
-  // Providers that expose a static hint (e.g. chatgpt-codex, whose /models
-  // endpoint requires OAuth bearer + ChatGPT-Account-Id headers that this
-  // keyless discovery path cannot supply) short-circuit with modelsHint.
-  if (entry.modelsHint !== undefined && entry.modelsHint.length > 0) {
-    return { ok: true, models: entry.modelsHint };
+  const plan = resolveListForProviderPlan(providerId, entry);
+  if (plan.action === 'return') {
+    return {
+      ok: true,
+      models: plan.models,
+      discoveryMode: plan.discoveryMode,
+      source: plan.source,
+    };
   }
 
   const keyResult = resolveApiKeyForListing(providerId, entry);
@@ -1046,7 +1065,9 @@ export async function handleModelsV1ListForProvider(raw: unknown): Promise<Model
   const { apiKey } = keyResult;
 
   const cached = getCachedModels(providerId, entry.baseUrl, apiKey);
-  if (cached !== null) return { ok: true, models: cached };
+  if (cached !== null) {
+    return { ok: true, models: cached, discoveryMode: 'models', source: 'remote' };
+  }
 
   const { url } = buildEndpointForWire(entry.wire, entry.baseUrl);
   const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.httpHeaders, entry.baseUrl);
@@ -1069,8 +1090,11 @@ export async function handleModelsV1ListForProvider(raw: unknown): Promise<Model
       entry.baseUrl,
     ),
   );
-  if (result.ok) setCachedModels(providerId, entry.baseUrl, apiKey, result.models);
-  return result;
+  if (result.ok) {
+    setCachedModels(providerId, entry.baseUrl, apiKey, result.models);
+    return { ...result, discoveryMode: 'models', source: 'remote' };
+  }
+  return { ...result, discoveryMode: 'models' };
 }
 
 async function fetchModelListResponse(

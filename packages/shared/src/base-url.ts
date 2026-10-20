@@ -1,3 +1,5 @@
+import type { ProviderModelDiscoveryMode } from './config';
+
 /**
  * Normalize a user-supplied provider base URL.
  *
@@ -181,12 +183,16 @@ export function modelsProbeRelationForProvider(
   wire: CanonicalWire,
   caps?: {
     supportsModelsEndpoint?: boolean | undefined;
-    modelDiscoveryMode?: 'models' | 'static-hint' | 'manual' | undefined;
+    modelDiscoveryMode?: ProviderModelDiscoveryMode | undefined;
   },
 ): ModelsProbeRelation {
   if (wire === 'openai-codex-responses') return 'unavailable';
   if (caps?.supportsModelsEndpoint === false) return 'unavailable';
-  if (caps?.modelDiscoveryMode === 'static-hint' || caps?.modelDiscoveryMode === 'manual') {
+  if (
+    caps?.modelDiscoveryMode === 'static-hint' ||
+    caps?.modelDiscoveryMode === 'manual' ||
+    caps?.modelDiscoveryMode === 'infer-only'
+  ) {
     return 'unavailable';
   }
   return 'optional-discovery';

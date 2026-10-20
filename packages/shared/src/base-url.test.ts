@@ -506,5 +506,8 @@ describe('modelsProbeRelation', () => {
     expect(
       modelsProbeRelationForProvider('openai-responses', { modelDiscoveryMode: 'static-hint' }),
     ).toBe('unavailable');
+    expect(
+      modelsProbeRelationForProvider('openai-chat', { modelDiscoveryMode: 'infer-only' }),
+    ).toBe('unavailable');
   });
 });

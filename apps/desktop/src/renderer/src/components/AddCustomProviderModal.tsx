@@ -2,7 +2,9 @@ import { useT } from '@open-codesign/i18n';
 import {
   canonicalBaseUrl,
   detectWireFromBaseUrl,
+  discoveryModeForCustomProvider,
   liteLlmEndpointPreset,
+  type ProviderModelDiscoveryMode,
   type WireApi,
 } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
@@ -54,6 +56,7 @@ interface Props {
     /** Existing per-provider TLS verification opt-out, so the checkbox can
      *  start in the right state when re-opening Edit. */
     tlsRejectUnauthorized?: boolean;
+    modelDiscoveryMode?: ProviderModelDiscoveryMode;
   };
 }
 
@@ -61,6 +64,7 @@ type TestState =
   | { kind: 'idle' }
   | { kind: 'testing' }
   | { kind: 'ok'; modelCount: number }
+  | { kind: 'listing-unavailable' }
   | { kind: 'error'; message: string; hintKey?: string };
 
 type DiscoveryState =
@@ -181,7 +185,10 @@ export function AddCustomProviderModal({
 
   const [discovery, setDiscovery] = useState<DiscoveryState>({ kind: 'idle' });
   // When true, user explicitly chose to type a model name instead of picking from the dropdown.
-  const [manualModel, setManualModel] = useState(false);
+  const [manualModel, setManualModel] = useState(
+    editTarget?.modelDiscoveryMode === 'manual' || editTarget?.modelDiscoveryMode === 'infer-only',
+  );
+  const discoveryTouched = useRef(!isEdit);
   // Track whether user has explicitly typed/picked a model so auto-pick doesn't override it.
   const userPickedModel = useRef(defaultModel.trim().length > 0);
 
@@ -208,6 +215,7 @@ export function AddCustomProviderModal({
       return;
     }
     debounceTimer.current = setTimeout(() => {
+      discoveryTouched.current = true;
       void runDiscovery(currentBaseUrl, currentWire, privateNetworkAllowed, keyRequired);
     }, 500);
   }
@@ -350,6 +358,10 @@ export function AddCustomProviderModal({
             setDefaultModel(pickBestModel(res.models));
           }
         }
+      } else if (res.error === 'not-a-model-endpoint') {
+        discoveryTouched.current = true;
+        setDiscovery((current) => (current.kind === 'found' ? current : { kind: 'failed' }));
+        setTest({ kind: 'listing-unavailable' });
       } else {
         setTest({
           kind: 'error',
@@ -393,6 +405,12 @@ export function AddCustomProviderModal({
             update.tlsRejectUnauthorized = !!tlsRejectUnauthorized;
           }
         }
+        if (discoveryTouched.current) {
+          update.modelDiscoveryMode = discoveryModeForCustomProvider({
+            discoveryKind: discovery.kind,
+            manualModel,
+          });
+        }
         await window.codesign.config.updateProvider(update);
       } else {
         const slug = slugify(name);
@@ -405,6 +423,10 @@ export function AddCustomProviderModal({
           ...buildProviderAuthPayload(requiresApiKey, apiKey),
           defaultModel: defaultModel.trim(),
           setAsActive: initialSetAsActive,
+          modelDiscoveryMode: discoveryModeForCustomProvider({
+            discoveryKind: discovery.kind,
+            manualModel,
+          }),
           ...(tlsRejectUnauthorized ? { tlsRejectUnauthorized: true } : {}),
         });
       }
@@ -648,7 +670,10 @@ export function AddCustomProviderModal({
               </select>
               <button
                 type="button"
-                onClick={() => setManualModel(true)}
+                onClick={() => {
+                  discoveryTouched.current = true;
+                  setManualModel(true);
+                }}
                 className="shrink-0 text-[var(--text-xs)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
               >
                 {t('settings.providers.custom.switchToManual')}
@@ -685,6 +710,8 @@ export function AddCustomProviderModal({
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : test.kind === 'ok' ? (
               <CheckCircle className="w-3.5 h-3.5 text-[var(--color-success)]" />
+            ) : test.kind === 'listing-unavailable' ? (
+              <AlertCircle className="w-3.5 h-3.5 text-[var(--color-warning)]" />
             ) : test.kind === 'error' ? (
               <AlertCircle className="w-3.5 h-3.5 text-[var(--color-error)]" />
             ) : null}
@@ -693,6 +720,11 @@ export function AddCustomProviderModal({
           {test.kind === 'ok' && (
             <span className="text-[var(--text-xs)] text-[var(--color-success)]">
               {t('settings.providers.custom.testOk', { count: test.modelCount })}
+            </span>
+          )}
+          {test.kind === 'listing-unavailable' && (
+            <span className="text-[var(--text-xs)] text-[var(--color-text-muted)]">
+              {t('settings.providers.custom.testOkNoListing')}
             </span>
           )}
           {test.kind === 'error' && (
