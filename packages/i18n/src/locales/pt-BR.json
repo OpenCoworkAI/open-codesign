@@ -393,7 +393,10 @@
         "logoutFailedTitle": "Falha ao sair do ChatGPT",
         "statusFailedTitle": "Falha ao verificar status do ChatGPT",
         "unknownError": "Erro desconhecido",
-        "unsupportedCountryRegion": "O login com assinatura do ChatGPT não está disponível para esta conta, país, região ou território."
+        "unsupportedCountryRegion": "O login com assinatura do ChatGPT não está disponível para esta conta, país, região ou território.",
+        "modelsFailedTitle": "Falha ao carregar as sugestões de modelos do ChatGPT",
+        "modelLabel": "ID do modelo do ChatGPT",
+        "modelHelp": "Usa o modelo local do Codex quando disponível. As sugestões vêm do catálogo do aplicativo; o acesso depende da sua conta do ChatGPT. Você pode inserir outro ID e editá-lo depois em Modelos."
       },
       "addProvider": "Adicionar provedor",
       "addCustom": "Adicionar personalizado",

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import {
   BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   canonicalBaseUrl,
   type DiagnosticCategory,
@@ -17,6 +18,7 @@ import {
   type WireApi,
 } from '@open-codesign/shared';
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
+import { getCodexModelOptions } from './codex-models';
 import { getCodexTokenStore } from './codex-oauth-ipc';
 import { ipcMain } from './electron-runtime';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from './onboarding-ipc';
@@ -1028,9 +1030,35 @@ export async function handleModelsV1ListForProvider(raw: unknown): Promise<Model
   if ('ok' in resolved) return resolved;
   const { providerId, entry } = resolved;
 
-  // Providers that expose a static hint (e.g. chatgpt-codex, whose /models
-  // endpoint requires OAuth bearer + ChatGPT-Account-Id headers that this
-  // keyless discovery path cannot supply) short-circuit with modelsHint.
+  // Use the maintained pi catalog and local Codex selection as suggestions.
+  // Never use persisted legacy hints as an allowlist or an entitlement check.
+  if (providerId === CHATGPT_CODEX_PROVIDER_ID && entry.wire === 'openai-codex-responses') {
+    try {
+      const options = await getCodexModelOptions();
+      const cfg = getCachedConfig();
+      return {
+        ok: true,
+        models: [
+          ...new Set(
+            [
+              ...(cfg?.activeProvider === providerId ? [cfg.activeModel] : []),
+              entry.defaultModel,
+              ...options.models,
+            ].filter(Boolean),
+          ),
+        ],
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'PARSE',
+        message: err instanceof Error ? err.message : String(err),
+        hint: 'Edit the model ID in Settings > Models, or repair your local Codex config.',
+      };
+    }
+  }
+
+  // Other providers can expose static hints instead of a /models endpoint.
   if (entry.modelsHint !== undefined && entry.modelsHint.length > 0) {
     return { ok: true, models: entry.modelsHint };
   }
