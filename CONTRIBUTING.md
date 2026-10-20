@@ -9,6 +9,27 @@ Thanks for considering a contribution. This project is in **pre-alpha**: the arc
 - Read [`CLAUDE.md`](./CLAUDE.md) — repository conventions
 - Search existing [issues](https://github.com/OpenCoworkAI/open-codesign/issues) and [discussions](https://github.com/OpenCoworkAI/open-codesign/discussions) before opening a new one
 
+## Running locally
+
+Use Node.js 22 LTS and the pnpm version pinned in `package.json` (currently 10.33.4).
+From your local checkout, run:
+
+```sh
+corepack enable pnpm
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+These commands also work in Windows PowerShell. Use pnpm, not `npm install` or
+`npm run dev`: this repository uses pnpm workspaces. If `pnpm` is not found,
+enable its Corepack shim and make sure it is on `PATH`; invoking only
+`corepack pnpm dev` is insufficient when Turborepo cannot find the pnpm binary.
+
+`pnpm dev` starts both the Electron desktop app and the documentation site.
+To start only the desktop app, use `pnpm --filter @open-codesign/desktop dev`.
+The desktop UI opens in an Electron window; opening its Vite URL in an ordinary
+browser does not provide the desktop IPC APIs.
+
 ## Filing an issue
 
 Use our issue templates:

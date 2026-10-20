@@ -16,6 +16,7 @@ import {
 export interface ExampleCardProps {
   example: LocalizedExample;
   onUsePrompt: (example: LocalizedExample) => void;
+  disabled?: boolean;
 }
 
 // Curated palette per category. Two stops give each cover a subtle gradient
@@ -91,7 +92,7 @@ const FALLBACK_SKIN = {
   accent: '#c58ff0',
 } as const;
 
-export function ExampleCard({ example, onUsePrompt }: ExampleCardProps) {
+export function ExampleCard({ example, onUsePrompt, disabled = false }: ExampleCardProps) {
   const t = useT();
   const skin = CATEGORY_SKIN[example.category] ?? FALLBACK_SKIN;
   const Icon = skin.icon;
@@ -154,12 +155,42 @@ export function ExampleCard({ example, onUsePrompt }: ExampleCardProps) {
         <p className="flex-1 text-[var(--font-size-body-sm)] leading-[var(--leading-body)] text-[var(--color-text-secondary)] line-clamp-3">
           {example.description}
         </p>
+        {example.features?.length ? (
+          <ul
+            aria-label={t('examples.featuresLabel')}
+            className="flex flex-wrap gap-[var(--space-1)]"
+          >
+            {example.features.map((feature) => (
+              <li
+                key={feature}
+                className="max-w-full rounded-full border border-[var(--color-border)] bg-[var(--color-background-secondary)] px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--font-size-body-sm)] text-[var(--color-text-secondary)]"
+              >
+                {t(`examples.features.${feature}`)}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {example.inputFiles?.length ? (
+          <details className="text-[var(--font-size-body-sm)] text-[var(--color-text-secondary)]">
+            <summary className="cursor-pointer">
+              {t('examples.inputFiles', { count: example.inputFiles.length })}
+            </summary>
+            <ul className="mt-[var(--space-2)] flex flex-col gap-[var(--space-1)]">
+              {example.inputFiles.map((file) => (
+                <li key={file} className="break-all">
+                  {file}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
         <button
           type="button"
+          disabled={disabled}
           onClick={() => onUsePrompt(example)}
-          className="self-start rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-background)] px-[var(--space-3)] py-[var(--space-2)] text-[var(--font-size-body-sm)] font-medium text-[var(--color-text-primary)] transition-[border-color,background-color,color,transform] duration-[var(--duration-faster)] ease-[var(--ease-out)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] active:scale-[var(--scale-press-down)]"
+          className="self-start rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-background)] px-[var(--space-3)] py-[var(--space-2)] text-[var(--font-size-body-sm)] font-medium text-[var(--color-text-primary)] transition-[border-color,background-color,color,transform] duration-[var(--duration-faster)] ease-[var(--ease-out)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] active:scale-[var(--scale-press-down)] disabled:cursor-wait disabled:opacity-50"
         >
-          {t('examples.useThisPrompt')}
+          {t(example.inputBundle ? 'examples.useDemoPack' : 'examples.useThisPrompt')}
         </button>
       </div>
     </article>

@@ -1,15 +1,14 @@
+import { realpath } from 'node:fs/promises';
 import path_module from 'node:path';
 import {
+  ActiveRunMessages,
   type AgentEvent,
   type AskInput,
-  applyRunPreferenceAnswers,
   buildApplyCommentUserPrompt,
   buildDesignContextPack,
-  buildRunProtocolPreflight,
   type CoreLogger,
   composeSystemPrompt,
   type DesignSessionBriefV1,
-  formatRunProtocolPreflightAnswers,
   type GenerateImageAssetRequest,
   type GenerateImageAssetResult,
   generateTitle,
@@ -17,6 +16,7 @@ import {
   inspectWorkspaceFiles,
   loadDesignSkills,
   loadFrameTemplates,
+  resolveContextWindow,
   routeRunPreferences,
   updateDesignSessionBrief,
 } from '@open-codesign/core';
@@ -27,16 +27,20 @@ import {
   generateImage,
 } from '@open-codesign/providers';
 import {
+  ActiveRunMessageInputV1,
   ApplyCommentPayload,
   CancelGenerationPayloadV1,
   CodesignError,
   type Config,
   deriveResourceStateFromChatRows,
   GeneratePayloadV1,
+  ListActiveMessagesInputV1,
+  summarizeUsageBudget,
+  type UsageTotals,
 } from '@open-codesign/shared';
 import { computeFingerprint } from '@open-codesign/shared/fingerprint';
-import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
-import type { AgentStreamEvent } from '../../preload/index';
+import type { BrowserWindow as ElectronBrowserWindow, WebContents } from 'electron';
+import type { AgentStreamEvent, GenerateResponse } from '../../preload/index';
 import { requestAsk } from '../ask-ipc';
 import { CHATGPT_CODEX_PROVIDER_ID, getCodexTokenStore } from '../codex-oauth-ipc';
 import { makeRuntimeVerifier } from '../done-verify';
@@ -46,12 +50,14 @@ import {
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
+  generationRequestTimeoutMs,
   listInFlightGenerations,
   withInFlightGenerationForDesign,
 } from '../generation-ipc';
 import { resolveGenerationWorkspaceRoot } from '../generation-workspace';
 import { resolveImageGenerationConfig, toGenerateImageOptions } from '../image-generation-settings';
 import { makeJudgeVisualParity } from '../judge-visual-parity';
+import { decryptSecret } from '../keychain';
 import { getLogger } from '../logger';
 import {
   loadMemoryContext,
@@ -68,31 +74,36 @@ import { createProviderContextStore } from '../provider-context';
 import { resolveActiveModel } from '../provider-settings';
 import { makeUiKitRenderer } from '../render-ui-kit';
 import { resolveActiveApiKey, resolveCredentialForProvider } from '../resolve-api-key';
+import { projectRunEventToChat } from '../run-event-chat';
+import { RunJournal } from '../run-journal';
 import { withRun } from '../runContext';
 import {
+  appendSessionActiveMessage,
+  appendSessionChatMessage,
   appendSessionDesignBrief,
   appendSessionRunPreferences,
+  listSessionActiveMessages,
   listSessionChatMessages,
   readSessionDesignBrief,
   readSessionRunPreferences,
   type SessionChatStoreOptions,
 } from '../session-chat';
-import { type Database, getDesign, recordDiagnosticEvent } from '../snapshots-db';
+import {
+  createSnapshot,
+  type Database,
+  getDesign,
+  listSnapshots,
+  recordDiagnosticEvent,
+} from '../snapshots-db';
+import { registerSourceEditBusyCheck } from '../source-edits-ipc';
 import { withTlsBypass } from '../tls-override';
+import { createResearchHost, createWebResearchAuthorization } from '../web-research';
+import { createWebResearchRun } from '../web-research-run';
 import { withStableWorkspacePath } from '../workspace-path-lock';
 import { listWorkspaceFilesAt, readWorkspaceFilesAt } from '../workspace-reader';
 import { finalAssistantTextForTurn } from './assistant-text';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
 import { summarizeToolResultForStream, toolExecutionStatusForStream } from './tool-log';
-
-const DEFAULT_CONTEXT_WINDOW_FOR_CONTEXT_PACK = 200_000;
-
-export function contextWindowForContextPack(model: unknown): number {
-  const value = (model as { contextWindow?: unknown } | null)?.contextWindow;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : DEFAULT_CONTEXT_WINDOW_FOR_CONTEXT_PACK;
-}
 
 /**
  * Whether outbound pi-ai requests for the given provider should bypass TLS
@@ -112,6 +123,7 @@ export function shouldRunUserMemoryCandidateCapture(prefs: {
   return prefs.memoryEnabled === true && prefs.userMemoryAutoUpdate === true;
 }
 
+/** @deprecated Compatibility helper; generation no longer opens a router interview. */
 export function buildRunPreferenceAskInput(
   questions: AskInput['questions'],
   rationale?: string | undefined,
@@ -127,18 +139,8 @@ export function buildRunPreferenceAskInput(
 function recentHistoryForRunPreferenceRouter(
   chatRows: ReturnType<typeof listSessionChatMessages>,
 ): string {
-  return chatRows
-    .slice(-12)
-    .map((row) => {
-      if (row.kind !== 'user' && row.kind !== 'assistant_text') return null;
-      const text =
-        typeof (row.payload as { text?: unknown }).text === 'string'
-          ? (row.payload as { text: string }).text
-          : '';
-      return text.trim().length > 0 ? `[${row.kind}] ${text.trim().slice(0, 800)}` : null;
-    })
-    .filter((line): line is string => line !== null)
-    .join('\n');
+  const { history } = buildDesignContextPack({ chatRows, historyBudgetChars: 8_000 });
+  return history.map((message) => `[${message.role}] ${message.content}`).join('\n');
 }
 
 function chatRowText(row: ReturnType<typeof listSessionChatMessages>[number]): string {
@@ -168,13 +170,6 @@ export function dropCurrentPromptEchoFromChatRows(
   const last = chatRows.at(-1);
   if (last === undefined || !isCurrentPromptEcho(last, currentPrompt)) return chatRows;
   return chatRows.slice(0, -1);
-}
-
-function sendPreflightAskEvent(
-  getMainWindow: () => ElectronBrowserWindow | null,
-  event: AgentStreamEvent,
-): void {
-  getMainWindow()?.webContents.send('agent:event:v1', event satisfies AgentStreamEvent);
 }
 
 function designMdSummaryForMemory(
@@ -353,6 +348,218 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   // lived only on the hidden transient sibling row emitted by retry.ts.
   // Implementation + LRU eviction lives in ../provider-context.ts.
   const providerContext = createProviderContextStore(50);
+  const journal = db ? new RunJournal(path_module.join(db.sessionDir, 'runs')) : null;
+  let eventDelivery = Promise.resolve();
+  const subscribers = new Set<WebContents>();
+  const deliveryFailures = new Map<string, unknown>();
+  const projectionFailures = new Map<string, number>();
+  const settledRuns = new Set<string>();
+  const closingRuns = new Set<string>();
+  const publishEvent = (event: AgentStreamEvent): void => {
+    if (
+      settledRuns.has(event.generationId) ||
+      (closingRuns.has(event.generationId) && event.type !== 'run_settled')
+    )
+      return;
+    if (event.type === 'run_settled') closingRuns.add(event.generationId);
+    event = structuredClone(event);
+    eventDelivery = eventDelivery
+      .then(async () => {
+        const durable = journal ? await journal.append({ ...event, chatPersisted: true }) : event;
+        if (event.type === 'run_settled') settledRuns.add(event.generationId);
+        if (journal && db) {
+          try {
+            projectRunEventToChat({ db, sessionDir: db.sessionDir }, durable);
+          } catch (error) {
+            if (durable.seq !== undefined && !projectionFailures.has(durable.generationId))
+              projectionFailures.set(durable.generationId, durable.seq - 1);
+            logIpc.error('run.chat.projection-failed', {
+              generationId: event.generationId,
+              message: String(error),
+            });
+          }
+        }
+        const win = getMainWindow();
+        // A renderer is a subscriber, never the owner of a running generation.
+        const targets = new Set(subscribers);
+        if (win && !win.isDestroyed()) targets.add(win.webContents);
+        for (const target of targets) {
+          try {
+            if (target.isDestroyed()) {
+              subscribers.delete(target);
+              continue;
+            }
+            target.send('agent:event:v1', durable);
+          } catch (error) {
+            logIpc.warn('run.event.delivery-failed', { message: String(error) });
+          }
+        }
+      })
+      .catch((error: unknown) => {
+        deliveryFailures.set(event.generationId, error);
+        inFlight.get(event.generationId)?.abort(error);
+        logIpc.error('run.event.persist-failed', {
+          generationId: event.generationId,
+          message: String(error),
+        });
+      });
+  };
+  const durableRun = async <T extends Awaited<ReturnType<typeof generateViaAgent>>>(
+    id: string,
+    designId: string,
+    controller: AbortController,
+    run: () => Promise<T>,
+  ): Promise<T & { chatPersisted?: boolean; snapshotId?: string }> => {
+    if (journal) await journal.start({ runId: id, designId, startedAt: Date.now() });
+    try {
+      const result = await run();
+      await eventDelivery;
+      if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
+      let snapshotId: string | undefined;
+      const artifact = result.artifacts[0];
+      if (journal && db && artifact && !controller.signal.aborted) {
+        const parent = listSnapshots(db, designId)[0];
+        const rows = listSessionChatMessages({ db, sessionDir: db.sessionDir }, designId);
+        const lastUser = rows.filter((row) => row.kind === 'user').at(-1);
+        const text = (lastUser?.payload as { text?: unknown } | undefined)?.text;
+        snapshotId =
+          parent?.artifactSource === artifact.content
+            ? parent.id
+            : createSnapshot(db, {
+                designId,
+                parentId: parent?.id ?? null,
+                type: parent ? 'edit' : 'initial',
+                prompt: typeof text === 'string' ? text : null,
+                artifactType: artifact.type === 'svg' ? 'svg' : 'html',
+                artifactSource: artifact.content,
+                message: result.message,
+              }).id;
+      }
+      const response = { ...result, ...(snapshotId ? { snapshotId } : {}) };
+      publishEvent({
+        designId,
+        generationId: id,
+        type: 'run_settled',
+        outcome: controller.signal.aborted ? 'cancelled' : 'completed',
+        response: response as GenerateResponse,
+      });
+      await eventDelivery;
+      if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
+      return { ...response, ...(journal ? { chatPersisted: true } : {}) };
+    } catch (error) {
+      publishEvent({
+        designId,
+        generationId: id,
+        type: 'run_settled',
+        outcome:
+          controller.signal.aborted &&
+          !extractGenerationTimeoutError(controller.signal) &&
+          !deliveryFailures.has(id)
+            ? 'cancelled'
+            : 'failed',
+        message: error instanceof Error ? error.message : String(error),
+        ...(error instanceof CodesignError ? { code: error.code } : {}),
+      });
+      await eventDelivery;
+      throw error;
+    } finally {
+      settledRuns.add(id);
+      closingRuns.delete(id);
+      deliveryFailures.delete(id);
+    }
+  };
+
+  const withDurableGenerationForDesign = <T extends Awaited<ReturnType<typeof generateViaAgent>>>(
+    id: string,
+    designId: string,
+    running: Map<string, AbortController>,
+    byDesign: Map<string, { generationId: string; startedAt: number }>,
+    controller: AbortController,
+    run: () => Promise<T>,
+  ) =>
+    withInFlightGenerationForDesign(id, designId, running, byDesign, controller, () =>
+      durableRun(id, designId, controller, run),
+    );
+  const canRecoverDesign = (designId: string): boolean => {
+    const design = db ? getDesign(db, designId) : null;
+    return design !== null && design.deletedAt === null && design.workspacePath !== null;
+  };
+  let repairedHistory: Promise<void> | undefined;
+  ipcMain.handle('codesign:v1:recover-runs', async (_event, raw: unknown) => {
+    const input = raw as { schemaVersion?: unknown; cursors?: unknown } | null;
+    if (
+      !input ||
+      input.schemaVersion !== 1 ||
+      !input.cursors ||
+      typeof input.cursors !== 'object' ||
+      Array.isArray(input.cursors)
+    )
+      throw new CodesignError('Invalid recovery cursors', 'IPC_BAD_INPUT');
+    const cursors: Record<string, number> = {};
+    for (const [id, seq] of Object.entries(input.cursors)) {
+      if (
+        !/^[A-Za-z0-9_-]{1,200}$/.test(id) ||
+        typeof seq !== 'number' ||
+        !Number.isSafeInteger(seq) ||
+        seq < 0
+      )
+        throw new CodesignError('Invalid recovery cursor', 'IPC_BAD_INPUT');
+      cursors[id] = seq;
+    }
+    if (_event?.sender) subscribers.add(_event.sender);
+    await eventDelivery;
+    if (!journal || !db) return { schemaVersion: 1, events: [] };
+    repairedHistory ??= journal
+      .allEvents()
+      .then((events) => {
+        for (const event of events) {
+          if (canRecoverDesign(event.designId))
+            projectRunEventToChat({ db, sessionDir: db.sessionDir }, event);
+        }
+      })
+      .catch((error: unknown) => {
+        repairedHistory = undefined;
+        throw error;
+      });
+    await repairedHistory;
+    const repairCursors = { ...cursors };
+    for (const [id, beforeFailure] of projectionFailures)
+      repairCursors[id] = Math.min(repairCursors[id] ?? 0, beforeFailure);
+    const recovered = await journal.recover(repairCursors);
+    recovered.events = recovered.events
+      .filter((event) => canRecoverDesign(event.designId))
+      .map((event) => ({ ...event, chatPersisted: true }));
+    for (const event of recovered.events)
+      projectRunEventToChat({ db, sessionDir: db.sessionDir }, event);
+    for (const event of recovered.events) projectionFailures.delete(event.generationId);
+    return recovered;
+  });
+
+  const emptyUsage = (): UsageTotals => ({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
+  ipcMain.handle('codesign:v1:usage-budget', async (_event, raw: unknown) => {
+    const input = raw as { schemaVersion?: unknown; designId?: unknown } | null;
+    if (
+      !input ||
+      input.schemaVersion !== 1 ||
+      typeof input.designId !== 'string' ||
+      input.designId.length === 0 ||
+      input.designId.length > 512
+    ) {
+      throw new CodesignError('Invalid usage budget request', 'IPC_BAD_INPUT');
+    }
+    const empty = {
+      schemaVersion: 1 as const,
+      design: emptyUsage(),
+      today: emptyUsage(),
+      week: emptyUsage(),
+    };
+    if (!journal) return empty;
+    const records = await journal.usageRecords();
+    return {
+      schemaVersion: 1 as const,
+      ...summarizeUsageBudget(records, input.designId, Date.now()),
+    };
+  });
 
   const recordFinalError = (scope: string, runId: string, err: unknown): void => {
     if (db === null) return;
@@ -433,6 +640,70 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       sessionDir: db.sessionDir,
     };
   };
+  const activeMessageRuns = new Map<string, ActiveRunMessages>();
+  const requireChatStore = (): SessionChatStoreOptions => {
+    const opts = chatStoreOptions();
+    if (!opts) throw new CodesignError('Session storage is unavailable.', 'IPC_DB_ERROR');
+    return opts;
+  };
+  ipcMain.handle('codesign:v1:active-message', async (_event, raw: unknown) => {
+    const payload = ActiveRunMessageInputV1.parse(raw);
+    return withStableWorkspacePath(payload.designId, async () => {
+      requireWorkspaceRootForDesign(payload.designId);
+      await eventDelivery;
+      const previous = listSessionActiveMessages(requireChatStore(), payload.designId).find(
+        (row) => row.messageId === payload.messageId,
+      );
+      if (previous) {
+        if (
+          previous.generationId !== payload.generationId ||
+          previous.mode !== payload.mode ||
+          previous.text !== payload.text
+        ) {
+          throw new CodesignError(
+            'Message ID already belongs to a different request.',
+            'IPC_BAD_INPUT',
+          );
+        }
+        if (previous.status === 'pending' && !activeMessageRuns.has(previous.generationId)) {
+          const recovered = {
+            ...previous,
+            status: 'not-delivered' as const,
+            reason: 'The previous run ended. Recover this message to send it again.',
+          };
+          appendSessionActiveMessage(requireChatStore(), recovered);
+          return recovered;
+        }
+        return previous;
+      }
+      const run = activeMessageRuns.get(payload.generationId);
+      if (!run)
+        throw new CodesignError(
+          'This generation is not accepting messages. Keep the draft and send after it finishes.',
+          'GENERATION_NOT_ACTIVE',
+        );
+      const accepted = run.submit(payload);
+      await eventDelivery;
+      if (deliveryFailures.has(payload.generationId))
+        throw deliveryFailures.get(payload.generationId);
+      return accepted;
+    });
+  });
+  ipcMain.handle('codesign:v1:active-messages', async (_event, raw: unknown) => {
+    await eventDelivery;
+    const { designId } = ListActiveMessagesInputV1.parse(raw);
+    const opts = requireChatStore();
+    return listSessionActiveMessages(opts, designId).map((row) => {
+      if (row.status !== 'pending' || activeMessageRuns.has(row.generationId)) return row;
+      const recovered = {
+        ...row,
+        status: 'not-delivered' as const,
+        reason: 'The previous run ended. Recover this message to send it again.',
+      };
+      appendSessionActiveMessage(opts, recovered);
+      return recovered;
+    });
+  });
 
   const chatRowsForDesign = (designId: string): ReturnType<typeof listSessionChatMessages> => {
     const opts = chatStoreOptions();
@@ -453,7 +724,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       status: 'done' | 'error';
     },
   ): void => {
-    getMainWindow()?.webContents.send('agent:event:v1', {
+    publishEvent({
       ...event,
       type: 'tool_call_start',
     } satisfies AgentStreamEvent);
@@ -470,6 +741,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     designId: string,
     previousSource: string | null,
     workspaceRoot: string,
+    researchRun: ReturnType<typeof createWebResearchRun>,
     attachmentsForRuntimeFs?: Parameters<typeof createRuntimeTextEditorFs>[0]['attachments'],
     memoryCallbacks?: {
       onAggressivePrune?: () => void;
@@ -477,13 +749,17 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     },
   ): ReturnType<typeof generateViaAgent> => {
     const sendEvent = (event: AgentStreamEvent) => {
-      getMainWindow()?.webContents.send('agent:event:v1', event);
+      publishEvent(event);
     };
     const baseCtx = { designId, generationId: id } as const;
+    const cfg = getCachedConfig();
+    const { settings: researchSettings, network } = researchRun;
     const toolStartedAt = new Map<string, number>();
-    const runtimeVerify = makeRuntimeVerifier();
     const templatesRoot = path_module.join(app.getPath('userData'), 'templates');
     const currentWorkspaceRoot = () => requireWorkspaceRootForDesign(designId).workspaceRoot;
+    const requestTimeoutMs = generationRequestTimeoutMs(
+      (await readPreferences()).generationTimeoutSec,
+    );
     const [frames, designSkills, initialWorkspaceFiles] = await Promise.all([
       loadFrameTemplates(path_module.join(templatesRoot, 'frames')),
       loadDesignSkills(path_module.join(templatesRoot, 'design-skills')),
@@ -494,6 +770,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       designId,
       generationId: id,
       logger: logIpc,
+      ...(input.signal ? { signal: input.signal } : {}),
       previousSource,
       initialFiles: initialWorkspaceFiles,
       attachments: attachmentsForRuntimeFs ?? input.attachments,
@@ -501,7 +778,16 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       frames,
       designSkills,
     });
-    const cfg = getCachedConfig();
+    const research = createResearchHost({
+      network,
+      inWorkspace: (fn) => withStableWorkspacePath(designId, () => fn(currentWorkspaceRoot())),
+      authorize: createWebResearchAuthorization(researchSettings, (questions, signal) =>
+        requestAsk(id, questions, () => getMainWindow(), {
+          designId,
+          ...(signal ? { signal } : {}),
+        }),
+      ),
+    });
     const imageConfig = cfg ? await resolveImageGenerationConfig(cfg) : null;
     const imageLog = getLogger('image-generation');
     const generateImageAsset = imageConfig
@@ -572,6 +858,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         const judgeOpts: Parameters<typeof complete>[2] = {
           apiKey: input.apiKey ?? '',
           maxTokens,
+          timeoutMs: requestTimeoutMs,
           userImages,
           ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
           ...(input.wire ? { wire: input.wire } : {}),
@@ -583,11 +870,34 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       },
     );
 
+    const activeMessages = new ActiveRunMessages(
+      designId,
+      id,
+      (message) => {
+        if (!journal) appendSessionActiveMessage(requireChatStore(), message);
+        try {
+          sendEvent({ ...baseCtx, type: 'active_message', activeMessage: message });
+        } catch (error) {
+          logIpc.warn('active-message.event.delivery-failed', {
+            ...baseCtx,
+            messageId: message.messageId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+      input.signal,
+    );
+    activeMessageRuns.set(id, activeMessages);
     return generateViaAgent(
       {
         ...input,
+        requestTimeoutMs,
         templatesRoot,
-        askBridge: (askInput) => requestAsk(id, askInput, () => getMainWindow()),
+        askBridge: (askInput, signal) =>
+          requestAsk(id, askInput, () => getMainWindow(), {
+            designId,
+            ...(signal ? { signal } : {}),
+          }),
         workspaceRoot,
         getWorkspaceRoot: currentWorkspaceRoot,
         onScaffolded: async (details) => {
@@ -602,14 +912,19 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           withStableWorkspacePath(designId, () =>
             readWorkspaceFilesAt(currentWorkspaceRoot(), patterns),
           ),
-        runPreview: ({ path, vision }) =>
+        runPreview: (options) =>
           withStableWorkspacePath(designId, () =>
-            runPreview({ path, vision, workspaceRoot: currentWorkspaceRoot() }),
+            runPreview({ ...options, workspaceRoot: currentWorkspaceRoot() }),
           ),
       },
       {
         fs,
-        runtimeVerify,
+        research,
+        activeMessages,
+        runtimeVerify: (source, context) =>
+          withStableWorkspacePath(designId, () =>
+            makeRuntimeVerifier({ workspaceRoot: currentWorkspaceRoot() })(source, context),
+          ),
         renderUiKit,
         judgeVisualParity,
         ...(generateImageAsset !== undefined ? { generateImageAsset } : {}),
@@ -721,7 +1036,15 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             // The second pattern catches the cancel-mid-stream case where only
             // the opening tag has landed.
             const finalText = finalAssistantTextForTurn(rawText, turnTextBuffer);
-            sendEvent({ ...baseCtx, type: 'turn_end', finalText });
+            const chatPersisted = journal !== null || activeMessages.hasAcceptedMessages;
+            if (!journal && chatPersisted && finalText.trim()) {
+              appendSessionChatMessage(requireChatStore(), {
+                designId,
+                kind: 'assistant_text',
+                payload: { text: finalText },
+              });
+            }
+            sendEvent({ ...baseCtx, type: 'turn_end', finalText, chatPersisted });
             return;
           }
           if (event.type === 'agent_end') {
@@ -730,19 +1053,50 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           }
         },
       },
-    ).then((result) => ({
-      ...result,
-      artifacts: result.artifacts.map((artifact) => ({
-        ...artifact,
-        content: resolveLocalAssetRefs(artifact.content, fsMap),
-      })),
-    }));
+    )
+      .finally(() => {
+        try {
+          activeMessages.close();
+        } finally {
+          activeMessageRuns.delete(id);
+        }
+      })
+      .then((result) => ({
+        ...result,
+        artifacts: result.artifacts.map((artifact) => ({
+          ...artifact,
+          content: resolveLocalAssetRefs(artifact.content, fsMap),
+        })),
+      }));
   };
 
   /** In-flight requests: generationId → AbortController */
   const inFlight = new Map<string, AbortController>();
   const inFlightByDesign = new Map<string, { generationId: string; startedAt: number }>();
   const inFlightByWorkspace = new Map<string, { generationId: string; startedAt: number }>();
+  const unregisterSourceEditBusyCheck = registerSourceEditBusyCheck(
+    async (designId, workspacePath) => {
+      if (inFlightByDesign.has(designId)) return true;
+      const key = (value: string) => (process.platform === 'win32' ? value.toLowerCase() : value);
+      const roots = new Set(inFlightByWorkspace.keys());
+      // Design registration precedes workspace acquisition during setup. Include
+      // those real runs too, including another design bound to this workspace.
+      for (const activeDesignId of inFlightByDesign.keys()) {
+        const root = db === null ? null : getDesign(db, activeDesignId)?.workspacePath;
+        if (root) roots.add(root);
+        else return true;
+      }
+      for (const root of roots) {
+        try {
+          if (key(await realpath(root)) === key(workspacePath)) return true;
+        } catch {
+          // An active run with an unresolved workspace must not permit a write.
+          return true;
+        }
+      }
+      return inFlightByDesign.has(designId);
+    },
+  );
 
   const armTimeout = (id: string, controller: AbortController) =>
     armGenerationTimeout(
@@ -770,8 +1124,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     ) {
       throw new CodesignError('done:verify:v1 expects { artifact: string }', 'IPC_BAD_INPUT');
     }
-    const errors = await sharedRuntimeVerifier((raw as { artifact: string }).artifact);
-    return { errors };
+    const { errors, warnings } = await sharedRuntimeVerifier(
+      (raw as { artifact: string }).artifact,
+    );
+    return { schemaVersion: 1, errors, warnings };
   });
 
   ipcMain.handle('codesign:v1:generate', async (_e, raw: unknown) => {
@@ -779,7 +1135,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const id = payload.generationId;
     return withRun(id, async () => {
       const controller = new AbortController();
-      return withInFlightGenerationForDesign(
+      return withDurableGenerationForDesign(
         id,
         payload.designId,
         inFlight,
@@ -797,6 +1153,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               'CONFIG_MISSING',
             );
           }
+          const researchRun = createWebResearchRun(cfg, decryptSecret);
           const active = resolveActiveModel(cfg, payload.model);
           const allowKeyless = active.allowKeyless;
           const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
@@ -844,30 +1201,57 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           const tlsBypass = resolveTlsBypassFor(cfg, active.model.provider);
 
           const prefs = await readPreferences();
-          const { designId, workspaceRoot, promptContext, memoryContext, memoryLoadWarning } =
-            await withStableWorkspacePath(payload.designId, async () => {
-              const { designId, workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
-              const promptContext = await preparePromptContext({
-                attachments: payload.attachments,
-                referenceUrl: payload.referenceUrl,
-                designSystem: cfg.designSystem ?? null,
-                workspaceRoot,
-              });
-              let memoryContext: Awaited<ReturnType<typeof loadMemoryContext>> | undefined;
-              let memoryLoadWarning: string | undefined;
-              if (prefs.memoryEnabled) {
-                try {
-                  memoryContext = await loadMemoryContext(workspaceRoot);
-                } catch (err) {
-                  memoryLoadWarning = `Project memory unavailable: ${err instanceof Error ? err.message : String(err)}`;
-                  logIpc.warn('memory.load.fail', {
-                    generationId: id,
-                    message: err instanceof Error ? err.message : String(err),
-                  });
-                }
-              }
-              return { designId, workspaceRoot, promptContext, memoryContext, memoryLoadWarning };
+          const {
+            designId,
+            workspaceRoot,
+            promptContext,
+            memoryContext,
+            memoryLoadWarning,
+            fileInventory,
+          } = await withStableWorkspacePath(payload.designId, async () => {
+            const { designId, workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
+            const promptContext = await preparePromptContext({
+              attachments: payload.attachments,
+              referenceUrl: payload.referenceUrl,
+              designSystem: cfg.designSystem ?? null,
+              workspaceRoot,
             });
+            const workspaceFiles = await listWorkspaceFilesAt(workspaceRoot);
+            const paths: string[] = [];
+            let pathChars = 0;
+            for (const file of workspaceFiles) {
+              if (paths.length >= 200 || pathChars + file.path.length > 16_000) break;
+              paths.push(file.path);
+              pathChars += file.path.length;
+            }
+            const fileInventory = {
+              paths,
+              truncated: paths.length < workspaceFiles.length,
+              // The shared scanner also omits hidden paths and caps its traversal.
+              exhaustive: false,
+            };
+            let memoryContext: Awaited<ReturnType<typeof loadMemoryContext>> | undefined;
+            let memoryLoadWarning: string | undefined;
+            if (prefs.memoryEnabled) {
+              try {
+                memoryContext = await loadMemoryContext(workspaceRoot);
+              } catch (err) {
+                memoryLoadWarning = `Project memory unavailable: ${err instanceof Error ? err.message : String(err)}`;
+                logIpc.warn('memory.load.fail', {
+                  generationId: id,
+                  message: err instanceof Error ? err.message : String(err),
+                });
+              }
+            }
+            return {
+              designId,
+              workspaceRoot,
+              promptContext,
+              memoryContext,
+              memoryLoadWarning,
+              fileInventory,
+            };
+          });
           const currentDesignName =
             db !== null ? (getDesign(db, designId)?.name ?? undefined) : undefined;
 
@@ -920,6 +1304,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 ? readSessionRunPreferences(runPreferenceStoreOptions, designId)
                 : null;
             const workspaceState = {
+              fileInventory,
               sourcePath: payload.previousSource ? 'App.jsx' : null,
               hasSource: Boolean(payload.previousSource?.trim()),
               hasDesignMd: Boolean(promptContext.projectContext.designMd?.trim()),
@@ -930,7 +1315,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 file.mediaType?.startsWith('image/'),
               ).length,
               hasReferenceUrl: promptContext.referenceUrl !== null,
-              hasDesignSystem: promptContext.designSystem !== null,
+              hasDesignSystem:
+                promptContext.designSystem !== null ||
+                Boolean(promptContext.projectContext.designMd?.trim()),
             };
             const routedPreferences = await withTlsBypass(tlsBypass, () =>
               routeRunPreferences({
@@ -953,103 +1340,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 logger: coreLogger,
               }),
             );
-            let runPreferences = routedPreferences.preferences;
-            const runProtocolPreflight = buildRunProtocolPreflight({
-              prompt: payload.prompt,
-              historyCount: chatRows.filter((row) => row.kind === 'user').length,
-              workspaceState: { hasSource: Boolean(payload.previousSource?.trim()) },
-              runPreferences,
-              routerQuestions: routedPreferences.needsClarification
-                ? routedPreferences.clarificationQuestions
-                : undefined,
-              attachmentCount: promptContext.attachments.length,
-              hasReferenceUrl: promptContext.referenceUrl !== null,
-              hasDesignSystem: promptContext.designSystem !== null,
-            });
-            let preflightAnswers: Array<{
-              questionId: string;
-              value: string | number | string[] | null;
-            }> = [];
-            if (runProtocolPreflight.requiresClarification) {
-              const askInput = buildRunPreferenceAskInput(
-                runProtocolPreflight.clarificationQuestions,
-                routedPreferences.clarificationRationale,
-              );
-              const toolCallId = `host-preflight-ask-${id}`;
-              const askStartedAt = Date.now();
-              sendPreflightAskEvent(getMainWindow, {
-                designId,
-                generationId: id,
-                type: 'turn_start',
-              });
-              logIpc.info('agent.tool_start', {
-                generationId: id,
-                tool: 'ask',
-                source: 'preflight',
-              });
-              sendPreflightAskEvent(getMainWindow, {
-                designId,
-                generationId: id,
-                type: 'tool_call_start',
-                toolName: 'ask',
-                toolCallId,
-                args: { questions: askInput.questions, rationale: askInput.rationale },
-                verbGroup: 'Clarifying',
-              });
-              try {
-                const askResult = await requestAsk(id, askInput, () => getMainWindow());
-                preflightAnswers = askResult.status === 'answered' ? askResult.answers : [];
-                runPreferences = applyRunPreferenceAnswers(runPreferences, preflightAnswers);
-                logIpc.info('agent.tool_end', {
-                  generationId: id,
-                  tool: 'ask',
-                  source: 'preflight',
-                  status: 'done',
-                  answers: preflightAnswers.length,
-                });
-                sendPreflightAskEvent(getMainWindow, {
-                  designId,
-                  generationId: id,
-                  type: 'tool_call_result',
-                  toolName: 'ask',
-                  toolCallId,
-                  durationMs: Date.now() - askStartedAt,
-                  status: 'done',
-                  result: {
-                    content: [
-                      {
-                        type: 'text',
-                        text:
-                          askResult.status === 'answered'
-                            ? `user answered ${preflightAnswers.length} question(s)`
-                            : 'user cancelled',
-                      },
-                    ],
-                    details: { status: askResult.status, answerCount: preflightAnswers.length },
-                  },
-                });
-              } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
-                logIpc.warn('agent.tool_end', {
-                  generationId: id,
-                  tool: 'ask',
-                  source: 'preflight',
-                  status: 'error',
-                  message,
-                });
-                sendPreflightAskEvent(getMainWindow, {
-                  designId,
-                  generationId: id,
-                  type: 'tool_call_result',
-                  toolName: 'ask',
-                  toolCallId,
-                  durationMs: Date.now() - askStartedAt,
-                  status: 'error',
-                  message,
-                });
-                throw err;
-              }
-            }
+            const runPreferences = routedPreferences.preferences;
             if (runPreferenceStoreOptions !== null) {
               appendSessionRunPreferences(runPreferenceStoreOptions, designId, runPreferences);
             }
@@ -1058,7 +1349,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               brief: existingBrief,
               runPreferences,
               resourceState,
-              modelContextWindow: contextWindowForContextPack(active.model),
+              modelContextWindow: resolveContextWindow(active.model, baseUrl, active.contextWindow),
               workspaceState: {
                 sourcePath: payload.previousSource ? 'App.jsx' : null,
                 hasSource: Boolean(payload.previousSource?.trim()),
@@ -1084,10 +1375,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   attachments: promptContext.attachments,
                   referenceUrl: promptContext.referenceUrl,
                   designSystem: promptContext.designSystem ?? null,
-                  sessionContext: [
-                    ...contextPack.contextSections,
-                    ...formatRunProtocolPreflightAnswers(preflightAnswers),
-                  ],
+                  sessionContext: contextPack.contextSections,
                   ...(memoryContext !== undefined ? { memoryContext: memoryContext.sections } : {}),
                   projectContext: promptContext.projectContext,
                   currentDesignName,
@@ -1099,6 +1387,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
                     : {}),
+                  ...(active.contextWindow !== undefined
+                    ? { contextWindow: active.contextWindow }
+                    : {}),
                   ...(allowKeyless ? { allowKeyless: true } : {}),
                   signal: controller.signal,
                   logger: coreLogger,
@@ -1107,6 +1398,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 designId,
                 payload.previousSource ?? null,
                 workspaceRoot,
+                researchRun,
                 promptContext.attachments,
                 {
                   onAggressivePrune: () => {
@@ -1360,7 +1652,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const id = payload.generationId;
     return withRun(id, async () => {
       const controller = new AbortController();
-      return withInFlightGenerationForDesign(
+      return withDurableGenerationForDesign(
         id,
         payload.designId,
         inFlight,
@@ -1376,6 +1668,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               'CONFIG_MISSING',
             );
           }
+          const researchRun = createWebResearchRun(cfg, decryptSecret);
           // Inline-comment edits don't need to be tied to whatever provider was
           // pinned in the original generate; resolve fresh against the canonical
           // active provider so a switch in Settings takes effect immediately.
@@ -1456,6 +1749,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
                     : {}),
+                  ...(active.contextWindow !== undefined
+                    ? { contextWindow: active.contextWindow }
+                    : {}),
                   ...(allowKeyless ? { allowKeyless: true } : {}),
                   signal: controller.signal,
                   logger: coreLogger,
@@ -1464,6 +1760,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 payload.designId,
                 payload.artifactSource,
                 workspaceRoot,
+                researchRun,
                 promptContext.attachments,
               ),
             );
@@ -1562,6 +1859,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   });
 
   return () => {
+    unregisterSourceEditBusyCheck();
     for (const controller of inFlight.values()) {
       try {
         controller.abort();

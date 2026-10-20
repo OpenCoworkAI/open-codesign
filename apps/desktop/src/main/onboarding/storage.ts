@@ -75,6 +75,7 @@ export async function runResetOnboarding(): Promise<void> {
     activeModel: '',
     secrets: {},
     providers: cfg.providers,
+    ...(cfg.webSearch !== undefined ? { webSearch: cfg.webSearch } : {}),
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
   });
   await writeConfig(next);

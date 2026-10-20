@@ -13,6 +13,8 @@
  */
 
 import { availableLocales, type Locale, normalizeLocale } from '@open-codesign/i18n';
+import type { DemoInputId } from '../demo-inputs';
+import { demoPackExamples } from './demo-packs';
 import { enExamples } from './locales/en';
 import { esExamples } from './locales/es';
 import { ptBRExamples } from './locales/pt-BR';
@@ -125,7 +127,22 @@ export interface Example {
   category: ExampleCategory;
   prompt: string;
   thumbnail: string;
+  features?: readonly ExampleFeature[];
+  inputBundle?: DemoInputId;
+  inputFiles?: readonly string[];
 }
+
+export const EXAMPLE_FEATURES = [
+  'local-assets',
+  'document-input',
+  'sketch-reference',
+  'multi-screen',
+  'shared-state',
+  'interactive-flow',
+  'responsive',
+] as const;
+
+export type ExampleFeature = (typeof EXAMPLE_FEATURES)[number];
 
 export interface LocalizedExample extends Example {
   title: string;
@@ -133,6 +150,7 @@ export interface LocalizedExample extends Example {
 }
 
 export const EXAMPLES: Example[] = [
+  ...demoPackExamples,
   {
     id: 'cosmic-animation',
     category: 'animation',

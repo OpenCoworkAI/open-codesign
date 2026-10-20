@@ -33,6 +33,7 @@ export interface AddCustomProviderInput {
   wire: WireApi;
   baseUrl: string;
   apiKey: string;
+  requiresApiKey?: boolean;
   defaultModel: string;
   httpHeaders?: Record<string, string>;
   queryParams?: Record<string, string>;
@@ -45,6 +46,7 @@ export interface AddCustomProviderInput {
 
 export interface UpdateProviderInput {
   id: string;
+  requiresApiKey?: boolean;
   name?: string;
   baseUrl?: string;
   defaultModel?: string;
@@ -52,6 +54,9 @@ export interface UpdateProviderInput {
   queryParams?: Record<string, string>;
   wire?: WireApi;
   reasoningLevel?: ReasoningLevel | null;
+  /** Context window in tokens. `null` clears it so core resolves the window
+   *  from pi-ai's catalog; `undefined` leaves the existing value alone. */
+  contextWindow?: number | null;
   /** When present AND non-empty, re-encrypt and replace the stored secret.
    *  Empty string means "clear stored secret" for providers that became
    *  keyless (e.g. switched to local Ollama). `undefined` means "leave alone". */
@@ -69,6 +74,7 @@ const ADD_PROVIDER_FIELDS = [
   'wire',
   'baseUrl',
   'apiKey',
+  'requiresApiKey',
   'defaultModel',
   'httpHeaders',
   'queryParams',
@@ -85,7 +91,9 @@ const UPDATE_PROVIDER_FIELDS = [
   'queryParams',
   'wire',
   'reasoningLevel',
+  'contextWindow',
   'apiKey',
+  'requiresApiKey',
   'tlsRejectUnauthorized',
 ] as const;
 
@@ -218,7 +226,7 @@ export function parseValidateKey(raw: unknown): ValidateKeyInput {
   const providerId = provider.trim();
   if (!isSupportedOnboardingProvider(providerId)) {
     throw new CodesignError(
-      `Provider "${providerId}" is not supported. Only anthropic, openai, openrouter, ollama.`,
+      `Provider "${providerId}" is not supported. Only anthropic, openai, atlascloud, openrouter, ollama.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
@@ -284,10 +292,14 @@ export function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
     throw new CodesignError(`Unsupported wire: ${String(wire)}`, ERROR_CODES.IPC_BAD_INPUT);
   }
   const parsedBaseUrl = validRequiredUrl(baseUrl, 'baseUrl');
+  const requiresApiKey = r['requiresApiKey'];
+  if (requiresApiKey !== undefined && typeof requiresApiKey !== 'boolean') {
+    throw new CodesignError('requiresApiKey must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+  }
   if (typeof apiKey !== 'string') {
     throw new CodesignError('apiKey must be a string', ERROR_CODES.IPC_BAD_INPUT);
   }
-  if (apiKey.trim().length === 0) {
+  if (apiKey.trim().length === 0 && requiresApiKey !== false) {
     throw new CodesignError('apiKey must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   if (typeof defaultModel !== 'string' || defaultModel.trim().length === 0) {
@@ -305,6 +317,7 @@ export function parseAddProviderPayload(raw: unknown): AddCustomProviderInput {
     apiKey: apiKey.trim(),
     defaultModel: defaultModel.trim(),
     setAsActive,
+    ...(requiresApiKey !== undefined ? { requiresApiKey } : {}),
   };
   const headers = stringMapFromOptional(r['httpHeaders'], 'httpHeaders');
   if (headers !== undefined && Object.keys(headers).length > 0) out.httpHeaders = headers;
@@ -339,6 +352,12 @@ export function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
     throw new CodesignError('id must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
   }
   const out: UpdateProviderInput = { id: id.trim() };
+  if (r['requiresApiKey'] !== undefined) {
+    if (typeof r['requiresApiKey'] !== 'boolean') {
+      throw new CodesignError('requiresApiKey must be a boolean', ERROR_CODES.IPC_BAD_INPUT);
+    }
+    out.requiresApiKey = r['requiresApiKey'];
+  }
   if (r['name'] !== undefined) {
     if (typeof r['name'] !== 'string' || r['name'].trim().length === 0) {
       throw new CodesignError('name must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
@@ -380,6 +399,18 @@ export function parseUpdateProviderPayload(raw: unknown): UpdateProviderInput {
       );
     }
     out.reasoningLevel = parsed.data;
+  }
+  if (r['contextWindow'] === null) {
+    out.contextWindow = null;
+  } else if (r['contextWindow'] !== undefined) {
+    const value = r['contextWindow'];
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+      throw new CodesignError(
+        'contextWindow must be a positive integer or null',
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+    out.contextWindow = value;
   }
   if (r['apiKey'] !== undefined) {
     if (typeof r['apiKey'] !== 'string') {

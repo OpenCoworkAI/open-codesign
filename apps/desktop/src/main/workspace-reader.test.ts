@@ -39,6 +39,25 @@ describe('readWorkspaceFilesAt', () => {
     expect(files).toEqual(['app.js', 'index.html']);
   });
 
+  it('preserves JSX/TSX BOM bytes in both file reads and source scans without changing JSON decoding', async () => {
+    const bom = String.fromCharCode(0xfeff);
+    const source = `${bom}function App() { return <h1>Title</h1>; }`;
+    for (const name of ['App.jsx', 'Other.TSX']) {
+      await writeFile(join(root, name), source);
+      const read = await readWorkspaceFileAt(root, name);
+      expect(read.content).toBe(source);
+      expect(Buffer.from(read.content, 'utf8')).toEqual(Buffer.from(source, 'utf8'));
+    }
+    await writeFile(join(root, 'package.json'), `${bom}{"type":"module"}`);
+    const read = await readWorkspaceFileAt(root, 'package.json');
+    expect(JSON.parse(read.content)).toEqual({ type: 'module' });
+    const scanned = await readWorkspaceFilesAt(root, ['App.jsx', 'Other.TSX', 'package.json']);
+    expect(scanned.find((entry) => entry.file === 'App.jsx')?.contents).toBe(source);
+    expect(scanned.find((entry) => entry.file === 'Other.TSX')?.contents).toBe(source);
+    expect(scanned.find((entry) => entry.file === 'package.json')?.contents).toBe(
+      '{"type":"module"}',
+    );
+  });
   it('honours user-supplied patterns', async () => {
     await writeFile(join(root, 'README.md'), '# hi');
     await writeFile(join(root, 'index.html'), '<!doctype html>');
@@ -58,11 +77,13 @@ describe('readWorkspaceFilesAt', () => {
     await writeFile(join(root, 'state.ts'), 'export const state = {};');
     await writeFile(join(root, 'package.json'), '{"type":"module"}');
     await writeFile(join(root, 'README.md'), '# Notes');
+    await writeFile(join(root, 'schedule.csv'), 'title,seats\n"Morning, together",4\n');
     const result = await readWorkspaceFilesAt(root);
     expect(result.map((f) => f.file).sort()).toEqual([
       'App.tsx',
       'README.md',
       'package.json',
+      'schedule.csv',
       'state.ts',
     ]);
   });

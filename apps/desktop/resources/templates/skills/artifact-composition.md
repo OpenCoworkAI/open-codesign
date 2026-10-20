@@ -2,14 +2,14 @@
 schemaVersion: 1
 name: artifact-composition
 description: >
-  Classifies design artifacts and sets the right density, section ladder,
-  metrics treatment, and comparison structure. Use for landing pages, case
-  studies, dashboards, pricing pages, reports, one-pagers, emails, or slides.
+  Chooses content structure and useful density for apps, landing pages, case
+  studies, dashboards, pricing, reports, emails, and slides. Use when deciding
+  what belongs in the artifact, not to add a fixed section or feature count.
 aliases: [composition, structure, density, landing-structure, dashboard-structure, case-study]
 dependencies: []
 validationHints:
-  - final artifact has a complete section ladder for its artifact type
-  - dense operational surfaces include records, filters, tables, or states
+  - structure serves the requested primary job without filler or missing connections
+  - records and summaries use the same underlying data
 trigger:
   providers: ['*']
   scope: system
@@ -17,53 +17,45 @@ disable_model_invocation: false
 user_invocable: true
 ---
 
-## Artifact Type
+## Structure By Job
 
-Before visual styling, classify the artifact by its primary job and choose the
-composition skeleton. The same visual style cannot serve every artifact type.
+These are useful content roles, not required module lists:
 
-| Type | Job |
+| Deliverable | Structure should help the audience |
 |---|---|
-| landing | convert a stranger quickly with one offer |
-| case_study | prove an outcome with evidence and sequence |
-| dashboard | orient, diagnose, and enable action |
-| pricing | make the buyer choose a tier confidently |
-| slide | communicate one idea on one rectangle |
-| email | scan well in a narrow inbox pane |
-| one_pager | brief a busy reader in 60 seconds |
-| report | walk through findings with substance |
+| App | complete the primary task across necessary states and destinations |
+| Dashboard | understand current status, inspect records, and act |
+| Landing page | understand an offer, evaluate evidence, and take the next step |
+| Case study | follow context, approach, outcome, and tradeoffs |
+| Pricing | compare actual available options and resolve buying uncertainty |
+| Report | understand findings, supporting evidence, and implications |
+| Slide | grasp one main idea with a supporting visual |
+| Email | scan a concise message and find its primary action |
 
-## Density
+Choose the amount of content from the brief and available evidence. A
+single-page dashboard can use section anchors; an app may need connected
+views. Neither needs a screen quota. Avoid a sales hero above a work surface,
+invented pricing tiers, decorative metrics, or charts added only to fill space.
 
-Sparse output is the common failure mode. Pick the correct section ladder:
+## Content And Data
 
-- Landing: hero, problem, solution/product proof, 3-5 differentiated features, social proof, pricing or CTA band, footer.
-- Case study: customer/result hero, customer profile, challenge, approach, before/after metrics, quote, implementation timeline, CTA.
-- Dashboard: app shell, global filters, KPI strip, primary chart, secondary chart/table, activity/detail panel, empty/loading state.
-- Pricing: headline, 3+ tiers, plan comparison, risk reducer/FAQ, CTA.
-- Report/one-pager: cover, TL;DR, 3 findings, evidence modules, methodology, conclusion.
-- Slide: one conclusion, one supporting visual, one footer note; never cram a page into a slide.
-- Email: subject/preheader mental model, headline, short body, one primary action, fallback link.
+Use domain-specific sample records with fields useful to the task. Derive
+counts, summaries, filters, and details from those records. Clearly distinguish
+mock data from verified claims; never invent customer quotes or results.
+Explain units and comparison bases when presenting numbers.
 
-## Evidence
+Arrange dense information for scanning, and use whitespace to separate ideas.
+Sparse is appropriate when the task is simple; emptiness is a problem when
+required content or behavior is missing.
 
-- Put important metrics in large labeled blocks.
-- Render before/after, vs, 对比, or growth claims as paired comparisons, not floating deltas.
-- Use realistic numbers and dates; avoid 100%, 1,000, Jan 1 2020, and lorem-style filler.
-- Mock records should feel operational: each row/card should carry at least 5 useful fields such as owner, status, trend, date, segment, severity, or next action.
+## From First Slice To Complete Artifact
 
-## Composition Rules
+A substantial app's first slice might be a styled task list with shared task
+records and a working completion action. Write valid, readable components for
+that slice before adding detail/edit views. Continue until the requested
+journeys connect; the initial slice is not the final product.
 
-- Marketing artifacts need rhythm: alternate dense sections with air, text-led sections with visual-led sections, and proof with promise.
-- Product tools need utility density: no oversized hero, no decorative feature grid, no landing-page copy above the work surface.
-- Case studies need credibility: include who the customer is, what changed, how long it took, and what tradeoff was solved.
-- Use `TWEAK_DEFAULTS` for 2-6 axes a user would actually tune: accent, density, radius, motion, chart mode, or surface contrast.
-- If multiple screens are implied, update or create `DESIGN.md` so later screens inherit tokens, component names, and layout rules.
-
-## Forbidden Skeletons
-
-- Landing: hero + three identical cards + testimonial + CTA, with no product proof.
-- Case study: four metric cards and a quote, with no challenge/approach/before-after structure.
-- Dashboard: stat cards floating over a marketing background, with no filters, table, or actionable state.
-- Pricing: three cards with vague plan names and no comparison or buying-risk reducer.
-- Slide/report: giant headline plus decorative chart with no takeaway.
+Adapt scaffolded source to the brief rather than treating its example content
+as a deliverable ceiling. A small document or single-screen revision does not
+need this staged app process. Reuse stable `DESIGN.md` choices when extending
+an existing artifact.

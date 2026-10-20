@@ -24,11 +24,8 @@ export async function loadConfigOnBoot(): Promise<void> {
     cachedConfig = null;
     return;
   }
-  // Boot-time migration: rewrite any legacy safeStorage-encrypted secrets
-  // as plaintext, and fill in missing display masks. This is the ONLY path
-  // that can trigger a keychain prompt (and only on an upgrade from an
-  // older build that still used safeStorage). After one successful run the
-  // config is pure plaintext forever.
+  // Upgrade readable credentials and fill display masks without blocking boot
+  // on an unreadable entry. Failed entries stay intact for repair in Settings.
   const migrated = migrateSecrets(parsed);
   cachedConfig = migrated.config;
   if (migrated.changed) {
@@ -156,6 +153,7 @@ export async function setDesignSystem(
     activeModel: cfg.activeModel,
     secrets: cfg.secrets,
     providers: cfg.providers,
+    ...(cfg.webSearch !== undefined ? { webSearch: cfg.webSearch } : {}),
     ...(designSystem !== null ? { designSystem: StoredDesignSystem.parse(designSystem) } : {}),
   });
   await writeConfig(next);

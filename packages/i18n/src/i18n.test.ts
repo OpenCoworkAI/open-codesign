@@ -8,6 +8,33 @@ import {
   setLocale,
 } from './index';
 
+describe('image response preference labels', () => {
+  it.each([
+    ['en', 'Request base64 response'],
+    ['zh-CN', '请求 base64 响应'],
+    ['es', 'Solicitar respuesta en base64'],
+    ['pt-BR', 'Solicitar resposta em base64'],
+  ])('localizes the preference in %s', async (locale, label) => {
+    const { i18n } = await import('./index');
+    await initI18n(locale);
+    expect(i18n.t('settings.imageGen.requestBase64')).toBe(label);
+    await setLocale('en');
+  });
+
+  it('localizes the whole image generation panel in Portuguese without English fallback', async () => {
+    const { i18n } = await import('./index');
+    await initI18n('pt-BR');
+    const english = i18n.getResource('en', 'translation', 'settings.imageGen');
+    const portuguese = i18n.getResource('pt-BR', 'translation', 'settings.imageGen');
+    expect(Object.keys(portuguese).sort()).toEqual(Object.keys(english).sort());
+    expect(Object.keys(portuguese.status).sort()).toEqual(Object.keys(english.status).sort());
+    expect(Object.keys(portuguese.toast).sort()).toEqual(Object.keys(english.toast).sort());
+    expect(i18n.t('settings.imageGen.title')).toBe('Assistente de geração de imagens');
+    expect(i18n.t('settings.tabs.images')).toBe('API de imagens');
+    await setLocale('en');
+  });
+});
+
 describe('normalizeLocale', () => {
   it('returns the value unchanged when it is supported', () => {
     expect(normalizeLocale('en')).toBe('en');
@@ -141,6 +168,40 @@ describe('onboarding i18n keys (Welcome / PasteKey / ChooseModel)', () => {
     expect(i18n.t('onboarding.choose.back')).toBe('返回');
 
     // Reset to en for other tests
+    await setLocale('en');
+  });
+});
+
+describe('LiteLLM connection diagnostics', () => {
+  const keys = [
+    'settings.providers.litellm.diagnostics.auth',
+    'settings.providers.litellm.diagnostics.notFound',
+    'settings.providers.litellm.diagnostics.notFoundLocal',
+    'settings.providers.litellm.diagnostics.unreachable',
+  ] as const;
+
+  it.each([
+    ['en', 'master or virtual key', 'keyless', '/v1', 'port 4000', 'Start the LiteLLM proxy'],
+    ['zh-CN', 'master key', '无 Key', '/v1', '4000', '启动 LiteLLM'],
+    ['es', 'master key', 'sin clave', '/v1', '4000', 'proxy de LiteLLM'],
+    ['pt-BR', 'master key', 'sem chave', '/v1', '4000', 'proxy LiteLLM'],
+  ] as const)('localizes LiteLLM failure hints in %s', async (locale, auth, keyless, suffix, port, start) => {
+    const { i18n } = await import('./index');
+    await initI18n(locale);
+    const authText = i18n.t(keys[0]);
+    const notFound = i18n.t(keys[1]);
+    const notFoundLocal = i18n.t(keys[2]);
+    const unreachable = i18n.t(keys[3]);
+    expect(authText).toContain(auth);
+    expect(authText).toContain(keyless);
+    expect(notFound).toContain(suffix);
+    expect(notFound).not.toContain('4000');
+    expect(notFoundLocal).toContain(suffix);
+    expect(notFoundLocal).toContain(port);
+    expect(unreachable).toContain(start);
+    for (const key of keys) {
+      expect(i18n.t(key)).not.toBe(key);
+    }
     await setLocale('en');
   });
 });

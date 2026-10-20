@@ -20,6 +20,7 @@ import {
   removeHtmlElementBlocks,
   stripHtmlTags,
 } from '@open-codesign/shared/html-utils';
+import type { DocumentTextLimits, OoxmlFormat } from './document-text';
 import { resolveSafeWorkspaceChildPath } from './workspace-reader';
 
 const TEXT_EXTS = new Set([
@@ -54,7 +55,24 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 
 const MAX_ATTACHMENT_CHARS = 6_000;
 const MAX_TEXT_ATTACHMENT_BYTES = 256_000;
-const MAX_BINARY_ATTACHMENT_BYTES = 10_000_000; // 10MB - images get full read for data URL, non-image binary only needs filename
+const MAX_BINARY_ATTACHMENT_BYTES = 10_000_000; // 10MB - images get a full read for the data URL, Office documents a full read for their text; other binary files stay filename-only
+// Only MAX_ATTACHMENT_CHARS of a document reach the prompt, so these bound the work of reading it,
+// not what the model sees. They are the attachment's own numbers: the Files tab preview keeps its own.
+const DOCUMENT_ATTACHMENT_LIMITS: DocumentTextLimits = {
+  maxSections: 30,
+  maxParagraphs: 400,
+  maxLinesPerSlide: 40,
+  maxRowsPerSheet: 200,
+  maxCellsPerRow: 20,
+  maxLineChars: 500,
+  maxUnpackedBytes: 32 * 1024 * 1024,
+  markCuts: true,
+};
+const DOCUMENT_FORMATS: Record<string, OoxmlFormat> = {
+  '.docx': 'docx',
+  '.pptx': 'pptx',
+  '.xlsx': 'xlsx',
+};
 const MAX_URL_EXCERPT_CHARS = 1_200;
 const MAX_URL_RESPONSE_BYTES = 256_000;
 const MAX_REFERENCE_URL_REDIRECTS = 3;
@@ -497,6 +515,87 @@ async function openAttachment(
   throw lastError;
 }
 
+/**
+ * A DOCX, PPTX or XLSX attachment as text. A file that cannot be read as that format fails the
+ * attachment, with a message that names the file, and so the send, before any model request:
+ * the model is never left to plan around a file it did not read. Formats this does not read
+ * (PDF, the legacy binary Office formats) keep the filename note.
+ */
+async function readDocumentAttachment(
+  file: LocalInputFile,
+  workspaceRoot: string | undefined,
+  format: OoxmlFormat,
+): Promise<AttachmentContext> {
+  const label = format.toUpperCase();
+  let bytes: Buffer;
+  let promptPath = file.path;
+  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    const opened = await openAttachment(file, workspaceRoot);
+    handle = opened.handle;
+    promptPath = opened.promptPath;
+    const { size } = await handle.stat();
+    if (size > MAX_BINARY_ATTACHMENT_BYTES) {
+      throw new CodesignError(
+        `Binary attachment "${file.name}" is too large (${size} bytes). Maximum is ${MAX_BINARY_ATTACHMENT_BYTES / 1_000_000}MB.`,
+        ERROR_CODES.ATTACHMENT_TOO_LARGE,
+      );
+    }
+    bytes = await handle.readFile();
+  } catch (error) {
+    if (error instanceof CodesignError) throw error;
+    throw new CodesignError(
+      `Failed to read attachment "${file.path}"`,
+      ERROR_CODES.ATTACHMENT_READ_FAILED,
+      { cause: error },
+    );
+  } finally {
+    await handle?.close();
+  }
+
+  // Loaded on first use: JSZip and the parsers are not needed until someone attaches a document.
+  const { DocumentTooLargeError, formatDocumentText, readOoxmlText } = await import(
+    './document-text'
+  );
+  let text: Awaited<ReturnType<typeof readOoxmlText>>;
+  try {
+    text = await readOoxmlText(bytes, format, DOCUMENT_ATTACHMENT_LIMITS);
+  } catch (error) {
+    if (error instanceof DocumentTooLargeError) {
+      throw new CodesignError(
+        `${label} attachment "${file.name}" holds more than ${DOCUMENT_ATTACHMENT_LIMITS.maxUnpackedBytes / (1024 * 1024)}MB of text once unpacked. Attach a smaller file.`,
+        ERROR_CODES.ATTACHMENT_TOO_LARGE,
+        { cause: error },
+      );
+    }
+    throw new CodesignError(
+      `Could not read "${file.name}" as a ${label} file.`,
+      ERROR_CODES.ATTACHMENT_READ_FAILED,
+      { cause: error },
+    );
+  }
+  if (text.missingPart !== null) {
+    throw new CodesignError(
+      `Could not read "${file.name}" as a ${label} file: it has no ${text.missingPart}.`,
+      ERROR_CODES.ATTACHMENT_READ_FAILED,
+    );
+  }
+
+  const full = cleanText(formatDocumentText(text, format), Number.MAX_SAFE_INTEGER);
+  if (full.length === 0) {
+    return { name: file.name, path: promptPath, note: `${label} file with no text in it.` };
+  }
+  const truncated = full.length > MAX_ATTACHMENT_CHARS;
+  return {
+    name: file.name,
+    path: promptPath,
+    excerpt: full.slice(0, MAX_ATTACHMENT_CHARS),
+    note: `Text extracted from a ${label} file; layout, images and charts are not included.${
+      truncated ? ` Excerpt truncated to the first ${MAX_ATTACHMENT_CHARS} characters.` : ''
+    }`,
+  };
+}
+
 async function readAttachment(
   file: LocalInputFile,
   workspaceRoot: string | undefined,
@@ -518,6 +617,10 @@ async function readAttachment(
       ERROR_CODES.ATTACHMENT_TOO_LARGE,
     );
   }
+
+  const documentFormat = DOCUMENT_FORMATS[extension];
+  if (documentFormat !== undefined)
+    return readDocumentAttachment(file, workspaceRoot, documentFormat);
 
   let buffer: Buffer;
   let handle: Awaited<ReturnType<typeof open>> | null = null;

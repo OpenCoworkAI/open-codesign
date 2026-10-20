@@ -1,5 +1,77 @@
 # @open-codesign/core
 
+## 0.2.2
+
+### Patch Changes
+
+- 8303e2b: Remove the desktop's automatic router questionnaire before generation. Route capability preferences without an interview, act on reversible design choices, and retain the agent's structured ask bridge for genuine blockers and explicit interview requests. Permission gates and paid-action authorization are unchanged.
+
+  Reuse validated, matching answers from existing session tool results as labelled data within the existing context budget. Preserve conversation and brief priority; do not infer answers from cancelled, empty, malformed, or historical count-only results. Keep legacy clarification helpers compatible without using them as the live generation path.
+
+- cd39c0c: Add optional viewport and bounded click, fill, keyboard, and assertion steps to preview. Report ordered interaction evidence and the final visible screen so connected products can verify shared state and navigation before completion. Existing render-only calls remain supported; checks run in an isolated disposable browser and do not promise persistence or coverage of untested flows.
+- eff688b: Preserve delivered active instructions, their identity, and completed tool results during transport and reasoning recovery. Continue the interrupted pi transcript without replaying the original prompt or duplicating delivery.
+- c9d7e20: Guide app generation toward bounded connected local prototypes with shared data, working navigation and back paths, relevant form states, and readable JSX. Preserve single-screen, document, deck, and narrow revision scope; clarify simulated services and sandbox persistence limits. Align built-in method skills with behavior-focused preview checks and concrete repairs instead of automatic polish quotas.
+- 619d7af: Guide tweak declarations toward consequential, implemented design choices with source-matched defaults, shared bindings, constrained options, and preserved user selections. Add method guidance for checking alternate rendered values and restoring defaults without claiming artifact previews test the host tweak panel or automatically synchronize unbound files. Keep targeted tweak edits narrow and avoid delaying the first working frame.
+- 729e356: Coordinate participating workspace writers by canonical file path across designs.
+  Conditional saves and agent text edits compare expected disk bytes inside the
+  writer queue; stale agent edits fail visibly and refresh the file view for an
+  explicit retry. External processes remain outside the in-process atomicity boundary.
+- 631143d: Add **Decompose to UI Kit** — opt-in sidebar action that emits a `ui_kits/<slug>/{index.html, components/*.tsx, tokens.css, manifest.json, README.md}` bundle shaped for downstream coding-agent handoff (Claude Code, Cursor). Decomposition is prompt-driven (no AST/parser deps); the orchestrator persists the structured plan to the virtual fs in a single atomic call. Output carries `schemaVersion: 1` so downstream consumers can evolve safely.
+
+  Three new agent tools in `packages/core/src/tools/`:
+
+  - `decompose_to_ui_kit` — orchestrator. Emits the full bundle from a source image + design brief.
+  - `verify_ui_kit_parity` — deterministic verifier (no LLM, no cost): element-count parity, visible-text coverage, token coverage. Returns `passCount/totalChecks` derived score (no fabricated floats).
+  - `verify_ui_kit_visual_parity` — vision-LLM judge wrapper. 12-check boolean rubric across 5 dimensions (layout / color / typography / content / components), anchor-calibrated reasoning-then-score chain-of-thought (WebDevJudge / Prometheus-Vision / Trust-but-Verify ICCV 2025). Host injects `renderUiKit` (headless screenshot) and `judgeVisualParity` (multimodal call) via the same deps interface as `generate_image_asset`. Without injections the tool returns `status: "unavailable"` and the agent proceeds with the deterministic verifier alone.
+
+  `decomposePrompt.ts` (EN + ZH) walks the agent through decompose → verify (both) → reconcile gaps → iterate (max 2) → done with HONEST cost summary. Per-decompose cost surfaces inline as a toast.
+
+  Refs #225 (Phase 1 of the requested image → componentization → prototype workflow). Phase 2 (cross-page flows, state machines, prototype orchestration) is tracked separately.
+
+- f2a9dbb: Preserve string-valued DESIGN.md component extensions with warnings, as required by Google's alpha consumer specification, rather than failing an otherwise working artifact. Keep malformed token values and runtime failures blocking and provide concrete object-shape repair guidance.
+
+  Surface non-blocking metadata warnings in done results and preserve error/warning counts through repeated stream/history compaction. Update the design-system method's portability guidance without silently rewriting user tokens or changing the repair limit.
+
+- a9609e6: Pass optional source-path context to runtime verification and resolve local assets against the latest bound workspace under the workspace path lock. Preview and done share safe file access and source-relative base URLs, including nested source files. Missing or out-of-workspace assets still fail and now identify the requested resource URL.
+- 0db17ee: Use supported default reasoning for GPT-6 Astra, including custom Responses gateways and helper requests. Preserve locally submitted generation state until its IPC response arrives so early stream completion cannot hide errors, artifacts, or token usage.
+- d199c75: Queue text follow-ups or steer the next safe processing step during generation using pi's native message queues. Preserve per-design drafts, delivery receipts, and recoverable undelivered messages in local session JSONL without bypassing permission or question gates.
+- b2d020d: Forward image attachments through OpenAI-compatible and Anthropic-style provider paths instead of only marking Codex synthesized models as image-capable.
+- f2758a6: Rewrite shared design prompts and seven on-demand methods around requested outcomes, coherent early slices, preserved journeys and focus, brief-grounded visual choices, and observed completion. Remove duplicated host procedures, rigid aesthetic quotas, and contradictory inferred-tweak prohibitions while retaining runtime, permission, source-format, brand, and data boundaries.
+
+  Add mode/provenance/feature-profile budget contracts and validate the method's DESIGN.md example against the actual schema. Document official prompting sources and the limits of prompt-only validation. Existing local method copies require a separate ownership-preserving upgrade; this change does not overwrite user templates or alter model/provider settings.
+
+- 2d95f7f: Add a bounded preview select action for native single-selection dropdowns. Select options by exact value using browser input/change events, with explicit errors for disabled controls/options, unsupported multiple selects, and missing or ambiguous targets. Keep existing step budgets and keyboard restrictions.
+- c9a512b: Clarify preview's existing 16-step hard limit in both the tool and steps schema descriptions, including counting assertions and retrying rejected arguments. Guide independent short journeys with fresh setup rather than assuming state continues between calls. Retain existing execution and time bounds.
+- f0d675c: Guide substantial fresh app generation through a few valid, renderable milestones: an early coherent frame, connected journeys, and integrated craft and responsive refinement. Allow early frame previews without confusing them with full behavior verification, require syntactically complete source after each edit, and preserve the final requested scope without mandatory extra rounds.
+- 8d4590a: Clarify that an early app checkpoint precedes secondary-screen implementation and full styling. Guide navigation revisions to preserve access to core record actions and return/recovery paths from newly reachable screens, checking changed entry paths instead of relying on old-screen checks or repeating every cosmetic check. These prompt contracts do not guarantee model compliance or fix runtime routing.
+- e70430d: Recover a truncated design-session brief with one bounded larger-output retry, retaining the previous brief on failure and including reported usage from the truncated attempt. Keep length-stop errors typed without accepting partial completion content.
+- 729e356: Keep generation ownership until cancellation and cleanup settle. Bind clarification,
+  preview, verification, and workspace publication to cancellation; prevent cancelled
+  prompt/recovery admissions and preserve queued messages for explicit recovery.
+
+  Use pi's sequential ask barrier and reject remaining tools when the third failed
+  done check exhausts repair attempts. Report incomplete verification without another
+  provider turn or misclassifying the repair limit as a user cancellation.
+
+- 573546f: Report unresolved final design verification as GENERATION_INCOMPLETE, including repair-limit exhaustion and remaining verifier details, rather than returning an apparently successful result. Keep generated workspace files and session history available for inspection and retry.
+- ef5677c: Explain missing, empty, or invalid tweak declarations for the active preview
+  source instead of promising automatic controls. Surface malformed declarations
+  without crashing the panel. Clarify that the tweaks scanner only discovers
+  declarations: unrelated starter values are not controls for the active preview.
+- fb92207: Give run-preference preflight a bounded inventory of existing workspace files and recognize workspace DESIGN.md as design guidance. Document-only demo inputs no longer look like missing references just because App.jsx has not been generated. Inventory omissions remain unknown, not proof of missing files; substantive clarification stays available.
+- Updated dependencies [729e356]
+- Updated dependencies [f2a9dbb]
+- Updated dependencies [0db17ee]
+- Updated dependencies [d199c75]
+- Updated dependencies [b2d020d]
+- Updated dependencies [a3a08e6]
+- Updated dependencies [e70430d]
+- Updated dependencies [729e356]
+- Updated dependencies [ef5677c]
+- Updated dependencies [729e356]
+  - @open-codesign/shared@0.2.2
+  - @open-codesign/providers@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

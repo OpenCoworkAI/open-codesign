@@ -12,6 +12,7 @@ export interface GenerateImageOptions {
   prompt: string;
   model?: string | undefined;
   baseUrl?: string | undefined;
+  requestBase64?: boolean | undefined;
   size?: ImageSize | undefined;
   aspectRatio?: ImageAspectRatio | undefined;
   quality?: ImageQuality | undefined;
@@ -108,6 +109,7 @@ async function generateOpenAIImage(
   options: GenerateImageOptions & { prompt: string },
 ): Promise<GenerateImageResult> {
   const model = options.model?.trim() || DEFAULT_OPENAI_IMAGE_MODEL;
+  const baseUrl = options.baseUrl ?? DEFAULT_OPENAI_BASE_URL;
   const body: Record<string, unknown> = {
     model,
     prompt: options.prompt,
@@ -117,9 +119,13 @@ async function generateOpenAIImage(
   if (options.quality !== undefined) body['quality'] = options.quality;
   if (options.outputFormat !== undefined) body['output_format'] = options.outputFormat;
   if (options.background !== undefined) body['background'] = options.background;
+  // Some gateways require this parameter; strict GPT image endpoints reject it.
+  if (options.requestBase64 === true) {
+    body['response_format'] = 'b64_json';
+  }
 
   const json = await postJson<OpenAIImageResponse>(
-    joinEndpoint(options.baseUrl ?? DEFAULT_OPENAI_BASE_URL, 'images/generations'),
+    joinEndpoint(baseUrl, 'images/generations'),
     body,
     options,
   );

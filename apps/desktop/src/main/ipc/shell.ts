@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import path_module from 'node:path';
 import { CodesignError } from '@open-codesign/shared';
-import { app, ipcMain, shell } from '../electron-runtime';
+import { app, BrowserWindow, ipcMain, shell } from '../electron-runtime';
 import { getLogPath } from '../logger';
 import { isAllowedExternalUrl } from '../open-external';
 
@@ -24,5 +24,12 @@ export function registerShellIpc(): void {
       throw new CodesignError('URL not allowed', 'IPC_BAD_INPUT');
     }
     await shell.openExternal(url);
+  });
+
+  ipcMain.handle('codesign:v1:focus-window', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win?.isMinimized()) win.restore();
+    win?.show();
+    win?.focus();
   });
 }

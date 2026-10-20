@@ -1,9 +1,4 @@
-import {
-  type ChatMessage,
-  type CodesignError,
-  ERROR_CODES,
-  type ModelRef,
-} from '@open-codesign/shared';
+import { type ChatMessage, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const getModelMock = vi.fn();
@@ -14,7 +9,7 @@ vi.mock('@mariozechner/pi-ai', () => ({
   completeSimple: (...args: unknown[]) => completeSimpleMock(...args),
 }));
 
-import { complete, inferReasoning } from './index';
+import { complete, detectProviderFromKey, inferReasoning } from './index';
 
 const MODEL: ModelRef = { provider: 'openai', modelId: 'gpt-4o' };
 
@@ -23,7 +18,39 @@ afterEach(() => {
   completeSimpleMock.mockReset();
 });
 
+describe('detectProviderFromKey', () => {
+  it('recognizes Atlas Cloud API keys', () => {
+    expect(detectProviderFromKey(' apikey-test ')).toBe('atlascloud');
+  });
+});
+
 describe('complete', () => {
+  it.each([
+    [undefined, 'low'],
+    ['high', 'high'],
+    ['off', undefined],
+  ] as const)('uses the Astra reasoning default unless overridden with %s', async (override, expected) => {
+    completeSimpleMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'OK' }],
+      stopReason: 'stop',
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    });
+
+    await complete(
+      { provider: 'custom-coproxy-local', modelId: 'gpt-6-astra' },
+      [{ role: 'user', content: 'Reply OK' }],
+      {
+        apiKey: '',
+        allowKeyless: true,
+        wire: 'openai-responses',
+        baseUrl: 'http://127.0.0.1:18537/v1',
+        ...(override !== undefined ? { reasoning: override } : {}),
+      },
+    );
+
+    expect(completeSimpleMock.mock.calls[0]?.[2].reasoning).toBe(expected);
+  });
+
   it('adapts shared chat history into pi-ai context for follow-up turns', async () => {
     getModelMock.mockReturnValue({
       id: 'gpt-4o',
@@ -137,9 +164,11 @@ describe('complete', () => {
     await expect(
       complete(MODEL, [{ role: 'user', content: 'hi' }], { apiKey: 'sk-test' }),
     ).rejects.toMatchObject({
+      name: 'CompletionLengthError',
       code: ERROR_CODES.PROVIDER_ERROR,
       message: expect.stringContaining('token limit'),
-    } satisfies Partial<CodesignError>);
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+    });
   });
 
   it('synthesizes a pass-through Model when openrouter id is missing from registry', async () => {
@@ -571,6 +600,28 @@ describe('complete', () => {
         baseUrl: 'https://api.minimaxi.com/v1',
       },
     );
+  });
+
+  it('forwards the per-request timeout to pi-ai', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'OK' }],
+      stopReason: 'stop',
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    });
+
+    await complete(
+      { provider: 'custom-lmstudio', modelId: 'qwen3.6-35b-a3b' },
+      [{ role: 'user', content: 'Reply OK' }],
+      {
+        apiKey: '',
+        allowKeyless: true,
+        wire: 'openai-chat',
+        baseUrl: 'http://127.0.0.1:1234/v1',
+        timeoutMs: 7_200_000,
+      },
+    );
+
+    expect(completeSimpleMock.mock.calls[0]?.[2].timeoutMs).toBe(7_200_000);
   });
 
   it('omits pi-ai reasoning option when caller explicitly sets reasoning off', async () => {

@@ -2,14 +2,14 @@
 schemaVersion: 1
 name: craft-polish
 description: >
-  Adds the final interaction and craft surplus pass that prevents generic AI UI:
-  real clickable states, view transitions, empty states, rhythm breaks, and
-  component-reference self-checks. Use before final `done`.
+  Resolves concrete visual and interaction details and exposes meaningful
+  source-backed design choices. Use for finishing a working artifact or
+  implementing useful tweak controls, not automatic extra polish rounds.
 aliases: [polish, interaction-polish, final-pass, craft-pass]
 dependencies: []
 validationHints:
-  - final artifact includes focus and hover states for actions
-  - operational surfaces include empty loading or error states
+  - visible controls perform their promised actions and preserve reachable recovery
+  - tweak defaults and consumers agree with the rendered design
 trigger:
   providers: ['*']
   scope: system
@@ -17,55 +17,91 @@ disable_model_invocation: false
 user_invocable: true
 ---
 
-## Interactive Minimum
+## Resolve What The User Notices
 
-Before `done`, run a final craft pass. For app/tool surfaces, every clickable element must do something: change state, open a modal/drawer, switch a tab, reveal content, copy, dismiss, or show a toast. Pure hover does not count. For static one-pagers, only visible controls need behavior; decorative links can be styled as inert only when they are clearly not the point of the artifact.
+Inspect the actual result for uneven spacing, weak hierarchy, awkward wrapping,
+layout jumps, unclear selection, or missing feedback. Improve specific issues
+without accumulating decorative features. Copy feedback, transitions, and
+status indicators are useful when they explain real behavior.
 
-Include:
+Check named component references and keep JSX and CSS readable across lines.
+Use complete component-sized edits, not a monolithic rewrite or a separate
+tool call for each property. Once the requested result works and the relevant
+evidence is sufficient, do not add another generic polish pass.
 
-- At least 3 observable state changes when the artifact is an app/tool surface.
-- Animated view transitions for tabs or navigation.
-- Hover, press, and focus styles on every action.
-- One empty-state variant for a list, grid, table, chart, or inbox.
-- Active navigation indicator that uses shape/weight, not color alone.
+## Consequential Human Choices
 
-## Empty, Loading, Error
+When requested or useful, expose a few decisions with meaningful visual
+effects: brand, density, type scale, implemented layout/emphasis, or content
+visibility. Do this after the main behavior works, not before the first slice.
+Defaults should reflect the brief and the user's current selections.
 
-Every operational surface should include at least one non-happy-path state:
+Trace each key to its actual consumers across relevant screens. CSS variables
+serve ordinary visual values; structural JSX must implement its enum/boolean
+variants. A key in JSON alone does nothing. Do not imply real authentication,
+payment, or backend capability with a switch.
 
-- Empty: explain what is missing, show one next action, and avoid sad blank panels.
-- Loading: use skeletons that match the final layout, not generic gray bars.
-- Error: include a human-readable cause and a retry or fallback action.
-- Offline/disabled: use opacity plus text/shape, not color alone.
+The panel humanizes camelCase keys; enum options are plain strings, not
+label/value objects. Explain the design tradeoff in the handoff, not invented
+schema fields. For source that implements these choices:
 
-## Craft Surplus
+```js
+const TWEAK_SCHEMA = /*TWEAK-SCHEMA-BEGIN*/{
+  "density": { "kind": "enum", "options": ["comfortable", "compact"] },
+  "gap": { "kind": "number", "min": 8, "max": 32, "step": 2, "unit": "px" },
+  "showNotes": { "kind": "boolean" }
+}/*TWEAK-SCHEMA-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "density": "comfortable",
+  "gap": 16,
+  "showNotes": true
+}/*EDITMODE-END*/;
+```
 
-Add at least 3 small details when the surface supports them:
+Schema keys match defaults. Use `kind: "color"` for colors. Constrain numbers
+and options to usable implemented values. `showNotes` must govern notes
+content; `density` must select a real layout. The runtime can rerun structural
+JSX with updated `TWEAK_DEFAULTS`; do not capture stale derived state.
 
-- Stateful badge or counter with a small animation.
-- Keyboard shortcut chip.
-- Copy feedback.
-- Dismissible toast/banner.
-- Tooltip with directional arrow.
-- Relative-time tick.
-- Segmented control.
-- Accordion or drawer.
-- Deliberate visual rhythm break.
+Check a representative alternate and relevant range boundaries, then restore
+the user's defaults. Use artifact controls if present; otherwise edit the exact
+bound source values, preview, and restore. Do not leave a test value behind.
+Artifact preview cannot click the host tweak panel: these checks do not prove
+host-panel interaction or persistence. `tweaks()` does not synchronize unbound
+files or `DESIGN.md`.
 
-## Motion And Focus
+## Focused Journey Evidence
 
-- Keep UI motion under 300ms, usually 120-200ms.
-- Use `transform` and `opacity` for transitions; avoid layout-jank animations.
-- Respect `prefers-reduced-motion` for looping or large movement.
-- Focus rings must be visible on keyboard navigation.
-- Hover and pressed states should change at least two cues: surface, border, shadow, icon, text weight, or transform.
+Check changed entry points, not only the original flow. For a newly added
+booking list, cancellation must still be reachable and update the same record
+through a direct action or detail view. Include a useful return path and
+keyboard/focus behavior. A mental walkthrough is not an executed test.
 
-## Final Self-Check
+Use the live preview schema. When it supports interaction steps, select unique
+elements from the actual source and assert outcomes, not just successful clicks.
+For a task app with these IDs:
 
-Before `done`:
+```json
+{
+  "path": "App.jsx",
+  "viewport": { "width": 390, "height": 844 },
+  "steps": [
+    { "action": "fill", "selector": "#new-task", "value": "Buy milk" },
+    { "action": "click", "selector": "#add-task" },
+    { "action": "assert", "selector": "#task-list", "text": "Buy milk" },
+    { "action": "click", "selector": "#settings" },
+    { "action": "assert", "selector": "#settings-title", "visible": true },
+    { "action": "click", "selector": "#back" },
+    { "action": "assert", "selector": "#task-list", "text": "Buy milk" }
+  ]
+}
+```
 
-- Audit every JSX `<PascalCase />` reference and confirm a matching component definition or runtime-provided component exists.
-- Click-path mentally through the default view plus hidden tabs, drawers, modals, and accordions.
-- Check that no card, button, tab, chart, or list row shifts size unexpectedly on hover/state change.
-- Remove debug labels, placeholder copy, "TODO", "lorem", fake filenames, and generic names.
-- Ensure `TWEAK_DEFAULTS` exposes only meaningful controls, not every pixel.
+Use `select` only if the live schema supports it: it chooses an enabled option
+by exact value in a native single-selection select. `press` supports Enter,
+Escape, and Tab; it does not prove focus landed correctly without observable
+evidence. Assertions support visible state, contained text, and exact input
+value. Read structured step results and the final view. Calls may reset state;
+stay within current step limits rather than pretending calls share a session.
+Repair observed failures and recheck affected paths. Report unavailable checks
+instead of claiming the whole product was tested.

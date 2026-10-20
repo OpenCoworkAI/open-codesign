@@ -10,6 +10,7 @@ export interface RunProtocolPreflightInput {
   historyCount: number;
   workspaceState: RunProtocolWorkspaceState;
   runPreferences: DesignRunPreferencesV1;
+  /** Legacy opt-in caller contract; the desktop no longer supplies router questions. */
   routerQuestions?: AskInput['questions'] | undefined;
   attachmentCount?: number | undefined;
   hasReferenceUrl?: boolean | undefined;

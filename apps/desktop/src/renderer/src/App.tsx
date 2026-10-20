@@ -1,5 +1,6 @@
 import { useT } from '@open-codesign/i18n';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { ChatSidebarFrame } from './components/ChatSidebarFrame';
 import { CommentsPanel } from './components/comment/CommentsPanel';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
@@ -15,6 +16,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { useAgentStream } from './hooks/useAgentStream';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useUpdateWiring } from './hooks/useUpdateWiring';
+import { notifyDesignInBackground } from './lib/system-notifications';
 
 // Settings opens in a separate view (Hub ↔ Workspace ↔ Settings). Keep it
 // out of the first-paint chunk — its ~2700-line tree + dynamic provider
@@ -48,7 +50,11 @@ export function App() {
   const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
-  const _sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
+  const sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useCodesignStore((s) => s.setSidebarCollapsed);
+  const previewFullscreen = useCodesignStore((s) => s.previewFullscreen);
+  const setPreviewFullscreen = useCodesignStore((s) => s.setPreviewFullscreen);
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const activeReportLocalId = useCodesignStore((s) => s.activeReportLocalId);
   const closeReportDialog = useCodesignStore((s) => s.closeReportDialog);
 
@@ -58,9 +64,24 @@ export function App() {
   );
   const [isResizing, setIsResizing] = useState(false);
 
+  useLayoutEffect(() => {
+    void currentDesignId;
+    setPreviewFullscreen(false);
+  }, [currentDesignId, setPreviewFullscreen]);
+
   const [updateStore] = useState(() => createUpdateStore({ dismissedVersion: '' }));
   useUpdateWiring(updateStore);
   useAgentStream();
+  useEffect(() => {
+    const off = window.codesign?.ask?.onRequest?.((request) => {
+      notifyDesignInBackground(useCodesignStore.getState(), request.designId, 'ask').catch(
+        (error: unknown) => console.warn('[open-codesign] system notification failed:', error),
+      );
+    });
+    return () => {
+      off?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!window.codesign) {
@@ -130,9 +151,13 @@ export function App() {
   }, [loadConfig, loadDesigns, switchDesign, syncGenerationStatus]);
 
   const ready = configLoaded && config?.hasKey;
-  const prefillComposer = useCallback((text: string) => {
-    setPrefillPrompt((prev) => ({ id: (prev?.id ?? 0) + 1, text }));
-  }, []);
+  const prefillComposer = useCallback(
+    (text: string) => {
+      setSidebarCollapsed(false);
+      setPrefillPrompt((prev) => ({ id: (prev?.id ?? 0) + 1, text }));
+    },
+    [setSidebarCollapsed],
+  );
 
   const bindings = useMemo(
     () => [
@@ -152,7 +177,8 @@ export function App() {
       },
       {
         combo: 'escape',
-        handler: () => {
+        handler: (event: KeyboardEvent) => {
+          if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
           if (designToDelete) {
             requestDeleteDesign(null);
             return;
@@ -167,6 +193,10 @@ export function App() {
           }
           if (interactionMode !== 'default') {
             setInteractionMode('default');
+            return;
+          }
+          if (previewFullscreen) {
+            setPreviewFullscreen(false);
             return;
           }
           if (view === 'settings') {
@@ -184,6 +214,8 @@ export function App() {
       designToDelete,
       designToRename,
       interactionMode,
+      previewFullscreen,
+      setPreviewFullscreen,
       setInteractionMode,
       setView,
       closeDesignsView,
@@ -215,16 +247,16 @@ export function App() {
         {hubMounted ? (
           <div hidden={view !== 'hub'} className="h-full">
             <HubView
-              onUseExamplePrompt={async (p) => {
+              onUseExamplePrompt={async (example) => {
                 // Clicking an example is an explicit "start a new thing"
                 // intent — always create a fresh design and preload the
                 // prompt into IT, never into whatever design the user was
                 // last on. If createNewDesign fails (e.g. another run is in
                 // flight) it surfaces a toast; we bail so the example prompt
                 // doesn't quietly land in the current design's input box.
-                const created = await createNewDesign();
+                const created = await createNewDesign(undefined, example.inputBundle);
                 if (!created) return;
-                prefillComposer(p);
+                prefillComposer(example.prompt);
                 setView('workspace');
               }}
             />
@@ -237,16 +269,15 @@ export function App() {
           >
             <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex relative">
               {isResizing && <div className="absolute inset-0 z-20 cursor-col-resize" />}
-              <div className="relative shrink-0" style={{ width: sidebarWidth }}>
+              <ChatSidebarFrame
+                collapsed={sidebarCollapsed}
+                fullscreen={previewFullscreen}
+                width={sidebarWidth}
+                onCollapsedChange={setSidebarCollapsed}
+                onResizeStart={onResizeStart}
+              >
                 <Sidebar prefillPrompt={prefillPrompt} />
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  onMouseDown={onResizeStart}
-                  className="absolute top-0 right-0 w-[5px] h-full cursor-col-resize z-10 hover:bg-[var(--color-accent)]/15 active:bg-[var(--color-accent)]/25 transition-colors duration-100"
-                  style={{ transform: 'translateX(50%)' }}
-                />
-              </div>
+              </ChatSidebarFrame>
               <main className="flex flex-col min-h-0 flex-1 min-w-0">
                 <Suspense fallback={null}>
                   <PreviewPane onPickStarter={prefillComposer} />

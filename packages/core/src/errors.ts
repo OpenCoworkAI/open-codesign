@@ -21,6 +21,7 @@ import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 export const PROVIDER_KEY_HELP_URL: Partial<Record<ProviderId, string>> = {
   openai: 'https://platform.openai.com/account/api-keys',
+  atlascloud: 'https://atlascloud.ai/',
   anthropic: 'https://console.anthropic.com/settings/keys',
   openrouter: 'https://openrouter.ai/settings/keys',
   google: 'https://aistudio.google.com/app/apikey',

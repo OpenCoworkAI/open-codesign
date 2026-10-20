@@ -72,7 +72,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.check_bot.outputs.has_review_for_current_head != 'true'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
@@ -160,7 +160,7 @@ jobs:
       - name: Run Codex for PR Review
         id: run_codex
         if: steps.check_bot.outputs.has_review_for_current_head != 'true' && steps.review_config.outputs.is_deepseek != 'true'
-        uses: openai/codex-action@e0fdf01220eb9a88167c4898839d273e3f2609d1 # v1
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}

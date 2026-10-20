@@ -207,7 +207,8 @@ h3,
   outline: none;
   box-shadow: none;
   background: transparent;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
 .codesign-prompt-textarea:focus,
 .codesign-prompt-textarea:focus-visible {
@@ -215,10 +216,14 @@ h3,
   outline: none;
   box-shadow: none;
 }
-.codesign-prompt-textarea::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
+.codesign-chat-sidebar {
+  container-type: size;
+}
+
+.codesign-prompt-context {
+  max-height: min(calc(var(--size-control-md) * 3), 18cqh);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Markdown prose inside assistant chat bubbles and file previews */

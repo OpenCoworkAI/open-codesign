@@ -1,6 +1,27 @@
 import type { ExampleContent } from '../index';
 
 export const zhCNExamples: Record<string, ExampleContent> = {
+  daymark: {
+    title: 'Daymark：从需求到待办应用',
+    description:
+      '五份可编辑输入：产品简报、任务、项目、原创标志与设计规范。连接今日任务、项目详情与任务编辑。',
+    prompt:
+      '根据工作区的 product-brief.md、tasks.json、projects.json、logo.svg 和 DESIGN.md，制作 Daymark 移动优先待办原型。先阅读全部文件，保留原始输入并使用真实本地标志与设计规范。实现今日、项目列表、项目详情和任务编辑完整流程，共享任务状态，新增、编辑、完成任务后所有列表与计数同步；处理空状态、校验和返回导航。仅用模拟数据，无后端、登录、支付、网络请求或安装。用 App.jsx 实现响应式可访问界面，更新 DESIGN.md，预览并操作主流程后完成；不要声称未测试的功能已验证。',
+  },
+  'common-ground': {
+    title: 'Common Ground：工作坊预约',
+    description:
+      '从简报、排期 CSV 与原创海报构建发现、详情、预约和确认流程；所有预约均为本地模拟。',
+    prompt:
+      '先阅读工作区 product-brief.md、schedule.csv、poster.svg、logo.svg 和 DESIGN.md，为虚构品牌 Common Ground 制作完整工作坊预约原型。使用本地原创海报、标志与规范，以 CSV 为场次、价格和容量依据。连接发现、详情、预约表单和确认页，共享已选场次与访客信息，校验人数和联系方式，防止重复扣减容量，取消后恢复名额；支持返回和无结果状态。明确标注模拟预约、无实际付款。保留输入文件，用 App.jsx 实现移动和桌面响应式界面，更新 DESIGN.md；不添加后端、登录、支付、网络调用或依赖安装。预览并操作主流程再完成，不把未测试行为标为已验证。',
+  },
+  trailhead: {
+    title: 'Trailhead：从草图到行程规划',
+    description:
+      '原创 SVG 低保真草图、注释简报和示例行程，生成互联的行程编辑器；无需视觉模型也可读取注释。',
+    prompt:
+      '先阅读工作区 sketch-reference.svg、product-brief.md 和 trips.json，将 Trailhead 草稿转成完整互联的行程规划原型。SVG 是原创手绘风格低保真参考，不是手绘照片或最终成品；即使无法查看图像也要读取 SVG 文本和简报注释，仅在支持时查看图像。把三组线框转为行程列表、行程详情和停留点编辑页，不要把草图直接当最终界面。新增、删除、排序和编辑使用单一共享状态，所有页面的时长总计一致，支持校验、空状态和返回。仅用本地模拟数据，不使用真实地图、导航、预订、认证、网络或安装。保留输入，用 App.jsx 实现响应式可访问界面并创建 DESIGN.md；预览并操作主流程再完成，不声称未测试结果已验证。',
+  },
   'cosmic-animation': {
     title: '宇宙尺度动画',
     description: '面向航天科技公司的动画 Hero，含轨道、星场和任务控制细节。',

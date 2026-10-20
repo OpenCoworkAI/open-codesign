@@ -85,6 +85,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [models, setModels] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [discoveryHintKey, setDiscoveryHintKey] = useState<string | null>(null);
   const [providerRows, setProviderRows] = useState<ProviderRow[] | null>(null);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -130,8 +131,19 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
     setLoading(true);
     void window.codesign.models
       .listForProvider(provider)
-      .then((res) => setModels(res.ok ? res.models : []))
-      .catch(() => setModels([]))
+      .then((res) => {
+        if (res.ok) {
+          setModels(res.models);
+          setDiscoveryHintKey(null);
+        } else {
+          setModels([]);
+          setDiscoveryHintKey(res.hintKey ?? null);
+        }
+      })
+      .catch(() => {
+        setModels([]);
+        setDiscoveryHintKey(null);
+      })
       .finally(() => setLoading(false));
   }, [open, models, provider]);
 
@@ -188,14 +200,17 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
   const isSidebar = variant === 'sidebar';
 
   return (
-    <div ref={rootRef} className="relative w-fit">
+    <div
+      ref={rootRef}
+      className={isSidebar ? 'relative min-w-0 max-w-full' : 'relative w-full min-w-0'}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={
           isSidebar
-            ? 'inline-flex h-5 min-w-0 items-center gap-[3px] rounded-[var(--radius-sm)] px-[2px] text-[11px] text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-secondary)] cursor-pointer'
-            : 'inline-flex h-10 min-w-[220px] max-w-[340px] items-center gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] select-none whitespace-nowrap transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]'
+            ? 'inline-flex min-h-[var(--space-6)] max-w-full min-w-0 items-center gap-[var(--space-1)] rounded-[var(--radius-sm)] px-[2px] text-[var(--text-sm)] text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-secondary)] cursor-pointer'
+            : 'inline-flex h-10 w-full min-w-0 items-center gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] select-none whitespace-nowrap transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]'
         }
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -207,12 +222,12 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
           </span>
         ) : (
           <span className="inline-flex min-w-0 flex-1 items-center gap-[6px] overflow-hidden text-[var(--text-xs)] leading-none">
-            <span className="min-w-[72px] basis-[45%] truncate text-[var(--color-text-secondary)]">
+            <span className="min-w-0 basis-[45%] truncate text-[var(--color-text-secondary)]">
               {providerLabel}
             </span>
             <span className="shrink-0 text-[var(--color-border-strong)]">·</span>
             <span
-              className="min-w-[64px] basis-[55%] truncate text-[var(--color-text-muted)]"
+              className="min-w-0 basis-[55%] truncate text-[var(--color-text-muted)]"
               style={{ fontFamily: 'var(--font-sans)' }}
             >
               {compactModelLabel}
@@ -231,7 +246,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
           className={`absolute z-50 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] shadow-[var(--shadow-card)] ${
             isSidebar
               ? 'bottom-full mb-[var(--space-1)] left-0 min-w-[220px]'
-              : 'top-full mt-[var(--space-1)] right-0 min-w-[320px]'
+              : 'top-full mt-[var(--space-1)] right-0 min-w-[320px] max-w-[calc(100vw-2*var(--space-5))]'
           }`}
         >
           {showSearch && (
@@ -290,7 +305,7 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
                     role="option"
                     aria-selected={isActive}
                     onClick={() => void switchModel(m)}
-                    className={`relative w-full text-left px-[var(--space-3)] py-[var(--space-1_5)] text-[12px] transition-colors ${
+                    className={`relative w-full text-left px-[var(--space-3)] py-[var(--space-1_5)] text-[12px] [overflow-wrap:anywhere] transition-colors ${
                       isActive
                         ? 'bg-[var(--color-surface-hover)] font-medium text-[var(--color-text-primary)]'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]'
@@ -318,8 +333,8 @@ export function ModelSwitcher({ variant }: ModelSwitcherProps) {
                 })}
               </div>
             ) : (
-              <div className="px-[var(--space-3)] py-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
-                {t('settings.providers.noModel')}
+              <div className="px-[var(--space-3)] py-[var(--space-2)] text-[var(--text-xs)] leading-5 text-[var(--color-text-muted)]">
+                {discoveryHintKey !== null ? t(discoveryHintKey) : t('settings.providers.noModel')}
               </div>
             )}
           </div>
