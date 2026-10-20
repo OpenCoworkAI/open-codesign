@@ -50,8 +50,10 @@ export {
   type DesignMdDocument,
   type DesignMdFinding,
   type DesignMdFindingSeverity,
+  type DesignMdFrontmatter,
   formatDesignMdForPrompt,
   parseDesignMd,
+  serializeDesignMd,
   validateDesignMd,
 } from './design-md';
 export * from './source-edits';

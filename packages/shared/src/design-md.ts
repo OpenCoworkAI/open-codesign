@@ -1,4 +1,4 @@
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 export type DesignMdFindingSeverity = 'error' | 'warning' | 'info';
 
@@ -23,7 +23,8 @@ export interface DesignMdDocument {
 const FRONTMATTER_MAX_CHARS = 64 * 1024;
 const BODY_PROMPT_MAX_CHARS = 2000;
 
-const ALLOWED_TOP_LEVEL = new Set([
+/** The top-level fields, in the order the serializer writes them. */
+const FRONTMATTER_FIELDS = [
   'version',
   'name',
   'description',
@@ -32,7 +33,9 @@ const ALLOWED_TOP_LEVEL = new Set([
   'rounded',
   'spacing',
   'components',
-]);
+] as const;
+
+const ALLOWED_TOP_LEVEL: ReadonlySet<string> = new Set(FRONTMATTER_FIELDS);
 
 const TYPOGRAPHY_KEYS = new Set([
   'fontFamily',
@@ -371,11 +374,11 @@ export function formatDesignMdForPrompt(raw: string): string {
   return ['---', doc.frontmatterText.trimEnd(), '---', '', body].join('\n');
 }
 
-function orderedBodySections(doc: DesignMdDocument): DesignMdBodySection[] {
-  if (doc.bodySections.length === 0) return [];
+function orderedBodySections(sections: DesignMdBodySection[]): DesignMdBodySection[] {
+  if (sections.length === 0) return [];
   const known: DesignMdBodySection[] = [];
   const unknown: DesignMdBodySection[] = [];
-  for (const section of doc.bodySections) {
+  for (const section of sections) {
     const canonical = canonicalSectionHeading(section.heading);
     if (KNOWN_SECTION_INDEX.has(canonical)) known.push({ ...section, heading: canonical });
     else unknown.push(section);
@@ -399,7 +402,7 @@ function formatBodySectionsForPrompt(doc: DesignMdDocument): string {
       : doc.body;
   }
 
-  const rendered = orderedBodySections(doc).map(renderSection);
+  const rendered = orderedBodySections(doc.bodySections).map(renderSection);
   const full = rendered.join('\n\n');
   if (full.length <= BODY_PROMPT_MAX_CHARS) return full;
 
@@ -422,4 +425,34 @@ function formatBodySectionsForPrompt(doc: DesignMdDocument): string {
     break;
   }
   return `${out.join('\n\n')}${suffix}`;
+}
+
+/** The frontmatter fields `validateDesignMd` accepts, in the order they are written. */
+export interface DesignMdFrontmatter {
+  name: string;
+  version?: string;
+  description?: string;
+  colors?: Record<string, string>;
+  typography?: Record<string, Record<string, unknown>>;
+  rounded?: Record<string, string>;
+  spacing?: Record<string, string | number>;
+  components?: Record<string, Record<string, string>>;
+}
+
+/**
+ * Writes a DESIGN.md: the frontmatter in the canonical field order, then the body sections
+ * in the canonical section order. Strings such as `#1a1c1e` are quoted so they stay strings,
+ * and long values are not folded. `validateDesignMd` reports anything the fields get wrong.
+ */
+export function serializeDesignMd(input: {
+  frontmatter: DesignMdFrontmatter;
+  sections?: DesignMdBodySection[];
+}): string {
+  // yaml leaves out the fields that are undefined.
+  const fields = Object.fromEntries(FRONTMATTER_FIELDS.map((key) => [key, input.frontmatter[key]]));
+  const frontmatter = stringifyYaml(fields, { lineWidth: 0 }).trimEnd();
+  const body = orderedBodySections(input.sections ?? [])
+    .map(renderSection)
+    .join('\n\n');
+  return body === '' ? `---\n${frontmatter}\n---\n` : `---\n${frontmatter}\n---\n\n${body}\n`;
 }

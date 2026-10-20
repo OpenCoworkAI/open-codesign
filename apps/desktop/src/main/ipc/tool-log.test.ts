@@ -84,7 +84,7 @@ describe('done diagnostic durability', () => {
 
   it('keeps warnings visible without changing successful completion to failure', () => {
     const result = {
-      content: [{ type: 'text', text: 'ok\nNon-blocking design metadata warnings' }],
+      content: [{ type: 'text', text: 'ok\nNon-blocking warnings' }],
       details: {
         status: 'ok',
         path: 'App.jsx',

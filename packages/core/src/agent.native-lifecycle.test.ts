@@ -222,7 +222,7 @@ describe('production generateViaAgent with installed pi', () => {
       async (source: string, context?: { path: string; signal?: AbortSignal }) => {
         expect(context?.signal).toBeInstanceOf(AbortSignal);
         expect(source).toBe(readFileSync(join(root, 'App.jsx'), 'utf8'));
-        return [];
+        return { errors: [], warnings: [] };
       },
     );
     const checks: DoneDetails[] = [];
@@ -438,7 +438,10 @@ describe('production generateViaAgent with installed pi', () => {
     const controller = new AbortController();
     const active = new ActiveRunMessages('design', 'run', () => {}, controller.signal);
     const ended: AgentMessage[][] = [];
-    const verify = vi.fn(async () => [{ message: 'Broken runtime', source: 'runtime' }]);
+    const verify = vi.fn(async () => ({
+      errors: [{ message: 'Broken runtime', source: 'runtime' }],
+      warnings: [],
+    }));
     script([
       [todos()],
       ...Array.from({ length: 5 }, (_, n) => [
@@ -637,7 +640,10 @@ describe('production generateViaAgent with installed pi', () => {
 
     it('leaves repeated done calls to the done repair limit', async () => {
       seed();
-      const verify = vi.fn(async () => [{ message: 'Broken runtime', source: 'runtime' }]);
+      const verify = vi.fn(async () => ({
+        errors: [{ message: 'Broken runtime', source: 'runtime' }],
+        warnings: [],
+      }));
       script([[todos()], ...Array.from({ length: 5 }, () => [done()]), 'Must not complete']);
       await expect(generateViaAgent(input, { fs, runtimeVerify: verify })).rejects.toMatchObject({
         code: 'GENERATION_INCOMPLETE',

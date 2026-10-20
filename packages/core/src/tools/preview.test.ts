@@ -7,9 +7,12 @@ import {
 import { CodesignError } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type LayoutIssue,
   MAX_ASSET_ERRORS,
   MAX_CONSOLE_ENTRIES,
+  MAX_LAYOUT_ISSUES,
   MAX_PREVIEW_STEPS,
+  MAX_PREVIEW_WARNINGS,
   makePreviewTool,
   type PreviewInput,
   type PreviewResult,
@@ -345,6 +348,79 @@ describe('makePreviewTool', () => {
     const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
     expect(result.details.ok).toBe(true);
     expect(JSON.stringify(result.content)).toContain('isolated browser terminated');
+  });
+
+  describe('layout issues', () => {
+    const issue = (index: number): LayoutIssue => ({
+      check: 'horizontal-overflow',
+      viewportWidth: 390,
+      selector: `body > div:nth-of-type(${index})`,
+      message: `Element ${index} extends past the right edge`,
+      measured: 420,
+      limit: 390,
+    });
+
+    it('returns layout issues to the agent without failing the preview', async () => {
+      const runPreview = vi.fn().mockResolvedValue(cannedResult({ layoutIssues: [issue(1)] }));
+
+      const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+
+      expect(result.details.ok).toBe(true);
+      expect(result.details.layoutIssues).toEqual([issue(1)]);
+      expect(result.content[0]).toMatchObject({ text: expect.stringContaining('preview ok') });
+      expect(JSON.stringify(result.content)).toContain('Element 1 extends past the right edge');
+    });
+
+    it('counts layout issues in the summary line, and only when there are some', async () => {
+      const summaryOf = async (layoutIssues?: LayoutIssue[]) => {
+        const runPreview = vi
+          .fn()
+          .mockResolvedValue(cannedResult(layoutIssues ? { layoutIssues } : {}));
+        const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+        const first = result.content[0];
+        return first?.type === 'text' ? first.text : '';
+      };
+
+      expect(await summaryOf([issue(1)])).toBe(
+        'preview ok: 42 nodes, 0 console errors, 0 asset errors, 1 layout issue',
+      );
+      expect(await summaryOf([issue(1), issue(2)])).toBe(
+        'preview ok: 42 nodes, 0 console errors, 0 asset errors, 2 layout issues',
+      );
+      expect(await summaryOf()).toBe('preview ok: 42 nodes, 0 console errors, 0 asset errors');
+    });
+
+    it('caps layout issues to the documented budget', async () => {
+      const issues = Array.from({ length: MAX_LAYOUT_ISSUES + 10 }, (_, index) => issue(index));
+      const runPreview = vi.fn().mockResolvedValue(cannedResult({ layoutIssues: issues }));
+
+      const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+
+      expect(MAX_LAYOUT_ISSUES).toBe(20);
+      expect(result.details.layoutIssues).toEqual(issues.slice(0, MAX_LAYOUT_ISSUES));
+    });
+
+    it('caps warnings to the documented budget', async () => {
+      const warnings = Array.from(
+        { length: MAX_PREVIEW_WARNINGS + 1 },
+        (_, index) => `Note ${index}`,
+      );
+      const runPreview = vi.fn().mockResolvedValue(cannedResult({ warnings }));
+
+      const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+
+      expect(MAX_PREVIEW_WARNINGS).toBe(5);
+      expect(result.details.warnings).toEqual(warnings.slice(0, MAX_PREVIEW_WARNINGS));
+    });
+
+    it('leaves the field out when the host did not measure the layout', async () => {
+      const runPreview = vi.fn().mockResolvedValue(cannedResult());
+
+      const result = await makePreviewTool(runPreview).execute('call', { path: 'App.jsx' });
+
+      expect(result.details).not.toHaveProperty('layoutIssues');
+      expect(result.content).toHaveLength(1);
+    });
   });
 
   it('propagates select steps and accepts empty and maximum-length option values', async () => {

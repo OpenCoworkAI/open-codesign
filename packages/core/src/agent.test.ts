@@ -1228,8 +1228,8 @@ describe('generateViaAgent()', () => {
     };
     const runtimeVerify = vi
       .fn()
-      .mockResolvedValueOnce([{ message: 'Temporary render error' }])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce({ errors: [{ message: 'Temporary render error' }], warnings: [] })
+      .mockResolvedValueOnce({ errors: [], warnings: [] });
     const result = await generateViaAgent(
       {
         prompt: 'design a meditation app',

@@ -36,10 +36,20 @@ export {
   ModelRegistry,
   SessionManager,
 } from './agent-session.js';
+export type {
+  DesignFields,
+  ImportOrigin,
+  TokenFile,
+  TokenImport,
+  TokenImportReport,
+  UnresolvedReason,
+  UnsupportedReason,
+} from './brand/index.js';
 export {
   extractFromCssVars,
   extractFromTailwindConfig,
   importDtcgJson,
+  mapTokensToDesignFields,
 } from './brand/index.js';
 export { DEFAULT_CONTEXT_WINDOW, resolveContextWindow } from './context-window.js';
 export {
@@ -119,7 +129,9 @@ export {
 export {
   type DoneDetails,
   type DoneError,
+  type DoneRuntimeResult,
   type DoneRuntimeVerifier,
+  LAYOUT_WARNING_SOURCE,
   makeDoneTool,
 } from './tools/done.js';
 export {
@@ -137,6 +149,8 @@ export {
   type WorkspaceInspection,
 } from './tools/inspect-workspace.js';
 export {
+  type LayoutIssue,
+  MAX_LAYOUT_ISSUES,
   makePreviewTool,
   type PreviewInput,
   type PreviewResult,

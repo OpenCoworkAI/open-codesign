@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@mariozechner/pi-agent-core": "^0.73.1",
-    "@mariozechner/pi-ai": "^0.72.1",
-    "@mariozechner/pi-coding-agent": "^0.72.1",
+    "@mariozechner/pi-ai": "^0.73.1",
+    "@mariozechner/pi-coding-agent": "^0.73.1",
     "@open-codesign/providers": "workspace:*",
     "@open-codesign/shared": "workspace:*",
     "@sinclair/typebox": "^0.34.49"
