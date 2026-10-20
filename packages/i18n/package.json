@@ -21,12 +21,12 @@
     "react-i18next": "^17.0.6"
   },
   "peerDependencies": {
-    "react": "^19.3.0"
+    "react": "^19.3.1"
   },
   "devDependencies": {
     "@open-codesign/shared": "workspace:*",
     "@types/react": "^19.3.0",
-    "react": "^19.3.0",
+    "react": "^19.3.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }
