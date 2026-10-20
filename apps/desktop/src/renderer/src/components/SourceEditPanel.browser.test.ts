@@ -992,42 +992,46 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     'before initial selection',
     'after initial selection',
     'changed and moved before initial selection',
-  ])('never binds a removed static A to the dynamic A survivor %s', async (timing) => {
-    const effect =
-      timing === 'before initial selection'
-        ? `React.useLayoutEffect(()=>{const host=document.getElementById('history');if(host?.firstChild)host.removeChild(host.firstChild);document.documentElement.dataset.removed='yes'},[]);`
-        : timing === 'changed and moved before initial selection'
-          ? `React.useLayoutEffect(()=>{const host=document.getElementById('history');const first=host?.firstChild;if(first){first.textContent='Z';document.getElementById('destination').appendChild(first)}document.documentElement.dataset.removed='yes'},[]);`
-          : '';
-    const source = `function App(){${effect}return <main><h1>Mutation history</h1><p id="history">{'A'}{String('A')}{'B'}</p><div id="destination"/></main>}`;
-    await writeFile(join(workspace, 'App.jsx'), source);
-    await page.reload();
-    await artifact();
-    await enterEdit();
-    const frame = await artifact('#history');
-    if (timing !== 'after initial selection') {
-      await frame.waitForFunction(() => document.documentElement.dataset['removed'] === 'yes');
-    } else {
-      await selectText('#history', 'A');
-      expect(await fieldDisabled('A')).toBe(false);
-      await frame.$eval('#history', (node) => {
-        if (node.firstChild) node.removeChild(node.firstChild);
-      });
-    }
-    await frame.click('#history');
-    await page.waitForFunction(() =>
-      Array.from(document.querySelectorAll('aside textarea')).some(
-        (node) => node instanceof HTMLTextAreaElement && node.value === 'A' && node.disabled,
-      ),
-    );
-    expect(await fieldDisabled('A')).toBe(true);
-    await assertPreviewText('#history', 'AB');
-    expect(records.filter((record) => record.method === 'apply')).toHaveLength(0);
-    expect(await disk()).toBe(source);
-    verified.push(
-      `mutation history ${timing}: source static A/dynamic A/static B loses first node; remaining dynamic A never authorizes removed static definition, no disk write`,
-    );
-  }, 60_000);
+  ])(
+    'never binds a removed static A to the dynamic A survivor %s',
+    async (timing) => {
+      const effect =
+        timing === 'before initial selection'
+          ? `React.useLayoutEffect(()=>{const host=document.getElementById('history');if(host?.firstChild)host.removeChild(host.firstChild);document.documentElement.dataset.removed='yes'},[]);`
+          : timing === 'changed and moved before initial selection'
+            ? `React.useLayoutEffect(()=>{const host=document.getElementById('history');const first=host?.firstChild;if(first){first.textContent='Z';document.getElementById('destination').appendChild(first)}document.documentElement.dataset.removed='yes'},[]);`
+            : '';
+      const source = `function App(){${effect}return <main><h1>Mutation history</h1><p id="history">{'A'}{String('A')}{'B'}</p><div id="destination"/></main>}`;
+      await writeFile(join(workspace, 'App.jsx'), source);
+      await page.reload();
+      await artifact();
+      await enterEdit();
+      const frame = await artifact('#history');
+      if (timing !== 'after initial selection') {
+        await frame.waitForFunction(() => document.documentElement.dataset['removed'] === 'yes');
+      } else {
+        await selectText('#history', 'A');
+        expect(await fieldDisabled('A')).toBe(false);
+        await frame.$eval('#history', (node) => {
+          if (node.firstChild) node.removeChild(node.firstChild);
+        });
+      }
+      await frame.click('#history');
+      await page.waitForFunction(() =>
+        Array.from(document.querySelectorAll('aside textarea')).some(
+          (node) => node instanceof HTMLTextAreaElement && node.value === 'A' && node.disabled,
+        ),
+      );
+      expect(await fieldDisabled('A')).toBe(true);
+      await assertPreviewText('#history', 'AB');
+      expect(records.filter((record) => record.method === 'apply')).toHaveLength(0);
+      expect(await disk()).toBe(source);
+      verified.push(
+        `mutation history ${timing}: source static A/dynamic A/static B loses first node; remaining dynamic A never authorizes removed static definition, no disk write`,
+      );
+    },
+    60_000,
+  );
 
   it('revalidates a selected field before save and refuses an intervening runtime mutation', async () => {
     await loadPreviewOnlyFixture();

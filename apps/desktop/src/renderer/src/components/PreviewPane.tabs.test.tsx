@@ -47,17 +47,16 @@ describe('canvas file tab content', () => {
     expect(html).not.toContain('data-testid="dedicated-file-preview"');
   });
 
-  it.each([
-    'App.jsx',
-    'DESIGN.md',
-    'assets/logo.svg',
-  ])('shows only the requested file when switching to the %s tab', (path) => {
-    useCodesignStore.setState({
-      canvasTabs: [{ kind: 'files' }, { kind: 'file', path }],
-      activeCanvasTab: 1,
-    });
-    const html = renderToStaticMarkup(<PreviewPane onPickStarter={vi.fn()} />);
-    expect(html).toContain(`data-testid="dedicated-file-preview">${path}</main>`);
-    expect(html).not.toContain('data-testid="workspace-file-browser"');
-  });
+  it.each(['App.jsx', 'DESIGN.md', 'assets/logo.svg'])(
+    'shows only the requested file when switching to the %s tab',
+    (path) => {
+      useCodesignStore.setState({
+        canvasTabs: [{ kind: 'files' }, { kind: 'file', path }],
+        activeCanvasTab: 1,
+      });
+      const html = renderToStaticMarkup(<PreviewPane onPickStarter={vi.fn()} />);
+      expect(html).toContain(`data-testid="dedicated-file-preview">${path}</main>`);
+      expect(html).not.toContain('data-testid="workspace-file-browser"');
+    },
+  );
 });

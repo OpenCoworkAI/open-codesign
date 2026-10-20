@@ -182,49 +182,47 @@ describe('projectRunEventToChat', () => {
     ]);
   });
 
-  it.each([
-    'completed',
-    'failed',
-    'cancelled',
-    'interrupted',
-  ] as const)('repairs a missed real tool result after the %s terminal fallback', async (outcome) => {
-    const started = event(1, { type: 'tool_call_start', toolName: 'read', toolCallId: 'tool-a' });
-    const actualResult = event(2, {
-      type: 'tool_call_result',
-      toolCallId: 'tool-a',
-      status: 'done',
-      result: { content: [{ type: 'text', text: 'result'.repeat(2_000) }] },
-      durationMs: 42,
-    });
-    const terminal = event(3, {
-      type: 'run_settled',
-      outcome,
-      message: 'Run settled before result projection was repaired',
-    });
-    // Simulate a committed result whose chat projection failed before settlement.
-    project([started, terminal]);
-    expect(rows()[0]?.payload).toMatchObject({
-      status: outcome === 'completed' ? 'done' : 'error',
-    });
-    project([actualResult]);
-    const repaired = rows()[0]?.payload as Record<string, unknown>;
-    expect(repaired).toMatchObject({
-      status: 'done',
-      durationMs: 42,
-      runResultEventKey: 'run-a:2',
-    });
-    expect(repaired['error']).toBeUndefined();
-    expect(repaired['errorMessage']).toBeUndefined();
-    const result = repaired['result'] as { content: Array<{ text: string }> };
-    expect(result.content[0]?.text.length).toBeLessThan(12_000);
-    const before = await file();
-    project([started, actualResult, terminal, actualResult]);
-    expect(await file()).toBe(before);
-    const reopened = initSnapshotsDb(path.join(root, 'design-store.json'));
-    opts = { db: reopened, sessionDir: reopened.sessionDir };
-    project([actualResult]);
-    expect(await file()).toBe(before);
-  });
+  it.each(['completed', 'failed', 'cancelled', 'interrupted'] as const)(
+    'repairs a missed real tool result after the %s terminal fallback',
+    async (outcome) => {
+      const started = event(1, { type: 'tool_call_start', toolName: 'read', toolCallId: 'tool-a' });
+      const actualResult = event(2, {
+        type: 'tool_call_result',
+        toolCallId: 'tool-a',
+        status: 'done',
+        result: { content: [{ type: 'text', text: 'result'.repeat(2_000) }] },
+        durationMs: 42,
+      });
+      const terminal = event(3, {
+        type: 'run_settled',
+        outcome,
+        message: 'Run settled before result projection was repaired',
+      });
+      // Simulate a committed result whose chat projection failed before settlement.
+      project([started, terminal]);
+      expect(rows()[0]?.payload).toMatchObject({
+        status: outcome === 'completed' ? 'done' : 'error',
+      });
+      project([actualResult]);
+      const repaired = rows()[0]?.payload as Record<string, unknown>;
+      expect(repaired).toMatchObject({
+        status: 'done',
+        durationMs: 42,
+        runResultEventKey: 'run-a:2',
+      });
+      expect(repaired['error']).toBeUndefined();
+      expect(repaired['errorMessage']).toBeUndefined();
+      const result = repaired['result'] as { content: Array<{ text: string }> };
+      expect(result.content[0]?.text.length).toBeLessThan(12_000);
+      const before = await file();
+      project([started, actualResult, terminal, actualResult]);
+      expect(await file()).toBe(before);
+      const reopened = initSnapshotsDb(path.join(root, 'design-store.json'));
+      opts = { db: reopened, sessionDir: reopened.sessionDir };
+      project([actualResult]);
+      expect(await file()).toBe(before);
+    },
+  );
 
   it('restores an actual tool error after a completed-run fallback marked it done', async () => {
     const started = event(1, {
@@ -319,25 +317,25 @@ describe('projectRunEventToChat', () => {
     expect(await file()).toBe(before);
   });
 
-  it.each([
-    'failed',
-    'interrupted',
-  ] as const)('settles unfinished tools and persists %s once', async (outcome) => {
-    const history = [
-      event(1, { type: 'tool_call_start', toolName: 'bash', toolCallId: 'tool-a' }),
-      event(2, { type: 'run_settled', outcome, message: 'Worker stopped', code: 'RUN_STOPPED' }),
-    ];
-    project(history);
-    expect(rows().map((row) => row.kind)).toEqual(['tool_call', 'error']);
-    expect(rows()[0]?.payload).toMatchObject({
-      status: 'error',
-      error: { message: 'Worker stopped' },
-    });
-    expect(rows()[1]?.payload).toMatchObject({ message: 'Worker stopped', code: 'RUN_STOPPED' });
-    const before = await file();
-    project(history);
-    expect(await file()).toBe(before);
-  });
+  it.each(['failed', 'interrupted'] as const)(
+    'settles unfinished tools and persists %s once',
+    async (outcome) => {
+      const history = [
+        event(1, { type: 'tool_call_start', toolName: 'bash', toolCallId: 'tool-a' }),
+        event(2, { type: 'run_settled', outcome, message: 'Worker stopped', code: 'RUN_STOPPED' }),
+      ];
+      project(history);
+      expect(rows().map((row) => row.kind)).toEqual(['tool_call', 'error']);
+      expect(rows()[0]?.payload).toMatchObject({
+        status: 'error',
+        error: { message: 'Worker stopped' },
+      });
+      expect(rows()[1]?.payload).toMatchObject({ message: 'Worker stopped', code: 'RUN_STOPPED' });
+      const before = await file();
+      project(history);
+      expect(await file()).toBe(before);
+    },
+  );
 
   it('records a structured error event exactly once', async () => {
     const failure = event(1, { type: 'error', message: 'Provider failed', code: 'PROVIDER_FAIL' });

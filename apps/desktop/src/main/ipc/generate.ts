@@ -457,8 +457,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   ipcMain.handle('codesign:v1:recover-runs', async (_event, raw: unknown) => {
     const input = raw as { schemaVersion?: unknown; cursors?: unknown } | null;
     if (
-      !input ||
-      input.schemaVersion !== 1 ||
+      input?.schemaVersion !== 1 ||
       !input.cursors ||
       typeof input.cursors !== 'object' ||
       Array.isArray(input.cursors)
@@ -508,8 +507,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   ipcMain.handle('codesign:v1:usage-budget', async (_event, raw: unknown) => {
     const input = raw as { schemaVersion?: unknown; designId?: unknown } | null;
     if (
-      !input ||
-      input.schemaVersion !== 1 ||
+      input?.schemaVersion !== 1 ||
       typeof input.designId !== 'string' ||
       input.designId.length === 0 ||
       input.designId.length > 512

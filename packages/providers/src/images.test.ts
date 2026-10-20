@@ -20,65 +20,64 @@ describe('generateImage', () => {
     vi.unstubAllGlobals();
   });
 
-  it.each([
-    true,
-    false,
-    undefined,
-  ])('honors the explicit base64 request option (%s) at custom endpoints', async (requestBase64) => {
-    const requests: Record<string, unknown>[] = [];
-    const server = createServer(async (req, res) => {
-      if (req.url !== '/v1/images/generations' && req.url !== '/strict/v1/images/generations') {
-        res.writeHead(404).end();
-        return;
-      }
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(Buffer.from(chunk));
-      const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
-      requests.push(body);
-      res.setHeader('content-type', 'application/json');
-      if (req.url.startsWith('/strict/') && 'response_format' in body) {
-        res
-          .writeHead(400)
-          .end(JSON.stringify({ error: { message: 'Unknown parameter: response_format' } }));
-        return;
-      }
-      res.end(
-        JSON.stringify({
-          data: [
-            req.url.startsWith('/strict/') || body['response_format'] === 'b64_json'
-              ? { b64_json: PNG_HEADER_BASE64 }
-              : { url: '/generated/image.png' },
-          ],
-        }),
-      );
-    });
-    server.listen(0, '127.0.0.1');
-    await once(server, 'listening');
-    const address = server.address();
-    if (address === null || typeof address === 'string') throw new Error('Missing server port');
-    const path = requestBase64 === true ? 'v1' : 'strict/v1';
-    const baseUrl = `http://127.0.0.1:${address.port}/${path}/`;
-    try {
-      const result = await generateImage({
-        provider: 'openai',
-        apiKey: 'local-test-only',
-        prompt: 'hero image',
-        baseUrl,
-        requestBase64,
+  it.each([true, false, undefined])(
+    'honors the explicit base64 request option (%s) at custom endpoints',
+    async (requestBase64) => {
+      const requests: Record<string, unknown>[] = [];
+      const server = createServer(async (req, res) => {
+        if (req.url !== '/v1/images/generations' && req.url !== '/strict/v1/images/generations') {
+          res.writeHead(404).end();
+          return;
+        }
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(Buffer.from(chunk));
+        const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
+        requests.push(body);
+        res.setHeader('content-type', 'application/json');
+        if (req.url.startsWith('/strict/') && 'response_format' in body) {
+          res
+            .writeHead(400)
+            .end(JSON.stringify({ error: { message: 'Unknown parameter: response_format' } }));
+          return;
+        }
+        res.end(
+          JSON.stringify({
+            data: [
+              req.url.startsWith('/strict/') || body['response_format'] === 'b64_json'
+                ? { b64_json: PNG_HEADER_BASE64 }
+                : { url: '/generated/image.png' },
+            ],
+          }),
+        );
       });
-      expect(result.base64).toBe(PNG_HEADER_BASE64);
-      expect(requests).toHaveLength(1);
-      if (requestBase64 === true) {
-        expect(requests[0]).toHaveProperty('response_format', 'b64_json');
-      } else {
-        expect(requests[0]).not.toHaveProperty('response_format');
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const address = server.address();
+      if (address === null || typeof address === 'string') throw new Error('Missing server port');
+      const path = requestBase64 === true ? 'v1' : 'strict/v1';
+      const baseUrl = `http://127.0.0.1:${address.port}/${path}/`;
+      try {
+        const result = await generateImage({
+          provider: 'openai',
+          apiKey: 'local-test-only',
+          prompt: 'hero image',
+          baseUrl,
+          requestBase64,
+        });
+        expect(result.base64).toBe(PNG_HEADER_BASE64);
+        expect(requests).toHaveLength(1);
+        if (requestBase64 === true) {
+          expect(requests[0]).toHaveProperty('response_format', 'b64_json');
+        } else {
+          expect(requests[0]).not.toHaveProperty('response_format');
+        }
+      } finally {
+        await new Promise<void>((resolve, reject) => {
+          server.close((err) => (err ? reject(err) : resolve()));
+        });
       }
-    } finally {
-      await new Promise<void>((resolve, reject) => {
-        server.close((err) => (err ? reject(err) : resolve()));
-      });
-    }
-  });
+    },
+  );
 
   it.each([
     'https://api.openai.com/v1',

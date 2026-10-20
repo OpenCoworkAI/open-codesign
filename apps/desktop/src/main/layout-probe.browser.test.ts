@@ -148,12 +148,15 @@ describe.skipIf(!chrome)('layout checks in system Chrome', () => {
         'from the top but the box starts at',
         -1,
       ],
-    ])('names the %s side when text sticks out of it', async (_side, markup, wording, direction) => {
-      const [issue] = await clippedAt(markup);
+    ])(
+      'names the %s side when text sticks out of it',
+      async (_side, markup, wording, direction) => {
+        const [issue] = await clippedAt(markup);
 
-      expect(issue?.message).toContain(wording);
-      expect(Math.sign((issue?.measured ?? 0) - (issue?.limit ?? 0))).toBe(direction);
-    });
+        expect(issue?.message).toContain(wording);
+        expect(Math.sign((issue?.measured ?? 0) - (issue?.limit ?? 0))).toBe(direction);
+      },
+    );
 
     it('ends the path at an element with an id and otherwise keeps three levels', async () => {
       const issues = await clippedAt(

@@ -381,21 +381,24 @@ describe('mapTokensToDesignFields()', () => {
       it.each([
         ['shallowest first', false],
         ['deepest first', true],
-      ])('still counts the levels a name nests when a later token reuses it (%s)', (_order, reverse) => {
-        const chain = Array.from({ length: MAX_VAR_DEPTH }, (_, i) =>
-          token('color', `c${i}`, i === 0 ? '#112233' : `var(--c${i - 1})`),
-        );
-        const result = map(
-          ...(reverse ? chain.reverse() : chain),
-          token('color', 'fits', `var(--c${MAX_VAR_DEPTH - 2})`),
-          token('color', 'too-deep', `var(--c${MAX_VAR_DEPTH - 1})`),
-        );
+      ])(
+        'still counts the levels a name nests when a later token reuses it (%s)',
+        (_order, reverse) => {
+          const chain = Array.from({ length: MAX_VAR_DEPTH }, (_, i) =>
+            token('color', `c${i}`, i === 0 ? '#112233' : `var(--c${i - 1})`),
+          );
+          const result = map(
+            ...(reverse ? chain.reverse() : chain),
+            token('color', 'fits', `var(--c${MAX_VAR_DEPTH - 2})`),
+            token('color', 'too-deep', `var(--c${MAX_VAR_DEPTH - 1})`),
+          );
 
-        expect(result.fields.colors).toHaveProperty('fits', '#112233');
-        expect(result.report.unresolved.map((u) => [u.token, u.reason])).toEqual([
-          ['too-deep', 'too-complex'],
-        ]);
-      });
+          expect(result.fields.colors).toHaveProperty('fits', '#112233');
+          expect(result.report.unresolved.map((u) => [u.token, u.reason])).toEqual([
+            ['too-deep', 'too-complex'],
+          ]);
+        },
+      );
 
       it('reports the same depth limit whether a name was expanded before or not', () => {
         const chain = (names: string[]) =>

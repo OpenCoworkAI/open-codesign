@@ -90,115 +90,115 @@ afterEach(() => {
   set(initial);
 });
 
-it.each([
-  'reference',
-  'comments',
-] as const)('allows queue and steer after a real %s send without consuming new context', async (context) => {
-  const completion = deferred<GenerateResponse>();
-  generate.mockReturnValueOnce(completion.promise);
-  if (context === 'reference') get().setReferenceUrl(' https://example.com/reference ');
-  else {
-    set({
-      comments: [
+it.each(['reference', 'comments'] as const)(
+  'allows queue and steer after a real %s send without consuming new context',
+  async (context) => {
+    const completion = deferred<GenerateResponse>();
+    generate.mockReturnValueOnce(completion.promise);
+    if (context === 'reference') get().setReferenceUrl(' https://example.com/reference ');
+    else {
+      set({
+        comments: [
+          {
+            schemaVersion: 1,
+            id: 'edit-a',
+            designId: 'a',
+            snapshotId: 'snapshot-a',
+            kind: 'edit',
+            status: 'pending',
+            text: 'Make the heading warm',
+            createdAt: design.createdAt,
+            selector: '#heading',
+            tag: 'h1',
+            outerHTML: '<h1>Heading</h1>',
+            rect: { top: 0, left: 0, width: 100, height: 20 },
+            appliedInSnapshotId: null,
+          },
+        ],
+        queuedCommentIds: ['edit-a'],
+      });
+    }
+    const config = get().config;
+    const generation = get().sendPrompt({ prompt: 'Use this context' });
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
+    if (context === 'reference') {
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceUrl: 'https://example.com/reference' }),
+      );
+      expect(get().referenceUrl).toBe(' https://example.com/reference ');
+    } else {
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ prompt: expect.stringContaining('Make the heading warm') }),
+      );
+      expect(get().queuedCommentIds).toEqual(['edit-a']);
+    }
+    const run = get().generationByDesign['a'];
+    for (const mode of ['follow-up', 'steer'] as const) {
+      get().setComposerDraft('Keep going');
+      await get().sendActiveMessage('Keep going', mode);
+      expect(get().composerDrafts['a']).toBe('');
+      expect(send).toHaveBeenLastCalledWith({
+        schemaVersion: 1,
+        designId: 'a',
+        generationId: run?.generationId,
+        messageId: expect.any(String),
+        text: 'Keep going',
+        mode,
+      });
+    }
+    expect(get().config).toBe(config);
+    expect(get().generationByDesign['a']).toBe(run);
+    expect(generate).toHaveBeenCalledOnce();
+    expect(append).toHaveBeenCalledOnce();
+    expect(get().comments.every((comment) => comment.status === 'pending')).toBe(true);
+    get().setComposerDraft('Retain me');
+    if (context === 'reference') get().setReferenceUrl('https://example.com/new');
+    else get().queueCommentForPrompt('new-edit');
+    await expect(get().sendActiveMessage('Retain me', 'steer')).rejects.toThrow('text-only');
+    expect(get().composerDrafts['a']).toBe('Retain me');
+    expect(send).toHaveBeenCalledTimes(2);
+    const api = window.codesign;
+    if (!api) throw new Error('Missing test IPC');
+    if (context === 'comments') {
+      api.snapshots.list = vi.fn<CodesignApi['snapshots']['list']>(async () => [
         {
           schemaVersion: 1,
-          id: 'edit-a',
+          id: 'applied-snapshot',
           designId: 'a',
-          snapshotId: 'snapshot-a',
-          kind: 'edit',
-          status: 'pending',
-          text: 'Make the heading warm',
+          parentId: null,
+          type: 'edit',
+          prompt: null,
+          artifactType: 'html',
+          artifactSource: '<main>Done</main>',
           createdAt: design.createdAt,
-          selector: '#heading',
-          tag: 'h1',
-          outerHTML: '<h1>Heading</h1>',
-          rect: { top: 0, left: 0, width: 100, height: 20 },
-          appliedInSnapshotId: null,
         },
-      ],
-      queuedCommentIds: ['edit-a'],
-    });
-  }
-  const config = get().config;
-  const generation = get().sendPrompt({ prompt: 'Use this context' });
-  await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
-  if (context === 'reference') {
-    expect(generate).toHaveBeenCalledWith(
-      expect.objectContaining({ referenceUrl: 'https://example.com/reference' }),
-    );
-    expect(get().referenceUrl).toBe(' https://example.com/reference ');
-  } else {
-    expect(generate).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: expect.stringContaining('Make the heading warm') }),
-    );
-    expect(get().queuedCommentIds).toEqual(['edit-a']);
-  }
-  const run = get().generationByDesign['a'];
-  for (const mode of ['follow-up', 'steer'] as const) {
-    get().setComposerDraft('Keep going');
-    await get().sendActiveMessage('Keep going', mode);
-    expect(get().composerDrafts['a']).toBe('');
-    expect(send).toHaveBeenLastCalledWith({
-      schemaVersion: 1,
-      designId: 'a',
-      generationId: run?.generationId,
-      messageId: expect.any(String),
-      text: 'Keep going',
-      mode,
-    });
-  }
-  expect(get().config).toBe(config);
-  expect(get().generationByDesign['a']).toBe(run);
-  expect(generate).toHaveBeenCalledOnce();
-  expect(append).toHaveBeenCalledOnce();
-  expect(get().comments.every((comment) => comment.status === 'pending')).toBe(true);
-  get().setComposerDraft('Retain me');
-  if (context === 'reference') get().setReferenceUrl('https://example.com/new');
-  else get().queueCommentForPrompt('new-edit');
-  await expect(get().sendActiveMessage('Retain me', 'steer')).rejects.toThrow('text-only');
-  expect(get().composerDrafts['a']).toBe('Retain me');
-  expect(send).toHaveBeenCalledTimes(2);
-  const api = window.codesign;
-  if (!api) throw new Error('Missing test IPC');
-  if (context === 'comments') {
-    api.snapshots.list = vi.fn<CodesignApi['snapshots']['list']>(async () => [
-      {
-        schemaVersion: 1,
-        id: 'applied-snapshot',
-        designId: 'a',
-        parentId: null,
-        type: 'edit',
-        prompt: null,
-        artifactType: 'html',
-        artifactSource: '<main>Done</main>',
-        createdAt: design.createdAt,
-      },
-    ]);
-    api.comments.markAppliedIfUnchanged = vi.fn(async (_designId, ids, appliedInSnapshotId) => ({
-      schemaVersion: 1 as const,
-      conflictedIds: [],
-      applied: get()
-        .comments.filter((comment) => ids.includes(comment.id))
-        .map((comment) => ({ ...comment, status: 'applied' as const, appliedInSnapshotId })),
-    }));
-  }
-  completion.resolve({ artifacts: [], message: '', inputTokens: 1, outputTokens: 1, costUsd: 0 });
-  await generation;
-  expect(get().generationByDesign['a']).toBeUndefined();
-  expect(get().composerDrafts['a']).toBe('Retain me');
-  if (context === 'comments') {
-    expect(api.comments.markAppliedIfUnchanged).toHaveBeenCalledWith(
-      'a',
-      ['edit-a'],
-      'applied-snapshot',
-      expect.objectContaining({ 'edit-a': expect.any(String) }),
-    );
-    expect(get().queuedCommentIds).toEqual(['new-edit']);
-    expect(get().comments[0]?.status).toBe('applied');
-  } else {
-    expect(get().referenceUrl).toBe('https://example.com/new');
-  }
-});
+      ]);
+      api.comments.markAppliedIfUnchanged = vi.fn(async (_designId, ids, appliedInSnapshotId) => ({
+        schemaVersion: 1 as const,
+        conflictedIds: [],
+        applied: get()
+          .comments.filter((comment) => ids.includes(comment.id))
+          .map((comment) => ({ ...comment, status: 'applied' as const, appliedInSnapshotId })),
+      }));
+    }
+    completion.resolve({ artifacts: [], message: '', inputTokens: 1, outputTokens: 1, costUsd: 0 });
+    await generation;
+    expect(get().generationByDesign['a']).toBeUndefined();
+    expect(get().composerDrafts['a']).toBe('Retain me');
+    if (context === 'comments') {
+      expect(api.comments.markAppliedIfUnchanged).toHaveBeenCalledWith(
+        'a',
+        ['edit-a'],
+        'applied-snapshot',
+        expect.objectContaining({ 'edit-a': expect.any(String) }),
+      );
+      expect(get().queuedCommentIds).toEqual(['new-edit']);
+      expect(get().comments[0]?.status).toBe('applied');
+    } else {
+      expect(get().referenceUrl).toBe('https://example.com/new');
+    }
+  },
+);
 
 it('never implicitly attaches files after a context-bearing normal send', async () => {
   get().setReferenceUrl('https://example.com');
@@ -279,37 +279,37 @@ it('reconciles initial history with intervening append and deduplicates a later 
   expect(list).toHaveBeenCalledTimes(2);
 });
 
-it.each([
-  false,
-  true,
-])('preserves tool patches racing history, including a not-yet-loaded row (visible=%s)', async (visible) => {
-  const tool: ChatMessageRow = {
-    ...row(2),
-    kind: 'tool_call',
-    payload: { toolName: 'read', status: 'running' },
-  };
-  if (visible) set({ chatMessages: [row(1), tool], chatLoaded: true });
-  const old = deferred<ChatMessageRow[]>();
-  list.mockReturnValueOnce(old.promise);
-  const loading = get().loadChatForCurrentDesign();
-  await vi.waitFor(() => expect(list).toHaveBeenCalledOnce());
-  await get().updateChatToolStatus({
-    designId: 'a',
-    seq: 2,
-    status: 'done',
-    result: { text: 'Read successfully' },
-    durationMs: 12,
-  });
-  old.resolve([row(1), tool]);
-  await loading;
-  expect(get().chatMessages).toHaveLength(2);
-  expect(get().chatMessages[1]?.payload).toMatchObject({
-    status: 'done',
-    durationMs: 12,
-    result: { text: 'Read successfully' },
-  } satisfies Partial<ChatToolCallPayload>);
-  expect(list).toHaveBeenCalledOnce();
-});
+it.each([false, true])(
+  'preserves tool patches racing history, including a not-yet-loaded row (visible=%s)',
+  async (visible) => {
+    const tool: ChatMessageRow = {
+      ...row(2),
+      kind: 'tool_call',
+      payload: { toolName: 'read', status: 'running' },
+    };
+    if (visible) set({ chatMessages: [row(1), tool], chatLoaded: true });
+    const old = deferred<ChatMessageRow[]>();
+    list.mockReturnValueOnce(old.promise);
+    const loading = get().loadChatForCurrentDesign();
+    await vi.waitFor(() => expect(list).toHaveBeenCalledOnce());
+    await get().updateChatToolStatus({
+      designId: 'a',
+      seq: 2,
+      status: 'done',
+      result: { text: 'Read successfully' },
+      durationMs: 12,
+    });
+    old.resolve([row(1), tool]);
+    await loading;
+    expect(get().chatMessages).toHaveLength(2);
+    expect(get().chatMessages[1]?.payload).toMatchObject({
+      status: 'done',
+      durationMs: 12,
+      result: { text: 'Read successfully' },
+    } satisfies Partial<ChatToolCallPayload>);
+    expect(list).toHaveBeenCalledOnce();
+  },
+);
 
 it('publishes useful earlier history even while a newer load is pending', async () => {
   const first = deferred<ChatMessageRow[]>();

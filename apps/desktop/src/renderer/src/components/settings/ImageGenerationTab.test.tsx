@@ -83,18 +83,17 @@ async function edit(selector: string, value: string): Promise<void> {
 }
 
 describe('image response preference UI', () => {
-  it.each([
-    'openai',
-    'openrouter',
-    'chatgpt-codex',
-  ] as const)('shows the checkbox only for the OpenAI provider (%s)', async (provider) => {
-    settings.provider = provider;
-    await mount();
-    expect(
-      container.querySelector('input[aria-label="settings.imageGen.requestBase64"]') !== null,
-    ).toBe(provider === 'openai');
-    expect(saveButton().disabled).toBe(true);
-  });
+  it.each(['openai', 'openrouter', 'chatgpt-codex'] as const)(
+    'shows the checkbox only for the OpenAI provider (%s)',
+    async (provider) => {
+      settings.provider = provider;
+      await mount();
+      expect(
+        container.querySelector('input[aria-label="settings.imageGen.requestBase64"]') !== null,
+      ).toBe(provider === 'openai');
+      expect(saveButton().disabled).toBe(true);
+    },
+  );
 
   it('enables Save for a changed checkbox and disables it after reverting the draft', async () => {
     await mount();

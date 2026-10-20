@@ -90,23 +90,21 @@ describe('Google DESIGN.md helpers', () => {
     expect(formatDesignMdForPrompt(raw)).toContain('minHeight: 44px');
   });
 
-  it.each([
-    '44',
-    '{ value: 44px }',
-    '[44px]',
-    'null',
-  ])('keeps non-string component extensions blocking: %s', (value) => {
-    const findings = validateDesignMd(
-      VALID_DESIGN_MD.replace('    padding: 12px', `    minHeight: ${value}`),
-    );
-    expect(findings).toContainEqual(
-      expect.objectContaining({
-        severity: 'error',
-        path: 'components.button-primary.minHeight',
-        message: 'Expected a string or token reference',
-      }),
-    );
-  });
+  it.each(['44', '{ value: 44px }', '[44px]', 'null'])(
+    'keeps non-string component extensions blocking: %s',
+    (value) => {
+      const findings = validateDesignMd(
+        VALID_DESIGN_MD.replace('    padding: 12px', `    minHeight: ${value}`),
+      );
+      expect(findings).toContainEqual(
+        expect.objectContaining({
+          severity: 'error',
+          path: 'components.button-primary.minHeight',
+          message: 'Expected a string or token reference',
+        }),
+      );
+    },
+  );
 
   it('gives concrete object repair shapes instead of just naming rejected types', () => {
     const findings = validateDesignMd(`---
@@ -170,45 +168,30 @@ components:
     expect(formatDesignMdForPrompt(raw)).toContain(parsed.frontmatterText);
   });
 
-  it.each([
-    '0',
-    '"0"',
-    '.02em',
-    '-.02em',
-    '.5px',
-    '-.5rem',
-    '0px',
-    '-0.02em',
-  ])('accepts CSS zero and dimension spellings across token groups: %s', (value) => {
-    const raw = VALID_DESIGN_MD.replace('fontSize: 48px', `fontSize: ${value}`)
-      .replace('lineHeight: 1.1', `lineHeight: ${value}`)
-      .replace('letterSpacing: -0.02em', `letterSpacing: ${value}`)
-      .replace('sm: 4px', `sm: ${value}`)
-      .replace('sm: 8px', `sm: ${value}`);
-    expect(validateDesignMd(raw)).toEqual([]);
-  });
+  it.each(['0', '"0"', '.02em', '-.02em', '.5px', '-.5rem', '0px', '-0.02em'])(
+    'accepts CSS zero and dimension spellings across token groups: %s',
+    (value) => {
+      const raw = VALID_DESIGN_MD.replace('fontSize: 48px', `fontSize: ${value}`)
+        .replace('lineHeight: 1.1', `lineHeight: ${value}`)
+        .replace('letterSpacing: -0.02em', `letterSpacing: ${value}`)
+        .replace('sm: 4px', `sm: ${value}`)
+        .replace('sm: 8px', `sm: ${value}`);
+      expect(validateDesignMd(raw)).toEqual([]);
+    },
+  );
 
-  it.each([
-    '0.5',
-    '"0.5"',
-    '16',
-    '".5"',
-    'true',
-    'null',
-    '[]',
-    '{}',
-    '.inf',
-    '1vw',
-    '1%',
-  ])('keeps nonzero unitless and malformed dimensions blocking: %s', (value) => {
-    expect(
-      validateDesignMd(
-        VALID_DESIGN_MD.replace('letterSpacing: -0.02em', `letterSpacing: ${value}`),
-      ),
-    ).toContainEqual(
-      expect.objectContaining({ severity: 'error', path: 'typography.h1.letterSpacing' }),
-    );
-  });
+  it.each(['0.5', '"0.5"', '16', '".5"', 'true', 'null', '[]', '{}', '.inf', '1vw', '1%'])(
+    'keeps nonzero unitless and malformed dimensions blocking: %s',
+    (value) => {
+      expect(
+        validateDesignMd(
+          VALID_DESIGN_MD.replace('letterSpacing: -0.02em', `letterSpacing: ${value}`),
+        ),
+      ).toContainEqual(
+        expect.objectContaining({ severity: 'error', path: 'typography.h1.letterSpacing' }),
+      );
+    },
+  );
 
   it('keeps typography structure errors blocking alongside top-level extension warnings', () => {
     const raw = VALID_DESIGN_MD.replace('rounded:', 'radius:').replace(

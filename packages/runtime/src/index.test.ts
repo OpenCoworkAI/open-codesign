@@ -25,18 +25,24 @@ describe('interactive preview form policy', () => {
       'index.html',
       '<html lang="en"><script>window.early=true</script><head></head><body><form></form></body></html>',
     ],
-  ])('keeps trusted policy first through %s round trips without changing exports', (path, source) => {
-    const first = buildInteractivePreviewDocument(source, { path });
-    const second = buildInteractivePreviewDocument(first, { path, baseHref: 'file:///workspace/' });
-    for (const document of [first, second]) {
-      expect(document).toMatch(/^<!doctype html>\s*<meta http-equiv="Content-Security-Policy"/u);
-      expect(document.match(/data-codesign-form-policy/gu)).toHaveLength(1);
-      expect(document).toContain('content="form-action \'none\'"');
-    }
-    expect(second).toContain('<base href="file:///workspace/"');
-    expect(buildStandaloneDocument(source, { path })).not.toContain('data-codesign-form-policy');
-    expect(INTERACTIVE_PREVIEW_SANDBOX.split(' ')).toEqual(['allow-scripts', 'allow-forms']);
-  });
+  ])(
+    'keeps trusted policy first through %s round trips without changing exports',
+    (path, source) => {
+      const first = buildInteractivePreviewDocument(source, { path });
+      const second = buildInteractivePreviewDocument(first, {
+        path,
+        baseHref: 'file:///workspace/',
+      });
+      for (const document of [first, second]) {
+        expect(document).toMatch(/^<!doctype html>\s*<meta http-equiv="Content-Security-Policy"/u);
+        expect(document.match(/data-codesign-form-policy/gu)).toHaveLength(1);
+        expect(document).toContain('content="form-action \'none\'"');
+      }
+      expect(second).toContain('<base href="file:///workspace/"');
+      expect(buildStandaloneDocument(source, { path })).not.toContain('data-codesign-form-policy');
+      expect(INTERACTIVE_PREVIEW_SANDBOX.split(' ')).toEqual(['allow-scripts', 'allow-forms']);
+    },
+  );
 });
 
 describe.each([

@@ -87,46 +87,46 @@ describe('web search settings persistence', () => {
     expect(mocks.probe).not.toHaveBeenCalled();
   });
 
-  it.each([
-    false,
-    true,
-  ])('saves and replaces a key using existing encryption (encrypted=%s)', async (encrypted) => {
-    mocks.encrypted = encrypted;
-    for (const apiKey of ['tvly-first-fixture', 'tvly-replacement-fixture']) {
-      const state = await saveWebSearchSettings({ apiKey });
-      expect(state).toEqual({ enabled: true, hasKey: true });
-      const stored = await configFile.readConfig();
-      const ref = stored?.secrets['tavily'];
-      expect(ref?.ciphertext).toMatch(encrypted ? /^safe:/ : /^plain:/);
-      expect(decryptSecret(ref?.ciphertext ?? '')).toBe(apiKey);
-      expect(JSON.stringify(state)).not.toContain(apiKey);
-      const diagnostic = await readConfigRedacted({ includePaths: true, includeUrls: true });
-      expect(diagnostic).not.toContain(apiKey);
-      expect(diagnostic).not.toContain(ref?.ciphertext);
-      expect(diagnostic).toContain('***REDACTED***');
-      expect(stored?.webSearch).toEqual(limits);
-      expect(stored?.secrets['other']).toEqual(fixture().secrets['other']);
-    }
-    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('tvly-');
-    expect(mocks.probe).not.toHaveBeenCalled();
-  });
+  it.each([false, true])(
+    'saves and replaces a key using existing encryption (encrypted=%s)',
+    async (encrypted) => {
+      mocks.encrypted = encrypted;
+      for (const apiKey of ['tvly-first-fixture', 'tvly-replacement-fixture']) {
+        const state = await saveWebSearchSettings({ apiKey });
+        expect(state).toEqual({ enabled: true, hasKey: true });
+        const stored = await configFile.readConfig();
+        const ref = stored?.secrets['tavily'];
+        expect(ref?.ciphertext).toMatch(encrypted ? /^safe:/ : /^plain:/);
+        expect(decryptSecret(ref?.ciphertext ?? '')).toBe(apiKey);
+        expect(JSON.stringify(state)).not.toContain(apiKey);
+        const diagnostic = await readConfigRedacted({ includePaths: true, includeUrls: true });
+        expect(diagnostic).not.toContain(apiKey);
+        expect(diagnostic).not.toContain(ref?.ciphertext);
+        expect(diagnostic).toContain('***REDACTED***');
+        expect(stored?.webSearch).toEqual(limits);
+        expect(stored?.secrets['other']).toEqual(fixture().secrets['other']);
+      }
+      expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('tvly-');
+      expect(mocks.probe).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each([
-    true,
-    false,
-  ])('clears only Tavily and preserves the enabled=%s switch', async (enabled) => {
-    setCachedConfig(
-      parseConfigFlexible({ ...toPersistedV3(fixture()), webSearch: { ...limits, enabled } }),
-    );
-    expect(await saveWebSearchSettings({ clearKey: true })).toEqual({ enabled, hasKey: false });
-    const stored = await configFile.readConfig();
-    expect(stored?.secrets['tavily']).toBeUndefined();
-    expect(stored?.secrets['other']).toEqual(fixture().secrets['other']);
-    expect(stored?.webSearch).toEqual({ ...limits, enabled });
-    expect(await readFile(configFile.configPath(), 'utf8')).not.toContain(key);
-    await saveWebSearchSettings({ enabled: !enabled });
-    expect(getWebSearchSettings().hasKey).toBe(false);
-  });
+  it.each([true, false])(
+    'clears only Tavily and preserves the enabled=%s switch',
+    async (enabled) => {
+      setCachedConfig(
+        parseConfigFlexible({ ...toPersistedV3(fixture()), webSearch: { ...limits, enabled } }),
+      );
+      expect(await saveWebSearchSettings({ clearKey: true })).toEqual({ enabled, hasKey: false });
+      const stored = await configFile.readConfig();
+      expect(stored?.secrets['tavily']).toBeUndefined();
+      expect(stored?.secrets['other']).toEqual(fixture().secrets['other']);
+      expect(stored?.webSearch).toEqual({ ...limits, enabled });
+      expect(await readFile(configFile.configPath(), 'utf8')).not.toContain(key);
+      await saveWebSearchSettings({ enabled: !enabled });
+      expect(getWebSearchSettings().hasKey).toBe(false);
+    },
+  );
 
   it('preserves absent webSearch when only replacing or clearing a key', async () => {
     const { webSearch: _settings, ...rest } = toPersistedV3(fixture());
@@ -193,21 +193,20 @@ describe('explicit saved-key testing', () => {
     expect(mocks.probe).not.toHaveBeenCalled();
   });
 
-  it.each([
-    'plain',
-    'safe',
-    'legacy',
-  ])('supports %s credential format without modifying the configuration', async (format) => {
-    mocks.encrypted = true;
-    const encoded = Buffer.from(`encrypted:${key}`).toString('base64');
-    const ciphertext =
-      format === 'plain' ? `plain:${key}` : format === 'safe' ? `safe:${encoded}` : encoded;
-    setCachedConfig(fixture(ciphertext));
-    await saveWebSearchSettings({ enabled: false });
-    const before = getCachedConfig();
-    expect(await testWebSearchSettings()).toEqual({ status: 'ok' });
-    expect(mocks.probe).toHaveBeenCalledExactlyOnceWith(key, limits.timeoutMs);
-    expect(getCachedConfig()).toBe(before);
-    expect(getWebSearchSettings().enabled).toBe(false);
-  });
+  it.each(['plain', 'safe', 'legacy'])(
+    'supports %s credential format without modifying the configuration',
+    async (format) => {
+      mocks.encrypted = true;
+      const encoded = Buffer.from(`encrypted:${key}`).toString('base64');
+      const ciphertext =
+        format === 'plain' ? `plain:${key}` : format === 'safe' ? `safe:${encoded}` : encoded;
+      setCachedConfig(fixture(ciphertext));
+      await saveWebSearchSettings({ enabled: false });
+      const before = getCachedConfig();
+      expect(await testWebSearchSettings()).toEqual({ status: 'ok' });
+      expect(mocks.probe).toHaveBeenCalledExactlyOnceWith(key, limits.timeoutMs);
+      expect(getCachedConfig()).toBe(before);
+      expect(getWebSearchSettings().enabled).toBe(false);
+    },
+  );
 });

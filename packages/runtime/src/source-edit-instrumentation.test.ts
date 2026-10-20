@@ -163,19 +163,19 @@ describe('source edit preview instrumentation', () => {
     expect(() => babel.transform(compiledInput.source, compiledInput.options)).not.toThrow();
   });
 
-  it.each([
-    'App.jsx',
-    'App.tsx',
-  ])('preserves escaped attributes and self-closing JSX in %s', (path) => {
-    const source = `${path.endsWith('.tsx') ? 'const count: number = 1;\n' : ''}function App(){return <input title="A &quot;quote&quot; &amp; B" placeholder={'a\\'b'} />}`;
-    const plan = planFor(source, ['input']);
-    const input = artifactCompileInput(
-      buildInteractivePreviewDocument(source, { path, sourceEdit: plan }),
-    );
-    expect(input.source).toContain('title="A &quot;quote&quot; &amp; B"');
-    const result = babel.transform(input.source, input.options);
-    expect(result.code).toContain(`"${SOURCE_EDIT_ATTRIBUTE}"`);
-  });
+  it.each(['App.jsx', 'App.tsx'])(
+    'preserves escaped attributes and self-closing JSX in %s',
+    (path) => {
+      const source = `${path.endsWith('.tsx') ? 'const count: number = 1;\n' : ''}function App(){return <input title="A &quot;quote&quot; &amp; B" placeholder={'a\\'b'} />}`;
+      const plan = planFor(source, ['input']);
+      const input = artifactCompileInput(
+        buildInteractivePreviewDocument(source, { path, sourceEdit: plan }),
+      );
+      expect(input.source).toContain('title="A &quot;quote&quot; &amp; B"');
+      const result = babel.transform(input.source, input.options);
+      expect(result.code).toContain(`"${SOURCE_EDIT_ATTRIBUTE}"`);
+    },
+  );
 
   it('does not instrument ordinary preview or standalone export paths', () => {
     const source = 'function App(){return <button>Save</button>}';
@@ -205,16 +205,15 @@ describe('source edit preview instrumentation', () => {
     ).toThrow('original JSX or TSX');
   });
 
-  it.each([
-    undefined,
-    'index.html',
-    'App.js',
-  ])('requires an explicit JSX/TSX file path, not %s', (path) => {
-    const source = 'function App(){return <button>Save</button>}';
-    expect(() =>
-      buildInteractivePreviewDocument(source, { path, sourceEdit: planFor(source, ['button']) }),
-    ).toThrow('original JSX or TSX');
-  });
+  it.each([undefined, 'index.html', 'App.js'])(
+    'requires an explicit JSX/TSX file path, not %s',
+    (path) => {
+      const source = 'function App(){return <button>Save</button>}';
+      expect(() =>
+        buildInteractivePreviewDocument(source, { path, sourceEdit: planFor(source, ['button']) }),
+      ).toThrow('original JSX or TSX');
+    },
+  );
   it.each([
     `function App(){return <header>${SOURCE_EDIT_ATTRIBUTE}</header>}`,
     `// ${SOURCE_EDIT_ATTRIBUTE}\nfunction App(){return <header>Title</header>}`,

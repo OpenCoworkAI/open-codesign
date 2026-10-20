@@ -142,28 +142,28 @@ describe('image generation enablement', () => {
     expect(toGenerateImageOptions(resolved, 'fixture').requestBase64).toBe(false);
   });
 
-  it.each([
-    true,
-    false,
-  ])('persists and forwards the base64 preference (%s)', async (requestBase64) => {
-    getApiKeyForProviderMock.mockReturnValue('local-test-only');
-    mocks.cachedConfig = makeConfig(true);
-    const patch = parseImageGenerationUpdate({
-      requestBase64,
-      baseUrl: 'https://relay.example/v1',
-    });
-    const view = await updateImageGenerationSettings(patch);
-    expect(view).toMatchObject({ requestBase64, baseUrl: 'https://relay.example/v1' });
-    const saved = mocks.writeConfig.mock.calls[0]?.[0];
-    if (saved === undefined) throw new Error('Expected persisted configuration');
-    expect(saved.imageGeneration?.requestBase64).toBe(requestBase64);
-    const resolved = await resolveImageGenerationConfig(saved);
-    if (resolved === null) throw new Error('Expected enabled image generation');
-    expect(toGenerateImageOptions(resolved, 'fixture')).toMatchObject({
-      requestBase64,
-      baseUrl: 'https://relay.example/v1',
-    });
-  });
+  it.each([true, false])(
+    'persists and forwards the base64 preference (%s)',
+    async (requestBase64) => {
+      getApiKeyForProviderMock.mockReturnValue('local-test-only');
+      mocks.cachedConfig = makeConfig(true);
+      const patch = parseImageGenerationUpdate({
+        requestBase64,
+        baseUrl: 'https://relay.example/v1',
+      });
+      const view = await updateImageGenerationSettings(patch);
+      expect(view).toMatchObject({ requestBase64, baseUrl: 'https://relay.example/v1' });
+      const saved = mocks.writeConfig.mock.calls[0]?.[0];
+      if (saved === undefined) throw new Error('Expected persisted configuration');
+      expect(saved.imageGeneration?.requestBase64).toBe(requestBase64);
+      const resolved = await resolveImageGenerationConfig(saved);
+      if (resolved === null) throw new Error('Expected enabled image generation');
+      expect(toGenerateImageOptions(resolved, 'fixture')).toMatchObject({
+        requestBase64,
+        baseUrl: 'https://relay.example/v1',
+      });
+    },
+  );
 
   it('resets the gateway compatibility option when switching image providers', async () => {
     getApiKeyForProviderMock.mockReturnValue('local-test-only');
@@ -512,17 +512,18 @@ describe('image generation enablement', () => {
   });
 });
 
-it.each([
-  true,
-  false,
-  undefined,
-])('retains web search settings (%s) while saving image settings', async (enabled) => {
-  const cfg = makeConfig(true);
-  const webSearch =
-    enabled === undefined ? undefined : { enabled, maxCalls: 7, timeoutMs: 23000, maxChars: 6000 };
-  mocks.cachedConfig = { ...cfg, ...(webSearch ? { webSearch } : {}) };
-  mocks.writeConfig.mockClear();
-  await updateImageGenerationSettings({ enabled: false });
-  const saved = mocks.writeConfig.mock.calls.at(-1)?.[0];
-  expect(saved?.webSearch).toEqual(webSearch);
-});
+it.each([true, false, undefined])(
+  'retains web search settings (%s) while saving image settings',
+  async (enabled) => {
+    const cfg = makeConfig(true);
+    const webSearch =
+      enabled === undefined
+        ? undefined
+        : { enabled, maxCalls: 7, timeoutMs: 23000, maxChars: 6000 };
+    mocks.cachedConfig = { ...cfg, ...(webSearch ? { webSearch } : {}) };
+    mocks.writeConfig.mockClear();
+    await updateImageGenerationSettings({ enabled: false });
+    const saved = mocks.writeConfig.mock.calls.at(-1)?.[0];
+    expect(saved?.webSearch).toEqual(webSearch);
+  },
+);

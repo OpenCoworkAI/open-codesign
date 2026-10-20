@@ -9,6 +9,7 @@ vi.mock('electron', () => ({
   contextBridge: { exposeInMainWorld: electron.exposeInMainWorld },
   ipcRenderer: electron,
 }));
+
 import './index';
 
 const api = electron.exposeInMainWorld.mock.calls[0]?.[1];

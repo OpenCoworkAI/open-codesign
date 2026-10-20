@@ -14,6 +14,7 @@ vi.mock('electron', () => ({
   contextBridge: { exposeInMainWorld: electron.exposeInMainWorld },
   ipcRenderer: electron,
 }));
+
 import './index';
 
 it('exposes a typed, unsubscribable host cancellation event without resolving the ask', () => {

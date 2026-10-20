@@ -36,13 +36,12 @@ describe('cssColorToHex()', () => {
       expect(cssColorToHex(input)).toEqual(ok(hex));
     });
 
-    it.each([
-      'rgb(255 0 0 / 50%)',
-      'rgba(0, 0, 0, .5)',
-      'rgb(0 0 0 / 0)',
-    ])('reports alpha for %s', (input) => {
-      expect(cssColorToHex(input)).toEqual({ ok: false, reason: 'alpha' });
-    });
+    it.each(['rgb(255 0 0 / 50%)', 'rgba(0, 0, 0, .5)', 'rgb(0 0 0 / 0)'])(
+      'reports alpha for %s',
+      (input) => {
+        expect(cssColorToHex(input)).toEqual({ ok: false, reason: 'alpha' });
+      },
+    );
 
     it('clamps a channel outside 0-255 and says so', () => {
       expect(cssColorToHex('rgb(300 -4 0)')).toEqual(ok('#ff0000', true));
@@ -81,13 +80,12 @@ describe('cssColorToHex()', () => {
       expect(cssColorToHex('hsl(0 100% 50% / 0.5)')).toEqual({ ok: false, reason: 'alpha' });
     });
 
-    it.each([
-      'hsl(0 100 50)',
-      'hsl(0 100%)',
-      'hsl(red 100% 50%)',
-    ])('reports the format of %s', (input) => {
-      expect(cssColorToHex(input)).toEqual({ ok: false, reason: 'format' });
-    });
+    it.each(['hsl(0 100 50)', 'hsl(0 100%)', 'hsl(red 100% 50%)'])(
+      'reports the format of %s',
+      (input) => {
+        expect(cssColorToHex(input)).toEqual({ ok: false, reason: 'format' });
+      },
+    );
   });
 
   // Expected values come from a separate implementation: the CSS Color 4 reference route

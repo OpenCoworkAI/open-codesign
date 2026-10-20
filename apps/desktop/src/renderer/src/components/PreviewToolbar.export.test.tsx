@@ -80,20 +80,21 @@ describe('preview export menu', () => {
     expect(exportMenu().disabled).toBe(true);
   });
 
-  it.each(
-    availableLocales,
-  )('uses a translated native label and fallback hint in %s', async (locale) => {
-    await setLocale(locale);
-    const item = exportMenu().items.find((candidate) => candidate.id === 'pptx-native');
-    for (const field of ['label', 'hint'] as const) {
-      const translated = i18n.getResource(
-        locale,
-        'translation',
-        `export.items.pptxNative.${field}`,
-      );
-      expect(typeof translated).toBe('string');
-      expect(translated.length).toBeGreaterThan(0);
-      expect(item?.[field]).toBe(translated);
-    }
-  });
+  it.each(availableLocales)(
+    'uses a translated native label and fallback hint in %s',
+    async (locale) => {
+      await setLocale(locale);
+      const item = exportMenu().items.find((candidate) => candidate.id === 'pptx-native');
+      for (const field of ['label', 'hint'] as const) {
+        const translated = i18n.getResource(
+          locale,
+          'translation',
+          `export.items.pptxNative.${field}`,
+        );
+        expect(typeof translated).toBe('string');
+        expect(translated.length).toBeGreaterThan(0);
+        expect(item?.[field]).toBe(translated);
+      }
+    },
+  );
 });

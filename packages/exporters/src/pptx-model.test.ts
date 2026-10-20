@@ -140,13 +140,13 @@ function required<T>(value: T | undefined): T {
 
 function textNode(model: NativeSlideModel) {
   const node = model.elements[1];
-  if (!node || node.type !== 'text') throw new Error('Invalid fixture');
+  if (node?.type !== 'text') throw new Error('Invalid fixture');
   return node;
 }
 
 function shapeNode(model: NativeSlideModel) {
   const node = model.elements[0];
-  if (!node || node.type !== 'shape') throw new Error('Invalid fixture');
+  if (node?.type !== 'shape') throw new Error('Invalid fixture');
   return node;
 }
 
@@ -166,35 +166,38 @@ describe('native slide writer', () => {
       'gif',
       'image/gif',
     ],
-  ])('normalizes %s MIME without changing embedded image bytes', async (_name, data, extension, mime) => {
-    const pres = new PptxGenJS();
-    pres.layout = 'LAYOUT_WIDE';
-    const model = fixture();
-    const image = required(model.elements[2]);
-    if (image.type !== 'image') throw new Error('Expected image fixture');
-    image.data = required(data);
-    addNativeSlides(pres, [model]);
-    expect(image.data).toBe(data);
-    await inspectPresentation(pres, (parts, media) => {
-      const rels = parseXml(parts.get('ppt/slides/_rels/slide1.xml.rels') ?? '');
-      const rel = Array.from(rels.getElementsByTagNameNS(relationships, 'Relationship')).find(
-        (entry) => entry.getAttribute('Type')?.endsWith('/image'),
-      );
-      const target = rel?.getAttribute('Target') ?? '';
-      expect(posix.extname(target)).toBe(`.${extension}`);
-      expect(media.get(posix.normalize(posix.join('ppt/slides', target)))).toEqual(
-        Buffer.from(required(data).split(',')[1] ?? '', 'base64'),
-      );
-      const types = parseXml(parts.get('[Content_Types].xml') ?? '');
-      const imageType = Array.from(types.getElementsByTagNameNS(contentTypes, 'Default')).find(
-        (entry) => entry.getAttribute('Extension') === extension,
-      );
-      expect(imageType?.getAttribute('ContentType')).toBe(mime);
-      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
-      expect(slide.getElementsByTagNameNS(presentation, 'pic')).toHaveLength(1);
-      expect(slide.getElementsByTagNameNS(drawing, 't')[0]?.textContent).toBe('中文 Native text');
-    });
-  });
+  ])(
+    'normalizes %s MIME without changing embedded image bytes',
+    async (_name, data, extension, mime) => {
+      const pres = new PptxGenJS();
+      pres.layout = 'LAYOUT_WIDE';
+      const model = fixture();
+      const image = required(model.elements[2]);
+      if (image.type !== 'image') throw new Error('Expected image fixture');
+      image.data = required(data);
+      addNativeSlides(pres, [model]);
+      expect(image.data).toBe(data);
+      await inspectPresentation(pres, (parts, media) => {
+        const rels = parseXml(parts.get('ppt/slides/_rels/slide1.xml.rels') ?? '');
+        const rel = Array.from(rels.getElementsByTagNameNS(relationships, 'Relationship')).find(
+          (entry) => entry.getAttribute('Type')?.endsWith('/image'),
+        );
+        const target = rel?.getAttribute('Target') ?? '';
+        expect(posix.extname(target)).toBe(`.${extension}`);
+        expect(media.get(posix.normalize(posix.join('ppt/slides', target)))).toEqual(
+          Buffer.from(required(data).split(',')[1] ?? '', 'base64'),
+        );
+        const types = parseXml(parts.get('[Content_Types].xml') ?? '');
+        const imageType = Array.from(types.getElementsByTagNameNS(contentTypes, 'Default')).find(
+          (entry) => entry.getAttribute('Extension') === extension,
+        );
+        expect(imageType?.getAttribute('ContentType')).toBe(mime);
+        const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+        expect(slide.getElementsByTagNameNS(presentation, 'pic')).toHaveLength(1);
+        expect(slide.getElementsByTagNameNS(drawing, 't')[0]?.textContent).toBe('中文 Native text');
+      });
+    },
+  );
 
   it.each([
     'data:image/jpg;base64,',
@@ -253,93 +256,96 @@ describe('native slide writer', () => {
     });
   });
 
-  it.each([
-    undefined,
-    'source',
-  ] as const)('writes portrait geometry with pageLayout=%s using the existing sizing budget', async (pageLayout) => {
-    const pres = new PptxGenJS();
-    pres.layout = 'LAYOUT_WIDE';
-    const model = fixture();
-    model.width = 720;
-    model.height = 1280;
-    if (pageLayout !== undefined) model.pageLayout = pageLayout;
-    Object.assign(shapeNode(model), { x: 0, y: 0, width: 720, height: 1280 });
-    const transform = slideTransform(model.width, model.height);
-    const offsetX = pageLayout === 'source' ? 0 : transform.offsetX;
-    addNativeSlides(pres, [model]);
-    await inspectPresentation(pres, (parts) => {
-      const document = parseXml(parts.get('ppt/presentation.xml') ?? '');
-      const size = document.getElementsByTagNameNS(presentation, 'sldSz')[0];
-      expect(size?.getAttribute('cx')).toBe(pageLayout === 'source' ? '3857625' : '12192000');
-      expect(size?.getAttribute('cy')).toBe('6858000');
-      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
-      const objects = [
-        ...Array.from(slide.getElementsByTagNameNS(presentation, 'sp')),
-        ...Array.from(slide.getElementsByTagNameNS(presentation, 'pic')),
-      ];
-      expect(objects).toHaveLength(3);
-      for (const [index, object] of objects.entries()) {
-        const node = required(model.elements[index]);
-        const off = object.getElementsByTagNameNS(drawing, 'off')[0];
-        const ext = object.getElementsByTagNameNS(drawing, 'ext')[0];
-        expect(off?.getAttribute('x')).toBe(
-          String(Math.round((offsetX + node.x * transform.scale) * 914400)),
-        );
-        expect(off?.getAttribute('y')).toBe(String(Math.round(node.y * transform.scale * 914400)));
-        expect(ext?.getAttribute('cx')).toBe(
-          String(Math.round(node.width * transform.scale * 914400)),
-        );
-        expect(ext?.getAttribute('cy')).toBe(
-          String(Math.round(node.height * transform.scale * 914400)),
-        );
-      }
-      expect(slide.getElementsByTagNameNS(drawing, 'rPr')[0]?.getAttribute('sz')).toBe('1350');
-    });
-  });
+  it.each([undefined, 'source'] as const)(
+    'writes portrait geometry with pageLayout=%s using the existing sizing budget',
+    async (pageLayout) => {
+      const pres = new PptxGenJS();
+      pres.layout = 'LAYOUT_WIDE';
+      const model = fixture();
+      model.width = 720;
+      model.height = 1280;
+      if (pageLayout !== undefined) model.pageLayout = pageLayout;
+      Object.assign(shapeNode(model), { x: 0, y: 0, width: 720, height: 1280 });
+      const transform = slideTransform(model.width, model.height);
+      const offsetX = pageLayout === 'source' ? 0 : transform.offsetX;
+      addNativeSlides(pres, [model]);
+      await inspectPresentation(pres, (parts) => {
+        const document = parseXml(parts.get('ppt/presentation.xml') ?? '');
+        const size = document.getElementsByTagNameNS(presentation, 'sldSz')[0];
+        expect(size?.getAttribute('cx')).toBe(pageLayout === 'source' ? '3857625' : '12192000');
+        expect(size?.getAttribute('cy')).toBe('6858000');
+        const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+        const objects = [
+          ...Array.from(slide.getElementsByTagNameNS(presentation, 'sp')),
+          ...Array.from(slide.getElementsByTagNameNS(presentation, 'pic')),
+        ];
+        expect(objects).toHaveLength(3);
+        for (const [index, object] of objects.entries()) {
+          const node = required(model.elements[index]);
+          const off = object.getElementsByTagNameNS(drawing, 'off')[0];
+          const ext = object.getElementsByTagNameNS(drawing, 'ext')[0];
+          expect(off?.getAttribute('x')).toBe(
+            String(Math.round((offsetX + node.x * transform.scale) * 914400)),
+          );
+          expect(off?.getAttribute('y')).toBe(
+            String(Math.round(node.y * transform.scale * 914400)),
+          );
+          expect(ext?.getAttribute('cx')).toBe(
+            String(Math.round(node.width * transform.scale * 914400)),
+          );
+          expect(ext?.getAttribute('cy')).toBe(
+            String(Math.round(node.height * transform.scale * 914400)),
+          );
+        }
+        expect(slide.getElementsByTagNameNS(drawing, 'rPr')[0]?.getAttribute('sz')).toBe('1350');
+      });
+    },
+  );
 
-  it.each([
-    null,
-    'wide',
-    '',
-    42,
-  ])('rejects invalid pageLayout %s without mutation', (pageLayout) => {
-    const pres = new PptxGenJS();
-    pres.layout = 'LAYOUT_WIDE';
-    const defineLayout = vi.spyOn(pres, 'defineLayout');
-    const setLayout = vi.spyOn(pres, 'layout', 'set');
-    const addSlide = vi.spyOn(pres, 'addSlide');
-    const model = fixture();
-    Object.assign(model, { pageLayout });
-    expect(() => addNativeSlides(pres, [fixture(), model])).toThrow(
-      'Slide 2: Unsupported pageLayout',
-    );
-    expect(defineLayout).not.toHaveBeenCalled();
-    expect(setLayout).not.toHaveBeenCalled();
-    expect(addSlide).not.toHaveBeenCalled();
-    expect(pres.layout).toBe('LAYOUT_WIDE');
-  });
+  it.each([null, 'wide', '', 42])(
+    'rejects invalid pageLayout %s without mutation',
+    (pageLayout) => {
+      const pres = new PptxGenJS();
+      pres.layout = 'LAYOUT_WIDE';
+      const defineLayout = vi.spyOn(pres, 'defineLayout');
+      const setLayout = vi.spyOn(pres, 'layout', 'set');
+      const addSlide = vi.spyOn(pres, 'addSlide');
+      const model = fixture();
+      Object.assign(model, { pageLayout });
+      expect(() => addNativeSlides(pres, [fixture(), model])).toThrow(
+        'Slide 2: Unsupported pageLayout',
+      );
+      expect(defineLayout).not.toHaveBeenCalled();
+      expect(setLayout).not.toHaveBeenCalled();
+      expect(addSlide).not.toHaveBeenCalled();
+      expect(pres.layout).toBe('LAYOUT_WIDE');
+    },
+  );
 
   it.each([
     ['source', undefined],
     [undefined, 'source'],
     ['source', 'source'],
-  ] as const)('rejects mixed or multiple source pages (%s, %s) without mutation', (first, second) => {
-    const pres = new PptxGenJS();
-    pres.layout = 'LAYOUT_WIDE';
-    const defineLayout = vi.spyOn(pres, 'defineLayout');
-    const setLayout = vi.spyOn(pres, 'layout', 'set');
-    const addSlide = vi.spyOn(pres, 'addSlide');
-    expect(() =>
-      addNativeSlides(pres, [
-        { ...fixture(), ...(first !== undefined ? { pageLayout: first } : {}) },
-        { ...fixture(), ...(second !== undefined ? { pageLayout: second } : {}) },
-      ]),
-    ).toThrow('Source-sized pageLayout requires exactly one slide model.');
-    expect(defineLayout).not.toHaveBeenCalled();
-    expect(setLayout).not.toHaveBeenCalled();
-    expect(addSlide).not.toHaveBeenCalled();
-    expect(pres.layout).toBe('LAYOUT_WIDE');
-  });
+  ] as const)(
+    'rejects mixed or multiple source pages (%s, %s) without mutation',
+    (first, second) => {
+      const pres = new PptxGenJS();
+      pres.layout = 'LAYOUT_WIDE';
+      const defineLayout = vi.spyOn(pres, 'defineLayout');
+      const setLayout = vi.spyOn(pres, 'layout', 'set');
+      const addSlide = vi.spyOn(pres, 'addSlide');
+      expect(() =>
+        addNativeSlides(pres, [
+          { ...fixture(), ...(first !== undefined ? { pageLayout: first } : {}) },
+          { ...fixture(), ...(second !== undefined ? { pageLayout: second } : {}) },
+        ]),
+      ).toThrow('Source-sized pageLayout requires exactly one slide model.');
+      expect(defineLayout).not.toHaveBeenCalled();
+      expect(setLayout).not.toHaveBeenCalled();
+      expect(addSlide).not.toHaveBeenCalled();
+      expect(pres.layout).toBe('LAYOUT_WIDE');
+    },
+  );
 
   const malformedSourceCases: [string, (model: NativeSlideModel) => void, string][] = [
     [
@@ -379,35 +385,36 @@ describe('native slide writer', () => {
       'Slide 1, object 2 (text): lineHeight',
     ],
   ];
-  it.each(
-    malformedSourceCases,
-  )('rejects malformed source %s before changing existing PPTX', async (_name, mutate, message) => {
-    const pres = new PptxGenJS();
-    pres.layout = 'LAYOUT_WIDE';
-    pres.addSlide().addText('Existing slide');
-    const defineLayout = vi.spyOn(pres, 'defineLayout');
-    const setLayout = vi.spyOn(pres, 'layout', 'set');
-    const addSlide = vi.spyOn(pres, 'addSlide');
-    const model = fixture();
-    model.pageLayout = 'source';
-    model.width = 720;
-    model.height = 1280;
-    mutate(model);
-    expect(() => addNativeSlides(pres, [model])).toThrow(message);
-    expect(defineLayout).not.toHaveBeenCalled();
-    expect(setLayout).not.toHaveBeenCalled();
-    expect(addSlide).not.toHaveBeenCalled();
-    expect(pres.layout).toBe('LAYOUT_WIDE');
-    await inspectPresentation(pres, (parts) => {
-      const document = parseXml(parts.get('ppt/presentation.xml') ?? '');
-      const size = document.getElementsByTagNameNS(presentation, 'sldSz')[0];
-      expect(size?.getAttribute('cx')).toBe('12192000');
-      expect(size?.getAttribute('cy')).toBe('6858000');
-      expect(document.getElementsByTagNameNS(presentation, 'sldId').length).toBe(1);
-      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
-      expect(slide.getElementsByTagNameNS(drawing, 't')[0]?.textContent).toBe('Existing slide');
-    });
-  });
+  it.each(malformedSourceCases)(
+    'rejects malformed source %s before changing existing PPTX',
+    async (_name, mutate, message) => {
+      const pres = new PptxGenJS();
+      pres.layout = 'LAYOUT_WIDE';
+      pres.addSlide().addText('Existing slide');
+      const defineLayout = vi.spyOn(pres, 'defineLayout');
+      const setLayout = vi.spyOn(pres, 'layout', 'set');
+      const addSlide = vi.spyOn(pres, 'addSlide');
+      const model = fixture();
+      model.pageLayout = 'source';
+      model.width = 720;
+      model.height = 1280;
+      mutate(model);
+      expect(() => addNativeSlides(pres, [model])).toThrow(message);
+      expect(defineLayout).not.toHaveBeenCalled();
+      expect(setLayout).not.toHaveBeenCalled();
+      expect(addSlide).not.toHaveBeenCalled();
+      expect(pres.layout).toBe('LAYOUT_WIDE');
+      await inspectPresentation(pres, (parts) => {
+        const document = parseXml(parts.get('ppt/presentation.xml') ?? '');
+        const size = document.getElementsByTagNameNS(presentation, 'sldSz')[0];
+        expect(size?.getAttribute('cx')).toBe('12192000');
+        expect(size?.getAttribute('cy')).toBe('6858000');
+        expect(document.getElementsByTagNameNS(presentation, 'sldId').length).toBe(1);
+        const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+        expect(slide.getElementsByTagNameNS(drawing, 't')[0]?.textContent).toBe('Existing slide');
+      });
+    },
+  );
 
   it('emits radius adjustments only for roundRect and clamps them to half the shortest side', async () => {
     const pres = new PptxGenJS();
@@ -680,18 +687,19 @@ describe('native slide writer', () => {
       'object type',
     ],
   ];
-  it.each(
-    invalidCases,
-  )('rejects %s with slide/object context before modifying presentation', (_name, mutate, field) => {
-    const pres = new PptxGenJS();
-    const model = fixture();
-    mutate(model);
-    const addSlide = vi.spyOn(pres, 'addSlide');
-    expect(() => addNativeSlides(pres, [fixture(), model])).toThrow(
-      new RegExp(`Slide 2, object \\d+ .*${field}`),
-    );
-    expect(addSlide).not.toHaveBeenCalled();
-  });
+  it.each(invalidCases)(
+    'rejects %s with slide/object context before modifying presentation',
+    (_name, mutate, field) => {
+      const pres = new PptxGenJS();
+      const model = fixture();
+      mutate(model);
+      const addSlide = vi.spyOn(pres, 'addSlide');
+      expect(() => addNativeSlides(pres, [fixture(), model])).toThrow(
+        new RegExp(`Slide 2, object \\d+ .*${field}`),
+      );
+      expect(addSlide).not.toHaveBeenCalled();
+    },
+  );
 
   it('includes the page number for invalid model dimensions', () => {
     const model = fixture();

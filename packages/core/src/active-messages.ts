@@ -85,7 +85,7 @@ export class ActiveRunMessages {
     if (event.type !== 'message_start' || event.message.role !== 'user') return;
     const id = (event.message as Partial<QueuedUserMessage>).codesignMessageId;
     const pending = id ? this.records.get(id) : undefined;
-    if (!pending || pending.status !== 'pending') return;
+    if (pending?.status !== 'pending') return;
     if (this.signal?.aborted)
       throw new CodesignError(
         'Generation cancelled before message delivery.',

@@ -41,17 +41,17 @@ describe('buildHtmlDocument', () => {
     expect(out).toContain('https://cdn.tailwindcss.com');
   });
 
-  it.each([
-    'assets/app.js',
-    'https://example.com/app.js',
-  ])('does not duplicate Tailwind when followed by %s', (scriptSrc) => {
-    const out = buildHtmlDocument(
-      `<html><head><script src="https://cdn.tailwindcss.com"></script><script src="${scriptSrc}"></script></head><body>hi</body></html>`,
-      { injectTailwind: true, prettify: false },
-    );
+  it.each(['assets/app.js', 'https://example.com/app.js'])(
+    'does not duplicate Tailwind when followed by %s',
+    (scriptSrc) => {
+      const out = buildHtmlDocument(
+        `<html><head><script src="https://cdn.tailwindcss.com"></script><script src="${scriptSrc}"></script></head><body>hi</body></html>`,
+        { injectTailwind: true, prettify: false },
+      );
 
-    expect(out.match(/src="https:\/\/cdn\.tailwindcss\.com"/g)).toHaveLength(1);
-  });
+      expect(out.match(/src="https:\/\/cdn\.tailwindcss\.com"/g)).toHaveLength(1);
+    },
+  );
 
   it('uses sourcePath to preserve TSX transform options during export', () => {
     const out = buildHtmlDocument(
@@ -94,27 +94,28 @@ describe('buildHtmlDocument', () => {
     expect(out).not.toContain('src="assets/logo.svg"');
   });
 
-  it.each([
-    'App.jsx',
-    'App.tsx',
-  ])('inlines quoted JSX attributes before encoding %s', async (name) => {
-    const source = 'function App() { return <img src="../assets/logo.svg" />; }';
-    const opts = {
-      sourcePath: `screens/${name}`,
-      assetBasePath: join(tempDir, 'screens'),
-      assetRootPath: tempDir,
-      injectTailwind: false,
-      prettify: false,
-    };
-    const dest = join(tempDir, `${name}.html`);
-    await exportHtml(source, dest, opts);
-    const html = readFileSync(dest, 'utf8');
-    const renderHtml = await buildExportHtmlDocument(source, opts);
-    for (const document of [html, renderHtml]) {
-      expect(document).toContain('src=\\"data:image/svg+xml;charset=utf-8,');
-      expect(document).not.toContain('../assets/logo.svg');
-    }
-  }, 30_000);
+  it.each(['App.jsx', 'App.tsx'])(
+    'inlines quoted JSX attributes before encoding %s',
+    async (name) => {
+      const source = 'function App() { return <img src="../assets/logo.svg" />; }';
+      const opts = {
+        sourcePath: `screens/${name}`,
+        assetBasePath: join(tempDir, 'screens'),
+        assetRootPath: tempDir,
+        injectTailwind: false,
+        prettify: false,
+      };
+      const dest = join(tempDir, `${name}.html`);
+      await exportHtml(source, dest, opts);
+      const html = readFileSync(dest, 'utf8');
+      const renderHtml = await buildExportHtmlDocument(source, opts);
+      for (const document of [html, renderHtml]) {
+        expect(document).toContain('src=\\"data:image/svg+xml;charset=utf-8,');
+        expect(document).not.toContain('../assets/logo.svg');
+      }
+    },
+    30_000,
+  );
 
   it('keeps explicit asset opt-out and nonlocal references unchanged', async () => {
     const source = 'function App() { return <img src="assets/logo.svg" />; }';

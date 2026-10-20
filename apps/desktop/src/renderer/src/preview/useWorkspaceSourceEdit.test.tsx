@@ -165,30 +165,27 @@ describe('revision-bound local source edits', () => {
     expect(api.selection).toBeNull();
     expect(api.inspection?.previewRevision).not.toBe(revision);
   });
-  it.each([
-    'rejected',
-    'throw',
-    'wrong-path',
-    'missing-revision',
-    'wrong-revision',
-  ] as const)('never announces saved for %s', async (outcome) => {
-    await enableAndSelect();
-    if (outcome === 'rejected')
-      apply.mockResolvedValue({
-        schemaVersion: 1,
-        status: 'rejected',
-        reason: 'source-conflict',
-        message: 'Source changed',
-      });
-    else if (outcome === 'throw') apply.mockRejectedValue(new Error('Write failed'));
-    else if (outcome === 'wrong-path') apply.mockResolvedValue({ ...applied, path: 'Other.jsx' });
-    else if (outcome === 'missing-revision') apply.mockResolvedValue(applied);
-    else apply.mockResolvedValue({ ...applied, previewRevision: 'stale' });
-    await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
-    expect(onPersist).not.toHaveBeenCalled();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(api.message).toBeTruthy();
-  });
+  it.each(['rejected', 'throw', 'wrong-path', 'missing-revision', 'wrong-revision'] as const)(
+    'never announces saved for %s',
+    async (outcome) => {
+      await enableAndSelect();
+      if (outcome === 'rejected')
+        apply.mockResolvedValue({
+          schemaVersion: 1,
+          status: 'rejected',
+          reason: 'source-conflict',
+          message: 'Source changed',
+        });
+      else if (outcome === 'throw') apply.mockRejectedValue(new Error('Write failed'));
+      else if (outcome === 'wrong-path') apply.mockResolvedValue({ ...applied, path: 'Other.jsx' });
+      else if (outcome === 'missing-revision') apply.mockResolvedValue(applied);
+      else apply.mockResolvedValue({ ...applied, previewRevision: 'stale' });
+      await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+      expect(onPersist).not.toHaveBeenCalled();
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(api.message).toBeTruthy();
+    },
+  );
   it.each([
     'inspect-rejected',
     'save-rejected',
@@ -252,35 +249,32 @@ describe('revision-bound local source edits', () => {
     expect(onPersist).toHaveBeenCalledOnce();
     expect(onSaved).toHaveBeenCalledWith(['canvas.sourceEdit.refreshWarning']);
   });
-  it.each([
-    'design',
-    'path',
-    'content',
-    'generation',
-    'toggle',
-  ] as const)('ignores late apply ACK after %s changes', async (change) => {
-    await enableAndSelect();
-    const pending = deferred<SourceEditApplyResultV1>();
-    apply.mockReturnValue(pending.promise);
-    let saving!: Promise<void>;
-    await act(async () => {
-      saving = api.apply({ kind: 'set-text', value: 'New' });
-    });
-    if (change === 'design') props = { ...props, designId: 'b' };
-    if (change === 'path') props = { ...props, selectedPath: 'Other.jsx' };
-    if (change === 'content')
-      props = { ...props, source: { ...workspaceSource(), content: '<p>Changed</p>' } };
-    if (change === 'generation') props = { ...props, generating: true };
-    if (change === 'toggle') await act(async () => api.toggle());
-    await render();
-    await act(async () => {
-      pending.resolve({ ...applied, previewRevision: apply.mock.calls[0]?.[0]?.previewRevision });
-      await saving;
-    });
-    expect(onPersist).not.toHaveBeenCalled();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(api.selection).toBeNull();
-  });
+  it.each(['design', 'path', 'content', 'generation', 'toggle'] as const)(
+    'ignores late apply ACK after %s changes',
+    async (change) => {
+      await enableAndSelect();
+      const pending = deferred<SourceEditApplyResultV1>();
+      apply.mockReturnValue(pending.promise);
+      let saving!: Promise<void>;
+      await act(async () => {
+        saving = api.apply({ kind: 'set-text', value: 'New' });
+      });
+      if (change === 'design') props = { ...props, designId: 'b' };
+      if (change === 'path') props = { ...props, selectedPath: 'Other.jsx' };
+      if (change === 'content')
+        props = { ...props, source: { ...workspaceSource(), content: '<p>Changed</p>' } };
+      if (change === 'generation') props = { ...props, generating: true };
+      if (change === 'toggle') await act(async () => api.toggle());
+      await render();
+      await act(async () => {
+        pending.resolve({ ...applied, previewRevision: apply.mock.calls[0]?.[0]?.previewRevision });
+        await saving;
+      });
+      expect(onPersist).not.toHaveBeenCalled();
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(api.selection).toBeNull();
+    },
+  );
   it('ignores a late inspection after changing design', async () => {
     const pending = deferred<SourceEditInspectResultV1>();
     inspect.mockReturnValue(pending.promise);
@@ -385,18 +379,18 @@ describe('revision-bound local source edits', () => {
     await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
     expect(apply).toHaveBeenCalledOnce();
   });
-  it.each([
-    null,
-    { targetId: target.id, sourceHash: hash, previewRevision: 'old' },
-  ])('rejects missing/stale commit validation before IPC apply: %j', async (reply) => {
-    await enableAndSelect();
-    validate.mockResolvedValue(reply);
-    await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
-    expect(apply).not.toHaveBeenCalled();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(api.selection?.id).toBe(target.id);
-    expect(api.message).toBe('canvas.sourceEdit.validationFailed');
-  });
+  it.each([null, { targetId: target.id, sourceHash: hash, previewRevision: 'old' }])(
+    'rejects missing/stale commit validation before IPC apply: %j',
+    async (reply) => {
+      await enableAndSelect();
+      validate.mockResolvedValue(reply);
+      await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+      expect(apply).not.toHaveBeenCalled();
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(api.selection?.id).toBe(target.id);
+      expect(api.message).toBe('canvas.sourceEdit.validationFailed');
+    },
+  );
   it('rejects a field that changes after it was selected', async () => {
     await enableAndSelect();
     validate.mockImplementation(async (request) => ({

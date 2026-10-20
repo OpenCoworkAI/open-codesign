@@ -2300,41 +2300,51 @@ describe('PPTX export requests', () => {
     [undefined, { format: 'pptx' }],
     ['image', { format: 'pptx', renderMode: 'image' }],
     ['native', { format: 'pptx', renderMode: 'native' }],
-  ] as const)('records mode %s in the local export action timeline', async (renderMode, expected) => {
-    resetTimeline();
-    vi.stubGlobal('window', {
-      codesign: { export: vi.fn().mockResolvedValue({ status: 'saved', path: '/tmp/deck.pptx' }) },
-      setTimeout,
-    });
-    useCodesignStore.setState({ currentDesignId: null, previewSource: '<section>Deck</section>' });
-    await useCodesignStore.getState().exportActive('pptx', renderMode);
-    const exports = snapshotTimeline().filter((entry) => entry.type === 'design.export');
-    expect(exports).toHaveLength(1);
-    expect(exports[0]?.data).toEqual(expected);
-  });
+  ] as const)(
+    'records mode %s in the local export action timeline',
+    async (renderMode, expected) => {
+      resetTimeline();
+      vi.stubGlobal('window', {
+        codesign: {
+          export: vi.fn().mockResolvedValue({ status: 'saved', path: '/tmp/deck.pptx' }),
+        },
+        setTimeout,
+      });
+      useCodesignStore.setState({
+        currentDesignId: null,
+        previewSource: '<section>Deck</section>',
+      });
+      await useCodesignStore.getState().exportActive('pptx', renderMode);
+      const exports = snapshotTimeline().filter((entry) => entry.type === 'design.export');
+      expect(exports).toHaveLength(1);
+      expect(exports[0]?.data).toEqual(expected);
+    },
+  );
 
-  it.each([
-    undefined,
-    'image',
-    'native',
-  ] as const)('forwards the selected mode %s without changing the default', async (renderMode) => {
-    const exportFile = vi.fn().mockResolvedValue({ status: 'saved', path: '/tmp/deck.pptx' });
-    vi.stubGlobal('window', { codesign: { export: exportFile }, setTimeout });
-    useCodesignStore.setState({ currentDesignId: null, previewSource: '<section>Deck</section>' });
+  it.each([undefined, 'image', 'native'] as const)(
+    'forwards the selected mode %s without changing the default',
+    async (renderMode) => {
+      const exportFile = vi.fn().mockResolvedValue({ status: 'saved', path: '/tmp/deck.pptx' });
+      vi.stubGlobal('window', { codesign: { export: exportFile }, setTimeout });
+      useCodesignStore.setState({
+        currentDesignId: null,
+        previewSource: '<section>Deck</section>',
+      });
 
-    await useCodesignStore.getState().exportActive('pptx', renderMode);
+      await useCodesignStore.getState().exportActive('pptx', renderMode);
 
-    expect(exportFile).toHaveBeenCalledOnce();
-    expect(exportFile.mock.calls[0]?.[0]).toMatchObject({
-      format: 'pptx',
-      artifactSource: '<section>Deck</section>',
-    });
-    if (renderMode === undefined) {
-      expect(exportFile.mock.calls[0]?.[0]).not.toHaveProperty('renderMode');
-    } else {
-      expect(exportFile.mock.calls[0]?.[0]).toHaveProperty('renderMode', renderMode);
-    }
-  });
+      expect(exportFile).toHaveBeenCalledOnce();
+      expect(exportFile.mock.calls[0]?.[0]).toMatchObject({
+        format: 'pptx',
+        artifactSource: '<section>Deck</section>',
+      });
+      if (renderMode === undefined) {
+        expect(exportFile.mock.calls[0]?.[0]).not.toHaveProperty('renderMode');
+      } else {
+        expect(exportFile.mock.calls[0]?.[0]).toHaveProperty('renderMode', renderMode);
+      }
+    },
+  );
 
   it('shows exporter warnings and research warnings alongside both saved paths', async () => {
     const exportWarnings = ['Slide 2 uses an image fallback.'];

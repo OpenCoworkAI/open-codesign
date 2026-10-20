@@ -22,23 +22,22 @@ describe('bundled demo input seeding', () => {
     expect(DEMO_INPUT_LICENSE.attribution).toBeTruthy();
   });
 
-  it.each([
-    'daymark',
-    'common-ground',
-    'trailhead',
-  ] as const)('copies exactly the %s allowlist into a fresh workspace', async (id) => {
-    const expected = [...DEMO_INPUTS[id].files].sort();
-    expect((await readdir(path.join(resources, id))).sort()).toEqual(expected);
-    await seedDemoInputsFromRoot(root, id, resources);
-    expect((await readdir(root)).sort()).toEqual(expected);
-    for (const file of expected) {
-      const content = await readFile(path.join(root, file), 'utf8');
-      expect(content).toBe(await readFile(path.join(resources, id, file), 'utf8'));
-      expect(content).not.toMatch(/https?:\/\/(?!www\.w3\.org\/2000\/svg)/);
-      expect(file).not.toMatch(/\.(jsx|html|tsx)$/);
-      if (file.endsWith('.json')) expect(JSON.parse(content).schemaVersion).toBe(1);
-    }
-  });
+  it.each(['daymark', 'common-ground', 'trailhead'] as const)(
+    'copies exactly the %s allowlist into a fresh workspace',
+    async (id) => {
+      const expected = [...DEMO_INPUTS[id].files].sort();
+      expect((await readdir(path.join(resources, id))).sort()).toEqual(expected);
+      await seedDemoInputsFromRoot(root, id, resources);
+      expect((await readdir(root)).sort()).toEqual(expected);
+      for (const file of expected) {
+        const content = await readFile(path.join(root, file), 'utf8');
+        expect(content).toBe(await readFile(path.join(resources, id, file), 'utf8'));
+        expect(content).not.toMatch(/https?:\/\/(?!www\.w3\.org\/2000\/svg)/);
+        expect(file).not.toMatch(/\.(jsx|html|tsx)$/);
+        if (file.endsWith('.json')) expect(JSON.parse(content).schemaVersion).toBe(1);
+      }
+    },
+  );
 
   it('does not overwrite or add files to an existing workspace', async () => {
     await writeFile(path.join(root, 'product-brief.md'), 'My own brief');

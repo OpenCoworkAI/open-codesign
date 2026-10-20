@@ -11,7 +11,9 @@ vi.mock('electron', () => ({
   contextBridge: { exposeInMainWorld: electron.exposeInMainWorld },
   ipcRenderer: electron,
 }));
+
 import './index';
+
 it('exposes deterministic inspect/apply without invoking generation or file overwrite APIs', async () => {
   const api = electron.exposeInMainWorld.mock.calls[0]?.[1];
   if (!api) throw new Error('Missing exposed preload API');

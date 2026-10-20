@@ -83,30 +83,30 @@ describe('comment composer action lifecycle', () => {
     expect(ui.onDismiss).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    'false',
-    'reject',
-  ] as const)('retains a visible error and unlocks retry after %s', async (failure) => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const save = vi
-      .fn()
-      .mockImplementationOnce(() =>
-        failure === 'false' ? Promise.resolve(false) : Promise.reject(new Error('Save rejected')),
-      )
-      .mockResolvedValue(true);
-    const ui = render(save);
-    ui.send();
-    await vi.waitFor(() =>
-      expect(updates).toContain(
-        failure === 'false' ? 'notifications.commentCreateFailed' : 'Save rejected',
-      ),
-    );
-    expect(updates.at(-1)).toBeNull();
-    expect(ui.onDismiss).not.toHaveBeenCalled();
-    ui.save();
-    expect(save).toHaveBeenCalledTimes(2);
-    await vi.waitFor(() => expect(updates.at(-1)).toBeNull());
-  });
+  it.each(['false', 'reject'] as const)(
+    'retains a visible error and unlocks retry after %s',
+    async (failure) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const save = vi
+        .fn()
+        .mockImplementationOnce(() =>
+          failure === 'false' ? Promise.resolve(false) : Promise.reject(new Error('Save rejected')),
+        )
+        .mockResolvedValue(true);
+      const ui = render(save);
+      ui.send();
+      await vi.waitFor(() =>
+        expect(updates).toContain(
+          failure === 'false' ? 'notifications.commentCreateFailed' : 'Save rejected',
+        ),
+      );
+      expect(updates.at(-1)).toBeNull();
+      expect(ui.onDismiss).not.toHaveBeenCalled();
+      ui.save();
+      expect(save).toHaveBeenCalledTimes(2);
+      await vi.waitFor(() => expect(updates.at(-1)).toBeNull());
+    },
+  );
 
   it('does not save blank text and dismisses without persisting a draft', () => {
     const save = vi.fn(() => true);

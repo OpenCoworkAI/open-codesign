@@ -71,14 +71,18 @@ describe.skipIf(!chromePath)('native PPTX repair edge regressions in system Chro
     );
   }
 
-  it.each([-1, 1])('does not duplicate static inline text with ignored z-index %s', async (z) => {
-    const model = await render(`<p>A<span style="z-index:${z}">DUP</span>Z</p>`);
-    expect(
-      texts(model)
-        .map((element) => element.text)
-        .join(''),
-    ).toBe('ADUPZ');
-  }, 30_000);
+  it.each([-1, 1])(
+    'does not duplicate static inline text with ignored z-index %s',
+    async (z) => {
+      const model = await render(`<p>A<span style="z-index:${z}">DUP</span>Z</p>`);
+      expect(
+        texts(model)
+          .map((element) => element.text)
+          .join(''),
+      ).toBe('ADUPZ');
+    },
+    30_000,
+  );
 
   it('keeps direct text after a decorated inline child at its measured position', async () => {
     const model = await render('<p>A<span style="background:red">BBBB</span>Z</p>');
@@ -145,7 +149,7 @@ describe.skipIf(!chromePath)('native PPTX repair edge regressions in system Chro
     );
     expect(texts(model).map((element) => element.text)).toEqual(['UNDERLINE']);
     const image = model.elements.find((element) => element.type === 'image');
-    if (!image || image.type !== 'image') throw new Error('Expected isolated background image');
+    if (image?.type !== 'image') throw new Error('Expected isolated background image');
     const nonRedPixels = await page.evaluate(async (data) => {
       const image = new Image();
       image.src = data;
@@ -170,49 +174,51 @@ describe.skipIf(!chromePath)('native PPTX repair edge regressions in system Chro
     expect(nonRedPixels).toBe(0);
   }, 30_000);
 
-  it.each([
-    'height:0',
-    'height:200px',
-  ])('preserves painted absolute descendants and global stacking through a non-stacking wrapper (%s)', async (height) => {
-    const model = await render(
-      '<div id="wrapper"><div id="red"></div></div><div id="blue"></div>',
-      `
+  it.each(['height:0', 'height:200px'])(
+    'preserves painted absolute descendants and global stacking through a non-stacking wrapper (%s)',
+    async (height) => {
+      const model = await render(
+        '<div id="wrapper"><div id="red"></div></div><div id="blue"></div>',
+        `
       #wrapper{${height};width:200px}
       #red,#blue{position:absolute;left:50px;top:50px;width:100px;height:100px}
       #red{z-index:10;background:red}#blue{z-index:1;background:blue}
     `,
-    );
-    expect(await pixel(model.elements, 80, 80)).toEqual([255, 0, 0, 255]);
-  }, 30_000);
+      );
+      expect(await pixel(model.elements, 80, 80)).toEqual([255, 0, 0, 255]);
+    },
+    30_000,
+  );
 
-  it.each([
-    false,
-    true,
-  ])('preserves DOM order between translucent decoration and z-index:auto content (overlay last: %s)', async (overlayLast) => {
-    const grid = '<div id="grid"></div>';
-    const inner = '<div id="inner"><p>Editable poster text</p></div>';
-    const model = await render(
-      overlayLast ? inner + grid : grid + inner,
-      `
+  it.each([false, true])(
+    'preserves DOM order between translucent decoration and z-index:auto content (overlay last: %s)',
+    async (overlayLast) => {
+      const grid = '<div id="grid"></div>';
+      const inner = '<div id="inner"><p>Editable poster text</p></div>';
+      const model = await render(
+        overlayLast ? inner + grid : grid + inner,
+        `
       #grid{position:absolute;left:60px;top:60px;width:240px;height:180px;opacity:.5;pointer-events:none;background:linear-gradient(red,red)}
       #inner{position:relative;width:240px;height:180px;background:blue}
     `,
-    );
-    const imageIndex = model.elements.findIndex((e) => e.type === 'image');
-    const textIndex = model.elements.findIndex((e) => e.type === 'text');
-    expect(
-      texts(model)
-        .map((e) => e.text)
-        .join(' '),
-    ).toBe('Editable poster text');
-    expect(imageIndex).toBeGreaterThan(-1);
-    expect(imageIndex > textIndex).toBe(overlayLast);
-    const color = await pixel(model.elements, 80, 80);
-    if (overlayLast) {
-      expect(color[0]).toBeGreaterThan(120);
-      expect(color[2]).toBeGreaterThan(120);
-    } else expect(color).toEqual([0, 0, 255, 255]);
-  }, 30_000);
+      );
+      const imageIndex = model.elements.findIndex((e) => e.type === 'image');
+      const textIndex = model.elements.findIndex((e) => e.type === 'text');
+      expect(
+        texts(model)
+          .map((e) => e.text)
+          .join(' '),
+      ).toBe('Editable poster text');
+      expect(imageIndex).toBeGreaterThan(-1);
+      expect(imageIndex > textIndex).toBe(overlayLast);
+      const color = await pixel(model.elements, 80, 80);
+      if (overlayLast) {
+        expect(color[0]).toBeGreaterThan(120);
+        expect(color[2]).toBeGreaterThan(120);
+      } else expect(color).toEqual([0, 0, 255, 255]);
+    },
+    30_000,
+  );
 
   it('does not isolate high-z descendants inside a positioned z-index:auto wrapper', async () => {
     const model = await render(

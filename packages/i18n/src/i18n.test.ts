@@ -185,23 +185,26 @@ describe('LiteLLM connection diagnostics', () => {
     ['zh-CN', 'master key', '无 Key', '/v1', '4000', '启动 LiteLLM'],
     ['es', 'master key', 'sin clave', '/v1', '4000', 'proxy de LiteLLM'],
     ['pt-BR', 'master key', 'sem chave', '/v1', '4000', 'proxy LiteLLM'],
-  ] as const)('localizes LiteLLM failure hints in %s', async (locale, auth, keyless, suffix, port, start) => {
-    const { i18n } = await import('./index');
-    await initI18n(locale);
-    const authText = i18n.t(keys[0]);
-    const notFound = i18n.t(keys[1]);
-    const notFoundLocal = i18n.t(keys[2]);
-    const unreachable = i18n.t(keys[3]);
-    expect(authText).toContain(auth);
-    expect(authText).toContain(keyless);
-    expect(notFound).toContain(suffix);
-    expect(notFound).not.toContain('4000');
-    expect(notFoundLocal).toContain(suffix);
-    expect(notFoundLocal).toContain(port);
-    expect(unreachable).toContain(start);
-    for (const key of keys) {
-      expect(i18n.t(key)).not.toBe(key);
-    }
-    await setLocale('en');
-  });
+  ] as const)(
+    'localizes LiteLLM failure hints in %s',
+    async (locale, auth, keyless, suffix, port, start) => {
+      const { i18n } = await import('./index');
+      await initI18n(locale);
+      const authText = i18n.t(keys[0]);
+      const notFound = i18n.t(keys[1]);
+      const notFoundLocal = i18n.t(keys[2]);
+      const unreachable = i18n.t(keys[3]);
+      expect(authText).toContain(auth);
+      expect(authText).toContain(keyless);
+      expect(notFound).toContain(suffix);
+      expect(notFound).not.toContain('4000');
+      expect(notFoundLocal).toContain(suffix);
+      expect(notFoundLocal).toContain(port);
+      expect(unreachable).toContain(start);
+      for (const key of keys) {
+        expect(i18n.t(key)).not.toBe(key);
+      }
+      await setLocale('en');
+    },
+  );
 });

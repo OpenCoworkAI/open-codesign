@@ -123,8 +123,7 @@ function toolResultText(turn: number, toolCallId: string): string {
   const message = requests[turn]?.find(
     (item) => item.role === 'toolResult' && item.toolCallId === toolCallId,
   );
-  if (!message || message.role !== 'toolResult')
-    throw new Error(`No ${toolCallId} result at turn ${turn}`);
+  if (message?.role !== 'toolResult') throw new Error(`No ${toolCallId} result at turn ${turn}`);
   return message.content.map((part) => (part.type === 'text' ? part.text : '')).join('');
 }
 

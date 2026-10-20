@@ -29,27 +29,30 @@ describe('complete', () => {
     [undefined, 'low'],
     ['high', 'high'],
     ['off', undefined],
-  ] as const)('uses the Astra reasoning default unless overridden with %s', async (override, expected) => {
-    completeSimpleMock.mockResolvedValueOnce({
-      content: [{ type: 'text', text: 'OK' }],
-      stopReason: 'stop',
-      usage: { input: 1, output: 1, cost: { total: 0 } },
-    });
+  ] as const)(
+    'uses the Astra reasoning default unless overridden with %s',
+    async (override, expected) => {
+      completeSimpleMock.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'OK' }],
+        stopReason: 'stop',
+        usage: { input: 1, output: 1, cost: { total: 0 } },
+      });
 
-    await complete(
-      { provider: 'custom-coproxy-local', modelId: 'gpt-6-astra' },
-      [{ role: 'user', content: 'Reply OK' }],
-      {
-        apiKey: '',
-        allowKeyless: true,
-        wire: 'openai-responses',
-        baseUrl: 'http://127.0.0.1:18537/v1',
-        ...(override !== undefined ? { reasoning: override } : {}),
-      },
-    );
+      await complete(
+        { provider: 'custom-coproxy-local', modelId: 'gpt-6-astra' },
+        [{ role: 'user', content: 'Reply OK' }],
+        {
+          apiKey: '',
+          allowKeyless: true,
+          wire: 'openai-responses',
+          baseUrl: 'http://127.0.0.1:18537/v1',
+          ...(override !== undefined ? { reasoning: override } : {}),
+        },
+      );
 
-    expect(completeSimpleMock.mock.calls[0]?.[2].reasoning).toBe(expected);
-  });
+      expect(completeSimpleMock.mock.calls[0]?.[2].reasoning).toBe(expected);
+    },
+  );
 
   it('adapts shared chat history into pi-ai context for follow-up turns', async () => {
     getModelMock.mockReturnValue({

@@ -595,8 +595,7 @@ export function createTextResolver(
     const current = node(expression);
     const result = resolve(current);
     if (
-      !result ||
-      result.value.source.type !== 'StringLiteral' ||
+      result?.value.source.type !== 'StringLiteral' ||
       typeof result.value.source.value !== 'string' ||
       [...result.owners].some((owner) => unsafe.has(owner))
     )

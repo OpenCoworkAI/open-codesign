@@ -120,40 +120,41 @@ async function journal(
 }
 
 describe('method skill upgrades', () => {
-  it.each([
-    'ENOTSUP',
-    'EOPNOTSUPP',
-    'EXDEV',
-  ])('seeds all seven methods in a fresh root with exclusive copies when links report %s', async (code) => {
-    await fs.rmdir(path.dirname(candidate));
-    await fs.rmdir(dest);
-    for (const skill of Object.keys(METHOD_SKILL_HISTORY)) {
-      await fs.writeFile(path.join(source, 'skills', skill), `${skill}: bundled`);
-    }
-    hooks.link = async () => {
-      throw Object.assign(new Error('Links unavailable'), { code });
-    };
-    const copy = vi.fn();
-    hooks.copyFile = async (...args) => {
-      copy(...args);
-    };
-    expect(await ensureUserTemplates(user, source)).toMatchObject({
-      action: 'seeded',
-      methodSkills: { installed: 7, updated: 0, preserved: 0, failed: 0 },
-    });
-    expect(copy).toHaveBeenCalledTimes(7);
-    expect(copy.mock.calls.every((call) => call[2] === constants.COPYFILE_EXCL)).toBe(true);
-    expect((await fs.readdir(path.dirname(candidate))).sort()).toEqual(
-      Object.keys(METHOD_SKILL_HISTORY).sort(),
-    );
-    for (const skill of Object.keys(METHOD_SKILL_HISTORY)) {
-      expect(await fs.readFile(path.join(dest, 'skills', skill), 'utf8')).toBe(`${skill}: bundled`);
-    }
-    expect(log.info).toHaveBeenCalledWith(
-      'skill.install.exclusive_copy',
-      expect.objectContaining({ status: 'installed-missing-file' }),
-    );
-  });
+  it.each(['ENOTSUP', 'EOPNOTSUPP', 'EXDEV'])(
+    'seeds all seven methods in a fresh root with exclusive copies when links report %s',
+    async (code) => {
+      await fs.rmdir(path.dirname(candidate));
+      await fs.rmdir(dest);
+      for (const skill of Object.keys(METHOD_SKILL_HISTORY)) {
+        await fs.writeFile(path.join(source, 'skills', skill), `${skill}: bundled`);
+      }
+      hooks.link = async () => {
+        throw Object.assign(new Error('Links unavailable'), { code });
+      };
+      const copy = vi.fn();
+      hooks.copyFile = async (...args) => {
+        copy(...args);
+      };
+      expect(await ensureUserTemplates(user, source)).toMatchObject({
+        action: 'seeded',
+        methodSkills: { installed: 7, updated: 0, preserved: 0, failed: 0 },
+      });
+      expect(copy).toHaveBeenCalledTimes(7);
+      expect(copy.mock.calls.every((call) => call[2] === constants.COPYFILE_EXCL)).toBe(true);
+      expect((await fs.readdir(path.dirname(candidate))).sort()).toEqual(
+        Object.keys(METHOD_SKILL_HISTORY).sort(),
+      );
+      for (const skill of Object.keys(METHOD_SKILL_HISTORY)) {
+        expect(await fs.readFile(path.join(dest, 'skills', skill), 'utf8')).toBe(
+          `${skill}: bundled`,
+        );
+      }
+      expect(log.info).toHaveBeenCalledWith(
+        'skill.install.exclusive_copy',
+        expect.objectContaining({ status: 'installed-missing-file' }),
+      );
+    },
+  );
 
   it('preserves old methods while exclusively installing missing ones on an unsupported filesystem', async () => {
     await fs.writeFile(candidate, old);
@@ -188,26 +189,25 @@ describe('method skill upgrades', () => {
     expect(log.info).not.toHaveBeenCalledWith('skill.install.exclusive_copy', expect.anything());
   });
 
-  it.each([
-    'EACCES',
-    'EPERM',
-    'EIO',
-  ])('keeps unexpected missing-file link error %s visible without fallback', async (code) => {
-    hooks.link = async () => {
-      throw Object.assign(new Error('Unexpected link error'), { code });
-    };
-    const copy = vi.fn();
-    hooks.copyFile = async (...args) => {
-      copy(...args);
-    };
-    await expect(ensureUserTemplates(user, source)).rejects.toThrow('Unexpected link error');
-    expect(copy).not.toHaveBeenCalled();
-    await expect(fs.stat(candidate)).rejects.toMatchObject({ code: 'ENOENT' });
-    expect(log.error).toHaveBeenCalledWith(
-      'skills.upgrade.failed',
-      expect.objectContaining({ dest }),
-    );
-  });
+  it.each(['EACCES', 'EPERM', 'EIO'])(
+    'keeps unexpected missing-file link error %s visible without fallback',
+    async (code) => {
+      hooks.link = async () => {
+        throw Object.assign(new Error('Unexpected link error'), { code });
+      };
+      const copy = vi.fn();
+      hooks.copyFile = async (...args) => {
+        copy(...args);
+      };
+      await expect(ensureUserTemplates(user, source)).rejects.toThrow('Unexpected link error');
+      expect(copy).not.toHaveBeenCalled();
+      await expect(fs.stat(candidate)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(log.error).toHaveBeenCalledWith(
+        'skills.upgrade.failed',
+        expect.objectContaining({ dest }),
+      );
+    },
+  );
 
   it('keeps fallback copy failures visible rather than claiming an installation', async () => {
     hooks.link = async () => {
@@ -246,19 +246,19 @@ describe('method skill upgrades', () => {
     expect(await fs.readFile(stage, 'utf8')).toBe('user edited stage');
     expect(await fs.readFile(candidate, 'utf8')).toBe('user edited stage');
   });
-  it.each([
-    'staged.md',
-    'pending.tmp',
-  ])('preserves the candidate if preparing %s fails', async (failureFile) => {
-    await fs.writeFile(candidate, old);
-    hooks.open = async (file) => {
-      if (file.endsWith(failureFile)) throw new Error('Write denied');
-    };
-    await expect(upgradeMethodSkills(dest, source)).rejects.toThrow('retained or recovered');
-    expect(await fs.readFile(candidate, 'utf8')).toBe(old);
-    hooks.open = undefined;
-    expect(await upgradeMethodSkills(dest, source)).toMatchObject({ updated: 1 });
-  });
+  it.each(['staged.md', 'pending.tmp'])(
+    'preserves the candidate if preparing %s fails',
+    async (failureFile) => {
+      await fs.writeFile(candidate, old);
+      hooks.open = async (file) => {
+        if (file.endsWith(failureFile)) throw new Error('Write denied');
+      };
+      await expect(upgradeMethodSkills(dest, source)).rejects.toThrow('retained or recovered');
+      expect(await fs.readFile(candidate, 'utf8')).toBe(old);
+      hooks.open = undefined;
+      expect(await upgradeMethodSkills(dest, source)).toMatchObject({ updated: 1 });
+    },
+  );
 
   it('preserves the candidate if moving the backup fails', async () => {
     await fs.writeFile(candidate, old);
@@ -293,27 +293,27 @@ describe('method skill upgrades', () => {
     });
   });
 
-  it.each([
-    false,
-    true,
-  ])('replays a completed receipt with a pending journal (linked temp: %s)', async (linked) => {
-    const tx = await journal({ backup: old, candidate: next });
-    const receipt = JSON.stringify({
-      schemaVersion: 1,
-      name,
-      previousHash: sha(old),
-      installedHash: sha(next),
-      outcome: 'installed',
-    });
-    await fs.writeFile(path.join(tx, 'receipt.tmp'), receipt);
-    await fs.link(path.join(tx, 'receipt.tmp'), path.join(tx, 'receipt.json'));
-    if (!linked) await fs.unlink(path.join(tx, 'receipt.tmp'));
-    expect((await ensureUserTemplates(user, source)).methodSkills).toMatchObject({
-      recovered: 1,
-      unchanged: 1,
-    });
-    expect((await ensureUserTemplates(user, source)).methodSkills?.recovered).toBe(0);
-  });
+  it.each([false, true])(
+    'replays a completed receipt with a pending journal (linked temp: %s)',
+    async (linked) => {
+      const tx = await journal({ backup: old, candidate: next });
+      const receipt = JSON.stringify({
+        schemaVersion: 1,
+        name,
+        previousHash: sha(old),
+        installedHash: sha(next),
+        outcome: 'installed',
+      });
+      await fs.writeFile(path.join(tx, 'receipt.tmp'), receipt);
+      await fs.link(path.join(tx, 'receipt.tmp'), path.join(tx, 'receipt.json'));
+      if (!linked) await fs.unlink(path.join(tx, 'receipt.tmp'));
+      expect((await ensureUserTemplates(user, source)).methodSkills).toMatchObject({
+        recovered: 1,
+        unchanged: 1,
+      });
+      expect((await ensureUserTemplates(user, source)).methodSkills?.recovered).toBe(0);
+    },
+  );
 
   it('rejects a corrupt receipt before restoring a missing skill', async () => {
     const tx = await journal({ backup: old });
@@ -386,16 +386,15 @@ describe('method skill upgrades', () => {
     expect(await transactions()).toHaveLength(1);
   });
 
-  it.each([
-    'custom edit',
-    'known original\r\n',
-    'known original\n ',
-  ])('preserves unknown bytes without normalizing: %j', async (text) => {
-    await fs.writeFile(candidate, text);
-    expect(await upgradeMethodSkills(dest, source)).toMatchObject({ preserved: 1 });
-    expect(await fs.readFile(candidate, 'utf8')).toBe(text);
-    expect(log.info).toHaveBeenCalledWith('skill.preserved.custom_or_unknown', { candidate });
-  });
+  it.each(['custom edit', 'known original\r\n', 'known original\n '])(
+    'preserves unknown bytes without normalizing: %j',
+    async (text) => {
+      await fs.writeFile(candidate, text);
+      expect(await upgradeMethodSkills(dest, source)).toMatchObject({ preserved: 1 });
+      expect(await fs.readFile(candidate, 'utf8')).toBe(text);
+      expect(log.info).toHaveBeenCalledWith('skill.preserved.custom_or_unknown', { candidate });
+    },
+  );
 
   it('never changes private brands, existing scaffolds or unknown method names', async () => {
     for (const relative of [
@@ -420,46 +419,44 @@ describe('method skill upgrades', () => {
     }
   });
 
-  it.each([
-    'ENOTSUP',
-    'EOPNOTSUPP',
-    'EXDEV',
-  ])('reports unsupported %s without moving originals or blocking startup seeding', async (code) => {
-    await fs.writeFile(candidate, old);
-    hooks.link = async () => {
-      throw Object.assign(new Error('Unsupported hard links'), { code });
-    };
-    const move = vi.fn();
-    hooks.rename = async (...args) => {
-      move(...args);
-    };
-    expect(await ensureUserTemplates(user, source)).toMatchObject({
-      action: 'skipped',
-      updatedFiles: 0,
-      methodSkills: { failed: 1, preserved: 1, updated: 0 },
-    });
-    expect(await fs.readFile(candidate, 'utf8')).toBe(old);
-    expect(await transactions()).toEqual([]);
-    expect(move).not.toHaveBeenCalled();
-    expect(log.warn).toHaveBeenCalledWith(
-      'skill.upgrade.unsupported',
-      expect.objectContaining({ candidate, status: 'failed-preserved-original' }),
-    );
-  });
+  it.each(['ENOTSUP', 'EOPNOTSUPP', 'EXDEV'])(
+    'reports unsupported %s without moving originals or blocking startup seeding',
+    async (code) => {
+      await fs.writeFile(candidate, old);
+      hooks.link = async () => {
+        throw Object.assign(new Error('Unsupported hard links'), { code });
+      };
+      const move = vi.fn();
+      hooks.rename = async (...args) => {
+        move(...args);
+      };
+      expect(await ensureUserTemplates(user, source)).toMatchObject({
+        action: 'skipped',
+        updatedFiles: 0,
+        methodSkills: { failed: 1, preserved: 1, updated: 0 },
+      });
+      expect(await fs.readFile(candidate, 'utf8')).toBe(old);
+      expect(await transactions()).toEqual([]);
+      expect(move).not.toHaveBeenCalled();
+      expect(log.warn).toHaveBeenCalledWith(
+        'skill.upgrade.unsupported',
+        expect.objectContaining({ candidate, status: 'failed-preserved-original' }),
+      );
+    },
+  );
 
-  it.each([
-    'EACCES',
-    'EPERM',
-    'EIO',
-  ])('does not disguise unexpected preflight %s as a safe unsupported skip', async (code) => {
-    await fs.writeFile(candidate, old);
-    hooks.link = async () => {
-      throw Object.assign(new Error('Denied'), { code });
-    };
-    await expect(ensureUserTemplates(user, source)).rejects.toThrow('retained or recovered');
-    expect(await fs.readFile(candidate, 'utf8')).toBe(old);
-    expect(log.error).toHaveBeenCalled();
-  });
+  it.each(['EACCES', 'EPERM', 'EIO'])(
+    'does not disguise unexpected preflight %s as a safe unsupported skip',
+    async (code) => {
+      await fs.writeFile(candidate, old);
+      hooks.link = async () => {
+        throw Object.assign(new Error('Denied'), { code });
+      };
+      await expect(ensureUserTemplates(user, source)).rejects.toThrow('retained or recovered');
+      expect(await fs.readFile(candidate, 'utf8')).toBe(old);
+      expect(log.error).toHaveBeenCalled();
+    },
+  );
 
   it('preserves an edit that arrives before the final comparison', async () => {
     await fs.writeFile(candidate, old);
@@ -524,18 +521,18 @@ describe('method skill upgrades', () => {
     { label: 'after move', backup: old },
     { label: 'after publication', backup: old, candidate: next },
     { label: 'custom concurrent replacement', backup: old, candidate: 'custom' },
-  ])('recovers $label before ordinary seeding and is idempotent', async ({
-    label: _label,
-    ...state
-  }) => {
-    await journal(state);
-    const result = await ensureUserTemplates(user, source);
-    expect(result.methodSkills?.recovered).toBe(1);
-    expect(await fs.readFile(candidate, 'utf8')).toBe(
-      state.candidate === 'custom' ? 'custom' : next,
-    );
-    expect((await ensureUserTemplates(user, source)).methodSkills?.recovered).toBe(0);
-  });
+  ])(
+    'recovers $label before ordinary seeding and is idempotent',
+    async ({ label: _label, ...state }) => {
+      await journal(state);
+      const result = await ensureUserTemplates(user, source);
+      expect(result.methodSkills?.recovered).toBe(1);
+      expect(await fs.readFile(candidate, 'utf8')).toBe(
+        state.candidate === 'custom' ? 'custom' : next,
+      );
+      expect((await ensureUserTemplates(user, source)).methodSkills?.recovered).toBe(0);
+    },
+  );
 
   it('recovers a crash between hard-link publication and staging cleanup', async () => {
     const tx = await journal({ backup: old, stage: true });

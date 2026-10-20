@@ -328,21 +328,21 @@ describe('agent stream / IPC completion ordering', () => {
     expect(useCodesignStore.getState().streamingAssistantTextByDesign[design.id]).toBeUndefined();
   });
 
-  it.each([
-    false,
-    undefined,
-  ])('preserves normal assistant append when chatPersisted is %s', (chatPersisted) => {
-    emit('turn_start', 'normal');
-    emit('turn_end', 'normal', {
-      finalText: 'Normal result',
-      ...(chatPersisted !== undefined ? { chatPersisted } : {}),
-    });
-    expect(append).toHaveBeenCalledWith({
-      designId: design.id,
-      kind: 'assistant_text',
-      payload: { text: 'Normal result' },
-    });
-  });
+  it.each([false, undefined])(
+    'preserves normal assistant append when chatPersisted is %s',
+    (chatPersisted) => {
+      emit('turn_start', 'normal');
+      emit('turn_end', 'normal', {
+        finalText: 'Normal result',
+        ...(chatPersisted !== undefined ? { chatPersisted } : {}),
+      });
+      expect(append).toHaveBeenCalledWith({
+        designId: design.id,
+        kind: 'assistant_text',
+        payload: { text: 'Normal result' },
+      });
+    },
+  );
 
   it('reconciles active message outcomes after Stop without reactivating generation', () => {
     const message = {
@@ -387,34 +387,34 @@ describe('agent stream / IPC completion ordering', () => {
     expect(useCodesignStore.getState().activeMessagesByDesign).toEqual({});
   });
 
-  it.each([
-    'agent_end',
-    'error',
-  ] as const)('shows the IPC failure even when %s arrives first', async (eventType) => {
-    useCodesignStore.getState().setReferenceUrl('https://example.com/reference');
-    generate.mockImplementationOnce(async ({ generationId }: { generationId: string }) => {
-      emit('turn_start', generationId);
-      emit(eventType, generationId);
-      expect(useCodesignStore.getState().generationByDesign[design.id]).toMatchObject({
-        generationId,
-        awaitingResponse: true,
-        submittedContext: { referenceUrl: 'https://example.com/reference', comments: {} },
+  it.each(['agent_end', 'error'] as const)(
+    'shows the IPC failure even when %s arrives first',
+    async (eventType) => {
+      useCodesignStore.getState().setReferenceUrl('https://example.com/reference');
+      generate.mockImplementationOnce(async ({ generationId }: { generationId: string }) => {
+        emit('turn_start', generationId);
+        emit(eventType, generationId);
+        expect(useCodesignStore.getState().generationByDesign[design.id]).toMatchObject({
+          generationId,
+          awaitingResponse: true,
+          submittedContext: { referenceUrl: 'https://example.com/reference', comments: {} },
+        });
+        throw new Error('400 unsupported reasoning');
       });
-      throw new Error('400 unsupported reasoning');
-    });
 
-    await useCodesignStore.getState().sendPrompt({ prompt: 'Create an Aurora design' });
+      await useCodesignStore.getState().sendPrompt({ prompt: 'Create an Aurora design' });
 
-    expect(useCodesignStore.getState().errorMessage).toContain('400 unsupported reasoning');
-    expect(useCodesignStore.getState().generationStage).toBe('error');
-    expect(useCodesignStore.getState().isGenerating).toBe(false);
-    expect(useCodesignStore.getState().generationByDesign[design.id]).toBeUndefined();
-    expect(useCodesignStore.getState().referenceUrl).toBe('https://example.com/reference');
-    expect(append.mock.calls.filter(([row]) => row.kind === 'error')).toHaveLength(1);
-    expect(useCodesignStore.getState().toasts).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(useCodesignStore.getState().tryAutoPolish).not.toHaveBeenCalled();
-  });
+      expect(useCodesignStore.getState().errorMessage).toContain('400 unsupported reasoning');
+      expect(useCodesignStore.getState().generationStage).toBe('error');
+      expect(useCodesignStore.getState().isGenerating).toBe(false);
+      expect(useCodesignStore.getState().generationByDesign[design.id]).toBeUndefined();
+      expect(useCodesignStore.getState().referenceUrl).toBe('https://example.com/reference');
+      expect(append.mock.calls.filter(([row]) => row.kind === 'error')).toHaveLength(1);
+      expect(useCodesignStore.getState().toasts).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(useCodesignStore.getState().tryAutoPolish).not.toHaveBeenCalled();
+    },
+  );
 
   it('retains artifacts and usage from the response after agent_end', async () => {
     generate.mockImplementationOnce(async ({ generationId }: { generationId: string }) => {

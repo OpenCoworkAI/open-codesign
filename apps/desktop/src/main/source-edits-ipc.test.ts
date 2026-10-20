@@ -226,53 +226,53 @@ describe('deterministic source edits IPC', () => {
     await writeFile(path.join(root, 'App.jsx'), String.fromCharCode(0xfeff) + original);
     expect(await inspect()).toMatchObject({ status: 'rejected', reason: 'stale-source' });
   });
-  it.each([
-    'App.jsx',
-    'App.tsx',
-  ])('preserves BOM across workspace read, inspect, apply and refreshed %s source', async (name) => {
-    const source = String.fromCharCode(0xfeff) + original;
-    const file = path.join(root, name);
-    await writeFile(file, source);
-    // This is the reader used by files.read, not a separate engine-only string.
-    const preview = await readWorkspaceFileAt(root, name);
-    const inspected = await inspect(designId, name, preview.content);
-    expect(inspected.status).toBe('ready');
-    if (inspected.status !== 'ready') throw new Error(inspected.message);
-    expect(inspected.sourceHash).toBe(
-      createHash('sha256')
-        .update(await readFile(file))
-        .digest('hex'),
-    );
-    const target = inspected.targets.find((entry) => entry.tagName === 'h1');
-    if (!target) throw new Error('Missing BOM source target');
-    const result = SourceEditApplyResultV1.parse(
-      await invoke('apply', {
-        schemaVersion: 1,
-        designId,
-        path: name,
-        expectedSourceHash: inspected.sourceHash,
-        previewRevision: 'bom-preview',
-        targetId: target.id,
-        operation: { kind: 'set-text', value: 'BOM edited' },
-        scope: 'source-definition',
-      }),
-    );
-    expect(result.status).toBe('applied');
-    if (result.status !== 'applied') throw new Error(result.message);
-    expect(result.content.charCodeAt(0)).toBe(0xfeff);
-    expect(result.content).toBe(
-      source.slice(0, result.patch.start) +
-        result.patch.replacement +
-        source.slice(result.patch.end),
-    );
-    expect(await readFile(file)).toEqual(Buffer.from(result.content, 'utf8'));
-    const refreshed = await readWorkspaceFileAt(root, name);
-    expect(refreshed.content).toBe(result.content);
-    expect(await inspect(designId, name, refreshed.content)).toMatchObject({
-      status: 'ready',
-      sourceHash: result.sourceHash,
-    });
-  });
+  it.each(['App.jsx', 'App.tsx'])(
+    'preserves BOM across workspace read, inspect, apply and refreshed %s source',
+    async (name) => {
+      const source = String.fromCharCode(0xfeff) + original;
+      const file = path.join(root, name);
+      await writeFile(file, source);
+      // This is the reader used by files.read, not a separate engine-only string.
+      const preview = await readWorkspaceFileAt(root, name);
+      const inspected = await inspect(designId, name, preview.content);
+      expect(inspected.status).toBe('ready');
+      if (inspected.status !== 'ready') throw new Error(inspected.message);
+      expect(inspected.sourceHash).toBe(
+        createHash('sha256')
+          .update(await readFile(file))
+          .digest('hex'),
+      );
+      const target = inspected.targets.find((entry) => entry.tagName === 'h1');
+      if (!target) throw new Error('Missing BOM source target');
+      const result = SourceEditApplyResultV1.parse(
+        await invoke('apply', {
+          schemaVersion: 1,
+          designId,
+          path: name,
+          expectedSourceHash: inspected.sourceHash,
+          previewRevision: 'bom-preview',
+          targetId: target.id,
+          operation: { kind: 'set-text', value: 'BOM edited' },
+          scope: 'source-definition',
+        }),
+      );
+      expect(result.status).toBe('applied');
+      if (result.status !== 'applied') throw new Error(result.message);
+      expect(result.content.charCodeAt(0)).toBe(0xfeff);
+      expect(result.content).toBe(
+        source.slice(0, result.patch.start) +
+          result.patch.replacement +
+          source.slice(result.patch.end),
+      );
+      expect(await readFile(file)).toEqual(Buffer.from(result.content, 'utf8'));
+      const refreshed = await readWorkspaceFileAt(root, name);
+      expect(refreshed.content).toBe(result.content);
+      expect(await inspect(designId, name, refreshed.content)).toMatchObject({
+        status: 'ready',
+        sourceHash: result.sourceHash,
+      });
+    },
+  );
   it('serializes two designs sharing one source and rejects the second stale patch', async () => {
     const other = createDesign(db, 'Shared');
     updateDesignWorkspace(db, other.id, root);

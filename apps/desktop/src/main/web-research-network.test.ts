@@ -449,14 +449,14 @@ describe('HTML5 text extraction (not an HTML sanitizer)', () => {
     expect(result.text).toContain('Readable');
     expect(result.text).not.toMatch(/<script|<!--/i);
   });
-  it.each([
-    'script',
-    'style',
-    'noscript',
-    'template',
-  ])('does not leak an unfinished %s subtree into evidence', async (tag) => {
-    expect((await readableHtml(`<p>Visible</p><${tag}>must-not-be-evidence`)).text).toBe('Visible');
-  });
+  it.each(['script', 'style', 'noscript', 'template'])(
+    'does not leak an unfinished %s subtree into evidence',
+    async (tag) => {
+      expect((await readableHtml(`<p>Visible</p><${tag}>must-not-be-evidence`)).text).toBe(
+        'Visible',
+      );
+    },
+  );
   it('preserves encoded tag literals as untrusted text, not markup to render', async () => {
     const literal = '<script>alert(1)</script>';
     expect(

@@ -102,9 +102,14 @@ describe.skipIf(!chrome)('tap targets and control names in system Chrome', () =>
         'a visually hidden input whose label is the target',
         '<label>Custom check <input type="checkbox" style="position:absolute;width:1px;height:1px;opacity:0"></label>',
       ],
-    ])('skips a control that is %s, even with a target right next to it', async (_label, markup) => {
-      expect(await targetsIn(`<div style="display:flex">${markup}${neighbour}</div>`)).toEqual([]);
-    });
+    ])(
+      'skips a control that is %s, even with a target right next to it',
+      async (_label, markup) => {
+        expect(await targetsIn(`<div style="display:flex">${markup}${neighbour}</div>`)).toEqual(
+          [],
+        );
+      },
+    );
 
     it('names the smallest first, at most five, and says how many more there were', async () => {
       const buttons = [17, 12, 15, 10, 16, 14, 13, 11]

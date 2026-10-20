@@ -64,7 +64,9 @@ describe('permission-ipc', () => {
     cancelPendingPermissionRequests('cancelled-run');
     await expect(first).resolves.toEqual({ scope: 'deny' });
     expect(execute).not.toHaveBeenCalled();
-    const requestId = (send.mock.calls[1]?.[1] as { requestId: string }).requestId;
+    const request = send.mock.calls[1]?.[1] as { requestId: string } | undefined;
+    if (request === undefined) throw new Error('Missing second permission request');
+    const { requestId } = request;
     handlers.get('permission:resolve')?.(null, { requestId, scope: 'once' });
     await expect(second).resolves.toEqual({ scope: 'once' });
     expect(execute.mock.calls).toEqual([['approved']]);

@@ -177,30 +177,29 @@ describe('migrateSecrets', () => {
 });
 
 describe('migration recovery for optional and unreadable credentials', () => {
-  it.each([
-    'tvly-missing-plain-prefix',
-    'safe:broken-ciphertext',
-    'legacy-ciphertext',
-  ])('retains an unreadable %s without logging its value or accepting it as plaintext', (stored) => {
-    const rawError = 'secret-must-never-be-logged';
-    vi.mocked(safeStorage.decryptString).mockImplementationOnce(() => {
-      throw new Error(rawError);
-    });
-    const cfg = hydrateConfig({
-      version: 3,
-      activeProvider: '',
-      activeModel: '',
-      providers: {},
-      secrets: { tavily: { ciphertext: stored } },
-    });
-    const migrated = migrateSecrets(cfg);
-    expect(migrated).toEqual({ config: cfg, changed: false });
-    const logged = JSON.stringify(loggerMock.warn.mock.calls);
-    expect(logged).toContain('tavily');
-    expect(logged).not.toContain(stored);
-    expect(logged).not.toContain(rawError);
-    expect(() => decryptSecret(stored)).toThrow(CodesignError);
-  });
+  it.each(['tvly-missing-plain-prefix', 'safe:broken-ciphertext', 'legacy-ciphertext'])(
+    'retains an unreadable %s without logging its value or accepting it as plaintext',
+    (stored) => {
+      const rawError = 'secret-must-never-be-logged';
+      vi.mocked(safeStorage.decryptString).mockImplementationOnce(() => {
+        throw new Error(rawError);
+      });
+      const cfg = hydrateConfig({
+        version: 3,
+        activeProvider: '',
+        activeModel: '',
+        providers: {},
+        secrets: { tavily: { ciphertext: stored } },
+      });
+      const migrated = migrateSecrets(cfg);
+      expect(migrated).toEqual({ config: cfg, changed: false });
+      const logged = JSON.stringify(loggerMock.warn.mock.calls);
+      expect(logged).toContain('tavily');
+      expect(logged).not.toContain(stored);
+      expect(logged).not.toContain(rawError);
+      expect(() => decryptSecret(stored)).toThrow(CodesignError);
+    },
+  );
 
   it('still migrates good entries and leaves bad entries untouched in a mixed config', () => {
     vi.mocked(safeStorage.decryptString).mockImplementationOnce(() => {

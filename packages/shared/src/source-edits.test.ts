@@ -123,27 +123,22 @@ describe('source edit wire contracts', () => {
       }).textSources?.[0]?.start,
     ).toBe(0);
   });
-  it.each([
-    'onClick',
-    'style',
-    'src',
-    'href',
-    'data-codesign-source-id',
-  ])('rejects forbidden attribute %s', (name) => {
-    expect(SourceEditOperation.safeParse({ kind: 'set-attribute', name, value: 'x' }).success).toBe(
-      false,
-    );
-  });
-  it.each([
-    'background',
-    'backgroundImage',
-    'position',
-    '--custom',
-  ])('rejects forbidden style %s', (property) => {
-    expect(SourceEditOperation.safeParse({ kind: 'set-style', property, value: 'x' }).success).toBe(
-      false,
-    );
-  });
+  it.each(['onClick', 'style', 'src', 'href', 'data-codesign-source-id'])(
+    'rejects forbidden attribute %s',
+    (name) => {
+      expect(
+        SourceEditOperation.safeParse({ kind: 'set-attribute', name, value: 'x' }).success,
+      ).toBe(false);
+    },
+  );
+  it.each(['background', 'backgroundImage', 'position', '--custom'])(
+    'rejects forbidden style %s',
+    (property) => {
+      expect(
+        SourceEditOperation.safeParse({ kind: 'set-style', property, value: 'x' }).success,
+      ).toBe(false);
+    },
+  );
   it('rejects extra executable fields, non-source scope and obsolete versions', () => {
     expect(
       SourceEditOperation.safeParse({ kind: 'set-text', value: 'x', expression: 'run()' }).success,
