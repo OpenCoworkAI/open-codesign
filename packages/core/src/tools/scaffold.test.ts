@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { setImmediate } from 'node:timers/promises';
+import { withWorkspaceFileWriter } from '@open-codesign/shared/workspace-file-lock';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listScaffoldKinds, loadScaffoldManifest, makeScaffoldTool, runScaffold } from './scaffold';
 
@@ -31,6 +33,32 @@ const MANIFEST = {
   },
 } as const;
 
+const cancellation = vi.hoisted(() => ({
+  onWriter: (): void => {},
+  afterMkdir: (): void => {},
+}));
+vi.mock('@open-codesign/shared/workspace-file-lock', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@open-codesign/shared/workspace-file-lock')>();
+  return {
+    withWorkspaceFileWriter: <T>(file: string, operation: () => Promise<T>): Promise<T> => {
+      const result = actual.withWorkspaceFileWriter(file, operation);
+      cancellation.onWriter();
+      return result;
+    },
+  };
+});
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    mkdir: async (...args: Parameters<typeof actual.mkdir>) => {
+      const result = await actual.mkdir(...args);
+      cancellation.afterMkdir();
+      return result;
+    },
+  };
+});
+
 describe('scaffold tool', () => {
   let scaffoldsRoot: string;
 
@@ -58,7 +86,93 @@ describe('scaffold tool', () => {
   });
 
   afterEach(() => {
+    cancellation.onWriter = () => {};
+    cancellation.afterMkdir = () => {};
     rmSync(scaffoldsRoot, { recursive: true, force: true });
+  });
+
+  it('retains a queued scaffold until settlement but never publishes after cancellation', async () => {
+    const dest = path.join(scaffoldsRoot, 'output.jsx');
+    writeFileSync(dest, 'existing user source');
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered = (): void => {};
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const holder = withWorkspaceFileWriter(dest, async () => {
+      entered();
+      await gate;
+    });
+    await started;
+    let attempted = (): void => {};
+    const queued = new Promise<void>((resolve) => {
+      attempted = resolve;
+    });
+    cancellation.onWriter = attempted;
+    const controller = new AbortController();
+    const onScaffolded = vi.fn();
+    let settled = false;
+    const copy = makeScaffoldTool(
+      () => scaffoldsRoot,
+      () => scaffoldsRoot,
+      { onScaffolded },
+    )
+      .execute('cancel-copy', { kind: 'demo-frame', destPath: 'output.jsx' }, controller.signal)
+      .finally(() => {
+        settled = true;
+      });
+    const result = Promise.allSettled([copy]);
+    try {
+      await queued;
+      controller.abort();
+      await setImmediate();
+      expect(settled).toBe(false);
+    } finally {
+      release();
+    }
+    await holder;
+    expect(await result).toMatchObject([{ status: 'rejected', reason: { name: 'AbortError' } }]);
+    expect(readFileSync(dest, 'utf8')).toBe('existing user source');
+    expect(onScaffolded).not.toHaveBeenCalled();
+    await expect(withWorkspaceFileWriter(dest, async () => 'released')).resolves.toBe('released');
+  });
+
+  it('checks cancellation before work and after mkdir before the OS write', async () => {
+    const dest = path.join(scaffoldsRoot, 'output.jsx');
+    writeFileSync(dest, 'existing user source');
+    const controller = new AbortController();
+    const onScaffolded = vi.fn();
+    const tool = makeScaffoldTool(
+      () => scaffoldsRoot,
+      () => scaffoldsRoot,
+      { onScaffolded },
+    );
+    cancellation.afterMkdir = () => controller.abort();
+    await expect(
+      tool.execute(
+        'abort-at-mkdir',
+        {
+          kind: 'demo-frame',
+          destPath: 'output.jsx',
+        },
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(readFileSync(dest, 'utf8')).toBe('existing user source');
+    expect(onScaffolded).not.toHaveBeenCalled();
+    await expect(
+      tool.execute(
+        'already-aborted',
+        {
+          kind: 'demo-frame',
+          destPath: 'output.jsx',
+        },
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('manifest loads and contains entries', async () => {

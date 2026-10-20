@@ -52,7 +52,7 @@ function decryptSafeStorage(base64: string, format: 'encrypted' | 'legacy'): str
     return safeStorage.decryptString(Buffer.from(base64, 'base64'));
   } catch (err) {
     throw new CodesignError(
-      `Failed to decrypt a ${format} API key. Please re-enter your API key in Settings.`,
+      `Failed to decrypt a ${format} API key. Re-enter it in Settings, or replace the relevant config.toml secret with ciphertext = "plain:YOUR_API_KEY" using a fresh plaintext key, not the existing encrypted value.`,
       ERROR_CODES.KEYCHAIN_UNAVAILABLE,
       { cause: err },
     );
@@ -96,10 +96,20 @@ export function migrateSecrets(cfg: Config): { config: Config; changed: boolean 
   const nextSecrets: Record<string, SecretRef> = { ...secrets };
   let changed = false;
   for (const [provider, ref] of entries) {
-    const migrated = migrateSecretRef(ref);
-    if (migrated === null) continue;
-    nextSecrets[provider] = migrated;
-    changed = true;
+    try {
+      const migrated = migrateSecretRef(ref);
+      if (migrated === null) continue;
+      nextSecrets[provider] = migrated;
+      changed = true;
+    } catch {
+      // Migration must not prevent users from opening Settings to repair a key.
+      // Never log the exception: OS/adapter errors may contain credential data.
+      logger.warn('keychain.migration.skipped', {
+        provider,
+        reason:
+          'Stored credential could not be migrated; original value was preserved. Re-enter the key in Settings or repair its config.toml entry.',
+      });
+    }
   }
   return { config: { ...cfg, secrets: nextSecrets }, changed };
 }

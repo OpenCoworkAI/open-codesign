@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "projects": [
+    {
+      "id": "p1",
+      "name": "Field Notes editorial",
+      "description": "An independent nature journal cover."
+    },
+    { "id": "p2", "name": "Everyday", "description": "Make room for life outside work." },
+    {
+      "id": "p3",
+      "name": "Personal experiments",
+      "description": "A fresh space for the next idea."
+    }
+  ]
+}

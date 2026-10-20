@@ -110,29 +110,59 @@ function compactPreviewDetails(details: Record<string, unknown>): Record<string,
   };
 }
 
-function compactDoneDetails(details: Record<string, unknown>): Record<string, unknown> {
-  const status = details['status'];
-  const path = details['path'];
-  const summary = typeof details['summary'] === 'string' ? details['summary'] : undefined;
-  const errors = Array.isArray(details['errors']) ? details['errors'] : [];
-  const errorsPreview = errors
+function compactDoneFindings(
+  details: Record<string, unknown>,
+  key: 'errors' | 'warnings',
+): { count: number; preview: DoneErrorPreview[] } {
+  const countKey = key === 'errors' ? 'errorCount' : 'warningCount';
+  const previewKey = key === 'errors' ? 'errorsPreview' : 'warningsPreview';
+  const raw = details[key];
+  const previous = details[previewKey];
+  const findings = Array.isArray(raw) ? raw : Array.isArray(previous) ? previous : [];
+  const previousCount = details[countKey];
+  const count =
+    !Array.isArray(raw) &&
+    typeof previousCount === 'number' &&
+    Number.isSafeInteger(previousCount) &&
+    previousCount >= findings.length
+      ? previousCount
+      : findings.length;
+  const preview = findings
     .slice(0, DONE_ERROR_PREVIEW_LIMIT)
     .map((item) => {
       if (!isRecord(item)) return null;
       const message = typeof item['message'] === 'string' ? item['message'] : null;
       if (message === null) return null;
       return {
-        message,
-        ...(typeof item['source'] === 'string' ? { source: item['source'] } : {}),
+        message: truncateText(message, 1_000),
+        ...(typeof item['source'] === 'string'
+          ? { source: truncateText(item['source'], 256) }
+          : {}),
         ...(typeof item['lineno'] === 'number' ? { lineno: item['lineno'] } : {}),
       };
     })
     .filter((item): item is DoneErrorPreview => item !== null);
+  return { count, preview };
+}
+
+function compactDoneDetails(details: Record<string, unknown>): Record<string, unknown> {
+  const status = details['status'];
+  const path = details['path'];
+  const summary =
+    typeof details['summary'] === 'string' ? truncateText(details['summary'], 2_000) : undefined;
+  const errors = compactDoneFindings(details, 'errors');
+  const warnings = compactDoneFindings(details, 'warnings');
   return {
     ...(typeof status === 'string' ? { status } : {}),
     ...(typeof path === 'string' ? { path } : {}),
-    errorCount: errors.length,
-    errorsPreview,
+    errorCount: errors.count,
+    errorsPreview: errors.preview,
+    ...(warnings.count > 0
+      ? {
+          warningCount: warnings.count,
+          warningsPreview: warnings.preview,
+        }
+      : {}),
     ...(summary !== undefined ? { summary } : {}),
     summarized: true,
   };

@@ -11,11 +11,20 @@ describe('tool-manifest', () => {
       'scaffold',
       'inspect_workspace',
       'str_replace_based_edit_tool',
+      'decompose_to_ui_kit',
+      'verify_ui_kit_parity',
+      'verify_ui_kit_visual_parity',
       'done',
       'preview',
       'generate_image_asset',
       'tweaks',
       'ask',
+      'web_search',
+      'web_fetch',
+      'research_evidence',
+      'research_slide',
+      'research_export',
+      'research_records',
     ]);
     const currentNames = TOOL_MANIFEST_V1.tools
       .filter((tool) => tool.status === 'current')
@@ -53,6 +62,9 @@ describe('tool-manifest', () => {
       'skill',
       'scaffold',
       'str_replace_based_edit_tool',
+      'decompose_to_ui_kit',
+      'verify_ui_kit_parity',
+      'verify_ui_kit_visual_parity',
       'done',
     ]);
   });

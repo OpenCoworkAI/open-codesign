@@ -20,7 +20,8 @@
     "prepare": "husky",
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "test": "turbo run test",
+    "test": "pnpm test:scripts && turbo run test",
+    "test:scripts": "node --test .github/scripts/deepseek-common.test.mjs",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "turbo run typecheck",
@@ -35,22 +36,26 @@
   },
   "pnpm": {
     "overrides": {
-      "@xmldom/xmldom@<0.8.13": "0.8.13",
+      "@xmldom/xmldom@<0.8.15": "0.8.15",
+      "pptxgenjs@4.0.1>image-size": "-",
       "fast-xml-parser@<5.7.0": ">=5.7.0",
       "vitepress>vite": "6.4.2",
       "esbuild@<0.25.0": ">=0.25.0"
+    },
+    "patchedDependencies": {
+      "pptxgenjs@4.0.1": "patches/pptxgenjs@4.0.1.patch"
     }
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
-    "@changesets/cli": "^2.27.11",
+    "@changesets/cli": "^2.31.1",
     "@iarna/toml": "^2.2.5",
     "@open-codesign/core": "workspace:*",
     "@open-codesign/shared": "workspace:*",
-    "@types/node": "^22.19.19",
+    "@types/node": "^22.20.5",
     "acorn": "^8.14.0",
     "husky": "^9.1.7",
-    "tsx": "^4.19.2",
+    "tsx": "^4.22.3",
     "turbo": "^2.9.14",
     "typescript": "^6.0.3"
   }

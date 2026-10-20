@@ -105,6 +105,12 @@ function compactToolResultForUi(result: unknown): unknown {
   };
 }
 
+function parityDetailsForToast(result: unknown): Record<string, unknown> | null {
+  if (!isRecord(result)) return null;
+  const details = result['details'];
+  return isRecord(details) ? details : result;
+}
+
 function compactChatRowForUi(row: ChatMessageRow): ChatMessageRow {
   if (row.kind === 'tool_call') {
     const payload = isRecord(row.payload) ? (row.payload as unknown as ChatToolCallPayload) : null;
@@ -159,6 +165,39 @@ interface ChatSliceActions {
 }
 
 export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
+  type ChatChange = (rows: ChatMessageRow[]) => ChatMessageRow[];
+  let nextLoad = 0;
+  let publishedLoad = 0;
+  const pendingStatusUpdates = new Map<
+    string,
+    { next: number; published: number; pending: number }
+  >();
+  const pendingLoads = new Set<{
+    id: number;
+    designId: string;
+    epoch: number;
+    changes: ChatChange[];
+  }>();
+  function pruneLoads(): void {
+    for (const load of pendingLoads) {
+      if (load.epoch !== get().chatViewEpoch || load.id <= publishedLoad) {
+        load.changes.length = 0;
+        pendingLoads.delete(load);
+      }
+    }
+  }
+  function changeChat(designId: string, change: ChatChange): void {
+    const state = get();
+    pruneLoads();
+    for (const load of pendingLoads) {
+      if (load.designId === designId) {
+        load.changes.push(change);
+      }
+    }
+    if (state.currentDesignId === designId) {
+      set({ chatMessages: compactChatRowsForUi(change(state.chatMessages)) });
+    }
+  }
   return {
     async loadChatForCurrentDesign() {
       if (!window.codesign) return;
@@ -167,18 +206,47 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
         set({ chatMessages: [], chatLoaded: true });
         return;
       }
+      const load = {
+        id: 0,
+        designId,
+        epoch: get().chatViewEpoch,
+        changes: [] as ChatChange[],
+      };
+      const publicationBeforeSeed = publishedLoad;
+      const canPublish = () =>
+        get().currentDesignId === designId &&
+        get().chatViewEpoch === load.epoch &&
+        load.id > publishedLoad;
       try {
         // Seed existing designs' chat history from snapshots on first open.
         await window.codesign.chat.seedFromSnapshots(designId);
+        if (get().currentDesignId !== designId || get().chatViewEpoch !== load.epoch) return;
+        load.id = ++nextLoad;
+        pruneLoads();
+        pendingLoads.add(load);
         const rows = await window.codesign.chat.list(designId);
-        // Guard against a design switch happening while the IPC was in flight —
-        // we'd otherwise render the previous design's chat into the new one.
-        if (get().currentDesignId !== designId) return;
-        set({ chatMessages: compactChatRowsForUi(rows), chatLoaded: true });
+        if (!canPublish()) return;
+        // Replay only writes acknowledged during this read, including patches to
+        // rows not yet visible. Dropping the read would lose initial history.
+        const reconciled = load.changes.reduce((current, change) => change(current), rows);
+        publishedLoad = load.id;
+        pruneLoads();
+        set({ chatMessages: compactChatRowsForUi(reconciled), chatLoaded: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
         console.warn('[open-codesign] loadChatForCurrentDesign failed:', msg);
-        set({ chatLoaded: true });
+        if (
+          canPublish() ||
+          (load.id === 0 &&
+            publishedLoad === publicationBeforeSeed &&
+            get().currentDesignId === designId &&
+            get().chatViewEpoch === load.epoch)
+        ) {
+          set({ chatLoaded: true });
+        }
+      } finally {
+        load.changes.length = 0;
+        pendingLoads.delete(load);
       }
     },
 
@@ -186,11 +254,11 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
       if (!window.codesign) return null;
       try {
         const row = await window.codesign.chat.append(input);
-        // Only merge into state if the append belongs to the current design —
-        // a background append to a previous design must not pollute the view.
-        if (get().currentDesignId === input.designId) {
-          set((s) => ({ chatMessages: compactChatRowsForUi([...s.chatMessages, row]) }));
-        }
+        changeChat(input.designId, (rows) =>
+          rows.some((existing) => existing.id === row.id)
+            ? rows
+            : [...rows, row].sort((a, b) => a.seq - b.seq),
+        );
         return row;
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
@@ -200,7 +268,13 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
     },
 
     clearChatLocal() {
-      set({ chatMessages: [], chatLoaded: false });
+      for (const load of pendingLoads) load.changes.length = 0;
+      pendingLoads.clear();
+      set((state) => ({
+        chatMessages: [],
+        chatLoaded: false,
+        chatViewEpoch: state.chatViewEpoch + 1,
+      }));
     },
 
     setStreamingAssistantText(value) {
@@ -257,10 +331,38 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
           },
         });
       }
+      if (toolName === 'verify_ui_kit_visual_parity') {
+        const details = parityDetailsForToast(result);
+        const passCount = typeof details?.['passCount'] === 'number' ? details['passCount'] : 0;
+        const totalChecks =
+          typeof details?.['totalChecks'] === 'number' ? details['totalChecks'] : 0;
+        const judgeCostUsd =
+          typeof details?.['judgeCostUsd'] === 'number' ? details['judgeCostUsd'] : 0;
+        const status = typeof details?.['status'] === 'string' ? details['status'] : 'unknown';
+        if (totalChecks > 0) {
+          const ok = status === 'verified' || status === 'needs_review';
+          get().pushToast({
+            variant: ok ? 'success' : 'info',
+            title: tr('sidebar.decomposeJudgeResultTitle', {
+              passed: passCount,
+              total: totalChecks,
+              status,
+            }),
+            description: tr('sidebar.decomposeJudgeResultDescription', {
+              cost: `$${judgeCostUsd.toFixed(4)}`,
+            }),
+          });
+        }
+      }
     },
 
     async updateChatToolStatus({ designId, seq, status, result, durationMs, errorMessage }) {
       if (!window.codesign) return;
+      const key = `${designId}:${seq}`;
+      const updates = pendingStatusUpdates.get(key) ?? { next: 0, published: 0, pending: 0 };
+      const version = ++updates.next;
+      updates.pending++;
+      pendingStatusUpdates.set(key, updates);
       try {
         await window.codesign.chat.updateToolStatus({
           designId,
@@ -270,31 +372,32 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
           ...(durationMs !== undefined ? { durationMs } : {}),
           ...(errorMessage !== undefined ? { errorMessage } : {}),
         });
+        if (version < updates.published) return;
+        updates.published = version;
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'unknown';
         console.warn('[open-codesign] updateChatToolStatus failed:', msg);
         return;
+      } finally {
+        if (--updates.pending === 0) pendingStatusUpdates.delete(key);
       }
       // Mirror the patch into local chatMessages so WorkingCard re-renders
       // immediately without waiting for a list reload.
-      if (get().currentDesignId !== designId) return;
-      set((s) => ({
-        chatMessages: compactChatRowsForUi(
-          s.chatMessages.map((m) => {
-            if (m.designId !== designId || m.seq !== seq || m.kind !== 'tool_call') return m;
-            const prev = (m.payload as ChatToolCallPayload | null) ?? null;
-            if (!prev) return m;
-            const nextPayload: ChatToolCallPayload = {
-              ...prev,
-              status,
-              ...(result !== undefined ? { result } : {}),
-              ...(durationMs !== undefined ? { durationMs } : {}),
-              ...(errorMessage !== undefined ? { error: { message: errorMessage } } : {}),
-            };
-            return { ...m, payload: nextPayload };
-          }),
-        ),
-      }));
+      changeChat(designId, (rows) =>
+        rows.map((m) => {
+          if (m.designId !== designId || m.seq !== seq || m.kind !== 'tool_call') return m;
+          const prev = (m.payload as ChatToolCallPayload | null) ?? null;
+          if (!prev) return m;
+          const nextPayload: ChatToolCallPayload = {
+            ...prev,
+            status,
+            ...(result !== undefined ? { result } : {}),
+            ...(durationMs !== undefined ? { durationMs } : {}),
+            ...(errorMessage !== undefined ? { error: { message: errorMessage } } : {}),
+          };
+          return { ...m, payload: nextPayload };
+        }),
+      );
     },
 
     setPreviewSourceFromAgent({ designId, content }) {

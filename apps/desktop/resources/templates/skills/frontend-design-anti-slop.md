@@ -2,10 +2,9 @@
 schemaVersion: 1
 name: frontend-design-anti-slop
 description: >
-  Creates distinctive, production-grade frontend interfaces with exceptional
-  design quality. Use when building any UI component, landing page, dashboard,
-  prototype, or when styling HTML/CSS. Avoids generic AI aesthetics (Inter font,
-  purple gradients, predictable card layouts).
+  Develops a coherent visual direction from the audience, content, and primary
+  task. Use for original interface design or an explicitly requested redesign;
+  preserve established choices during ordinary revisions.
 trigger:
   providers: ['*']
   scope: system
@@ -13,29 +12,40 @@ disable_model_invocation: false
 user_invocable: true
 ---
 
-## Frontend Design Quality Guard
+## Direction From The Brief
 
-You tend to produce "AI slop" by default: Inter or system fonts, purple-on-white gradients, symmetric card grids, flat white backgrounds. Break this pattern deliberately.
+Identify what the audience must notice, understand, or do. Choose typography,
+composition, density, and tone that support that job. A planning sentence is
+enough when the direction is clear; offer alternatives only when requested or
+when the choice materially changes the result.
 
-### Typography
-Choose unexpected, characterful typefaces. Pair a distinctive display font (e.g. Playfair Display, DM Serif Display, Syne, Bebas Neue, Instrument Serif) with a refined body font. Never use Inter, Roboto, Arial, or Space Grotesk — they signal zero creative investment.
+For an existing artifact, work within its visual language unless redesign is
+requested. User references and design-system tokens take priority over this
+method's suggestions.
 
-### Color & Theme
-Commit fully to one coherent aesthetic. Use CSS custom properties for every color token. Dominant accent colors with sharp contrast outperform timid palettes. Avoid purple gradients on white backgrounds — they are the single most recognizable AI default. Try: deep navy + warm amber, charcoal + acid green, cream + burgundy + gold, near-black + electric cyan.
+## Make The Hierarchy Visible
 
-Express colors in `oklch()` where possible — it gives perceptually uniform lightness steps and vivid gamut-P3 hues without the muddy mid-tones of hex-RGB.
+- Establish a clear reading order with type scale, alignment, spacing, and
+  contrast. Let primary information carry more weight than interface chrome.
+- Choose fonts for content, language coverage, readability, and available
+  assets. Familiar fonts and system fallbacks are valid; unusual fonts are
+  not evidence of craft by themselves.
+- Use a compact palette with distinct surface, text, border, accent, and
+  status roles. White, dark, saturated, or muted treatments can all work.
+- Let content shape the layout. A calm task list benefits from clear rows;
+  an editorial story may need expressive typography; operational data needs
+  efficient comparison. Do not force every brief into the same hero/card grid.
+- Make a focal element memorable when useful, and keep surrounding elements
+  restrained. Decoration should reinforce meaning rather than conceal sparse
+  content or compete with the primary action.
 
-### Motion
-CSS-only for web artifacts. One well-orchestrated page-load with staggered `animation-delay` reveals is better than scattered micro-interactions. Use `@media (prefers-reduced-motion: reduce)` to gate all animations.
+## Detail With Purpose
 
-### Spatial Composition
-Asymmetry. Overlap. Diagonal rhythm. Grid-breaking hero elements. Resist the urge to center-align everything — left-aligned, offset, or deliberately edge-bleeding layouts feel more crafted.
+Use consistent spacing, icon weight, radii, and interaction feedback. Motion
+can explain a transition or confirm an action; it should not delay work.
+Support reduced motion. Charts need meaningful data and labels, not decorative
+shapes pretending to be evidence.
 
-### Backgrounds
-Never solid white or solid grey. Use CSS gradients, noise/grain overlay (`background-image: url("data:image/svg+xml,...")`), geometric SVG patterns, or subtle radial glows. One grain overlay (`opacity: 0.04`) on a colored background immediately elevates perceived quality.
-
-### Tone Commitment
-Pick **one** tone and execute it with full craft: brutally minimal / maximalist chaos / retro-futuristic / organic warmth / luxury editorial / bold experimental. Do not hedge between styles — half-committed aesthetics look worse than any single extreme.
-
-### Hard Prohibitions
-NEVER use: Inter, Roboto, Arial, system-ui, Space Grotesk as the primary typeface; purple gradients on white; symmetric 3-column card grids as the only layout element; drop shadows that look like Bootstrap defaults; placeholder grey rectangles as "images".
+When preview evidence is available, inspect hierarchy, content fit, contrast,
+alignment, and the intended viewport. Repair specific weaknesses. Stop when
+the brief is well served, rather than adding another effect because it exists.

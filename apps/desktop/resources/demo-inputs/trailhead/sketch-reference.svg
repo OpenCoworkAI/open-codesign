@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" fill="none">
+  <title>Trailhead: original low-fidelity SVG sketch reference</title>
+  <desc>Three loosely drawn frames: Trips, Itinerary, and Stop editor. Dashed arrows connect navigation. All labels and interactions are annotated in product-brief.md.</desc>
+  <rect width="1000" height="600" fill="#FAF8EF"/>
+  <g stroke="#555A50" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M34 61l266-3 3 444-272 4zM351 58l282 4-2 442-279-3zM685 60l278-2 4 448-284-2z"/>
+    <path d="M53 141l224-3 1 90-224 3zM54 256l223 3-3 91-222-3z"/>
+    <path d="M373 153l232 2-1 62-229-1zM375 236l230-2-1 66-229 1zM374 320l230 1 2 63-232-2z"/>
+    <path d="M706 157l235 2-2 44-231-1zM708 245l231-2 1 45-233 1zM707 329l234 1-1 74-234-2zM710 434l89 2-1 37-89-1z"/>
+    <path d="M298 274l50-4m-13-9 13 9-11 9M632 274l49-3m-13-8 13 8-11 11" stroke-dasharray="6 5"/>
+    <path d="M360 549q144-12 288 1m-281 7 268-1"/>
+  </g>
+  <g fill="#41453D" font-family="monospace" font-size="18">
+    <text x="52" y="100">1 / TRIPS</text><text x="69" y="179">Ridge morning</text><text x="69" y="207">3 stops / 125 min</text>
+    <text x="69" y="291">Waterside</text><text x="69" y="321">No stops yet</text>
+    <text x="373" y="101">2 / ITINERARY</text><text x="373" y="134">&lt; Back / Ridge</text>
+    <text x="392" y="193">Gate / 20 min</text><text x="392" y="277">Clearing / 45</text><text x="392" y="360">Picnic / 60</text>
+    <text x="382" y="425">+ Add stop</text><text x="382" y="474">TOTAL: 125 min</text>
+    <text x="706" y="100">3 / STOP EDITOR</text><text x="708" y="143">Label</text><text x="708" y="232">Minutes (5-480)</text>
+    <text x="708" y="318">Note</text><text x="722" y="460">Save</text><text x="832" y="460">Cancel</text>
+    <text x="315" y="540">totals derive from stops!</text><text x="34" y="583">Original SVG sketch / not a finished UI / MIT</text>
+  </g>
+</svg>

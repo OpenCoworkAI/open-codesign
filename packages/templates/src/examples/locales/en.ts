@@ -1,6 +1,21 @@
 import type { ExampleContent } from '../index';
 
 export const enExamples: Record<string, ExampleContent> = {
+  daymark: {
+    title: 'Daymark: brief to Todo app',
+    description:
+      'Five editable inputs: product brief, tasks, projects, original logo and design tokens. Connect Today, projects and task editing.',
+  },
+  'common-ground': {
+    title: 'Common Ground: workshop booking',
+    description:
+      'Turn a brief, schedule CSV and original artwork into discovery, details, booking and confirmation with simulated reservations.',
+  },
+  trailhead: {
+    title: 'Trailhead: sketch to trip planner',
+    description:
+      'An original SVG sketch, annotated brief and sample trips guide a connected itinerary editor. Text annotations work without vision.',
+  },
   'cosmic-animation': {
     title: 'Cosmic scale animation',
     description: 'Animated space-tech hero with orbital motion and mission-control details.',

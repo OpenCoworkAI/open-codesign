@@ -30,6 +30,13 @@ describe('rewriteUpstreamMessage', () => {
     expect(result.message).toContain('openrouter.ai/settings/keys');
   });
 
+  it('rewrites leaked openai URL to Atlas Cloud URL', () => {
+    const result = rewriteUpstreamMessage(LEAKED, 'atlascloud', 401);
+    expect(result.rewritten).toBe(true);
+    expect(result.message).not.toContain('openai.com');
+    expect(result.message).toContain('atlascloud.ai');
+  });
+
   it('rewrites to deepseek URL even though it is not in the typed enum', () => {
     const result = rewriteUpstreamMessage(LEAKED, 'deepseek', 401);
     expect(result.message).toContain('platform.deepseek.com/api_keys');

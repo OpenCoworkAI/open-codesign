@@ -1,5 +1,32 @@
 # @open-codesign/shared
 
+## 0.2.2
+
+### Patch Changes
+
+- 729e356: Coordinate participating workspace writers by canonical file path across designs.
+  Conditional saves and agent text edits compare expected disk bytes inside the
+  writer queue; stale agent edits fail visibly and refresh the file view for an
+  explicit retry. External processes remain outside the in-process atomicity boundary.
+- f2a9dbb: Preserve string-valued DESIGN.md component extensions with warnings, as required by Google's alpha consumer specification, rather than failing an otherwise working artifact. Keep malformed token values and runtime failures blocking and provide concrete object-shape repair guidance.
+
+  Surface non-blocking metadata warnings in done results and preserve error/warning counts through repeated stream/history compaction. Update the design-system method's portability guidance without silently rewriting user tokens or changing the repair limit.
+
+- d199c75: Queue text follow-ups or steer the next safe processing step during generation using pi's native message queues. Preserve per-design drafts, delivery receipts, and recoverable undelivered messages in local session JSONL without bypassing permission or question gates.
+- a3a08e6: Keep canvas comments tied to the host-resolved preview source file, including dedicated file tabs and persisted session comments. Edit prompts now use pi's read/edit tools and describe DOM targets as evidence rather than exact source-code locations; imported components still require source inspection.
+
+  Correct duplicate/special-character ID selection and nested SVG rectangle tracking, preserve existing outlines, and clear stale selection when the selected layer disappears or the preview changes. Store comment rectangles in unscaled iframe coordinates and reject malformed geometry messages.
+
+- 729e356: Compare active-message context against the immutable comment content submitted to the running generation, not just comment IDs. Revised comments remain pending and drafts are retained.
+
+  Generation completion now uses an atomic expected-content check when marking comments applied. Only matching revisions are consumed; conflicts are reported without failing the completed generation. Late responses cannot overwrite newer visible edits, and editing an applied comment makes the new content pending. Existing explicit bulk marking remains compatible.
+
+- ef5677c: Explain missing, empty, or invalid tweak declarations for the active preview
+  source instead of promising automatic controls. Surface malformed declarations
+  without crashing the panel. Clarify that the tweaks scanner only discovers
+  declarations: unrelated starter values are not controls for the active preview.
+- 729e356: Add a versioned, session-scoped ask cancellation event and an unsubscribable preload listener so host cancellation can dismiss interrupted questions without submitting an answer.
+
 ## 0.2.1
 
 ### Patch Changes

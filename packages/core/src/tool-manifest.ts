@@ -5,6 +5,7 @@ import {
 } from '@open-codesign/shared';
 
 export interface ToolAvailabilityDeps {
+  research?: boolean;
   fs: boolean;
   preview: boolean;
   image: boolean;

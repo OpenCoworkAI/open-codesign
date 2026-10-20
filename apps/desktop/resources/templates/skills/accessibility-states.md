@@ -2,15 +2,14 @@
 schemaVersion: 1
 name: accessibility-states
 description: >
-  Adds semantic HTML, keyboard access, focus visibility, contrast discipline,
-  reduced-motion handling, and real empty/loading/error/disabled states. Use
-  before finalizing app surfaces, forms, tables, navigation, drawers, dialogs,
-  command palettes, or any interactive prototype.
+  Makes interactive screens usable through semantics, keyboard focus,
+  legible content, and reachable validation, empty, error, and success states.
+  Use when implementing or changing forms, navigation, dialogs, or record actions.
 aliases: [a11y, accessibility, states, keyboard, focus, wcag]
-dependencies: [craft-polish]
+dependencies: []
 validationHints:
-  - interactive controls have visible focus and keyboard paths
-  - final artifact includes appropriate empty loading error or disabled states
+  - controls have accessible names and usable keyboard paths
+  - state transitions preserve input and move or restore focus appropriately
 trigger:
   providers: ['*']
   scope: system
@@ -18,56 +17,53 @@ disable_model_invocation: false
 user_invocable: true
 ---
 
-## Interaction Contract
+## Semantics And Keyboard
 
-Every visible control must be either a real button/input/select/link or a
-clearly inert visual element. If it looks clickable, it needs behavior or a
-truthful destination.
+Use native buttons, links, inputs, selects, and form submission. Associate
+labels with controls and give icon-only actions accessible names. Use
+landmarks and meaningful heading levels; real tables help compare tabular
+records. Avoid click-only divs and fake links.
 
-Use semantic elements first:
+Keep keyboard order aligned with reading order and provide a visible focus
+indicator. Expose current/selected/expanded states semantically as appropriate.
+Do not rely on color or hover alone for status or instructions.
 
-- Navigation: `<nav>` with button or anchor children.
-- Primary content: `<main>`, `<section>`, `<article>`, `<aside>`.
-- Forms: `<form>`, `<fieldset>`, `<legend>`, `<label>`, real inputs.
-- Dialog-like surfaces: a labelled container, clear close action, and scrim.
-- Tables: real `<table>` when comparing rows and columns.
+## Focus Is Part Of The Journey
 
-## Keyboard And Focus
+On a screen change, move focus to a meaningful destination when the previous
+control disappears; a focusable page heading is often suitable. Returning
+should restore context rather than drop the user at an unrelated control.
 
-- All controls must be reachable by keyboard in source order.
-- Use visible focus rings with at least two cues: outline plus color, shadow,
-  or background change.
-- Do not remove outlines unless replacing them with an equally visible focus
-  style.
-- For tabs, segmented controls, drawers, and accordions, show selected/open
-  state using shape or weight, not color alone.
-- Do not rely on hover for core information.
+Modal dialogs need an accessible name, initial focus, focus containment,
+Escape and visible close/cancel actions, and focus restoration. Prefer native
+`<dialog>` with `showModal()` where supported. If deletion removes the opener,
+restore focus to the next useful action, not a detached element.
 
-## States
+## Reachable States
 
-Operational surfaces need non-happy paths:
+Implement states the actual flow needs, not a disconnected state gallery:
 
-- Empty: what is missing, why it matters, one next action.
-- Loading: geometry-matched skeleton or inline spinner with label.
-- Error: plain-language cause plus retry/recovery action.
-- Disabled: explain the requirement or next step.
-- Success: visible confirmation that does not block continued work.
+- Validation explains the field and fix, preserves input, and identifies the
+  first invalid control on submit.
+- Empty results explain the situation and offer a relevant action such as
+  clearing filters or creating the first record.
+- Errors offer a working recovery path; do not simulate a service failure
+  as though a real network request happened.
+- Success confirms the state change without blocking continued work.
+- Disabled controls explain what is needed. Loading belongs only to actual
+  waiting or an explicitly requested loading-state design.
 
-## Visual Access
+## Visual Access And Checks
 
-- Keep body text at 16px or larger unless the artifact is a fixed-format slide.
-- Pair small labels with strong contrast and enough line height.
-- Never use color as the only indicator for status, selection, or trend.
-- Respect `prefers-reduced-motion` for looping, parallax, large movement, or
-  repeated entrance animations.
-- Keep click/tap targets at least 44px for touch-oriented surfaces.
+Use legible typography, sufficient contrast, wrapping, and comfortable touch
+areas. Respect reduced motion. Meaningful images need text alternatives;
+decorative images should not add screen-reader noise.
 
-## Final Check
+Exercise the affected keyboard and focus path when supported by the available
+tools, including entry, submit/close, and return. Check focus in the actual
+artifact or report it as untested; visible markup and a clean console do not
+prove keyboard behavior or full accessibility conformance.
 
-Before `done()`, scan the source for:
-
-- `href="#"` links with no real destination.
-- Click handlers on non-interactive `<div>` or `<span>` elements.
-- Inputs without visible labels.
-- Icon-only buttons without accessible text or `aria-label`.
-- Gray-on-gray labels, tiny captions, and invisible focus states.
+If page shortcuts exist, check them after pointer navigation has moved focus
+to controls, not only on initial load. Respect text entry and native control
+activation rather than intercepting every key.

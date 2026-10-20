@@ -2,6 +2,7 @@ import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
 import { normalizeLegacyEditmodeBlock } from '@open-codesign/shared';
+import { withWorkspaceFileWriter } from '@open-codesign/shared/workspace-file-lock';
 import { Type } from '@sinclair/typebox';
 
 /**
@@ -162,6 +163,7 @@ export interface ScaffoldRequest {
   destPath: string;
   workspaceRoot: string;
   scaffoldsRoot: string;
+  signal?: AbortSignal;
 }
 
 export interface ScaffoldResult {
@@ -184,6 +186,7 @@ function destinationPathForSource(destPath: string, sourcePath: string): string 
 }
 
 export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult> {
+  req.signal?.throwIfAborted();
   let manifest: ScaffoldManifest;
   try {
     manifest = await loadScaffoldManifest(req.scaffoldsRoot);
@@ -236,8 +239,12 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
       reason: reason.includes('outside root') ? 'destination outside workspace' : reason,
     };
   }
-  await mkdir(path.dirname(dest), { recursive: true });
-  await writeFile(dest, contents, 'utf8');
+  await withWorkspaceFileWriter(dest, async () => {
+    req.signal?.throwIfAborted();
+    await mkdir(path.dirname(dest), { recursive: true });
+    req.signal?.throwIfAborted();
+    await writeFile(dest, contents, 'utf8');
+  });
   return {
     ok: true,
     destPath: actualDestPath,
@@ -289,7 +296,8 @@ export function makeScaffoldTool(
     description:
       "Copy a concrete starter/source asset into the current workspace. kind: one of the keys in <userData>/templates/scaffolds/manifest.json (device-frame / browser / app-shell / dev-mockup / ui-primitive / background / surface / deck / report / design-system / landing). destPath: workspace-relative path. Example: scaffold({kind: 'iphone-16-pro-frame', destPath: 'frames/iphone.jsx'}). The tool preserves the source extension.",
     parameters: ScaffoldParams,
-    async execute(_toolCallId, params): Promise<AgentToolResult<ScaffoldDetails>> {
+    async execute(_toolCallId, params, signal): Promise<AgentToolResult<ScaffoldDetails>> {
+      signal?.throwIfAborted();
       const workspaceRoot = getWorkspaceRoot();
       if (!workspaceRoot) {
         const reason = 'no workspace attached to this session';
@@ -311,6 +319,7 @@ export function makeScaffoldTool(
         destPath: params.destPath,
         workspaceRoot,
         scaffoldsRoot,
+        ...(signal ? { signal } : {}),
       });
       if (result.ok && result.written && typeof result.bytes === 'number') {
         const suffix = result.normalizedEditmode ? ' (normalized legacy EDITMODE block)' : '';
