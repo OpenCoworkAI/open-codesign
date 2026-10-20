@@ -491,22 +491,28 @@ describe('production generateViaAgent with installed pi', () => {
       native.agents[0]?.state.messages.filter((message) => message.role === 'user'),
     ).toHaveLength(1);
   });
-  it('propagates an unrelated observer failure without treating it as a controlled halt', async () => {
+  it.each([
+    new CodesignError('Observer failed', ERROR_CODES.GENERATION_INCOMPLETE),
+    null,
+    undefined,
+  ])('propagates unrelated observer failure %s without treating it as a controlled halt', async (failure) => {
     seed();
-    const failure = new CodesignError('Observer failed', ERROR_CODES.GENERATION_INCOMPLETE);
     const onComplete = vi.fn();
+    const ended: AgentEvent[] = [];
     script([[todos()], 'Must not continue']);
-    await expect(
-      generateViaAgent(input, {
-        fs,
-        onComplete,
-        onEvent: (event) => {
-          if (event.type === 'turn_end') throw failure;
-        },
-      }),
-    ).rejects.toBe(failure);
+    const running = generateViaAgent(input, {
+      fs,
+      onComplete,
+      onEvent: (event) => {
+        if (event.type === 'agent_end') ended.push(event);
+        if (event.type === 'turn_end') throw failure;
+      },
+    });
+    if (failure instanceof Error) await expect(running).rejects.toBe(failure);
+    else await expect(running).rejects.toThrow(String(failure));
     expect(native.stream).toHaveBeenCalledOnce();
     expect(onComplete).not.toHaveBeenCalled();
+    expect(ended).toHaveLength(0);
   });
 
   describe('repeated tool calls', () => {

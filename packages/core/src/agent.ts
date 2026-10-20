@@ -1473,7 +1473,7 @@ async function generateViaAgentInternal(
       } catch (err) {
         // pi now propagates listener exceptions. Our own turn-boundary halt
         // still needs transcript completion before the normal incomplete result.
-        if (err !== turnBoundaryHalt) throw err;
+        if (turnBoundaryHalt === null || err !== turnBoundaryHalt) throw err;
         controlledHalt = true;
       }
       await target.waitForIdle();
