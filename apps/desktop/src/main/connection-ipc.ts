@@ -3,25 +3,37 @@ import { isIP } from 'node:net';
 import {
   BUILTIN_PROVIDERS,
   CodesignError,
+  type ConnectionTestError,
+  type ConnectionTestResponse,
+  type ConnectionTestResult,
   canonicalBaseUrl,
   connectionTestProbesModelsEndpoint,
   type DiagnosticCategory,
   ERROR_CODES,
   ensureVersionedBase,
+  inferenceEndpointUrl,
   isLiteLlmConnectionTarget,
   isSupportedOnboardingProvider,
   liteLlmHintKeyForHttpStatus,
   liteLlmHintKeyForTransportError,
+  modelsEndpointUrl,
+  modelsProbeRelationForProvider,
   type ProviderEntry,
   type ProviderModelDiscoveryMode,
   resolveListForProviderPlan,
-  resolveProviderCapabilities,
   type SupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
   type WireApi,
 } from '@open-codesign/shared';
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
 import { getCodexTokenStore } from './codex-oauth-ipc';
+import {
+  connectionErrorFromUnknown,
+  type EffectiveProviderContract,
+  invokeAuthMode,
+  resolveEffectiveInvokeContract,
+  toInvokeContractView,
+} from './effective-provider-contract';
 import { ipcMain } from './electron-runtime';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from './onboarding-ipc';
 import { isKeylessProviderAllowed } from './provider-settings';
@@ -76,41 +88,7 @@ function assertKnownFields(
   }
 }
 
-export interface ConnectionTestResult {
-  ok: true;
-  /**
-   * `models` when the standard GET /models probe succeeded.
-   * `inference` when the provider's discovery mode does not expect /models
-   * and the real invoke path answered.
-   * `chat_completion_degraded` when /models 404'd but POST /chat/completions
-   * proved the openai-chat wire is alive (e.g. Zhipu GLM — no public /models).
-   * `responses_degraded` when /models 404'd but POST /responses proved the
-   * openai-responses wire is alive. We probe the wire's real inference
-   * endpoint so a gateway that only implements /chat/completions can't
-   * false-positive for a user whose provider is on the Responses API.
-   */
-  probeMethod?:
-    | 'models'
-    | 'inference'
-    | 'chat_completion_degraded'
-    | 'responses_degraded'
-    | 'anthropic_messages_degraded';
-  compatibility?: 'compatible' | 'degraded';
-  reasonCategory?: DiagnosticCategory;
-}
-
-export interface ConnectionTestError {
-  ok: false;
-  code: 'IPC_BAD_INPUT' | '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE';
-  message: string;
-  hint: string;
-  /** i18n key for a provider-specific hint. The renderer translates it. */
-  hintKey?: string;
-  compatibility?: 'incompatible';
-  reasonCategory?: DiagnosticCategory;
-}
-
-export type ConnectionTestResponse = ConnectionTestResult | ConnectionTestError;
+export type { ConnectionTestError, ConnectionTestResponse, ConnectionTestResult };
 
 export type ModelsListResponse =
   | {
@@ -536,294 +514,245 @@ export interface ActiveProviderCredentials {
   name?: string;
 }
 
-function resolveCredentialsForProvider(
-  providerId: string,
-): ActiveProviderCredentials | ConnectionTestError {
-  const cfg = getCachedConfig();
-  if (cfg === null || providerId.length === 0) {
-    return {
-      ok: false,
-      code: 'IPC_BAD_INPUT',
-      message: 'No active provider configured',
-      hint: 'Complete onboarding first',
-    };
-  }
-  const entry =
-    cfg.providers[providerId] ??
-    (isSupportedOnboardingProvider(providerId) ? BUILTIN_PROVIDERS[providerId] : undefined);
-  if (entry === undefined) {
-    return {
-      ok: false,
-      code: 'IPC_BAD_INPUT',
-      message: `Provider "${providerId}" not found in config`,
-      hint: 'Re-add the provider from Settings',
-    };
-  }
-  let apiKey = '';
-  if (isKeylessProviderAllowed(providerId, entry) && !hasApiKeyForProvider(providerId)) {
-    apiKey = '';
-  } else {
-    try {
-      apiKey = getApiKeyForProvider(providerId);
-    } catch (err) {
-      return {
-        ok: false,
-        code: 'IPC_BAD_INPUT',
-        message:
-          err instanceof Error ? err.message : `No API key stored for provider "${providerId}"`,
-        hint: 'Open Settings and import Codex again, or add an API key for this provider',
-      };
-    }
-  }
+function invokeCredentialDeps() {
   return {
-    provider: providerId,
-    name: entry.name,
-    wire: entry.wire,
-    apiKey,
-    baseUrl: entry.baseUrl,
-    builtin: entry.builtin === true,
-    modelDiscoveryMode: resolveProviderCapabilities(providerId, entry).modelDiscoveryMode,
-    ...(entry.httpHeaders !== undefined ? { httpHeaders: entry.httpHeaders } : {}),
-    ...(entry.tlsRejectUnauthorized !== undefined
-      ? { tlsRejectUnauthorized: entry.tlsRejectUnauthorized }
-      : {}),
+    getCodexAccessToken: () => getCodexTokenStore().getValidAccessToken(),
+    getApiKeyForProvider,
+    hasApiKeyForProvider,
   };
 }
 
-function resolveActiveCredentials(): ActiveProviderCredentials | ConnectionTestError {
-  const cfg = getCachedConfig();
-  const active = cfg?.activeProvider;
-  if (active === undefined || active.length === 0) {
-    return {
-      ok: false,
-      code: 'IPC_BAD_INPUT',
-      message: 'No active provider configured',
-      hint: 'Complete onboarding first',
-    };
-  }
-  return resolveCredentialsForProvider(active);
+function noConfigError(): ConnectionTestError {
+  return {
+    ok: false,
+    code: 'IPC_BAD_INPUT',
+    message: 'No active provider configured',
+    hint: 'Complete onboarding first',
+  };
 }
 
-async function testChatGPTCodexOAuth(): Promise<ConnectionTestResponse> {
-  let stored: Awaited<ReturnType<ReturnType<typeof getCodexTokenStore>['read']>>;
-  try {
-    stored = await getCodexTokenStore().read();
-  } catch (err) {
+function contractFromCredentials(creds: ActiveProviderCredentials): EffectiveProviderContract {
+  const modelDiscoveryMode = creds.modelDiscoveryMode ?? 'models';
+  const relation = modelsProbeRelationForProvider(creds.wire, {
+    modelDiscoveryMode,
+    supportsModelsEndpoint: connectionTestProbesModelsEndpoint(modelDiscoveryMode),
+  });
+  const canonical = canonicalBaseUrl(creds.baseUrl, creds.wire);
+  const modelsUrl =
+    relation === 'optional-discovery' ? modelsEndpointUrl(creds.baseUrl, creds.wire) : null;
+  const allowKeyless = creds.apiKey.length === 0;
+  return {
+    providerId: creds.provider,
+    ...(creds.name !== undefined ? { providerName: creds.name } : {}),
+    modelId: 'probe',
+    wire: creds.wire,
+    storedBaseUrl: creds.baseUrl,
+    canonicalBaseUrl: canonical,
+    modelsUrl,
+    invokeUrl: inferenceEndpointUrl(creds.baseUrl, creds.wire),
+    authHeaders: buildAuthHeadersForWire(creds.wire, creds.apiKey, creds.httpHeaders, canonical),
+    httpHeaders: creds.httpHeaders,
+    queryParams: undefined,
+    apiKey: creds.apiKey,
+    allowKeyless,
+    builtin: creds.builtin === true,
+    tlsRejectUnauthorized: creds.tlsRejectUnauthorized,
+    tlsBypass: creds.builtin !== true && creds.tlsRejectUnauthorized === true,
+    modelsProbeRelation: relation,
+    authMode: invokeAuthMode(creds.wire, creds.apiKey),
+    overridden: false,
+    reasoningLevel: undefined,
+    contextWindow: undefined,
+  };
+}
+
+function isHttpInvokeWire(wire: WireApi): wire is 'openai-chat' | 'openai-responses' | 'anthropic' {
+  return wire === 'openai-chat' || wire === 'openai-responses' || wire === 'anthropic';
+}
+
+function degradedProbeMethod(
+  wire: 'openai-chat' | 'openai-responses' | 'anthropic',
+): NonNullable<ConnectionTestResult['probeMethod']> {
+  if (wire === 'openai-responses') return 'responses_degraded';
+  if (wire === 'anthropic') return 'anthropic_messages_degraded';
+  return 'chat_completion_degraded';
+}
+
+export async function testInvokeContract(
+  contract: EffectiveProviderContract,
+): Promise<ConnectionTestResponse> {
+  if (contract.wire === 'openai-codex-responses') {
+    if (contract.apiKey.length === 0) {
+      return {
+        ok: false,
+        code: '401',
+        message: 'No ChatGPT OAuth token stored',
+        hint: 'ChatGPT 订阅未登录，请到 Settings 登录',
+        compatibility: 'incompatible',
+        reasonCategory: 'auth',
+        invokeParity: 'aligned',
+        modelsProbeRelation: 'unavailable',
+        invokeContract: toInvokeContractView(contract),
+      };
+    }
     return {
-      ok: false,
-      code: '401',
-      message: err instanceof Error ? err.message : String(err),
-      hint: 'ChatGPT 订阅凭证读取失败，请到 Settings 重新登录',
+      ok: true,
+      probeMethod: 'codex_oauth',
+      compatibility: 'compatible',
+      invokeParity: 'aligned',
+      modelsProbeRelation: 'unavailable',
+      invokeContract: toInvokeContractView(contract),
     };
   }
-  if (stored === null) {
-    return {
-      ok: false,
-      code: '401',
-      message: 'No ChatGPT OAuth token stored',
-      hint: 'ChatGPT 订阅未登录，请到 Settings 登录',
-      compatibility: 'incompatible',
-      reasonCategory: 'auth',
-    };
-  }
-  if (stored.expiresAt < Date.now()) {
-    return {
-      ok: false,
-      code: '401',
-      message: 'ChatGPT OAuth token expired',
-      hint: 'ChatGPT 订阅登录已过期，请重新登录',
-      compatibility: 'incompatible',
-      reasonCategory: 'auth',
-    };
-  }
-  return { ok: true, compatibility: 'compatible' };
+
+  return withTlsBypass(contract.tlsBypass, async () => {
+    let models: ProbeResult | { kind: 'skipped' } = { kind: 'skipped' };
+    if (contract.modelsProbeRelation === 'optional-discovery' && contract.modelsUrl !== null) {
+      models = await probeGet(contract.modelsUrl, contract.authHeaders);
+    }
+
+    if (!isHttpInvokeWire(contract.wire)) {
+      return {
+        ok: false,
+        code: 'IPC_BAD_INPUT',
+        message: `Unsupported invoke wire: ${contract.wire}`,
+        hint: 'Re-add the provider from Settings',
+        compatibility: 'incompatible',
+        invokeParity: 'aligned',
+        invokeContract: toInvokeContractView(contract),
+      };
+    }
+    const invoke = await probeInferenceEndpoint(
+      contract.wire,
+      contract.canonicalBaseUrl,
+      contract.authHeaders,
+    );
+    const result = classifyInvokeAndModelsProbes(contract, models, invoke);
+    if (result.ok) return result;
+    const litellm = isLiteLlmConnectionTarget({
+      providerId: contract.providerId,
+      name: contract.providerName,
+      baseUrl: contract.storedBaseUrl,
+    });
+    return withHintKey(
+      result,
+      invoke.kind === 'http'
+        ? liteLlmHttpHint(litellm, invoke.status, contract.storedBaseUrl)
+        : invoke.kind === 'network'
+          ? liteLlmTransportHint(litellm, invoke.error ?? new Error(invoke.message))
+          : undefined,
+    );
+  });
 }
 
 export async function runProviderTest(
   creds: ActiveProviderCredentials,
 ): Promise<ConnectionTestResponse> {
-  // ChatGPT subscription uses OAuth + ChatGPT-Account-Id headers; its host
-  // has no `/models` endpoint that a generic Bearer probe can reach. A plain
-  // HTTP probe would return 401 here and render as the misleading "API key
-  // 错误或权限不足" hint — so we check the OAuth token store directly and
-  // surface a login-specific hint instead.
-  if (creds.wire === 'openai-codex-responses') {
-    return testChatGPTCodexOAuth();
-  }
-
-  const discoveryMode = creds.modelDiscoveryMode ?? 'models';
-  const bypass = creds.builtin !== true && creds.tlsRejectUnauthorized === true;
-  if (!connectionTestProbesModelsEndpoint(discoveryMode)) {
-    return withTlsBypass(bypass, () => probeDeclaredInference(creds));
-  }
-  const litellm = isLiteLlmConnectionTarget({
-    providerId: creds.provider,
-    name: creds.name,
-    baseUrl: creds.baseUrl,
-  });
-
-  // Bypass is the per-provider opt-in, force-gated so a tampered config can
-  // never weaken TLS for built-in providers. Wrapping the whole body covers
-  // both the GET /models probe and the inner POST inside tryDegradeProbe.
-  return withTlsBypass(bypass, async () => {
-    const { url, normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
-    const headers = buildAuthHeadersForWire(
-      creds.wire,
-      creds.apiKey,
-      creds.httpHeaders,
-      creds.baseUrl,
-    );
-
-    let res: Response;
-    try {
-      res = await fetchWithTimeout(url, { method: 'GET', headers });
-    } catch (err) {
-      const { code, hint } = classifyNetworkError(err);
-      return withHintKey(
-        {
-          ok: false as const,
-          code,
-          message: err instanceof Error ? err.message : 'Network request failed',
-          hint,
-          compatibility: 'incompatible' as const,
-          reasonCategory:
-            code === 'ECONNREFUSED' ? ('network-unreachable' as const) : ('unknown' as const),
-        },
-        liteLlmTransportHint(litellm, err),
-      );
-    }
-    if (!res.ok) {
-      // Some OpenAI-compatible gateways (Zhipu GLM, a handful of self-hosted
-      // proxies) don't expose /models but their /chat/completions works fine.
-      // If the primary probe 404s on those wires, degrade-probe with a tiny
-      // chat request before declaring the endpoint dead. We intentionally do
-      // not degrade anthropic — its /v1/models is standard, and skipping it
-      // would mask real path-shape mistakes.
-      if (
-        res.status === 404 &&
-        (creds.wire === 'openai-chat' ||
-          creds.wire === 'openai-responses' ||
-          creds.wire === 'anthropic')
-      ) {
-        const degraded = await tryDegradeProbe(
-          creds.wire,
-          normalizedBaseUrl,
-          headers,
-          litellm,
-          creds.baseUrl,
-        );
-        if (degraded !== null) return degraded;
-        // Inference endpoint also 404'd (or the network dropped) — fall through
-        // and report the original /models 404.
-      }
-      const { code, hint } = classifyHttpError(res.status);
-      return withHintKey(
-        {
-          ok: false as const,
-          code,
-          message: `HTTP ${res.status}`,
-          hint,
-          compatibility: 'incompatible' as const,
-          reasonCategory: connectionCategoryForStatus(res.status, normalizedBaseUrl),
-        },
-        liteLlmHttpHint(litellm, res.status, creds.baseUrl),
-      );
-    }
-    return { ok: true, probeMethod: 'models', compatibility: 'compatible' };
-  });
+  return testInvokeContract(contractFromCredentials(creds));
 }
 
-async function probeDeclaredInference(
-  creds: ActiveProviderCredentials,
-): Promise<ConnectionTestResponse> {
-  if (
-    creds.wire !== 'openai-chat' &&
-    creds.wire !== 'openai-responses' &&
-    creds.wire !== 'anthropic'
-  ) {
+function classifyInvokeAndModelsProbes(
+  contract: EffectiveProviderContract,
+  models: ProbeResult | { kind: 'skipped' },
+  invoke: ProbeResult,
+): ConnectionTestResponse {
+  const view = toInvokeContractView(contract);
+  const modelsPass = models.kind === 'pass';
+  const modelsSkipped = models.kind === 'skipped';
+
+  if (invoke.kind === 'pass') {
+    if (modelsPass || modelsSkipped) {
+      return {
+        ok: true,
+        probeMethod: modelsPass ? 'models' : 'invoke',
+        compatibility: 'compatible',
+        invokeParity: 'aligned',
+        modelsProbeRelation: contract.modelsProbeRelation,
+        invokeContract: view,
+      };
+    }
     return {
-      ok: false,
-      code: 'IPC_BAD_INPUT',
-      message: `Discovery mode does not probe /models for wire "${creds.wire}"`,
-      hint: 'Use a listed model id or switch this provider to a listing-capable endpoint',
-      compatibility: 'incompatible',
-      reasonCategory: 'unknown',
+      ok: true,
+      probeMethod: isHttpInvokeWire(contract.wire) ? degradedProbeMethod(contract.wire) : 'invoke',
+      compatibility: 'degraded',
+      reasonCategory: 'model-discovery-degraded',
+      invokeParity: 'degraded-discovery',
+      modelsProbeRelation: contract.modelsProbeRelation,
+      invokeContract: view,
     };
   }
-  const { normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
-  const headers = buildAuthHeadersForWire(
-    creds.wire,
-    creds.apiKey,
-    creds.httpHeaders,
-    creds.baseUrl,
-  );
-  const probe = await probeInferenceEndpoint(creds.wire, normalizedBaseUrl, headers);
-  if (probe.kind === 'pass') {
-    return { ok: true, probeMethod: 'inference', compatibility: 'compatible' };
-  }
-  if (probe.kind === 'network') {
+
+  if (modelsPass) {
+    const failed = invokeFailureFields(invoke, contract.canonicalBaseUrl);
     return {
       ok: false,
-      code: 'NETWORK',
-      message: probe.message,
-      hint: 'Cannot reach provider inference endpoint',
-      compatibility: 'incompatible',
-      reasonCategory: 'unknown',
+      code: 'INVOKE_DIVERGED',
+      message: failed.message,
+      hint: 'The /models endpoint is reachable, but the inference endpoint used at generate-time failed. Connection test and generate share this invoke contract.',
+      compatibility: 'diverges',
+      reasonCategory: 'invoke-contract-diverged',
+      invokeParity: 'diverged',
+      reachableVia: 'models',
+      probeMethod: 'models',
+      modelsProbeRelation: contract.modelsProbeRelation,
+      invokeContract: view,
     };
   }
-  const { code, hint } = classifyHttpError(probe.status);
+
+  const failed = invokeFailureFields(invoke, contract.canonicalBaseUrl);
   return {
     ok: false,
-    code,
-    message: `HTTP ${probe.status}`,
-    hint,
+    ...failed,
     compatibility: 'incompatible',
-    reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
+    invokeParity: 'aligned',
+    modelsProbeRelation: contract.modelsProbeRelation,
+    invokeContract: view,
   };
 }
 
-async function tryDegradeProbe(
-  wire: 'openai-chat' | 'openai-responses' | 'anthropic',
-  normalizedBaseUrl: string,
-  headers: Record<string, string>,
-  litellm: boolean,
-  baseUrl?: string,
-): Promise<ConnectionTestResponse | null> {
-  const probe = await probeInferenceEndpoint(wire, normalizedBaseUrl, headers);
-  if (probe.kind === 'pass') {
+function invokeFailureFields(
+  invoke: ProbeResult,
+  canonicalBaseUrl: string,
+): Pick<ConnectionTestError, 'code' | 'message' | 'hint' | 'reasonCategory'> {
+  if (invoke.kind === 'http') {
+    const { code, hint } = classifyHttpError(invoke.status);
     return {
-      ok: true,
-      probeMethod:
-        wire === 'openai-responses'
-          ? 'responses_degraded'
-          : wire === 'anthropic'
-            ? 'anthropic_messages_degraded'
-            : 'chat_completion_degraded',
-      compatibility: 'degraded',
-      reasonCategory: 'model-discovery-degraded',
+      code,
+      message: `HTTP ${invoke.status}`,
+      hint,
+      reasonCategory: connectionCategoryForStatus(invoke.status, canonicalBaseUrl),
     };
   }
-  if (probe.kind === 'http' && probe.status !== 404) {
-    const { code, hint } = classifyHttpError(probe.status);
-    return withHintKey(
-      {
-        ok: false as const,
-        code,
-        message: `HTTP ${probe.status}`,
-        hint,
-        compatibility: 'incompatible' as const,
-        reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
-      },
-      liteLlmHttpHint(litellm, probe.status, baseUrl),
-    );
+  const message = invoke.kind === 'network' ? invoke.message : 'Network request failed';
+  const err = invoke.kind === 'network' ? (invoke.error ?? new Error(message)) : new Error(message);
+  const { code, hint } = classifyNetworkError(err);
+  return {
+    code,
+    message,
+    hint,
+    reasonCategory: code === 'ECONNREFUSED' ? 'network-unreachable' : 'unknown',
+  };
+}
+
+async function probeGet(url: string, headers: Record<string, string>): Promise<ProbeResult> {
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, { method: 'GET', headers });
+  } catch (err) {
+    return {
+      kind: 'network',
+      message: err instanceof Error ? err.message : String(err),
+      error: err,
+    };
   }
-  return null;
+  if (res.ok) return { kind: 'pass' };
+  return { kind: 'http', status: res.status };
 }
 
 type ProbeResult =
   | { kind: 'pass' }
   | { kind: 'http'; status: number }
-  | { kind: 'network'; message: string };
+  | { kind: 'network'; message: string; error?: unknown };
 
 /**
  * POST a minimal inference request to verify the endpoint is alive when GET
@@ -841,12 +770,7 @@ async function probeInferenceEndpoint(
   normalizedBaseUrl: string,
   headers: Record<string, string>,
 ): Promise<ProbeResult> {
-  const url =
-    wire === 'anthropic'
-      ? `${normalizedBaseUrl}/v1/messages`
-      : wire === 'openai-responses'
-        ? `${normalizedBaseUrl}/responses`
-        : `${normalizedBaseUrl}/chat/completions`;
+  const url = inferenceEndpointUrl(normalizedBaseUrl, wire);
   const body =
     wire === 'anthropic'
       ? JSON.stringify({
@@ -876,7 +800,11 @@ async function probeInferenceEndpoint(
       body,
     });
   } catch (err) {
-    return { kind: 'network', message: err instanceof Error ? err.message : String(err) };
+    return {
+      kind: 'network',
+      message: err instanceof Error ? err.message : String(err),
+      error: err,
+    };
   }
   if (res.ok) return { kind: 'pass' };
   if (res.status === 404 || res.status >= 500) return { kind: 'http', status: res.status };
@@ -916,11 +844,7 @@ export function registerConnectionIpc(): void {
   ipcMain.handle('models:v1:list', (_e, raw: unknown) => handleModelsV1List(raw));
 
   // Tests the currently active provider using the stored (encrypted) key — no key passed from renderer.
-  ipcMain.handle('connection:v1:test-active', async (): Promise<ConnectionTestResponse> => {
-    const creds = resolveActiveCredentials();
-    if (!('provider' in creds)) return creds;
-    return runProviderTest(creds);
-  });
+  ipcMain.handle('connection:v1:test-active', () => handleConnectionV1TestActive());
 
   // Tests a specific provider by id — used by the per-row "Test connection"
   // button in Settings. Same probe as test-active but routed by id.
@@ -1024,7 +948,25 @@ async function handleModelsV1List(raw: unknown): Promise<ModelsListResponse> {
   return result;
 }
 
-async function handleConnectionV1TestProvider(raw: unknown): Promise<ConnectionTestResponse> {
+export async function handleConnectionV1TestActive(): Promise<ConnectionTestResponse> {
+  const cfg = getCachedConfig();
+  if (cfg === null || cfg.activeProvider.length === 0) return noConfigError();
+  try {
+    const contract = await resolveEffectiveInvokeContract({
+      cfg,
+      mode: 'active',
+      hint: { provider: cfg.activeProvider, modelId: cfg.activeModel },
+      creds: invokeCredentialDeps(),
+    });
+    return testInvokeContract(contract);
+  } catch (err) {
+    return connectionErrorFromUnknown(err);
+  }
+}
+
+export async function handleConnectionV1TestProvider(
+  raw: unknown,
+): Promise<ConnectionTestResponse> {
   if (typeof raw !== 'string' || raw.length === 0) {
     return {
       ok: false,
@@ -1033,9 +975,19 @@ async function handleConnectionV1TestProvider(raw: unknown): Promise<ConnectionT
       hint: 'Internal error — missing provider id',
     };
   }
-  const creds = resolveCredentialsForProvider(raw);
-  if (!('provider' in creds)) return creds;
-  return runProviderTest(creds);
+  const cfg = getCachedConfig();
+  if (cfg === null) return noConfigError();
+  try {
+    const contract = await resolveEffectiveInvokeContract({
+      cfg,
+      mode: 'provider',
+      providerId: raw,
+      creds: invokeCredentialDeps(),
+    });
+    return testInvokeContract(contract);
+  } catch (err) {
+    return connectionErrorFromUnknown(err);
+  }
 }
 
 type ResolvedProviderForListing = { providerId: string; entry: ProviderEntry };

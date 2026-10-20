@@ -30,6 +30,7 @@ import { recordAction } from '../../lib/action-timeline';
 import { connectionFailureText } from '../../lib/connection-failure-text';
 import { useCodesignStore } from '../../store';
 import { ConnectionDiagnosticPanel } from '../ConnectionDiagnosticPanel';
+import { connectionTestToastKind } from './connection-test-toast';
 
 /**
  * Electron IPC wraps thrown errors as
@@ -339,6 +340,7 @@ export function ProviderCard({
   const [connectionDiag, setConnectionDiag] = useState<{
     errorCode: ErrorCode;
     httpStatus: string;
+    attemptedUrl?: string;
   } | null>(null);
 
   const stateClass = hasError
@@ -359,23 +361,59 @@ export function ProviderCard({
     }
     try {
       const res = await window.codesign.connection.testProvider(row.provider);
-      recordAction({ type: 'connection.test', data: { provider: row.provider, ok: res.ok } });
-      if (res.ok) {
-        setConnectionDiag(null);
+      setConnectionDiag(
+        res.ok
+          ? null
+          : {
+              errorCode: res.code,
+              httpStatus: res.message,
+              ...(res.invokeContract !== undefined
+                ? { attemptedUrl: res.invokeContract.invokeUrl }
+                : {}),
+            },
+      );
+      recordAction({
+        type: 'connection.test',
+        data: {
+          provider: row.provider,
+          ok: res.ok,
+          compatibility: 'compatibility' in res ? res.compatibility : undefined,
+          invokeParity: 'invokeParity' in res ? res.invokeParity : undefined,
+        },
+      });
+      const kind = connectionTestToastKind(res);
+      if (kind === 'ok') {
+        pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
+      } else if (kind === 'degraded') {
         pushToast({
-          variant: res.compatibility === 'degraded' ? 'info' : 'success',
-          title:
-            res.compatibility === 'degraded'
-              ? t('settings.providers.toast.connectionOkDegraded')
-              : t('settings.providers.toast.connectionOk'),
+          variant: 'info',
+          title: t('settings.providers.toast.connectionDegraded'),
+          description: t('settings.providers.toast.connectionDegradedBody'),
+        });
+      } else if (kind === 'diverges') {
+        reportableErrorToast({
+          code: 'CONNECTION_TEST_DIVERGED',
+          scope: 'settings',
+          title: t('settings.providers.toast.connectionDiverges'),
+          description:
+            res.ok === false
+              ? connectionFailureText(t, res)
+              : t('settings.providers.toast.connectionDivergesBody'),
+          context: {
+            provider: row.provider,
+            invokeParity: res.invokeParity,
+            ...(res.ok === false && res.invokeContract !== undefined
+              ? { invokeUrl: res.invokeContract.invokeUrl }
+              : {}),
+          },
         });
       } else {
-        setConnectionDiag({ errorCode: res.code, httpStatus: res.message });
         reportableErrorToast({
           code: 'CONNECTION_TEST_FAILED',
           scope: 'settings',
           title: t('settings.providers.toast.connectionFailed'),
-          description: connectionFailureText(t, res),
+          description:
+            res.ok === false ? connectionFailureText(t, res) : t('settings.common.unknownError'),
           context: { provider: row.provider },
         });
       }
@@ -393,7 +431,7 @@ export function ProviderCard({
     }
   }
 
-  const attemptedUrl = modelsListingAttemptUrl(row);
+  const attemptedUrl = connectionDiag?.attemptedUrl ?? modelsListingAttemptUrl(row);
 
   return (
     <div

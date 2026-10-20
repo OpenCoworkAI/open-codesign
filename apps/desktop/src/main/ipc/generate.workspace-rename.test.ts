@@ -877,6 +877,10 @@ describe('generate IPC workspace rename coordination', () => {
       reasoningLevel: undefined,
       contextWindow: 32_768,
       allowKeyless: false,
+      builtin: false,
+      tlsRejectUnauthorized: undefined,
+      supportsModelsEndpoint: true,
+      modelDiscoveryMode: 'models',
       overridden: false,
     });
     const db = initTestDb();
