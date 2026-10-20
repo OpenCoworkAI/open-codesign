@@ -243,11 +243,15 @@ async function runLogin(raw?: unknown): Promise<CodexOAuthStatus> {
   activeLoginAbortController = abortController;
 
   const promise = (async () => {
-    const existing = getCachedConfig()?.providers[CHATGPT_CODEX_PROVIDER_ID];
+    const cfg = getCachedConfig();
+    const currentModel =
+      cfg?.activeProvider === CHATGPT_CODEX_PROVIDER_ID
+        ? cfg.activeModel
+        : cfg?.providers[CHATGPT_CODEX_PROVIDER_ID]?.defaultModel;
     const model =
       typeof raw === 'string'
         ? raw.trim()
-        : (existing?.defaultModel ?? (await getCodexModelOptions()).suggestedModel);
+        : (currentModel ?? (await getCodexModelOptions()).suggestedModel);
     if (abortController.signal.aborted) {
       throw new CodesignError('Codex login cancelled', ERROR_CODES.PROVIDER_ABORTED);
     }
@@ -257,11 +261,7 @@ async function runLogin(raw?: unknown): Promise<CodexOAuthStatus> {
         ERROR_CODES.CONFIG_MISSING,
       );
     }
-    return runLoginFlow(
-      abortController,
-      model,
-      typeof raw === 'string' && model !== existing?.defaultModel,
-    );
+    return runLoginFlow(abortController, model, typeof raw === 'string' && model !== currentModel);
   })();
   const trackedPromise = promise.finally(() => {
     if (activeLoginAbortController === abortController) {
@@ -357,11 +357,13 @@ export function registerCodexOAuthIpc(): void {
   ipcMain.handle('codex-oauth:v1:status', async (): Promise<CodexOAuthStatus> => runStatus());
   ipcMain.handle('codex-oauth:v1:models', async () => {
     const options = await getCodexModelOptions();
+    const cfg = getCachedConfig();
     return {
       ...options,
       suggestedModel:
-        getCachedConfig()?.providers[CHATGPT_CODEX_PROVIDER_ID]?.defaultModel ??
-        options.suggestedModel,
+        cfg?.activeProvider === CHATGPT_CODEX_PROVIDER_ID
+          ? cfg.activeModel
+          : (cfg?.providers[CHATGPT_CODEX_PROVIDER_ID]?.defaultModel ?? options.suggestedModel),
     };
   });
   ipcMain.handle(

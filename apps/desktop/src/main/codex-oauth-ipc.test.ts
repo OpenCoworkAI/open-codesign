@@ -168,16 +168,22 @@ describe('codex-oauth:v1:status', () => {
 });
 
 describe('codex-oauth:v1:models', () => {
-  it('prefills the saved default before the local Codex suggestion', async () => {
+  it.each([
+    { provider: '', expected: 'saved-user-model' },
+    { provider: 'chatgpt-codex', expected: 'active-user-model' },
+  ])('prefills the saved selection before the local Codex suggestion (provider=$provider)', async ({
+    provider,
+    expected,
+  }) => {
     fakeCachedConfig = {
-      activeProvider: '',
-      activeModel: '',
+      activeProvider: provider,
+      activeModel: 'active-user-model',
       secrets: {},
       providers: { 'chatgpt-codex': { defaultModel: 'saved-user-model' } },
     };
     await register();
     expect(await handlers.get('codex-oauth:v1:models')?.()).toEqual({
-      suggestedModel: 'saved-user-model',
+      suggestedModel: expected,
       models: EXPECTED_CHATGPT_CODEX_MODELS,
     });
   });
@@ -229,7 +235,8 @@ describe('codex-oauth:v1:login', () => {
 
   it.each([
     { requested: undefined, active: 'my-active-model', defaultModel: 'my-default-model' },
-    { requested: 'my-default-model', active: 'my-active-model', defaultModel: 'my-default-model' },
+    { requested: 'my-active-model', active: 'my-active-model', defaultModel: 'my-default-model' },
+    { requested: 'my-default-model', active: 'my-default-model', defaultModel: 'my-default-model' },
     {
       requested: 'chosen-account-model',
       active: 'chosen-account-model',
