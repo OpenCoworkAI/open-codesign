@@ -59,6 +59,45 @@ describe('renderer source identity state', () => {
       previewSourceByDesign: { html: ready.content },
     });
   });
+  it('returns the latest entry to concurrent initial readers instead of a legacy fallback', async () => {
+    let finishOlder: (value: SourceEntryResultV1) => void = () => {};
+    let finishNewer: (value: SourceEntryResultV1) => void = () => {};
+    read
+      .mockReturnValueOnce(
+        new Promise<SourceEntryResultV1>((done) => {
+          finishOlder = done;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<SourceEntryResultV1>((done) => {
+          finishNewer = done;
+        }),
+      );
+    const older = useCodesignStore.getState().refreshSourceEntry('html');
+    const newer = useCodesignStore.getState().refreshSourceEntry('html');
+    const current = { ...ready, content: '<main>Latest source</main>' };
+    finishOlder(ready);
+    finishNewer(current);
+    await expect(Promise.all([older, newer])).resolves.toEqual([current, current]);
+    expect(useCodesignStore.getState().previewSource).toBe(current.content);
+  });
+  it('propagates a newer lookup failure instead of treating the source API as absent', async () => {
+    let finishOlder: (value: SourceEntryResultV1) => void = () => {};
+    read
+      .mockReturnValueOnce(
+        new Promise<SourceEntryResultV1>((done) => {
+          finishOlder = done;
+        }),
+      )
+      .mockRejectedValueOnce(new Error('Source lookup failed'));
+    const older = useCodesignStore.getState().refreshSourceEntry('html');
+    await expect(useCodesignStore.getState().refreshSourceEntry('html')).rejects.toThrow(
+      'Source lookup failed',
+    );
+    finishOlder(ready);
+    await expect(older).rejects.toThrow('Source lookup failed');
+    expect(useCodesignStore.getState().previewSource).toBeNull();
+  });
   it('evicts stale preview content when the host reports an invalid entry', async () => {
     await useCodesignStore.getState().refreshSourceEntry('html');
     read.mockResolvedValue({
