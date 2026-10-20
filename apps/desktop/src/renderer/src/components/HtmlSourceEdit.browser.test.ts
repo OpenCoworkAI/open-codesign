@@ -215,9 +215,9 @@ describe('native HTML point edit: FilesTab → real IPC → atomic disk write �
     await frame.click(selector);
     return frame;
   }
-  async function save(label: string, value: string) {
+  async function save(label: string, value: string, applyLabel = 'Save source definition') {
     if (label === 'Text') label = 'Text 1';
-    const selector = `[aria-label="Save source definition: ${label}"]`;
+    const selector = `[aria-label="${applyLabel}: ${label}"]`;
     const button = await page.waitForSelector(selector);
     if (!button) throw new Error('Missing save button');
     const input = (
@@ -276,6 +276,34 @@ describe('native HTML point edit: FilesTab → real IPC → atomic disk write �
     await page.reload();
     const frame = await artifact('h1');
     expect(await frame.$eval('h1', (node) => getComputedStyle(node).fontSize)).toBe('20px');
+  }, 60_000);
+  it('keeps save controls inside a narrow editor and persists a pointer-initiated edit', async () => {
+    // Match the Files area left by the desktop app's conversation sidebar.
+    await page.setViewport({ width: 930, height: 850 });
+    await page.goto(`${endpoint}&locale=zh-CN`);
+    await artifact('#counter');
+    await page.click('button::-p-text(编辑源码)');
+    const frame = await artifact('h1[data-codesign-source-id]');
+    await frame.click('h1');
+    const selector = '[aria-label="保存源定义: 文字 1"]';
+    await page.waitForSelector(selector);
+    const layout = await page.$eval(selector, (button) => {
+      const panel = button.closest('aside');
+      if (!panel) throw new Error('Missing source edit panel');
+      const bounds = panel.getBoundingClientRect();
+      const paddingRight = Number.parseFloat(getComputedStyle(panel).paddingRight);
+      return {
+        overflow: panel.scrollWidth - panel.clientWidth,
+        controlsFit: [...panel.querySelectorAll('form button')].every((control) => {
+          const rect = control.getBoundingClientRect();
+          return rect.left >= bounds.left && rect.right <= bounds.right - paddingRight;
+        }),
+      };
+    });
+    expect(layout.overflow).toBeLessThanOrEqual(1);
+    expect(layout.controlsFit).toBe(true);
+    await save('文字 1', 'Narrow editor change', '保存源定义');
+    await expect.poll(disk).toBe(original.replace('原始标题 😀', 'Narrow editor change'));
   }, 60_000);
   it('does not execute authored scripts while waiting for the initial source inspection', async () => {
     let resume = () => {};
