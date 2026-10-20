@@ -1,4 +1,21 @@
 {
+  "activeMessages": {
+    "queue": "Enfileirar acompanhamento",
+    "steer": "Orientar próximo passo",
+    "queueShort": "Enfileirar",
+    "steerShort": "Orientar",
+    "help": "Ajuda sobre o envio de mensagens",
+    "pending": "Na fila — ainda não entregue",
+    "notDelivered": "Não entregue",
+    "recover": "Recuperar como rascunho",
+    "recoverPending": "Apenas copia o texto; a mensagem continua na fila. Não reenvie, a menos que seja necessário.",
+    "boundary": "Os acompanhamentos aguardam o assistente concluir o turno e o lote de ferramentas. As orientações são entregues no próximo limite de etapa compatível, não durante uma resposta ou ferramenta. Nenhuma opção ignora perguntas ou pedidos de permissão pendentes.",
+    "textOnly": "Durante a geração, as mensagens aceitam apenas texto. Não podem incluir arquivos, URLs de referência ou comentários na fila.",
+    "textOnlyError": "Mensagens ativas aceitam apenas texto. Remova os anexos, a URL de referência e os comentários na fila, ou aguarde o fim da geração. O rascunho foi mantido.",
+    "notRunning": "Esta geração não está mais disponível. O rascunho foi mantido; envie quando o agente estiver pronto.",
+    "sendFailed": "A mensagem não foi aceita",
+    "loadFailed": "Não foi possível atualizar as mensagens ativas"
+  },
   "common": {
     "appName": "open-codesign",
     "send": "Enviar",
@@ -45,6 +62,7 @@
     "previewTab": "Pré-visualização",
     "filesTab": "Arquivos",
     "filesTabEmpty": "Nenhum arquivo ainda",
+    "filesTabEmptyHint": "Descreva seu design no chat, anexe referências locais ou escolha um espaço de trabalho existente. Seus arquivos e a prévia aparecerão aqui.",
     "openInTab": "Abrir em nova aba",
     "previewHint": "Pré-visualização em miniatura · clique duas vezes no arquivo ou use Abrir em nova aba para ver em tela cheia",
     "documentPreview": {
@@ -182,6 +200,11 @@
     "dismissErrors": "Dispensar erros da pré-visualização",
     "zoom": "Zoom",
     "zoomFit": "Ajustar",
+    "fullscreen": "Prévia em tela cheia",
+    "exitFullscreen": "Sair da tela cheia",
+    "fullscreenHint": "Expandir a prévia executável nesta janela",
+    "exitFullscreenHint": "Restaurar painéis (Escape)",
+    "fullscreenUnavailable": "Abra uma prévia executável de JSX ou HTML para usar tela cheia",
     "viewport": {
       "desktop": "Prévia desktop",
       "tablet": "Prévia tablet",
@@ -190,13 +213,19 @@
   },
   "tweaks": {
     "title": "Ajustes",
+    "compatibilityNotice": "Este artefato usa o modo de compatibilidade de ajustes ao vivo. Atualizar os ajustes reinicia seu estado de interação. Para preservá-lo, leia os tokens durante a renderização em componentes sem memoização.",
     "openLabel": "Abrir painel de ajustes",
     "close": "Fechar",
     "reset": "Restaurar padrões",
     "pickColor": "Escolher cor",
     "swatchAria": "Cor {{key}}",
     "emptyTitle": "Nenhum token ajustável",
-    "emptyHint": "O agente ainda não declarou um bloco EDITMODE. Gerações futuras disponibilizarão tokens de design aqui."
+    "emptyHint": "Este arquivo não tem controles EDITMODE. Peça ao agente controles úteis neste arquivo, conectados ao design. Os controles de um modelo separado não afetam esta prévia.",
+    "declaredEmptyHint": "Este arquivo declara um bloco EDITMODE vazio. Nenhum controle está habilitado. Solicite ajustes específicos vinculados ao código se precisar.",
+    "invalidTitle": "A declaração de ajustes precisa de correção",
+    "invalidHint": "Corrija a declaração neste arquivo antes de ajustar valores: EDITMODE requer um objeto JSON simples com ambos os marcadores. TWEAK_SCHEMA deve usar tipos de controle compatíveis.",
+    "sourceLabel": "Arquivo",
+    "currentPreview": "Prévia atual"
   },
   "inspector": {
     "title": "Inspector",
@@ -261,6 +290,10 @@
       "noModel": "Nenhum modelo selecionado",
       "thinking": "Pensando",
       "tokensLine": "~{{count}} tokens",
+      "usageLabel": "Uso deste design",
+      "usageLoadFailed": "Não foi possível ler os totais de uso",
+      "usageDesign": "Design {{tokens}} tokens · {{cost}}",
+      "usageWindow": "Hoje {{todayTokens}} · {{todayCost}} · Semana {{weekTokens}} · {{weekCost}}",
       "artifactDelivered": "entregue",
       "artifactDefaultLabel": "design.html",
       "tool": {
@@ -281,8 +314,39 @@
   },
   "settings": {
     "title": "Configurações",
+    "imageGen": {
+      "tabTitle": "Geração de imagens",
+      "tabHint": "Permita que o agente de design use modelos de imagem pela OpenAI, OpenRouter ou assinatura do ChatGPT para criar imagens de destaque, pôsteres e fundos. As credenciais ficam neste dispositivo.",
+      "title": "Assistente de geração de imagens",
+      "hint": "Quando ativado, o agente pode usar generate_image_asset durante uma execução.",
+      "enabled": "Ativar assistente de geração de imagens",
+      "provider": "Provedor",
+      "chatgptSubscription": "Assinatura do ChatGPT",
+      "credentials": "Credenciais",
+      "inherit": "Herdar do provedor",
+      "customKey": "Chave separada",
+      "keyPlaceholder": "Deixe vazio para manter {{mask}}",
+      "newKeyPlaceholder": "Cole a chave de API",
+      "requestBase64": "Solicitar resposta em base64",
+      "model": "Modelo de imagem",
+      "baseUrl": "URL base",
+      "quality": "Qualidade",
+      "size": "Tamanho",
+      "status": {
+        "ready": "Pronto",
+        "needsKey": "Precisa de chave de API",
+        "needsChatgptLogin": "Precisa entrar no ChatGPT",
+        "disabled": "Desativado"
+      },
+      "toast": {
+        "loadFailed": "Falha ao carregar as configurações de geração de imagens",
+        "saved": "Configurações de geração de imagens salvas",
+        "saveFailed": "Falha ao salvar as configurações de geração de imagens"
+      }
+    },
     "tabs": {
       "models": "Modelos",
+      "images": "API de imagens",
       "appearance": "Aparência",
       "workspace": "Espaço e arquivos",
       "storage": "Armazenamento",
@@ -347,6 +411,8 @@
         "baseUrl": "URL base",
         "apiKey": "Chave de API",
         "apiKeyEditPlaceholder": "Deixe vazio para manter {{mask}}",
+        "keylessLabel": "Não requer chave de API",
+        "keylessDescription": "Ative apenas para endpoints que aceitam solicitações sem chave de API. Ao mudar para este modo, a chave armazenada será removida ao salvar.",
         "defaultModel": "Modelo padrão",
         "compatibilityHintTitle": "Aviso de compatibilidade",
         "compatibilityHintBody": "Alguns coding plans, relays e gateways compatíveis com OpenAI só permitem clientes específicos, como Claude Code, openclaw ou Hermes. Mesmo que a API pareça compatível, o Open CoDesign ainda pode ser bloqueado por uma lista de apps permitidos.",
@@ -444,6 +510,8 @@
         "modelSaveFailed": "Falha ao salvar a seleção de modelo",
         "reasoningSaved": "Profundidade de raciocínio salva",
         "reasoningSaveFailed": "Falha ao salvar a profundidade de raciocínio",
+        "contextWindowSaved": "Janela de contexto salva",
+        "contextWindowSaveFailed": "Falha ao salvar a janela de contexto",
         "connectionOk": "Conexão OK",
         "connectionFailed": "Falha na conexão",
         "saveFailed": "Falha ao salvar o provedor"
@@ -458,8 +526,26 @@
         "high": "Alta",
         "xhigh": "Muito alta"
       },
+      "contextWindow": {
+        "label": "Janela de contexto",
+        "placeholder": "Auto",
+        "unit": "tokens",
+        "hint": "Deixe vazio para usar o catálogo de modelos. Defina para modelos locais e relays que o catálogo não conhece.",
+        "invalid": "Digite um número inteiro de tokens maior que 0"
+      },
       "addKey": "Adicionar chave",
       "missingKey": "Chave ausente",
+      "litellm": {
+        "presetName": "LiteLLM Gateway",
+        "presetDescription": "Gateway auto-hospedado compatível com OpenAI, chave de API opcional",
+        "hint": "Aponte para um proxy LiteLLM que você já executa (o LiteLLM não vem incluído). A URL padrão é http://localhost:4000/v1; edite-a para implantações remotas. O modo sem chave vem ativado para proxies sem master key; desative-o e cole sua master key ou virtual key se o gateway exigir autenticação. Para uma URL localhost, permita abaixo os testes em rede privada.",
+        "diagnostics": {
+          "auth": "Defina a master key ou virtual key do LiteLLM, ou desative o modo sem chave se este proxy exigir uma chave.",
+          "notFound": "Confira se a URL base termina com /v1.",
+          "notFoundLocal": "Confira se a URL base termina com /v1 e se o proxy local do LiteLLM está na porta 4000.",
+          "unreachable": "Inicie o proxy LiteLLM e tente novamente."
+        }
+      },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
         "presetDescription": "Proxy local que encapsula assinaturas OAuth do Claude/Codex/Gemini",
@@ -548,6 +634,8 @@
       "beta": "Beta",
       "checkForUpdatesOnStartup": "Verificar atualizações ao iniciar",
       "checkForUpdatesOnStartupHint": "Verifica automaticamente se há nova versão 30 segundos após iniciar o app.",
+      "systemNotifications": "Notificações do sistema",
+      "systemNotificationsHint": "Avisar quando um design terminar, falhar ou fizer uma pergunta enquanto o Open CoDesign estiver em segundo plano. No macOS, os avisos param depois que você fecha a última janela, até abri-la de novo.",
       "timeout": "Tempo limite de geração",
       "timeoutHint": "Segundos antes de uma geração ser abortada.",
       "timeoutSeconds": "{{value}} s",
@@ -703,9 +791,17 @@
         "label": "PDF",
         "hint": "Renderizado via seu Chrome instalado"
       },
+      "png": {
+        "label": "PNG",
+        "hint": "Imagem da página inteira em 2x, pelo Chrome instalado; apresentações (um slide por <section>) são empilhadas em ordem numa única imagem alta"
+      },
       "pptx": {
         "label": "PPTX",
         "hint": "Slides de alta fidelidade; um por <section>"
+      },
+      "pptxNative": {
+        "label": "PPTX (editável, beta)",
+        "hint": "Texto e formas editáveis; elementos visuais complexos podem virar imagens"
       },
       "zip": {
         "label": "Pacote ZIP",
@@ -723,11 +819,15 @@
     "designSystemCleared": "Design system removido",
     "clearDesignSystemFailed": "Não foi possível remover o design system",
     "generationFailed": "Falha na geração",
+    "systemDesignReady": "Design pronto",
+    "systemGenerationFailed": "Falha na geração",
+    "systemAskWaiting": "Aguardando sua resposta",
     "cancellationFailed": "Falha no cancelamento",
     "inlineCommentFailed": "Falha no comentário inline",
     "commentNeedsSnapshot": "Gere um design antes de deixar um comentário",
     "commentCreateFailed": "Não foi possível salvar o comentário",
     "commentUpdateFailed": "Não foi possível atualizar o comentário",
+    "commentsChangedDuringGeneration": "Os comentários mudaram durante a geração e continuam pendentes. Envie-os novamente para aplicar as alterações atualizadas.",
     "commentDeleteFailed": "Não foi possível excluir o comentário",
     "noDesignToExport": "Nenhum design para exportar ainda.",
     "exportedTo": "Exportado para {{path}}"
@@ -741,6 +841,8 @@
     "applyChange": "Aplicar mudança"
   },
   "commentBubble": {
+    "retryHint": "Seu rascunho foi mantido. Tente salvar novamente.",
+    "keyboardHint": "Enter: nova linha · Ctrl/⌘+Enter: adicionar ao chat",
     "title": "Comentar em",
     "close": "Fechar balão de comentário",
     "placeholder": "Descreva a mudança ou deixe uma nota para você…",
@@ -955,6 +1057,7 @@
       "reasoningPolicy": "O endpoint rejeitou metadados de reasoning para este modelo. Reduza a profundidade de reasoning e tente novamente.",
       "modelIdShape": "O id do modelo selecionado inclui um prefixo de provedor que este endpoint não aceita.",
       "generationTimeout": "A geração atingiu o tempo limite configurado antes de o modelo terminar.",
+      "contextWindowExceeded": "O prompt do sistema, as ferramentas e esta solicitação precisam de mais tokens do que a janela de contexto do modelo permite.",
       "relayStreamingBug": "O gateway pode tratar incorretamente eventos SSE da OpenAI Responses API e cortar o stream cedo.",
       "transportInterrupted": "A conexão com o provedor terminou antes da conclusão. Normalmente é timeout do gateway ou interrupção de rede.",
       "referenceUrlInvalid": "A URL de referência é inválida ou não é suportada.",
@@ -971,6 +1074,7 @@
       "addV1": "Adicionar /v1",
       "waitAndRetry": "Aguardar e tentar novamente",
       "adjustGenerationTimeout": "Ajustar tempo limite da geração",
+      "adjustContextWindow": "Verificar a janela de contexto",
       "checkNetwork": "Verificar rede / VPN",
       "checkVpn": "Verificar VPN / firewall",
       "reportBug": "Reportar este bug",
@@ -1072,7 +1176,19 @@
   "examples": {
     "tab": "Exemplos",
     "title": "Exemplos",
-    "subtitle": "Pontos de partida selecionados a dedo. Passe o cursor para pré-visualizar e depois insira o prompt no editor.",
+    "subtitle": "Comece com um prompt ou arquivos locais editáveis. As etiquetas indicam referências e funções solicitadas, não resultados verificados. As capas são ilustrações conceituais originais.",
+    "featuresLabel": "Arquivos e funções solicitadas",
+    "inputFiles": "{{count}} arquivos de entrada · ver lista",
+    "useDemoPack": "Usar pacote de exemplo",
+    "features": {
+      "local-assets": "Recursos locais",
+      "document-input": "Documentos",
+      "sketch-reference": "Esboço de referência",
+      "multi-screen": "Várias telas",
+      "shared-state": "Estado compartilhado",
+      "interactive-flow": "Fluxo interativo",
+      "responsive": "Responsivo"
+    },
     "empty": "Nenhum exemplo corresponde ao seu filtro.",
     "useThisPrompt": "Usar este prompt",
     "categories": {
@@ -1226,6 +1342,7 @@
     "INPUT_EMPTY_HTML": "Um HTML existente é obrigatório para esta operação.",
     "INPUT_UNSUPPORTED_MODE": "Este modo de geração não é suportado.",
     "GENERATION_TIMEOUT": "A geração excedeu o tempo limite. Tente um prompt mais curto ou aumente o tempo em Configurações.",
+    "GENERATION_CONTEXT_EXCEEDED": "Esta execução não cabe na janela de contexto do modelo. Encurte a solicitação ou os anexos, defina a janela de contexto do provedor em Configurações → Modelos ou use um modelo com uma janela maior.",
     "GENERATION_INCOMPLETE": "O agente parou antes de concluir a verificação. Continue a execução para finalizar o artefato do espaço de trabalho.",
     "WORKSPACE_MISSING": "Este design não tem um espaço de trabalho vinculado. Reabra ou recrie o design.",
     "ARTIFACT_PROTOCOL_INVALID": "O artefato gerado não seguiu o protocolo obrigatório.",
@@ -1252,8 +1369,9 @@
     "PREFERENCES_INVALID_TIMEOUT": "O valor do tempo limite de geração é inválido.",
     "SKILL_LOAD_FAILED": "Uma ou mais skills falharam ao carregar. Procure erros nos seus arquivos de skill.",
     "EXPORTER_UNKNOWN": "Formato de exportação desconhecido.",
-    "EXPORTER_NO_CHROME": "Chrome ou Chromium não encontrado. Instale um deles para habilitar a exportação em PDF.",
+    "EXPORTER_NO_CHROME": "Chrome ou Chromium não encontrado. Instale um deles para habilitar a exportação em PDF e PNG.",
     "EXPORTER_PDF_FAILED": "A exportação em PDF falhou. Garanta que o Chrome esteja instalado e tente novamente.",
+    "EXPORTER_PNG_FAILED": "A exportação em PNG falhou. Garanta que o Chrome esteja instalado e tente novamente.",
     "EXPORTER_PPTX_FAILED": "A exportação em PowerPoint falhou.",
     "EXPORTER_ZIP_UNSAFE_PATH": "A exportação foi bloqueada: um caminho de asset escaparia dos limites do arquivo ZIP.",
     "EXPORTER_ZIP_FAILED": "A exportação em ZIP falhou.",

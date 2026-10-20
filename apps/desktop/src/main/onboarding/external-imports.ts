@@ -120,6 +120,7 @@ export async function runImportCodex(imported: CodexImport): Promise<OnboardingS
     activeModel,
     secrets: nextSecrets,
     providers: nextProviders,
+    ...(cachedConfig?.webSearch !== undefined ? { webSearch: cachedConfig.webSearch } : {}),
     ...(cachedConfig?.designSystem !== undefined
       ? { designSystem: cachedConfig.designSystem }
       : {}),
@@ -168,6 +169,7 @@ export async function runImportClaudeCode(imported: ClaudeCodeImport): Promise<O
     activeModel: imported.activeModel ?? imported.provider.defaultModel,
     secrets: nextSecrets,
     providers: nextProviders,
+    ...(cachedConfig?.webSearch !== undefined ? { webSearch: cachedConfig.webSearch } : {}),
     ...(cachedConfig?.designSystem !== undefined
       ? { designSystem: cachedConfig.designSystem }
       : {}),
@@ -211,6 +213,7 @@ export async function runImportGemini(imported: GeminiImport): Promise<Onboardin
     activeModel: imported.provider.defaultModel,
     secrets: nextSecrets,
     providers: nextProviders,
+    ...(cachedConfig?.webSearch !== undefined ? { webSearch: cachedConfig.webSearch } : {}),
     ...(cachedConfig?.designSystem !== undefined
       ? { designSystem: cachedConfig.designSystem }
       : {}),
@@ -260,6 +263,7 @@ export async function runImportOpencode(imported: OpencodeImport): Promise<Onboa
     activeModel,
     secrets: nextSecrets,
     providers: nextProviders,
+    ...(cachedConfig?.webSearch !== undefined ? { webSearch: cachedConfig.webSearch } : {}),
     ...(cachedConfig?.designSystem !== undefined
       ? { designSystem: cachedConfig.designSystem }
       : {}),

@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { Activity, Brain, Cpu, FolderOpen, Image, Palette, Sliders } from 'lucide-react';
+import { Activity, Brain, Cpu, FolderOpen, Globe, Image, Palette, Sliders } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { type SettingsTab, useCodesignStore } from '../store';
 import { AdvancedTab } from './settings/AdvancedTab';
@@ -9,6 +9,7 @@ import { ImageGenerationTab } from './settings/ImageGenerationTab';
 import { MemoryTab } from './settings/MemoryTab';
 import { ModelsTab } from './settings/ModelsTab';
 import { StorageTab } from './settings/StorageTab';
+import { WebSearchTab } from './settings/WebSearchTab';
 
 export { resolveTimeoutOptions, TIMEOUT_OPTION_SECONDS } from './settings/AdvancedTab';
 // Re-exports so Settings.test.ts keeps its public entry points. The actual
@@ -16,11 +17,20 @@ export { resolveTimeoutOptions, TIMEOUT_OPTION_SECONDS } from './settings/Advanc
 export { applyLocaleChange } from './settings/AppearanceTab';
 export { computeModelOptions } from './settings/primitives';
 
-type Tab = 'models' | 'images' | 'appearance' | 'workspace' | 'memory' | 'diagnostics' | 'advanced';
+type Tab =
+  | 'models'
+  | 'images'
+  | 'webSearch'
+  | 'appearance'
+  | 'workspace'
+  | 'memory'
+  | 'diagnostics'
+  | 'advanced';
 
 export const SETTINGS_TABS: ReadonlyArray<{ id: Tab; icon: typeof Cpu }> = [
   { id: 'models', icon: Cpu },
   { id: 'images', icon: Image },
+  { id: 'webSearch', icon: Globe },
   { id: 'appearance', icon: Palette },
   { id: 'workspace', icon: FolderOpen },
   { id: 'memory', icon: Brain },
@@ -30,6 +40,7 @@ export const SETTINGS_TABS: ReadonlyArray<{ id: Tab; icon: typeof Cpu }> = [
 
 export function primarySettingsTab(tab: SettingsTab | null): Tab {
   if (tab === 'images') return 'images';
+  if (tab === 'webSearch') return 'webSearch';
   if (tab === 'appearance') return 'appearance';
   if (tab === 'storage' || tab === 'workspace') return 'workspace';
   if (tab === 'memory') return 'memory';
@@ -81,6 +92,7 @@ export function Settings() {
         <section className="codesign-scroll-area flex flex-col min-h-0 overflow-y-auto p-[clamp(var(--space-4),3vw,var(--space-6))]">
           {tab === 'models' ? <ModelsTab /> : null}
           {tab === 'images' ? <ImageGenerationTab /> : null}
+          {tab === 'webSearch' ? <WebSearchTab /> : null}
           {tab === 'appearance' ? <AppearanceTab /> : null}
           {tab === 'workspace' ? <StorageTab /> : null}
           {tab === 'memory' ? <MemoryTab /> : null}

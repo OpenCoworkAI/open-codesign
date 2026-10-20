@@ -1,4 +1,8 @@
-import { completeWithRetry, type RetryReason } from '@open-codesign/providers';
+import {
+  completeWithRetry,
+  type RetryReason,
+  requiredReasoningDefault,
+} from '@open-codesign/providers';
 import type {
   Artifact,
   ChatMessage,
@@ -17,6 +21,7 @@ import { formatUntrustedContext } from './lib/context-format.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt, type PromptComposeOptions } from './prompts/index.js';
 
+export { ActiveRunMessages } from './active-messages.js';
 export type { AgentEvent, GenerateViaAgentDeps } from './agent.js';
 export { generateViaAgent } from './agent.js';
 export type {
@@ -31,6 +36,22 @@ export {
   ModelRegistry,
   SessionManager,
 } from './agent-session.js';
+export type {
+  DesignFields,
+  ImportOrigin,
+  TokenFile,
+  TokenImport,
+  TokenImportReport,
+  UnresolvedReason,
+  UnsupportedReason,
+} from './brand/index.js';
+export {
+  extractFromCssVars,
+  extractFromTailwindConfig,
+  importDtcgJson,
+  mapTokensToDesignFields,
+} from './brand/index.js';
+export { DEFAULT_CONTEXT_WINDOW, resolveContextWindow } from './context-window.js';
 export {
   type BuildDesignContextPackInput,
   buildDesignContextPack,
@@ -108,7 +129,9 @@ export {
 export {
   type DoneDetails,
   type DoneError,
+  type DoneRuntimeResult,
   type DoneRuntimeVerifier,
+  LAYOUT_WARNING_SOURCE,
   makeDoneTool,
 } from './tools/done.js';
 export {
@@ -126,10 +149,16 @@ export {
   type WorkspaceInspection,
 } from './tools/inspect-workspace.js';
 export {
+  type LayoutIssue,
+  MAX_LAYOUT_ISSUES,
   makePreviewTool,
+  type PreviewInput,
   type PreviewResult,
+  type PreviewStep,
   type RunPreviewFn,
+  type RunPreviewOptions,
   trimPreviewResult,
+  validatePreviewInput,
 } from './tools/preview.js';
 export { makeScaffoldTool, type ScaffoldDetails } from './tools/scaffold.js';
 export { makeSetTitleTool, normalizeTitle, type SetTitleDetails } from './tools/set-title.js';
@@ -216,6 +245,12 @@ export interface GenerateInput {
    * via `reasoningForModel`.
    */
   reasoningLevel?: ReasoningLevel | undefined;
+  /**
+   * Context window, in tokens, configured for the provider
+   * (`ProviderEntry.contextWindow`). When absent, core resolves it from pi-ai's
+   * catalog via `resolveContextWindow`.
+   */
+  contextWindow?: number | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
@@ -261,6 +296,12 @@ export interface GenerateInput {
    */
   mode?: Extract<PromptComposeOptions['mode'], 'create'> | undefined;
   signal?: AbortSignal | undefined;
+  /**
+   * Per-HTTP-request timeout forwarded to pi-ai's `timeoutMs`. Without it the
+   * OpenAI / Anthropic SDKs cut every request at their 10-minute default,
+   * regardless of the run-level generation timeout.
+   */
+  requestTimeoutMs?: number | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
   logger?: CoreLogger | undefined;
   /**
@@ -279,20 +320,13 @@ export interface GenerateInput {
    * read back console / asset errors + a DOM outline (or screenshot on
    * vision-capable models).
    */
-  runPreview?:
-    | ((opts: {
-        path: string;
-        vision: boolean;
-      }) => Promise<import('./tools/preview.js').PreviewResult>)
-    | undefined;
+  runPreview?: import('./tools/preview.js').RunPreviewFn | undefined;
   /**
    * Optional async bridge for the `ask` tool. When provided, the agent gains
    * an `ask` tool that pauses the turn, renders the questionnaire to the
    * user, and resumes with the collected answers.
    */
-  askBridge?:
-    | ((input: import('./tools/ask.js').AskInput) => Promise<import('./tools/ask.js').AskResult>)
-    | undefined;
+  askBridge?: import('./tools/ask.js').AskBridge | undefined;
 }
 
 export interface ApplyCommentInput {
@@ -459,6 +493,8 @@ export function reasoningForModel(
   model: ModelRef,
   baseUrl?: string | undefined,
 ): ReasoningLevel | undefined {
+  const requiredDefault = requiredReasoningDefault(model.modelId);
+  if (requiredDefault !== undefined) return requiredDefault;
   // Proxy detection: when the provider id is 'anthropic' but baseUrl points
   // somewhere other than api.anthropic.com, we're talking to a Claude Code-
   // style proxy. Those commonly gate reasoning by plan and consumer-tier
@@ -642,3 +678,5 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
     throw remapProviderError(err, input.model.provider, input.wire);
   }
 }
+
+export { makeWebResearchTools, WEB_RESEARCH_GUIDANCE } from './tools/web-research.js';

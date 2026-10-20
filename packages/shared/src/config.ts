@@ -5,6 +5,7 @@ import { z } from 'zod';
 const ProviderIdEnum = z.enum([
   'anthropic',
   'openai',
+  'atlascloud',
   'google',
   'openrouter',
   'groq',
@@ -19,6 +20,7 @@ const ProviderIdEnum = z.enum([
 export const SUPPORTED_ONBOARDING_PROVIDERS = [
   'anthropic',
   'openai',
+  'atlascloud',
   'openrouter',
   'ollama',
   'zai',
@@ -146,6 +148,7 @@ export const ImageGenerationSettingsSchema = z
     credentialMode: ImageGenerationCredentialModeSchema.default('inherit'),
     model: z.string().min(1).default('gpt-image-2'),
     baseUrl: z.string().url().optional(),
+    requestBase64: z.boolean().optional(),
     apiKey: SecretRef.optional(),
     quality: ImageGenerationQualitySchema.default('high'),
     size: ImageGenerationSizeSchema.default('1536x1024'),
@@ -180,6 +183,13 @@ export const ProviderEntrySchema = z
      * per endpoint. The UI surfaces this as a "Reasoning depth" dropdown.
      */
     reasoningLevel: ReasoningLevelSchema.optional(),
+    /**
+     * Context window, in tokens, of the models served through this provider.
+     * Overrides pi-ai's model catalog in core's `resolveContextWindow`; needed
+     * for local runtimes and relays whose windows the catalog does not know.
+     * The UI surfaces this as "Context window".
+     */
+    contextWindow: z.number().int().positive().optional(),
     capabilities: ProviderCapabilitiesSchema.optional(),
     /**
      * Per-provider opt-in to skip TLS certificate verification on outbound
@@ -264,6 +274,22 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
       modelDiscoveryMode: 'models',
     },
   },
+  atlascloud: {
+    id: 'atlascloud',
+    name: 'Atlas Cloud',
+    builtin: true,
+    wire: 'openai-chat',
+    baseUrl: 'https://api.atlascloud.ai/v1',
+    envKey: 'ATLASCLOUD_API_KEY',
+    defaultModel: 'qwen/qwen3.5-flash',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsReasoning: false,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
+  },
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -301,8 +327,8 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
     builtin: true,
     wire: 'anthropic',
     baseUrl: 'https://api.z.ai/api/anthropic',
-    defaultModel: 'glm-5.1',
-    modelsHint: ['glm-5.1', 'glm-5-turbo', 'glm-4.7', 'glm-4.5-air'],
+    defaultModel: 'glm-5.3',
+    modelsHint: ['glm-5.3', 'glm-5.3-flash'],
     requiresApiKey: true,
     capabilities: {
       supportsKeyless: false,
@@ -342,6 +368,15 @@ export const ConfigV3Schema = z
     providers: z.record(z.string(), ProviderEntrySchema).default({}),
     designSystem: StoredDesignSystem.optional(),
     imageGeneration: ImageGenerationSettingsSchema.optional(),
+    webSearch: z
+      .object({
+        enabled: z.boolean().default(false),
+        maxCalls: z.number().int().min(1).max(50).default(12),
+        timeoutMs: z.number().int().min(1000).max(60000).default(15000),
+        maxChars: z.number().int().min(1000).max(12000).default(10000),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((config, ctx) => {
@@ -479,6 +514,7 @@ export function toPersistedV3(cfg: Config | ConfigV3): ConfigV3 {
     activeProvider: cfg.activeProvider,
     activeModel: cfg.activeModel,
     secrets: cfg.secrets,
+    ...(cfg.webSearch !== undefined ? { webSearch: cfg.webSearch } : {}),
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
     ...(cfg.imageGeneration !== undefined ? { imageGeneration: cfg.imageGeneration } : {}),
@@ -518,6 +554,13 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     primary: ['gpt-4o', 'gpt-4.1'],
     defaultPrimary: 'gpt-4o',
   },
+  atlascloud: {
+    provider: 'atlascloud',
+    label: 'Atlas Cloud',
+    keyHelpUrl: 'https://atlascloud.ai/',
+    primary: ['qwen/qwen3.5-flash', 'deepseek-ai/deepseek-v4-pro'],
+    defaultPrimary: 'qwen/qwen3.5-flash',
+  },
   openrouter: {
     provider: 'openrouter',
     label: 'OpenRouter',
@@ -536,8 +579,8 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     provider: 'zai',
     label: 'Z.ai (GLM Coding Plan)',
     keyHelpUrl: 'https://z.ai/manage-apikey/apikey-list',
-    primary: ['glm-5.1', 'glm-5-turbo', 'glm-4.7', 'glm-4.5-air'],
-    defaultPrimary: 'glm-5.1',
+    primary: ['glm-5.3', 'glm-5.3-flash'],
+    defaultPrimary: 'glm-5.3',
   },
 };
 

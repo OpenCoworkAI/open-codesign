@@ -142,6 +142,7 @@ describe('settings navigation', () => {
     expect(SETTINGS_TABS.map((entry) => entry.id)).toEqual([
       'models',
       'images',
+      'webSearch',
       'appearance',
       'workspace',
       'memory',
@@ -152,6 +153,7 @@ describe('settings navigation', () => {
 
   it('opens deep links on their matching primary settings tab', () => {
     expect(primarySettingsTab('images')).toBe('images');
+    expect(primarySettingsTab('webSearch')).toBe('webSearch');
     expect(primarySettingsTab('memory')).toBe('memory');
     expect(primarySettingsTab('diagnostics')).toBe('diagnostics');
     expect(primarySettingsTab('storage')).toBe('workspace');

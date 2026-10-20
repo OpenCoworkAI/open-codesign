@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { buildEnrichedPrompt } from './store';
 
 describe('buildEnrichedPrompt', () => {
+  it('directs a file-tab edit to its source, not App.jsx or a similar sibling', () => {
+    const prompt = buildEnrichedPrompt('Update only the selected action', [
+      {
+        selector: '/button[2]/span[1]',
+        tag: 'span',
+        outerHTML: '<span>Reserve</span>',
+        text: 'Rename to Confirm booking',
+        sourcePath: 'screens/tablet.html',
+      },
+    ]);
+    expect(prompt).toContain('Source file: screens/tablet.html');
+    expect(prompt).not.toContain('apply every edit below to App.jsx');
+    expect(prompt).toContain('DOM selectors are not source-code locations');
+    expect(prompt).toContain('`read` and `edit`');
+  });
   it('returns user prompt unchanged when there are no pending edits', () => {
     expect(buildEnrichedPrompt('make it blue', [])).toBe('make it blue');
   });
@@ -24,9 +39,8 @@ describe('buildEnrichedPrompt', () => {
     expect(prompt).toContain('Make this darker');
     expect(prompt).toContain('tweak the page');
     expect(prompt).toContain('<untrusted_scanned_content type="pending_edit_target">');
-    expect(prompt).toContain('str_replace_based_edit_tool');
-    expect(prompt).toContain('command: "view"');
-    expect(prompt).toContain('command: "str_replace"');
+    expect(prompt).toContain('`read` and `edit`');
+    expect(prompt).not.toContain('str_replace_based_edit_tool');
     expect(prompt).not.toContain('text_editor str_replace');
     // ordering: edit block comes first, user prompt last
     const editsIdx = prompt.indexOf('### Edit 1');

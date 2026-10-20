@@ -1,5 +1,131 @@
 # @open-codesign/desktop
 
+## 0.2.2
+
+### Patch Changes
+
+- 8303e2b: Remove the desktop's automatic router questionnaire before generation. Route capability preferences without an interview, act on reversible design choices, and retain the agent's structured ask bridge for genuine blockers and explicit interview requests. Permission gates and paid-action authorization are unchanged.
+
+  Reuse validated, matching answers from existing session tool results as labelled data within the existing context budget. Preserve conversation and brief priority; do not infer answers from cancelled, empty, malformed, or historical count-only results. Keep legacy clarification helpers compatible without using them as the live generation path.
+
+- a77bb4a: Add three original local-input demo packs, localized feature tags and inspectable
+  file lists to Examples. Seed references lazily into a fresh workspace before
+  prefilling the prompt, without overwriting existing files or automatically
+  submitting a generation.
+- f44ef6b: Avoid appending a duplicate final assistant summary when a generation finishes after switching to another design.
+- c8a179f: Show concise tool and generation errors with expandable, scrollable original
+  diagnostics instead of flooding the conversation with raw validation arguments.
+- cd39c0c: Add optional viewport and bounded click, fill, keyboard, and assertion steps to preview. Report ordered interaction evidence and the final visible screen so connected products can verify shared state and navigation before completion. Existing render-only calls remain supported; checks run in an isolated disposable browser and do not promise persistence or coverage of untested flows.
+- 729e356: Allow text-only queue and steer messages during reference-URL and comment-application runs without resending their original context. Preserve delivered chat messages, initial history, and local tool updates when chat reads finish out of order or designs are switched.
+- d1fbb08: Bind tweak controls to the file being previewed, including secondary JSX/HTML files. Refresh controls after source edits, preserve unrelated token changes, and reject stale or out-of-range writes instead of overwriting later revisions. Cancel pending saves when their design changes or generation starts.
+- 729e356: Dismiss host-cancelled clarification requests without answering them or disturbing unrelated questions and drafts, including cancellations that race initial pending-question replay.
+- 760147c: Let the conversation sidebar collapse to a narrow, keyboard-accessible restore
+  rail. Keep chat and preview components mounted so drafts, active generation,
+  scroll position, and artifact interaction state survive collapse and expansion.
+  Preserve the previous sidebar width and hide the rail in fullscreen preview.
+  New clarification requests reveal the conversation, while Escape cannot
+  silently cancel a hidden question or cancel during IME composition.
+- e140ea8: Keep the floating comments list below the actual preview header so wrapped toolbars
+  and fullscreen exit controls remain accessible at larger interface zoom levels.
+  Clamp the list to the remaining viewport height while preserving comment drafts.
+- c8a179f: Keep the running composer compact with short queue/steer labels and an on-demand,
+  keyboard-accessible delivery explanation. Preserve 40px action targets and fix
+  ambiguous text-size utilities that caused inherited typography in the composer.
+  Do not show additional-message actions for an empty draft after normal submission.
+- 67afb24: Reduce desktop chrome with a compact single-row workspace header and a shared workspace-path/preview summary row. Keep narrow layouts, full model and design identification, diagnostics, native dragging, and expandable preview configuration accessible without reducing control targets.
+- c9d7e20: Guide app generation toward bounded connected local prototypes with shared data, working navigation and back paths, relevant form states, and readable JSX. Preserve single-screen, document, deck, and narrow revision scope; clarify simulated services and sandbox persistence limits. Align built-in method skills with behavior-focused preview checks and concrete repairs instead of automatic polish quotas.
+- 619d7af: Guide tweak declarations toward consequential, implemented design choices with source-matched defaults, shared bindings, constrained options, and preserved user selections. Add method guidance for checking alternate rendered values and restoring defaults without claiming artifact previews test the host tweak panel or automatically synchronize unbound files. Keep targeted tweak edits narrow and avoid delaying the first working frame.
+- 729e356: Coordinate participating workspace writers by canonical file path across designs.
+  Conditional saves and agent text edits compare expected disk bytes inside the
+  writer queue; stale agent edits fail visibly and refresh the file view for an
+  explicit retry. External processes remain outside the in-process atomicity boundary.
+- 96cd16f: Include workspace CSV files in the existing bounded agent text-filesystem hydration. Seeded schedules and other local CSV references remain readable by the agent instead of appearing in the Files inventory but failing with "Path not found."
+- 626fa14: Clear obsolete runtime errors when the visible preview document changes, while
+  retaining errors from the current document. Background pooled previews no longer
+  affect this reset, and file-preview error listeners attach before rendering.
+- 631143d: Add **Decompose to UI Kit** — opt-in sidebar action that emits a `ui_kits/<slug>/{index.html, components/*.tsx, tokens.css, manifest.json, README.md}` bundle shaped for downstream coding-agent handoff (Claude Code, Cursor). Decomposition is prompt-driven (no AST/parser deps); the orchestrator persists the structured plan to the virtual fs in a single atomic call. Output carries `schemaVersion: 1` so downstream consumers can evolve safely.
+
+  Three new agent tools in `packages/core/src/tools/`:
+
+  - `decompose_to_ui_kit` — orchestrator. Emits the full bundle from a source image + design brief.
+  - `verify_ui_kit_parity` — deterministic verifier (no LLM, no cost): element-count parity, visible-text coverage, token coverage. Returns `passCount/totalChecks` derived score (no fabricated floats).
+  - `verify_ui_kit_visual_parity` — vision-LLM judge wrapper. 12-check boolean rubric across 5 dimensions (layout / color / typography / content / components), anchor-calibrated reasoning-then-score chain-of-thought (WebDevJudge / Prometheus-Vision / Trust-but-Verify ICCV 2025). Host injects `renderUiKit` (headless screenshot) and `judgeVisualParity` (multimodal call) via the same deps interface as `generate_image_asset`. Without injections the tool returns `status: "unavailable"` and the agent proceeds with the deterministic verifier alone.
+
+  `decomposePrompt.ts` (EN + ZH) walks the agent through decompose → verify (both) → reconcile gaps → iterate (max 2) → done with HONEST cost summary. Per-decompose cost surfaces inline as a toast.
+
+  Refs #225 (Phase 1 of the requested image → componentization → prototype workflow). Phase 2 (cross-page flows, state machines, prototype orchestration) is tracked separately.
+
+- 0db17ee: Open dedicated file tabs as full-width file previews instead of retaining the workspace file browser and its thumbnail-preview controls. Keep the file browser in the Files tab.
+- f2a9dbb: Preserve string-valued DESIGN.md component extensions with warnings, as required by Google's alpha consumer specification, rather than failing an otherwise working artifact. Keep malformed token values and runtime failures blocking and provide concrete object-shape repair guidance.
+
+  Surface non-blocking metadata warnings in done results and preserve error/warning counts through repeated stream/history compaction. Update the design-system method's portability guidance without silently rewriting user tokens or changing the repair limit.
+
+- b94d715: Add the built-in `design-reference-to-html` method skill for screenshot/mockup-to-HTML recreation. The skill is an Open CoDesign-native rewrite that uses workspace files, `App.jsx`, `DESIGN.md`, `preview()`, and optional `gen_image()` instead of vendoring external skill directories or browser scripts.
+- 729e356: Reject preview interactions with controls disabled by an enclosing fieldset before changing values or dispatching input. Preserve the native first-legend exception and existing inert and ARIA-disabled checks.
+- a9609e6: Pass optional source-path context to runtime verification and resolve local assets against the latest bound workspace under the workspace path lock. Preview and done share safe file access and source-relative base URLs, including nested source files. Missing or out-of-workspace assets still fail and now identify the requested resource URL.
+- 729e356: Preserve URL encoding for local asset paths in exported ZIPs so filenames containing spaces, quotes, or parentheses load correctly in HTML and JSX designs without breaking CSS or JavaScript strings.
+- 71dbd2f: Add an explicit, localized no-API-key option for custom providers. Preserve key-required defaults, round-trip authentication mode through settings, discover opted-in keyless endpoints without credentials, and require a key when switching back to authenticated mode.
+- 0db17ee: Use supported default reasoning for GPT-6 Astra, including custom Responses gateways and helper requests. Preserve locally submitted generation state until its IPC response arrives so early stream completion cannot hide errors, artifacts, or token usage.
+- ef1d37e: Follow the preferred runnable source as files arrive in a new workspace instead
+  of remaining on an automatically selected document. Explicit file selections
+  remain selected and do not carry over to another design.
+- a8de894: Add window-local fullscreen preview for runnable JSX and HTML. Hide navigation panels without remounting the artifact, preserve form and navigation state, restore panels on exit, and forward unconsumed sandbox Escape events through the trusted preview bridge.
+- d199c75: Queue text follow-ups or steer the next safe processing step during generation using pi's native message queues. Preserve per-design drafts, delivery receipts, and recoverable undelivered messages in local session JSONL without bypassing permission or question gates.
+- e42b538: Refresh seven known, unedited bundled method skills during startup using exact
+  historical hashes. Preserve custom and linked files, retain original backups,
+  recover interrupted upgrades before missing-file seeding, and report upgrade
+  counts and actionable failures without overwriting concurrent replacements.
+- 87e6612: Keep fresh and partially seeded profiles compatible with filesystems that do not
+  support hard links by exclusively copying missing method files. Never replace a
+  concurrently created file or weaken guarded updates and recovery.
+- 729e356: Order canonical chat snapshots by actual read dispatch after history seeding, preserving newer messages when seed requests complete out of order.
+- f2758a6: Rewrite shared design prompts and seven on-demand methods around requested outcomes, coherent early slices, preserved journeys and focus, brief-grounded visual choices, and observed completion. Remove duplicated host procedures, rigid aesthetic quotas, and contradictory inferred-tweak prohibitions while retaining runtime, permission, source-format, brand, and data boundaries.
+
+  Add mode/provenance/feature-profile budget contracts and validate the method's DESIGN.md example against the actual schema. Document official prompting sources and the limits of prompt-only validation. Existing local method copies require a separate ownership-preserving upgrade; this change does not overwrite user templates or alter model/provider settings.
+
+- 729e356: Keep asynchronous clarification answers and file-field state bound to their request and session, so a cancelled upload cannot overwrite a later question with the same question ID.
+- 971918b: Allow interactive preview forms to run client-side submit handlers while blocking native form navigation with browser-enforced CSP. Keep standalone exports and connected development-server policies unchanged.
+- 726f08e: Resolve literal local asset references before JSX/TSX is encoded into standalone
+  HTML. HTML and browser-rendered exports now inline these assets, while ZIP exports
+  collect and rebase them without changing the included editable source. Preserve
+  CSS URL quoting and safely encode text assets in quoted attributes.
+- a3a08e6: Keep canvas comments tied to the host-resolved preview source file, including dedicated file tabs and persisted session comments. Edit prompts now use pi's read/edit tools and describe DOM targets as evidence rather than exact source-code locations; imported components still require source inspection.
+
+  Correct duplicate/special-character ID selection and nested SVG rectangle tracking, preserve existing outlines, and clear stale selection when the selected layer disappears or the preview changes. Store comment rectangles in unscaled iframe coordinates and reject malformed geometry messages.
+
+- 729e356: Preserve React component identity, hook state, effects, and uncontrolled inputs when applying live tweaks to components that read tokens during rendering. Saved tweaks and filesystem watcher acknowledgements no longer rerun the artifact module on this path.
+
+  Artifacts that capture token values at module scope, render static root JSX/fragments/arrays, or use memoized components or memoization hooks (`useMemo` / `useCallback`) retain the previous module-replay behavior so their controls still update. Memoization hooks are conservatively classified even when a particular hook does not read tokens, because closures may capture values before the hook executes. An informational compatibility notice, localized in all four app languages, explains the resulting state reset once per artifact; it is not a runtime error and does not fail preview validation. Structural source replacements still rebuild the preview.
+
+- 2d95f7f: Add a bounded preview select action for native single-selection dropdowns. Select options by exact value using browser input/change events, with explicit errors for disabled controls/options, unsupported multiple selects, and missing or ambiguous targets. Keep existing step budgets and keyboard restrictions.
+- 8d4590a: Clarify that an early app checkpoint precedes secondary-screen implementation and full styling. Guide navigation revisions to preserve access to core record actions and return/recovery paths from newly reachable screens, checking changed entry paths instead of relying on old-screen checks or repeating every cosmetic check. These prompt contracts do not guarantee model compliance or fix runtime routing.
+- 778ee51: Give the prompt composer a full-width, scrollable text surface with separate send and attachment controls. Bound its growth and attached references to preserve conversation space at smaller window sizes and higher zoom. Empty workspaces now show one getting-started preview without reserving a blank file-tree column.
+- 346282c: Make canvas comments easier to read and operate with labeled primary actions, larger click targets, responsive composer placement, and comment-list actions that do not cover comment text.
+
+  Cancel, close, and Escape now dismiss without saving, retaining the existing anchor-scoped draft. IME composition no longer triggers keyboard submission or dismissal. Saving prevents duplicate requests, shows progress and retry feedback, and returns focus after failure. A late save cannot close a newer comment anchor or queue its comment in a different design.
+
+- 8cc9e52: Keep header navigation and controls from overlapping at narrow desktop widths and increased zoom. Place navigation and the model picker on a second row when needed, preserve the native window drag strip, and truncate long design, provider, and model names within their available space.
+- 729e356: Compare active-message context against the immutable comment content submitted to the running generation, not just comment IDs. Revised comments remain pending and drafts are retained.
+
+  Generation completion now uses an atomic expected-content check when marking comments applied. Only matching revisions are consumed; conflicts are reported without failing the completed generation. Late responses cannot overwrite newer visible edits, and editing an applied comment makes the new content pending. Existing explicit bulk marking remains compatible.
+
+- 729e356: Keep generation ownership until cancellation and cleanup settle. Bind clarification,
+  preview, verification, and workspace publication to cancellation; prevent cancelled
+  prompt/recovery admissions and preserve queued messages for explicit recovery.
+
+  Use pi's sequential ask barrier and reject remaining tools when the third failed
+  done check exhausts repair attempts. Report incomplete verification without another
+  provider turn or misclassifying the repair limit as a user cancellation.
+
+- c63b1a4: Share in-flight startup design initialization so concurrent boot effects create only one blank design and workspace. Failed initialization remains retryable and continues to surface storage errors.
+- 729e356: Keep inferred tweak controls and keyboard focus stable while replacing text or colors, including pauses across autosave. Validate inferred colors with the browser instead of treating arbitrary words as color names. Serialize and coalesce slow saves without losing newer drafts, weakening source conflict guards, or resetting artifact state. File/design switches and independent source replacements reset control inference; save conflicts remain visible and retain recoverable text.
+- ef5677c: Explain missing, empty, or invalid tweak declarations for the active preview
+  source instead of promising automatic controls. Surface malformed declarations
+  without crashing the panel. Clarify that the tweaks scanner only discovers
+  declarations: unrelated starter values are not controls for the active preview.
+- 729e356: Add a versioned, session-scoped ask cancellation event and an unsubscribable preload listener so host cancellation can dismiss interrupted questions without submitting an answer.
+- fb92207: Give run-preference preflight a bounded inventory of existing workspace files and recognize workspace DESIGN.md as design guidance. Document-only demo inputs no longer look like missing references just because App.jsx has not been generated. Inventory omissions remain unknown, not proof of missing files; substantive clarification stays available.
+
 ## 0.2.1
 
 ### Patch Changes

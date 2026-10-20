@@ -1,6 +1,27 @@
 import type { ExampleContent } from '../index';
 
 export const esExamples: Record<string, ExampleContent> = {
+  daymark: {
+    title: 'Daymark: del brief a las tareas',
+    description:
+      'Cinco archivos editables: brief, tareas, proyectos, logotipo original y tokens. Conecta Hoy, proyectos y edición de tareas.',
+    prompt:
+      'Lee product-brief.md, tasks.json, projects.json, logo.svg y DESIGN.md del espacio de trabajo. Crea Daymark en App.jsx: Hoy, proyectos, detalle y editor de tareas conectados, con estado compartido y contadores derivados. Reutiliza el logotipo y los tokens locales. Implementa añadir, editar, completar, volver, validación y estados vacíos según el brief. Conserva los archivos originales y actualiza DESIGN.md. Solo datos simulados: sin backend, autenticación, pagos, red ni instalaciones. Interfaz accesible y adaptable a móvil y escritorio. Previsualiza y recorre el flujo antes de terminar; no presentes comportamientos no probados como verificados.',
+  },
+  'common-ground': {
+    title: 'Common Ground: reservar talleres',
+    description:
+      'Un brief, un CSV y arte original guían descubrimiento, detalles, reserva y confirmación. Reservas simuladas, no reales.',
+    prompt:
+      'Lee product-brief.md, schedule.csv, poster.svg, logo.svg y DESIGN.md del espacio de trabajo. Crea Common Ground en App.jsx con descubrimiento, detalles, reserva y confirmación conectados. Reutiliza el arte local; usa el CSV para sesiones, precios y plazas. Comparte selección y formulario; valida datos y capacidad, evita reservas duplicadas y restaura plazas al cancelar. Respeta el brief, navegación atrás y estados vacíos. Indica reserva simulada sin cobro. Conserva archivos y actualiza DESIGN.md. Sin backend, autenticación, pagos, red ni instalaciones. Diseño accesible y adaptable. Previsualiza y prueba el flujo; no afirmes verificaciones que no realizaste.',
+  },
+  trailhead: {
+    title: 'Trailhead: del boceto al itinerario',
+    description:
+      'Boceto SVG original, brief anotado y viajes ficticios para un editor conectado. Las notas no requieren un modelo con visión.',
+    prompt:
+      'Lee sketch-reference.svg, product-brief.md y trips.json del espacio de trabajo. El SVG es un boceto original de baja fidelidad, no una foto ni una interfaz terminada. Lee el texto SVG y las anotaciones aunque no puedas ver imágenes. Transforma sus tres marcos en viajes, itinerario y editor de paradas conectados en App.jsx. Añadir, editar, ordenar y eliminar deben actualizar un único estado y los totales en todas las pantallas. Incluye validación, estados vacíos y navegación atrás según el brief. Conserva los archivos y crea DESIGN.md. Solo datos simulados; sin mapas reales, reservas, autenticación, red ni instalaciones. Hazlo adaptable y accesible; previsualiza y recorre el flujo antes de finalizar, sin afirmar resultados no probados.',
+  },
   'cosmic-animation': {
     title: 'Animación a escala cósmica',
     description:

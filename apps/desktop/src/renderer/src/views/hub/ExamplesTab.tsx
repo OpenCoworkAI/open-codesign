@@ -1,15 +1,11 @@
 import { getCurrentLocale, useT, useTranslation } from '@open-codesign/i18n';
 import { type ExampleCategory, getExamples, type LocalizedExample } from '@open-codesign/templates';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ExampleCard } from './ExampleCard';
 
 export interface ExamplesTabProps {
-  /**
-   * Called with the chosen example so the host (composer / hub) can fill the
-   * prompt input and switch back to the workspace. PR-A wires this up; until
-   * then PR-B can plug in any handler (App.tsx, Storybook, tests).
-   */
-  onUsePrompt: (example: LocalizedExample) => void;
+  /** The host prepares any inputs before filling the composer; it owns error reporting. */
+  onUsePrompt: (example: LocalizedExample) => void | Promise<void>;
 }
 
 type CategoryFilter = 'all' | ExampleCategory;
@@ -37,13 +33,27 @@ export function ExamplesTab({ onUsePrompt }: ExamplesTabProps) {
   const t = useT();
   const { i18n } = useTranslation();
   const [filter, setFilter] = useState<CategoryFilter>('all');
+  const [preparing, setPreparing] = useState(false);
+  const preparingRef = useRef(false);
+
+  async function useExample(example: LocalizedExample): Promise<void> {
+    if (preparingRef.current) return;
+    preparingRef.current = true;
+    setPreparing(true);
+    try {
+      await onUsePrompt(example);
+    } finally {
+      preparingRef.current = false;
+      setPreparing(false);
+    }
+  }
 
   const examples = useMemo(() => getExamples(i18n.language || getCurrentLocale()), [i18n.language]);
 
   const visible = filter === 'all' ? examples : examples.filter((e) => e.category === filter);
 
   return (
-    <section className="flex flex-col gap-[var(--space-6)]">
+    <section aria-busy={preparing} className="flex flex-col gap-[var(--space-6)]">
       <header className="flex flex-col gap-[var(--space-2)]">
         <h1 className="text-[var(--text-xl)] font-semibold leading-[var(--leading-heading)] tracking-[var(--tracking-normal)] text-[var(--color-text-primary)]">
           {t('examples.title')}
@@ -92,7 +102,12 @@ export function ExamplesTab({ onUsePrompt }: ExamplesTabProps) {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] gap-[var(--space-4)]">
           {visible.map((example) => (
-            <ExampleCard key={example.id} example={example} onUsePrompt={onUsePrompt} />
+            <ExampleCard
+              key={example.id}
+              example={example}
+              onUsePrompt={useExample}
+              disabled={preparing}
+            />
           ))}
         </div>
       )}

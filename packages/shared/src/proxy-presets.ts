@@ -39,6 +39,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay',
   },
   {
+    id: 'requesty',
+    label: 'Requesty',
+    provider: 'openai',
+    baseUrl: 'https://router.requesty.ai/v1',
+    notes: 'Multi-model relay',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
@@ -53,6 +60,13 @@ export const PROXY_PRESETS = [
     notes: 'Edit URL to your deployment',
   },
   {
+    id: 'litellm',
+    label: 'LiteLLM Gateway',
+    provider: 'openai',
+    baseUrl: 'http://localhost:4000/v1',
+    notes: 'Self-hosted OpenAI-compatible gateway; key optional',
+  },
+  {
     id: 'cli-proxy-api',
     label: 'CLIProxyAPI',
     provider: 'anthropic',
@@ -64,7 +78,7 @@ export const PROXY_PRESETS = [
     label: 'Z.ai GLM Coding Plan',
     provider: 'anthropic',
     baseUrl: 'https://api.z.ai/api/anthropic',
-    notes: 'GLM-5.1, GLM-5-Turbo, GLM-4.7, GLM-4.5-Air',
+    notes: 'GLM-5.3, GLM-5.3-Flash',
   },
   {
     id: 'custom',

@@ -1,7 +1,10 @@
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import JSZip from 'jszip';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { omittedMark } from './document-text';
 import { preparePromptContext } from './prompt-context';
 
 const VALID_DESIGN_MD = `---
@@ -443,6 +446,22 @@ describe('preparePromptContext', () => {
     expect(result.projectContext.settingsJson).not.toContain('arbitrary');
   });
 
+  it('loads warning-only DESIGN.md as design context while preserving extensions', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-extensions-'));
+    const raw = VALID_DESIGN_MD.replace('rounded:', 'radius:')
+      .replace('fontSize: 16px', 'fontSize: 16px\n    letterSpacing: -.02em')
+      .replace('spacing:', 'shadows:\n  card: "0 2px 8px #000000"\nspacing:');
+    await fs.writeFile(path.join(dir, 'DESIGN.md'), raw, 'utf8');
+
+    const result = await preparePromptContext({ workspaceRoot: dir });
+
+    expect(result.projectContext.invalidDesignMd).toBeUndefined();
+    expect(result.projectContext.designMd).toContain('radius:\n  sm: 4px');
+    expect(result.projectContext.designMd).toContain('shadows:\n  card: "0 2px 8px #000000"');
+    expect(result.projectContext.designMd).toContain('letterSpacing: -.02em');
+    expect(await fs.readFile(path.join(dir, 'DESIGN.md'), 'utf8')).toBe(raw);
+  });
+
   it('passes invalid workspace DESIGN.md as repair context instead of blocking generation', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-design-'));
     await fs.writeFile(
@@ -463,7 +482,6 @@ Use a deep indigo welcome-email system.
 
     expect(result.projectContext.designMd).toBeUndefined();
     expect(result.projectContext.invalidDesignMd?.errors).toEqual([
-      'project: Unknown Google DESIGN.md top-level field "project"',
       'name: name is required',
       'version: version must be a string',
     ]);
@@ -497,5 +515,265 @@ Use a deep indigo welcome-email system.
       name: 'CodesignError',
       code: 'CONFIG_PARSE_FAILED',
     });
+  });
+});
+
+describe('document attachments', () => {
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const A = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+  const S = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+  const RELATIONSHIPS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const relationships = (...items: Array<[id: string, kind: string, target: string]>) =>
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items
+      .map(
+        ([id, kind, target]) =>
+          `<Relationship Id="${id}" Type="${RELATIONSHIPS}/${kind}" Target="${target}"/>`,
+      )
+      .join('')}</Relationships>`;
+  const workbook = (...tabs: Array<[name: string, id: string]>) =>
+    `<workbook ${S} xmlns:r="${RELATIONSHIPS}"><sheets>${tabs
+      .map(([name, id], n) => `<sheet name="${name}" sheetId="${n + 1}" r:id="${id}"/>`)
+      .join('')}</sheets></workbook>`;
+  const oneCell = (text: string) =>
+    `<worksheet ${S}><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${text}</t></is></c></row></sheetData></worksheet>`;
+  const paragraph = (text: string) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
+  const docx = (...paragraphs: string[]) => ({
+    'word/document.xml': `<w:document ${W}><w:body>${paragraphs.map(paragraph).join('')}</w:body></w:document>`,
+  });
+  const slide = (...lines: string[]) =>
+    `<p:sld ${A}>${lines.map((line) => `<a:p><a:r><a:t>${line}</a:t></a:r></a:p>`).join('')}</p:sld>`;
+
+  async function attach(name: string, files: Record<string, string | Buffer>) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-document-attachment-'));
+    const zip = new JSZip();
+    for (const [part, content] of Object.entries(files)) {
+      zip.file(part, content, { compression: 'DEFLATE', compressionOptions: { level: 9 } });
+    }
+    const bytes = await zip.generateAsync({ type: 'nodebuffer' });
+    const filePath = path.join(dir, name);
+    await fs.writeFile(filePath, bytes);
+    return { path: filePath, name, size: bytes.length };
+  }
+
+  it('reads a DOCX as text, under its title', async () => {
+    const file = await attach('brief.docx', {
+      ...docx('Redesign the pricing page', 'Keep it calm &amp; clear'),
+      'docProps/core.xml':
+        '<cp:coreProperties xmlns:cp="c" xmlns:dc="d"><dc:title>Pricing brief</dc:title></cp:coreProperties>',
+    });
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]).toEqual({
+      name: 'brief.docx',
+      path: file.path,
+      excerpt: 'Title: Pricing brief\n\nRedesign the pricing page\nKeep it calm & clear',
+      note: 'Text extracted from a DOCX file; layout, images and charts are not included.',
+    });
+  });
+
+  it('reads a document that sits in the workspace, from its workspace-relative path and an unknown size', async () => {
+    const file = await attach('brief.docx', docx('From the workspace'));
+    const workspaceRoot = path.dirname(file.path);
+    const { attachments } = await preparePromptContext({
+      workspaceRoot,
+      attachments: [{ path: 'brief.docx', name: 'brief.docx', size: 0 }],
+    });
+    expect(attachments[0]).toMatchObject({
+      name: 'brief.docx',
+      path: 'brief.docx',
+      excerpt: 'From the workspace',
+    });
+  });
+
+  it('reads a PPTX slide by slide', async () => {
+    const file = await attach('deck.pptx', {
+      'ppt/slides/slide2.xml': slide('Roadmap'),
+      'ppt/slides/slide1.xml': slide('Launch plan', 'Q3'),
+    });
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]?.excerpt).toBe('Slide 1:\nLaunch plan\nQ3\n\nSlide 2:\nRoadmap');
+  });
+
+  it('reads an XLSX sheet by sheet', async () => {
+    const file = await attach('content.xlsx', {
+      'xl/workbook.xml': workbook(['Copy', 'rId1']),
+      'xl/_rels/workbook.xml.rels': relationships(['rId1', 'worksheet', 'worksheets/sheet1.xml']),
+      'xl/sharedStrings.xml': `<sst ${S}><si><t>Headline</t></si><si><t>Ship faster</t></si></sst>`,
+      'xl/worksheets/sheet1.xml': `<worksheet ${S}><sheetData><row r="1"><c r="A1" s="1"/><c r="B1" t="s"><v>0</v></c></row><row r="2"><c r="A2" t="s"><v>1</v></c><c r="B2"><v>42</v></c></row></sheetData></worksheet>`,
+    });
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]?.excerpt).toBe('Sheet "Copy":\nHeadline\nShip faster · 42');
+  });
+
+  it('gives each sheet name the content of its own worksheet when the tabs are in reverse part order', async () => {
+    const file = await attach('finance.xlsx', {
+      'xl/workbook.xml': workbook(['Expenses', 'rId2'], ['Revenue', 'rId1']),
+      'xl/_rels/workbook.xml.rels': relationships(
+        ['rId1', 'worksheet', 'worksheets/sheet1.xml'],
+        ['rId2', 'worksheet', 'worksheets/sheet2.xml'],
+      ),
+      'xl/worksheets/sheet1.xml': oneCell('Revenue = 1000000'),
+      'xl/worksheets/sheet2.xml': oneCell('Expenses = 900000'),
+    });
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]?.excerpt).toBe(
+      'Sheet "Expenses":\nExpenses = 900000\n\nSheet "Revenue":\nRevenue = 1000000',
+    );
+  });
+
+  it('pairs sheet names with worksheets whose part names do not match the tab positions', async () => {
+    const file = await attach('regions.xlsx', {
+      'xl/workbook.xml': workbook(['North', 'rId4'], ['South', 'rId2'], ['East', 'rId9']),
+      'xl/_rels/workbook.xml.rels': relationships(
+        ['rId2', 'worksheet', 'worksheets/sheet10.xml'],
+        ['rId4', 'worksheet', 'worksheets/sheet3.xml'],
+        ['rId9', 'worksheet', '/xl/worksheets/east.xml'],
+      ),
+      'xl/worksheets/sheet3.xml': oneCell('north data'),
+      'xl/worksheets/sheet10.xml': oneCell('south data'),
+      'xl/worksheets/east.xml': oneCell('east data'),
+    });
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]?.excerpt).toBe(
+      'Sheet "North":\nnorth data\n\nSheet "South":\nsouth data\n\nSheet "East":\neast data',
+    );
+  });
+
+  it('fails the send, naming the file, when a sheet points at a worksheet the archive lacks', async () => {
+    const file = await attach('broken.xlsx', {
+      'xl/workbook.xml': workbook(['Revenue', 'rId1'], ['Expenses', 'rId2']),
+      'xl/_rels/workbook.xml.rels': relationships(
+        ['rId1', 'worksheet', 'worksheets/sheet1.xml'],
+        ['rId2', 'worksheet', 'worksheets/sheet2.xml'],
+      ),
+      'xl/worksheets/sheet1.xml': oneCell('Sales 5400'),
+    });
+    await expect(preparePromptContext({ attachments: [file] })).rejects.toMatchObject({
+      code: 'ATTACHMENT_READ_FAILED',
+      message: expect.stringContaining(
+        '"broken.xlsx" as a XLSX file: it has no xl/worksheets/sheet2.xml.',
+      ),
+    });
+  });
+
+  it('fails the send when the workbook has no relationships part', async () => {
+    const file = await attach('bare.xlsx', {
+      'xl/workbook.xml': workbook(['Revenue', 'rId1']),
+      'xl/worksheets/sheet1.xml': oneCell('Sales 5400'),
+    });
+    await expect(preparePromptContext({ attachments: [file] })).rejects.toMatchObject({
+      code: 'ATTACHMENT_READ_FAILED',
+      message: expect.stringContaining('it has no xl/_rels/workbook.xml.rels.'),
+    });
+  });
+
+  it('says what the limits left out of the text the model gets', async () => {
+    const paragraphs = Array.from({ length: 450 }, (_, n) => `Paragraph ${n}`);
+    const file = await attach('long.docx', docx(...paragraphs));
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]?.excerpt).toContain('Paragraph 399');
+    expect(attachments[0]?.excerpt).not.toContain('Paragraph 400');
+    expect(attachments[0]?.excerpt?.endsWith(omittedMark(50, 'paragraph'))).toBe(true);
+    expect(attachments[0]?.note).not.toContain('truncated');
+  });
+
+  it('cuts the excerpt at the character limit and says so', async () => {
+    const file = await attach(
+      'wide.docx',
+      docx(...Array.from({ length: 60 }, () => 'x'.repeat(480))),
+    );
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]?.excerpt).toHaveLength(6_000);
+    expect(attachments[0]?.note).toContain('Excerpt truncated to the first 6000 characters.');
+  });
+
+  it('says a document with no text has none', async () => {
+    const file = await attach('empty.docx', docx());
+    const { attachments } = await preparePromptContext({ attachments: [file] });
+    expect(attachments[0]).toEqual({
+      name: 'empty.docx',
+      path: file.path,
+      note: 'DOCX file with no text in it.',
+    });
+  });
+
+  describe('a file that cannot be read as the format it claims', () => {
+    it('fails with the file named when it is not an archive', async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-document-attachment-'));
+      const filePath = path.join(dir, 'renamed.docx');
+      await fs.writeFile(filePath, 'this is plain text');
+      await expect(
+        preparePromptContext({ attachments: [{ path: filePath, name: 'renamed.docx', size: 18 }] }),
+      ).rejects.toMatchObject({
+        code: 'ATTACHMENT_READ_FAILED',
+        message: 'Could not read "renamed.docx" as a DOCX file.',
+        cause: expect.any(Error),
+      });
+    });
+
+    it('checks the size on disk, not the size the renderer reports', async () => {
+      const file = await attach('big.docx', {
+        'word/document.xml': randomBytes(11_000_000),
+      });
+      await expect(
+        preparePromptContext({ attachments: [{ ...file, size: 1_000 }] }),
+      ).rejects.toMatchObject({
+        code: 'ATTACHMENT_TOO_LARGE',
+        message: expect.stringContaining('Binary attachment "big.docx" is too large'),
+      });
+    });
+
+    it('fails with the missing part named when the archive lacks it', async () => {
+      const file = await attach('odd.pptx', { 'unrelated.txt': 'x' });
+      await expect(preparePromptContext({ attachments: [file] })).rejects.toMatchObject({
+        code: 'ATTACHMENT_READ_FAILED',
+        message: 'Could not read "odd.pptx" as a PPTX file: it has no ppt/slides/slide1.xml.',
+      });
+    });
+
+    it('fails as too large when the archive unpacks past the limit, without unpacking it', async () => {
+      const file = await attach('bomb.docx', {
+        'word/document.xml': Buffer.alloc(40 * 1024 * 1024, 0x20),
+      });
+      expect(file.size).toBeLessThan(1024 * 1024);
+      const start = performance.now();
+      await expect(preparePromptContext({ attachments: [file] })).rejects.toMatchObject({
+        code: 'ATTACHMENT_TOO_LARGE',
+        message: expect.stringContaining('holds more than 32MB of text once unpacked'),
+      });
+      expect(performance.now() - start).toBeLessThan(5_000);
+    });
+
+    it('fails the whole send, naming the file, when only one of several attachments is bad', async () => {
+      const good = await attach('good.docx', docx('Fine'));
+      const bad = await attach('bad.xlsx', { 'unrelated.txt': 'x' });
+      await expect(preparePromptContext({ attachments: [good, bad] })).rejects.toMatchObject({
+        code: 'ATTACHMENT_READ_FAILED',
+        message: expect.stringContaining('"bad.xlsx"'),
+      });
+    });
+  });
+
+  it('keeps the filename note for formats it does not read, so they are not reported as broken', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-document-attachment-'));
+    const files = [];
+    for (const name of ['report.pdf', 'old.doc', 'old.ppt', 'old.xls']) {
+      const filePath = path.join(dir, name);
+      await fs.writeFile(filePath, Buffer.from([0x25, 0x50, 0x00, 0x01, 0x02]));
+      files.push({ path: filePath, name, size: 5 });
+    }
+    const { attachments } = await preparePromptContext({ attachments: files });
+    expect(attachments.map((attachment) => attachment.note)).toEqual([
+      'Binary or unsupported format (.pdf). Use the filename as a hint, not quoted content.',
+      'Binary or unsupported format (.doc). Use the filename as a hint, not quoted content.',
+      'Binary or unsupported format (.ppt). Use the filename as a hint, not quoted content.',
+      'Binary or unsupported format (.xls). Use the filename as a hint, not quoted content.',
+    ]);
+  });
+
+  it('loads the document reader only when a document is attached', async () => {
+    const source = await fs.readFile(path.join(__dirname, 'prompt-context.ts'), 'utf8');
+    const staticImports = source.split('\n').filter((line) => /^import\b(?!\s+type)/.test(line));
+    expect(staticImports.filter((line) => /document-text|jszip/.test(line))).toEqual([]);
+    expect(source).toMatch(/await import\(\s*'\.\/document-text'\s*\)/);
   });
 });

@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ConfigV3Schema, toPersistedV3 } from '@open-codesign/shared';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const handlers = new Map<string, (...args: unknown[]) => unknown>();
 
@@ -88,6 +88,13 @@ vi.mock('@open-codesign/providers/codex', async () => {
 });
 
 let tmpConfigDir: string;
+
+// Cold transformation of the OAuth/provider module graph is suite setup, not
+// part of the first status handler's 5s assertion budget. Under concurrent
+// Windows runs that setup alone can exceed the per-test timeout.
+beforeAll(async () => {
+  await import('./codex-oauth-ipc');
+}, 30_000);
 
 beforeEach(() => {
   tmpConfigDir = mkdtempSync(join(tmpdir(), 'codex-oauth-ipc-'));

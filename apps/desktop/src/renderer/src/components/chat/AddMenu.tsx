@@ -81,7 +81,7 @@ export function AddMenu({
     <div ref={wrapRef} className="relative">
       <Tooltip label={t('sidebar.chat.addMenu.trigger')} side="top">
         <IconButton
-          size="sm"
+          size="md"
           type="button"
           label={t('sidebar.chat.addMenu.trigger')}
           aria-haspopup="menu"
