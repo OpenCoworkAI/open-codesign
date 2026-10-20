@@ -39,6 +39,7 @@ import type {
   WireApi,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
+import type { CodexModelOptions } from '../main/codex-models';
 import type { CodexOAuthStatus } from '../main/codex-oauth-ipc';
 import type {
   ConnectionTestError,
@@ -697,7 +698,9 @@ const api = {
   },
   codexOAuth: {
     status: () => ipcRenderer.invoke('codex-oauth:v1:status') as Promise<CodexOAuthStatus>,
-    login: () => ipcRenderer.invoke('codex-oauth:v1:login') as Promise<CodexOAuthStatus>,
+    models: () => ipcRenderer.invoke('codex-oauth:v1:models') as Promise<CodexModelOptions>,
+    login: (model?: string) =>
+      ipcRenderer.invoke('codex-oauth:v1:login', model) as Promise<CodexOAuthStatus>,
     cancelLogin: () => ipcRenderer.invoke('codex-oauth:v1:cancel-login') as Promise<boolean>,
     logout: () => ipcRenderer.invoke('codex-oauth:v1:logout') as Promise<CodexOAuthStatus>,
   },

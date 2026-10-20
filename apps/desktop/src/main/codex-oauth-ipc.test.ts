@@ -99,6 +99,10 @@ beforeAll(async () => {
 beforeEach(() => {
   tmpConfigDir = mkdtempSync(join(tmpdir(), 'codex-oauth-ipc-'));
   fakeCachedConfig = null;
+  modelOptionsMock.mockResolvedValue({
+    suggestedModel: 'local-account-model',
+    models: EXPECTED_CHATGPT_CODEX_MODELS,
+  });
   handlers.clear();
   writeConfigMock.mockClear();
   waitForCodeMock.mockReset();
@@ -124,14 +128,9 @@ function makeIdToken(payload: Record<string, unknown>): string {
   return `${header}.${body}.sig`;
 }
 
-const EXPECTED_CHATGPT_CODEX_MODELS = [
-  'gpt-5.5',
-  'gpt-5.4',
-  'gpt-5.4-mini',
-  'gpt-5.3-codex',
-  'gpt-5.3-codex-spark',
-  'gpt-5.2',
-];
+const EXPECTED_CHATGPT_CODEX_MODELS = ['local-account-model'];
+const modelOptionsMock = vi.hoisted(() => vi.fn());
+vi.mock('./codex-models', () => ({ getCodexModelOptions: modelOptionsMock }));
 
 describe('codex-oauth:v1:status', () => {
   it('returns loggedIn: false when no token file is present', async () => {
@@ -169,6 +168,86 @@ describe('codex-oauth:v1:status', () => {
 });
 
 describe('codex-oauth:v1:login', () => {
+  it('can cancel while reading the local model configuration', async () => {
+    let release: ((value: { suggestedModel: string; models: string[] }) => void) | undefined;
+    modelOptionsMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    await register();
+    const login = handlers.get('codex-oauth:v1:login')?.() as Promise<unknown>;
+    expect(await handlers.get('codex-oauth:v1:cancel-login')?.()).toBe(true);
+    release?.({ suggestedModel: 'local-model', models: [] });
+    await expect(login).rejects.toThrow(/Codex login cancelled/);
+    expect(startCallbackServerMock).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit model when local Codex has no selection, before opening a browser', async () => {
+    modelOptionsMock.mockResolvedValue({ suggestedModel: null, models: ['catalog-only'] });
+    await register();
+    await expect(handlers.get('codex-oauth:v1:login')?.()).rejects.toThrow(
+      /Choose a ChatGPT subscription model/,
+    );
+    expect(startCallbackServerMock).not.toHaveBeenCalled();
+    expect(writeConfigMock).not.toHaveBeenCalled();
+  });
+
+  it('uses an explicitly entered model absent from the catalog', async () => {
+    waitForCodeMock.mockResolvedValue({ code: 'AUTH_CODE' });
+    exchangeCodeMock.mockResolvedValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      idToken: makeIdToken({}),
+      expiresAt: 99999,
+      accountId: 'acct',
+    });
+    await register();
+    await handlers.get('codex-oauth:v1:login')?.(undefined, 'my-account-model');
+    expect(fakeCachedConfig?.activeModel).toBe('my-account-model');
+    expect(fakeCachedConfig?.providers['chatgpt-codex']).toMatchObject({
+      defaultModel: 'my-account-model',
+    });
+  });
+
+  it('preserves active/default model and provider overrides on reauthentication', async () => {
+    fakeCachedConfig = {
+      activeProvider: 'chatgpt-codex',
+      activeModel: 'my-active-model',
+      secrets: {},
+      providers: {
+        'chatgpt-codex': {
+          id: 'chatgpt-codex',
+          name: 'My subscription',
+          builtin: false,
+          wire: 'openai-codex-responses',
+          baseUrl: 'https://chatgpt.com/backend-api',
+          defaultModel: 'my-default-model',
+          reasoningLevel: 'low',
+          contextWindow: 200000,
+        },
+      },
+    };
+    waitForCodeMock.mockResolvedValue({ code: 'AUTH_CODE' });
+    exchangeCodeMock.mockResolvedValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      idToken: makeIdToken({}),
+      expiresAt: 99999,
+      accountId: 'acct',
+    });
+    await register();
+    await handlers.get('codex-oauth:v1:login')?.(undefined, 'catalog-model');
+    expect(fakeCachedConfig?.activeModel).toBe('my-active-model');
+    expect(fakeCachedConfig?.providers['chatgpt-codex']).toMatchObject({
+      name: 'My subscription',
+      defaultModel: 'my-default-model',
+      reasoningLevel: 'low',
+      contextWindow: 200000,
+    });
+  });
+
   it('runs the happy path: opens browser, writes token, injects provider, persists config', async () => {
     const { shell } = await import('./electron-runtime');
     const shellOpen = shell.openExternal as ReturnType<typeof vi.fn>;
@@ -208,8 +287,7 @@ describe('codex-oauth:v1:login', () => {
       name: 'ChatGPT 订阅',
       wire: 'openai-codex-responses',
       baseUrl: 'https://chatgpt.com/backend-api',
-      defaultModel: 'gpt-5.5',
-      modelsHint: EXPECTED_CHATGPT_CODEX_MODELS,
+      defaultModel: 'local-account-model',
       requiresApiKey: false,
     });
 
@@ -269,7 +347,7 @@ describe('codex-oauth:v1:login', () => {
     await handlers.get('codex-oauth:v1:login')?.();
 
     expect(fakeCachedConfig?.activeProvider).toBe('chatgpt-codex');
-    expect(fakeCachedConfig?.activeModel).toBe('gpt-5.5');
+    expect(fakeCachedConfig?.activeModel).toBe('local-account-model');
   });
 
   it('leaves active provider alone when one is already set and valid', async () => {
@@ -351,7 +429,10 @@ describe('codex-oauth:v1:login', () => {
     );
 
     await register();
-    const loginPromise = handlers.get('codex-oauth:v1:login')?.() as Promise<unknown>;
+    const loginPromise = handlers.get('codex-oauth:v1:login')?.(
+      undefined,
+      'selected-model',
+    ) as Promise<unknown>;
     await expect(handlers.get('codex-oauth:v1:cancel-login')?.()).resolves.toBe(true);
     await expect(loginPromise).rejects.toThrow(/Codex login cancelled/);
     expect(closeMock).toHaveBeenCalled();
@@ -374,7 +455,7 @@ describe('codex-oauth:v1:logout', () => {
     });
     fakeCachedConfig = {
       activeProvider: 'chatgpt-codex',
-      activeModel: 'gpt-5.3-codex',
+      activeModel: 'future-account-model',
       secrets: {},
       providers: {
         'chatgpt-codex': {
@@ -411,7 +492,7 @@ describe('codex-oauth:v1:logout', () => {
 });
 
 describe('migrateStaleCodexEntryIfNeeded', () => {
-  it('rewrites stale codex entry with current wire, baseUrl, and model hints', async () => {
+  it('repairs stale transport without overwriting active or default models', async () => {
     fakeCachedConfig = {
       activeProvider: 'chatgpt-codex',
       activeModel: 'gpt-5.1-codex-max',
@@ -437,16 +518,16 @@ describe('migrateStaleCodexEntryIfNeeded', () => {
     const rewritten = fakeCachedConfig?.providers['chatgpt-codex'] as Record<string, unknown>;
     expect(rewritten['wire']).toBe('openai-codex-responses');
     expect(rewritten['baseUrl']).toBe('https://chatgpt.com/backend-api');
-    expect(rewritten['defaultModel']).toBe('gpt-5.5');
-    expect(rewritten['modelsHint']).toEqual(EXPECTED_CHATGPT_CODEX_MODELS);
-    expect(fakeCachedConfig?.activeModel).toBe('gpt-5.5');
+    expect(rewritten['defaultModel']).toBe('gpt-5.3-codex');
+    expect(rewritten['modelsHint']).toEqual(['gpt-5.4', 'gpt-5.1-codex-max', 'gpt-5.1']);
+    expect(fakeCachedConfig?.activeModel).toBe('gpt-5.1-codex-max');
     expect(writeConfigMock).toHaveBeenCalledTimes(1);
   });
 
   it('is a no-op when the codex entry is already canonical', async () => {
     fakeCachedConfig = {
       activeProvider: 'chatgpt-codex',
-      activeModel: 'gpt-5.3-codex',
+      activeModel: 'future-account-model',
       secrets: {},
       providers: {
         'chatgpt-codex': {
@@ -455,8 +536,8 @@ describe('migrateStaleCodexEntryIfNeeded', () => {
           builtin: false,
           wire: 'openai-codex-responses',
           baseUrl: 'https://chatgpt.com/backend-api',
-          defaultModel: 'gpt-5.5',
-          modelsHint: EXPECTED_CHATGPT_CODEX_MODELS,
+          defaultModel: 'my-explicit-default',
+          capabilities: { modelDiscoveryMode: 'manual' },
           requiresApiKey: false,
         },
       },

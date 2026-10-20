@@ -19,6 +19,7 @@ import {
   hydrateConfig,
   type ProviderEntry,
 } from '@open-codesign/shared';
+import { getCodexModelOptions } from './codex-models';
 import { configDir, writeConfig } from './config';
 import { ipcMain, shell } from './electron-runtime';
 import { getLogger } from './logger';
@@ -38,17 +39,7 @@ export interface CodexOAuthStatus {
 // avoid a module cycle with `provider-settings`.
 export { CHATGPT_CODEX_PROVIDER_ID };
 
-const CHATGPT_CODEX_DEFAULT_MODEL = 'gpt-5.5';
-const CHATGPT_CODEX_MODELS = [
-  CHATGPT_CODEX_DEFAULT_MODEL,
-  'gpt-5.4',
-  'gpt-5.4-mini',
-  'gpt-5.3-codex',
-  'gpt-5.3-codex-spark',
-  'gpt-5.2',
-];
-
-const CHATGPT_CODEX_PROVIDER: ProviderEntry = {
+const CHATGPT_CODEX_PROVIDER = {
   id: CHATGPT_CODEX_PROVIDER_ID,
   name: 'ChatGPT 订阅',
   builtin: false,
@@ -57,20 +48,15 @@ const CHATGPT_CODEX_PROVIDER: ProviderEntry = {
   // we store the bare base. Do not add `/codex` here — it'd produce
   // `/codex/codex/responses`.
   baseUrl: 'https://chatgpt.com/backend-api',
-  defaultModel: CHATGPT_CODEX_DEFAULT_MODEL,
-  // Static hint for the keyless ChatGPT/Codex OAuth path. This endpoint has
-  // no usable /models discovery flow, so keep the list aligned with the
-  // official Codex model picker and ordered strongest-first.
-  modelsHint: CHATGPT_CODEX_MODELS,
   requiresApiKey: false,
   capabilities: {
     supportsKeyless: true,
     supportsModelsEndpoint: false,
     supportsReasoning: true,
     requiresClaudeCodeIdentity: false,
-    modelDiscoveryMode: 'static-hint',
+    modelDiscoveryMode: 'manual',
   },
-};
+} satisfies Omit<ProviderEntry, 'defaultModel'>;
 
 let tokenStoreSingleton: CodexTokenStore | null = null;
 let activeLoginAbortController: AbortController | null = null;
@@ -153,7 +139,7 @@ async function claimActiveProviderIfUnset(): Promise<void> {
   const next: Config = hydrateConfig({
     version: 3,
     activeProvider: CHATGPT_CODEX_PROVIDER_ID,
-    activeModel: CHATGPT_CODEX_PROVIDER.defaultModel,
+    activeModel: cfg.providers[CHATGPT_CODEX_PROVIDER_ID]?.defaultModel ?? '',
     secrets: cfg.secrets,
     providers: cfg.providers,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
@@ -164,7 +150,10 @@ async function claimActiveProviderIfUnset(): Promise<void> {
   setCachedConfig(next);
 }
 
-async function runLoginFlow(abortController: AbortController): Promise<CodexOAuthStatus> {
+async function runLoginFlow(
+  abortController: AbortController,
+  model: string,
+): Promise<CodexOAuthStatus> {
   const pkce = generatePkce();
   const state = randomBytes(16).toString('hex');
   let server: CallbackServer | null = null;
@@ -199,7 +188,13 @@ async function runLoginFlow(abortController: AbortController): Promise<CodexOAut
     };
     await getCodexTokenStore().write(stored);
     await persistProviderMutation((providers) => {
-      providers[CHATGPT_CODEX_PROVIDER_ID] = { ...CHATGPT_CODEX_PROVIDER };
+      const previous = providers[CHATGPT_CODEX_PROVIDER_ID];
+      providers[CHATGPT_CODEX_PROVIDER_ID] = {
+        ...previous,
+        ...CHATGPT_CODEX_PROVIDER,
+        name: previous?.name ?? CHATGPT_CODEX_PROVIDER.name,
+        defaultModel: previous?.defaultModel ?? model,
+      };
       return providers;
     });
     await claimActiveProviderIfUnset();
@@ -226,13 +221,35 @@ async function runLoginFlow(abortController: AbortController): Promise<CodexOAut
   }
 }
 
-async function runLogin(): Promise<CodexOAuthStatus> {
+async function runLogin(raw?: unknown): Promise<CodexOAuthStatus> {
   if (activeLoginPromise !== null) return activeLoginPromise;
 
+  if (raw !== undefined && (typeof raw !== 'string' || raw.trim().length === 0)) {
+    throw new CodesignError(
+      'Choose a ChatGPT subscription model in Settings > Models.',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
   const abortController = new AbortController();
   activeLoginAbortController = abortController;
 
-  const promise = runLoginFlow(abortController);
+  const promise = (async () => {
+    const existing = getCachedConfig()?.providers[CHATGPT_CODEX_PROVIDER_ID];
+    const model =
+      typeof raw === 'string'
+        ? raw.trim()
+        : (existing?.defaultModel ?? (await getCodexModelOptions()).suggestedModel);
+    if (abortController.signal.aborted) {
+      throw new CodesignError('Codex login cancelled', ERROR_CODES.PROVIDER_ABORTED);
+    }
+    if (!model) {
+      throw new CodesignError(
+        'Choose a ChatGPT subscription model in Settings > Models. Model access depends on your account.',
+        ERROR_CODES.CONFIG_MISSING,
+      );
+    }
+    return runLoginFlow(abortController, model);
+  })();
   const trackedPromise = promise.finally(() => {
     if (activeLoginAbortController === abortController) {
       activeLoginAbortController = null;
@@ -282,28 +299,9 @@ async function runLogout(): Promise<CodexOAuthStatus> {
   return { loggedIn: false, email: null, accountId: null, expiresAt: null };
 }
 
-function sameModelHints(input: string[] | undefined): boolean {
-  return (
-    input !== undefined &&
-    input.length === CHATGPT_CODEX_MODELS.length &&
-    input.every((model, index) => model === CHATGPT_CODEX_MODELS[index])
-  );
-}
-
-function isKnownChatgptCodexModel(modelId: string): boolean {
-  return CHATGPT_CODEX_MODELS.includes(modelId);
-}
-
 /**
- * One-shot boot migration for feat-branch testers: if an older build wrote
- * `chatgpt-codex` with Phase 1's stale `wire`/`baseUrl`, overwrite with the
- * current canonical values so the first generate after upgrade works without
- * requiring a manual re-login. This also refreshes the static model hint list
- * when ChatGPT subscription model availability changes.
- *
- * The public card used to ship disabled, so this migration only fires for
- * users who ran the experimental branch directly; zero writes on fresh
- * installs or first-time upgraders from a stock main build.
+ * Repair transport metadata only. A catalog omission is never evidence that
+ * a user's model is stale; upgrades and re-login must preserve that choice.
  */
 export async function migrateStaleCodexEntryIfNeeded(): Promise<void> {
   const cfg = getCachedConfig();
@@ -313,21 +311,18 @@ export async function migrateStaleCodexEntryIfNeeded(): Promise<void> {
   const providerIsStale =
     entry.wire !== CHATGPT_CODEX_PROVIDER.wire ||
     entry.baseUrl !== CHATGPT_CODEX_PROVIDER.baseUrl ||
-    entry.defaultModel !== CHATGPT_CODEX_PROVIDER.defaultModel ||
-    !sameModelHints(entry.modelsHint);
-  const activeModelIsStale =
-    cfg.activeProvider === CHATGPT_CODEX_PROVIDER_ID && !isKnownChatgptCodexModel(cfg.activeModel);
+    entry.capabilities?.modelDiscoveryMode !== 'manual';
 
-  if (!providerIsStale && !activeModelIsStale) return;
+  if (!providerIsStale) return;
 
   const nextProviders = {
     ...cfg.providers,
-    [CHATGPT_CODEX_PROVIDER_ID]: { ...CHATGPT_CODEX_PROVIDER },
+    [CHATGPT_CODEX_PROVIDER_ID]: { ...entry, ...CHATGPT_CODEX_PROVIDER, name: entry.name },
   };
   const next: Config = hydrateConfig({
     version: 3,
     activeProvider: cfg.activeProvider,
-    activeModel: activeModelIsStale ? CHATGPT_CODEX_DEFAULT_MODEL : cfg.activeModel,
+    activeModel: cfg.activeModel,
     secrets: cfg.secrets,
     providers: nextProviders,
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
@@ -340,13 +335,24 @@ export async function migrateStaleCodexEntryIfNeeded(): Promise<void> {
     previousWire: entry.wire,
     previousBaseUrl: entry.baseUrl,
     previousDefaultModel: entry.defaultModel,
-    activeModelReset: activeModelIsStale,
   });
 }
 
 export function registerCodexOAuthIpc(): void {
   ipcMain.handle('codex-oauth:v1:status', async (): Promise<CodexOAuthStatus> => runStatus());
-  ipcMain.handle('codex-oauth:v1:login', async (): Promise<CodexOAuthStatus> => runLogin());
+  ipcMain.handle('codex-oauth:v1:models', async () => {
+    const options = await getCodexModelOptions();
+    return {
+      ...options,
+      suggestedModel:
+        getCachedConfig()?.providers[CHATGPT_CODEX_PROVIDER_ID]?.defaultModel ??
+        options.suggestedModel,
+    };
+  });
+  ipcMain.handle(
+    'codex-oauth:v1:login',
+    async (_event, model?: unknown): Promise<CodexOAuthStatus> => runLogin(model),
+  );
   ipcMain.handle('codex-oauth:v1:cancel-login', async (): Promise<boolean> => runCancelLogin());
   ipcMain.handle('codex-oauth:v1:logout', async (): Promise<CodexOAuthStatus> => runLogout());
 }

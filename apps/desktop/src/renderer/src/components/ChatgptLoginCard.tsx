@@ -23,7 +23,7 @@ export function resolveViewState(
 
 interface CodexOAuthApi {
   status(): Promise<CodexOAuthStatus>;
-  login(): Promise<CodexOAuthStatus>;
+  login(model?: string): Promise<CodexOAuthStatus>;
   cancelLogin(): Promise<boolean>;
   logout(): Promise<CodexOAuthStatus>;
 }
@@ -32,6 +32,7 @@ type PushToastLike = (toast: { variant: 'error'; title: string; description?: st
 
 export interface PerformLoginDeps {
   api: CodexOAuthApi;
+  model?: string;
   setStatus: (s: CodexOAuthStatus) => void;
   setLoading: (v: boolean) => void;
   pushToast: PushToastLike;
@@ -60,7 +61,7 @@ function formatLoginErrorDescription(
 export async function performLogin(deps: PerformLoginDeps): Promise<void> {
   deps.setLoading(true);
   try {
-    const next = await deps.api.login();
+    const next = await deps.api.login(deps.model);
     deps.setStatus(next);
     await deps.onStatusChange?.();
   } catch (err) {
@@ -135,6 +136,8 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
   const pushToast = useCodesignStore((s) => s.pushToast);
   const [status, setStatus] = useState<CodexOAuthStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [model, setModel] = useState('');
+  const [models, setModels] = useState<string[]>([]);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -143,6 +146,32 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!window.codesign) return;
+    let cancelled = false;
+    void window.codesign.codexOAuth
+      .models()
+      .then((options) => {
+        if (cancelled) return;
+        setModels(options.models);
+        setModel((current) => current || options.suggestedModel || '');
+      })
+      .catch((err: unknown) => {
+        if (!cancelled)
+          pushToast({
+            variant: 'error',
+            title: t('settings.providers.chatgptLogin.statusFailedTitle'),
+            description:
+              err instanceof Error
+                ? err.message
+                : t('settings.providers.chatgptLogin.unknownError'),
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pushToast, t]);
 
   useEffect(() => {
     if (!window.codesign) return;
@@ -162,6 +191,7 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
     if (!window.codesign) return;
     await performLogin({
       api: window.codesign.codexOAuth,
+      model: model.trim(),
       setStatus: (s) => {
         if (mountedRef.current) setStatus(s);
       },
@@ -176,7 +206,7 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
       },
       ...(onStatusChange !== undefined ? { onStatusChange } : {}),
     });
-  }, [onStatusChange, pushToast, t]);
+  }, [model, onStatusChange, pushToast, t]);
 
   const handleCancel = useCallback(async () => {
     if (!window.codesign) return;
@@ -239,6 +269,24 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
         <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] mt-[var(--space-0_5)] leading-[var(--leading-body)]">
           {t('settings.providers.chatgptLogin.description')}
         </p>
+        <label className="mt-2 block text-[var(--text-xs)] text-[var(--color-text-muted)]">
+          {t('settings.providers.chatgptLogin.modelLabel')}
+          <input
+            className="mt-1 block w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[var(--color-text-primary)]"
+            list="chatgpt-model-suggestions"
+            value={model}
+            onChange={(event) => setModel(event.target.value)}
+            disabled={loading}
+          />
+          <datalist id="chatgpt-model-suggestions">
+            {models.map((id) => (
+              <option key={id} value={id} />
+            ))}
+          </datalist>
+        </label>
+        <p className="mt-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
+          {t('settings.providers.chatgptLogin.modelHelp')}
+        </p>
       </div>
       <div className="shrink-0 flex items-center gap-[var(--space-2)]">
         {viewState === 'loading' ? (
@@ -252,7 +300,12 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
             </Button>
           </>
         ) : (
-          <Button variant="primary" size="sm" onClick={() => void handleLogin()}>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!model.trim()}
+            onClick={() => void handleLogin()}
+          >
             <Sparkles className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" />
             {t('settings.providers.chatgptLogin.signIn')}
           </Button>

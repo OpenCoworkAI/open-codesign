@@ -554,7 +554,9 @@
         "logoutFailedTitle": "ChatGPT sign-out failed",
         "statusFailedTitle": "ChatGPT status check failed",
         "unknownError": "Unknown error",
-        "unsupportedCountryRegion": "ChatGPT subscription login is not available for this account, country, region, or territory."
+        "unsupportedCountryRegion": "ChatGPT subscription login is not available for this account, country, region, or territory.",
+        "modelLabel": "ChatGPT model ID",
+        "modelHelp": "Uses your local Codex model when available. Suggestions come from the app’s model catalog; access depends on your ChatGPT account. You can enter another model ID and edit it later in Models."
       },
       "addProvider": "Add provider",
       "addCustom": "Add custom",

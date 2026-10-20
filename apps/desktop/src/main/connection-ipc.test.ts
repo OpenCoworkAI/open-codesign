@@ -5,6 +5,13 @@ vi.mock('./electron-runtime', () => ({
   ipcMain: { handle: vi.fn() },
 }));
 
+vi.mock('./codex-models', () => ({
+  getCodexModelOptions: vi.fn(async () => ({
+    suggestedModel: 'local-codex-model',
+    models: ['local-codex-model', 'catalog-model'],
+  })),
+}));
+
 // Mock the TLS-bypass wrapper so tests can assert the enabled flag passed to
 // it without actually swapping the global undici dispatcher mid-test. The
 // pass-through impl preserves the existing fetch path so all other suites in
@@ -15,6 +22,7 @@ vi.mock('./tls-override', () => ({
 
 import { createHash } from 'node:crypto';
 import { hydrateConfig, LITELLM_CONNECTION_HINT_KEYS } from '@open-codesign/shared';
+import { getCodexModelOptions } from './codex-models';
 import {
   _clearModelsCache,
   buildAuthHeaders,
@@ -43,6 +51,63 @@ import { withTlsBypass } from './tls-override';
 // ---------------------------------------------------------------------------
 
 import type { ConnectionTestResponse, ModelsListResponse } from './connection-ipc';
+
+describe('ChatGPT model suggestions for saved providers', () => {
+  beforeEach(() => {
+    setCachedConfig(
+      hydrateConfig({
+        version: 3,
+        activeProvider: 'chatgpt-codex',
+        activeModel: 'explicit-active-model',
+        secrets: {},
+        providers: {
+          'chatgpt-codex': {
+            id: 'chatgpt-codex',
+            name: 'ChatGPT',
+            builtin: false,
+            wire: 'openai-codex-responses',
+            baseUrl: 'https://chatgpt.com/backend-api',
+            defaultModel: 'explicit-default-model',
+            modelsHint: ['obsolete-hint'],
+            requiresApiKey: false,
+          },
+        },
+      }),
+    );
+  });
+  afterEach(() =>
+    setCachedConfig(
+      hydrateConfig({
+        version: 3,
+        activeProvider: '',
+        activeModel: '',
+        secrets: {},
+        providers: {},
+      }),
+    ),
+  );
+
+  it('includes explicit selections and maintained catalog suggestions instead of legacy persisted hints', async () => {
+    expect(await handleModelsV1ListForProvider('chatgpt-codex')).toEqual({
+      ok: true,
+      models: [
+        'explicit-active-model',
+        'explicit-default-model',
+        'local-codex-model',
+        'catalog-model',
+      ],
+    });
+  });
+
+  it('surfaces local catalog failures without resetting the selected model', async () => {
+    vi.mocked(getCodexModelOptions).mockRejectedValueOnce(new Error('Unreadable Codex config'));
+    expect(await handleModelsV1ListForProvider('chatgpt-codex')).toMatchObject({
+      ok: false,
+      message: 'Unreadable Codex config',
+      hint: expect.stringContaining('Settings > Models'),
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // connection:v1:test test helper

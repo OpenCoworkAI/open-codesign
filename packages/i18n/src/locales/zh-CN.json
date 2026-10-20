@@ -554,7 +554,9 @@
         "logoutFailedTitle": "ChatGPT 登出失败",
         "statusFailedTitle": "ChatGPT 登录状态读取失败",
         "unknownError": "未知错误",
-        "unsupportedCountryRegion": "当前账号、国家、地区或区域暂不支持 ChatGPT 订阅登录。"
+        "unsupportedCountryRegion": "当前账号、国家、地区或区域暂不支持 ChatGPT 订阅登录。",
+        "modelLabel": "ChatGPT 模型 ID",
+        "modelHelp": "优先使用本机 Codex 的模型配置。候选来自应用的模型目录，是否可用取决于你的 ChatGPT 账号。可输入其他模型 ID，之后也可在 Models 中编辑。"
       },
       "addProvider": "添加服务",
       "addCustom": "添加自定义",
