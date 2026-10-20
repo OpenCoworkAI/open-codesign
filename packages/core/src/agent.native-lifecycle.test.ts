@@ -7,7 +7,7 @@ import { type ActiveRunMessageV1, CodesignError, ERROR_CODES } from '@open-codes
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActiveRunMessages } from './active-messages';
 import { generateViaAgent } from './agent';
-import type { GenerateInput } from './index';
+import type { AgentEvent, GenerateInput } from './index';
 import type { AskResult } from './tools/ask';
 import type { DoneDetails } from './tools/done';
 import type { RunPreviewFn } from './tools/preview';
