@@ -1,5 +1,10 @@
 # Agent-native CLI: phase 1 design and acceptance
 
+The following describes the offline phase 1 slice. The subsequent `debug ui` development
+host and its executable acceptance are documented in
+[BACKGROUND_DEBUG.md](../desktop/BACKGROUND_DEBUG.md); it uses real isolated Electron IPC
+and does not claim standalone model execution.
+
 ## Scope and architecture
 
 The target user is an external agent or developer automating inspection and handoff of
@@ -48,7 +53,7 @@ Other boundaries that must be preserved:
 | --- | --- |
 | `auth-bridge.ts` / `keychain.ts` | Electron safeStorage decryption; AuthStorage population writes credential state. |
 | `ask-ipc.ts` / `permission-ipc.ts` | User decisions and durable asks currently flow through desktop IPC. |
-| `done-verify.ts` / preview | BrowserWindow-based preview/verification is part of successful design completion. |
+| `done-verify.ts` / preview | System-Chrome preview/verification is part of successful design completion. |
 | `session-chat.ts` / pi SessionManager | Opening sessions can involve file lifecycle/migration; no parallel session format should be invented. |
 | `run-journal.ts` | Initialization creates directories, repairs tails and settles interrupted runs; it is not a read-only query API. |
 | Desktop index / storage settings | Electron app paths, migrations, logging, IPC and window lifecycle initialize together. |

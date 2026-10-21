@@ -11,7 +11,7 @@ import { migrateStaleCodexEntryIfNeeded, registerCodexOAuthIpc } from './codex-o
 import { configDir } from './config';
 import { registerConnectionIpc } from './connection-ipc';
 import { registerDiagnosticsIpc } from './diagnostics-ipc';
-import { app, BrowserWindow, clipboard, dialog, shell } from './electron-runtime';
+import { app, BACKGROUND_DEBUG, BrowserWindow, clipboard, dialog, shell } from './electron-runtime';
 import { ensureUserTemplates, resolveBundledTemplatesDir } from './ensure-user-templates';
 import { registerExporterIpc } from './exporter-ipc';
 import { registerImageGenerationSettingsIpc } from './image-generation-settings';
@@ -95,7 +95,9 @@ function createWindow(): void {
     backgroundColor: BRAND.backgroundColor,
     icon: join(__dirname, '../../resources/icon.png'),
     show: false,
+    ...(BACKGROUND_DEBUG ? { focusable: false, skipTaskbar: true } : {}),
     webPreferences: {
+      ...(BACKGROUND_DEBUG ? { offscreen: true, backgroundThrottling: false } : {}),
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: true,
       contextIsolation: true,
@@ -110,13 +112,14 @@ function createWindow(): void {
   // anyway; on healthy systems ready-to-show fires well within 2s and
   // startup stays flicker-free.
   const showFallback = setTimeout(() => {
+    if (BACKGROUND_DEBUG) return;
     if (mainWindow !== null && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
       mainWindow.show();
     }
   }, 2000);
   mainWindow.on('ready-to-show', () => {
     clearTimeout(showFallback);
-    mainWindow?.show();
+    if (!BACKGROUND_DEBUG) mainWindow?.show();
   });
   mainWindow.on('closed', () => clearTimeout(showFallback));
   // Null the reference on close so stale IPC sends from async emitters
@@ -131,7 +134,7 @@ function createWindow(): void {
     // `codesign:v1:open-external`, otherwise any renderer path that triggers
     // a new-window event could coerce the main process into opening an
     // attacker-controlled URL.
-    if (isAllowedExternalUrl(url)) {
+    if (!BACKGROUND_DEBUG && isAllowedExternalUrl(url)) {
       void shell.openExternal(url);
     }
     return { action: 'deny' };
@@ -243,6 +246,7 @@ if (!IS_VITEST) {
       // Start Menu shortcut, which electron-builder sets to the appId.
       if (process.platform === 'win32') app.setAppUserModelId('ai.opencowork.codesign');
       app.on('second-instance', () => {
+        if (BACKGROUND_DEBUG) return;
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.focus();
@@ -303,7 +307,7 @@ if (!IS_VITEST) {
           message: dbResult.error.message,
           stack: dbResult.error.stack,
         });
-        if (IS_SMOKE_TEST) throw dbResult.error;
+        if (IS_SMOKE_TEST || BACKGROUND_DEBUG) throw dbResult.error;
         // Install stub handlers so renderer-side calls reject with a typed
         // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
         // "No handler registered" rejection — see snapshots-ipc.ts.
@@ -333,12 +337,15 @@ if (!IS_VITEST) {
         app.quit();
         return;
       }
-      setupAutoUpdater(getMainWindow);
-      registerAppMenu();
+      if (!BACKGROUND_DEBUG) {
+        setupAutoUpdater(getMainWindow);
+        registerAppMenu();
+      }
       createWindow();
-      void scheduleStartupUpdateCheck();
+      if (!BACKGROUND_DEBUG) void scheduleStartupUpdateCheck();
 
       app.on('activate', () => {
+        if (BACKGROUND_DEBUG) return;
         if (BrowserWindow.getAllWindows().length === 0) {
           try {
             createWindow();
@@ -348,7 +355,7 @@ if (!IS_VITEST) {
         }
       });
     } catch (err) {
-      if (IS_SMOKE_TEST) {
+      if (IS_SMOKE_TEST || BACKGROUND_DEBUG) {
         process.stderr.write(
           `codesign smoke.fail ${err instanceof Error ? err.stack || err.message : String(err)}\n`,
         );

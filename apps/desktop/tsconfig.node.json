@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/main/**/*", "src/preload/**/*", "electron.vite.config.ts"],
+  "include": ["src/main/**/*", "src/preload/**/*", "src/debug/**/*", "electron.vite.config.ts"],
   "compilerOptions": {
     "outDir": "out",
     "module": "ESNext",

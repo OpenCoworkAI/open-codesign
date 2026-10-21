@@ -1,8 +1,10 @@
 import { cpSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 import pkg from './package.json' with { type: 'json' };
+import { uiSourceFingerprint } from './src/debug/build-fingerprint';
 
 const APP_VERSION = JSON.stringify(pkg.version);
 const WORKSPACE_PACKAGES = [
@@ -52,14 +54,21 @@ function copyPromptSections() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   main: {
     define: { __APP_VERSION__: APP_VERSION },
     build: {
       externalizeDeps: { exclude: [...WORKSPACE_PACKAGES, ...BUNDLED_RUNTIME_PACKAGES] },
       outDir: 'out/main',
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/main/index.ts') },
+        input: {
+          index: resolve(__dirname, 'src/main/index.ts'),
+          ...(mode === 'background-debug'
+            ? { 'ui-debug': resolve(__dirname, 'src/debug/ui-debug.ts') }
+            : {}),
+        },
+        // Shared debug chunks also read the prompt files copied next to the main entry.
+        ...(mode === 'background-debug' ? { output: { chunkFileNames: '[name]-[hash].js' } } : {}),
         treeshake: {
           moduleSideEffects: (id) =>
             !id.includes('/node_modules/@mariozechner/pi-coding-agent/dist/'),
@@ -88,6 +97,24 @@ export default defineConfig({
         input: { index: resolve(__dirname, 'src/renderer/index.html') },
       },
     },
-    plugins: [react()],
+    plugins: [
+      react(),
+      ...(mode === 'background-debug'
+        ? [
+            {
+              name: 'codesign:background-debug-fingerprint',
+              async closeBundle() {
+                await writeFile(
+                  resolve(__dirname, 'out/background-debug-build.json'),
+                  JSON.stringify({
+                    schemaVersion: 1,
+                    fingerprint: await uiSourceFingerprint(__dirname),
+                  }),
+                );
+              },
+            },
+          ]
+        : []),
+    ],
   },
-});
+}));

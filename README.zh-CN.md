@@ -330,6 +330,10 @@ Open CoDesign 在 [LINUX DO](https://linux.do/) 社区首发，感谢佬友们�
 检查环境、读取工作区设计状态和导出 HTML。在源码仓库根目录运行
 `pnpm --silent cli --help`，文档包含 Windows PowerShell 调用方式。
 
+调试 Open CoDesign 自身界面时，可使用 [`debug ui`](./apps/desktop/BACKGROUND_DEBUG.md)
+启动隔离的离屏 Electron 副本，执行截图、点击、输入和错误收集，并在 Windows 下检查
+是否出现可见窗口、抢占焦点或系统合成输入。
+
 请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。开始写代码前建议先开 issue，发 PR 前请先运行 `pnpm lint && pnpm typecheck && pnpm test`。
 
 ## 许可证

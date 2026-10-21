@@ -425,6 +425,10 @@ For automation without the desktop window, the [Agent-native CLI](./apps/cli/REA
 provides diagnostics, workspace inspection and HTML export. Start with
 `pnpm --silent cli --help` from a source checkout.
 
+To verify Open CoDesign's own interface in an isolated offscreen Electron instance, use
+[`debug ui`](./apps/desktop/BACKGROUND_DEBUG.md). It captures screenshots, runs page
+interactions, collects errors, and checks Windows window/focus/input observations.
+
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before writing code and run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
 Desktop tests use at most two workers on Windows so concurrent Chromium and
 filesystem integration suites do not exhaust the host during workspace-wide checks.

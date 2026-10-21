@@ -22,6 +22,37 @@ let root: string;
 let workspace: string;
 let config: string;
 
+it('debug ui has a bounded timeout and requires an explicit new output directory', () => {
+  expect(parseArguments(['debug', 'ui', '--output', 'reports/run'])).toMatchObject({
+    command: 'debug ui',
+    timeoutMs: 120000,
+  });
+  expect(() => parseArguments(['debug', 'ui'])).toThrow('--output');
+  expect(() => parseArguments(['debug', 'ui', '--output', 'x', '--workspace', '.'])).toThrow(
+    '--workspace',
+  );
+  expect(() => parseArguments(['doctor', '--steps', 'x'])).toThrow('--steps');
+});
+
+it('keeps the UI evidence when a deadline expires during cleanup', async () => {
+  const result = await invoke(
+    ['debug', 'ui', '--output', 'unused', '--timeout-ms', '1', '--json'],
+    async (_args, operationSignal) => {
+      await new Promise<void>((resolve) =>
+        operationSignal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+      return { data: { cleanup: true, screenshots: ['failure.png'] } };
+    },
+  );
+  expect(result.code).toBe(124);
+  expect(JSON.parse(result.stdout)).toMatchObject({
+    ok: false,
+    data: { cleanup: true },
+    error: { code: 'TIMEOUT' },
+  });
+  expect(result.stderr).toBe('');
+});
+
 beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), 'codesign-cli-'));
   workspace = path.join(root, 'workspace with spaces');

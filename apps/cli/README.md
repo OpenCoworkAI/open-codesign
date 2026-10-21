@@ -2,7 +2,9 @@
 
 A source-checkout CLI for agents, developers and CI. It inspects existing workspaces and
 exports HTML directly through Open CoDesign's core and exporter packages. The desktop app
-does not need to be running. No model, browser, Electron window or desktop input is used.
+does not need to be running. Inspection and export use no model, browser or Electron.
+The development-only `debug ui` command separately starts an isolated offscreen Electron
+instance to verify Open CoDesign's own interface without physical desktop input.
 
 ## Run
 
@@ -44,6 +46,7 @@ symlinks/junctions. It is selected explicitly; the CLI does not guess which desi
 | `doctor` | Node version, config schema, credential storage summary, workspace scan and HTML dependency availability. Human output by default. |
 | `workspace inspect --workspace PATH` | Bounded design inventory: entry candidates, sources, styles, design/reference documents and assets. No file contents. |
 | `export html --workspace PATH --source FILE --output FILE` | Reuses the existing standalone runtime and HTML exporter; creates one new output file. |
+| `debug ui --output NEW_DIR [--steps FILE]` | Real desktop UI in offscreen Electron; screenshots, interactions, errors and Windows non-interference observations. Requires a fresh debug build. |
 
 Inspection skips hidden/internal/build directories and symbolic links using the desktop's
 same filesystem reader. It scans up to 2,001 files, reports at most 2,000 files, up to 24
@@ -57,11 +60,15 @@ imports, or visually verify the result. It supports the same standalone JSX/TSX 
 as the desktop exporter, not arbitrary bundler-based React projects. Opening the resulting
 HTML later can execute its scripts and load its remote references.
 
-Only export writes files. It never overwrites an existing file (including the source or an
+Export writes one file. It never overwrites an existing file (including the source or an
 output symlink), does not create parent directories, and removes its own partial output on
 handled cancellation or failure. `OUTPUT_CLEANUP_FAILED` means cleanup itself failed.
 An OS crash or forced kill can leave a partial file; inspect it and choose a new destination.
 Workspace/config/session data is never migrated or saved by these commands.
+
+`debug ui` writes a new evidence directory and disposable application data. See
+[background UI debugging](../desktop/BACKGROUND_DEBUG.md) for its supported flow,
+PowerShell commands, custom steps, isolation and executable acceptance conditions.
 
 ## Machine protocol
 
@@ -87,7 +94,8 @@ Handled errors also go to stdout in JSON mode; stderr is empty.
 ```
 
 On failure, `error` contains `category`, `code`, a safe `message` and `exitCode`.
-Doctor retains its individual checks in `data` on failure; other failures omit `data`.
+Doctor retains its individual checks in `data` on failure. Background UI run failures
+retain their report in `data`; setup failures and other operations omit it.
 An invalid invocation uses command `unknown`; recognized unavailable commands use
 command `unsupported`. No event stream is exposed because there are no model runs.
 
@@ -102,7 +110,7 @@ command `unsupported`. No event stream is exposed because there are no model run
 | 124 | timeout | Cooperative deadline exceeded. |
 | 130 | cancelled | SIGINT / SIGTERM, including Ctrl+C where Node receives SIGINT. |
 
-The default `--timeout-ms` is 30000; accepted range is 1–3600000.
+The default `--timeout-ms` is 30000 (120000 for `debug ui`); accepted range is 1–3600000.
 Cancellation/deadlines are cooperative: the CLI checks between filesystem and rendering
 steps, aborts output writes and waits for cleanup before reporting failure. A blocked OS
 filesystem call or synchronous renderer cannot be forcibly preempted by the timer.
@@ -143,6 +151,6 @@ Root Turborepo checks also need the pinned `pnpm` shim on PATH, as described in
 pnpm executable Turborepo's children find.
 
 Tests use temporary workspaces and synthetic credentials. They require no API account.
-Guarded Node subprocess tests reject Electron/browser automation imports, external
+For the offline inspection/export paths, guarded Node subprocess tests reject Electron/browser automation imports, external
 processes and network calls; the existing tsx/esbuild TypeScript compiler is the sole
 permitted child process. These tests run with the real HTML exporter and vendored runtime.

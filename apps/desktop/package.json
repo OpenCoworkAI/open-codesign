@@ -17,7 +17,8 @@
     "build:dir": "electron-vite build && electron-builder --dir",
     "release": "electron-vite build && electron-builder --publish never",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:debug-ui": "node scripts/test-background-ui.mjs"
   },
   "dependencies": {
     "@babel/parser": "7.29.2",

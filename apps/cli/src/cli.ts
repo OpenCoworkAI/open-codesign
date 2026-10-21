@@ -26,6 +26,9 @@ export async function execute(
   try {
     checkCancelled(controller.signal);
     const result = await dispatch(args, controller.signal, deadline);
+    if (args.command === 'debug ui' && controller.signal.aborted) {
+      return { ...result, error: safeError(controller.signal.reason) };
+    }
     // Synchronous document rendering can delay the timer callback.
     if (Date.now() >= deadline && args.command !== 'export html') {
       controller.abort(new CliError('timeout', 'TIMEOUT', 'Operation exceeded --timeout-ms.'));
@@ -43,6 +46,8 @@ export async function runCli(
   io: IO,
   signal: AbortSignal = new AbortController().signal,
   dispatch: Dispatch = async (args, operationSignal, deadline) => {
+    if (args.command === 'debug ui')
+      return (await import('./ui-debug')).debugUi(args, operationSignal);
     const operations = await import('./operations');
     return operations.dispatch(args, operationSignal, deadline);
   },
@@ -59,7 +64,7 @@ export async function runCli(
       throw new CliError(
         'unsupported',
         'UNSUPPORTED',
-        'Only doctor, workspace inspect and export html are available. Design execution and session status require the Electron permission, credential and session lifecycle; MCP transport and other export formats are not implemented. No GUI fallback was attempted.',
+        'Only doctor, workspace inspect, export html and debug ui are available. Design execution and session status require the Electron permission, credential and session lifecycle; MCP transport and other export formats are not implemented. No GUI fallback was attempted.',
       );
     else result = await execute(args, signal, dispatch);
   } catch (error) {
