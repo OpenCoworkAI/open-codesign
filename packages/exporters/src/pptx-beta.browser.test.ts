@@ -27,11 +27,6 @@ describe.skipIf(!chromePath)('representative native PPTX Beta boundaries', () =>
       'complex content',
     ],
     [
-      'table',
-      '<table style="width:240px;height:140px;border-collapse:collapse"><tbody><tr><th>Local table</th><th>Value</th></tr><tr><td>Metric</td><td>42</td></tr></tbody></table>',
-      'complex content',
-    ],
-    [
       'transform',
       '<div style="width:240px;height:140px;transform:rotate(5deg);background:#eef"><p>Local transform</p></div>',
       'transform',
@@ -63,6 +58,19 @@ describe.skipIf(!chromePath)('representative native PPTX Beta boundaries', () =>
     },
     30_000,
   );
+
+  it('keeps a regular table and its surrounding text editable', async () => {
+    const model = await render(
+      '<table style="width:240px;height:140px;border-collapse:collapse"><tbody><tr><th>Local table</th><th>Value</th></tr><tr><td>Metric</td><td>42</td></tr></tbody></table>',
+    );
+    expect(model.elements.filter((element) => element.type === 'table')).toHaveLength(1);
+    expect(model.elements.filter((element) => element.type === 'image')).toHaveLength(0);
+    expect(
+      model.elements
+        .filter((element) => element.type === 'text')
+        .flatMap((element) => element.runs.map((run) => run.text)),
+    ).toEqual(['Editable overview', 'Editable caption']);
+  }, 30_000);
 
   it('resolves an unavailable requested font rather than writing its absent name', async () => {
     const missing = 'MissingBetaFixtureFont_7F57';

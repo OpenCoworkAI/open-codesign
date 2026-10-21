@@ -13,7 +13,7 @@ overrides:
 
 patchedDependencies:
   pptxgenjs@4.0.1:
-    hash: dd46c0a62033b672e35bc3f1d7cb16c23dc8ccaa76d11ba92543083d4eca2def
+    hash: 404d3c108d40771d3932ee137efd5c72847a3a26c2e0f68c365045db9e6280f5
     path: patches/pptxgenjs@4.0.1.patch
 
 importers:
@@ -177,7 +177,7 @@ importers:
         version: 1.14.0(react@19.3.1)
       pptxgenjs:
         specifier: ^4.0.1
-        version: 4.0.1(patch_hash=dd46c0a62033b672e35bc3f1d7cb16c23dc8ccaa76d11ba92543083d4eca2def)
+        version: 4.0.1(patch_hash=404d3c108d40771d3932ee137efd5c72847a3a26c2e0f68c365045db9e6280f5)
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -266,7 +266,7 @@ importers:
         version: link:../shared
       pptxgenjs:
         specifier: ^4.0.1
-        version: 4.0.1(patch_hash=dd46c0a62033b672e35bc3f1d7cb16c23dc8ccaa76d11ba92543083d4eca2def)
+        version: 4.0.1(patch_hash=404d3c108d40771d3932ee137efd5c72847a3a26c2e0f68c365045db9e6280f5)
       puppeteer-core:
         specifier: ^24.42.0
         version: 24.42.0
@@ -10496,7 +10496,7 @@ snapshots:
       commander: 9.5.0
     optional: true
 
-  pptxgenjs@4.0.1(patch_hash=dd46c0a62033b672e35bc3f1d7cb16c23dc8ccaa76d11ba92543083d4eca2def):
+  pptxgenjs@4.0.1(patch_hash=404d3c108d40771d3932ee137efd5c72847a3a26c2e0f68c365045db9e6280f5):
     dependencies:
       '@types/node': 22.20.5
       https: 1.0.0

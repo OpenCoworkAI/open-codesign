@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, posix } from 'node:path';
 import { DOMParser } from '@xmldom/xmldom';
@@ -27,11 +27,13 @@ const html = (body: string, css = '') => `<!doctype html><html><head><style>
 
 describe.skipIf(!chromePath)('native PPTX in system Chromium', () => {
   let directory: string;
+  const qaDirectory = process.env['CODESIGN_PPTX_QA_DIR'];
   beforeAll(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'pptx-native-browser-'));
+    directory = qaDirectory ?? (await mkdtemp(join(tmpdir(), 'pptx-native-browser-')));
+    if (qaDirectory) await mkdir(directory, { recursive: true });
   });
   afterAll(async () => {
-    await rm(directory, { recursive: true, force: true });
+    if (!qaDirectory) await rm(directory, { recursive: true, force: true });
   });
 
   it.each([
@@ -105,6 +107,199 @@ describe.skipIf(!chromePath)('native PPTX in system Chromium', () => {
     expect(texts[2]?.x).toBeGreaterThan(texts[1]?.x ?? 0);
     expect(texts[2]?.y).toBe(texts[1]?.y);
   }, 30_000);
+
+  it('keeps nested list items as editable native bullets and numbers exactly once', async () => {
+    const models = await renderNativeSlides(
+      html(
+        '<section class="slide"><ul><li>第一项 <strong>重点</strong><ol start="3"><li>子项</li></ol></li><li>第二项</li></ul></section>',
+      ),
+      options,
+    );
+    const model = models[0];
+    const texts = model?.elements.filter((element) => element.type === 'text') ?? [];
+    expect(
+      texts
+        .flatMap((element) => element.runs.map((run) => run.text))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    ).toBe('第一项 重点 子项 第二项');
+    expect(texts.map((element) => element.list)).toEqual([
+      { kind: 'bullet', level: 0 },
+      { kind: 'number', level: 1, start: 3 },
+      { kind: 'bullet', level: 0 },
+    ]);
+    expect(model?.warnings.some((warning) => warning.includes('list marker'))).toBe(false);
+  }, 30_000);
+
+  it('extracts a regular HTML table as one native table, not an image', async () => {
+    const models = await renderNativeSlides(
+      html(
+        '<section class="slide"><table style="width:480px;border-collapse:collapse"><tr><th>指标</th><th>数值</th></tr><tr><td>收入</td><td>42</td></tr></table></section>',
+      ),
+      options,
+    );
+    const table = models[0]?.elements.find((element) => element.type === 'table');
+    expect(table?.rows.map((row) => row.map((cell) => cell.text))).toEqual([
+      ['指标', '数值'],
+      ['收入', '42'],
+    ]);
+    expect(models[0]?.elements.filter((element) => element.type === 'image')).toHaveLength(0);
+  }, 30_000);
+
+  it('preserves uniform cell borders and locally rasterizes a decorated table', async () => {
+    const models = await renderNativeSlides(
+      html(
+        '<section class="slide"><p>可编辑标题</p><table style="width:320px"><tr><td style="border:2px solid #123456;background:#eeeeee;text-align:right">边框单元格</td></tr></table><table style="width:320px"><tr><td style="background:linear-gradient(red,blue)">复杂表格</td></tr></table><p>可编辑说明</p></section>',
+      ),
+      options,
+    );
+    const model = models[0];
+    const table = model?.elements.find((element) => element.type === 'table');
+    expect(table?.rows[0]?.[0]).toMatchObject({
+      border: { width: 2, color: { hex: '123456', opacity: 1 } },
+    });
+    expect(model?.elements.filter((element) => element.type === 'table')).toHaveLength(1);
+    expect(model?.elements.filter((element) => element.type === 'image')).toHaveLength(1);
+    expect(
+      model?.elements
+        .filter((element) => element.type === 'text')
+        .flatMap((element) => element.runs.map((run) => run.text)),
+    ).toEqual(['可编辑标题', '可编辑说明']);
+    expect(model?.warnings.join(' ')).toContain('complex table cell decoration');
+  }, 30_000);
+
+  it('preserves centered cover image cropping as an editable picture', async () => {
+    const models = await renderNativeSlides(
+      html(
+        `<section class="slide"><img src="data:image/png;base64,${png}" style="width:120px;height:80px;object-fit:cover" /></section>`,
+      ),
+      options,
+    );
+    const images = models[0]?.elements.filter((element) => element.type === 'image') ?? [];
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ fit: 'cover' });
+    expect(models[0]?.warnings.some((warning) => warning.includes('rasterized'))).toBe(false);
+  }, 30_000);
+
+  it('keeps rectangular inset-clipped pictures editable', async () => {
+    const models = await renderNativeSlides(
+      html(
+        `<section class="slide"><img src="data:image/png;base64,${png}" style="width:120px;height:80px;clip-path:inset(10px 20px 15px 25px)" /></section>`,
+      ),
+      options,
+    );
+    const images = models[0]?.elements.filter((element) => element.type === 'image') ?? [];
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ crop: { top: 10, right: 20, bottom: 15, left: 25 } });
+    expect(models[0]?.warnings.some((warning) => warning.includes('rasterized'))).toBe(false);
+  }, 30_000);
+
+  it('preserves translated layered cards as independent editable objects', async () => {
+    const models = await renderNativeSlides(
+      html(
+        '<section class="slide"><div style="position:absolute;left:80px;top:90px;width:260px;height:100px;background:#eeeeee;transform:translate(25px,15px)"><p>移位卡片</p></div><p style="position:absolute;left:120px;top:120px;z-index:2">前景文字</p></section>',
+      ),
+      options,
+    );
+    const model = models[0];
+    expect(
+      model?.elements
+        .filter((element) => element.type === 'text')
+        .flatMap((element) => element.runs.map((run) => run.text)),
+    ).toEqual(['移位卡片', '前景文字']);
+    expect(model?.elements.filter((element) => element.type === 'image')).toHaveLength(0);
+    expect(model?.warnings.some((warning) => warning.includes('CSS transform'))).toBe(false);
+  }, 30_000);
+
+  it('reads explicit chart data into a native chart without duplicating SVG labels', async () => {
+    const data = JSON.stringify({
+      type: 'line',
+      labels: ['一月', '二月'],
+      series: [{ name: '收入', values: [12, 18] }],
+    });
+    const source = html(
+      `<section class="slide"><div data-pptx-chart='${data}' style="width:400px;height:240px"><svg width="400" height="240"><text x="10" y="20">视觉标签</text></svg></div></section>`,
+    );
+    const models = await renderNativeSlides(source, options);
+    const chart = models[0]?.elements.find((element) => element.type === 'chart');
+    expect(chart).toMatchObject({
+      chartType: 'line',
+      labels: ['一月', '二月'],
+      series: [{ name: '收入', values: [12, 18] }],
+    });
+    expect(models[0]?.elements.filter((element) => element.type === 'text')).toHaveLength(0);
+    expect(models[0]?.elements.filter((element) => element.type === 'image')).toHaveLength(0);
+    await expect(
+      renderNativeSlides(
+        html(
+          '<section class="slide"><div data-pptx-chart="{bad}" style="width:400px;height:240px"></div></section>',
+        ),
+        options,
+      ),
+    ).rejects.toThrow('data-pptx-chart');
+  }, 30_000);
+
+  it('exports a four-page quality fixture with editable text, table and all chart types', async () => {
+    const marker = (type: 'bar' | 'line' | 'pie', values: number[]) =>
+      JSON.stringify({
+        type,
+        labels: ['甲', '乙', '丙'],
+        series: [{ name: `${type}系列`, values }],
+      });
+    const bars = [4, 6, 9]
+      .map(
+        (value, index) =>
+          `<rect x="${60 + index * 105}" y="${205 - value * 17}" width="45" height="${value * 17}" fill="#c0504d" />`,
+      )
+      .join('');
+    const line = [5, 7, 8]
+      .map((value, index) => `${82 + index * 105},${205 - value * 17}`)
+      .join(' ');
+    const source = html(`
+      <section class="slide"><h1>中文季度报告</h1><div style="display:grid;grid-template-columns:1fr 1fr;gap:24px"><div style="background:#eeeeee;padding:20px"><p>收入 <strong>增长</strong></p></div><div><img src="data:image/png;base64,${png}" style="width:120px;height:80px;object-fit:cover" /><img src="data:image/png;base64,${png}" style="width:120px;height:80px;margin-left:12px;clip-path:inset(10px 20px 15px 25px)" /></div></div></section>
+      <section class="slide"><h1>执行清单</h1><ol start="2"><li>准备材料</li><li>提交审核</li></ol><table style="width:480px"><tr><th>指标</th><th>数值</th></tr><tr><td>收入</td><td>42</td></tr></table></section>
+      <section class="slide"><h1>数据趋势</h1><div data-pptx-chart='${marker('bar', [4, 6, 9])}' style="display:inline-block;width:400px;height:240px"><svg width="400" height="240"><line x1="40" y1="205" x2="370" y2="205" stroke="#888" />${bars}<text x="68" y="225">甲</text><text x="173" y="225">乙</text><text x="278" y="225">丙</text></svg></div><div data-pptx-chart='${marker('line', [5, 7, 8])}' style="display:inline-block;width:400px;height:240px"><svg width="400" height="240"><line x1="40" y1="205" x2="370" y2="205" stroke="#888" /><polyline points="${line}" fill="none" stroke="#c0504d" stroke-width="3" /><text x="75" y="225">甲</text><text x="180" y="225">乙</text><text x="285" y="225">丙</text></svg></div></section>
+      <section class="slide"><h1>结构占比</h1><div data-pptx-chart='${marker('pie', [2, 3, 5])}' style="width:400px;height:240px"><div style="width:210px;height:210px;border-radius:50%;margin:15px auto;background:conic-gradient(#5da5da 0 20%,#faa43a 20% 50%,#60bd68 50% 100%)"></div></div></section>`);
+    const destination = join(directory, 'quality-fixture.pptx');
+    if (qaDirectory) await writeFile(join(directory, 'quality-fixture.html'), source);
+    const result = await exportPptx(source, destination, {
+      ...options,
+      sourcePath: 'deck.html',
+      renderMode: 'native',
+    });
+    expect(result.warnings?.some((warning) => warning.includes('rasterized')) ?? false).toBe(false);
+    const unpacked = join(directory, 'quality-fixture-unpacked');
+    await extract(destination, unpacked);
+    const parser = new DOMParser();
+    const slideTexts: string[][] = [];
+    for (let page = 1; page <= 4; page++) {
+      const slide = parser.parseFromString(
+        await readFile(join(unpacked, `ppt/slides/slide${page}.xml`), 'utf8'),
+        'application/xml',
+      );
+      slideTexts.push(
+        Array.from(slide.getElementsByTagName('a:t')).map((node) => node.textContent ?? ''),
+      );
+      if (page === 2) expect(slide.getElementsByTagName('a:tbl')).toHaveLength(1);
+    }
+    expect(slideTexts[0]?.join('')).toBe('中文季度报告收入 增长');
+    expect(slideTexts[1]?.join('')).toBe('执行清单准备材料提交审核指标数值收入42');
+    expect(slideTexts[2]?.join('')).toBe('数据趋势');
+    expect(slideTexts[3]?.join('')).toBe('结构占比');
+    await expect(readFile(join(unpacked, 'ppt/slides/slide5.xml'))).rejects.toThrow();
+    for (const [index, type] of ['bar', 'line', 'pie'].entries()) {
+      const chartXml = parser.parseFromString(
+        await readFile(join(unpacked, `ppt/charts/chart${index + 1}.xml`), 'utf8'),
+        'application/xml',
+      );
+      expect(chartXml.getElementsByTagName('c:ser')).toHaveLength(1);
+      expect(
+        chartXml.getElementsByTagName('c:cat')[0]?.getElementsByTagName('c:strRef'),
+      ).toHaveLength(1);
+      expect(chartXml.getElementsByTagName('c:v')[0]?.textContent).toContain(type);
+    }
+  }, 60_000);
 
   it('executes JSX props and maps before exporting actual text to PPTX XML', async () => {
     const source = `const title = '真实标题'; const values = ['第一项', '第二项'];

@@ -46,6 +46,7 @@ export type BrowserStyle = Iterable<string> &
     | 'maskImage'
     | 'mixBlendMode'
     | 'objectFit'
+    | 'objectPosition'
     | 'opacity'
     | 'outlineStyle'
     | 'outlineWidth'
@@ -59,6 +60,7 @@ export type BrowserStyle = Iterable<string> &
     | 'rotate'
     | 'scale'
     | 'textDecorationLine'
+    | 'textAlign'
     | 'textOverflow'
     | 'textShadow'
     | 'textTransform'
@@ -117,6 +119,7 @@ export interface BrowserHtmlElement extends BrowserStyledElement {
 export interface BrowserImageElement extends BrowserHtmlElement {
   complete: boolean;
   naturalWidth: number;
+  naturalHeight: number;
   currentSrc: string;
   src: string;
   loading: string;

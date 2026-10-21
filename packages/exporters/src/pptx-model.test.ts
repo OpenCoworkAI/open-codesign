@@ -20,6 +20,7 @@ const drawing = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 const presentation = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const relationships = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const contentTypes = 'http://schemas.openxmlformats.org/package/2006/content-types';
+const chart = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 
 function parseXml(xml: string) {
   const errors: string[] = [];
@@ -151,6 +152,228 @@ function shapeNode(model: NativeSlideModel) {
 }
 
 describe('native slide writer', () => {
+  it('writes list markers as editable paragraph properties', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    const first = textNode(model);
+    const run = required(first.runs[0]);
+    model.elements = [
+      { ...first, runs: [{ ...run, text: '项目' }], list: { kind: 'bullet', level: 0 } },
+      {
+        ...first,
+        y: first.y + 50,
+        runs: [{ ...run, text: '第三项' }],
+        list: { kind: 'number', level: 1, start: 3 },
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(drawing, 'buChar')).toHaveLength(1);
+      const numbered = slide.getElementsByTagNameNS(drawing, 'buAutoNum');
+      expect(numbered).toHaveLength(1);
+      expect(numbered[0]?.getAttribute('startAt')).toBe('3');
+      expect(
+        Array.from(slide.getElementsByTagNameNS(drawing, 't')).map((el) => el.textContent),
+      ).toEqual(['项目', '第三项']);
+    });
+  });
+
+  it('writes cover cropping in the editable picture XML', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'image',
+        x: 0,
+        y: 0,
+        width: 180,
+        height: 90,
+        data: png,
+        fit: 'cover',
+        sourceWidth: 1,
+        sourceHeight: 1,
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(presentation, 'pic')).toHaveLength(1);
+      const crop = slide.getElementsByTagNameNS(drawing, 'srcRect');
+      expect(crop).toHaveLength(1);
+      expect(['l', 'r', 't', 'b'].map((side) => crop[0]?.getAttribute(side))).toEqual([
+        '0',
+        '0',
+        '25000',
+        '25000',
+      ]);
+    });
+  });
+
+  it('writes rectangular inset clipping as editable picture cropping', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'image',
+        x: 50,
+        y: 50,
+        width: 120,
+        height: 80,
+        data: png,
+        crop: { top: 10, right: 20, bottom: 15, left: 25 },
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(presentation, 'pic')).toHaveLength(1);
+      const crop = slide.getElementsByTagNameNS(drawing, 'srcRect')[0];
+      expect(Number(crop?.getAttribute('l'))).toBeGreaterThan(0);
+      expect(Number(crop?.getAttribute('r'))).toBeGreaterThan(0);
+      expect(Number(crop?.getAttribute('t'))).toBeGreaterThan(0);
+      expect(Number(crop?.getAttribute('b'))).toBeGreaterThan(0);
+    });
+  });
+
+  it('writes a real table on the source slide with editable cell text', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'table',
+        x: 100,
+        y: 100,
+        width: 480,
+        height: 120,
+        columnWidths: [240, 240],
+        rowHeights: [60, 60],
+        rows: [
+          [
+            {
+              text: '指标',
+              bold: true,
+              fontFace: 'Arial',
+              fontSize: 20,
+              color: { hex: '112233', opacity: 1 },
+              fill: { hex: 'EEEEEE', opacity: 1 },
+              align: 'left',
+              border: { width: 2, color: { hex: 'AB1234', opacity: 1 } },
+            },
+            {
+              text: '数值',
+              bold: true,
+              fontFace: 'Arial',
+              fontSize: 20,
+              color: { hex: '112233', opacity: 1 },
+              fill: { hex: 'EEEEEE', opacity: 1 },
+              align: 'right',
+            },
+          ],
+          [
+            {
+              text: '收入',
+              bold: false,
+              fontFace: 'Arial',
+              fontSize: 20,
+              color: { hex: '112233', opacity: 1 },
+              fill: { hex: 'FFFFFF', opacity: 1 },
+              align: 'left',
+            },
+            {
+              text: '42',
+              bold: false,
+              fontFace: 'Arial',
+              fontSize: 20,
+              color: { hex: '112233', opacity: 1 },
+              fill: { hex: 'FFFFFF', opacity: 1 },
+              align: 'right',
+            },
+          ],
+        ],
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(drawing, 'tbl')).toHaveLength(1);
+      expect(slide.getElementsByTagNameNS(drawing, 'tr')).toHaveLength(2);
+      const firstCell = slide.getElementsByTagNameNS(drawing, 'tc')[0];
+      expect(firstCell?.getElementsByTagNameNS(drawing, 'lnL')).toHaveLength(1);
+      expect(
+        Array.from(firstCell?.getElementsByTagNameNS(drawing, 'srgbClr') ?? []).some(
+          (color) => color.getAttribute('val') === 'AB1234',
+        ),
+      ).toBe(true);
+      expect(
+        Array.from(slide.getElementsByTagNameNS(drawing, 't')).map((el) => el.textContent),
+      ).toEqual(['指标', '数值', '收入', '42']);
+      expect(parts.has('ppt/slides/slide2.xml')).toBe(false);
+    });
+  });
+
+  it('writes chart series and flat category labels as editable chart data', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 100,
+        y: 100,
+        width: 500,
+        height: 300,
+        chartType: 'bar',
+        labels: ['第一季', '第二季'],
+        series: [
+          { name: '收入', values: [12, 18] },
+          { name: '目标', values: [10, 16] },
+        ],
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(presentation, 'graphicFrame')).toHaveLength(1);
+      const chartXml = parseXml(parts.get('ppt/charts/chart1.xml') ?? '');
+      expect(chartXml.getElementsByTagNameNS(chart, 'ser')).toHaveLength(2);
+      expect(
+        Array.from(chartXml.getElementsByTagNameNS(chart, 'v')).map((el) => el.textContent),
+      ).toEqual(
+        expect.arrayContaining(['收入', '目标', '第一季', '第二季', '12', '18', '10', '16']),
+      );
+      const categories = chartXml.getElementsByTagNameNS(chart, 'cat');
+      expect(categories).toHaveLength(2);
+      for (const category of Array.from(categories)) {
+        expect(category.getElementsByTagNameNS(chart, 'strRef')).toHaveLength(1);
+        expect(category.getElementsByTagNameNS(chart, 'multiLvlStrRef')).toHaveLength(0);
+      }
+    });
+  });
+
+  it('rejects invalid chart series before adding any slides', () => {
+    const pres = new PptxGenJS();
+    const addSlide = vi.spyOn(pres, 'addSlide');
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 300,
+        chartType: 'line',
+        labels: ['A', 'B'],
+        series: [{ name: 'Bad', values: [1] }],
+      },
+    ];
+    expect(() => addNativeSlides(pres, [model])).toThrow('values must match labels');
+    expect(addSlide).not.toHaveBeenCalled();
+  });
   it.each([
     ['PNG', png.replace('image/png', 'image/PNG'), 'png', 'image/png'],
     ['JPG', jpeg.replace('image/jpeg', 'image/jpg'), 'jpeg', 'image/jpeg'],
