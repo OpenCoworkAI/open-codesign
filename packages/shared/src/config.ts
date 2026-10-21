@@ -23,6 +23,7 @@ export const SUPPORTED_ONBOARDING_PROVIDERS = [
   'atlascloud',
   'openrouter',
   'ollama',
+  'zai',
 ] as const;
 export type SupportedOnboardingProvider = (typeof SUPPORTED_ONBOARDING_PROVIDERS)[number];
 
@@ -320,6 +321,23 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
       modelDiscoveryMode: 'models',
     },
   },
+  zai: {
+    id: 'zai',
+    name: 'Z.ai (GLM Coding Plan)',
+    builtin: true,
+    wire: 'anthropic',
+    baseUrl: 'https://api.z.ai/api/anthropic',
+    defaultModel: 'glm-5.3',
+    modelsHint: ['glm-5.3', 'glm-5.3-flash'],
+    requiresApiKey: true,
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: false,
+      supportsReasoning: true,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'static-hint',
+    },
+  },
 } as const;
 
 // ── ConfigSchema v3 — canonical on-disk shape ────────────────────────────────
@@ -556,6 +574,13 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     keyHelpUrl: 'https://ollama.com/download',
     primary: [OLLAMA_DEFAULT_MODEL, 'llama3.1', 'qwen2.5'],
     defaultPrimary: OLLAMA_DEFAULT_MODEL,
+  },
+  zai: {
+    provider: 'zai',
+    label: 'Z.ai (GLM Coding Plan)',
+    keyHelpUrl: 'https://z.ai/manage-apikey/apikey-list',
+    primary: ['glm-5.3', 'glm-5.3-flash'],
+    defaultPrimary: 'glm-5.3',
   },
 };
 

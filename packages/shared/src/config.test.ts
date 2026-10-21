@@ -571,6 +571,49 @@ describe('provider capability helpers', () => {
   });
 });
 
+describe('zai builtin provider', () => {
+  it('has a well-formed zai entry in BUILTIN_PROVIDERS', () => {
+    const zai = BUILTIN_PROVIDERS.zai;
+    expect(zai).toBeDefined();
+    expect(zai.id).toBe('zai');
+    expect(zai.name).toBe('Z.ai (GLM Coding Plan)');
+    expect(zai.builtin).toBe(true);
+    expect(zai.wire).toBe('anthropic');
+    expect(zai.baseUrl).toBe('https://api.z.ai/api/anthropic');
+    expect(zai.defaultModel).toBe('glm-5.3');
+    expect(zai.modelsHint).toEqual(['glm-5.3', 'glm-5.3-flash']);
+    expect(zai.requiresApiKey).toBe(true);
+  });
+
+  it('zai capabilities are set for static-hint discovery with reasoning', () => {
+    const caps = resolveProviderCapabilities('zai', BUILTIN_PROVIDERS.zai);
+    expect(caps.supportsKeyless).toBe(false);
+    expect(caps.supportsModelsEndpoint).toBe(false);
+    expect(caps.supportsReasoning).toBe(true);
+    expect(caps.modelDiscoveryMode).toBe('static-hint');
+  });
+
+  it('zai is included in SUPPORTED_ONBOARDING_PROVIDERS', () => {
+    expect(SUPPORTED_ONBOARDING_PROVIDERS).toContain('zai');
+  });
+
+  it('detects z.ai anthropic URL as anthropic wire', () => {
+    expect(detectWireFromBaseUrl('https://api.z.ai/api/anthropic')).toBe('anthropic');
+  });
+
+  it('accepts zai as active provider in v3 config', () => {
+    const parsed = ConfigV3Schema.parse({
+      version: 3,
+      activeProvider: 'zai',
+      activeModel: 'glm-5.3',
+      secrets: { zai: { ciphertext: 'plain:sk-test', mask: 'sk-***test' } },
+      providers: { zai: BUILTIN_PROVIDERS.zai },
+    });
+    expect(parsed.activeProvider).toBe('zai');
+    expect(parsed.activeModel).toBe('glm-5.3');
+  });
+});
+
 it('round-trips opt-in web search settings and keeps Tavily in the existing secrets map', () => {
   const cfg = parseConfigFlexible({
     version: 3,
