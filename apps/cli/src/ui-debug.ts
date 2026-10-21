@@ -4,11 +4,10 @@ import type { Arguments } from './arguments';
 import { CliError, type Result } from './protocol';
 
 /** Developer-only adapter. UI automation dependencies stay in the desktop workspace. */
-export async function debugUi(args: Arguments, signal: AbortSignal): Promise<Result> {
-  let host: UiDebugHost;
+export async function loadUiDebugHost(): Promise<UiDebugHost> {
   try {
     const entry = fileURLToPath(new URL('../../desktop/out/main/ui-debug.js', import.meta.url));
-    host = (await import(pathToFileURL(entry).href)) as typeof host;
+    return (await import(pathToFileURL(entry).href)) as UiDebugHost;
   } catch {
     throw new CliError(
       'runtime',
@@ -16,6 +15,10 @@ export async function debugUi(args: Arguments, signal: AbortSignal): Promise<Res
       'Build first: pnpm --filter @open-codesign/desktop build --mode background-debug',
     );
   }
+}
+
+export async function debugUi(args: Arguments, signal: AbortSignal): Promise<Result> {
+  const host = await loadUiDebugHost();
   let steps: Awaited<ReturnType<UiDebugHost['loadUiSteps']>>;
   try {
     steps = await host.loadUiSteps(args.steps);

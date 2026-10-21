@@ -67,6 +67,10 @@ describe('Windows non-interference evidence', () => {
     expect(observationPassed({ ...observed, overflow: true })).toBe(false);
     expect(observationPassed({ ...observed, samples: 0 })).toBe(false);
   });
+  it('distinguishes live evidence from a completed observation', () => {
+    expect(observationPassed({ ...observed, completed: false }, false)).toBe(true);
+    expect(observationPassed(observed, false)).toBe(false);
+  });
 });
 
 it('validates bounded steps before a browser is started', async () => {

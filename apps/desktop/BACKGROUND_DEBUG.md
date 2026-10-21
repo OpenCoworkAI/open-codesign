@@ -56,8 +56,98 @@ Supported actions: `click`, `fill`, `select`, `press` (Enter/Escape/Tab), `asser
 (visible/text/value). Limits: 1–16 steps, 64 KiB JSON, 256-character selectors,
 2,000-character text, approximately two seconds per step. The first failed step stops
 the journey. Each invocation starts a new instance; this is a batch debugging command,
-not a persistent interactive computer-use server. Screenshots show supplied inputs;
+not a persistent session. Use `debug session` below for an observe/decide/act loop. Screenshots show supplied inputs;
 use synthetic test data rather than secrets.
+
+## Continuous sessions for agents
+
+```powershell
+pnpm --filter @open-codesign/desktop build --mode background-debug
+node --import tsx .\apps\cli\src\main.ts debug session --output ".\ui-session-report"
+```
+
+Keep this process and its stdin/stdout pipes open. It starts one disposable app and emits
+a `ready` JSON line. An agent reads `data.screenshot`, inspects that PNG using its own vision
+capability, and uses `data.elements` (selectors, labels, text, values and disabled state) to
+choose the next operation. The CLI itself makes no model calls. Submit **one request at a time**,
+then wait for its response before making the next decision:
+
+```jsonl
+{"schemaVersion":1,"id":"inspect-1","method":"snapshot"}
+{"schemaVersion":1,"id":"open-1","method":"act","steps":[{"action":"click","selector":"button[aria-label=\"New design\"]"}]}
+{"schemaVersion":1,"id":"inspect-2","method":"snapshot"}
+{"schemaVersion":1,"id":"close-1","method":"close"}
+```
+
+Those selectors are examples for the initial hub. After the dialog opens, select its Create
+button from the new element list, then select the textarea from the workspace response:
+
+```jsonl
+{"schemaVersion":1,"id":"create-1","method":"act","steps":[{"action":"click","selector":"[role=\"document\"] > div:last-child > button:last-child"}]}
+{"schemaVersion":1,"id":"fill-1","method":"act","steps":[{"action":"fill","selector":"textarea","value":"Background draft"}]}
+```
+
+`act` accepts the same 1–16 preview steps as batch debugging. It stops that request on its
+first failed step. Each action and observation saves a new PNG. State stays in the same
+React/main/preload instance until closed. `elements` contains at most 120 visible controls;
+covered or inert controls can still appear, and normal hit-testing rejects clicks on them.
+Selectors describe the current DOM, so re-observe after navigation instead of treating them
+as permanent IDs. Password/sensitive-field values are omitted; textual diagnostics are
+redacted, but screenshots are not. Only use synthetic inputs.
+
+Every stdout line is a protocol object, without progress logs:
+
+| `type` | Meaning |
+| --- | --- |
+| `ready` | App initialized; `id: null`; `data` has the initial screenshot/elements and limits. |
+| `response` | Echoes the request `id`; contains a screenshot, steps, new errors since the previous frame, total error count and current Windows observation. |
+| `closed` | Cleanup has finished; `id: null`; `data` contains the final report and completed Windows observation. Setup failures may omit `data`. |
+
+Messages retain the CLI's `schemaVersion`, `command`, `ok`, `data` and safe `error` envelope.
+A valid `close` receives a response with `{closing:true}` followed by `closed`; wait for
+`closed` and the process exit before considering cleanup complete. Setup errors also emit
+`closed`; invalid command-line arguments use ordinary CLI error output (`--json` for an envelope).
+
+Malformed requests/duplicate IDs return error 2 without executing an action. A missing
+selector returns error 5 and permits another request. Blocked native operations return 6,
+and the agent may inspect/recover the UI. Final `report.json` retains all failed attempts,
+so the final process exits 5/6 even if later operations succeeded. Protocol-only validation
+errors do not mark UI verification as failed. The report never silently discards failures.
+
+Limits: 64 KiB per JSONL message, eight queued messages, 200 requests including malformed
+ones, and 200 submitted steps. IDs are unique, 1–64 ASCII letters/digits/underscore/hyphen.
+Default lifetime is 30 minutes (`--timeout-ms`), default input idle timeout is five minutes
+(`--idle-timeout-ms`); both accept 1–3600000 ms. Each action/observation request has a
+60-second deadline. Message/queue/request-count limits and idle/lifetime expiry end the session and run cleanup;
+requests exceeding the step budget are rejected without executing them.
+timeout exits 124. SIGINT/SIGTERM or a broken stdout pipe cancel (130). Input EOF drains
+already queued requests and then closes. Stop sending after `close`.
+
+Windows observation runs for the entire session, including time the agent spends thinking.
+Live frames have `windows.completed:false`; only the final report can certify the completed
+observation. The host checks updates every 250 ms and stops if observation is lost/stale
+(five seconds), the app exits, or interference is detected. Ordinary user mouse movement
+and switching other applications remain allowed. The observer retains only counters after
+identifying the test process, avoiding an accumulating history of unrelated desktop activity.
+
+For a PowerShell transport smoke test (three requests, then EOF), use a fresh directory:
+
+```powershell
+@'
+{"schemaVersion":1,"id":"before","method":"snapshot"}
+{"schemaVersion":1,"id":"open","method":"act","steps":[{"action":"click","selector":"button[aria-label=\"New design\"]"}]}
+{"schemaVersion":1,"id":"finish","method":"close"}
+'@ | node --import tsx .\apps\cli\src\main.ts debug session --output ".\ui-session-smoke"
+$LASTEXITCODE
+```
+
+Agent clients should spawn Node with `windowsHide:true`, use separate stdin/stdout/stderr
+pipes, parse stdout one line at a time, and keep the child handle across tool calls. No
+additional listening service, session token, daemon, reconnect or arbitrary JavaScript API
+is exposed. Code edits require rebuilding and starting a new session. A debug session is
+not a pi design session and does not implement `session status` or MCP issue #274.
+The CLI transport calls the same `UiDebugHost`/`UiDebugSession` business interface as batch
+debugging, which can also serve a future MCP adapter without duplicating app lifecycle logic.
 
 ## Windows non-interference verification
 
@@ -138,6 +228,11 @@ pnpm test
 | Stale source cannot be silently validated | Source-fingerprint unit test and runtime preflight |
 | Normal launches and model permissions stay unchanged | Host-policy tests, existing desktop tests, build/typecheck |
 | JSON contracts and timeout exit preserve evidence | CLI contract tests |
+| One real app retains input across separate requests; failed clicks allow correction | `ui-session.integration.test.ts`: continuity/recovery case |
+| Rejected native operations are visible before close; EOF cleans up | Session integration unsupported/EOF case |
+| Idle timeout and lost stdout close the app and preserve final evidence | Session integration idle/output-disconnect cases |
+| Loss of the owned Windows observer stops an idle session instead of claiming success | Windows-only session integration observer-disconnect case |
+| JSONL framing, UTF-8 splits, duplicate IDs, malformed/overlarge input, queue limits, cancellation | `apps/cli/src/ui-session.test.ts` |
 
 Real Electron integration is opt-in via `test:debug-ui`; ordinary `pnpm test` reports those
 cases as skipped rather than pretending they ran. No test requires real API credentials.

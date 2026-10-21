@@ -30,12 +30,41 @@ export interface UiDebugReport {
   cleanup: boolean;
 }
 
+export interface UiDebugElement {
+  selector: string;
+  tag: string;
+  role: string;
+  label: string;
+  text: string;
+  value?: string;
+  disabled: boolean;
+}
+
+export interface UiDebugFrame {
+  screenshot: string;
+  elements: UiDebugElement[];
+  elementsTruncated: boolean;
+  steps: UiDebugReport['steps'];
+  errors: UiDebugReport['errors'];
+  errorCount: number;
+  errorsTruncated: boolean;
+  windows: WindowsObservation;
+}
+
+export interface UiDebugSession {
+  signal: AbortSignal;
+  snapshot(): Promise<UiDebugFrame>;
+  act(steps: PreviewStep[]): Promise<UiDebugFrame>;
+}
+
 export interface UiDebugHost {
+  validateUiSteps(input: unknown): PreviewStep[];
   loadUiSteps(path?: string): Promise<PreviewStep[]>;
   runUiDebug(options: {
     output: string;
     steps: PreviewStep[];
     signal: AbortSignal;
     defaultJourney: boolean;
+    interact?: (session: UiDebugSession) => Promise<void>;
   }): Promise<UiDebugReport>;
 }

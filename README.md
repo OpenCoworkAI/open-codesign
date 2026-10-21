@@ -428,6 +428,8 @@ provides diagnostics, workspace inspection and HTML export. Start with
 To verify Open CoDesign's own interface in an isolated offscreen Electron instance, use
 [`debug ui`](./apps/desktop/BACKGROUND_DEBUG.md). It captures screenshots, runs page
 interactions, collects errors, and checks Windows window/focus/input observations.
+Use `debug session` for a continuous agent screenshot/decision/action loop in the same
+isolated instance, with JSONL requests and automatic cleanup on close or timeout.
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before writing code and run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
 Desktop tests use at most two workers on Windows so concurrent Chromium and

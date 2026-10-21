@@ -9,7 +9,8 @@ import { type PreviewStep, validatePreviewInput } from '@open-codesign/core';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { runPreviewSteps } from '../main/preview-interactions';
 import { uiSourceFingerprint } from './build-fingerprint';
-import type { UiDebugReport, WindowsObservation } from './contract';
+import type { UiDebugFrame, UiDebugReport, UiDebugSession, WindowsObservation } from './contract';
+import { collectUiElements } from './ui-outline';
 
 const desktopRoot = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(import.meta.url);
@@ -28,10 +29,10 @@ export const DEFAULT_UI_STEPS: PreviewStep[] = [
   { action: 'assert', selector: '[data-codesign-hub-scroll-root]', text: 'Untitled design 1' },
 ];
 
-export function observationPassed(observation: WindowsObservation): boolean {
+export function observationPassed(observation: WindowsObservation, completed = true): boolean {
   return (
     observation.available &&
-    observation.completed === true &&
+    observation.completed === completed &&
     (observation.samples ?? 0) > 0 &&
     observation.overflow === false &&
     observation.visibleWindowEvents === 0 &&
@@ -91,7 +92,10 @@ export async function loadUiSteps(path?: string): Promise<PreviewStep[]> {
   if (path === undefined) return DEFAULT_UI_STEPS;
   const buffer = await readFile(path);
   if (buffer.length > 64 * 1024) throw new Error('Steps file exceeds 64 KiB');
-  const input: unknown = JSON.parse(buffer.toString('utf8'));
+  return validateUiSteps(JSON.parse(buffer.toString('utf8')));
+}
+
+export function validateUiSteps(input: unknown): PreviewStep[] {
   if (!input || typeof input !== 'object')
     throw new Error('Expected { schemaVersion: 1, steps: [...] }');
   const record = input as Record<string, unknown>;
@@ -149,10 +153,13 @@ async function startObserver(directory: string, signal: AbortSignal) {
       join(desktopRoot, 'scripts/observe-background-ui.ps1'),
       '-ControlDirectory',
       directory,
+      '-Stream',
     ],
     { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   let output = '';
+  let latest: WindowsObservation | undefined;
+  let updated = Date.now();
   let failure = false;
   let diagnostic = '';
   let closed = false;
@@ -160,7 +167,18 @@ async function startObserver(directory: string, signal: AbortSignal) {
     closed = true;
   });
   child.stdout?.on('data', (chunk: Buffer) => {
-    if (output.length < 32_000) output += chunk.toString();
+    output += chunk.toString();
+    const lines = output.split('\n');
+    output = lines.pop() ?? '';
+    if (output.length > 32_000) failure = true;
+    for (const line of lines) {
+      try {
+        latest = JSON.parse(line) as WindowsObservation;
+        updated = Date.now();
+      } catch {
+        failure = true;
+      }
+    }
   });
   child.stderr?.on('data', (chunk: Buffer) => {
     failure = true;
@@ -186,6 +204,16 @@ async function startObserver(directory: string, signal: AbortSignal) {
     async attach(pid: number) {
       await writeFile(join(directory, 'pid.tmp'), String(pid));
       await rename(join(directory, 'pid.tmp'), join(directory, 'pid'));
+      await until(async () => {
+        if (failure || closed) throw new Error('Windows observer stopped');
+        return latest && (latest.samples ?? 0) > 0 ? true : undefined;
+      }, signal);
+    },
+    current(): WindowsObservation {
+      if (failure || closed || !latest || Date.now() - updated > 5000)
+        throw new Error('Windows observation lost or stale');
+      if (!observationPassed(latest, false)) throw new Error('Windows interference observed');
+      return { ...latest };
     },
     async stop(): Promise<WindowsObservation> {
       await writeFile(join(directory, 'stop'), 'stop');
@@ -193,7 +221,8 @@ async function startObserver(directory: string, signal: AbortSignal) {
         await until(async () => (closed ? true : undefined), AbortSignal.timeout(5000));
         if (failure || child.exitCode !== 0)
           throw new Error(`Windows observer exit ${child.exitCode}: ${diagnostic}`);
-        return JSON.parse(output) as WindowsObservation;
+        if (!latest) throw new Error('Windows observation missing');
+        return latest;
       } finally {
         await stopChild(child);
       }
@@ -233,8 +262,10 @@ export async function runUiDebug(options: {
   steps: PreviewStep[];
   signal: AbortSignal;
   defaultJourney: boolean;
+  interact?: (session: UiDebugSession) => Promise<void>;
 }): Promise<UiDebugReport> {
-  const { signal } = options;
+  const watchdog = new AbortController();
+  const signal = AbortSignal.any([options.signal, watchdog.signal]);
   const entry = join(desktopRoot, 'out/main/index.js');
   await access(entry);
   const stamp = JSON.parse(
@@ -275,6 +306,32 @@ export async function runUiDebug(options: {
   let endpoint: string | undefined;
   let spawnFailed = false;
   let stderr = '';
+  let monitoring: ReturnType<typeof setInterval> | undefined;
+  let hostLines = 0;
+  let logLines = 0;
+  const collectHostErrors = async (final = false) => {
+    const hostEvents = await readFile(join(root, 'host-events.jsonl'), 'utf8').catch(() => '');
+    // Only consume complete lines while the host can still append to the log.
+    const lines = hostEvents.split('\n');
+    if (!final || lines.at(-1) === '') lines.pop();
+    for (const line of lines.slice(hostLines)) {
+      try {
+        const event = JSON.parse(line) as { kind: string; detail: string };
+        if (typeof event.kind === 'string' && typeof event.detail === 'string')
+          error(`host:${event.kind}`, event.detail);
+        else error('host-log', 'Invalid host event');
+      } catch {
+        error('host-log', 'Invalid host event');
+      }
+    }
+    hostLines = lines.length;
+    const mainLog = await readFile(join(root, 'logs/main.log'), 'utf8').catch(() => '');
+    const entries = mainLog.split('\n');
+    if (!final || entries.at(-1) === '') entries.pop();
+    for (const line of entries.slice(logLines).filter((line) => /\]\s+\[error\]/i.test(line)))
+      error('main', line);
+    logLines = entries.length;
+  };
   const cancel = () => {
     void browser?.close().catch(() => undefined);
   };
@@ -284,6 +341,7 @@ export async function runUiDebug(options: {
     const path = join(output, `${name}.png`);
     await page.screenshot({ path, type: 'png' });
     report.screenshots.push(path);
+    return path;
   };
   try {
     observer = await startObserver(join(temp, 'observer'), signal);
@@ -316,6 +374,15 @@ export async function runUiDebug(options: {
         )?.[1];
     });
     if (child.pid !== undefined) await observer?.attach(child.pid);
+    monitoring = setInterval(() => {
+      try {
+        observer?.current();
+        if (spawnFailed || child?.exitCode !== null || child?.signalCode !== null)
+          throw new Error('Background application exited');
+      } catch (issue) {
+        watchdog.abort(issue);
+      }
+    }, 250);
     const ws = await until(async () => {
       if (spawnFailed || child?.exitCode !== null || child?.signalCode !== null)
         throw new Error(`Electron could not start. ${stderr}`);
@@ -348,19 +415,59 @@ export async function runUiDebug(options: {
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 20_000 });
     await page.waitForSelector('header[data-view="hub"]', { timeout: 20_000, signal });
     await capture('00-initial');
-    for (const [index, step] of options.steps.entries()) {
+    const activePage = page;
+    const perform = async (steps: PreviewStep[]) => {
+      for (const step of steps) {
+        signal.throwIfAborted();
+        observer?.current();
+        const index = report.steps.length;
+        const result = (await runPreviewSteps(activePage, [step], signal))[0];
+        if (!result) throw new Error('Missing step result');
+        report.steps.push({
+          ...result,
+          index,
+          ...(result.reason ? { reason: scrubDebugText(result.reason) } : {}),
+        });
+        signal.throwIfAborted();
+        await capture(`${String(report.screenshots.length).padStart(2, '0')}-${step.action}`);
+        if (!result.ok) break;
+      }
+    };
+    if (options.interact) {
+      let deliveredErrors = 0;
+      const frame = async (steps: PreviewStep[] = []): Promise<UiDebugFrame> => {
+        signal.throwIfAborted();
+        if (steps.length) validatePreviewInput({ path: 'desktop-ui', steps });
+        if (report.steps.length + steps.length > 200)
+          throw new Error('Session step limit exceeded');
+        const start = report.steps.length;
+        await perform(steps);
+        const screenshot = await capture(
+          `${String(report.screenshots.length).padStart(2, '0')}-snapshot`,
+        );
+        if (!screenshot) throw new Error('Application page closed');
+        const outline = await activePage.evaluate(collectUiElements);
+        for (const element of outline.elements) {
+          element.label = scrubDebugText(element.label);
+          element.text = scrubDebugText(element.text);
+          if (element.value !== undefined) element.value = scrubDebugText(element.value);
+        }
+        await collectHostErrors();
+        const errors = report.errors.slice(deliveredErrors);
+        deliveredErrors = report.errors.length;
+        return {
+          screenshot,
+          ...outline,
+          steps: report.steps.slice(start),
+          errors,
+          errorCount: report.errors.length,
+          errorsTruncated: report.errorsTruncated,
+          windows: observer?.current() ?? report.windows,
+        };
+      };
+      await options.interact({ signal, snapshot: () => frame(), act: (steps) => frame(steps) });
       signal.throwIfAborted();
-      const result = (await runPreviewSteps(page, [step], signal))[0];
-      if (!result) throw new Error('Missing step result');
-      report.steps.push({
-        ...result,
-        index,
-        ...(result.reason ? { reason: scrubDebugText(result.reason) } : {}),
-      });
-      signal.throwIfAborted();
-      await capture(`${String(index + 1).padStart(2, '0')}-${step.action}`);
-      if (!result.ok) break;
-    }
+    } else await perform(options.steps);
     const store = JSON.parse(
       await readFile(join(root, 'userData/design-store.json'), 'utf8').catch(
         () => '{"designs":[]}',
@@ -382,11 +489,12 @@ export async function runUiDebug(options: {
     }
   } catch (issue) {
     error(
-      signal.aborted ? 'cancelled' : 'runtime',
+      options.signal.aborted ? 'cancelled' : watchdog.signal.aborted ? 'observer' : 'runtime',
       issue instanceof Error ? issue.message : String(issue),
     );
     await capture('failure').catch(() => undefined);
   } finally {
+    clearInterval(monitoring);
     signal.removeEventListener('abort', cancel);
     if (browser) await Promise.race([browser.close().catch(() => undefined), delay(3000)]);
     let processStopped = true;
@@ -408,20 +516,7 @@ export async function runUiDebug(options: {
         );
       }
     }
-    const hostEvents = await readFile(join(root, 'host-events.jsonl'), 'utf8').catch(() => '');
-    for (const line of hostEvents.split('\n').filter(Boolean)) {
-      try {
-        const event = JSON.parse(line) as { kind: string; detail: string };
-        if (typeof event.kind === 'string' && typeof event.detail === 'string') {
-          error(`host:${event.kind}`, event.detail);
-        } else error('host-log', 'Invalid host event; cleanup will still run');
-      } catch {
-        error('host-log', 'Incomplete host event; cleanup will still run');
-      }
-    }
-    const mainLog = await readFile(join(root, 'logs/main.log'), 'utf8').catch(() => '');
-    for (const line of mainLog.split('\n').filter((line) => /\]\s+\[error\]/i.test(line)))
-      error('main', line);
+    await collectHostErrors(true);
     try {
       await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
       report.cleanup = processStopped;
@@ -430,7 +525,7 @@ export async function runUiDebug(options: {
     }
     report.ok =
       report.errors.length === 0 &&
-      report.steps.length === options.steps.length &&
+      (options.interact !== undefined || report.steps.length === options.steps.length) &&
       report.steps.every((step) => step.ok) &&
       report.cleanup &&
       (process.platform !== 'win32' || observationPassed(report.windows));

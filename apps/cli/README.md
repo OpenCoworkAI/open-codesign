@@ -5,6 +5,8 @@ exports HTML directly through Open CoDesign's core and exporter packages. The de
 does not need to be running. Inspection and export use no model, browser or Electron.
 The development-only `debug ui` command separately starts an isolated offscreen Electron
 instance to verify Open CoDesign's own interface without physical desktop input.
+`debug session` keeps that same isolated instance alive for an agent's repeated
+screenshot/decision/action loop over JSONL stdin/stdout.
 
 ## Run
 
@@ -47,6 +49,7 @@ symlinks/junctions. It is selected explicitly; the CLI does not guess which desi
 | `workspace inspect --workspace PATH` | Bounded design inventory: entry candidates, sources, styles, design/reference documents and assets. No file contents. |
 | `export html --workspace PATH --source FILE --output FILE` | Reuses the existing standalone runtime and HTML exporter; creates one new output file. |
 | `debug ui --output NEW_DIR [--steps FILE]` | Real desktop UI in offscreen Electron; screenshots, interactions, errors and Windows non-interference observations. Requires a fresh debug build. |
+| `debug session --output NEW_DIR` | Continuous isolated UI session; JSONL `snapshot`, `act`, `close` requests. Same debug build and host restrictions. |
 
 Inspection skips hidden/internal/build directories and symbolic links using the desktop's
 same filesystem reader. It scans up to 2,001 files, reports at most 2,000 files, up to 24
@@ -66,14 +69,16 @@ handled cancellation or failure. `OUTPUT_CLEANUP_FAILED` means cleanup itself fa
 An OS crash or forced kill can leave a partial file; inspect it and choose a new destination.
 Workspace/config/session data is never migrated or saved by these commands.
 
-`debug ui` writes a new evidence directory and disposable application data. See
+`debug ui` and `debug session` write a new evidence directory and disposable application data. See
 [background UI debugging](../desktop/BACKGROUND_DEBUG.md) for its supported flow,
 PowerShell commands, custom steps, isolation and executable acceptance conditions.
 
 ## Machine protocol
 
-`--json` emits exactly one JSON object and a newline on stdout, with no progress text.
+For single-shot commands, `--json` emits exactly one JSON object and a newline on stdout, with no progress text.
 Handled errors also go to stdout in JSON mode; stderr is empty.
+`debug session` always emits JSONL (`ready`, request `response`, then `closed`), even without
+`--json`. See the [session protocol and PowerShell examples](../desktop/BACKGROUND_DEBUG.md#continuous-sessions-for-agents).
 
 ```json
 {
@@ -97,7 +102,7 @@ On failure, `error` contains `category`, `code`, a safe `message` and `exitCode`
 Doctor retains its individual checks in `data` on failure. Background UI run failures
 retain their report in `data`; setup failures and other operations omit it.
 An invalid invocation uses command `unknown`; recognized unavailable commands use
-command `unsupported`. No event stream is exposed because there are no model runs.
+command `unsupported`. No model event stream is exposed; sessions return UI frames only.
 
 | Exit | Category | Examples |
 | --- | --- | --- |
@@ -110,7 +115,8 @@ command `unsupported`. No event stream is exposed because there are no model run
 | 124 | timeout | Cooperative deadline exceeded. |
 | 130 | cancelled | SIGINT / SIGTERM, including Ctrl+C where Node receives SIGINT. |
 
-The default `--timeout-ms` is 30000 (120000 for `debug ui`); accepted range is 1–3600000.
+The default `--timeout-ms` is 30000 (120000 for `debug ui`, 1800000 for `debug session`);
+accepted range is 1–3600000. Sessions additionally support `--idle-timeout-ms` (default 300000).
 Cancellation/deadlines are cooperative: the CLI checks between filesystem and rendering
 steps, aborts output writes and waits for cleanup before reporting failure. A blocked OS
 filesystem call or synchronous renderer cannot be forcibly preempted by the timer.

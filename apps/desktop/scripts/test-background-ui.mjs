@@ -9,6 +9,7 @@ const child = spawn(
     join(dirname(require.resolve('vitest/package.json')), 'vitest.mjs'),
     'run',
     'src/debug/ui-debug.integration.test.ts',
+    'src/debug/ui-session.integration.test.ts',
   ],
   {
     stdio: 'inherit',

@@ -1,6 +1,6 @@
 # Agent-native CLI: phase 1 design and acceptance
 
-The following describes the offline phase 1 slice. The subsequent `debug ui` development
+The following describes the offline phase 1 slice. The subsequent `debug ui` and `debug session` development
 host and its executable acceptance are documented in
 [BACKGROUND_DEBUG.md](../desktop/BACKGROUND_DEBUG.md); it uses real isolated Electron IPC
 and does not claim standalone model execution.

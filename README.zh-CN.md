@@ -333,6 +333,8 @@ Open CoDesign 在 [LINUX DO](https://linux.do/) 社区首发，感谢佬友们�
 调试 Open CoDesign 自身界面时，可使用 [`debug ui`](./apps/desktop/BACKGROUND_DEBUG.md)
 启动隔离的离屏 Electron 副本，执行截图、点击、输入和错误收集，并在 Windows 下检查
 是否出现可见窗口、抢占焦点或系统合成输入。
+需要 Agent 连续观察和操作时，使用 `debug session`，通过 JSONL 多轮截图、点击和输入；
+整个会话保留同一个隔离实例，关闭连接或超时后自动清理。
 
 请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。开始写代码前建议先开 issue，发 PR 前请先运行 `pnpm lint && pnpm typecheck && pnpm test`。
 

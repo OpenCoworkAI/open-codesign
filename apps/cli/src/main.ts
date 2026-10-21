@@ -7,10 +7,15 @@ const controller = new AbortController();
 const cancel = () => controller.abort();
 process.once('SIGINT', cancel);
 process.once('SIGTERM', cancel);
+// A disconnected JSONL client must release its offscreen host even if stdin is still open.
+process.stdout.on('error', cancel);
 process.exitCode = await runCli(
   process.argv.slice(2),
   {
-    stdout: (text) => process.stdout.write(text),
+    stdin: process.stdin,
+    stdout: (text) => {
+      if (!process.stdout.destroyed) process.stdout.write(text);
+    },
     stderr: (text) => process.stderr.write(text),
   },
   controller.signal,

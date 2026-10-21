@@ -1,7 +1,9 @@
+import type { Readable } from 'node:stream';
 import { type Arguments, HELP, parseArguments } from './arguments';
 import { CliError, checkCancelled, EXIT_CODES, envelope, type Result, safeError } from './protocol';
 
 interface IO {
+  stdin?: Readable;
   stdout: (text: string) => void;
   stderr: (text: string) => void;
 }
@@ -59,12 +61,21 @@ export async function runCli(
     const args = parseArguments(argv);
     command = args.command;
     json = args.json;
+    if (args.command === 'debug session') {
+      if (!io.stdin)
+        throw new CliError(
+          'runtime',
+          'SESSION_STDIN_REQUIRED',
+          'debug session requires JSONL stdin.',
+        );
+      return await (await import('./ui-session')).runUiSession(args, io.stdin, io.stdout, signal);
+    }
     if (command === 'help') result = { data: { help: HELP } };
     else if (command === 'unsupported')
       throw new CliError(
         'unsupported',
         'UNSUPPORTED',
-        'Only doctor, workspace inspect, export html and debug ui are available. Design execution and session status require the Electron permission, credential and session lifecycle; MCP transport and other export formats are not implemented. No GUI fallback was attempted.',
+        'Only doctor, workspace inspect, export html, debug ui and debug session are available. Design execution and session status require the Electron permission, credential and session lifecycle; MCP transport and other export formats are not implemented. No GUI fallback was attempted.',
       );
     else result = await execute(args, signal, dispatch);
   } catch (error) {

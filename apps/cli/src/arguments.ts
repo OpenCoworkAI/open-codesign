@@ -9,23 +9,28 @@ Usage:
   node --import tsx apps/cli/src/main.ts workspace inspect --workspace PATH [--json]
   node --import tsx apps/cli/src/main.ts export html --workspace PATH --source FILE --output FILE [--json]
   node --import tsx apps/cli/src/main.ts debug ui --output NEW_DIR [--steps FILE] [--json]
+  node --import tsx apps/cli/src/main.ts debug session --output NEW_DIR [--idle-timeout-ms N]
 
 Options:
   --help, -h          Show this help (also supports --json)
-  --json             Exactly one versioned JSON result on stdout
+  --json             One versioned JSON result (debug session always uses JSONL)
   --workspace PATH   Workspace directory; doctor defaults to current directory
   --config FILE      doctor only: config.toml (default: XDG_CONFIG_HOME/open-codesign/
                      config.toml or ~/.config/open-codesign/config.toml)
   --source FILE      Workspace-relative .html, .htm, .jsx or .tsx source
   --output PATH      New .html file, or new debug report directory; parent must exist
   --steps FILE       debug ui only: {schemaVersion:1,steps:[...]} (1-16 preview steps)
-  --timeout-ms N     Timeout in milliseconds (default 30000; debug ui 120000; max 3600000)
+  --timeout-ms N     Timeout (default 30000; debug ui 120000; session 1800000; max 3600000)
+  --idle-timeout-ms N  debug session only: input idle timeout (default 300000; max 3600000)
 
 Read-only: doctor, workspace inspect. Export writes only the explicit output.
 debug ui uses offscreen Electron, temporary data, screenshot/report output; build first:
   pnpm --filter @open-codesign/desktop build --mode background-debug
 It uses real desktop IPC with a restricted development allowlist; native dialogs,
 model calls, credentials and external opening are unsupported. No physical input.
+debug session keeps one isolated instance; JSONL stdin methods: snapshot, act, close.
+Each request: {schemaVersion:1,id:"unique-id",method:"snapshot"}.
+act adds steps:[...]; ready/response/closed JSONL messages go to stdout. EOF closes.
 SIGINT/SIGTERM cancel. No model calls, credential refresh or GUI fallback.
 Unsupported: run, session status, --mcp-server and non-HTML exports.
 pnpm --silent cli is a convenience alias; pnpm run can normalize failure exits to 1.
@@ -42,6 +47,7 @@ export type Command =
   | 'workspace inspect'
   | 'export html'
   | 'debug ui'
+  | 'debug session'
   | 'unsupported';
 
 export interface Arguments {
@@ -53,6 +59,7 @@ export interface Arguments {
   source?: string;
   output?: string;
   steps?: string;
+  idleTimeoutMs?: number;
 }
 
 function usage(message: string): never {
@@ -76,6 +83,7 @@ export function parseArguments(argv: string[]): Arguments {
         output: { type: 'string' },
         steps: { type: 'string' },
         'timeout-ms': { type: 'string' },
+        'idle-timeout-ms': { type: 'string' },
         'mcp-server': { type: 'boolean' },
       },
     });
@@ -97,7 +105,8 @@ export function parseArguments(argv: string[]): Arguments {
     name === 'doctor' ||
     name === 'workspace inspect' ||
     name === 'export html' ||
-    name === 'debug ui'
+    name === 'debug ui' ||
+    name === 'debug session'
   )
     command = name;
   else if (
@@ -111,7 +120,13 @@ export function parseArguments(argv: string[]): Arguments {
 
   const timeout = values['timeout-ms'];
   const timeoutMs =
-    timeout === undefined ? (command === 'debug ui' ? 120_000 : 30_000) : Number(timeout);
+    timeout === undefined
+      ? command === 'debug ui'
+        ? 120_000
+        : command === 'debug session'
+          ? 1_800_000
+          : 30_000
+      : Number(timeout);
   if (
     (typeof timeout === 'string' && !/^\d+$/.test(timeout)) ||
     !Number.isSafeInteger(timeoutMs) ||
@@ -121,6 +136,21 @@ export function parseArguments(argv: string[]): Arguments {
     usage('--timeout-ms must be an integer from 1 to 3600000.');
 
   const out: Arguments = { command, json: values['json'] === true, timeoutMs };
+  const idle = values['idle-timeout-ms'];
+  if (idle !== undefined && command !== 'debug session')
+    usage('--idle-timeout-ms is only supported by debug session.');
+  if (command === 'debug session') {
+    const idleTimeoutMs = idle === undefined ? 300_000 : Number(idle);
+    if (
+      (typeof idle === 'string' && !/^\d+$/.test(idle)) ||
+      !Number.isSafeInteger(idleTimeoutMs) ||
+      idleTimeoutMs < 1 ||
+      idleTimeoutMs > 3_600_000
+    )
+      usage('--idle-timeout-ms must be an integer from 1 to 3600000.');
+    out.idleTimeoutMs = idleTimeoutMs;
+    out.json = true;
+  }
   for (const key of ['workspace', 'config', 'source', 'output', 'steps'] as const) {
     const value = values[key];
     if (value === undefined) continue;
@@ -131,9 +161,11 @@ export function parseArguments(argv: string[]): Arguments {
   if (command === 'help' || command === 'unsupported') return out;
   if (command !== 'doctor' && out.config) usage('--config is only supported by doctor.');
   if (command !== 'debug ui' && out.steps) usage('--steps is only supported by debug ui.');
-  if (command === 'debug ui') {
-    if (!out.output || out.workspace || out.source)
-      usage('debug ui requires --output NEW_DIR; --workspace and --source are not supported.');
+  if (command === 'debug ui' || command === 'debug session') {
+    if (!out.output || out.workspace || out.source || (command === 'debug session' && out.steps))
+      usage(
+        'debug ui/session requires --output NEW_DIR; --workspace and --source are not supported. Session steps arrive on stdin.',
+      );
     return out;
   }
   if (command !== 'export html' && (out.source || out.output))

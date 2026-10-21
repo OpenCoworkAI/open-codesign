@@ -1,5 +1,6 @@
 param(
-  [Parameter(Mandatory=$true)][string]$ControlDirectory
+  [Parameter(Mandatory=$true)][string]$ControlDirectory,
+  [switch]$Stream
 )
 $ErrorActionPreference = 'Stop'
 # Observation only: no key values, window titles, screenshots, or input injection.
@@ -59,17 +60,21 @@ public static class BackgroundUiObserver {
     }
     return result.ToArray();
   }
-  public static object Run(string directory) {
+  public static object Run(string directory, bool stream) {
     var events = new List<Tuple<uint,uint[]>>();
     int injectedMouse = 0, injectedKeyboard = 0, visibleSamples = 0, focusSamples = 0, samples = 0;
     bool overflow = false;
     uint target = 0;
+    int visibleEvents = 0, foregroundEvents = 0;
     Point start, end; GetCursorPos(out start);
     IntPtr initialForeground = GetForegroundWindow();
     WinEvent callback = (hook, kind, window, obj, child, thread, time) => {
       if (window == IntPtr.Zero || (kind == 0x8002 && obj != 0)) return;
       uint pid; GetWindowThreadProcessId(window, out pid);
-      if (events.Count < 10000) events.Add(Tuple.Create(kind, Ancestors(pid, Parents()))); else overflow = true;
+      var ancestors = Ancestors(pid, Parents());
+      if (target != 0) {
+        if (ancestors.Contains(target)) { if (kind == 0x8002) visibleEvents++; else foregroundEvents++; }
+      } else if (events.Count < 10000) events.Add(Tuple.Create(kind, ancestors)); else overflow = true;
     };
     InputHook mouse = (code, msg, data) => {
       if (code >= 0 && (Marshal.PtrToStructure<Mouse>(data).Flags & 1) != 0) injectedMouse++;
@@ -90,6 +95,7 @@ public static class BackgroundUiObserver {
       File.WriteAllText(Path.Combine(directory, "ready"), "ready");
       var deadline = DateTime.UtcNow.AddMinutes(65);
       int owner = int.Parse(File.ReadAllText(Path.Combine(directory, "owner")));
+      var nextUpdate = DateTime.UtcNow;
       while (!File.Exists(Path.Combine(directory, "stop")) && DateTime.UtcNow < deadline) {
         try { if (Process.GetProcessById(owner).HasExited) break; } catch (ArgumentException) { break; }
         Message message;
@@ -99,6 +105,11 @@ public static class BackgroundUiObserver {
           // Without a PID and positive samples the final observation cannot pass.
           try { uint.TryParse(File.ReadAllText(Path.Combine(directory, "pid")), out target); }
           catch (IOException) { }
+          if (target != 0) {
+            visibleEvents += events.Count(e => e.Item1 == 0x8002 && e.Item2.Contains(target));
+            foregroundEvents += events.Count(e => e.Item1 == 3 && e.Item2.Contains(target));
+            events.Clear();
+          }
         }
         if (target != 0) {
           var parents = Parents();
@@ -110,6 +121,13 @@ public static class BackgroundUiObserver {
           uint focused; GetWindowThreadProcessId(GetForegroundWindow(), out focused);
           if (Ancestors(focused, parents).Contains(target)) focusSamples++;
           samples++;
+          if (stream && DateTime.UtcNow >= nextUpdate) {
+            Console.WriteLine("{\"platform\":\"win32\",\"available\":true,\"completed\":false,\"samples\":" + samples +
+              ",\"overflow\":" + overflow.ToString().ToLowerInvariant() + ",\"visibleWindowEvents\":" + visibleEvents +
+              ",\"foregroundEvents\":" + foregroundEvents + ",\"visibleSamples\":" + visibleSamples +
+              ",\"focusSamples\":" + focusSamples + ",\"injectedMouse\":" + injectedMouse + ",\"injectedKeyboard\":" + injectedKeyboard + "}");
+            nextUpdate = DateTime.UtcNow.AddMilliseconds(250);
+          }
         }
         Thread.Sleep(20);
       }
@@ -122,8 +140,8 @@ public static class BackgroundUiObserver {
     }
     return new {
       platform = "win32", available = true, completed, samples, overflow,
-      visibleWindowEvents = events.Count(e => e.Item1 == 0x8002 && e.Item2.Contains(target)),
-      foregroundEvents = events.Count(e => e.Item1 == 3 && e.Item2.Contains(target)),
+      visibleWindowEvents = visibleEvents,
+      foregroundEvents = foregroundEvents,
       visibleSamples, focusSamples, injectedMouse, injectedKeyboard,
       cursorUnchanged = start.X == end.X && start.Y == end.Y,
       foregroundUnchanged = initialForeground == GetForegroundWindow()
@@ -131,4 +149,4 @@ public static class BackgroundUiObserver {
   }
 }
 '@
-[BackgroundUiObserver]::Run($ControlDirectory) | ConvertTo-Json -Compress -Depth 4
+[BackgroundUiObserver]::Run($ControlDirectory, $Stream.IsPresent) | ConvertTo-Json -Compress -Depth 4
