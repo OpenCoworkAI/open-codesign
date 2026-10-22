@@ -30,6 +30,13 @@ describe('rewriteUpstreamMessage', () => {
     expect(result.message).toContain('openrouter.ai/settings/keys');
   });
 
+  it('routes API Route authentication help to its own key page', () => {
+    const result = rewriteUpstreamMessage(LEAKED, 'api-route', 401);
+    expect(result.rewritten).toBe(true);
+    expect(result.message).not.toContain('openai.com');
+    expect(result.message).toContain('https://www.api-route.com/tokens');
+  });
+
   it('rewrites leaked openai URL to Atlas Cloud URL', () => {
     const result = rewriteUpstreamMessage(LEAKED, 'atlascloud', 401);
     expect(result.rewritten).toBe(true);

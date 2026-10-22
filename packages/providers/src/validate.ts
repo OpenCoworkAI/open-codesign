@@ -57,6 +57,13 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
         headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
       };
     }
+    case 'api-route': {
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://global.api-route.com';
+      return {
+        url: `${root}/v1/models`,
+        headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+      };
+    }
     case 'openrouter': {
       const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://openrouter.ai/api';
       return {
@@ -104,7 +111,7 @@ export async function pingProvider(
 ): Promise<ValidateResult> {
   if (!isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
-      `Provider "${provider}" is not supported by the first-run provider shortcut. Supported: anthropic, openai, atlascloud, openrouter, ollama. Add custom providers in Settings, or use ChatGPT subscription sign-in for chatgpt-codex.`,
+      `Provider "${provider}" is not supported by the first-run provider shortcut. Supported: anthropic, openai, atlascloud, api-route, openrouter, ollama. Add custom providers in Settings, or use ChatGPT subscription sign-in for chatgpt-codex.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
