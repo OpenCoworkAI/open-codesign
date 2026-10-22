@@ -33,6 +33,8 @@ export interface WindowsObservation {
   focusSamples?: number;
   injectedMouse?: number;
   injectedKeyboard?: number;
+  /** Large single-poll cursor deltas; diagnostic only, not a pass/fail gate. */
+  cursorJumpSamples?: number;
   cursorUnchanged?: boolean;
   foregroundUnchanged?: boolean;
 }

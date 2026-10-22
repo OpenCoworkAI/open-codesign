@@ -62,11 +62,11 @@ public static class BackgroundUiObserver {
   }
   public static object Run(string directory, bool stream) {
     var events = new List<Tuple<uint,uint[]>>();
-    int injectedMouse = 0, injectedKeyboard = 0, visibleSamples = 0, focusSamples = 0, samples = 0;
+    int injectedMouse = 0, injectedKeyboard = 0, visibleSamples = 0, focusSamples = 0, samples = 0, cursorJumpSamples = 0;
     bool overflow = false;
     uint target = 0;
     int visibleEvents = 0, foregroundEvents = 0;
-    Point start, end; GetCursorPos(out start);
+    Point start, end, previous; GetCursorPos(out start); previous = start;
     IntPtr initialForeground = GetForegroundWindow();
     WinEvent callback = (hook, kind, window, obj, child, thread, time) => {
       if (window == IntPtr.Zero || (kind == 0x8002 && obj != 0)) return;
@@ -120,12 +120,17 @@ public static class BackgroundUiObserver {
           }, IntPtr.Zero);
           uint focused; GetWindowThreadProcessId(GetForegroundWindow(), out focused);
           if (Ancestors(focused, parents).Contains(target)) focusSamples++;
+          Point cursor; GetCursorPos(out cursor);
+          // Instant cursor teleports move far in one poll without LLMHF_INJECTED.
+          // Informational only: ordinary user flicks can also trip this.
+          if (Math.Abs(cursor.X - previous.X) + Math.Abs(cursor.Y - previous.Y) >= 80) cursorJumpSamples++;
+          previous = cursor;
           samples++;
           if (stream && DateTime.UtcNow >= nextUpdate) {
             Console.WriteLine("{\"platform\":\"win32\",\"available\":true,\"completed\":false,\"samples\":" + samples +
               ",\"overflow\":" + overflow.ToString().ToLowerInvariant() + ",\"visibleWindowEvents\":" + visibleEvents +
               ",\"foregroundEvents\":" + foregroundEvents + ",\"visibleSamples\":" + visibleSamples +
-              ",\"focusSamples\":" + focusSamples + ",\"injectedMouse\":" + injectedMouse + ",\"injectedKeyboard\":" + injectedKeyboard + "}");
+              ",\"focusSamples\":" + focusSamples + ",\"injectedMouse\":" + injectedMouse + ",\"injectedKeyboard\":" + injectedKeyboard + ",\"cursorJumpSamples\":" + cursorJumpSamples + "}");
             nextUpdate = DateTime.UtcNow.AddMilliseconds(250);
           }
         }
@@ -142,7 +147,7 @@ public static class BackgroundUiObserver {
       platform = "win32", available = true, completed, samples, overflow,
       visibleWindowEvents = visibleEvents,
       foregroundEvents = foregroundEvents,
-      visibleSamples, focusSamples, injectedMouse, injectedKeyboard,
+      visibleSamples, focusSamples, injectedMouse, injectedKeyboard, cursorJumpSamples,
       cursorUnchanged = start.X == end.X && start.Y == end.Y,
       foregroundUnchanged = initialForeground == GetForegroundWindow()
     };

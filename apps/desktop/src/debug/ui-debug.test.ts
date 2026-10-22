@@ -142,3 +142,19 @@ it('Windows observer imports observation APIs only', async () => {
   expect(script).toContain('CallNextHookEx');
   expect(script).not.toContain('ExecutionPolicy');
 });
+it('background UI debug uses DOM pointer input instead of CDP mouse', async () => {
+  const source = await readFile(new URL('./ui-debug.ts', import.meta.url), 'utf8');
+  expect(source).toMatch(/pointerInput:\s*'dom'/);
+  expect(source).toContain('runPreviewSteps(activePage, [step], signal');
+});
+
+it('preview-interactions documents CDP cursor risk and offers dom mode', async () => {
+  const source = await readFile(
+    new URL('../main/preview-interactions.ts', import.meta.url),
+    'utf8',
+  );
+  expect(source).toContain('LLMHF_INJECTED');
+  expect(source).toContain('PreviewPointerInput');
+  expect(source).toContain('clickViaDom');
+  expect(source).not.toMatch(/\b(?:SendInput|SetCursorPos|SetForegroundWindow)\b/);
+});

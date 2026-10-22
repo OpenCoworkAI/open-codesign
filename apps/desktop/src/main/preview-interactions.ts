@@ -52,6 +52,35 @@ interface StepAttempt {
   point?: { x: number; y: number };
 }
 
+/** Dispatch in-page mouse events. Avoids CDP Input.dispatchMouseEvent, which can
+ * sync the OS cursor on Windows even when the Electron window is hidden/offscreen
+ * and without setting LLMHF_INJECTED (so the observer's injectedMouse stays 0).
+ * Serialized into the page like inspectStep (uses the ambient document types above). */
+function dispatchDomClick(point: { x: number; y: number }): void {
+  const target = document.elementFromPoint(point.x, point.y);
+  if (!target) throw new Error('No element at click point');
+  for (const type of ['mousedown', 'mouseup', 'click'] as const) {
+    const event = document.createEvent('MouseEvents');
+    event.initEvent(type, true, true);
+    target.dispatchEvent(event);
+  }
+}
+
+async function clickViaDom(
+  page: {
+    // Same structural evaluate used by runPreviewSteps; cast keeps unit mocks simple.
+    evaluate: (fn: typeof inspectStep, step: PreviewStep) => Promise<StepAttempt>;
+  },
+  point: { x: number; y: number },
+): Promise<void> {
+  await (
+    page.evaluate as unknown as (
+      fn: typeof dispatchDomClick,
+      point: { x: number; y: number },
+    ) => Promise<void>
+  )(dispatchDomClick, point);
+}
+
 function inspectStep(step: PreviewStep): StepAttempt {
   const matches = document.querySelectorAll(step.selector);
   const fail = (reason: string, retry = false): StepAttempt => ({ ok: false, reason, retry });
@@ -247,6 +276,8 @@ export function boundedPreview<T>(
   });
 }
 
+export type PreviewPointerInput = 'cdp' | 'dom';
+
 export async function runPreviewSteps(
   page: {
     evaluate: (fn: typeof inspectStep, step: PreviewStep) => Promise<StepAttempt>;
@@ -257,7 +288,9 @@ export async function runPreviewSteps(
   steps: PreviewStep[],
   signal?: AbortSignal,
   navigationFailure: () => string | undefined = () => undefined,
+  options: { pointerInput?: PreviewPointerInput } = {},
 ): Promise<NonNullable<PreviewResult['steps']>> {
+  const pointerInput = options.pointerInput ?? 'cdp';
   const results: NonNullable<PreviewResult['steps']> = [];
   const totalDeadline = Date.now() + 20_000;
   for (const [index, step] of steps.entries()) {
@@ -276,7 +309,9 @@ export async function runPreviewSteps(
           if (signal?.aborted) throw new Error('Preview cancelled');
           if (attempt.point) {
             await boundedPreview(
-              page.mouse.click(attempt.point.x, attempt.point.y),
+              pointerInput === 'dom'
+                ? clickViaDom(page, attempt.point)
+                : page.mouse.click(attempt.point.x, attempt.point.y),
               Math.max(1, deadline - Date.now()),
               signal,
             );

@@ -241,6 +241,15 @@ export function initializeBackgroundDebug(electron: typeof import('electron')): 
     for (const name of ['show', 'showInactive', 'focus', 'restore'] as const) {
       Object.defineProperty(window, name, { value: () => blocked(`window.${name}`) });
     }
+    try {
+      window.setIgnoreMouseEvents(true);
+      window.setFocusable(false);
+      window.setSkipTaskbar(true);
+      window.setOpacity(0);
+      window.setPosition(-32000, -32000);
+    } catch {
+      record('warning', 'window-isolation-partial');
+    }
     window.on('show', () => record('violation', 'visible-window'));
     window.on('focus', () => record('violation', 'focused-window'));
     window.webContents.setAudioMuted(true);

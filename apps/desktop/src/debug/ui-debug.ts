@@ -510,7 +510,11 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
         signal.throwIfAborted();
         observer?.current();
         const index = report.steps.length;
-        const result = (await runPreviewSteps(activePage, [step], signal))[0];
+        const result = (
+          await runPreviewSteps(activePage, [step], signal, () => undefined, {
+            pointerInput: 'dom',
+          })
+        )[0];
         if (!result) throw new Error('Missing step result');
         report.steps.push({
           ...result,

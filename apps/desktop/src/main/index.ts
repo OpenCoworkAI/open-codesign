@@ -95,7 +95,16 @@ function createWindow(): void {
     backgroundColor: BRAND.backgroundColor,
     icon: join(__dirname, '../../resources/icon.png'),
     show: false,
-    ...(BACKGROUND_DEBUG ? { focusable: false, skipTaskbar: true } : {}),
+    ...(BACKGROUND_DEBUG
+      ? {
+          focusable: false,
+          skipTaskbar: true,
+          // Keep any accidental HWND far off the interactive desktop.
+          x: -32000,
+          y: -32000,
+          opacity: 0,
+        }
+      : {}),
     webPreferences: {
       ...(BACKGROUND_DEBUG ? { offscreen: true, backgroundThrottling: false } : {}),
       preload: join(__dirname, '../preload/index.cjs'),
@@ -104,6 +113,13 @@ function createWindow(): void {
       nodeIntegration: false,
     },
   });
+  if (BACKGROUND_DEBUG) {
+    try {
+      mainWindow.setIgnoreMouseEvents(true);
+    } catch {
+      // Offscreen hosts may reject this; show/focus remain blocked below.
+    }
+  }
 
   // On software-rendered systems (e.g. VMware SVGA → SwiftShader fallback)
   // the compositor never produces a first frame for a hidden window, so

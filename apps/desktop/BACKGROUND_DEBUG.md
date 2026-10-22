@@ -5,17 +5,28 @@ and local design persistence** in a fresh disposable profile. Puppeteer controls
 page using the browser debugging protocol instead of calling OS input-injection APIs.
 It requires no API key, existing design, or running desktop application.
 
-**Windows status (2026-10-22): non-interference acceptance failed.** A user reported
+**Windows status (2026-10-23): partial mitigation landed; non-interference still unverified on an interactive desktop.** A user reported
 persistent physical pointer movement while background/model sessions and real browser
 tests were running concurrently. It stopped after the owned test processes were terminated.
 The observer reported zero injected-input events; those counters did not rule out the
-reported movement. The responsible process and mechanism have not been identified.
-Do not repeat Electron/Chrome/UI tests on the affected interactive desktop until the cause
-is corrected or verified OS-level isolation is in place. This applies to `test:browser`,
-`test:debug-ui` and background sessions. The commands below describe the interface, not a
-guarantee that the Windows isolation requirement has passed. Lint, typecheck and explicitly
-selected tests that do not start browsers can continue. In this checkout `pnpm test` now
-excludes real browser/Electron suites, so ordinary tests and hooks that invoke them can run.
+reported movement.
+
+**Likely mechanism (code evidence):** background UI actions used Puppeteer's CDP
+`page.mouse.click` (`Input.dispatchMouseEvent`) via `runPreviewSteps` in
+`preview-interactions.ts`. On Windows, Chromium can sync the OS cursor for those events
+even when the Electron `BrowserWindow` is `show: false` / offscreen, and that path does
+**not** set `LLMHF_INJECTED`, so `injectedMouse` stays 0. The Job Object only covers
+process lifetime, not desktop/input isolation. Concurrent real Chrome/Electron suites amplify
+the risk.
+
+**Mitigations in this tree:** background debug now passes `pointerInput: 'dom'` so clicks
+dispatch in-page mouse events instead of CDP mouse; debug windows also use
+`setIgnoreMouseEvents(true)`, off-desktop position, and opacity 0. The observer records
+informational `cursorJumpSamples` for large single-poll cursor deltas (not a pass/fail gate).
+Do not claim verified non-interference until a measured run on an isolated Windows host
+passes with no user-visible pointer movement. Prefer not to rerun `test:browser` /
+`test:debug-ui` on a busy interactive desktop. Lint, typecheck and ordinary `pnpm test`
+(browser suites excluded) can continue.
 
 ## Run from the repository root
 
@@ -31,7 +42,7 @@ Use a **new output directory** each time; its parent must exist. The report cont
 PNG paths, each interaction/assertion result, collected errors, persistence checks, cleanup
 status, and Windows observations. `00-initial.png` captures the initial app; a PNG follows
 each attempted step, including a failed step. `report.json` remains after cleanup.
-The command defaults to 120 seconds; `--timeout-ms` accepts 1â€“3600000. Ctrl+C cancels where
+The command defaults to 120 seconds; `--timeout-ms` accepts 1â€?600000. Ctrl+C cancels where
 Node receives SIGINT. Cleanup may extend the deadline briefly while processes terminate.
 
 The built-in journey clicks New design, confirms creation, fills the actual composer,
@@ -65,7 +76,7 @@ node --import tsx .\apps\cli\src\main.ts debug ui --steps ".\steps.json" --outpu
 ```
 
 Supported actions: `click`, `fill`, `select`, `press` (Enter/Escape/Tab), `assert`
-(visible/text/value). Limits: 1â€“16 steps, 64 KiB JSON, 256-character selectors,
+(visible/text/value). Limits: 1â€?6 steps, 64 KiB JSON, 256-character selectors,
 2,000-character text, approximately two seconds per step. The first failed step stops
 the journey. Each invocation starts a new instance; this is a batch debugging command,
 not a persistent session. Use `debug session` below for an observe/decide/act loop. Screenshots show supplied inputs;
@@ -100,7 +111,7 @@ button from the new element list, then select the textarea from the workspace re
 {"schemaVersion":1,"id":"fill-1","method":"act","steps":[{"action":"fill","selector":"textarea","value":"Background draft"}]}
 ```
 
-`act` accepts the same 1â€“16 preview steps as batch debugging. It stops that request on its
+`act` accepts the same 1â€?6 preview steps as batch debugging. It stops that request on its
 first failed step. Each action and observation saves a new PNG. State stays in the same
 React/main/preload instance until closed. `elements` contains at most 120 visible controls;
 covered or inert controls can still appear, and normal hit-testing rejects clicks on them.
@@ -128,9 +139,9 @@ so the final process exits 5/6 even if later operations succeeded. Protocol-only
 errors do not mark UI verification as failed. The report never silently discards failures.
 
 Limits: 64 KiB per JSONL message, eight queued messages, 200 requests including malformed
-ones, and 200 submitted steps. IDs are unique, 1â€“64 ASCII letters/digits/underscore/hyphen.
+ones, and 200 submitted steps. IDs are unique, 1â€?4 ASCII letters/digits/underscore/hyphen.
 Default lifetime is 30 minutes (`--timeout-ms`), default input idle timeout is five minutes
-(`--idle-timeout-ms`); both accept 1â€“3600000 ms. Each action/observation request has a
+(`--idle-timeout-ms`); both accept 1â€?600000 ms. Each action/observation request has a
 60-second deadline. Message/queue/request-count limits and idle/lifetime expiry end the session and run cleanup;
 requests exceeding the step budget are rejected without executing them.
 timeout exits 124. SIGINT/SIGTERM or a broken stdout pipe cancel (130). Input EOF drains
@@ -267,15 +278,18 @@ All hooks forward input immediately and are removed when observation ends.
 
 Passing the automated observation checks requires completed observation, positive sample count, no overflow,
 zero visible test windows, zero test foreground events, and zero observed injected input.
-`cursorUnchanged` and `foregroundUnchanged` are informational: you may move your mouse and
-switch applications during the run. Those changes do not fail the test. Injected-input
-counts are system-wide, so concurrent automation from another program makes that run
-inconclusive/failing; they cannot identify which program injected an event.
+`cursorUnchanged`, `foregroundUnchanged`, and `cursorJumpSamples` are informational: you may
+move your mouse and switch applications during the run. Those changes do not fail the test.
+Injected-input counts are system-wide, so concurrent automation from another program makes
+that run inconclusive/failing; they cannot identify which program injected an event.
+`cursorJumpSamples` counts large single-poll cursor deltas (possible programmatic/CDP sync
+teleports) but ordinary user flicks can also increment it.
 
 These are necessary checks, not proof that the physical cursor never moved unexpectedly.
-The observer does not attribute cursor position changes to a process or distinguish every
-programmatic movement from ordinary user input. `report.ok` describes the automated checks;
-a user's report of interference overrides it for non-interference acceptance. Close the
+CDP mouse input can move the cursor without `LLMHF_INJECTED`; background sessions therefore
+use DOM pointer input instead. The observer does not attribute cursor position changes to a
+process. `report.ok` describes the automated checks; a user's report of interference overrides
+it for non-interference acceptance. Close the
 owned session, stop remaining owned test processes, save the report/transcript and incident
 details, and stop retries on that desktop. Do not move the pointer or restore focus as a
 workaround. Run browser suites separately when diagnosing ownership; they are not all
@@ -288,10 +302,13 @@ Electron. On other operating systems, the UI flow can run but `windows.available
 no Windows non-interference claim is made.
 
 Offscreen rendering uses Electron's [offscreen rendering support](https://www.electronjs.org/docs/latest/tutorial/offscreen-rendering).
-`show: false`, `focusable: false`, and `skipTaskbar: true` are applied to the debug window.
-The normal ready-to-show/fallback/activation paths do not display it. Attempts to show or
-focus it are explicitly blocked and reported. The runner never restores foreground focus
-or cursor position; doing so would interfere with the user's own activity.
+`show: false`, `focusable: false`, `skipTaskbar: true`, off-desktop position, opacity 0, and
+`setIgnoreMouseEvents(true)` are applied to debug windows. The normal ready-to-show/fallback/
+activation paths do not display them. Attempts to show or focus are explicitly blocked and
+reported. Background UI clicks use in-page DOM mouse events (`pointerInput: 'dom'`), not CDP
+`Input.dispatchMouseEvent`, so the host does not ask Chromium to sync the OS cursor. The
+runner never restores foreground focus or cursor position; doing so would interfere with the
+user's own activity.
 
 ## Boundaries and failure behavior
 

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { initializeBackgroundDebug, isBackgroundChannelAllowed } from './background-debug';
 
@@ -64,4 +65,11 @@ describe('background development host policy', () => {
       false,
     );
   });
+});
+it('hardens every created window against focus and OS mouse hit-testing', async () => {
+  const source = await readFile(new URL('./background-debug.ts', import.meta.url), 'utf8');
+  expect(source).toContain('setIgnoreMouseEvents(true)');
+  expect(source).toContain('setPosition(-32000, -32000)');
+  expect(source).toContain('setOpacity(0)');
+  expect(source).toContain('window-isolation-partial');
 });

@@ -92,4 +92,37 @@ describe('preview interaction budgets', () => {
     expect(steps.slice(0, 10).every((step) => step.ok)).toBe(true);
     expect(steps[10]).toMatchObject({ ok: false, reason: expect.stringContaining('timed out') });
   });
+
+  it('dom pointer input clicks without CDP page.mouse', async () => {
+    const page = {
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, point: { x: 12, y: 34 } })
+        .mockResolvedValueOnce(undefined),
+      mouse: { click: vi.fn() },
+      keyboard: { press: vi.fn() },
+      select: vi.fn(),
+    };
+    const results = await runPreviewSteps(
+      page,
+      [{ action: 'click', selector: '#button' }],
+      undefined,
+      () => undefined,
+      { pointerInput: 'dom' },
+    );
+    expect(results).toEqual([expect.objectContaining({ action: 'click', ok: true })]);
+    expect(page.mouse.click).not.toHaveBeenCalled();
+    expect(page.evaluate).toHaveBeenCalledTimes(2);
+  });
+
+  it('cdp pointer input remains the default for preview journeys', async () => {
+    const page = {
+      evaluate: vi.fn(async () => ({ ok: true, point: { x: 1, y: 2 } })),
+      mouse: { click: vi.fn(async () => undefined) },
+      keyboard: { press: vi.fn() },
+      select: vi.fn(),
+    };
+    await runPreviewSteps(page, [{ action: 'click', selector: '#button' }]);
+    expect(page.mouse.click).toHaveBeenCalledWith(1, 2);
+  });
 });
