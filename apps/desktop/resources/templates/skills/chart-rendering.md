@@ -55,6 +55,7 @@ attribute contains JSON with `type` (`bar`, `line`, or `pie`), a nonempty array
 of string `labels`, and a nonempty array of named `series`. Every series has a
 `values` array of finite numbers matching the label count. A pie chart has one
 series with nonnegative values. Render the visible chart from the same data.
+For a horizontal bar chart, add `barDirection: 'horizontal'`; bars default to vertical.
 
 ```jsx
 const chart = {
@@ -68,7 +69,9 @@ const chart = {
 ```
 
 The editable exporter replaces the marked container with a native PowerPoint
-chart. SVG and canvas charts without this attribute use a local image fallback.
+chart. Without this attribute, supported SVG primitives remain editable shapes
+and text but have no chart data series; unsupported SVG and canvas use a local
+image fallback.
 
 Rules:
 

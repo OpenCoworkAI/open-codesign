@@ -5,6 +5,7 @@ import type {
   BrowserHtmlElement,
   BrowserImageElement,
   BrowserNode,
+  BrowserSvgElement,
   BrowserStyle as CSSStyleDeclaration,
   BrowserRect as DOMRect,
 } from './pptx-browser-types';
@@ -337,7 +338,7 @@ export function extractNativeSlide(
       inlineTree(el)
     );
   };
-  const text = (el: Element, directOnly = false) => {
+  const text = (el: Element, directOnly = false, svgScale?: number) => {
     type Fragment = { rect: DOMRect; run: SlideTextRun; flow: number };
     const fragments: Fragment[] = [];
     let flow = 0;
@@ -346,6 +347,9 @@ export function extractNativeSlide(
       if (node.nodeType === Node.TEXT_NODE) {
         if (directOnly && el.tagName !== 'LI') flow++;
         const s = getComputedStyle(owner);
+        if (svgScale !== undefined && s.getPropertyValue('fill') === 'none') return;
+        const ink = { ...color(svgScale === undefined ? s.color : s.getPropertyValue('fill')) };
+        if (svgScale !== undefined) ink.opacity *= Number(s.getPropertyValue('fill-opacity'));
         const raw = node.textContent ?? '';
         const requested =
           s.fontFamily
@@ -389,12 +393,12 @@ export function extractNativeSlide(
             run: {
               text: value,
               fontFace,
-              fontSize: number(s.fontSize),
-              color: color(s.color),
+              fontSize: number(s.fontSize) * (svgScale ?? 1),
+              color: { ...ink },
               bold: number(s.fontWeight) >= 600 || s.fontWeight === 'bold',
               italic: s.fontStyle !== 'normal',
               underline: s.textDecorationLine.includes('underline'),
-              charSpacing: number(s.letterSpacing),
+              charSpacing: number(s.letterSpacing) * (svgScale ?? 1),
             },
           });
         }
@@ -494,6 +498,150 @@ export function extractNativeSlide(
       );
     });
   };
+  const extractSvg = (svg: Element, viewport: DOMRect) => {
+    if (svg.tagName.toLowerCase() !== 'svg') return false;
+    const nodes = [svg, ...Array.from(svg.querySelectorAll('*'))].filter(visible);
+    const primitiveTags = ['rect', 'circle', 'ellipse', 'line', 'text'];
+    const transforms = new Map<Element, number>();
+    // Preflight the whole SVG before emitting objects; an unsupported child must not
+    // leave native text behind when the same SVG is captured as an image.
+    for (const node of nodes) {
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'title' || tag === 'desc') continue;
+      if (!['svg', 'g', 'tspan', ...primitiveTags].includes(tag) || (tag === 'svg' && node !== svg))
+        return false;
+      const s = getComputedStyle(node);
+      const matrix = (node as BrowserSvgElement).getScreenCTM();
+      if (
+        !matrix ||
+        ![matrix.a, matrix.b, matrix.c, matrix.d].every(Number.isFinite) ||
+        matrix.a <= 0 ||
+        matrix.d <= 0 ||
+        Math.abs(matrix.b) > 0.000001 ||
+        Math.abs(matrix.c) > 0.000001 ||
+        Math.abs(matrix.a - matrix.d) > 0.000001
+      )
+        return false;
+      transforms.set(node, matrix.a);
+      if (
+        node.hasAttribute('data-pptx-raster') ||
+        s.filter !== 'none' ||
+        s.backdropFilter !== 'none' ||
+        s.mixBlendMode !== 'normal' ||
+        s.clipPath !== 'none' ||
+        s.maskImage !== 'none' ||
+        number(s.opacity) !== 1 ||
+        s.textShadow !== 'none' ||
+        decorationReason(s) ||
+        color(s.backgroundColor).opacity !== 0 ||
+        s.getPropertyValue('vector-effect') === 'non-scaling-stroke' ||
+        hasPseudo(node, '::before') ||
+        hasPseudo(node, '::after')
+      )
+        return false;
+      const fill = s.getPropertyValue('fill');
+      const stroke = s.getPropertyValue('stroke');
+      if (fill.includes('url(') || stroke.includes('url(')) return false;
+      const dash = s.getPropertyValue('stroke-dasharray');
+      if (dash !== 'none' && (tag !== 'line' || dash.split(/[ ,]+/).filter(Boolean).length !== 2))
+        return false;
+      if (
+        (tag === 'text' || tag === 'tspan') &&
+        (stroke !== 'none' ||
+          s.writingMode !== 'horizontal-tb' ||
+          s.direction === 'rtl' ||
+          node.hasAttribute('textLength') ||
+          node.hasAttribute('rotate'))
+      )
+        return false;
+      if (
+        tag === 'rect' &&
+        node.hasAttribute('ry') &&
+        node.getAttribute('ry') !== node.getAttribute('rx')
+      )
+        return false;
+      if (primitiveTags.includes(tag)) {
+        const r = node.getBoundingClientRect();
+        if (
+          r.left < viewport.left - 1 ||
+          r.right > viewport.right + 1 ||
+          r.top < viewport.top - 1 ||
+          r.bottom > viewport.bottom + 1 ||
+          r.left < rootRect.left - 1 ||
+          r.right > rootRect.right + 1 ||
+          r.top < rootRect.top - 1 ||
+          r.bottom > rootRect.bottom + 1
+        )
+          return false;
+      }
+    }
+    for (const node of nodes) {
+      const tag = node.tagName.toLowerCase();
+      if (!primitiveTags.includes(tag)) continue;
+      const s = getComputedStyle(node);
+      const scale = transforms.get(node) ?? 1;
+      const r = node.getBoundingClientRect();
+      const svgColor = (property: 'fill' | 'stroke') => {
+        const value = s.getPropertyValue(property);
+        if (value === 'none') return { hex: '000000', opacity: 0 };
+        const resolved = color(value);
+        return {
+          ...resolved,
+          opacity: resolved.opacity * Number(s.getPropertyValue(`${property}-opacity`)),
+        };
+      };
+      const stroke = svgColor('stroke');
+      const strokeWidth = number(s.getPropertyValue('stroke-width')) * scale;
+      if (tag === 'text') {
+        if (s.getPropertyValue('fill') !== 'none') text(node, false, scale);
+      } else if (tag === 'line') {
+        if (stroke.opacity === 0 || strokeWidth === 0 || (r.width === 0 && r.height === 0))
+          continue;
+        const xDelta =
+          number(node.getAttribute('x2') ?? '0') - number(node.getAttribute('x1') ?? '0');
+        const yDelta =
+          number(node.getAttribute('y2') ?? '0') - number(node.getAttribute('y1') ?? '0');
+        const dashed = s.getPropertyValue('stroke-dasharray') !== 'none';
+        elements.push({
+          type: 'line',
+          ...box(r),
+          stroke,
+          strokeWidth,
+          flipV: xDelta * yDelta < 0,
+          ...(dashed ? { dash: 'dash' as const } : {}),
+        });
+        if (dashed)
+          warnings.add(
+            `${selector(svg)}: SVG dash lengths approximated with a native dashed line.`,
+          );
+      } else {
+        if (r.width <= 0 || r.height <= 0) continue;
+        const fill = svgColor('fill');
+        if (fill.opacity === 0 && (stroke.opacity === 0 || strokeWidth === 0)) continue;
+        const radiusValue = node.getAttribute('rx') ?? s.getPropertyValue('rx');
+        const radius = radiusValue.endsWith('%')
+          ? (r.width * number(radiusValue)) / 100
+          : number(radiusValue) * scale;
+        elements.push({
+          type: 'shape',
+          ...box(r),
+          shape: tag === 'rect' ? (radius > 0 ? 'roundRect' : 'rect') : 'ellipse',
+          radius: tag === 'rect' ? Math.min(radius, r.width / 2, r.height / 2) : 0,
+          fill,
+          stroke,
+          strokeWidth: stroke.opacity === 0 ? 0 : strokeWidth,
+        });
+      }
+    }
+    if (
+      svg.hasAttribute('data-research-values') ||
+      /chart|图/.test(svg.getAttribute('aria-label') ?? '')
+    )
+      warnings.add(
+        `${selector(svg)}: SVG chart exported as editable shapes and text; chart data series are unavailable without data-pptx-chart.`,
+      );
+    return true;
+  };
   const extractChart = (el: Element, rect: DOMRect) => {
     const raw = el.getAttribute('data-pptx-chart');
     if (raw === null) return false;
@@ -505,8 +653,13 @@ export function extractNativeSlide(
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
       throw new Error(`Invalid data-pptx-chart data on ${selector(el)}.`);
-    const data = parsed as { type?: unknown; labels?: unknown; series?: unknown };
-    const { type, labels, series } = data;
+    const data = parsed as {
+      type?: unknown;
+      labels?: unknown;
+      series?: unknown;
+      barDirection?: unknown;
+    };
+    const { type, labels, series, barDirection } = data;
     if (
       (type !== 'bar' && type !== 'line' && type !== 'pie') ||
       !Array.isArray(labels) ||
@@ -514,7 +667,9 @@ export function extractNativeSlide(
       labels.length === 0 ||
       series.length === 0 ||
       labels.some((label: unknown) => typeof label !== 'string') ||
-      (type === 'pie' && series.length !== 1)
+      (type === 'pie' && series.length !== 1) ||
+      (barDirection !== undefined &&
+        (type !== 'bar' || (barDirection !== 'horizontal' && barDirection !== 'vertical')))
     )
       throw new Error(`Invalid data-pptx-chart data on ${selector(el)}.`);
     const checkedSeries: { name: string; values: number[] }[] = [];
@@ -538,6 +693,7 @@ export function extractNativeSlide(
       type: 'chart',
       ...box(rect),
       chartType: type,
+      ...(barDirection === 'horizontal' || barDirection === 'vertical' ? { barDirection } : {}),
       labels: labels as string[],
       series: checkedSeries,
     });
@@ -655,7 +811,7 @@ export function extractNativeSlide(
     )
       return;
     const s = getComputedStyle(el);
-    if (extractChart(el, rect) || extractTable(el, rect)) return;
+    if (extractChart(el, rect) || extractTable(el, rect) || extractSvg(el, rect)) return;
     const reason = compositeReason(el, s);
     if (reason) {
       raster(el, reason);

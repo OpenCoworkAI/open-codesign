@@ -108,6 +108,100 @@ describe.skipIf(!chromePath)('native PPTX in system Chromium', () => {
     expect(texts[2]?.y).toBe(texts[1]?.y);
   }, 30_000);
 
+  it('keeps unmarked SVG bars, grid lines and labels editable at viewBox scale', async () => {
+    const models = await renderNativeSlides(
+      html(`<section class="slide"><svg role="img" width="520" height="200" viewBox="0 0 1040 400" data-research-values="2023:949.5万辆;2024:1286.6万辆;2025:1649万辆">
+      <line x1="68" x2="1010" y1="334" y2="334" stroke="#ccd4de" />
+      <g><rect x="160" y="190" width="130" height="144" rx="6" fill="#d5e9dc" /><text x="225" y="175" text-anchor="middle" style="font:700 24px Arial;fill:#123456">949.5</text><text x="225" y="365" text-anchor="middle">2023 年</text></g>
+      <g><rect x="475" y="139" width="130" height="195" rx="6" fill="#98c5a3" /><text x="540" y="123" text-anchor="middle" style="font:700 24px Arial;fill:#123456">1286.6</text></g>
+      <g><rect x="790" y="85" width="130" height="249" rx="6" fill="#1d8732" /><text x="855" y="69" text-anchor="middle" style="font:700 24px Arial;fill:#123456">1649</text></g>
+    </svg></section>`),
+      options,
+    );
+    const model = models[0];
+    expect(model?.elements.filter((element) => element.type === 'image')).toHaveLength(0);
+    expect(
+      model?.elements.filter(
+        (element) => element.type === 'shape' && element.shape === 'roundRect',
+      ),
+    ).toHaveLength(3);
+    expect(model?.elements.filter((element) => element.type === 'line')).toHaveLength(1);
+    const texts = model?.elements.filter((element) => element.type === 'text') ?? [];
+    expect(texts.map((element) => element.runs.map((run) => run.text).join(''))).toEqual([
+      '949.5',
+      '2023 年',
+      '1286.6',
+      '1649',
+    ]);
+    expect(texts[0]?.runs[0]).toMatchObject({ fontSize: 12, color: { hex: '123456', opacity: 1 } });
+    expect(model?.warnings.join(' ')).toContain('data series');
+  }, 30_000);
+
+  it('keeps horizontal SVG bars and their dashed threshold line editable', async () => {
+    const models = await renderNativeSlides(
+      html(`<section class="slide"><svg role="img" width="620" height="268" viewBox="0 0 620 268">
+      <line x1="78" x2="78" y1="26" y2="212" stroke="#ccd4de" />
+      <rect x="78" y="36" width="237" height="40" rx="5" fill="#d5e9dc" />
+      <text x="62" y="62" text-anchor="end">2023 年</text><text x="327" y="63">31.6%</text>
+      <line x1="453" x2="453" y1="26" y2="236" stroke="#778899" stroke-width="1.5" stroke-dasharray="5 5" />
+      <text x="453" y="20" text-anchor="middle">50%</text>
+    </svg></section>`),
+      options,
+    );
+    const model = models[0];
+    expect(model?.elements.filter((element) => element.type === 'image')).toHaveLength(0);
+    expect(model?.elements.filter((element) => element.type === 'line')).toHaveLength(2);
+    expect(
+      model?.elements.find((element) => element.type === 'line' && element.dash === 'dash'),
+    ).toMatchObject({ width: 0, height: 210, strokeWidth: 1.5 });
+    expect(
+      model?.elements
+        .filter((element) => element.type === 'text')
+        .flatMap((element) => element.runs.map((run) => run.text)),
+    ).toEqual(['2023 年', '31.6%', '50%']);
+  }, 30_000);
+
+  it('reads horizontal native chart direction from chart metadata', async () => {
+    const data = JSON.stringify({
+      type: 'bar',
+      barDirection: 'horizontal',
+      labels: ['2023', '2024'],
+      series: [{ name: '占比', values: [31.6, 40.9] }],
+    });
+    const models = await renderNativeSlides(
+      html(
+        `<section class="slide"><svg width="620" height="268" data-pptx-chart='${data}'></svg></section>`,
+      ),
+      options,
+    );
+    expect(models[0]?.elements.find((element) => element.type === 'chart')).toMatchObject({
+      barDirection: 'horizontal',
+    });
+  }, 30_000);
+
+  it.each([
+    ['path', '<path d="M0 50 C20 0 60 0 90 50" stroke="green" fill="none" />', ''],
+    ['clip', '<g clip-path="inset(4px)"><rect width="100" height="60" fill="green" /></g>', ''],
+    ['background', '', 'background:#eeeeee'],
+  ])(
+    'locally rasterizes an unsupported SVG %s without duplicating its labels',
+    async (_name, extra, style) => {
+      const models = await renderNativeSlides(
+        html(
+          `<section class="slide"><p>保留文本</p><svg width="240" height="140" style="${style}"><rect x="10" y="10" width="80" height="100" fill="green" /><text x="20" y="40">图内标签</text>${extra}</svg></section>`,
+        ),
+        options,
+      );
+      expect(models[0]?.elements.filter((element) => element.type === 'image')).toHaveLength(1);
+      expect(
+        models[0]?.elements
+          .filter((element) => element.type === 'text')
+          .flatMap((element) => element.runs.map((run) => run.text)),
+      ).toEqual(['保留文本']);
+    },
+    30_000,
+  );
+
   it('keeps nested list items as editable native bullets and numbers exactly once', async () => {
     const models = await renderNativeSlides(
       html(

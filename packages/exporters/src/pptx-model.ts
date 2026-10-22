@@ -57,6 +57,13 @@ export type NativeSlideElement =
       strokeWidth: number;
     })
   | (SlideBox & {
+      type: 'line';
+      stroke: SlideColor;
+      strokeWidth: number;
+      dash?: 'dash' | 'sysDot';
+      flipV?: boolean;
+    })
+  | (SlideBox & {
       type: 'image';
       data: string;
       fit?: 'cover';
@@ -73,6 +80,7 @@ export type NativeSlideElement =
   | (SlideBox & {
       type: 'chart';
       chartType: 'bar' | 'line' | 'pie';
+      barDirection?: 'horizontal' | 'vertical';
       labels: string[];
       series: SlideChartSeries[];
     })
@@ -127,8 +135,8 @@ function objectBox(node: NativeSlideElement, transform: ReturnType<typeof slideT
   const { scale, offsetX, offsetY } = transform;
   checkNumber(node.x, 'x', -Number.MAX_VALUE, Number.MAX_VALUE);
   checkNumber(node.y, 'y', -Number.MAX_VALUE, Number.MAX_VALUE);
-  checkNumber(node.width, 'width', Number.MIN_VALUE, Number.MAX_VALUE);
-  checkNumber(node.height, 'height', Number.MIN_VALUE, Number.MAX_VALUE);
+  checkNumber(node.width, 'width', node.type === 'line' ? 0 : Number.MIN_VALUE, Number.MAX_VALUE);
+  checkNumber(node.height, 'height', node.type === 'line' ? 0 : Number.MIN_VALUE, Number.MAX_VALUE);
   const box = {
     x: offsetX + node.x * scale,
     y: offsetY + node.y * scale,
@@ -142,8 +150,18 @@ function objectBox(node: NativeSlideElement, transform: ReturnType<typeof slideT
   // DrawingML ST_Coordinate and ST_PositiveCoordinate bounds, in EMUs.
   checkNumber(Math.round(box.x * 914400), 'scaled x (EMU)', -27273042329600, 27273042316900);
   checkNumber(Math.round(box.y * 914400), 'scaled y (EMU)', -27273042329600, 27273042316900);
-  checkNumber(Math.round(box.w * 914400), 'scaled width (EMU)', 1, 27273042316900);
-  checkNumber(Math.round(box.h * 914400), 'scaled height (EMU)', 1, 27273042316900);
+  checkNumber(
+    Math.round(box.w * 914400),
+    'scaled width (EMU)',
+    node.type === 'line' ? 0 : 1,
+    27273042316900,
+  );
+  checkNumber(
+    Math.round(box.h * 914400),
+    'scaled height (EMU)',
+    node.type === 'line' ? 0 : 1,
+    27273042316900,
+  );
   return box;
 }
 
@@ -162,7 +180,15 @@ function imageDataUrl(data: unknown): string {
 
 function checkElement(node: NativeSlideElement, scale: number): void {
   if (node.type === 'raster') throw new Error('Unresolved native PPTX raster fallback.');
-  if (node.type === 'image') {
+  if (node.type === 'line') {
+    if (node.width === 0 && node.height === 0) throw new Error('Line must have a visible length.');
+    checkColor(node.stroke, 'line stroke');
+    checkNumber(node.strokeWidth * scale * 914400, 'scaled line stroke width (EMU)', 0, 20116800);
+    if (node.dash !== undefined && node.dash !== 'dash' && node.dash !== 'sysDot')
+      throw new Error('Unsupported line dash.');
+    if (node.flipV !== undefined && typeof node.flipV !== 'boolean')
+      throw new Error('Invalid line direction.');
+  } else if (node.type === 'image') {
     imageDataUrl(node.data);
     if (node.fit !== undefined && node.fit !== 'cover') throw new Error('Unsupported image fit.');
     if (node.fit === 'cover') {
@@ -225,6 +251,11 @@ function checkElement(node: NativeSlideElement, scale: number): void {
   } else if (node.type === 'chart') {
     if (!['bar', 'line', 'pie'].includes(node.chartType))
       throw new Error('Unsupported chart type.');
+    if (
+      node.barDirection !== undefined &&
+      (node.chartType !== 'bar' || !['horizontal', 'vertical'].includes(node.barDirection))
+    )
+      throw new Error('Unsupported bar chart direction.');
     if (
       !Array.isArray(node.labels) ||
       node.labels.length === 0 ||
@@ -403,7 +434,18 @@ export function addNativeSlides(pres: PptxGenJS, models: NativeSlideModel[]): st
     for (const [objectIndex, node] of model.elements.entries()) {
       const box = objectBox(node, transform);
       if (node.type === 'raster') throw new Error('Unresolved native PPTX raster fallback.');
-      if (node.type === 'image') {
+      if (node.type === 'line') {
+        slide.addShape(pres.ShapeType.line, {
+          ...box,
+          flipV: node.flipV ?? false,
+          line: {
+            color: node.stroke.hex,
+            transparency: (1 - node.stroke.opacity) * 100,
+            width: node.strokeWidth * scale * 72,
+            ...(node.dash ? { dashType: node.dash } : {}),
+          },
+        });
+      } else if (node.type === 'image') {
         if (node.crop) {
           const left = node.crop.left * scale;
           const top = node.crop.top * scale;
@@ -485,7 +527,13 @@ export function addNativeSlides(pres: PptxGenJS, models: NativeSlideModel[]): st
             ),
             values: series.values,
           })),
-          { ...box, showLegend: node.series.length > 1 },
+          {
+            ...box,
+            showLegend: node.series.length > 1,
+            ...(node.chartType === 'bar'
+              ? { barDir: node.barDirection === 'horizontal' ? ('bar' as const) : ('col' as const) }
+              : {}),
+          },
         );
       } else if (node.type === 'shape') {
         slide.addShape(pres.ShapeType[node.shape], {

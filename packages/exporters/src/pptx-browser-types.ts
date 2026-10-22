@@ -109,6 +109,10 @@ export interface BrowserStyledElement extends BrowserElement {
   style: BrowserStyle;
 }
 
+export interface BrowserSvgElement extends BrowserStyledElement {
+  getScreenCTM(): { a: number; b: number; c: number; d: number; e: number; f: number } | null;
+}
+
 export interface BrowserHtmlElement extends BrowserStyledElement {
   scrollWidth: number;
   scrollHeight: number;

@@ -41,9 +41,12 @@ of `quality-fixture.pptx`:
 4. Record the application version, date, screenshots or observations, and
    pass/fail for each step.
 
-Keep the native-export beta label until both applications pass. Unmarked SVG
-or canvas charts and genuinely clipped text are local image fallbacks; their
-warnings must identify the page and reason.
+Keep the native-export beta label until both applications pass. Supported SVG
+rectangles, ellipses, straight lines, groups, and text export as editable drawing
+objects. These do not have chart data series; `data-pptx-chart` is required for
+data charts, with optional `barDirection: 'horizontal'` for horizontal bars.
+Unsupported SVG effects, paths, canvas charts, and genuinely clipped text still
+use local image fallbacks; their warnings identify the page and reason.
 
 ## Recorded run: 2026-10-21
 
@@ -61,3 +64,19 @@ picture on page 1. Native charts add grid lines,
 tick labels, and their own spacing; the chart restyling warning reports this.
 The generated sample and screenshots live in the ignored
 `.Codex/workspace/pptx-qa/` directory of the test worktree.
+
+## Real-deck regression: 2026-10-22
+
+A six-page user deck with vertical sales bars and horizontal penetration bars
+had only `data-research-values` annotations. The original export rasterized
+both SVGs. Re-exporting the unchanged JSX now preserves bars, grid lines,
+numeric labels, years, units, and the 50% threshold as native shapes/text.
+Pages 3 and 4 each have two remaining decoration pictures; neither chart is a
+picture. PowerPoint 16.0.17932.21000 rendered both pages, edited a chart label
+and bar fill, saved, and reopened with both edits retained. Source/PPTX PNGs
+were compared for layout. No user source or data was changed.
+
+The reproduction files and report remain local in the ignored
+`.Codex/workspace/ev-chart-qa/` directory. The research and general slide
+generation prompts now request the data-chart contract explicitly rather
+than relying only on an optional chart skill.

@@ -152,6 +152,74 @@ function shapeNode(model: NativeSlideModel) {
 }
 
 describe('native slide writer', () => {
+  it('preserves horizontal bar direction in a native data chart', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 50,
+        y: 50,
+        width: 600,
+        height: 260,
+        chartType: 'bar',
+        barDirection: 'horizontal',
+        labels: ['2023', '2024', '2025'],
+        series: [{ name: '占比', values: [31.6, 40.9, 47.9] }],
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const chartParts = [...parts].filter(([name]) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+      expect(chartParts).toHaveLength(1);
+      const xml = parseXml(chartParts[0]?.[1] ?? '');
+      expect(xml.getElementsByTagNameNS(chart, 'barDir')[0]?.getAttribute('val')).toBe('bar');
+      expect(xml.getElementsByTagNameNS(chart, 'ser')).toHaveLength(1);
+    });
+  });
+  it('writes horizontal and vertical SVG lines as native DrawingML lines', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'line',
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 0,
+        stroke: { hex: 'CCD4DE', opacity: 1 },
+        strokeWidth: 1,
+      },
+      {
+        type: 'line',
+        x: 300,
+        y: 50,
+        width: 0,
+        height: 250,
+        stroke: { hex: '778899', opacity: 1 },
+        strokeWidth: 1.5,
+        dash: 'dash',
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(
+        Array.from(slide.getElementsByTagNameNS(drawing, 'prstGeom')).map((element) =>
+          element.getAttribute('prst'),
+        ),
+      ).toEqual(['line', 'line']);
+      expect(
+        Array.from(slide.getElementsByTagNameNS(drawing, 'prstDash')).some(
+          (element) => element.getAttribute('val') === 'dash',
+        ),
+      ).toBe(true);
+      expect(slide.getElementsByTagNameNS(presentation, 'pic')).toHaveLength(0);
+    });
+  });
+
   it('writes list markers as editable paragraph properties', async () => {
     const pres = new PptxGenJS();
     pres.layout = 'LAYOUT_WIDE';
@@ -339,7 +407,9 @@ describe('native slide writer', () => {
     await inspectPresentation(pres, (parts) => {
       const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
       expect(slide.getElementsByTagNameNS(presentation, 'graphicFrame')).toHaveLength(1);
-      const chartXml = parseXml(parts.get('ppt/charts/chart1.xml') ?? '');
+      const chartParts = [...parts].filter(([name]) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+      expect(chartParts).toHaveLength(1);
+      const chartXml = parseXml(chartParts[0]?.[1] ?? '');
       expect(chartXml.getElementsByTagNameNS(chart, 'ser')).toHaveLength(2);
       expect(
         Array.from(chartXml.getElementsByTagNameNS(chart, 'v')).map((el) => el.textContent),

@@ -22,8 +22,8 @@ async function render(body: string) {
 describe.skipIf(!chromePath)('representative native PPTX Beta boundaries', () => {
   it.each([
     [
-      'SVG chart',
-      '<svg width="240" height="140"><rect width="100" height="120" fill="green"/><text x="10" y="40">Local chart</text></svg>',
+      'SVG path chart',
+      '<svg width="240" height="140"><path d="M0 120 C40 20 100 90 200 10" fill="none" stroke="green"/><text x="10" y="40">Local chart</text></svg>',
       'complex content',
     ],
     [
