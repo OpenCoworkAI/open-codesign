@@ -15,6 +15,9 @@ updates:
       prefix: chore
       include: scope
     groups:
+      pi:
+        patterns:
+          - "@earendil-works/pi-*"
       typescript:
         patterns:
           - typescript

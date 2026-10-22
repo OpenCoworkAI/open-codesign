@@ -15,7 +15,7 @@
       "automerge": false
     },
     {
-      "matchPackageNames": ["@mariozechner/pi-ai", "@mariozechner/pi-coding-agent"],
+      "matchPackageNames": ["@earendil-works/pi-ai", "@earendil-works/pi-coding-agent"],
       "groupName": "pi-ai",
       "schedule": ["before 5am on monday"]
     },

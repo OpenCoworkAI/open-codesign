@@ -19,9 +19,9 @@ const WORKSPACE_PACKAGES = [
   '@open-codesign/ui',
 ];
 const BUNDLED_RUNTIME_PACKAGES = [
-  '@mariozechner/pi-agent-core',
-  '@mariozechner/pi-ai',
-  '@mariozechner/pi-coding-agent',
+  '@earendil-works/pi-agent-core',
+  '@earendil-works/pi-ai',
+  '@earendil-works/pi-coding-agent',
   'electron-log',
   'electron-log/main',
   'electron-updater',
@@ -71,7 +71,7 @@ export default defineConfig(({ mode }) => ({
         ...(mode === 'background-debug' ? { output: { chunkFileNames: '[name]-[hash].js' } } : {}),
         treeshake: {
           moduleSideEffects: (id) =>
-            !id.includes('/node_modules/@mariozechner/pi-coding-agent/dist/'),
+            !id.includes('/node_modules/@earendil-works/pi-coding-agent/dist/'),
         },
         external: ['electron', 'puppeteer-core'],
         plugins: [copyPromptSections()],

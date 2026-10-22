@@ -1,5 +1,5 @@
-import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import type { ImageContent, TextContent } from '@mariozechner/pi-ai';
+import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
+import type { ImageContent, TextContent } from '@earendil-works/pi-ai';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type Static, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';

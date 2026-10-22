@@ -26,12 +26,12 @@
     "ms": "2.1.3",
     "parse5": "8.0.1",
     "puppeteer-core": "^24.42.0",
-    "undici": "^7.29.1"
+    "undici": "8.10.2"
   },
   "devDependencies": {
-    "@mariozechner/pi-agent-core": "^0.72.1",
-    "@mariozechner/pi-ai": "^0.72.1",
-    "@mariozechner/pi-coding-agent": "^0.72.1",
+    "@earendil-works/pi-agent-core": "^0.79.0",
+    "@earendil-works/pi-ai": "^0.79.0",
+    "@earendil-works/pi-coding-agent": "^0.79.0",
     "@open-codesign/artifacts": "workspace:*",
     "@open-codesign/core": "workspace:*",
     "@open-codesign/exporters": "workspace:*",

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import type { AgentEvent, AgentMessage, AgentOptions } from '@mariozechner/pi-agent-core';
+import type { AgentEvent, AgentMessage, AgentOptions } from '@earendil-works/pi-agent-core';
 import type {
   LoadedSkill,
   ModelRef,
@@ -95,7 +95,7 @@ interface AgentScript {
 
 let scriptedAgent: AgentScript = { assistantText: '' };
 
-vi.mock('@mariozechner/pi-agent-core', () => {
+vi.mock('@earendil-works/pi-agent-core', () => {
   class MockAgent {
     clearAllQueues(): void {}
     steer(): void {}
@@ -310,7 +310,7 @@ vi.mock('./skills/loader.js', async () => {
 
 const streamSimpleMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@mariozechner/pi-ai', () => ({
+vi.mock('@earendil-works/pi-ai', () => ({
   streamSimple: streamSimpleMock,
   getModel: (provider: string, modelId: string) => ({
     id: modelId,
