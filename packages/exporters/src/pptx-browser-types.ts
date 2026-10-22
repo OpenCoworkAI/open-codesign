@@ -88,6 +88,9 @@ export interface BrowserNode {
 
 export interface BrowserElement extends BrowserNode {
   tagName: string;
+  attributes: Iterable<{ name: string }>;
+  outerHTML: string;
+  cloneNode(deep: boolean): BrowserElement;
   childElementCount: number;
   children: Iterable<BrowserElement>;
   parentElement: BrowserHtmlElement | null;

@@ -314,7 +314,7 @@ export async function renderNativeSlides(
         metadata = await discoverSlides();
         if (metadata.count !== 1) throw new Error('PPTX dynamic slide container changed.');
         const signature = await page.$eval('[data-codesign-pptx-page="0"]', (el) => {
-          const copy = el.cloneNode(true) as typeof el;
+          const copy = (el as unknown as Element).cloneNode(true);
           for (const node of [copy, ...Array.from(copy.querySelectorAll('*'))])
             for (const attribute of Array.from(node.attributes))
               if (attribute.name.startsWith('data-codesign-pptx-'))
