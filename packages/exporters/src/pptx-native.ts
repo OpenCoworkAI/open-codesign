@@ -188,86 +188,146 @@ export async function renderNativeSlides(
     });
     await waitForSlideAssets(page, timeout);
     if (pageErrors.length) throw new Error(`Slide runtime error: ${pageErrors[0]}`);
-    const metadata = await page.evaluate(
-      (input) => {
-        for (const el of document.querySelectorAll(
-          '[data-codesign-pptx-page], [data-codesign-pptx-node]',
-        )) {
-          el.removeAttribute('data-codesign-pptx-page');
-          el.removeAttribute('data-codesign-pptx-node');
-        }
-        let candidates = Array.from(document.querySelectorAll(input.selector));
-        let poster = false;
-        if (!candidates.length && !input.custom) {
-          const posters = Array.from(
-            document.querySelectorAll('[data-pptx-poster], [class]'),
-          ).filter((el) => {
-            const style = getComputedStyle(el);
-            const rect = el.getBoundingClientRect();
-            if (
-              style.display === 'none' ||
-              style.visibility !== 'visible' ||
-              rect.width <= 0 ||
-              rect.height <= 0 ||
-              el.closest('[data-pptx-ignore]')
-            )
-              return false;
-            return (
-              el.hasAttribute('data-pptx-poster') ||
-              (Array.from(el.classList).some((name) => /(^|[-_])poster$/i.test(name)) &&
-                style.aspectRatio !== 'auto' &&
-                rect.height > rect.width)
+    const discoverSlides = () =>
+      page.evaluate(
+        (input) => {
+          for (const el of document.querySelectorAll(
+            '[data-codesign-pptx-page], [data-codesign-pptx-node]',
+          )) {
+            el.removeAttribute('data-codesign-pptx-page');
+            el.removeAttribute('data-codesign-pptx-node');
+          }
+          let candidates = Array.from(document.querySelectorAll(input.selector));
+          let poster = false;
+          if (!candidates.length && !input.custom) {
+            const posters = Array.from(
+              document.querySelectorAll('[data-pptx-poster], [class]'),
+            ).filter((el) => {
+              const style = getComputedStyle(el);
+              const rect = el.getBoundingClientRect();
+              if (
+                style.display === 'none' ||
+                style.visibility !== 'visible' ||
+                rect.width <= 0 ||
+                rect.height <= 0 ||
+                el.closest('[data-pptx-ignore]')
+              )
+                return false;
+              return (
+                el.hasAttribute('data-pptx-poster') ||
+                (Array.from(el.classList).some((name) => /(^|[-_])poster$/i.test(name)) &&
+                  style.aspectRatio !== 'auto' &&
+                  rect.height > rect.width)
+              );
+            });
+            const outerPosters = posters.filter(
+              (el) => !posters.some((other) => other !== el && other.contains(el)),
             );
-          });
-          const outerPosters = posters.filter(
-            (el) => !posters.some((other) => other !== el && other.contains(el)),
+            // A unique, explicitly proportioned poster is safer than guessing among arbitrary cards/articles.
+            if (outerPosters.length === 1) {
+              candidates = outerPosters;
+              poster = true;
+            }
+          }
+          if (!candidates.length && !input.custom)
+            candidates = Array.from(document.querySelectorAll('section'));
+          let fallback = false;
+          if (!candidates.length && !input.custom) {
+            candidates = [document.getElementById('root') ?? document.body];
+            fallback = true;
+          }
+          const slides = candidates.filter(
+            (el) => !candidates.some((other) => other !== el && other.contains(el)),
           );
-          // A unique, explicitly proportioned poster is safer than guessing among arbitrary cards/articles.
-          if (outerPosters.length === 1) {
-            candidates = outerPosters;
-            poster = true;
+          const ancestors = new Set<HTMLElement>();
+          for (const [index, el] of slides.entries()) {
+            el.setAttribute('data-codesign-pptx-page', String(index));
+            let parent = el.parentElement;
+            while (parent) {
+              ancestors.add(parent);
+              parent = parent.parentElement;
+            }
           }
-        }
-        if (!candidates.length && !input.custom)
-          candidates = Array.from(document.querySelectorAll('section'));
-        let fallback = false;
-        if (!candidates.length && !input.custom) {
-          candidates = [document.getElementById('root') ?? document.body];
-          fallback = true;
-        }
-        const slides = candidates.filter(
-          (el) => !candidates.some((other) => other !== el && other.contains(el)),
-        );
-        const ancestors = new Set<HTMLElement>();
-        for (const [index, el] of slides.entries()) {
-          el.setAttribute('data-codesign-pptx-page', String(index));
-          let parent = el.parentElement;
-          while (parent) {
-            ancestors.add(parent);
-            parent = parent.parentElement;
-          }
-        }
-        const state = window as unknown as { __pptxRestorePage?: () => void };
-        const original = [...ancestors, ...slides].map((el) => ({
-          el,
-          style: el.getAttribute('style'),
-          className: el.getAttribute('class'),
-        }));
-        state.__pptxRestorePage = () => {
-          for (const { el, style, className } of original) {
-            if (style === null) el.removeAttribute('style');
-            else el.setAttribute('style', style);
-            if (className === null) el.removeAttribute('class');
-            else el.setAttribute('class', className);
-          }
-        };
-        return { count: slides.length, fallback, poster };
-      },
-      { selector: opts.slideSelector ?? SLIDE_SELECTOR, custom: !!opts.slideSelector },
-    );
+          const state = window as unknown as { __pptxRestorePage?: () => void };
+          const original = [...ancestors, ...slides].map((el) => ({
+            el,
+            style: el.getAttribute('style'),
+            className: el.getAttribute('class'),
+          }));
+          state.__pptxRestorePage = () => {
+            for (const { el, style, className } of original) {
+              if (style === null) el.removeAttribute('style');
+              else el.setAttribute('style', style);
+              if (className === null) el.removeAttribute('class');
+              else el.setAttribute('class', className);
+            }
+          };
+          return { count: slides.length, fallback, poster };
+        },
+        { selector: opts.slideSelector ?? SLIDE_SELECTOR, custom: !!opts.slideSelector },
+      );
+    let metadata = await discoverSlides();
     if (!metadata.count) throw new Error('No slides matched the supplied PPTX slideSelector.');
+    // Some React decks mount one page at a time. Only follow explicit, contiguous
+    // numbered slide navigation outside the artboard, never arbitrary next buttons.
+    const navigation =
+      metadata.count === 1 && !metadata.fallback && !opts.slideSelector
+        ? await page.evaluate(() => {
+            const groups = Array.from(document.querySelectorAll('nav,[role="navigation"]'))
+              .filter((nav) => !nav.closest('[data-codesign-pptx-page]'))
+              .map((nav) =>
+                Array.from(nav.querySelectorAll('button[aria-label]'))
+                  .map((button) => {
+                    const label = button.getAttribute('aria-label') ?? '';
+                    const match = label.match(/^(?:第\s*(\d+)\s*页|(?:slide|page)\s+(\d+)\b)/i);
+                    return { label, page: Number(match?.[1] ?? match?.[2] ?? 0) };
+                  })
+                  .filter((entry) => entry.page > 0),
+              )
+              .filter(
+                (entries) =>
+                  entries.length > 1 &&
+                  entries.length <= 100 &&
+                  entries.every((entry, index) => entry.page === index + 1),
+              );
+            return groups.length === 1 ? (groups[0]?.map((entry) => entry.label) ?? []) : [];
+          })
+        : [];
     const models: NativeSlideModel[] = [];
-    for (let index = 0; index < metadata.count; index++) {
+    const pageCount = navigation.length || metadata.count;
+    const signatures = new Set<string>();
+    for (let index = 0; index < pageCount; index++) {
+      if (navigation.length) {
+        await page.evaluate((label) => {
+          (window as unknown as { __pptxRestorePage?: () => void }).__pptxRestorePage?.();
+          const buttons = Array.from(
+            document.querySelectorAll<HTMLElement>('nav button,[role="navigation"] button'),
+          ).filter(
+            (button) =>
+              button.getAttribute('aria-label') === label &&
+              !button.closest('[data-codesign-pptx-page]'),
+          );
+          if (buttons.length !== 1) throw new Error('PPTX numbered slide navigation changed.');
+          buttons[0]?.click();
+        }, navigation[index]);
+        await waitForSlideAssets(page, timeout);
+        metadata = await discoverSlides();
+        if (metadata.count !== 1) throw new Error('PPTX dynamic slide container changed.');
+        const signature = await page.$eval('[data-codesign-pptx-page="0"]', (el) => {
+          const copy = el.cloneNode(true) as typeof el;
+          for (const node of [copy, ...Array.from(copy.querySelectorAll('*'))])
+            for (const attribute of Array.from(node.attributes))
+              if (attribute.name.startsWith('data-codesign-pptx-'))
+                node.removeAttribute(attribute.name);
+          return copy.outerHTML;
+        });
+        if (signatures.has(signature))
+          throw new Error(
+            `PPTX page ${index + 1} did not change after numbered navigation; export stopped to avoid missing pages.`,
+          );
+        signatures.add(signature);
+      }
+      const pageIndex = navigation.length ? 0 : index;
       await page.evaluate(
         (input) => {
           const state = window as unknown as { __pptxRestorePage?: () => void };
@@ -341,12 +401,12 @@ export async function renderNativeSlides(
           for (const [nodeIndex, node] of [el, ...el.querySelectorAll('*')].entries())
             node.setAttribute('data-codesign-pptx-node', `${input.index}-${nodeIndex}`);
         },
-        { index, viewport, fallback: metadata.fallback },
+        { index: pageIndex, viewport, fallback: metadata.fallback },
       );
       await waitForSlideAssets(page, timeout);
       if (pageErrors.length) throw new Error(`Slide runtime error: ${pageErrors[0]}`);
       const fonts = await resolvePlatformFonts(page);
-      const handle = await page.$(`[data-codesign-pptx-page="${index}"]`);
+      const handle = await page.$(`[data-codesign-pptx-page="${pageIndex}"]`);
       if (!handle) throw new Error('Slide container disappeared during export.');
       const model = await handle.evaluate(extractNativeSlide, fonts);
       if (model.width <= 0 || model.height <= 0)

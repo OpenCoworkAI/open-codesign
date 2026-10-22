@@ -80,3 +80,94 @@ The reproduction files and report remain local in the ignored
 `.Codex/workspace/ev-chart-qa/` directory. The research and general slide
 generation prompts now request the data-chart contract explicitly rather
 than relying only on an optional chart skill.
+
+## Desktop UI generation/export run: 2026-10-22
+
+Computer Use submitted a natural-language request to the configured CoDesign
+model for six Chinese slides containing grouped columns, horizontal bars,
+two-series lines, a pie chart, a revenue table, and nested lists. All numbers
+were specified synthetic test data. The resulting `App.jsx` was generated and
+self-previewed by CoDesign; no hand-written replacement deck was used.
+
+The editable PPTX menu initially exported only the cover because React mounted
+one slide at a time. Numbered page navigation is now followed during native
+export, with a duplicate-page failure guard. Ordinary nonuniform cell borders
+also remained rasterized; separate solid top/right/bottom/left borders now
+produce a native table. Both fixes have browser regressions, and table borders
+have an OOXML writer check.
+
+After rebuilding and re-exporting through the desktop UI, package inspection
+confirmed six pages, four native charts with six total series and the exact
+requested values/categories, and one native table. Remaining pictures are
+local decorations. PowerPoint 16.0.17932.21000 opened the deck without a repair
+prompt, exposed the column chart's embedded data worksheet with correct values,
+saved, and reopened the six-page deck. This run did not complete chart-data
+mutation: Computer Use could not target the embedded Excel child window.
+
+Visual acceptance **failed**: default native-chart colors differ from source
+legend colors, chart legends duplicate existing DOM legends, horizontal chart
+categories are reversed, and the source donut becomes a pie. Some custom list
+markers duplicate native bullets, and cover KPI unit placement needs work.
+The source-generated preview also emitted a recoverable invalid-preview-tool
+argument error and attempted a missing sources file before writing it.
+These observations remain follow-up work; neither full PowerPoint editing
+acceptance nor WPS acceptance is claimed, and the beta label stays in place.
+
+The source snapshot, PowerPoint-saved PPTX, package relationship checks, and
+observations are kept in the ignored `.Codex/workspace/ui-chart-qa/` directory.
+
+### UI follow-up: chart styling and editing
+
+CoDesign updated the same generated JSX through a follow-up UI prompt to retain
+the source palette in `colors`, suppress native legends where DOM legends
+already exist, enable value labels, and declare the donut's `holeSize: 52`.
+These are optional validated chart-contract fields. Native horizontal bars now
+keep source category order, and `list-style:none` no longer adds native bullets.
+The default slide-generation prompt and chart skill now request matching palette,
+legend, label, and donut metadata; prompt contract/budget tests pass (15 tests).
+
+A subsequent export through the actual desktop editable-PPTX menu contains six
+pages, four charts/six series, and one native table, with no missing package
+relationships. PowerPoint 16.0.17932.21000 visually confirmed matching series
+colors, one legend, correct horizontal category order, an editable doughnut,
+and no duplicate native list markers. Source numbers/categories are retained.
+Native axis placement, grid lines, and spacing still differ from SVG styling.
+
+Computer Use opened the native table, changed Q1 domestic revenue from 120 to
+125, saved a separate copy, closed it, and reopened it. Both PowerPoint and the
+saved table XML retain 125. The chart-data worksheet can be targeted using
+**Edit Data → Edit Data in Excel**, which opens a full Excel window; this avoids
+the unaddressable embedded child window from the initial run. A separate chart
+copy was changed from 120 to 125 and saved, with the changed chart cache verified.
+The styled table-editing copy was subsequently used for a combined check: the
+page 2 heading became `原生文字与图表编辑验证（已修改）`, and the embedded column
+chart's B2 value became 125. PowerPoint updated both the column and its label.
+Saved OOXML retains the changed heading, table cell, and chart value, with their
+native object types intact.
+After closing and reopening this combined copy, PowerPoint still displays the
+changed heading and 125 chart label, and its chart context menu still offers
+Edit Data. No repair prompt appeared.
+
+Full exporter verification passed 227 tests with 8 skipped. Review then caught
+one additional dynamic-page signature case: identical content with only root
+class/style changes. A failing browser regression reproduced it; the signature
+now includes real root attributes and excludes exporter-injected attributes.
+The focused navigation regressions and TypeScript check pass.
+
+The cover overlap was traced to the generated source: `.cover__main` has
+`flex:1` with zero bottom padding, placing the KPI row under its absolutely
+positioned footer. CoDesign's full preview at 70% reproduces footer text across
+the first KPI before export. Extracted cover pictures contain only decorations,
+and the requested Noto font is installed. A UI follow-up asks CoDesign to reserve
+100px of footer space. WPS is not installed; keep the beta label until all visual
+and cross-application checks pass.
+
+CoDesign completed the padding change through its UI. Measured source geometry
+now leaves 35.6px between KPI content and footer. After rebuilding/restarting the
+desktop app, Computer Use window activation timed out twice despite a responsive
+app process. The final source was therefore exported through the same native
+exporter directly, with six pages, four charts, one table, and valid relationships.
+This last invocation is **not** counted as another UI export run. PowerPoint was
+opened on the final file, but its screenshot capture also timed out; final visual
+reinspection remains pending. The earlier styled UI export and combined editing
+roundtrip were visually verified before the control-tool failures.

@@ -23,6 +23,11 @@ export interface SlideTextRun {
   charSpacing?: number;
 }
 
+export interface SlideTableBorder {
+  width: number;
+  color: SlideColor;
+}
+
 export interface SlideTableCell {
   text: string;
   fontFace: string;
@@ -31,7 +36,8 @@ export interface SlideTableCell {
   fill: SlideColor;
   bold: boolean;
   align: 'left' | 'center' | 'right';
-  border?: { width: number; color: SlideColor };
+  border?: SlideTableBorder;
+  borders?: [SlideTableBorder, SlideTableBorder, SlideTableBorder, SlideTableBorder];
 }
 
 export interface SlideChartSeries {
@@ -81,6 +87,10 @@ export type NativeSlideElement =
       type: 'chart';
       chartType: 'bar' | 'line' | 'pie';
       barDirection?: 'horizontal' | 'vertical';
+      colors?: string[];
+      showLegend?: boolean;
+      showValue?: boolean;
+      holeSize?: number;
       labels: string[];
       series: SlideChartSeries[];
     })
@@ -232,13 +242,15 @@ function checkElement(node: NativeSlideElement, scale: number): void {
         checkNumber(cell.fontSize * scale * 72, 'table cell fontSize', 1, 4000);
         checkColor(cell.color, 'table cell color');
         checkColor(cell.fill, 'table cell fill');
-        if (cell.border) {
-          checkNumber(cell.border.width, 'table cell border width', 0, Number.MAX_VALUE);
-          checkColor(cell.border.color, 'table cell border color');
-          if (cell.border.color.opacity !== 1)
+        if (cell.borders && cell.borders.length !== 4)
+          throw new Error('table cell borders must contain top, right, bottom and left.');
+        for (const border of cell.borders ?? (cell.border ? [cell.border] : [])) {
+          checkNumber(border.width, 'table cell border width', 0, Number.MAX_VALUE);
+          checkColor(border.color, 'table cell border color');
+          if (border.width > 0 && border.color.opacity !== 1)
             throw new Error('table cell border transparency is unsupported.');
           checkNumber(
-            cell.border.width * scale * 914400,
+            border.width * scale * 914400,
             'scaled table cell border width (EMU)',
             0,
             20116800,
@@ -249,6 +261,21 @@ function checkElement(node: NativeSlideElement, scale: number): void {
       }
     }
   } else if (node.type === 'chart') {
+    if (
+      node.colors &&
+      (node.colors.length !==
+        (node.chartType === 'pie' ? node.labels.length : node.series.length) ||
+        node.colors.some((value) => !/^[\da-f]{6}$/i.test(value)))
+    )
+      throw new Error('Chart colors must be RGB hex values matching the series or pie labels.');
+    for (const value of [node.showLegend, node.showValue])
+      if (value !== undefined && typeof value !== 'boolean')
+        throw new Error('Chart display flags must be booleans.');
+    if (node.holeSize !== undefined) {
+      if (node.chartType !== 'pie') throw new Error('Only pie charts support a hole size.');
+      if (!Number.isInteger(node.holeSize)) throw new Error('chart holeSize must be an integer.');
+      checkNumber(node.holeSize, 'chart holeSize', 10, 90);
+    }
     if (!['bar', 'line', 'pie'].includes(node.chartType))
       throw new Error('Unsupported chart type.');
     if (
@@ -496,15 +523,28 @@ export function addNativeSlides(pres: PptxGenJS, models: NativeSlideModel[]): st
                 bold: cell.bold,
                 align: cell.align,
                 fill: { color: cell.fill.hex, transparency: (1 - cell.fill.opacity) * 100 },
-                ...(cell.border
+                ...(cell.borders
                   ? {
-                      border: {
-                        type: 'solid' as const,
-                        color: cell.border.color.hex,
-                        pt: cell.border.width * scale * 72,
-                      },
+                      border: cell.borders.map((border) => ({
+                        type: border.width > 0 ? ('solid' as const) : ('none' as const),
+                        color: border.color.hex,
+                        pt: border.width * scale * 72,
+                      })) as [
+                        PptxGenJS.BorderProps,
+                        PptxGenJS.BorderProps,
+                        PptxGenJS.BorderProps,
+                        PptxGenJS.BorderProps,
+                      ],
                     }
-                  : {}),
+                  : cell.border
+                    ? {
+                        border: {
+                          type: 'solid' as const,
+                          color: cell.border.color.hex,
+                          pt: cell.border.width * scale * 72,
+                        },
+                      }
+                    : {}),
                 margin: 0,
               },
             })),
@@ -519,7 +559,9 @@ export function addNativeSlides(pres: PptxGenJS, models: NativeSlideModel[]): st
         );
       } else if (node.type === 'chart') {
         slide.addChart(
-          pres.ChartType[node.chartType],
+          pres.ChartType[
+            node.chartType === 'pie' && node.holeSize !== undefined ? 'doughnut' : node.chartType
+          ],
           node.series.map((series) => ({
             name: cleanXml(series.name, 'series.name', `Slide ${index + 1}, chart`, warnings),
             labels: node.labels.map((label) =>
@@ -529,9 +571,22 @@ export function addNativeSlides(pres: PptxGenJS, models: NativeSlideModel[]): st
           })),
           {
             ...box,
-            showLegend: node.series.length > 1,
+            showLegend: node.showLegend ?? node.series.length > 1,
+            ...(node.colors ? { chartColors: node.colors } : {}),
+            ...(node.holeSize !== undefined ? { holeSize: node.holeSize } : {}),
+            ...(node.showValue !== undefined
+              ? node.chartType === 'pie'
+                ? { showPercent: node.showValue, showLabel: node.showValue }
+                : { showValue: node.showValue }
+              : {}),
             ...(node.chartType === 'bar'
-              ? { barDir: node.barDirection === 'horizontal' ? ('bar' as const) : ('col' as const) }
+              ? {
+                  barDir: node.barDirection === 'horizontal' ? ('bar' as const) : ('col' as const),
+                  // PptxGenJS accepts maxMin at runtime; its declaration only lists minMax.
+                  ...(node.barDirection === 'horizontal'
+                    ? { catAxisOrientation: 'maxMin' as 'minMax' }
+                    : {}),
+                }
               : {}),
           },
         );

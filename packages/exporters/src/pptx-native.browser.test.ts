@@ -36,6 +36,92 @@ describe.skipIf(!chromePath)('native PPTX in system Chromium', () => {
     if (!qaDirectory) await rm(directory, { recursive: true, force: true });
   });
 
+  it('exports every numbered page when navigation mounts only the current slide', async () => {
+    const source = html(`<main id="stage"></main><nav aria-label="页面切换">
+      <button aria-label="第 1 页 封面" onclick="show(1)">1</button>
+      <button aria-label="第 2 页 图表" onclick="show(2)">2</button>
+      <button aria-label="第 3 页 结论" onclick="show(3)">3</button></nav>
+      <script>function show(n) {
+        document.getElementById('stage').innerHTML = '<section class="slide" id="p'+n+'"><h1>页面 '+n+'</h1></section>';
+        if(n===2) { const chart=document.createElement('div'); chart.style='width:600px;height:300px';
+          chart.setAttribute('data-pptx-chart',JSON.stringify({type:'bar',labels:['Q1','Q2'],series:[{name:'收入',values:[120,150]}]}));
+          document.querySelector('.slide').appendChild(chart); }
+        document.querySelectorAll('nav button').forEach((b,i)=>b.setAttribute('aria-current',i===n-1?'true':'false'));
+      } show(2);</script>`);
+    const models = await renderNativeSlides(source, options);
+    expect(models).toHaveLength(3);
+    expect(
+      models.map((model) =>
+        model.elements
+          .filter((el) => el.type === 'text')
+          .flatMap((el) => el.runs.map((run) => run.text))
+          .join(''),
+      ),
+    ).toEqual(['页面 1', '页面 2', '页面 3']);
+    expect(
+      models.map((model) => model.elements.filter((el) => el.type === 'chart').length),
+    ).toEqual([0, 1, 0]);
+  }, 30_000);
+
+  it('distinguishes dynamically mounted charts with the same visible text', async () => {
+    const models = await renderNativeSlides(
+      html(`<main id="stage"></main><nav>
+      <button aria-label="Page 1" onclick="show(1)">1</button>
+      <button aria-label="Page 2" onclick="show(2)">2</button></nav>
+      <script>function show(n) {
+        document.getElementById('stage').innerHTML = '<section class="slide"><h1>收入</h1><div style="width:400px;height:240px"></div></section>';
+        document.querySelector('.slide div').setAttribute('data-pptx-chart', JSON.stringify({type:'bar',labels:['Q1'],series:[{name:'收入',values:[n*100]}]}));
+      } show(1);</script>`),
+      options,
+    );
+    expect(
+      models.map((model) => model.elements.find((el) => el.type === 'chart')?.series[0]?.values),
+    ).toEqual([[100], [200]]);
+  }, 30_000);
+
+  it('distinguishes dynamic pages styled only by the slide root class', async () => {
+    const models = await renderNativeSlides(
+      html(
+        `<main id="stage"></main><nav>
+      <button aria-label="Page 1" onclick="show(1)">1</button>
+      <button aria-label="Page 2" onclick="show(2)">2</button></nav>
+      <script>function show(n) {
+        document.getElementById('stage').innerHTML = '<section class="slide theme-'+n+'"><h1>收入</h1></section>';
+      } show(1);</script>`,
+        '.theme-1{background:#112233}.theme-2{background:#445566}',
+      ),
+      options,
+    );
+    expect(
+      models.map((model) => model.elements.find((el) => el.type === 'shape')?.fill.hex),
+    ).toEqual(['112233', '445566']);
+  }, 30_000);
+
+  it('preserves explicit chart styling and suppressed CSS list markers', async () => {
+    const data = JSON.stringify({
+      type: 'pie',
+      labels: ['直销', '伙伴'],
+      series: [{ name: '占比', values: [60, 40] }],
+      colors: ['#19354a', '#9badb8'],
+      showLegend: false,
+      showValue: true,
+      holeSize: 50,
+    });
+    const models = await renderNativeSlides(
+      html(
+        `<section class="slide"><ul style="list-style:none"><li>自定义标记</li></ul><div data-pptx-chart='${data}' style="width:400px;height:280px"></div></section>`,
+      ),
+      options,
+    );
+    expect(models[0]?.elements.find((el) => el.type === 'chart')).toMatchObject({
+      colors: ['19354A', '9BADB8'],
+      showLegend: false,
+      showValue: true,
+      holeSize: 50,
+    });
+    expect(models[0]?.elements.find((el) => el.type === 'text')).not.toHaveProperty('list');
+  }, 30_000);
+
   it.each([
     ['JPG', jpeg.replace('image/jpeg', 'image/jpg'), 'jpeg'],
     ['JPEG', jpeg.replace('image/jpeg', 'image/JPEG'), 'jpeg'],
@@ -261,6 +347,35 @@ describe.skipIf(!chromePath)('native PPTX in system Chromium', () => {
         .flatMap((element) => element.runs.map((run) => run.text)),
     ).toEqual(['可编辑标题', '可编辑说明']);
     expect(model?.warnings.join(' ')).toContain('complex table cell decoration');
+  }, 30_000);
+
+  it('keeps ordinary header and bottom-rule table borders native', async () => {
+    const models = await renderNativeSlides(
+      html(`<section class="slide"><table style="border-collapse:collapse;width:480px">
+      <tr><th style="border-top:2px solid #123456;border-bottom:1px solid #ccddee">季度</th><th>收入</th></tr>
+      <tr><td>Q1</td><td style="border-bottom:1px solid #ccddee">120</td></tr></table></section>`),
+      options,
+    );
+    const table = models[0]?.elements.find((el) => el.type === 'table');
+    expect(table?.rows[0]?.[0]?.borders?.map((border) => border.width)).toEqual([2, 0, 1, 0]);
+    expect(table?.rows[1]?.[1]?.borders?.[2]?.color.hex).toBe('CCDDEE');
+    expect(models[0]?.elements.filter((el) => el.type === 'image')).toHaveLength(0);
+  }, 30_000);
+
+  it('exports transparent zero-width table edges and rasterizes rounded cells', async () => {
+    const source = html(`<section class="slide">
+      <table><tr><td style="border:0 solid transparent;border-bottom:1px solid #123456">原生边框</td></tr></table>
+      <table><tr><td style="border-top:2px solid #123456;border-radius:12px">圆角单元格</td></tr></table>
+    </section>`);
+    const result = await exportPptx(source, join(directory, 'table-edge-regression.pptx'), {
+      ...options,
+      renderMode: 'native',
+    });
+    expect(result.path).toBeTruthy();
+    const models = await renderNativeSlides(source, options);
+    expect(models[0]?.elements.filter((el) => el.type === 'table')).toHaveLength(1);
+    expect(models[0]?.elements.filter((el) => el.type === 'image')).toHaveLength(1);
+    expect(models[0]?.warnings.join(' ')).toContain('complex table cell decoration');
   }, 30_000);
 
   it('preserves centered cover image cropping as an editable picture', async () => {

@@ -312,6 +312,7 @@ export function extractNativeSlide(
     });
   const listMeta = (el: Element) => {
     if (el.tagName !== 'LI') return undefined;
+    if (getComputedStyle(el).listStyleType === 'none') return undefined;
     const parent = el.parentElement;
     if (!parent || (parent.tagName !== 'UL' && parent.tagName !== 'OL')) return undefined;
     let level = 0;
@@ -658,6 +659,10 @@ export function extractNativeSlide(
       labels?: unknown;
       series?: unknown;
       barDirection?: unknown;
+      colors?: unknown;
+      showLegend?: unknown;
+      showValue?: unknown;
+      holeSize?: unknown;
     };
     const { type, labels, series, barDirection } = data;
     if (
@@ -672,6 +677,23 @@ export function extractNativeSlide(
         (type !== 'bar' || (barDirection !== 'horizontal' && barDirection !== 'vertical')))
     )
       throw new Error(`Invalid data-pptx-chart data on ${selector(el)}.`);
+    const { colors, showLegend, showValue, holeSize } = data;
+    if (
+      (colors !== undefined &&
+        (!Array.isArray(colors) ||
+          colors.length !== (type === 'pie' ? labels.length : series.length) ||
+          colors.some(
+            (value: unknown) => typeof value !== 'string' || !/^#?[\da-f]{6}$/i.test(value),
+          ))) ||
+      [showLegend, showValue].some((value) => value !== undefined && typeof value !== 'boolean') ||
+      (holeSize !== undefined &&
+        (type !== 'pie' ||
+          typeof holeSize !== 'number' ||
+          !Number.isInteger(holeSize) ||
+          holeSize < 10 ||
+          holeSize > 90))
+    )
+      throw new Error(`Invalid data-pptx-chart styling on ${selector(el)}.`);
     const checkedSeries: { name: string; values: number[] }[] = [];
     for (const item of series as unknown[]) {
       if (!item || typeof item !== 'object')
@@ -693,6 +715,12 @@ export function extractNativeSlide(
       type: 'chart',
       ...box(rect),
       chartType: type,
+      ...(Array.isArray(colors)
+        ? { colors: (colors as string[]).map((value) => value.replace(/^#/, '').toUpperCase()) }
+        : {}),
+      ...(typeof showLegend === 'boolean' ? { showLegend } : {}),
+      ...(typeof showValue === 'boolean' ? { showValue } : {}),
+      ...(typeof holeSize === 'number' ? { holeSize } : {}),
       ...(barDirection === 'horizontal' || barDirection === 'vertical' ? { barDirection } : {}),
       labels: labels as string[],
       series: checkedSeries,
@@ -744,6 +772,7 @@ export function extractNativeSlide(
     for (const row of cells)
       for (const cell of row) {
         const style = getComputedStyle(cell);
+        const decoration = decorationReason(style);
         const sides = ['top', 'right', 'bottom', 'left'].map((side) => ({
           width: number(style.getPropertyValue(`border-${side}-width`)),
           pattern: style.getPropertyValue(`border-${side}-style`),
@@ -751,9 +780,17 @@ export function extractNativeSlide(
         }));
         if (
           compositeReason(cell, style) ||
-          decorationReason(style) ||
-          new Set(sides.map((side) => JSON.stringify(side))).size !== 1 ||
-          (sides[0]?.width && (sides[0].pattern !== 'solid' || color(sides[0].shade).opacity !== 1))
+          (decoration && decoration !== 'nonuniform border') ||
+          [
+            style.borderTopLeftRadius,
+            style.borderTopRightRadius,
+            style.borderBottomLeftRadius,
+            style.borderBottomRightRadius,
+          ].some((radius) => number(radius) > 0) ||
+          sides.some(
+            (side) =>
+              side.width > 0 && (side.pattern !== 'solid' || color(side.shade).opacity !== 1),
+          )
         ) {
           raster(el, 'complex table cell decoration');
           return true;
@@ -763,6 +800,11 @@ export function extractNativeSlide(
       row.map((cell) => {
         const s = getComputedStyle(cell);
         const borderWidth = number(s.borderTopWidth);
+        const borders = ['top', 'right', 'bottom', 'left'].map((side) => ({
+          width: number(s.getPropertyValue(`border-${side}-width`)),
+          color: color(s.getPropertyValue(`border-${side}-color`)),
+        })) as NonNullable<SlideTableCell['borders']>;
+        const uniformBorder = new Set(borders.map((border) => JSON.stringify(border))).size === 1;
         return {
           text: (cell.textContent ?? '').trim(),
           fontFace:
@@ -775,9 +817,11 @@ export function extractNativeSlide(
           fontSize: number(s.fontSize),
           color: color(s.color),
           fill: color(s.backgroundColor),
-          ...(borderWidth > 0
-            ? { border: { width: borderWidth, color: color(s.borderTopColor) } }
-            : {}),
+          ...(!uniformBorder
+            ? { borders }
+            : borderWidth > 0
+              ? { border: { width: borderWidth, color: color(s.borderTopColor) } }
+              : {}),
           bold: cell.tagName === 'TH' || number(s.fontWeight) >= 600 || s.fontWeight === 'bold',
           align:
             s.textAlign === 'center'

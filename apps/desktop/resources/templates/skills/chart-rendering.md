@@ -56,6 +56,12 @@ of string `labels`, and a nonempty array of named `series`. Every series has a
 `values` array of finite numbers matching the label count. A pie chart has one
 series with nonnegative values. Render the visible chart from the same data.
 For a horizontal bar chart, add `barDirection: 'horizontal'`; bars default to vertical.
+Preserve chart styling with optional `colors` (RGB hex strings, one per series
+or per pie slice), `showLegend`, and `showValue` booleans. Set `showLegend: false`
+when a separate DOM legend is already visible. For a donut use `type: 'pie'`
+with integer `holeSize` between 10 and 90 (percent). Use the same palette and hole ratio
+for the SVG and the metadata. `showValue` enables numeric labels on bars/lines
+and category/percentage labels on pies/donuts.
 
 ```jsx
 const chart = {

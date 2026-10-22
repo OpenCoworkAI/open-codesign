@@ -164,6 +164,9 @@ describe('native slide writer', () => {
         width: 600,
         height: 260,
         chartType: 'bar',
+        colors: ['19354A'],
+        showLegend: false,
+        showValue: true,
         barDirection: 'horizontal',
         labels: ['2023', '2024', '2025'],
         series: [{ name: '占比', values: [31.6, 40.9, 47.9] }],
@@ -175,6 +178,10 @@ describe('native slide writer', () => {
       expect(chartParts).toHaveLength(1);
       const xml = parseXml(chartParts[0]?.[1] ?? '');
       expect(xml.getElementsByTagNameNS(chart, 'barDir')[0]?.getAttribute('val')).toBe('bar');
+      const categoryAxis = xml.getElementsByTagNameNS(chart, 'catAx')[0];
+      expect(
+        categoryAxis?.getElementsByTagNameNS(chart, 'orientation')[0]?.getAttribute('val'),
+      ).toBe('maxMin');
       expect(xml.getElementsByTagNameNS(chart, 'ser')).toHaveLength(1);
     });
   });
@@ -340,6 +347,12 @@ describe('native slide writer', () => {
               color: { hex: '112233', opacity: 1 },
               fill: { hex: 'EEEEEE', opacity: 1 },
               align: 'right',
+              borders: [
+                { width: 2, color: { hex: '123456', opacity: 1 } },
+                { width: 0, color: { hex: '123456', opacity: 1 } },
+                { width: 1, color: { hex: 'CCDDEE', opacity: 1 } },
+                { width: 0, color: { hex: '123456', opacity: 1 } },
+              ],
             },
           ],
           [
@@ -377,6 +390,16 @@ describe('native slide writer', () => {
           (color) => color.getAttribute('val') === 'AB1234',
         ),
       ).toBe(true);
+      const secondCell = slide.getElementsByTagNameNS(drawing, 'tc')[1];
+      expect(secondCell?.getElementsByTagNameNS(drawing, 'lnT')[0]?.getAttribute('w')).toBe(
+        '19050',
+      );
+      expect(secondCell?.getElementsByTagNameNS(drawing, 'lnB')[0]?.getAttribute('w')).toBe('9525');
+      expect(
+        secondCell
+          ?.getElementsByTagNameNS(drawing, 'lnR')[0]
+          ?.getElementsByTagNameNS(drawing, 'noFill'),
+      ).toHaveLength(1);
       expect(
         Array.from(slide.getElementsByTagNameNS(drawing, 't')).map((el) => el.textContent),
       ).toEqual(['指标', '数值', '收入', '42']);
@@ -397,6 +420,9 @@ describe('native slide writer', () => {
         height: 300,
         chartType: 'bar',
         labels: ['第一季', '第二季'],
+        colors: ['19354A', '9BADB8'],
+        showLegend: false,
+        showValue: true,
         series: [
           { name: '收入', values: [12, 18] },
           { name: '目标', values: [10, 16] },
@@ -410,6 +436,12 @@ describe('native slide writer', () => {
       const chartParts = [...parts].filter(([name]) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
       expect(chartParts).toHaveLength(1);
       const chartXml = parseXml(chartParts[0]?.[1] ?? '');
+      expect(chartXml.getElementsByTagNameNS(chart, 'legend')).toHaveLength(0);
+      expect(
+        Array.from(chartXml.getElementsByTagNameNS(drawing, 'srgbClr')).map((el) =>
+          el.getAttribute('val'),
+        ),
+      ).toEqual(expect.arrayContaining(['19354A', '9BADB8']));
       expect(chartXml.getElementsByTagNameNS(chart, 'ser')).toHaveLength(2);
       expect(
         Array.from(chartXml.getElementsByTagNameNS(chart, 'v')).map((el) => el.textContent),
@@ -443,6 +475,54 @@ describe('native slide writer', () => {
     ];
     expect(() => addNativeSlides(pres, [model])).toThrow('values must match labels');
     expect(addSlide).not.toHaveBeenCalled();
+  });
+
+  it('writes an editable doughnut with the requested hole and percentage labels', async () => {
+    const pres = new PptxGenJS();
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 300,
+        chartType: 'pie',
+        labels: ['直销', '伙伴'],
+        series: [{ name: '占比', values: [60, 40] }],
+        colors: ['19354A', '9BADB8'],
+        showLegend: false,
+        showValue: true,
+        holeSize: 50,
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const entry = [...parts].find(([name]) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+      const xml = parseXml(entry?.[1] ?? '');
+      expect(xml.getElementsByTagNameNS(chart, 'doughnutChart')).toHaveLength(1);
+      expect(xml.getElementsByTagNameNS(chart, 'holeSize')[0]?.getAttribute('val')).toBe('50');
+      expect(xml.getElementsByTagNameNS(chart, 'showPercent')[0]?.getAttribute('val')).toBe('1');
+    });
+  });
+
+  it('rejects fractional doughnut hole sizes before writing invalid OOXML', () => {
+    const pres = new PptxGenJS();
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 300,
+        chartType: 'pie',
+        labels: ['A', 'B'],
+        series: [{ name: 'Share', values: [60, 40] }],
+        holeSize: 52.5,
+      },
+    ];
+    expect(() => addNativeSlides(pres, [model])).toThrow('integer');
   });
   it.each([
     ['PNG', png.replace('image/png', 'image/PNG'), 'png', 'image/png'],

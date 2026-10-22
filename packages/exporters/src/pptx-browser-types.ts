@@ -114,6 +114,7 @@ export interface BrowserSvgElement extends BrowserStyledElement {
 }
 
 export interface BrowserHtmlElement extends BrowserStyledElement {
+  click(): void;
   scrollWidth: number;
   scrollHeight: number;
   clientWidth: number;
