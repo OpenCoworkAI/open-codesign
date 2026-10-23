@@ -218,11 +218,34 @@ function normalizeOptionalDir(value: unknown): string | undefined {
   return normalizeDir(value);
 }
 
-function normalizeDir(value: string): string {
+/** True for Windows volume roots like `D:\\` / `D:` that non-admin processes cannot mkdir. */
+export function isWindowsDriveRoot(value: string): boolean {
+  return process.platform === 'win32' && /^[A-Za-z]:[\\/]?$/.test(value.trim());
+}
+
+/**
+ * Windows treats a bare drive letter (`D:`) as "cwd on that drive", not the volume
+ * root. Force `D:\\` so later joins create `D:\\foo` instead of the relative `D:foo`.
+ */
+export function coerceWindowsDriveBase(value: string): string {
   const trimmed = value.trim();
+  if (process.platform === 'win32' && /^[A-Za-z]:$/.test(trimmed)) {
+    return `${trimmed}\\`;
+  }
+  return trimmed;
+}
+
+function normalizeDir(value: string): string {
+  const trimmed = coerceWindowsDriveBase(value);
   if (!isAbsolute(trimmed)) {
     throw new CodesignError(
       `Storage directory must be an absolute path: ${value}`,
+      ERROR_CODES.STORAGE_SETTINGS_INVALID,
+    );
+  }
+  if (isWindowsDriveRoot(trimmed)) {
+    throw new CodesignError(
+      `Storage directory cannot be a Windows drive root (${trimmed}). Choose a writable folder such as D:\\codesign\\.config.`,
       ERROR_CODES.STORAGE_SETTINGS_INVALID,
     );
   }

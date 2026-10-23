@@ -10,13 +10,26 @@ import {
   toPersistedV3,
 } from '@open-codesign/shared';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
-import { getActiveStorageLocations } from './storage-settings';
+import {
+  coerceWindowsDriveBase,
+  getActiveStorageLocations,
+  isWindowsDriveRoot,
+} from './storage-settings';
 
 const XDG_DEFAULT = join(homedir(), '.config', 'open-codesign');
 
 export function defaultConfigDir(): string {
   const xdg = process.env['XDG_CONFIG_HOME'];
-  if (xdg && xdg.length > 0) return join(xdg, 'open-codesign');
+  if (xdg && xdg.length > 0) {
+    const base = coerceWindowsDriveBase(xdg);
+    if (isWindowsDriveRoot(base)) {
+      throw new CodesignError(
+        `XDG_CONFIG_HOME cannot be a Windows drive root (${base}). Set it to a writable folder such as D:\\codesign\\.config.`,
+        ERROR_CODES.CONFIG_READ_FAILED,
+      );
+    }
+    return join(base, 'open-codesign');
+  }
   return XDG_DEFAULT;
 }
 
@@ -86,6 +99,12 @@ export async function writeConfig(config: Config): Promise<void> {
   // activeModel='' was written here, then readConfig's parse rejected it.
   ConfigV3Schema.parse(persisted);
   const dir = configDir();
+  if (isWindowsDriveRoot(dir)) {
+    throw new CodesignError(
+      `Refusing to create config directory at Windows drive root (${dir}). Set Settings → Storage to a writable folder, or set XDG_CONFIG_HOME to e.g. D:\\codesign\\.config.`,
+      ERROR_CODES.CONFIG_READ_FAILED,
+    );
+  }
   await mkdir(dir, { recursive: true });
   const path = configPath();
   const body = stringifyToml(persisted as Record<string, unknown>);

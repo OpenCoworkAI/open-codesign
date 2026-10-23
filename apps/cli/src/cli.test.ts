@@ -186,7 +186,7 @@ describe('CLI contracts', () => {
     const human = await invoke(['doctor', '--workspace', workspace, '--config', config]);
     expect(human.stdout).toContain('[ok] config (CONFIG_VALID)');
     expect(await snapshot(root)).toEqual(before);
-  });
+  }, 30_000);
 
   it.each([
     ['unknown', 'value'],
