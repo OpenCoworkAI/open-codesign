@@ -138,3 +138,56 @@ export function modelsEndpointUrl(baseUrl: string, wire: CanonicalWire): string 
   // already-versioned base.
   return wire === 'anthropic' ? `${base}/v1/models` : `${base}/models`;
 }
+
+/**
+ * The URL runtime generate actually POSTs to for this wire.
+ *
+ * GET /models is discovery-only and is never on the generate path. Connection
+ * tests that want to validate the real invocation contract must probe this
+ * URL (or, for ChatGPT Codex, the OAuth token used to call it).
+ */
+export function inferenceEndpointUrl(baseUrl: string, wire: CanonicalWire): string {
+  const base = canonicalBaseUrl(baseUrl, wire);
+  switch (wire) {
+    case 'anthropic':
+      return `${base}/v1/messages`;
+    case 'openai-responses':
+      return `${base}/responses`;
+    case 'openai-codex-responses':
+      return `${base}/codex/responses`;
+    case 'openai-chat':
+      return `${base}/chat/completions`;
+  }
+}
+
+/**
+ * How GET /models relates to real generate.
+ *
+ * - `optional-discovery`: /models uses the same auth, headers, canonical
+ *   baseUrl, and wire as invoke, but generate does not call it. A missing
+ *   /models endpoint with a working inference endpoint is degraded
+ *   discovery, not an invoke failure.
+ * - `unavailable`: the wire has no user-discoverable /models (ChatGPT Codex)
+ *   or the provider declared that model listing is static/manual. Do not
+ *   treat a failed /models probe as evidence that generate will fail.
+ */
+export type ModelsProbeRelation = 'optional-discovery' | 'unavailable';
+
+export function modelsProbeRelationForWire(wire: CanonicalWire): ModelsProbeRelation {
+  return wire === 'openai-codex-responses' ? 'unavailable' : 'optional-discovery';
+}
+
+export function modelsProbeRelationForProvider(
+  wire: CanonicalWire,
+  caps?: {
+    supportsModelsEndpoint?: boolean | undefined;
+    modelDiscoveryMode?: 'models' | 'static-hint' | 'manual' | undefined;
+  },
+): ModelsProbeRelation {
+  if (wire === 'openai-codex-responses') return 'unavailable';
+  if (caps?.supportsModelsEndpoint === false) return 'unavailable';
+  if (caps?.modelDiscoveryMode === 'static-hint' || caps?.modelDiscoveryMode === 'manual') {
+    return 'unavailable';
+  }
+  return 'optional-discovery';
+}

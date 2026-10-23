@@ -84,6 +84,10 @@ describe('readOpencodeConfig', () => {
     expect(entry?.wire).toBe('anthropic');
     expect(entry?.baseUrl).toBe('https://api.anthropic.com');
     expect(entry?.defaultModel).toBe('claude-sonnet-4-6');
+    expect(entry?.capabilities).toMatchObject({
+      modelDiscoveryMode: 'models',
+      supportsModelsEndpoint: true,
+    });
     expect(out?.apiKeyMap['opencode-anthropic']).toBe('sk-ant-abc');
   });
 

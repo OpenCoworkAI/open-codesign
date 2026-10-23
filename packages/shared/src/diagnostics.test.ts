@@ -67,6 +67,30 @@ describe('diagnose', () => {
     expect(result[0]?.suggestedFix).toBeUndefined();
   });
 
+  it('404 on /models is listing-not-applicable when discovery mode does not expect listing', () => {
+    const result = diagnose('404', {
+      ...baseCtx,
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      attemptedUrl: 'https://open.bigmodel.cn/api/paas/v4/models',
+      modelDiscoveryMode: 'infer-only',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.modelsListingNotApplicable');
+    expect(result[0]?.category).toBe('model-discovery-degraded');
+    expect(result[0]?.severity).toBe('info');
+    expect(result[0]?.suggestedFix).toBeUndefined();
+  });
+
+  it('404 on an inference URL is still an endpoint failure even for infer-only providers', () => {
+    const result = diagnose('404', {
+      ...baseCtx,
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      attemptedUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+      modelDiscoveryMode: 'infer-only',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.endpointNotFound');
+    expect(result[0]?.category).toBe('endpoint-not-found');
+  });
+
   it('404 classifies endpoint-not-found when baseUrl already has /v1 (e.g. Cloudflare Workers AI)', () => {
     const result = diagnose('404', {
       ...baseCtx,
@@ -121,6 +145,13 @@ describe('diagnose', () => {
     const result = diagnose('SSL', baseCtx);
     expect(result[0]?.cause).toBe('diagnostics.cause.sslError');
     expect(result[0]?.suggestedFix?.label).toBe('diagnostics.fix.disableTls');
+  });
+
+  it('maps INVOKE_DIVERGED to invoke-contract-diverged', () => {
+    const result = diagnose('INVOKE_DIVERGED', baseCtx);
+    expect(result[0]?.cause).toBe('diagnostics.cause.invokeContractDiverged');
+    expect(result[0]?.category).toBe('invoke-contract-diverged');
+    expect(result[0]?.suggestedFix?.kind).toBe('openSettings');
   });
 
   it('maps unknown codes to generic unknown cause', () => {

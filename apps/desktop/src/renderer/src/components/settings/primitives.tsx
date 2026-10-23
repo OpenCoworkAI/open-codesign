@@ -1,8 +1,15 @@
 import { getCurrentLocale, useT } from '@open-codesign/i18n';
 import {
   CHATGPT_CODEX_PROVIDER_ID,
+  connectionTestProbesModelsEndpoint,
+  type ErrorCode,
+  localModelsForDiscoveryMode,
+  modelsEndpointUrl,
   type OnboardingState,
+  type ProviderModelDiscoveryMode,
   type ReasoningLevel,
+  settingsModelPickerKind,
+  usesRemoteModelsListing,
 } from '@open-codesign/shared';
 import {
   AlertTriangle,
@@ -23,6 +30,8 @@ import type { ProviderRow } from '../../../../preload/index';
 import { recordAction } from '../../lib/action-timeline';
 import { connectionFailureText } from '../../lib/connection-failure-text';
 import { useCodesignStore } from '../../store';
+import { ConnectionDiagnosticPanel } from '../ConnectionDiagnosticPanel';
+import { connectionTestToastKind } from './connection-test-toast';
 
 /**
  * Electron IPC wraps thrown errors as
@@ -59,6 +68,20 @@ export function computeModelOptions(input: {
     return [{ value: activeModelId, label: `${activeModelId} ${notInListSuffix}` }, ...base];
   }
   return base;
+}
+
+export function settingsModelPickerState(input: {
+  discoveryMode: ProviderModelDiscoveryMode;
+  loading: boolean;
+  models: string[] | null;
+  forceManual: boolean;
+}): 'loading' | 'select' | 'manual' {
+  if (input.forceManual) return 'manual';
+  if (settingsModelPickerKind(input.discoveryMode) === 'manual') return 'manual';
+  if (input.discoveryMode === 'models' && (input.loading || input.models === null)) {
+    return 'loading';
+  }
+  return (input.models?.length ?? 0) > 0 ? 'select' : 'manual';
 }
 
 export function Label({ children }: { children: React.ReactNode }) {
@@ -283,6 +306,18 @@ export function ProviderOverflowMenu({
   );
 }
 
+export function modelsListingAttemptUrl(
+  row: Pick<ProviderRow, 'baseUrl' | 'wire' | 'modelDiscoveryMode'>,
+): string | undefined {
+  if (row.baseUrl === null || row.baseUrl.length === 0) return undefined;
+  if (!connectionTestProbesModelsEndpoint(row.modelDiscoveryMode)) return undefined;
+  try {
+    return modelsEndpointUrl(row.baseUrl, row.wire);
+  } catch {
+    return undefined;
+  }
+}
+
 export function ProviderCard({
   row,
   config,
@@ -303,6 +338,10 @@ export function ProviderCard({
   const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const label = row.label ?? row.provider;
   const hasError = row.error !== undefined;
+  const [connectionDiag, setConnectionDiag] = useState<{
+    errorCode: ErrorCode;
+    httpStatus: string;
+  } | null>(null);
 
   const stateClass = hasError
     ? 'border-[var(--color-error)] bg-[var(--color-surface)]'
@@ -322,10 +361,45 @@ export function ProviderCard({
     }
     try {
       const res = await window.codesign.connection.testProvider(row.provider);
-      recordAction({ type: 'connection.test', data: { provider: row.provider, ok: res.ok } });
-      if (res.ok) {
+      recordAction({
+        type: 'connection.test',
+        data: {
+          provider: row.provider,
+          ok: res.ok,
+          compatibility: 'compatibility' in res ? res.compatibility : undefined,
+          invokeParity: 'invokeParity' in res ? res.invokeParity : undefined,
+        },
+      });
+      const kind = connectionTestToastKind(res);
+      if (kind === 'ok') {
+        setConnectionDiag(null);
         pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
+      } else if (kind === 'degraded') {
+        setConnectionDiag(null);
+        pushToast({
+          variant: 'info',
+          title: t('settings.providers.toast.connectionDegraded'),
+          description: t('settings.providers.toast.connectionDegradedBody'),
+        });
+      } else if (kind === 'diverges') {
+        reportableErrorToast({
+          code: 'CONNECTION_TEST_DIVERGED',
+          scope: 'settings',
+          title: t('settings.providers.toast.connectionDiverges'),
+          description:
+            res.ok === false
+              ? res.hint || res.message
+              : t('settings.providers.toast.connectionDivergesBody'),
+          context: {
+            provider: row.provider,
+            invokeParity: res.invokeParity,
+            ...(res.ok === false && res.invokeContract !== undefined
+              ? { invokeUrl: res.invokeContract.invokeUrl }
+              : {}),
+          },
+        });
       } else {
+        setConnectionDiag({ errorCode: res.code, httpStatus: res.message });
         reportableErrorToast({
           code: 'CONNECTION_TEST_FAILED',
           scope: 'settings',
@@ -335,16 +409,20 @@ export function ProviderCard({
         });
       }
     } catch (err) {
+      const description = cleanIpcError(err) || t('settings.common.unknownError');
+      setConnectionDiag({ errorCode: 'NETWORK', httpStatus: description });
       reportableErrorToast({
         code: 'CONNECTION_TEST_FAILED',
         scope: 'settings',
         title: t('settings.providers.toast.connectionFailed'),
-        description: cleanIpcError(err) || t('settings.common.unknownError'),
+        description,
         ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
         context: { provider: row.provider },
       });
     }
   }
+
+  const attemptedUrl = modelsListingAttemptUrl(row);
 
   return (
     <div
@@ -419,6 +497,45 @@ export function ProviderCard({
           onUpdated={onRowChanged}
         />
       )}
+      {connectionDiag !== null && (
+        <div className="mt-[var(--space-2)]">
+          <ConnectionDiagnosticPanel
+            errorCode={connectionDiag.errorCode}
+            httpStatus={connectionDiag.httpStatus}
+            baseUrl={row.baseUrl ?? ''}
+            provider={row.provider}
+            modelDiscoveryMode={row.modelDiscoveryMode}
+            {...(attemptedUrl !== undefined ? { attemptedUrl } : {})}
+            onApplyFix={(nextBaseUrl) => {
+              void (async () => {
+                if (!window.codesign?.config?.updateProvider) return;
+                try {
+                  await window.codesign.config.updateProvider({
+                    id: row.provider,
+                    baseUrl: nextBaseUrl,
+                  });
+                  onRowChanged({ ...row, baseUrl: nextBaseUrl });
+                  setConnectionDiag(null);
+                } catch (err) {
+                  reportableErrorToast({
+                    code: 'CONNECTION_FIX_APPLY_FAILED',
+                    scope: 'settings',
+                    title: t('settings.providers.toast.saveFailed'),
+                    description: cleanIpcError(err) || t('settings.common.unknownError'),
+                    ...(err instanceof Error && err.stack !== undefined
+                      ? { stack: err.stack }
+                      : {}),
+                  });
+                }
+              })();
+            }}
+            onTestAgain={() => {
+              void handleTestConnection();
+            }}
+            onDismiss={() => setConnectionDiag(null)}
+          />
+        </div>
+      )}
       {!hasError && row.hasKey !== false && (
         <ContextWindowInput
           provider={row.provider}
@@ -445,13 +562,26 @@ export function RowModelSelector({
 
   const provider = row.provider;
   const isActive = row.isActive;
+  const discoveryMode = row.modelDiscoveryMode;
+  // ChatGPT Codex is static-hint for discovery mode, but still needs the
+  // maintained local/pi catalog from listForProvider (#508).
+  const fetchRemote =
+    usesRemoteModelsListing(discoveryMode) || provider === CHATGPT_CODEX_PROVIDER_ID;
 
   const initial = isActive
     ? (config.modelPrimary ?? row.defaultModel ?? '')
     : (row.defaultModel ?? '');
   const [primary, setPrimary] = useState(initial);
-  const [models, setModels] = useState<string[] | null>(null);
-  const [loadingModels, setLoadingModels] = useState(false);
+  const [models, setModels] = useState<string[] | null>(
+    fetchRemote
+      ? null
+      : (localModelsForDiscoveryMode(discoveryMode, {
+          defaultModel: row.defaultModel,
+          modelsHint: row.modelsHint,
+        }) ?? []),
+  );
+  const [loadingModels, setLoadingModels] = useState(fetchRemote);
+  const [forceManual, setForceManual] = useState(false);
   const [discoveryHintKey, setDiscoveryHintKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -461,24 +591,70 @@ export function RowModelSelector({
   }, [isActive, config.modelPrimary, row.defaultModel]);
 
   useEffect(() => {
-    if (!window.codesign?.models?.listForProvider) return;
+    if (!fetchRemote) {
+      setModels(
+        localModelsForDiscoveryMode(discoveryMode, {
+          defaultModel: row.defaultModel,
+          modelsHint: row.modelsHint,
+        }) ?? [],
+      );
+      setLoadingModels(false);
+      setDiscoveryHintKey(null);
+      return;
+    }
+    if (!window.codesign?.models?.listForProvider) {
+      setModels([]);
+      setLoadingModels(false);
+      setDiscoveryHintKey(null);
+      return;
+    }
     let cancelled = false;
     setLoadingModels(true);
-    void window.codesign.models.listForProvider(provider).then((res) => {
-      if (cancelled) return;
-      setLoadingModels(false);
-      if (res.ok) {
-        setModels(res.models);
-        setDiscoveryHintKey(null);
-      } else {
+    void window.codesign.models
+      .listForProvider(provider)
+      .then((res) => {
+        if (cancelled) return;
+        setLoadingModels(false);
+        if (res.ok) {
+          setModels(res.models);
+          setDiscoveryHintKey(null);
+          return;
+        }
         setModels([]);
         setDiscoveryHintKey(res.hintKey ?? null);
-      }
-    });
+        reportableErrorToast({
+          code: 'PROVIDER_MODELS_DISCOVERY_FAILED',
+          scope: 'settings',
+          title: t('settings.providers.custom.discoveryFailed'),
+          description: connectionFailureText(t, res),
+          context: { provider },
+        });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setModels([]);
+        setLoadingModels(false);
+        setDiscoveryHintKey(null);
+        reportableErrorToast({
+          code: 'PROVIDER_MODELS_DISCOVERY_FAILED',
+          scope: 'settings',
+          title: t('settings.providers.custom.discoveryFailed'),
+          description: cleanIpcError(err) || t('settings.common.unknownError'),
+          context: { provider },
+        });
+      });
     return () => {
       cancelled = true;
     };
-  }, [provider]);
+  }, [
+    provider,
+    fetchRemote,
+    discoveryMode,
+    row.defaultModel,
+    row.modelsHint,
+    reportableErrorToast,
+    t,
+  ]);
 
   const saveSeq = useRef(0);
 
@@ -493,8 +669,6 @@ export function RowModelSelector({
         recordAction({ type: 'provider.switch', data: { provider, modelId: next } });
         setConfig(updated);
       } else {
-        // Inactive row: persist the per-provider default so "Set as current"
-        // later picks it up via currentRow.defaultModel.
         await window.codesign.config.updateProvider({ id: provider, defaultModel: next });
         onRowChanged({ ...row, defaultModel: next });
       }
@@ -531,9 +705,23 @@ export function RowModelSelector({
       }),
     [models, isActive, primary, notInListSuffix],
   );
+  const picker = settingsModelPickerState({
+    discoveryMode,
+    loading: loadingModels,
+    models,
+    forceManual,
+  });
+  const hintKey =
+    discoveryMode === 'infer-only'
+      ? 'settings.providers.discovery.inferOnlyHint'
+      : discoveryMode === 'manual'
+        ? 'settings.providers.discovery.manualHint'
+        : discoveryMode === 'static-hint'
+          ? 'settings.providers.discovery.staticHint'
+          : null;
 
   return (
-    <div className="mt-[var(--space-2)]">
+    <div className="mt-[var(--space-2)] space-y-1">
       <div className="flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
         <Cpu className="w-3 h-3 shrink-0" />
         {provider === CHATGPT_CODEX_PROVIDER_ID ? (
@@ -567,22 +755,52 @@ export function RowModelSelector({
               {t('common.save')}
             </button>
           </form>
-        ) : loadingModels ? (
+        ) : picker === 'loading' ? (
           <span className="inline-flex items-center gap-1 h-6 px-2 text-[var(--text-xs)]">
             <Loader2 className="w-3 h-3 animate-spin" />
           </span>
-        ) : options !== null ? (
-          <NativeSelect value={primary} onChange={handleChange} options={options} />
+        ) : picker === 'select' && options !== null ? (
+          <>
+            <NativeSelect value={primary} onChange={handleChange} options={options} />
+            <button
+              type="button"
+              onClick={() => setForceManual(true)}
+              className="shrink-0 text-[var(--text-xs)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
+            >
+              {t('settings.providers.custom.switchToManual')}
+            </button>
+          </>
         ) : (
-          <span className="h-6 px-2 inline-flex items-center font-mono text-[var(--text-xs)] text-[var(--color-text-primary)]">
-            {primary || t('settings.providers.noModel')}
-          </span>
+          <input
+            type="text"
+            value={primary}
+            onChange={(e) => setPrimary(e.target.value)}
+            onBlur={() => {
+              const next = primary.trim();
+              const currentSaved = isActive
+                ? (config.modelPrimary ?? row.defaultModel ?? '')
+                : (row.defaultModel ?? '');
+              if (next.length > 0 && next !== currentSaved) handleChange(next);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              const next = primary.trim();
+              if (next.length > 0) handleChange(next);
+            }}
+            placeholder={t('settings.providers.discovery.enterModelId')}
+            className="h-6 min-w-[12rem] px-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] font-mono text-[var(--text-xs)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+            aria-label={t('settings.providers.editModel')}
+          />
         )}
       </div>
       {provider === CHATGPT_CODEX_PROVIDER_ID && (
         <p className="mt-[var(--space-1)] text-[var(--text-xs)] leading-5 text-[var(--color-text-muted)]">
           {t('settings.providers.chatgptLogin.modelHelp')}
         </p>
+      )}
+      {hintKey !== null && (
+        <p className="pl-5 text-[var(--text-xs)] text-[var(--color-text-muted)]">{t(hintKey)}</p>
       )}
       {discoveryHintKey !== null && (
         <p className="mt-[var(--space-1)] text-[var(--text-xs)] leading-5 text-[var(--color-text-muted)]">

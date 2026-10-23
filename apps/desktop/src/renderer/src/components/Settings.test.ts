@@ -5,6 +5,7 @@ import {
   primarySettingsTab,
   resolveTimeoutOptions,
   SETTINGS_TABS,
+  settingsModelPickerState,
   TIMEOUT_OPTION_SECONDS,
 } from './Settings';
 
@@ -134,6 +135,65 @@ describe('computeModelOptions', () => {
       { value: 'haiku', label: 'haiku' },
       { value: 'sonnet', label: 'sonnet' },
     ]);
+  });
+});
+
+describe('settingsModelPickerState', () => {
+  it('shows a select for remote listing while models are loading', () => {
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'models',
+        loading: true,
+        models: null,
+        forceManual: false,
+      }),
+    ).toBe('loading');
+  });
+
+  it('falls back to manual entry when remote listing is empty', () => {
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'models',
+        loading: false,
+        models: [],
+        forceManual: false,
+      }),
+    ).toBe('manual');
+  });
+
+  it('does not force remote discover for static-hint or infer-only', () => {
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'static-hint',
+        loading: false,
+        models: ['gpt-5.5'],
+        forceManual: false,
+      }),
+    ).toBe('select');
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'infer-only',
+        loading: false,
+        models: ['glm-4.6'],
+        forceManual: false,
+      }),
+    ).toBe('manual');
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'manual',
+        loading: false,
+        models: ['custom'],
+        forceManual: false,
+      }),
+    ).toBe('manual');
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'models',
+        loading: false,
+        models: ['gpt-4o'],
+        forceManual: true,
+      }),
+    ).toBe('manual');
   });
 });
 

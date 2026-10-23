@@ -32,6 +32,7 @@ const row: ProviderRow = {
   defaultModel: 'saved-model',
   hasKey: true,
   requiresApiKey: false,
+  modelDiscoveryMode: 'static-hint',
 };
 const setActiveProvider = vi.fn();
 const updateProvider = vi.fn();

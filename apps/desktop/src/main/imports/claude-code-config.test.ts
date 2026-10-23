@@ -22,6 +22,10 @@ describe('parseClaudeCodeSettings', () => {
     expect(out.apiKey).toBe('sk-ant-test');
     expect(out.apiKeySource).toBe('settings-json');
     expect(out.userType).toBe('has-api-key');
+    expect(out.provider?.capabilities).toMatchObject({
+      modelDiscoveryMode: 'infer-only',
+      supportsModelsEndpoint: false,
+    });
   });
 
   it('accepts ANTHROPIC_API_KEY from settings.json as an alternate Claude key', () => {
@@ -44,6 +48,27 @@ describe('parseClaudeCodeSettings', () => {
     const json = JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 'k' } });
     const out = parseClaudeCodeSettings(json, { env: {} });
     expect(out.provider?.envKey).toBe('ANTHROPIC_AUTH_TOKEN');
+  });
+
+  it('stamps models discovery for official Anthropic and infer-only for proxies', () => {
+    const official = parseClaudeCodeSettings(JSON.stringify({ env: { ANTHROPIC_API_KEY: 'k' } }), {
+      env: {},
+    });
+    expect(official.provider?.baseUrl).toBe('https://api.anthropic.com');
+    expect(official.provider?.capabilities?.modelDiscoveryMode).toBe('models');
+    expect(official.provider?.capabilities?.supportsModelsEndpoint).toBe(true);
+
+    const proxy = parseClaudeCodeSettings(
+      JSON.stringify({
+        env: {
+          ANTHROPIC_BASE_URL: 'http://localhost:8082',
+          ANTHROPIC_AUTH_TOKEN: 'k',
+        },
+      }),
+      { env: {} },
+    );
+    expect(proxy.provider?.capabilities?.modelDiscoveryMode).toBe('infer-only');
+    expect(proxy.provider?.capabilities?.supportsModelsEndpoint).toBe(false);
   });
 
   it('classifies no-key + localhost baseUrl as local-proxy', () => {

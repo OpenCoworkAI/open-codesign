@@ -11,6 +11,7 @@ import {
   getAddProviderDefaults,
   isKeylessProviderAllowed,
   resolveActiveModel,
+  resolveProviderModel,
   toProviderRows,
 } from './provider-settings';
 
@@ -170,6 +171,7 @@ describe('toProviderRows', () => {
     expect(anthropicRow?.maskedKey).toMatch(/sk-.*\*{3}/);
     expect(anthropicRow?.isActive).toBe(true);
     expect(anthropicRow?.hasKey).toBe(true);
+    expect(anthropicRow?.modelDiscoveryMode).toBe('models');
   });
 
   it('surfaces keyless providers as rows with hasKey:false', () => {
@@ -216,7 +218,35 @@ describe('toProviderRows', () => {
       label: 'Ollama (local)',
       hasKey: true,
       maskedKey: '',
+      modelDiscoveryMode: 'models',
     });
+  });
+
+  it('stamps infer-only from stored capabilities without remote listing', () => {
+    const cfg = makeCfg({
+      provider: 'glm',
+      modelPrimary: 'glm-4.6',
+      secrets: { glm: { ciphertext: 'enc' } },
+      providers: {
+        glm: {
+          id: 'glm',
+          name: 'GLM',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+          defaultModel: 'glm-4.6',
+          capabilities: {
+            supportsModelsEndpoint: false,
+            modelDiscoveryMode: 'infer-only',
+          },
+        },
+      },
+    });
+
+    const rows = toProviderRows(cfg, () => 'sk-test-token-1234567890');
+    const glmRow = rows.find((row) => row.provider === 'glm');
+    expect(glmRow?.modelDiscoveryMode).toBe('infer-only');
+    expect(glmRow?.modelsHint).toBeUndefined();
   });
 });
 
@@ -618,5 +648,34 @@ describe('resolveActiveModel', () => {
         modelId: 'gpt-5.4',
       }),
     ).toThrowError(CodesignError);
+  });
+
+  it('threads builtin and model-discovery flags used by the invoke contract', () => {
+    const result = resolveActiveModel(baseCfg, {
+      provider: 'openrouter',
+      modelId: 'anthropic/claude-haiku-3',
+    });
+    expect(result.builtin).toBe(true);
+    expect(result.supportsModelsEndpoint).toBe(true);
+    expect(result.modelDiscoveryMode).toBe('models');
+  });
+});
+
+describe('resolveProviderModel', () => {
+  it('does not snap a named provider back to cfg.activeProvider', () => {
+    const cfg = makeCfg({
+      provider: 'openrouter',
+      modelPrimary: 'anthropic/claude-sonnet-4.6',
+      secrets: {
+        openai: { ciphertext: 'enc-oai' },
+        openrouter: { ciphertext: 'enc-or' },
+      },
+      baseUrls: { openai: 'https://api.duckcoding.ai/v1' },
+    });
+
+    const result = resolveProviderModel(cfg, 'openai', 'gpt-4o');
+    expect(result.model).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
+    expect(result.baseUrl).toBe('https://api.duckcoding.ai/v1');
+    expect(result.wire).toBe('openai-chat');
   });
 });
