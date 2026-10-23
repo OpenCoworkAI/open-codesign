@@ -1363,6 +1363,106 @@ describe('runProviderTest discovery modes (issue #210)', () => {
     }
   });
 
+  it('infer-only failure reports the inference attemptedUrl', async () => {
+    const { restore } = installFakeFetch((url) => {
+      if (url.endsWith('/chat/completions')) return { status: 404 };
+      return { status: 500 };
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'glm',
+        wire: 'openai-chat',
+        apiKey: 'sk-test',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        modelDiscoveryMode: 'infer-only',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe('404');
+        expect(res.attemptedUrl).toBe('https://open.bigmodel.cn/api/paas/v4/chat/completions');
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it('models mode failure reports the /models attemptedUrl when degrade also 404s', async () => {
+    const { restore } = installFakeFetch((url) => {
+      if (url.endsWith('/models')) return { status: 404 };
+      if (url.endsWith('/chat/completions')) return { status: 404 };
+      return { status: 500 };
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'custom',
+        wire: 'openai-chat',
+        apiKey: 'sk-test',
+        baseUrl: 'https://proxy.example.com/v1',
+        modelDiscoveryMode: 'models',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe('404');
+        expect(res.attemptedUrl).toBe('https://proxy.example.com/v1/models');
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it.each([
+    {
+      wire: 'openai-responses',
+      mode: 'manual',
+      baseUrl: 'https://proxy.example.com/v1',
+      attemptedUrl: 'https://proxy.example.com/v1/responses',
+      status: 401,
+    },
+    {
+      wire: 'anthropic',
+      mode: 'infer-only',
+      baseUrl: 'https://proxy.example.com/v1',
+      attemptedUrl: 'https://proxy.example.com/v1/messages',
+      status: 500,
+    },
+    {
+      wire: 'openai-chat',
+      mode: 'manual',
+      baseUrl: 'https://proxy.example.com/v4/chat/completions',
+      attemptedUrl: 'https://proxy.example.com/v4/chat/completions',
+      status: null,
+    },
+  ] as const)('reports the actual $wire inference URL on an HTTP or network failure', async ({
+    wire,
+    mode,
+    baseUrl,
+    attemptedUrl,
+    status,
+  }) => {
+    const { calls, restore } = installFakeFetch(() => {
+      if (status === null) throw new Error('Connection lost');
+      return { status };
+    });
+    try {
+      const res = await runProviderTest({
+        provider: 'custom',
+        wire,
+        apiKey: 'sk-test',
+        baseUrl,
+        modelDiscoveryMode: mode,
+      });
+      expect(res).toMatchObject({ ok: false, attemptedUrl });
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.url).toBe(attemptedUrl);
+      if (!res.ok) {
+        if (status === null) expect(res.code).toBe('NETWORK');
+        else expect(res.message).toBe(`HTTP ${status}`);
+      }
+    } finally {
+      restore();
+    }
+  });
+
   it('models mode still degrade-probes /models 404 as before', async () => {
     const { calls, restore } = installFakeFetch((url) => {
       if (url.endsWith('/models')) return { status: 404 };

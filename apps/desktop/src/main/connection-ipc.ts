@@ -108,6 +108,12 @@ export interface ConnectionTestError {
   hint: string;
   /** i18n key for a provider-specific hint. The renderer translates it. */
   hintKey?: string;
+  /**
+   * Absolute URL that was actually requested for this failure. Settings
+   * diagnostics prefer this over a guessed `/models` URL so infer-only /
+   * manual providers do not mis-attribute an inference 404 as a listing miss.
+   */
+  attemptedUrl?: string;
   compatibility?: 'incompatible';
   reasonCategory?: DiagnosticCategory;
 }
@@ -317,6 +323,16 @@ function buildEndpointForWire(
   const url =
     wire === 'anthropic' ? `${normalizedBaseUrl}/v1/models` : `${normalizedBaseUrl}/models`;
   return { url, normalizedBaseUrl };
+}
+
+/** Absolute URL used by probeInferenceEndpoint / probeDeclaredInference. */
+function inferenceProbeUrl(
+  wire: 'openai-chat' | 'openai-responses' | 'anthropic',
+  normalizedBaseUrl: string,
+): string {
+  if (wire === 'anthropic') return `${normalizedBaseUrl}/v1/messages`;
+  if (wire === 'openai-responses') return `${normalizedBaseUrl}/responses`;
+  return `${normalizedBaseUrl}/chat/completions`;
 }
 
 function buildModelsEndpoint(
@@ -687,6 +703,7 @@ export async function runProviderTest(
           code,
           message: err instanceof Error ? err.message : 'Network request failed',
           hint,
+          attemptedUrl: url,
           compatibility: 'incompatible' as const,
           reasonCategory:
             code === 'ECONNREFUSED' ? ('network-unreachable' as const) : ('unknown' as const),
@@ -725,6 +742,7 @@ export async function runProviderTest(
           code,
           message: `HTTP ${res.status}`,
           hint,
+          attemptedUrl: url,
           compatibility: 'incompatible' as const,
           reasonCategory: connectionCategoryForStatus(res.status, normalizedBaseUrl),
         },
@@ -753,6 +771,7 @@ async function probeDeclaredInference(
     };
   }
   const { normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
+  const attemptedUrl = inferenceProbeUrl(creds.wire, normalizedBaseUrl);
   const headers = buildAuthHeadersForWire(
     creds.wire,
     creds.apiKey,
@@ -769,6 +788,7 @@ async function probeDeclaredInference(
       code: 'NETWORK',
       message: probe.message,
       hint: 'Cannot reach provider inference endpoint',
+      attemptedUrl,
       compatibility: 'incompatible',
       reasonCategory: 'unknown',
     };
@@ -779,6 +799,7 @@ async function probeDeclaredInference(
     code,
     message: `HTTP ${probe.status}`,
     hint,
+    attemptedUrl,
     compatibility: 'incompatible',
     reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
   };
@@ -813,6 +834,7 @@ async function tryDegradeProbe(
         code,
         message: `HTTP ${probe.status}`,
         hint,
+        attemptedUrl: inferenceProbeUrl(wire, normalizedBaseUrl),
         compatibility: 'incompatible' as const,
         reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
       },
@@ -843,12 +865,7 @@ async function probeInferenceEndpoint(
   normalizedBaseUrl: string,
   headers: Record<string, string>,
 ): Promise<ProbeResult> {
-  const url =
-    wire === 'anthropic'
-      ? `${normalizedBaseUrl}/v1/messages`
-      : wire === 'openai-responses'
-        ? `${normalizedBaseUrl}/responses`
-        : `${normalizedBaseUrl}/chat/completions`;
+  const url = inferenceProbeUrl(wire, normalizedBaseUrl);
   const body =
     wire === 'anthropic'
       ? JSON.stringify({

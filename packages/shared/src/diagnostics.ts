@@ -161,16 +161,25 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
   }
 
   if (normalised === '404') {
-    if (
-      ctx.modelDiscoveryMode !== undefined &&
-      !usesRemoteModelsListing(ctx.modelDiscoveryMode) &&
-      looksLikeModelsListingUrl(ctx.attemptedUrl)
-    ) {
+    if (ctx.modelDiscoveryMode !== undefined && !usesRemoteModelsListing(ctx.modelDiscoveryMode)) {
+      // Listing URL + non-listing mode: soft info (unit tests / future soft-probes).
+      // Inference URL (or unknown): never suggest "add /v1" — that corrupts custom
+      // gateway baseUrls. Connection tests plumb the actually probed URL so this
+      // does not mis-label an inference 404 as a listing limitation.
+      if (looksLikeModelsListingUrl(ctx.attemptedUrl)) {
+        return [
+          h({
+            cause: 'diagnostics.cause.modelsListingNotApplicable',
+            category: 'model-discovery-degraded',
+            severity: 'info',
+          }),
+        ];
+      }
       return [
         h({
-          cause: 'diagnostics.cause.modelsListingNotApplicable',
-          category: 'model-discovery-degraded',
-          severity: 'info',
+          cause: 'diagnostics.cause.endpointNotFound',
+          category: 'endpoint-not-found',
+          severity: 'warning',
         }),
       ];
     }

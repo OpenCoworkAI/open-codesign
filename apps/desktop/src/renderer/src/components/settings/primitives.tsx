@@ -340,6 +340,7 @@ export function ProviderCard({
   const [connectionDiag, setConnectionDiag] = useState<{
     errorCode: ErrorCode;
     httpStatus: string;
+    attemptedUrl?: string;
   } | null>(null);
 
   const stateClass = hasError
@@ -371,7 +372,13 @@ export function ProviderCard({
               : t('settings.providers.toast.connectionOk'),
         });
       } else {
-        setConnectionDiag({ errorCode: res.code, httpStatus: res.message });
+        setConnectionDiag({
+          errorCode: res.code,
+          httpStatus: res.message,
+          ...(typeof res.attemptedUrl === 'string' && res.attemptedUrl.length > 0
+            ? { attemptedUrl: res.attemptedUrl }
+            : {}),
+        });
         reportableErrorToast({
           code: 'CONNECTION_TEST_FAILED',
           scope: 'settings',
@@ -394,7 +401,9 @@ export function ProviderCard({
     }
   }
 
-  const attemptedUrl = modelsListingAttemptUrl(row);
+  // Prefer the URL main actually probed. Guessing /models for non-listing
+  // modes would mis-fire modelsListingNotApplicable on inference 404s.
+  const attemptedUrl = connectionDiag?.attemptedUrl ?? modelsListingAttemptUrl(row);
 
   return (
     <div

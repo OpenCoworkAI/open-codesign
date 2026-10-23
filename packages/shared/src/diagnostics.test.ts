@@ -91,6 +91,16 @@ describe('diagnose', () => {
     expect(result[0]?.category).toBe('endpoint-not-found');
   });
 
+  it('404 without attemptedUrl for infer-only does not suggest add /v1', () => {
+    const result = diagnose('404', {
+      ...baseCtx,
+      baseUrl: 'https://relay.example.com',
+      modelDiscoveryMode: 'infer-only',
+    });
+    expect(result[0]?.cause).toBe('diagnostics.cause.endpointNotFound');
+    expect(result[0]?.suggestedFix).toBeUndefined();
+  });
+
   it('404 classifies endpoint-not-found when baseUrl already has /v1 (e.g. Cloudflare Workers AI)', () => {
     const result = diagnose('404', {
       ...baseCtx,
