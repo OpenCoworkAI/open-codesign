@@ -899,11 +899,12 @@ export function workspacePreviewPathForSelection(
   files: DesignFileEntry[],
   designId: string | null,
   selection: WorkspaceFileSelection | null,
+  primaryPath?: string | null,
 ): string | null {
   if (selection?.designId === designId && files.some((file) => file.path === selection.path)) {
     return selection.path;
   }
-  return defaultWorkspacePreviewPath(files);
+  return primaryPath === undefined ? defaultWorkspacePreviewPath(files) : primaryPath;
 }
 
 export function externalAppManagedFallbackPath(input: {
@@ -1117,11 +1118,12 @@ interface WorkspacePreviewSource {
   workspaceDesignId?: string;
   content: string;
   path: string;
+  source?: import('@open-codesign/shared').SourceIdentityV1;
 }
 
 export function workspacePreviewSourceStableKey(source: WorkspacePreviewSource | null): string {
   if (!source) return '';
-  return `${source.path}:${stablePreviewSourceKey(source.content)}`;
+  return `${source.path}:${source.source?.runtimeMode ?? 'legacy-auto'}:${stablePreviewSourceKey(source.content, source.source?.runtimeMode)}`;
 }
 
 export function splitMarkdownFrontmatter(content: string): {
@@ -1807,6 +1809,7 @@ export function WorkspaceFilePreview({
         snapshotSource: currentPreviewSource,
         listSnapshots: window.codesign?.snapshots.list,
         preferSnapshotSource: true,
+        getSourceEntry: useCodesignStore.getState().refreshSourceEntry,
       })
         .then((result) => {
           if (cancelled) return;
@@ -1841,7 +1844,12 @@ export function WorkspaceFilePreview({
     let cancelled = false;
     setReadError(null);
     setSourceReadPending(true);
-    void readWorkspacePreviewSource({ designId: currentDesignId, path, read })
+    void readWorkspacePreviewSource({
+      designId: currentDesignId,
+      path,
+      read,
+      getSourceEntry: useCodesignStore.getState().refreshSourceEntry,
+    })
       .then((result) => {
         if (cancelled) return;
         setPreviewSource({ ...result, workspaceDesignId: currentDesignId });
@@ -1883,6 +1891,11 @@ export function WorkspaceFilePreview({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Only the default preview masks tweak changes; source editing always uses exact bytes and a new inspected revision.
   const srcDoc = useMemo(() => {
     if (!activePreviewSource || !renderable || workspaceDevServerRequired) return null;
+    // Never resume authored scripts between enabling HTML editing and receiving
+    // inspection, or while re-inspecting the newly saved source revision.
+    if (sourceEdit.active && /\.html?$/i.test(activePreviewSource.path) && !sourceEdit.inspection) {
+      return `<!doctype html><html><body data-codesign-edit-pending>${escapeHtmlText(t('common.loading'))}</body></html>`;
+    }
     try {
       const baseHref = workspaceBaseHrefForFile({
         designId: currentDesignId,
@@ -1891,6 +1904,9 @@ export function WorkspaceFilePreview({
       });
       return buildInteractivePreviewDocument(activePreviewSource.content, {
         path: activePreviewSource.path,
+        ...(activePreviewSource.source
+          ? { runtimeMode: activePreviewSource.source.runtimeMode }
+          : {}),
         baseHref,
         ...(sourceEdit.inspection ? { sourceEdit: sourceEdit.inspection } : {}),
       });
@@ -1905,6 +1921,7 @@ export function WorkspaceFilePreview({
     previewSourceStableKey,
     sourceEdit.active ? activePreviewSource?.content : null,
     sourceEdit.inspection,
+    sourceEdit.active,
     renderable,
     workspaceDevServerRequired,
   ]);
@@ -2126,6 +2143,9 @@ export function FilesTabView({
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
   const openFileTab = useCodesignStore((s) => s.openCanvasFileTab);
+  const sourceEntry = useCodesignStore((s) =>
+    currentDesignId ? s.sourceEntryByDesign[currentDesignId] : undefined,
+  );
   const currentPreviewSource = useCodesignStore((s) => s.previewSource);
   const previewFullscreen = useCodesignStore((s) => s.previewFullscreen);
   const { files, tree: fileTree, loading, loadDirectory } = useLazyDesignFileTree(currentDesignId);
@@ -2133,7 +2153,18 @@ export function FilesTabView({
   const defaultPath = useMemo(() => defaultWorkspacePreviewPath(files), [files]);
 
   const [fileSelection, setFileSelection] = useState<WorkspaceFileSelection | null>(null);
-  const selectedPath = workspacePreviewPathForSelection(files, currentDesignId, fileSelection);
+  const primaryPath =
+    sourceEntry?.status === 'ready' || sourceEntry?.status === 'planned'
+      ? sourceEntry.source.path
+      : sourceEntry?.status === 'invalid' || sourceEntry?.status === 'needs-selection'
+        ? null
+        : undefined;
+  const selectedPath = workspacePreviewPathForSelection(
+    files,
+    currentDesignId,
+    fileSelection,
+    primaryPath,
+  );
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [fileBrowserWidth, setFileBrowserWidth] = useState(initialFileBrowserWidth);
   const [isFileBrowserResizing, setIsFileBrowserResizing] = useState(false);

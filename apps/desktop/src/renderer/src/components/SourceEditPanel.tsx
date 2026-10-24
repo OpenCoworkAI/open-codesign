@@ -55,7 +55,7 @@ function SourceEditField({
     if (!disabled && typeof value === 'string') void onApply({ ...operation, value });
   }
   return (
-    <form onSubmit={submit} className="grid gap-[var(--space-1)]">
+    <form onSubmit={submit} className="grid min-w-0 grid-cols-1 gap-[var(--space-1)]">
       <label htmlFor={id} className="text-[var(--text-sm)] text-[var(--color-text-secondary)]">
         {label}
       </label>
@@ -119,7 +119,7 @@ export function SourceEditPanel({
         event.stopPropagation();
         onClose();
       }}
-      className="flex min-h-0 flex-1 flex-col gap-[var(--space-3)] overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-4)] shadow-[var(--shadow-soft)]"
+      className="flex min-h-0 min-w-0 flex-1 flex-col gap-[var(--space-3)] overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-4)] shadow-[var(--shadow-soft)]"
     >
       <div className="flex items-center justify-between gap-[var(--space-2)]">
         <h3
@@ -147,6 +147,11 @@ export function SourceEditPanel({
       <p className="m-0 text-[var(--text-sm)] text-[var(--color-text-muted)]">
         {t('canvas.sourceEdit.reloadWarning')}
       </p>
+      {/\.html?$/i.test(path) ? (
+        <p className="m-0 text-[var(--text-sm)] text-[var(--color-text-muted)]">
+          {t('canvas.sourceEdit.htmlHint')}
+        </p>
+      ) : null}
       {ancestors.length ? (
         <nav
           aria-label={t('canvas.sourceEdit.ancestors')}
@@ -198,7 +203,7 @@ export function SourceEditPanel({
         return (
           <div
             key={`${target.id}:${sourceEditFieldKey(operation)}`}
-            className="grid gap-[var(--space-2)]"
+            className="grid min-w-0 grid-cols-1 gap-[var(--space-2)]"
           >
             {origin ? (
               <div className="text-[var(--text-sm)] text-[var(--color-text-muted)]">

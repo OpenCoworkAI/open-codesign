@@ -163,6 +163,43 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
 });
+
+it('passes the host-declared HTML path and runtime mode to the file preview renderer', async () => {
+  const content = '<main>Native</main><script>document.title="Authored";</script>';
+  const source = {
+    schemaVersion: 1 as const,
+    path: 'pages/start.htm',
+    format: 'html' as const,
+    runtimeMode: 'native-html' as const,
+  };
+  Object.defineProperty(window, 'codesign', {
+    configurable: true,
+    value: {
+      files: { read },
+      sourceEdits: { inspect, apply },
+      snapshots: {},
+      sourceEntry: {
+        get: async () => ({
+          schemaVersion: 1,
+          designId: 'a',
+          workspacePath: 'C:/design',
+          revision: '76741943-1171-44b6-a744-a1a3ece68fbc',
+          status: 'ready',
+          origin: 'declared',
+          source,
+          content,
+        }),
+      },
+    },
+  });
+  await act(async () => root.render(<WorkspaceFilePreview path={source.path} />));
+  expect(buildInteractivePreviewDocument).toHaveBeenCalledWith(
+    content,
+    expect.objectContaining({ path: source.path, runtimeMode: 'native-html' }),
+  );
+  expect(read).not.toHaveBeenCalled();
+  expect(inspect).not.toHaveBeenCalled();
+});
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();

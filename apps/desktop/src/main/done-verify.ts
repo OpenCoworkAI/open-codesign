@@ -1,8 +1,8 @@
 /**
  * Hidden runtime verifier for the agent's `done` tool.
  *
- * The agent emits a JSX module (TWEAK_DEFAULTS + App + ReactDOM.createRoot).
- * We wrap it via `@open-codesign/runtime`'s `buildSrcdoc` (same path the
+ * The host supplies artifact source and its optional runtime mode.
+ * We wrap it via `@open-codesign/runtime`'s `buildPreviewDocument` (same path the
  * preview iframe uses), serve it from memory at a file:// URL, load it with
  * the same system Chrome/Puppeteer engine used by `preview`, and capture
  * console/page errors for a short settle window. The collected errors flow
@@ -21,7 +21,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL, URL } from 'node:url';
 import type { DoneError, DoneRuntimeResult, DoneRuntimeVerifier } from '@open-codesign/core';
 import { findSystemChrome } from '@open-codesign/exporters';
-import { buildSrcdoc } from '@open-codesign/runtime';
+import { buildPreviewDocument, validateNativeGenerationSource } from '@open-codesign/runtime';
 import type { Browser, ConsoleMessage, HTTPRequest, Page } from 'puppeteer-core';
 import { inspectLayout, layoutFailureWarning, layoutWarnings } from './layout-probe';
 import { boundedPreview } from './preview-interactions';
@@ -274,14 +274,19 @@ async function verifyWithSystemChrome(
 export function makeRuntimeVerifier(options?: { workspaceRoot: string }): DoneRuntimeVerifier {
   return async (artifactSource, context): Promise<DoneRuntimeResult> => {
     context?.signal?.throwIfAborted();
+    if (context?.runtimeMode === 'native-html') validateNativeGenerationSource(artifactSource);
     const workspaceRoot = options ? resolve(options.workspaceRoot) : undefined;
     const srcdoc = workspaceRoot
       ? await buildWorkspacePreviewDocument(
           artifactSource,
           workspaceRoot,
           context?.path ?? 'App.jsx',
+          context?.runtimeMode,
         )
-      : buildSrcdoc(artifactSource);
+      : buildPreviewDocument(artifactSource, {
+          path: context?.path,
+          runtimeMode: context?.runtimeMode,
+        });
     const verifyPath = join(tmpdir(), `codesign-done-verify-${randomUUID()}`, 'verify.html');
     const verifyUrl = pathToFileURL(verifyPath).href;
     return verifyWithSystemChrome(verifyUrl, verifyPath, srcdoc, workspaceRoot, context?.signal);

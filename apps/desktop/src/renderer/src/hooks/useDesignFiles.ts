@@ -337,7 +337,10 @@ export function useLazyDesignFileTree(designId: string | null): UseLazyDesignFil
   );
   const pushToast = useCodesignStore((s) => s.pushToast);
   const dismissToast = useCodesignStore((s) => s.dismissToast);
-  const [directories, setDirectories] = useState<LazyDirectoryMap>({});
+  const [listing, setListing] = useState<{
+    contextKey: string;
+    directories: LazyDirectoryMap;
+  }>({ contextKey: '', directories: {} });
   const [loading, setLoading] = useState(false);
   const listErrorToastRef = useRef<WorkspaceListErrorToastState>({ key: null, toastId: null });
   const refetchSeqRef = useRef(0);
@@ -353,16 +356,24 @@ export function useLazyDesignFileTree(designId: string | null): UseLazyDesignFil
       'function'
       ? 'workspace'
       : 'snapshots';
+  const contextKey = JSON.stringify([designId, backend, workspacePath]);
+  // Effects clear the tree after a switch, but children can read during the
+  // preceding commit. Never pair another workspace's filenames with this id.
+  const directories = listing.contextKey === contextKey ? listing.directories : {};
+  directoriesRef.current = directories;
 
   loadContextRef.current = { designId, backend, workspacePath };
 
-  const updateDirectories = useCallback((updater: (prev: LazyDirectoryMap) => LazyDirectoryMap) => {
-    setDirectories((prev) => {
-      const next = updater(prev);
-      directoriesRef.current = next;
-      return next;
-    });
-  }, []);
+  const updateDirectories = useCallback(
+    (updater: (prev: LazyDirectoryMap) => LazyDirectoryMap) => {
+      setListing((prev) => {
+        const next = updater(prev.contextKey === contextKey ? prev.directories : {});
+        directoriesRef.current = next;
+        return { contextKey, directories: next };
+      });
+    },
+    [contextKey],
+  );
 
   const loadDirectory = useCallback(
     async (path: string) => {

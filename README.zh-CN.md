@@ -193,6 +193,12 @@ scoop install opencoworkai/open-codesign
 
 凭证会保存在 `~/.config/open-codesign/config.toml`，ChatGPT OAuth token 会保存在应用配置目录下的 token store 中。除非你选择的模型入口本身需要联网，请求内容不会额外离开你的机器。
 
+### 设计格式
+
+新建空白设计默认使用 **HTML**。在新建对话框中展开**高级选项**，可改选 **React**。HTML 设计使用 `index.html` 中的原生 HTML、CSS 和 JavaScript；React 设计从 `App.jsx` 开始。后续 Agent 修改沿用所选格式。
+
+选择已有文件夹时保留原来的源格式。若有多个可能的入口，需要明确选择主文件。选择主文件只会指定入口，不会转换格式。格式转换需要独立、明确的操作，保留原文件并重新验证结果；目前不提供自动转换。
+
 ### 3. 输入第一条提示词
 
 你可以直接选 **十五个内置 demo** 之一，比如 landing page、dashboard、pitch slide、pricing、mobile app、chat UI、event calendar、blog article、receipt/invoice、portfolio、settings panel 等，也可以直接写自己的需求。几秒内，你就能看到一个沙箱中的可交互原型。

@@ -1,4 +1,11 @@
 {
+  "sourceEntry": {
+    "primary": "主文件",
+    "needsSelection": "请选择要预览和编辑的文件。",
+    "choose": "选择文件",
+    "reload": "重新读取",
+    "useFile": "使用此文件"
+  },
   "activeMessages": {
     "queue": "排队追加消息",
     "steer": "调整下一步",
@@ -134,7 +141,8 @@
       "selectHint": "点击预览中的元素；仅可修改受支持的静态源码字段。",
       "unsupportedSelection": "此元素没有受支持的源码目标，动态或不明确的来源不可编辑。",
       "saved": "已保存到工作区",
-      "unavailable": "需要真实工作区 JSX/TSX 源码；生成过程中不可编辑。"
+      "unavailable": "需要真实工作区 HTML/JSX/TSX 源码；生成过程中不可编辑。",
+      "htmlHint": "HTML 编辑期间暂停页面脚本，确保点选元素与源码一致；退出编辑后恢复页面交互。"
     },
     "documentPreview": {
       "previewLabel": "文档预览",
@@ -163,9 +171,16 @@
     },
     "newDesignDialog": {
       "title": "新建项目",
-      "subtitle": "可选择一个本地文件夹，用于同步设计文件。",
+      "subtitle": "在新文件夹中创建设计，或继续使用已有文件夹。",
+      "advanced": "高级选项",
+      "format": "设计格式",
+      "htmlOption": "HTML（默认）",
+      "htmlDescription": "HTML：使用 HTML、CSS 和 JavaScript 创作，便于直接打开与交付。",
+      "reactDescription": "React：使用 JSX 组件创作设计。",
+      "existingFormat": "已有文件夹沿用原格式，必要时选择主文件；不会转换现有文件。",
+      "formatPersistence": "后续修改沿用设计格式。选择主文件只会指定入口，不会转换格式。",
       "noWorkspace": "未选择文件夹",
-      "skip": "跳过",
+      "skip": "使用新文件夹",
       "confirm": "创建"
     },
     "workspace": {

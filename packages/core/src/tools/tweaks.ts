@@ -20,6 +20,7 @@ import {
   type EditmodeTokenValue,
   inspectTweakSource,
   parseEditmodeBlock,
+  type SourceIdentityV1,
 } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 
@@ -75,16 +76,29 @@ const DEFAULT_PATTERNS = ['**/*.html', '**/*.jsx', '**/*.css', '**/*.js'];
 
 export function makeTweaksTool(
   readWorkspaceFiles: (patterns?: string[]) => Promise<TweakFileInput[]>,
+  opts: {
+    source?: SourceIdentityV1 | undefined;
+    readWorkspaceFile?: ((file: string) => Promise<TweakFileInput | null>) | undefined;
+  } = {},
 ): AgentTool<typeof TweaksParams, TweaksDetails> {
   return {
     name: 'tweaks',
     label: 'Tweaks',
     description:
-      'Inspect existing EDITMODE declarations across workspace files. This read-only scan does not create controls, persist declarations, or connect bindings. The renderer reads only its active preview source; controls in unused starters do not affect it. Prefer patterns targeting the implemented preview entry when verifying controls. Call when tweak controls are enabled or useful. Defaults to html/jsx/css/js.',
+      opts.source?.runtimeMode === 'native-html'
+        ? `Inspect source EDITMODE declarations, defaulting to the exact primary ${JSON.stringify(opts.source.path)}. Explicit patterns can inspect auxiliary files. This read-only discovery does not implement authored bindings, inject a CSS-variable bridge, or promise live host-panel updates.`
+        : 'Inspect existing EDITMODE declarations across workspace files. This read-only scan does not create controls, persist declarations, or connect bindings. The renderer reads only its active preview source; controls in unused starters do not affect it. Prefer patterns targeting the implemented preview entry when verifying controls. Call when tweak controls are enabled or useful. Defaults to html/jsx/css/js.',
     parameters: TweaksParams,
     async execute(_toolCallId, params): Promise<AgentToolResult<TweaksDetails>> {
-      const patterns = params.patterns ?? DEFAULT_PATTERNS;
-      const files = await readWorkspaceFiles(patterns);
+      let files: TweakFileInput[];
+      if (params.patterns === undefined && opts.source?.runtimeMode === 'native-html') {
+        if (!opts.readWorkspaceFile)
+          throw new Error('Native tweak discovery requires a literal workspace file reader.');
+        const file = await opts.readWorkspaceFile(opts.source.path);
+        files = file ? [file] : [];
+      } else {
+        files = await readWorkspaceFiles(params.patterns ?? DEFAULT_PATTERNS);
+      }
       if (files.length === 0) {
         return {
           content: [{ type: 'text', text: 'no files matched' }],
@@ -124,7 +138,7 @@ export function makeTweaksTool(
                 : '. No EDITMODE declarations found; this scan does not create controls'
             }. Missing declarations: ${missingFiles.join(', ') || 'none'}. Invalid declarations: ${
               invalidFiles.map(({ file, error }) => `${file}: ${error}`).join('; ') || 'none'
-            }. The panel reads the active preview source; verify its rendered bindings separately.`,
+            }. ${opts.source?.runtimeMode === 'native-html' ? 'Discovery only; verify authored bindings separately. No live host-panel updates are implied.' : 'The panel reads the active preview source; verify its rendered bindings separately.'}`,
           },
         ],
         details,

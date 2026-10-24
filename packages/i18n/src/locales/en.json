@@ -1,4 +1,11 @@
 {
+  "sourceEntry": {
+    "primary": "Primary file",
+    "needsSelection": "Choose the file to preview and edit.",
+    "choose": "Choose file",
+    "reload": "Reload",
+    "useFile": "Use this file"
+  },
   "activeMessages": {
     "queue": "Queue follow-up",
     "steer": "Steer next step",
@@ -134,7 +141,8 @@
       "selectHint": "Select an element in the preview. Only supported static source fields can be edited.",
       "unsupportedSelection": "This element has no supported source target. Dynamic or ambiguous sources cannot be edited.",
       "saved": "Saved to workspace",
-      "unavailable": "Requires a real workspace JSX/TSX source; editing is disabled during generation."
+      "unavailable": "Requires a real workspace HTML/JSX/TSX source; editing is disabled during generation.",
+      "htmlHint": "HTML editing temporarily pauses page scripts so selected elements match the source. Exit editing to restore page interactions."
     },
     "documentPreview": {
       "previewLabel": "Document preview",
@@ -163,9 +171,16 @@
     },
     "newDesignDialog": {
       "title": "New design",
-      "subtitle": "Optionally choose a local folder to sync your design files.",
+      "subtitle": "Create a design in a new folder, or continue working in an existing folder.",
+      "advanced": "Advanced options",
+      "format": "Design format",
+      "htmlOption": "HTML (default)",
+      "htmlDescription": "HTML: a portable page with HTML, CSS and JavaScript.",
+      "reactDescription": "React: a design authored with JSX components.",
+      "existingFormat": "An existing folder keeps its current format. Choose its primary file if needed; files are not converted.",
+      "formatPersistence": "Future edits keep the design's format. Choosing a primary file does not convert it to another format.",
       "noWorkspace": "No folder selected",
-      "skip": "Skip",
+      "skip": "Use new folder",
       "confirm": "Create"
     },
     "workspace": {

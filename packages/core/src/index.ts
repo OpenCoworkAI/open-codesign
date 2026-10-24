@@ -11,6 +11,7 @@ import type {
   ReasoningLevel,
   ResourceStateV1,
   SelectedElement,
+  SourceIdentityV1,
   StoredDesignSystem,
   WireApi,
 } from '@open-codesign/shared';
@@ -221,6 +222,10 @@ export interface ProjectContext {
 }
 
 export interface GenerateInput {
+  source?: SourceIdentityV1 | undefined;
+  onSourceAccepted?:
+    | ((accepted: import('./tools/done.js').VerifiedSource) => void | Promise<void>)
+    | undefined;
   prompt: string;
   history: ChatMessage[];
   model: ModelRef;
@@ -266,6 +271,7 @@ export interface GenerateInput {
   /** Optional host callback for workspace roots that can change mid-run, for
    * example when `set_title` renames an auto-managed workspace folder. */
   getWorkspaceRoot?: (() => string | null | undefined) | undefined;
+  withWorkspace?: (<T>(operation: (workspaceRoot: string) => Promise<T>) => Promise<T>) | undefined;
   /** Stable workspace context loaded by the host before generation. */
   projectContext?: ProjectContext | undefined;
   /** User-visible design title at the start of this run. */
@@ -291,10 +297,10 @@ export interface GenerateInput {
   /** Override the system prompt entirely. When set, `mode` is ignored. */
   systemPrompt?: string | undefined;
   /**
-   * Generation mode for this call. Only `'create'` is supported here.
-   * Use `applyComment()` for `'revise'`; `'tweak'` has no public entry point yet.
+   * Built-in generation supports create and explicit native HTML revise.
+   * Legacy revisions use applyComment(); tweak has no public entry point yet.
    */
-  mode?: Extract<PromptComposeOptions['mode'], 'create'> | undefined;
+  mode?: Extract<PromptComposeOptions['mode'], 'create' | 'revise'> | undefined;
   signal?: AbortSignal | undefined;
   /**
    * Per-HTTP-request timeout forwarded to pi-ai's `timeoutMs`. Without it the
@@ -314,6 +320,10 @@ export interface GenerateInput {
   readWorkspaceFiles?:
     | ((patterns?: string[]) => Promise<Array<{ file: string; contents: string }>>)
     | undefined;
+  /** Literal, bounded source read for native tweaks; never interprets file names as globs. */
+  readWorkspaceFile?:
+    | ((file: string) => Promise<{ file: string; contents: string } | null>)
+    | undefined;
   /**
    * Optional host-injected preview executor. When provided, the agent gets
    * a `preview` tool it can call before `done` to render the artifact and
@@ -330,6 +340,7 @@ export interface GenerateInput {
 }
 
 export interface ApplyCommentInput {
+  source?: SourceIdentityV1 | undefined;
   artifactSource: string;
   comment: string;
   selection: SelectedElement;
@@ -371,6 +382,7 @@ export interface GenerateOutput {
 }
 
 export interface BuildApplyCommentPromptInput {
+  source?: SourceIdentityV1 | undefined;
   comment: string;
   selection: SelectedElement;
 }
@@ -386,7 +398,7 @@ export function buildApplyCommentUserPrompt(input: BuildApplyCommentPromptInput)
     ].join('\n'),
   );
   const parts = [
-    'Revise the design source that is already in the workspace at `App.jsx`.',
+    `Revise the design source that is already in the workspace at \`${input.source?.path ?? 'App.jsx'}\`.`,
     'Keep the overall structure, copy, and layout intact unless the user request requires a broader change.',
     'Prioritize the selected element first and avoid unrelated edits.',
     `User request: ${input.comment.trim()}`,
@@ -548,8 +560,10 @@ export async function applyComment(
 
   log.info('[apply_comment] step=build_request', ctx);
   const buildStart = Date.now();
-  const systemPrompt = composeSystemPrompt({ mode: 'revise' });
+  const native = input.source?.runtimeMode === 'native-html';
+  const systemPrompt = native ? undefined : composeSystemPrompt({ mode: 'revise' });
   const userPrompt = buildApplyCommentUserPrompt({
+    source: input.source,
     comment: input.comment,
     selection: input.selection,
   });
@@ -561,6 +575,8 @@ export async function applyComment(
   const agentInput: GenerateInput = {
     prompt: userPrompt,
     systemPrompt,
+    source: input.source,
+    ...(native ? { mode: 'revise' as const } : {}),
     history: [],
     model: input.model,
     apiKey: input.apiKey,

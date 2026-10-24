@@ -121,6 +121,34 @@ afterEach(async () => {
 });
 
 describe('revision-bound local source edits', () => {
+  it('keeps native HTML identity after a successful save acknowledgement', async () => {
+    const source = {
+      schemaVersion: 1 as const,
+      path: 'index.html',
+      format: 'html' as const,
+      runtimeMode: 'native-html' as const,
+    };
+    props = {
+      ...props,
+      selectedPath: source.path,
+      source: { ...workspaceSource(), path: source.path, source },
+    };
+    inspect.mockResolvedValue({ ...ready, path: source.path });
+    apply.mockImplementation(async (request: SourceEditApplyRequestV1) => ({
+      ...applied,
+      path: source.path,
+      previewRevision: request.previewRevision,
+    }));
+    await enableAndSelect();
+    await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+    expect(onPersist).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: source.path,
+        source,
+        content: applied.status === 'applied' ? applied.content : '',
+      }),
+    );
+  });
   it('is opt-in and refuses snapshot or fallback sources', async () => {
     await render();
     expect(inspect).not.toHaveBeenCalled();

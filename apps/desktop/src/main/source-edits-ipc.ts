@@ -42,7 +42,10 @@ function assertSenderAlive(event: unknown): void {
   if (sender?.isDestroyed?.())
     throw new SourceEditCommitError('cancelled', 'The editing window was closed.');
 }
-async function assertIdle(designId: string, workspacePath: string): Promise<void> {
+export async function assertSourceWorkspaceIdle(
+  designId: string,
+  workspacePath: string,
+): Promise<void> {
   if (!busyCheck)
     throw new SourceEditCommitError(
       'unavailable',
@@ -54,10 +57,10 @@ async function assertIdle(designId: string, workspacePath: string): Promise<void
 function sourcePath(raw: string): string {
   const normalized = normalizeDesignFilePath(raw);
   assertWorkspacePathVisible(normalized);
-  if (!/\.(jsx|tsx)$/i.test(normalized))
+  if (!/\.(jsx|tsx|html?)$/i.test(normalized))
     throw new SourceEditCommitError(
       'unsupported-source',
-      'Only workspace JSX and TSX source files support local edits.',
+      'Only workspace HTML, JSX and TSX source files support local edits.',
     );
   return normalized;
 }
@@ -110,7 +113,7 @@ export function registerSourceEditsIpc(db: Database, getWin: () => BrowserWindow
               'unsupported-source',
               'Source files larger than 2 MiB are not supported.',
             );
-          await assertIdle(input.designId, canonicalRoot);
+          await assertSourceWorkspaceIdle(input.designId, canonicalRoot);
           assertSenderAlive(event);
         };
         await validate();

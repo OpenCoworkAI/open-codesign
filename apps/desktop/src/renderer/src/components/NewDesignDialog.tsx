@@ -1,11 +1,16 @@
 import { useT } from '@open-codesign/i18n';
+import type { DesignAuthoringFormat } from '@open-codesign/shared';
 import { FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import { useCodesignStore } from '../store';
 
 export function NewDesignDialog() {
-  const t = useT();
   const open = useCodesignStore((s) => s.newDesignDialogOpen);
+  return open ? <NewDesignForm /> : null;
+}
+
+function NewDesignForm() {
+  const t = useT();
   const close = useCodesignStore((s) => s.closeNewDesignDialog);
   const createNewDesign = useCodesignStore((s) => s.createNewDesign);
   const setView = useCodesignStore((s) => s.setView);
@@ -13,8 +18,7 @@ export function NewDesignDialog() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [creating, setCreating] = useState(false);
-
-  if (!open) return null;
+  const [authoringFormat, setAuthoringFormat] = useState<DesignAuthoringFormat>('html');
 
   async function handlePickFolder() {
     if (!window.codesign?.snapshots?.pickWorkspaceFolder) return;
@@ -30,10 +34,15 @@ export function NewDesignDialog() {
   async function handleCreate(withPath: string | null) {
     setCreating(true);
     try {
-      const design = await createNewDesign(withPath);
-      close();
-      setSelectedPath(null);
-      if (design) setView('workspace');
+      const design = await createNewDesign(
+        withPath,
+        undefined,
+        withPath ? undefined : authoringFormat,
+      );
+      if (design) {
+        close();
+        setView('workspace');
+      }
     } finally {
       setCreating(false);
     }
@@ -60,7 +69,11 @@ export function NewDesignDialog() {
         }
       }}
     >
-      <div
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!busy) void handleCreate(selectedPath);
+        }}
         role="document"
         className="w-full max-w-sm rounded-[var(--radius-2xl)] bg-[var(--color-background)] border border-[var(--color-border)] shadow-[var(--shadow-elevated)] p-5 space-y-4 animate-[panel-in_160ms_ease-out]"
       >
@@ -88,25 +101,60 @@ export function NewDesignDialog() {
           </button>
         </div>
 
+        <div className="space-y-2 text-[var(--text-sm)] text-[var(--color-text-secondary)]">
+          <p role="status">
+            {t(
+              selectedPath
+                ? 'canvas.newDesignDialog.existingFormat'
+                : `canvas.newDesignDialog.${authoringFormat}Description`,
+            )}
+          </p>
+          {!selectedPath ? (
+            <details>
+              <summary className="cursor-pointer text-[var(--text-xs)]">
+                {t('canvas.newDesignDialog.advanced')}
+              </summary>
+              <label className="mt-2 flex items-center justify-between gap-3">
+                {t('canvas.newDesignDialog.format')}
+                <select
+                  value={authoringFormat}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setAuthoringFormat(event.target.value === 'react' ? 'react' : 'html')
+                  }
+                  className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[var(--color-text-primary)]"
+                >
+                  <option value="html">{t('canvas.newDesignDialog.htmlOption')}</option>
+                  <option value="react">React</option>
+                </select>
+              </label>
+            </details>
+          ) : null}
+          <p className="text-[var(--text-xs)] leading-[var(--leading-body)]">
+            {t('canvas.newDesignDialog.formatPersistence')}
+          </p>
+        </div>
+
         <div className="flex items-center justify-end gap-2">
+          {selectedPath ? (
+            <button
+              type="button"
+              onClick={() => setSelectedPath(null)}
+              disabled={busy}
+              className="h-9 px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {t('canvas.newDesignDialog.skip')}
+            </button>
+          ) : null}
           <button
-            type="button"
-            onClick={() => void handleCreate(null)}
-            disabled={busy}
-            className="h-9 px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {t('canvas.newDesignDialog.skip')}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCreate(selectedPath)}
+            type="submit"
             disabled={busy}
             className="h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--text-sm)] font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
           >
             {t('canvas.newDesignDialog.confirm')}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

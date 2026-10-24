@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SourceIdentityV1 } from './source-entries';
 
 export {
   ActiveRunMessageInputV1,
@@ -58,7 +59,18 @@ export {
   validateDesignMd,
 } from './design-md';
 export * from './source-edits';
-export { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from './source-entries';
+export {
+  DEFAULT_SOURCE_ENTRY,
+  DesignAuthoringFormat,
+  DesignSourceEntryV1,
+  LEGACY_SOURCE_ENTRY,
+  NEW_HTML_SOURCE_ENTRY,
+  SourceEntryGetRequestV1,
+  SourceEntryPath,
+  SourceEntryResultV1,
+  SourceEntrySelectRequestV1,
+  SourceIdentityV1,
+} from './source-entries';
 export { inspectTweakSource, type TweakSourceState } from './tweak-source';
 
 export const DesignParam = z.discriminatedUnion('type', [
@@ -101,7 +113,7 @@ export type DesignParam = z.infer<typeof DesignParam>;
 export const ArtifactType = z.enum(['html', 'svg', 'slides', 'bundle']);
 export type ArtifactType = z.infer<typeof ArtifactType>;
 
-export const ArtifactSourceFormat = z.enum(['jsx', 'html', 'svg', 'markdown']);
+export const ArtifactSourceFormat = z.enum(['jsx', 'tsx', 'html', 'svg', 'markdown']);
 export type ArtifactSourceFormat = z.infer<typeof ArtifactSourceFormat>;
 
 export const ArtifactRenderRuntime = z.enum(['react', 'static-html', 'svg', 'none']);
@@ -116,6 +128,7 @@ export const Artifact = z.object({
   sourceFormat: ArtifactSourceFormat.optional(),
   renderRuntime: ArtifactRenderRuntime.optional(),
   entryPath: z.string().min(1).optional(),
+  source: SourceIdentityV1.optional(),
   createdAt: z.string(),
 });
 export type Artifact = z.infer<typeof Artifact>;

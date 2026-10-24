@@ -1,6 +1,11 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { lstat, readdir, readFile } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
-import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import { CodesignError, ERROR_CODES, type SourceIdentityV1 } from '@open-codesign/shared';
+import {
+  authoringProfileFor,
+  isAuthoringResourceEligible,
+  nativeSkillPath,
+} from '../authoring-profile.js';
 import { type LoadedSkill, SkillFrontmatterV1 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -250,6 +255,7 @@ async function loadSingleSkill(
 export async function loadSkillsFromDir(
   dir: string,
   source: LoadedSkill['source'],
+  identity?: SourceIdentityV1,
 ): Promise<LoadedSkill[]> {
   let entries: string[];
   try {
@@ -259,8 +265,38 @@ export async function loadSkillsFromDir(
     throw err;
   }
 
-  const mdEntries = entries.filter((entry) => extname(entry) === '.md');
-  const outcomes = await Promise.all(mdEntries.map((entry) => loadSingleSkill(dir, entry, source)));
+  const mdEntries = entries.filter(
+    (entry) =>
+      extname(entry) === '.md' &&
+      isAuthoringResourceEligible('skill', basename(entry, '.md'), identity),
+  );
+  const outcomes = await Promise.all(
+    mdEntries.map(async (entry): Promise<SkillLoadOutcome> => {
+      const id = basename(entry, '.md');
+      const selected = nativeSkillPath(id, identity);
+      if (authoringProfileFor(identity) === 'native-html') {
+        try {
+          for (const segment of selected
+            .split('/')
+            .map((_, index, parts) => join(dir, ...parts.slice(0, index + 1)))) {
+            if ((await lstat(segment)).isSymbolicLink())
+              throw new Error(`skill path traverses symbolic link: ${segment}`);
+          }
+        } catch (err) {
+          return { ok: false, error: `Could not read ${join(dir, selected)}: ${describeErr(err)}` };
+        }
+      }
+      const outcome = await loadSingleSkill(dir, selected, source);
+      if (
+        outcome.ok &&
+        authoringProfileFor(identity) === 'native-html' &&
+        outcome.skill.frontmatter.name !== id
+      ) {
+        return { ok: false, error: `Native skill ${selected} must keep canonical name ${id}` };
+      }
+      return outcome;
+    }),
+  );
 
   const skills: LoadedSkill[] = [];
   const errors: string[] = [];
@@ -316,6 +352,9 @@ export async function loadAllSkills(opts: LoadAllSkillsOptions): Promise<LoadedS
  * tests seed a tmpdir, the agent wires in the live path through
  * `GenerateInput.templatesRoot`.
  */
-export async function loadBuiltinSkills(builtinDir: string): Promise<LoadedSkill[]> {
-  return loadSkillsFromDir(builtinDir, 'builtin');
+export async function loadBuiltinSkills(
+  builtinDir: string,
+  source?: SourceIdentityV1,
+): Promise<LoadedSkill[]> {
+  return loadSkillsFromDir(builtinDir, 'builtin', source);
 }

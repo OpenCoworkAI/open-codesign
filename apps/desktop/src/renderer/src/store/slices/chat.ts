@@ -400,7 +400,7 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
       );
     },
 
-    setPreviewSourceFromAgent({ designId, content }) {
+    setPreviewSourceFromAgent({ designId, content, source }) {
       const state = get();
       // Only adopt the live source when the event's design is visible. This
       // prevents a background run on design A from blowing away the preview
@@ -414,7 +414,13 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
           designId,
           content,
         );
-        set({ previewSourceByDesign: pool.cache, recentDesignIds: pool.recent });
+        set({
+          previewSourceByDesign: pool.cache,
+          recentDesignIds: pool.recent,
+          ...(source
+            ? { previewIdentityByDesign: { ...state.previewIdentityByDesign, [designId]: source } }
+            : {}),
+        });
         return;
       }
       const pool = recordPreviewSourceInPool(
@@ -425,6 +431,9 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
       );
       set({
         previewSource: content,
+        ...(source
+          ? { previewIdentityByDesign: { ...state.previewIdentityByDesign, [designId]: source } }
+          : {}),
         previewSourceByDesign: pool.cache,
         recentDesignIds: pool.recent,
       });
@@ -457,7 +466,15 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
         ? state.previewSource
         : (state.previewSourceByDesign[designId] ?? null);
       let resolved: { content: string; path: string };
-      if (source && source.trim().length > 0) {
+      if (window.codesign.sourceEntry) {
+        const current = await resolveDesignPreviewSource({
+          designId,
+          getSourceEntry: get().refreshSourceEntry,
+        });
+        if (!current) return;
+        resolved = current;
+        source = current.content;
+      } else if (source && source.trim().length > 0) {
         const referencesWorkspaceSource = hasWorkspaceSourceReference(source, LEGACY_SOURCE_ENTRY);
         try {
           resolved = await resolveWorkspacePreviewSource({

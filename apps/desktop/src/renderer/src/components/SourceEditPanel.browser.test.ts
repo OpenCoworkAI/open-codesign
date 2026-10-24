@@ -1086,10 +1086,21 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     });
     // Hold across the overlay's 200 ms refresh to expose pre-submit mutation races.
     await saveText('Stable text', 'Must not save', 300);
-    await page.waitForFunction(() =>
-      document.querySelector('aside[aria-busy]')?.textContent?.includes('could not be verified'),
+    // The periodic selection refresh can replace the transient save message.
+    // Assert the retained real validation reply and refused field instead.
+    await expect.poll(validationReplies).toContainEqual(
+      expect.objectContaining({
+        fieldStates: expect.arrayContaining([expect.objectContaining({ status: 'changed' })]),
+      }),
     );
-    expect((await validationReplies()).length).toBeGreaterThan(0);
+    await page.waitForFunction(() =>
+      document
+        .querySelector('[aria-label="Save source definition: Text 1"]')
+        ?.hasAttribute('disabled'),
+    );
+    expect(await page.$eval('aside[aria-busy]', (node) => node.textContent)).toContain(
+      'changed from its source',
+    );
     expect(records.filter((record) => record.method === 'apply')).toHaveLength(0);
     expect(await disk()).toBe(previewOnlyFixture);
     await assertPreviewText('#between', 'Runtime changed');

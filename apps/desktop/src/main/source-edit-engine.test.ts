@@ -566,10 +566,10 @@ describe('conservative rejection and independent revalidation', () => {
       reason: 'invalid-operation',
     });
   });
-  it('rejects HTML paths and parse failures', () => {
+  it('rejects JSX masquerading as HTML and parse failures', () => {
     expect(analyzeSourceEdit({ path: 'index.html', source: simple })).toMatchObject({
       status: 'rejected',
-      reason: 'unsupported-path',
+      reason: 'unsupported-source',
     });
     expect(
       analyzeSourceEdit({ path: 'App.jsx', source: 'function App(){return <header>' }),

@@ -1,7 +1,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path_module from 'node:path';
 import type { AttachmentContext, CoreLogger, GenerateImageAssetRequest } from '@open-codesign/core';
-import { CodesignError, DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import {
+  CodesignError,
+  DEFAULT_SOURCE_ENTRY,
+  LEGACY_SOURCE_ENTRY,
+  type SourceIdentityV1,
+} from '@open-codesign/shared';
 import { withWorkspaceFileWriter } from '@open-codesign/shared/workspace-file-lock';
 import type { AgentStreamEvent } from '../../preload/index';
 import {
@@ -23,11 +28,53 @@ function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function resolveLocalAssetRefs(source: string, files: Map<string, string>): string {
+function resolveSrcsetAsset(candidates: string, relative: string, content: string): string {
+  let offset = 0;
+  let copied = 0;
+  let resolved = '';
+  while (offset < candidates.length) {
+    while (offset < candidates.length && /[\t\n\f\r ,]/.test(candidates[offset] ?? '')) offset++;
+    const start = offset;
+    while (offset < candidates.length && !/[\t\n\f\r ]/.test(candidates[offset] ?? '')) offset++;
+    let end = offset;
+    // Srcset URLs consume internal commas; only trailing commas end a descriptor-free candidate.
+    while (end > start && candidates[end - 1] === ',') end--;
+    const url = candidates.slice(start, end);
+    if (url === relative || url === `./${relative}`) {
+      resolved += candidates.slice(copied, start) + content;
+      copied = end;
+    }
+    if (end !== offset) continue;
+    let inParentheses = false;
+    while (offset < candidates.length) {
+      const character = candidates[offset++];
+      if (character === '(') inParentheses = true;
+      else if (character === ')') inParentheses = false;
+      else if (character === ',' && !inParentheses) break;
+    }
+  }
+  return resolved + candidates.slice(copied);
+}
+
+export function resolveLocalAssetRefs(
+  source: string,
+  files: Map<string, string>,
+  entryPath: string = DEFAULT_SOURCE_ENTRY,
+): string {
   let resolved = source;
   for (const [path, content] of files.entries()) {
-    if (!path.startsWith('assets/') || !content.startsWith('data:')) continue;
-    resolved = resolved.replace(new RegExp(escapeRegExp(path), 'g'), content);
+    if (!content.startsWith('data:')) continue;
+    const relative = path_module.posix.relative(path_module.posix.dirname(entryPath), path);
+    resolved = resolved.replace(
+      new RegExp(
+        `(\\b[sS][rR][cC][sS][eE][tT]\\s*=\\s*)(["'])([\\s\\S]*?)\\2|(["'\\x60(])(?:\\./)?${escapeRegExp(relative)}(?=["'\\x60)])`,
+        'g',
+      ),
+      (_match, attribute: string | undefined, quote: string, candidates: string, prefix: string) =>
+        attribute === undefined
+          ? prefix + content
+          : attribute + quote + resolveSrcsetAsset(candidates, relative, content) + quote,
+    );
   }
   return resolved;
 }
@@ -74,6 +121,9 @@ interface CreateRuntimeTextEditorFsOptions {
   frames?: ReadonlyArray<readonly [string, string]>;
   designSkills?: ReadonlyArray<readonly [string, string]>;
   signal?: AbortSignal;
+  source?: SourceIdentityV1 | undefined;
+  withWorkspace?: (<T>(operation: (workspaceRoot: string) => Promise<T>) => Promise<T>) | undefined;
+  onMutation?: ((path: string) => void) | undefined;
 }
 
 function dataUrlByteLength(dataUrl: string): number {
@@ -120,6 +170,9 @@ export function createRuntimeTextEditorFs({
   frames = [],
   designSkills = [],
   signal,
+  source,
+  withWorkspace,
+  onMutation,
 }: CreateRuntimeTextEditorFsOptions) {
   const baseCtx = { designId: designId ?? '', generationId } as const;
   const fsMap = new Map<string, string>();
@@ -143,6 +196,7 @@ export function createRuntimeTextEditorFs({
     fsMap.set('source.png', sourceImageDataUrl);
   }
   if (
+    !source &&
     previousSource &&
     previousSource.trim().length > 0 &&
     !fsMap.has(DEFAULT_SOURCE_ENTRY) &&
@@ -153,18 +207,32 @@ export function createRuntimeTextEditorFs({
 
   function emitFsUpdated(filePath: string, content: string): void {
     if (designId === null) return;
-    const resolved =
-      filePath === DEFAULT_SOURCE_ENTRY || filePath === LEGACY_SOURCE_ENTRY
-        ? resolveLocalAssetRefs(content, fsMap)
-        : content;
-    sendEvent({ ...baseCtx, type: 'fs_updated', path: filePath, content: resolved });
+    const isPrimary = source
+      ? filePath === source.path
+      : filePath === DEFAULT_SOURCE_ENTRY || filePath === LEGACY_SOURCE_ENTRY;
+    const resolved = isPrimary ? resolveLocalAssetRefs(content, fsMap, filePath) : content;
+    sendEvent({
+      ...baseCtx,
+      type: 'fs_updated',
+      path: filePath,
+      content: resolved,
+      ...(isPrimary && source ? { source } : {}),
+    });
   }
 
   function emitSourceIfAssetChanged(filePath: string): void {
-    if (!filePath.startsWith('assets/')) return;
-    const sourcePath = fsMap.has(DEFAULT_SOURCE_ENTRY) ? DEFAULT_SOURCE_ENTRY : LEGACY_SOURCE_ENTRY;
-    const source = fsMap.get(sourcePath);
-    if (source !== undefined) emitFsUpdated(sourcePath, source);
+    if (
+      source
+        ? filePath === source.path ||
+          !/\.(?:css|m?js|png|jpe?g|gif|webp|svg|woff2?)$/i.test(filePath)
+        : !filePath.startsWith('assets/')
+    )
+      return;
+    const sourcePath =
+      source?.path ??
+      (fsMap.has(DEFAULT_SOURCE_ENTRY) ? DEFAULT_SOURCE_ENTRY : LEGACY_SOURCE_ENTRY);
+    const content = fsMap.get(sourcePath);
+    if (content !== undefined) emitFsUpdated(sourcePath, content);
   }
 
   async function withResolvedWorkspace<T>(
@@ -174,6 +242,13 @@ export function createRuntimeTextEditorFs({
     if (designId === null || db === null) {
       throw new Error(`Workspace path unavailable for ${normalizedPath}`);
     }
+    if (withWorkspace)
+      return withWorkspace(async (workspacePath) =>
+        operation(
+          workspacePath,
+          await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath),
+        ),
+      );
     return withStableWorkspacePath(designId, async () => {
       const design = getDesign(db, designId);
       if (design === null) {
@@ -197,6 +272,7 @@ export function createRuntimeTextEditorFs({
     const normalizedPath = normalizeDesignFilePath(filePath);
     assertWorkspacePathVisible(normalizedPath);
     const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
+    onMutation?.(normalizedPath);
     if (designId === null || db === null) return writeContent.storedContent;
     try {
       await withResolvedWorkspace(normalizedPath, async (_workspacePath, destinationPath) => {

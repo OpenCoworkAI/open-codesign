@@ -204,7 +204,11 @@ export function scaleRectForZoom(
   };
 }
 
-export function stablePreviewSourceKey(source: string): string {
+export function stablePreviewSourceKey(
+  source: string,
+  runtimeMode?: 'legacy-auto' | 'native-html',
+): string {
+  if (runtimeMode === 'native-html') return source;
   const head = source.trimStart().slice(0, 2048).toLowerCase();
   // Full HTML documents do not get the JSX tweaks bridge injected, so token
   // changes must invalidate srcdoc and force a reload to take effect.

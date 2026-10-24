@@ -68,6 +68,45 @@ afterEach(async () => {
 });
 
 describe('deterministic source edits IPC', () => {
+  it('persists HTML text/attribute/style edits through the production atomic writer and rejects stale replays', async () => {
+    await writeFile(
+      path.join(root, 'index.html'),
+      '<!doctype html><h1 title="Original" style="color: red">Original HTML</h1>',
+    );
+    for (const operation of [
+      { kind: 'set-text', value: 'Changed & HTML' },
+      { kind: 'set-attribute', name: 'title', value: 'New title' },
+      { kind: 'set-style', property: 'color', value: 'blue' },
+    ] as const) {
+      const content = await readFile(path.join(root, 'index.html'), 'utf8');
+      const inspected = await inspect(designId, 'index.html', content);
+      if (inspected.status !== 'ready') throw new Error(inspected.message);
+      const target = inspected.targets.find((item) => item.tagName === 'h1');
+      if (!target) throw new Error('Missing HTML target');
+      const input = {
+        schemaVersion: 1,
+        designId,
+        path: 'index.html',
+        expectedSourceHash: inspected.sourceHash,
+        previewRevision: 'html-preview-1',
+        targetId: target.id,
+        scope: 'source-definition',
+        operation,
+      };
+      const result = SourceEditApplyResultV1.parse(await invoke('apply', input));
+      expect(result.status).toBe('applied');
+      if (result.status !== 'applied') throw new Error(result.message);
+      expect(await readFile(path.join(root, 'index.html'), 'utf8')).toBe(result.content);
+      expect(await invoke('apply', input)).toMatchObject({
+        status: 'rejected',
+        reason: 'stale-source',
+      });
+    }
+    expect(await readFile(path.join(root, 'index.html'), 'utf8')).toBe(
+      '<!doctype html><h1 title="New title" style="color: blue">Changed &amp; HTML</h1>',
+    );
+    expect((await readdir(root)).filter((name) => name.startsWith('.codesign-edit'))).toEqual([]);
+  });
   it('persists preview-selected literals beside effects while retaining stale protection', async () => {
     const content = original.replace(
       'return <main>',

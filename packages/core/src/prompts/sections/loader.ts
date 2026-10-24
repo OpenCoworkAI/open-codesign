@@ -21,6 +21,10 @@ function load(name: string): string {
   return raw.endsWith('\n') ? raw.slice(0, -1) : raw;
 }
 
+export const NATIVE_OUTPUT_RULES = load('native-output-rules');
+export const NATIVE_PRE_FLIGHT = load('native-pre-flight');
+export const NATIVE_EDITMODE_PROTOCOL = load('native-editmode-protocol');
+export const NATIVE_TWEAKS_PROTOCOL = load('native-tweaks-protocol');
 export const IDENTITY = load('identity');
 export const WORKFLOW = load('workflow');
 export const OUTPUT_RULES = load('output-rules');
@@ -34,6 +38,10 @@ export const BRAND_ACQUISITION = load('brand-acquisition');
 export const MULTI_SCREEN_BATON = load('multi-screen-baton');
 
 export const PROMPT_SECTIONS: Record<string, string> = {
+  nativeOutputRules: NATIVE_OUTPUT_RULES,
+  nativePreFlight: NATIVE_PRE_FLIGHT,
+  nativeEditmodeProtocol: NATIVE_EDITMODE_PROTOCOL,
+  nativeTweaksProtocol: NATIVE_TWEAKS_PROTOCOL,
   identity: IDENTITY,
   workflow: WORKFLOW,
   outputRules: OUTPUT_RULES,
@@ -48,6 +56,10 @@ export const PROMPT_SECTIONS: Record<string, string> = {
 };
 
 export const PROMPT_SECTION_FILES: Record<keyof typeof PROMPT_SECTIONS, string> = {
+  nativeOutputRules: 'sections/native-output-rules.md',
+  nativePreFlight: 'sections/native-pre-flight.md',
+  nativeEditmodeProtocol: 'sections/native-editmode-protocol.md',
+  nativeTweaksProtocol: 'sections/native-tweaks-protocol.md',
   identity: 'sections/identity.md',
   workflow: 'sections/workflow.md',
   outputRules: 'sections/output-rules.md',

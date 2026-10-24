@@ -77,6 +77,7 @@ interface AgentScript {
    * generateViaAgent's tool wrappers without reimplementing pi-agent-core's
    * full model/tool loop in the mock.
    */
+  execute?: (options: AgentOptions) => Promise<void>;
   executeTool?: {
     name: string;
     times?: number;
@@ -185,6 +186,7 @@ vi.mock('@mariozechner/pi-agent-core', () => {
         }
       }
 
+      await script.execute?.(this.call.options);
       if (script.executeTool) {
         const tool = this.call.options.initialState?.tools?.find(
           (candidate) => candidate.name === script.executeTool?.name,
@@ -1100,6 +1102,333 @@ describe('generateViaAgent()', () => {
     expect(result.inputTokens).toBe(1120);
     expect(result.outputTokens).toBe(340);
     expect(result.costUsd).toBeCloseTo(0.0493);
+  });
+
+  describe('source identity completion', () => {
+    const source = {
+      schemaVersion: 1,
+      path: 'pages/main.html',
+      format: 'html',
+      runtimeMode: 'native-html',
+    } as const;
+    const input = {
+      prompt: 'revise this page',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+      source,
+      systemPrompt: 'Follow host source identity.',
+    };
+    const fsForRun = () =>
+      makeStubFs({
+        [source.path]: SAMPLE_HTML,
+        'App.jsx': '<main>Unrelated</main>',
+        'DESIGN.md': VALID_DESIGN_MD,
+      });
+    async function tool(options: AgentOptions, name: string, params: Record<string, unknown> = {}) {
+      const selected = options.initialState?.tools?.find((entry) => entry.name === name);
+      if (!selected) throw new Error(`Missing tool ${name}`);
+      return selected.execute('identity-test', params);
+    }
+
+    it('runs a fixed no-model native authoring turn through real resources and default tools', async () => {
+      const templatesRoot = path.resolve(
+        import.meta.dirname,
+        '../../../apps/desktop/resources/templates',
+      );
+      const workspaceRoot = mkdtempSync(path.join(tmpdir(), 'native-authoring-turn-'));
+      const primary = { ...source, path: 'pages/main.htm' };
+      const { loadSkillsFromDir } =
+        await vi.importActual<typeof import('./skills/loader.js')>('./skills/loader.js');
+      loadBuiltinSkillsMock.mockImplementation(() =>
+        loadSkillsFromDir(path.join(templatesRoot, 'skills'), 'builtin', primary),
+      );
+      const fs = makeStubFs({ 'App.jsx': '<main>Unrelated original</main>' });
+      const scan = vi.fn(async () => []);
+      const readLiteral = vi.fn(async (file: string) => {
+        const result = fs.view(file);
+        return result ? { file, contents: result.content } : null;
+      });
+      const accepted = vi.fn();
+      let raw = '';
+      const preview = vi.fn(async () => ({
+        ok: true,
+        consoleErrors: [],
+        assetErrors: [],
+        metrics: { nodes: 25, height: 768, width: 1024, loadMs: 0 },
+      }));
+      scriptedAgent = {
+        assistantText: 'Fixed local harness complete; browser behavior is checked separately.',
+        execute: async (options) => {
+          expect(options.initialState?.systemPrompt).toContain(
+            'Primary native HTML source: "pages/main.htm"',
+          );
+          expect(options.initialState?.systemPrompt).toContain('craft-polish');
+          expect(options.initialState?.systemPrompt).not.toContain('data-viz-recharts');
+          await tool(options, 'set_todos', {
+            items: [{ text: 'Author and verify native source', checked: false }],
+          });
+          const excluded = await tool(options, 'skill', { name: 'data-viz-recharts' });
+          expect(excluded.details).toMatchObject({ status: 'not-found' });
+          expect(
+            (
+              await tool(options, 'scaffold', {
+                kind: 'iphone-16-pro-frame',
+                destPath: primary.path,
+              })
+            ).details,
+          ).toMatchObject({ ok: false });
+          const method = await tool(options, 'skill', { name: 'polish' });
+          expect(method.content).toEqual([
+            {
+              type: 'text',
+              text: readFileSync(
+                path.join(templatesRoot, 'skills/native-html/craft-polish.md'),
+                'utf8',
+              ),
+            },
+          ]);
+          expect(
+            (await tool(options, 'scaffold', { kind: 'terminal', destPath: primary.path })).details,
+          ).toMatchObject({ ok: true, destPath: primary.path });
+          expect(
+            (
+              await tool(options, 'scaffold', {
+                kind: 'design-system-starter',
+                destPath: 'DESIGN.md',
+              })
+            ).details,
+          ).toMatchObject({ ok: true });
+          const copied = readFileSync(path.join(workspaceRoot, primary.path), 'utf8');
+          await tool(options, 'str_replace_based_edit_tool', {
+            command: 'view',
+            path: primary.path,
+          });
+          raw = copied.replace('<title>Terminal</title>', '<title>Local terminal</title>');
+          await tool(options, 'str_replace_based_edit_tool', {
+            command: 'create',
+            path: primary.path,
+            file_text: raw,
+          });
+          expect((await tool(options, 'tweaks', {})).details).toMatchObject({
+            scannedFileCount: 1,
+          });
+          expect(readLiteral).toHaveBeenCalledExactlyOnceWith(primary.path);
+          expect(scan).not.toHaveBeenCalled();
+          expect((await tool(options, 'preview', { path: primary.path })).details).toMatchObject({
+            ok: true,
+          });
+          expect((await tool(options, 'done', { path: 'other.html' })).details).toMatchObject({
+            status: 'has_errors',
+          });
+          const completed = await tool(options, 'done', { path: primary.path });
+          expect(completed.details, JSON.stringify(completed)).toMatchObject({ status: 'ok' });
+        },
+      };
+      try {
+        const result = await generateViaAgent(
+          {
+            ...input,
+            source: primary,
+            systemPrompt: undefined,
+            templatesRoot,
+            workspaceRoot,
+            onSourceAccepted: accepted,
+            readWorkspaceFiles: scan,
+            readWorkspaceFile: readLiteral,
+            runPreview: preview,
+            onScaffolded: (details) => {
+              fs.create(details.destPath, readFileSync(details.written, 'utf8'));
+            },
+          },
+          { fs, runtimeVerify: async () => ({ errors: [], warnings: [] }) },
+        );
+        expect(result.artifacts).toHaveLength(1);
+        expect(result.artifacts[0]).toMatchObject({
+          content: raw,
+          source: primary,
+          entryPath: primary.path,
+        });
+        expect(accepted).toHaveBeenCalledWith({ source: primary, content: raw });
+        expect(preview).toHaveBeenCalledWith(expect.objectContaining({ path: primary.path }));
+        expect(fs.view('App.jsx')?.content).toBe('<main>Unrelated original</main>');
+        expect(result.resourceState?.loadedSkills).toContain('craft-polish');
+      } finally {
+        rmSync(workspaceRoot, { recursive: true, force: true });
+      }
+    });
+    it('uses built-in native revise with resource discovery and identity-bound tool guidance', async () => {
+      await generateViaAgent(
+        {
+          ...input,
+          systemPrompt: undefined,
+          mode: 'revise',
+          templatesRoot: path.resolve(
+            import.meta.dirname,
+            '../../../apps/desktop/resources/templates',
+          ),
+        },
+        { fs: fsForRun() },
+      );
+      const state = agentCalls.at(-1)?.options.initialState;
+      expect(state?.systemPrompt).toContain('Primary native HTML source:');
+      expect(state?.systemPrompt).not.toContain('Define `App`');
+      expect(state?.systemPrompt).not.toContain(
+        'Write the primary visual design source to `App.jsx`',
+      );
+      expect(loadBuiltinSkillsMock).toHaveBeenCalled();
+      expect(
+        state?.tools?.find((item) => item.name === 'str_replace_based_edit_tool')?.description,
+      ).toContain(source.path);
+      expect(state?.tools?.find((item) => item.name === 'scaffold')?.description).not.toContain(
+        'iphone-16-pro-frame',
+      );
+    });
+    it('public applyComment carries native identity into the built-in revise path', async () => {
+      await applyComment(
+        {
+          source,
+          artifactSource: SAMPLE_HTML,
+          comment: 'Adjust heading',
+          selection: {
+            tag: 'h1',
+            selector: 'h1',
+            outerHTML: '<h1>Hi</h1>',
+            rect: { top: 0, left: 0, width: 100, height: 20 },
+          },
+          model: MODEL,
+          apiKey: 'sk-test',
+          workspaceRoot: '/test',
+          templatesRoot: path.resolve(
+            import.meta.dirname,
+            '../../../apps/desktop/resources/templates',
+          ),
+        },
+        { fs: fsForRun() },
+      );
+      expect(agentCalls.at(-1)?.options.initialState?.systemPrompt).toContain(
+        'Primary native HTML source:',
+      );
+      expect(JSON.stringify(agentCalls.at(-1)?.prompts)).toContain(source.path);
+      expect(loadBuiltinSkillsMock).toHaveBeenCalled();
+    });
+    it('accepts the declared raw source, even with a coexisting App.jsx', async () => {
+      const accepted = vi.fn();
+      scriptedAgent = {
+        assistantText: 'Verified.',
+        execute: async (options) => {
+          await tool(options, 'done');
+        },
+      };
+      const result = await generateViaAgent(
+        { ...input, onSourceAccepted: accepted },
+        { fs: fsForRun(), runtimeVerify: async () => ({ errors: [], warnings: [] }) },
+      );
+      expect(result.artifacts).toHaveLength(1);
+      expect(result.artifacts[0]).toMatchObject({
+        content: SAMPLE_HTML,
+        entryPath: source.path,
+        sourceFormat: 'html',
+        renderRuntime: 'static-html',
+        source,
+      });
+      expect(accepted).toHaveBeenCalledWith({ source, content: SAMPLE_HTML });
+    });
+
+    it.each([
+      false,
+      true,
+    ])('no-op never emits an existing visual artifact (history=%s)', async (history) => {
+      const accepted = vi.fn();
+      scriptedAgent = { assistantText: 'Just discussing.' };
+      const initialResourceState = resourceState({
+        mutationSeq: 4,
+        lastDone: {
+          status: 'ok',
+          path: source.path,
+          mutationSeq: 4,
+          errorCount: 0,
+          checkedAt: '2026-01-01',
+        },
+      });
+      const result = await generateViaAgent(
+        { ...input, onSourceAccepted: accepted, ...(history ? { initialResourceState } : {}) },
+        { fs: fsForRun() },
+      );
+      expect(result.artifacts).toEqual([]);
+      expect(accepted).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'missing',
+      'stale',
+      'during',
+      'direct',
+      'document-bypass',
+      'custom',
+    ])('rejects %s verification bypass', async (scenario) => {
+      const fs = fsForRun();
+      const accepted = vi.fn();
+      scriptedAgent = {
+        assistantText: 'Finished.',
+        execute: async (options) => {
+          if (scenario === 'custom') {
+            await fs.create(source.path, `${SAMPLE_HTML}\nchanged`);
+            return;
+          }
+          if (scenario === 'stale' || scenario === 'direct') await tool(options, 'done');
+          if (scenario === 'direct') await fs.create(source.path, `${SAMPLE_HTML}\nchanged`);
+          else if (scenario !== 'during')
+            await tool(options, 'str_replace_based_edit_tool', {
+              command: 'create',
+              path: 'assets/style.css',
+              file_text: 'body { color: red; }',
+            });
+          if (scenario === 'during') await tool(options, 'done');
+          if (scenario === 'document-bypass') await tool(options, 'done', { path: 'DESIGN.md' });
+        },
+      };
+      const runtimeVerify = async () => {
+        if (scenario === 'during') {
+          const options = agentCalls.at(-1)?.options;
+          if (!options) throw new Error('Missing options');
+          await tool(options, 'str_replace_based_edit_tool', {
+            command: 'create',
+            path: 'assets/style.css',
+            file_text: 'body {}',
+          });
+        }
+        return { errors: [], warnings: [] };
+      };
+      await expect(
+        generateViaAgent(
+          { ...input, onSourceAccepted: accepted },
+          { fs, runtimeVerify, ...(scenario === 'custom' ? { tools: [] } : {}) },
+        ),
+      ).rejects.toMatchObject({ code: ERROR_CODES.GENERATION_INCOMPLETE });
+      expect(accepted).not.toHaveBeenCalled();
+    });
+
+    it('allows DESIGN.md-only work without confirming or collecting visual source', async () => {
+      const accepted = vi.fn();
+      scriptedAgent = {
+        assistantText: 'Updated documentation.',
+        execute: async (options) => {
+          await tool(options, 'str_replace_based_edit_tool', {
+            command: 'create',
+            path: 'DESIGN.md',
+            file_text: `${VALID_DESIGN_MD}\nNew note.`,
+          });
+          await tool(options, 'done', { path: 'DESIGN.md' });
+        },
+      };
+      const result = await generateViaAgent(
+        { ...input, onSourceAccepted: accepted },
+        { fs: fsForRun() },
+      );
+      expect(result.artifacts).toEqual([]);
+      expect(accepted).not.toHaveBeenCalled();
+    });
   });
 
   it('falls back to legacy index.html when App.jsx is absent', async () => {

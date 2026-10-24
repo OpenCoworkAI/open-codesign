@@ -3,7 +3,7 @@ import {
   buildInteractivePreviewDocument,
   INTERACTIVE_PREVIEW_SANDBOX,
 } from '@open-codesign/runtime';
-import type { CommentRow } from '@open-codesign/shared';
+import type { CommentRow, SourceIdentityV1 } from '@open-codesign/shared';
 import {
   type CSSProperties,
   type DragEvent,
@@ -38,7 +38,8 @@ import { CanvasErrorBar } from './CanvasErrorBar';
 import { CanvasTabBar } from './CanvasTabBar';
 import { CommentBubble } from './comment/CommentBubble';
 import { PinOverlay } from './comment/PinOverlay';
-import { FilesTabView, WorkspaceFilePreview } from './FilesTabView';
+import { DesignSourceControl } from './DesignSourceControl';
+import { FilesTabView, WorkspaceFilePreview, workspaceBaseHrefForFile } from './FilesTabView';
 import { PhoneFrame } from './PhoneFrame';
 import { PreviewToolbar } from './PreviewToolbar';
 
@@ -69,6 +70,7 @@ const COMMENT_HINT_CLASS =
 interface PreviewSlotProps {
   designId: string;
   source: string;
+  identity?: SourceIdentityV1 | undefined;
   active: boolean;
   viewport: 'mobile' | 'tablet' | 'desktop';
   zoom: number;
@@ -214,6 +216,7 @@ function ScaledPreviewFrame({
 function PreviewSlot({
   designId,
   source,
+  identity,
   active,
   viewport,
   zoom,
@@ -225,12 +228,27 @@ function PreviewSlot({
   onIframeError,
   onIframeLoaded,
 }: PreviewSlotProps) {
-  const srcDocStableKey = useMemo(() => stablePreviewSourceKey(source), [source]);
+  const workspacePath = useCodesignStore(
+    (s) => s.designs.find((d) => d.id === designId)?.workspacePath,
+  );
+  const srcDocStableKey = useMemo(
+    () => stablePreviewSourceKey(source, identity?.runtimeMode),
+    [source, identity?.runtimeMode],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: srcDocStableKey is the intentional dependency. source flows through naturally because the factory closes over it and re-runs whenever the stable key flips, which is exactly when structural changes (anything outside EDITMODE / TWEAK_SCHEMA markers) are present.
   const srcDoc = useMemo(
-    () => buildInteractivePreviewDocument(source, { path: inferPreviewSourcePath(source) }),
-    [srcDocStableKey],
+    () =>
+      buildInteractivePreviewDocument(source, {
+        path: identity?.path ?? inferPreviewSourcePath(source),
+        ...(identity ? { runtimeMode: identity.runtimeMode } : {}),
+        baseHref: workspaceBaseHrefForFile({
+          designId,
+          workspacePath,
+          filePath: identity?.path ?? inferPreviewSourcePath(source),
+        }),
+      }),
+    [srcDocStableKey, identity?.path, identity?.runtimeMode, workspacePath, designId],
   );
   const previousDocument = useRef(srcDoc);
   usePreviewErrorLifecycle(srcDoc, designId, active);
@@ -328,6 +346,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const t = useT();
   const previewSource = useCodesignStore((s) => s.previewSource);
   const previewSourceByDesign = useCodesignStore((s) => s.previewSourceByDesign);
+  const previewIdentityByDesign = useCodesignStore((s) => s.previewIdentityByDesign);
   const recentDesignIds = useCodesignStore((s) => s.recentDesignIds);
   const view = useCodesignStore((s) => s.view);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
@@ -670,6 +689,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             key={entry.id}
             designId={entry.id}
             source={entry.source}
+            identity={previewIdentityByDesign[entry.id]}
             active={entry.id === currentDesignId}
             viewport={previewViewport}
             zoom={previewZoom}
@@ -726,6 +746,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           </div>
         )}
         <CanvasErrorBar />
+        <DesignSourceControl />
         <div
           ref={canvasHostRef}
           className={PREVIEW_PANE_LAYOUT_CLASSES.canvasHost}

@@ -1,7 +1,9 @@
 import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { makeTweaksTool } from '@open-codesign/core';
+import { SourceIdentityV1 } from '@open-codesign/shared';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   classifyWorkspaceFileKind,
   listWorkspaceDirectoryAt,
@@ -24,6 +26,48 @@ describe('readWorkspaceFilesAt', () => {
   afterEach(async () => {
     // Vitest's tmpdir cleanup is best-effort; leaving dirs behind on failure
     // is cheaper than wrestling with rimraf on every test.
+  });
+
+  it.each([
+    'pages/[z-a].htm',
+    'pages/[main].htm',
+    'pages/main.htm',
+  ])('reads native tweaks from literal source %s without compiling a glob', async (sourcePath) => {
+    const source = SourceIdentityV1.parse({
+      schemaVersion: 1,
+      path: sourcePath,
+      format: 'html',
+      runtimeMode: 'native-html',
+    });
+    await mkdir(join(root, 'pages'));
+    await mkdir(join(root, 'styles'));
+    await writeFile(
+      join(root, sourcePath),
+      '<main>Native</main><script>const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"density":1}/*EDITMODE-END*/;</script>',
+    );
+    await writeFile(
+      join(root, 'pages/m.htm'),
+      '<script>const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"density":2}/*EDITMODE-END*/;</script>',
+    );
+    await writeFile(
+      join(root, 'styles/main.css'),
+      '/*EDITMODE-BEGIN*/{"radius":8}/*EDITMODE-END*/',
+    );
+    const scan = vi.fn((patterns?: string[]) => readWorkspaceFilesAt(root, patterns));
+    const read = vi.fn(async (file: string) => {
+      const result = await readWorkspaceFileAt(root, file);
+      return { file: result.path, contents: result.content };
+    });
+    const tool = makeTweaksTool(scan, { source, readWorkspaceFile: read });
+    expect((await tool.execute('native', {})).details.blocks).toEqual([
+      { file: sourcePath, tokens: { density: 1 } },
+    ]);
+    expect(scan).not.toHaveBeenCalled();
+    expect(read).toHaveBeenCalledExactlyOnceWith(sourcePath);
+    const explicit = await tool.execute('auxiliary', { patterns: ['styles/*.css'] });
+    expect(explicit.details.blocks).toEqual([{ file: 'styles/main.css', tokens: { radius: 8 } }]);
+    expect(scan).toHaveBeenCalledExactlyOnceWith(['styles/*.css']);
+    expect(read).toHaveBeenCalledTimes(1);
   });
 
   it('returns matching files and skips ignored dirs under default patterns', async () => {

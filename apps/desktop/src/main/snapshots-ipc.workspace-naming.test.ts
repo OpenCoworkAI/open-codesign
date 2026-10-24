@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,8 @@ import {
   isAutoManagedWorkspacePath,
   renameAutoManagedWorkspaceForDesign,
 } from './snapshots-ipc';
+import { getSourceEntry, initializeSourceEntry } from './source-entry';
+import * as sourceEntryStore from './source-entry-store';
 import { normalizeWorkspacePath } from './workspace-path';
 
 vi.mock('./electron-runtime', () => ({
@@ -36,10 +38,11 @@ describe('auto-managed workspace naming', () => {
   let root: string;
 
   beforeEach(async () => {
-    root = await mkdtemp(path.join(os.tmpdir(), 'codesign-workspace-name-'));
+    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'codesign-workspace-name-')));
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await rm(root, { recursive: true, force: true });
   });
 
@@ -66,12 +69,13 @@ describe('auto-managed workspace naming', () => {
   });
 
   it('renames an auto-managed workspace folder when the design receives a real title', async () => {
-    const db = initInMemoryDb();
+    const db = { ...initInMemoryDb(), sessionDir: path.join(root, 'sessions') };
     const design = createDesign(db, 'Untitled design 1');
     const oldWorkspace = path.join(root, 'Untitled-design-1');
     await mkdir(oldWorkspace);
     await writeFile(path.join(oldWorkspace, 'App.jsx'), 'function App() { return null; }', 'utf8');
     updateDesignWorkspace(db, design.id, oldWorkspace);
+    const entry = await initializeSourceEntry(db, design.id);
 
     const updated = await renameAutoManagedWorkspaceForDesign({
       db,
@@ -83,17 +87,21 @@ describe('auto-managed workspace naming', () => {
     const expected = normalizeWorkspacePath(path.join(root, 'Studio-Loop-Welcome-Email'));
     expect(updated?.workspacePath).toBe(expected);
     expect(getDesign(db, design.id)?.workspacePath).toBe(expected);
+    const moved = await getSourceEntry(db, design.id);
+    expect(moved).toMatchObject({ status: 'planned', source: entry.source });
+    expect(moved.revision).not.toBe(entry.revision);
     await expect(exists(oldWorkspace)).resolves.toBe(false);
     await expect(exists(path.join(expected, 'App.jsx'))).resolves.toBe(true);
   });
 
   it('adds a numeric suffix when the desired renamed workspace already exists', async () => {
-    const db = initInMemoryDb();
+    const db = { ...initInMemoryDb(), sessionDir: path.join(root, 'sessions') };
     const design = createDesign(db, 'Untitled design 1');
     const oldWorkspace = path.join(root, 'Untitled-design-1');
     await mkdir(oldWorkspace);
     await mkdir(path.join(root, 'Studio-Loop-Welcome-Email'));
     updateDesignWorkspace(db, design.id, oldWorkspace);
+    const entry = await initializeSourceEntry(db, design.id);
 
     const updated = await renameAutoManagedWorkspaceForDesign({
       db,
@@ -105,10 +113,41 @@ describe('auto-managed workspace naming', () => {
     expect(updated?.workspacePath).toBe(
       normalizeWorkspacePath(path.join(root, 'Studio-Loop-Welcome-Email-1')),
     );
+    expect((await getSourceEntry(db, design.id)).revision).not.toBe(entry.revision);
+  });
+
+  it('restores the original directory when source metadata fails after the directory rename', async () => {
+    const db = { ...initInMemoryDb(), sessionDir: path.join(root, 'sessions') };
+    const design = createDesign(db, 'Original');
+    const oldWorkspace = path.join(root, 'Original');
+    await mkdir(oldWorkspace);
+    await writeFile(path.join(oldWorkspace, 'index.html'), '<h1>Keep me</h1>');
+    const bound = updateDesignWorkspace(db, design.id, oldWorkspace);
+    if (!bound) throw new Error('Missing design');
+    const previous = await initializeSourceEntry(db, design.id);
+    vi.spyOn(sourceEntryStore, 'writeSourceEntryFile').mockRejectedValueOnce(
+      new Error('Sidecar failure'),
+    );
+    await expect(
+      renameAutoManagedWorkspaceForDesign({
+        db,
+        designBeforeRename: bound,
+        newName: 'Renamed',
+        defaultRoot: root,
+      }),
+    ).rejects.toThrow('Sidecar failure');
+    expect(getDesign(db, design.id)?.workspacePath).toBe(normalizeWorkspacePath(oldWorkspace));
+    expect(await exists(oldWorkspace)).toBe(true);
+    expect(await exists(path.join(root, 'Renamed'))).toBe(false);
+    expect(await sourceEntryStore.readSourceEntryFile(db, design.id)).toEqual(previous);
+    expect(await getSourceEntry(db, design.id)).toMatchObject({
+      status: 'planned',
+      content: '<h1>Keep me</h1>',
+    });
   });
 
   it('leaves user-chosen workspaces alone', async () => {
-    const db = initInMemoryDb();
+    const db = { ...initInMemoryDb(), sessionDir: path.join(root, 'sessions') };
     const design = createDesign(db, 'Untitled design 1');
     const userWorkspace = await mkdtemp(path.join(os.tmpdir(), 'codesign-custom-workspace-'));
     try {

@@ -13,6 +13,7 @@ import type {
   CommentRow,
   CommentStatus,
   Design,
+  DesignAuthoringFormat,
   DesignSnapshot,
   ExternalConfigsDetection,
   GeneratePayloadV1,
@@ -35,6 +36,9 @@ import type {
   SourceEditApplyResultV1,
   SourceEditInspectRequestV1,
   SourceEditInspectResultV1,
+  SourceEntryResultV1,
+  SourceEntrySelectRequestV1,
+  SourceIdentityV1,
   SupportedOnboardingProvider,
   WebSearchSettingsState,
   WebSearchTestResult,
@@ -254,7 +258,8 @@ export interface GenerateArtifact {
   title: string;
   content: string;
   designParams: unknown[];
-  sourceFormat?: 'jsx' | 'html' | 'svg' | 'markdown';
+  sourceFormat?: 'jsx' | 'tsx' | 'html' | 'svg' | 'markdown';
+  source?: SourceIdentityV1;
   renderRuntime?: 'react' | 'static-html' | 'svg' | 'none';
   entryPath?: string;
   createdAt: string;
@@ -351,6 +356,7 @@ export interface AgentStreamEvent {
   // generation so the user can watch the design take shape.
   path?: string;
   content?: string;
+  source?: SourceIdentityV1;
   // error
   message?: string;
   code?: string;
@@ -739,6 +745,15 @@ const api = {
         { ok: true; models: string[] } | { ok: false; code: string; message: string }
       >,
   },
+  sourceEntry: {
+    get: (designId: string) =>
+      ipcRenderer.invoke('codesign:source-entry:v1:get', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<SourceEntryResultV1>,
+    select: (input: SourceEntrySelectRequestV1) =>
+      ipcRenderer.invoke('codesign:source-entry:v1:select', input) as Promise<SourceEntryResultV1>,
+  },
   sourceEdits: {
     inspect: (input: SourceEditInspectRequestV1) =>
       ipcRenderer.invoke(
@@ -824,12 +839,18 @@ const api = {
   snapshots: {
     listDesigns: () =>
       ipcRenderer.invoke('snapshots:v1:list-designs', { schemaVersion: 1 }) as Promise<Design[]>,
-    createDesign: (name: string, workspacePath?: string | null, demoInputId?: string) =>
+    createDesign: (
+      name: string,
+      workspacePath?: string | null,
+      demoInputId?: string,
+      authoringFormat?: DesignAuthoringFormat,
+    ) =>
       ipcRenderer.invoke('snapshots:v1:create-design', {
         schemaVersion: 1,
         name,
         ...(workspacePath !== undefined ? { workspacePath } : {}),
         ...(demoInputId !== undefined ? { demoInputId } : {}),
+        ...(authoringFormat !== undefined ? { authoringFormat } : {}),
       }) as Promise<Design>,
     getDesign: (id: string) =>
       ipcRenderer.invoke('snapshots:v1:get-design', {

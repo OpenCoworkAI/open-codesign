@@ -7,11 +7,13 @@
  * happens through resource manifests plus `skill()` / `scaffold()` tool calls.
  */
 
+import type { SourceIdentityV1 } from '@open-codesign/shared';
 import { composeFull, type PromptFeatureProfile } from './compose-full.js';
 
 export { PROMPT_SECTION_FILES, PROMPT_SECTIONS } from './sections/loader.js';
 
 export interface PromptComposeOptions {
+  source?: SourceIdentityV1 | undefined;
   /** Generation mode:
    *  - `create`  — fresh design from a prompt
    *  - `tweak`   — update EDITMODE parameters only
@@ -39,7 +41,7 @@ export interface PromptComposeOptions {
  * prompt injection attacks from adversarial codebase content.
  */
 export function composeSystemPrompt(opts: PromptComposeOptions): string {
-  const sections = composeFull(opts.mode, opts.featureProfile);
+  const sections = composeFull(opts.mode, opts.featureProfile, opts.source);
 
   if (opts.resources?.length) {
     sections.push(opts.resources.join('\n\n---\n\n'));

@@ -1,8 +1,10 @@
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
+import { filterActive } from '@open-codesign/providers';
+import { CodesignError, ERROR_CODES, type SourceIdentityV1 } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
+import { authoringProfileFor, nativeSkillPath } from '../authoring-profile.js';
 
 /**
  * `skill` tool. Lazy-loads the markdown body of a builtin design skill (or a
@@ -29,6 +31,8 @@ export interface SkillManifestEntry {
 }
 
 export interface SkillRoots {
+  source?: SourceIdentityV1 | undefined;
+  providerId?: string | undefined;
   skillsRoot?: string | null | undefined;
   brandRefsRoot?: string | null | undefined;
 }
@@ -80,13 +84,17 @@ export async function listSkillManifest(roots: SkillRoots): Promise<SkillManifes
 
   if (roots.skillsRoot) {
     const { loadSkillsFromDir } = await import('../skills/loader.js');
-    const builtins = await loadSkillsFromDir(roots.skillsRoot, 'builtin');
+    const selected = await loadSkillsFromDir(roots.skillsRoot, 'builtin', roots.source);
+    const builtins =
+      authoringProfileFor(roots.source) === 'native-html'
+        ? filterActive(selected, roots.providerId ?? '')
+        : selected;
     for (const skill of builtins) {
       out.push({
         name: skill.frontmatter.name,
         category: 'design',
         source: 'builtin',
-        path: path.join(roots.skillsRoot, `${skill.id}.md`),
+        path: path.join(roots.skillsRoot, nativeSkillPath(skill.id, roots.source)),
         description: skill.frontmatter.description,
         aliases: skill.frontmatter.aliases,
         dependencies: skill.frontmatter.dependencies,
@@ -170,13 +178,42 @@ export interface InvokeSkillResult {
   metadata?: SkillManifestEntry;
 }
 
+function skillDedupKey(entry: SkillManifestEntry, roots: SkillRoots): string {
+  if (authoringProfileFor(roots.source) === 'legacy') return entry.name;
+  return JSON.stringify([
+    'native-html',
+    path.resolve(rootForEntry(entry, roots) ?? '.'),
+    roots.providerId ?? '',
+    entry.name,
+    path.resolve(entry.path),
+  ]);
+}
+
 export async function invokeSkill(opts: InvokeSkillOptions): Promise<InvokeSkillResult> {
   const manifest = await listSkillManifest(opts.roots);
-  const entry = manifest.find((e) => e.name === opts.name || e.aliases.includes(opts.name));
+  const native = authoringProfileFor(opts.roots.source) === 'native-html';
+  let entry = manifest.find(
+    (e) => e.name === opts.name || (!native && e.aliases.includes(opts.name)),
+  );
+  if (!entry && native) {
+    const canonicalFiles = opts.roots.skillsRoot
+      ? await readdir(opts.roots.skillsRoot).catch((err: unknown) => {
+          if (isMissingPath(err)) return [];
+          throw err;
+        })
+      : [];
+    if (canonicalFiles.includes(`${opts.name}.md`)) {
+      return { status: 'not-found', reason: `skill unavailable for this run: ${opts.name}` };
+    }
+    entry = manifest.find((e) => e.aliases.includes(opts.name));
+  }
   if (!entry) {
     return { status: 'not-found', reason: `no skill registered as ${opts.name}` };
   }
-  if (opts.alreadyLoaded?.has(entry.name) || opts.alreadyLoaded?.has(opts.name)) {
+  if (
+    opts.alreadyLoaded?.has(skillDedupKey(entry, opts.roots)) ||
+    (authoringProfileFor(opts.roots.source) === 'legacy' && opts.alreadyLoaded?.has(opts.name))
+  ) {
     return { status: 'already-loaded', metadata: entry };
   }
   try {
@@ -225,6 +262,8 @@ export function makeSkillTool(
 ): AgentTool<typeof SkillParams, SkillDetails> {
   const dedup = opts.dedup;
   const roots: SkillRoots = {
+    source: opts.source,
+    providerId: opts.providerId,
     ...(opts.skillsRoot !== undefined ? { skillsRoot: opts.skillsRoot } : {}),
     ...(opts.brandRefsRoot !== undefined ? { brandRefsRoot: opts.brandRefsRoot } : {}),
   };
@@ -232,14 +271,16 @@ export function makeSkillTool(
     name: 'skill',
     label: 'Skill',
     description:
-      'Load a concrete markdown rules sheet for a builtin method skill ' +
-      '(for example form-layout, responsive-layout, accessibility-states, ' +
-      'design-system-baton, app-shell-navigation, pitch-deck, mobile-mock, ' +
-      'data-viz-recharts) or a reference-only brand DESIGN.md as "brand:<slug>" ' +
-      '(for example brand:vercel, brand:linear, brand:stripe). Call BEFORE ' +
-      'writing code whenever the request matches. This tool loads guidance; it ' +
-      'does not copy scaffold files. One call per skill per session; repeat ' +
-      'calls return a short already-loaded response.',
+      authoringProfileFor(opts.source) === 'native-html'
+        ? 'Load an advertised native method (for example craft-polish or chart-rendering) or reference-only brand:<slug>. Guidance does not copy files. Native overlays and provider eligibility apply to direct calls; repeat calls are deduplicated for this profile and resource root.'
+        : 'Load a concrete markdown rules sheet for a builtin method skill ' +
+          '(for example form-layout, responsive-layout, accessibility-states, ' +
+          'design-system-baton, app-shell-navigation, pitch-deck, mobile-mock, ' +
+          'data-viz-recharts) or a reference-only brand DESIGN.md as "brand:<slug>" ' +
+          '(for example brand:vercel, brand:linear, brand:stripe). Call BEFORE ' +
+          'writing code whenever the request matches. This tool loads guidance; it ' +
+          'does not copy scaffold files. One call per skill per session; repeat ' +
+          'calls return a short already-loaded response.',
     parameters: SkillParams,
     async execute(_toolCallId, params): Promise<AgentToolResult<SkillDetails>> {
       const name = params.name;
@@ -250,7 +291,7 @@ export function makeSkillTool(
       });
       if (result.status === 'loaded') {
         const canonicalName = result.metadata?.name ?? name;
-        dedup?.add(canonicalName);
+        if (result.metadata) dedup?.add(skillDedupKey(result.metadata, roots));
         return {
           content: [{ type: 'text', text: result.body ?? '' }],
           details: {

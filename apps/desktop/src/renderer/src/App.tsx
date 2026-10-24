@@ -44,6 +44,7 @@ export function App() {
   const designsViewOpen = useCodesignStore((s) => s.designsViewOpen);
   const closeDesignsView = useCodesignStore((s) => s.closeDesignsView);
   const createNewDesign = useCodesignStore((s) => s.createNewDesign);
+  const openNewDesignDialog = useCodesignStore((s) => s.openNewDesignDialog);
   const designToDelete = useCodesignStore((s) => s.designToDelete);
   const designToRename = useCodesignStore((s) => s.designToRename);
   const requestDeleteDesign = useCodesignStore((s) => s.requestDeleteDesign);
@@ -172,7 +173,7 @@ export function App() {
         combo: 'mod+n',
         handler: () => {
           if (!ready) return;
-          void createNewDesign();
+          openNewDesignDialog();
         },
       },
       {
@@ -219,7 +220,7 @@ export function App() {
       setInteractionMode,
       setView,
       closeDesignsView,
-      createNewDesign,
+      openNewDesignDialog,
       requestDeleteDesign,
       requestRenameDesign,
     ],

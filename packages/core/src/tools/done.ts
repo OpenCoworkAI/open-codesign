@@ -15,7 +15,12 @@
  */
 
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY, validateDesignMd } from '@open-codesign/shared';
+import {
+  DEFAULT_SOURCE_ENTRY,
+  LEGACY_SOURCE_ENTRY,
+  type SourceIdentityV1,
+  validateDesignMd,
+} from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 import type { TextEditorFsCallbacks } from './text-editor.js';
 
@@ -61,8 +66,15 @@ export interface DoneDetails {
   summary?: string;
 }
 
+export interface VerifiedSource {
+  source: SourceIdentityV1;
+  content: string;
+}
+
 export interface DoneToolOptions {
   requireDesignMd?: boolean;
+  source?: SourceIdentityV1 | undefined;
+  onSourceVerified?: ((verified: VerifiedSource) => void) | undefined;
 }
 
 function resolveDonePath(fs: TextEditorFsCallbacks, requested: string | undefined): string {
@@ -167,7 +179,11 @@ export interface DoneRuntimeResult {
  *  observed when it actually executed it. */
 export type DoneRuntimeVerifier = (
   artifactSource: string,
-  context?: { path: string; signal?: AbortSignal },
+  context?: {
+    path: string;
+    signal?: AbortSignal;
+    runtimeMode?: SourceIdentityV1['runtimeMode'] | undefined;
+  },
 ) => Promise<DoneRuntimeResult>;
 
 const VOID_ELEMENTS = new Set([
@@ -514,7 +530,14 @@ export function makeDoneTool(
     parameters: DoneParams,
     async execute(_id, params, signal): Promise<AgentToolResult<DoneDetails>> {
       signal?.throwIfAborted();
-      const path = resolveDonePath(fs, params.path);
+      const path = params.path?.trim() || opts.source?.path || resolveDonePath(fs, params.path);
+      if (opts.source && path !== opts.source.path && path !== DESIGN_MD_ENTRY) {
+        const message = `done() must verify the declared source ${opts.source.path}, not ${path}.`;
+        return {
+          content: [{ type: 'text', text: `has_errors\n- ${message}` }],
+          details: { status: 'has_errors', path, errors: [{ message, source: 'fs' }] },
+        };
+      }
       const file = fs.view(path);
       if (file === null) {
         const details: DoneDetails = {
@@ -547,12 +570,20 @@ export function makeDoneTool(
         return { content: [{ type: 'text', text: text + formatWarnings(warnings) }], details };
       }
       const designFindings = designMdWorkspaceFindings(fs, path);
+      const native = opts.source?.runtimeMode === 'native-html';
       const errors: DoneError[] = [
-        ...findJsxStructuralIssues(file.content),
-        ...(isJsxShaped(file.content) ? [] : findUnclosedTags(file.content)),
-        ...findDuplicateIds(file.content),
-        ...findMissingAlt(file.content),
-        ...findBrokenHashLinks(file.content),
+        ...(native
+          ? []
+          : [
+              ...findJsxStructuralIssues(file.content),
+              ...(isJsxShaped(file.content) ? [] : findUnclosedTags(file.content)),
+              ...findDuplicateIds(file.content),
+              ...findMissingAlt(file.content),
+              ...findBrokenHashLinks(file.content),
+            ]),
+        ...(native && !runtimeVerify
+          ? [{ message: 'Native source requires host runtime verification.', source: 'runtime' }]
+          : []),
         ...(opts.requireDesignMd ? requiredDesignMdErrors(fs, path) : []),
         ...designFindings.errors,
       ];
@@ -561,6 +592,7 @@ export function makeDoneTool(
         try {
           const runtime = await runtimeVerify(file.content, {
             path,
+            ...(opts.source ? { runtimeMode: opts.source.runtimeMode } : {}),
             ...(signal ? { signal } : {}),
           });
           signal?.throwIfAborted();
@@ -574,7 +606,11 @@ export function makeDoneTool(
           });
         }
       }
+      signal?.throwIfAborted();
       const status: DoneDetails['status'] = errors.length === 0 ? 'ok' : 'has_errors';
+      if (status === 'ok' && opts.source) {
+        opts.onSourceVerified?.({ source: opts.source, content: file.content });
+      }
       const details: DoneDetails = {
         status,
         path,
@@ -586,9 +622,11 @@ export function makeDoneTool(
       const text =
         status === 'ok'
           ? [
-              runtimeVerify
-                ? 'ok — no syntactic or runtime issues detected.'
-                : 'ok — no syntactic issues detected. (Runtime verification not configured in this host.)',
+              native
+                ? 'ok — native runtime verification passed (legacy text lint not applied).'
+                : runtimeVerify
+                  ? 'ok — no syntactic or runtime issues detected.'
+                  : 'ok — no syntactic issues detected. (Runtime verification not configured in this host.)',
               '',
               ...(hasLayoutAdvice ? LAYOUT_ADVICE_LINES : STOP_LINES),
             ].join('\n')

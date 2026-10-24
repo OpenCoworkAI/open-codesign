@@ -3,6 +3,7 @@ import type { SourceEditSelection } from '@open-codesign/runtime';
 import {
   type SourceEditOperation,
   type SourceEditTarget,
+  type SourceIdentityV1,
   sourceEditFieldKey,
 } from '@open-codesign/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -18,6 +19,7 @@ export interface SourceEditWorkspaceSource {
   path: string;
   content: string;
   workspaceDesignId?: string;
+  source?: SourceIdentityV1;
 }
 
 export function useWorkspaceSourceEdit(input: {
@@ -47,7 +49,7 @@ export function useWorkspaceSourceEdit(input: {
     !input.generating &&
     Boolean(input.designId) &&
     input.source?.workspaceDesignId === input.designId &&
-    /\.(jsx|tsx)$/i.test(input.source?.path ?? '') &&
+    /\.(jsx|tsx|html?)$/i.test(input.source?.path ?? '') &&
     Boolean(window.codesign?.sourceEdits);
   const eligible = allowed && !input.loading;
   const context = useMemo(
@@ -60,6 +62,7 @@ export function useWorkspaceSourceEdit(input: {
       allowed,
       enabled,
       refresh,
+      runtimeMode: input.source?.source?.runtimeMode,
     }),
     [
       input.designId,
@@ -70,6 +73,7 @@ export function useWorkspaceSourceEdit(input: {
       allowed,
       enabled,
       refresh,
+      input.source?.source?.runtimeMode,
     ],
   );
   const current = useRef(context);
@@ -272,6 +276,7 @@ export function useWorkspaceSourceEdit(input: {
         setInspected(null);
         setRefresh((value) => value + 1);
         input.onPersist({
+          ...(input.source?.source ? { source: input.source.source } : {}),
           path: result.path,
           content: result.content,
           workspaceDesignId: context.designId,
@@ -297,6 +302,7 @@ export function useWorkspaceSourceEdit(input: {
       input.validate,
       input.onPersist,
       input.onSaved,
+      input.source?.source,
       clearSelection,
       t,
     ],

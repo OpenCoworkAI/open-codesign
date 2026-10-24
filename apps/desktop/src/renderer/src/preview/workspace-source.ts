@@ -3,11 +3,17 @@ import {
   findArtifactSourceReference,
   resolveArtifactSourceReferencePath,
 } from '@open-codesign/runtime';
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import {
+  DEFAULT_SOURCE_ENTRY,
+  LEGACY_SOURCE_ENTRY,
+  type SourceEntryResultV1,
+  type SourceIdentityV1,
+} from '@open-codesign/shared';
 
 export interface WorkspacePreviewReadResult {
   content: string;
   path: string;
+  source?: SourceIdentityV1;
 }
 
 export type WorkspacePreviewRead = (
@@ -66,7 +72,18 @@ export async function readWorkspacePreviewSource(input: {
   designId: string;
   path: string;
   read: WorkspacePreviewRead;
+  getSourceEntry?: ((designId: string) => Promise<SourceEntryResultV1 | null>) | undefined;
 }): Promise<WorkspacePreviewReadResult> {
+  const entry = await input.getSourceEntry?.(input.designId);
+  if (
+    entry &&
+    (entry.status === 'ready' || entry.status === 'planned') &&
+    entry.source.path === input.path
+  ) {
+    if (!entry.content?.trim())
+      return { path: entry.source.path, content: '', source: entry.source };
+    return { path: entry.source.path, content: entry.content, source: entry.source };
+  }
   const result = await input.read(input.designId, input.path);
   return resolveWorkspacePreviewSource({
     designId: input.designId,
@@ -95,7 +112,18 @@ export async function resolveDesignPreviewSource(input: {
   snapshotSource?: string | null | undefined;
   listSnapshots?: DesignPreviewSnapshotList | undefined;
   preferSnapshotSource?: boolean | undefined;
+  getSourceEntry?: ((designId: string) => Promise<SourceEntryResultV1 | null>) | undefined;
 }): Promise<WorkspacePreviewReadResult | null> {
+  const entry = await input.getSourceEntry?.(input.designId);
+  if (entry) {
+    if (entry.status === 'ready' || entry.status === 'planned') {
+      return entry.content?.trim()
+        ? { content: entry.content, path: entry.source.path, source: entry.source }
+        : null;
+    }
+    // A host decision must never fall through to a stale snapshot or another file.
+    return null;
+  }
   async function resolveSnapshotSource(): Promise<WorkspacePreviewReadResult | null> {
     let source =
       typeof input.snapshotSource === 'string' && input.snapshotSource.trim().length > 0

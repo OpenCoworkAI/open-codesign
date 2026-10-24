@@ -1,4 +1,14 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -49,7 +59,7 @@ async function withMockedPlatform<T>(platform: NodeJS.Platform, run: () => Promi
 }
 
 async function makeTempDir(prefix: string): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), prefix));
+  const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), prefix)));
   tempDirs.push(dir);
   return dir;
 }
@@ -148,7 +158,10 @@ describe('openWorkspaceFolder', () => {
 
 describe('bindWorkspace', () => {
   it('returns the current design unchanged when rebinding the same normalized path', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
     const workspace = await makeTempDir('ocd-ws-same-');
     const normalized = normalizeWorkspacePath(workspace);
@@ -167,7 +180,10 @@ describe('bindWorkspace', () => {
   });
 
   it('throws when another active design already owns the workspace path', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
     const otherDesign = createDesign(db, 'Landing page variants');
     const conflictPath = normalizeWorkspacePath(await makeTempDir('ocd-ws-conflict-'));
@@ -180,7 +196,10 @@ describe('bindWorkspace', () => {
   });
 
   it('rejects empty and relative workspace bindings before touching the db', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
 
     await expect(bindWorkspace(db, design.id, '   ', false)).rejects.toThrow(
@@ -193,7 +212,10 @@ describe('bindWorkspace', () => {
   });
 
   it('rejects missing workspace directories before binding', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
     const root = await makeTempDir('ocd-ws-missing-root-');
     const missing = path.join(root, 'missing-workspace');
@@ -205,7 +227,10 @@ describe('bindWorkspace', () => {
   });
 
   it('rejects file paths before binding them as workspaces', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
     const root = await makeTempDir('ocd-ws-file-root-');
     const filePath = path.join(root, 'not-a-directory');
@@ -219,7 +244,10 @@ describe('bindWorkspace', () => {
 
   it('treats case-only workspace differences as the same path on Windows for the same design', async () => {
     await withMockedPlatform('win32', async () => {
-      const db = initInMemoryDb();
+      const db = {
+        ...initInMemoryDb(),
+        sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+      };
       const design = createDesign(db);
       const storedPath = normalizeWorkspacePath('C:/Users/Roy/Workspace');
       updateDesignWorkspace(db, design.id, storedPath);
@@ -233,7 +261,10 @@ describe('bindWorkspace', () => {
 
   it('treats case-only workspace differences as conflicts on Windows across designs', async () => {
     await withMockedPlatform('win32', async () => {
-      const db = initInMemoryDb();
+      const db = {
+        ...initInMemoryDb(),
+        sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+      };
       const design = createDesign(db);
       const otherDesign = createDesign(db);
       updateDesignWorkspace(db, otherDesign.id, normalizeWorkspacePath('C:/Users/Roy/Workspace'));
@@ -245,7 +276,10 @@ describe('bindWorkspace', () => {
   });
 
   it('copies workspace files during migration', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
     const source = await makeTempDir('ocd-ws-source-');
     const destination = await makeTempDir('ocd-ws-dest-');
@@ -269,7 +303,10 @@ describe('bindWorkspace', () => {
   });
 
   it('copies workspace files between workspaces without changing the binding', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
     const source = await makeTempDir('ocd-ws-copy-source-');
     const destination = await makeTempDir('ocd-ws-copy-dest-');
@@ -292,7 +329,10 @@ describe('bindWorkspace', () => {
   });
 
   it('skips symlinked workspace path segments while copying', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
     const source = await makeTempDir('ocd-ws-symlink-source-');
     const outside = await makeTempDir('ocd-ws-symlink-outside-');
@@ -318,7 +358,10 @@ describe('bindWorkspace', () => {
   });
 
   it('aborts migration on destination collision and leaves the binding unchanged', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
     const source = await makeTempDir('ocd-ws-source-');
     const destination = await makeTempDir('ocd-ws-dest-');
@@ -338,7 +381,10 @@ describe('bindWorkspace', () => {
   });
 
   it('clears the workspace binding without touching the filesystem', async () => {
-    const db = initInMemoryDb();
+    const db = {
+      ...initInMemoryDb(),
+      sessionDir: path.join(await makeTempDir('ocd-session-'), 'sessions'),
+    };
     const design = createDesign(db);
     const source = await makeTempDir('ocd-ws-clear-');
     const normalizedSource = normalizeWorkspacePath(source);

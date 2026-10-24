@@ -6,7 +6,13 @@ import {
   RESOURCE_MANIFEST_SCHEMA_VERSION,
   type ResourceManifestEntryV1,
   type ResourceManifestV1,
+  type SourceIdentityV1,
 } from '@open-codesign/shared';
+import {
+  authoringProfileFor,
+  isAuthoringResourceEligible,
+  nativeSkillPath,
+} from './authoring-profile.js';
 import type { CoreLogger } from './logger.js';
 import { loadScaffoldManifest, type ScaffoldManifest } from './tools/scaffold.js';
 
@@ -36,7 +42,11 @@ function skillWhenToUse(skill: LoadedSkill): string {
   return oneLine(description, 220);
 }
 
-function skillEntry(skill: LoadedSkill, skillsRoot: string): ResourceManifestEntryV1 {
+function skillEntry(
+  skill: LoadedSkill,
+  skillsRoot: string,
+  source?: SourceIdentityV1,
+): ResourceManifestEntryV1 {
   return {
     name: skill.frontmatter.name,
     description: oneLine(skill.frontmatter.description),
@@ -46,15 +56,17 @@ function skillEntry(skill: LoadedSkill, skillsRoot: string): ResourceManifestEnt
     dependencies: skill.frontmatter.dependencies,
     source: skill.source,
     license: 'MIT',
-    path: path.relative(skillsRoot, path.join(skillsRoot, `${skill.id}.md`)),
+    path: path.relative(skillsRoot, path.join(skillsRoot, nativeSkillPath(skill.id, source))),
   };
 }
 
 function scaffoldEntries(
   manifest: ScaffoldManifest,
   scaffoldsRoot: string,
+  source?: SourceIdentityV1,
 ): ResourceManifestEntryV1[] {
   return Object.entries(manifest.scaffolds)
+    .filter(([name]) => isAuthoringResourceEligible('scaffold', name, source))
     .sort(([a], [b]) => a.localeCompare(b, 'en'))
     .map(([name, scaffold]) => ({
       name,
@@ -137,7 +149,7 @@ function formatResourceLine(entry: ResourceManifestEntryV1): string {
   return `- ${entry.name}: ${oneLine(details.join(' | '), 170)}`;
 }
 
-function scaffoldDestHint(entry: ResourceManifestEntryV1): string {
+function scaffoldDestHint(entry: ResourceManifestEntryV1, source?: SourceIdentityV1): string {
   const ext = path.extname(entry.path) || '.txt';
   const stem = entry.name.replace(/-frame$/i, '');
   const category = entry.whenToUse;
@@ -145,13 +157,14 @@ function scaffoldDestHint(entry: ResourceManifestEntryV1): string {
   if (category === 'background' || category === 'surface') return `styles/${entry.name}${ext}`;
   if (category === 'design-system') return 'DESIGN.md';
   if (ext === '.jsx' || ext === '.tsx') return `App${ext}`;
-  if (ext === '.html') return 'index.html';
+  if (ext === '.html' || ext === '.htm')
+    return authoringProfileFor(source) === 'native-html' && source ? source.path : 'index.html';
   return `${entry.name}${ext}`;
 }
 
-function formatScaffoldLine(entry: ResourceManifestEntryV1): string {
+function formatScaffoldLine(entry: ResourceManifestEntryV1, source?: SourceIdentityV1): string {
   const aliases = entry.aliases.length > 0 ? ` aliases: ${entry.aliases.join(', ')}.` : '';
-  return `  - ${entry.name}: ${oneLine(entry.description, 105)}${aliases} Use scaffold({kind: "${entry.name}", destPath: "${scaffoldDestHint(entry)}"}).`;
+  return `  - ${entry.name}: ${oneLine(entry.description, 105)}${aliases} Use scaffold({kind: "${entry.name}", destPath: "${scaffoldDestHint(entry, source)}"}).`;
 }
 
 function groupEntries(
@@ -164,7 +177,10 @@ function groupEntries(
     .map(formatResourceLine);
 }
 
-function formatScaffoldGroups(entries: ResourceManifestEntryV1[]): string[] {
+function formatScaffoldGroups(
+  entries: ResourceManifestEntryV1[],
+  source?: SourceIdentityV1,
+): string[] {
   const groups = new Map<string, ResourceManifestEntryV1[]>();
   for (const entry of entries.filter((item) => item.category === 'scaffold')) {
     const category = entry.whenToUse.includes(' ')
@@ -180,7 +196,7 @@ function formatScaffoldGroups(entries: ResourceManifestEntryV1[]): string[] {
       const sorted = group.sort((a, b) => a.name.localeCompare(b.name, 'en'));
       return [
         `- ${category}: ${sorted.length} scaffold(s)`,
-        ...sorted.map(formatScaffoldLine),
+        ...sorted.map((entry) => formatScaffoldLine(entry, source)),
       ].join('\n');
     });
 }
@@ -195,10 +211,13 @@ function formatBrandSummary(entries: ResourceManifestEntryV1[]): string {
   return names.length > 40 ? `${shown}, +${names.length - 40} more` : shown;
 }
 
-export function formatResourceManifestForPrompt(manifest: ResourceManifestV1): string | null {
+export function formatResourceManifestForPrompt(
+  manifest: ResourceManifestV1,
+  source?: SourceIdentityV1,
+): string | null {
   if (manifest.entries.length === 0) return null;
   const skillLines = groupEntries(manifest.entries, 'skill');
-  const scaffoldLines = formatScaffoldGroups(manifest.entries);
+  const scaffoldLines = formatScaffoldGroups(manifest.entries, source);
   const brandLine = formatBrandSummary(manifest.entries);
   return [
     '# Available Resources',
@@ -220,6 +239,7 @@ export async function collectResourceManifest(input: {
   log: CoreLogger;
   providerId: string;
   templatesRoot: string | undefined;
+  source?: SourceIdentityV1 | undefined;
 }): Promise<ResourceManifestResult> {
   const start = Date.now();
   const warnings: string[] = [];
@@ -245,8 +265,11 @@ export async function collectResourceManifest(input: {
 
   try {
     const { loadBuiltinSkills } = await import('./skills/loader.js');
-    const activeSkills = filterActive(await loadBuiltinSkills(skillsRoot ?? ''), input.providerId);
-    entries.push(...activeSkills.map((skill) => skillEntry(skill, skillsRoot ?? '')));
+    const activeSkills = filterActive(
+      await loadBuiltinSkills(skillsRoot ?? '', input.source),
+      input.providerId,
+    );
+    entries.push(...activeSkills.map((skill) => skillEntry(skill, skillsRoot ?? '', input.source)));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const errorClass = err instanceof Error ? err.constructor.name : typeof err;
@@ -259,7 +282,9 @@ export async function collectResourceManifest(input: {
 
   try {
     if (scaffoldsRoot) {
-      entries.push(...scaffoldEntries(await loadScaffoldManifest(scaffoldsRoot), scaffoldsRoot));
+      entries.push(
+        ...scaffoldEntries(await loadScaffoldManifest(scaffoldsRoot), scaffoldsRoot, input.source),
+      );
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -284,7 +309,7 @@ export async function collectResourceManifest(input: {
   }
 
   const manifest = { schemaVersion: RESOURCE_MANIFEST_SCHEMA_VERSION, entries };
-  const section = formatResourceManifestForPrompt(manifest);
+  const section = formatResourceManifestForPrompt(manifest, input.source);
   const skillCount = entries.filter((entry) => entry.category === 'skill').length;
   const scaffoldCount = entries.filter((entry) => entry.category === 'scaffold').length;
   const brandCount = entries.filter((entry) => entry.category === 'brand-ref').length;

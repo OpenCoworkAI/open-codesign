@@ -1,9 +1,10 @@
 import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import { normalizeLegacyEditmodeBlock } from '@open-codesign/shared';
+import { normalizeLegacyEditmodeBlock, type SourceIdentityV1 } from '@open-codesign/shared';
 import { withWorkspaceFileWriter } from '@open-codesign/shared/workspace-file-lock';
 import { Type } from '@sinclair/typebox';
+import { authoringProfileFor, isAuthoringResourceEligible } from '../authoring-profile.js';
 
 /**
  * `scaffold` tool. Copies a prebuilt starter file from the user-visible
@@ -159,6 +160,7 @@ async function resolveSafeChildPath(root: string, relPath: string): Promise<stri
 }
 
 export interface ScaffoldRequest {
+  source?: SourceIdentityV1 | undefined;
   kind: string;
   destPath: string;
   workspaceRoot: string;
@@ -194,8 +196,19 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
     const reason = err instanceof Error ? err.message : String(err);
     return { ok: false, reason: `scaffold manifest unavailable: ${reason}` };
   }
-  const entry = manifest.scaffolds[req.kind];
-  if (!entry) return { ok: false, reason: `unknown scaffold kind: ${req.kind}` };
+  const canonical = Object.hasOwn(manifest.scaffolds, req.kind)
+    ? req.kind
+    : authoringProfileFor(req.source) === 'native-html'
+      ? Object.keys(manifest.scaffolds).find(
+          (name) =>
+            isAuthoringResourceEligible('scaffold', name, req.source) &&
+            manifest.scaffolds[name]?.aliases?.includes(req.kind),
+        )
+      : undefined;
+  const entry = canonical ? manifest.scaffolds[canonical] : undefined;
+  if (!entry || !canonical || !isAuthoringResourceEligible('scaffold', canonical, req.source)) {
+    return { ok: false, reason: `${entry ? 'unavailable' : 'unknown'} scaffold kind: ${req.kind}` };
+  }
 
   const templatesRoot = path.dirname(path.resolve(req.scaffoldsRoot));
   let source: string;
@@ -229,9 +242,37 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
   }
 
   let dest: string;
-  const actualDestPath = destinationPathForSource(req.destPath, source);
+  let actualDestPath: string;
   try {
+    const requested = await resolveSafeChildPath(req.workspaceRoot, req.destPath);
+    const primary =
+      authoringProfileFor(req.source) === 'native-html' && req.source
+        ? await resolveSafeChildPath(req.workspaceRoot, req.source.path)
+        : undefined;
+    const isPrimaryPath = (candidate: string) =>
+      primary !== undefined &&
+      (process.platform === 'win32'
+        ? candidate.toLowerCase() === primary.toLowerCase()
+        : candidate === primary);
+    const html = ['.html', '.htm'].includes(path.extname(source).toLowerCase());
+    if (isPrimaryPath(requested) && !html)
+      return { ok: false, reason: 'native primary source requires an HTML scaffold' };
+    actualDestPath =
+      isPrimaryPath(requested) && req.source
+        ? req.source.path
+        : destinationPathForSource(req.destPath, source);
     dest = await resolveSafeChildPath(req.workspaceRoot, actualDestPath);
+    if (isPrimaryPath(dest)) {
+      if (!html)
+        return {
+          ok: false,
+          reason: 'normalized scaffold destination collides with native primary source',
+        };
+      if (req.source && primary) {
+        actualDestPath = req.source.path;
+        dest = primary;
+      }
+    }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     return {
@@ -282,6 +323,7 @@ export type ScaffoldDetails =
   | { ok: false; reason: string };
 
 export interface MakeScaffoldToolOptions {
+  source?: SourceIdentityV1 | undefined;
   onScaffolded?: ((details: Extract<ScaffoldDetails, { ok: true }>) => Promise<void> | void) | null;
 }
 
@@ -294,8 +336,19 @@ export function makeScaffoldTool(
     name: 'scaffold',
     label: 'Scaffold',
     description:
-      "Copy a concrete starter/source asset into the current workspace. kind: one of the keys in <userData>/templates/scaffolds/manifest.json (device-frame / browser / app-shell / dev-mockup / ui-primitive / background / surface / deck / report / design-system / landing). destPath: workspace-relative path. Example: scaffold({kind: 'iphone-16-pro-frame', destPath: 'frames/iphone.jsx'}). The tool preserves the source extension.",
-    parameters: ScaffoldParams,
+      authoringProfileFor(opts.source) === 'native-html'
+        ? `Copy an advertised native HTML, CSS, or document scaffold. Use the exact primary path ${JSON.stringify(opts.source?.path)} for HTML; CSS and documents are auxiliary. JSX and unknown custom scaffolds are unavailable. Inspect customized contents; eligibility is not semantic certification.`
+        : "Copy a concrete starter/source asset into the current workspace. kind: one of the keys in <userData>/templates/scaffolds/manifest.json (device-frame / browser / app-shell / dev-mockup / ui-primitive / background / surface / deck / report / design-system / landing). destPath: workspace-relative path. Example: scaffold({kind: 'iphone-16-pro-frame', destPath: 'frames/iphone.jsx'}). The tool preserves the source extension.",
+    parameters:
+      authoringProfileFor(opts.source) === 'native-html'
+        ? Type.Object({
+            kind: ScaffoldParams.properties.kind,
+            destPath: Type.String({
+              minLength: 1,
+              description: `Workspace-relative destination; HTML may target exact primary ${JSON.stringify(opts.source?.path)} without suffix normalization. Auxiliary files preserve scaffold extensions.`,
+            }),
+          })
+        : ScaffoldParams,
     async execute(_toolCallId, params, signal): Promise<AgentToolResult<ScaffoldDetails>> {
       signal?.throwIfAborted();
       const workspaceRoot = getWorkspaceRoot();
@@ -317,6 +370,7 @@ export function makeScaffoldTool(
       const result = await runScaffold({
         kind: params.kind,
         destPath: params.destPath,
+        source: opts.source,
         workspaceRoot,
         scaffoldsRoot,
         ...(signal ? { signal } : {}),

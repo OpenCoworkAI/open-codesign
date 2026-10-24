@@ -1,3 +1,4 @@
+import type { SourceEntryResultV1 } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
   hasWorkspaceSourceReference,
@@ -10,6 +11,114 @@ import {
 } from './workspace-source';
 
 describe('workspace preview source resolution', () => {
+  const declared: SourceEntryResultV1 = {
+    schemaVersion: 1,
+    designId: 'd1',
+    workspacePath: 'C:/design',
+    revision: '76741943-1171-44b6-a744-a1a3ece68fbc',
+    status: 'ready',
+    origin: 'declared',
+    source: {
+      schemaVersion: 1,
+      path: 'pages/start.htm',
+      format: 'html',
+      runtimeMode: 'native-html',
+    },
+    content: '<!doctype html><main>Native</main><!-- artifact source lives in stale.jsx -->',
+  };
+
+  it('uses the declared nested HTML source and mode before snapshots or JSX filename guesses', async () => {
+    const read = vi.fn();
+    const listSnapshots = vi.fn();
+    const getSourceEntry = vi.fn(async () => declared);
+    await expect(
+      resolveDesignPreviewSource({
+        designId: 'd1',
+        read,
+        listSnapshots,
+        preferSnapshotSource: true,
+        getSourceEntry,
+      }),
+    ).resolves.toEqual({
+      path: declared.source.path,
+      content: declared.content,
+      source: declared.source,
+    });
+    expect(read).not.toHaveBeenCalled();
+    expect(listSnapshots).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'invalid',
+    'needs-selection',
+    'not-applicable',
+  ] as const)('never resurrects cached snapshots or guessed files for a %s host result', async (status) => {
+    const getSourceEntry = vi.fn(
+      async () =>
+        ({
+          schemaVersion: 1,
+          designId: 'd1',
+          workspacePath: 'C:/design',
+          revision: null,
+          status,
+          reason: 'missing',
+          message: 'Choose a source',
+        }) as SourceEntryResultV1,
+    );
+    const read = vi.fn();
+    const listSnapshots = vi.fn();
+    await expect(
+      resolveDesignPreviewSource({ designId: 'd1', read, listSnapshots, getSourceEntry }),
+    ).resolves.toBeNull();
+    expect(read).not.toHaveBeenCalled();
+    expect(listSnapshots).not.toHaveBeenCalled();
+  });
+
+  it('leaves an uncreated planned HTML source empty without falling back to App.jsx', async () => {
+    const getSourceEntry = async (): Promise<SourceEntryResultV1> => ({
+      schemaVersion: 1,
+      designId: 'd1',
+      workspacePath: 'C:/design',
+      revision: declared.revision as string,
+      status: 'planned',
+      source: declared.source,
+      content: null,
+    });
+    const read = vi.fn();
+    await expect(
+      resolveDesignPreviewSource({ designId: 'd1', read, getSourceEntry }),
+    ).resolves.toBeNull();
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it('keeps declared HTML bytes literal when opening its file tab', async () => {
+    const read = vi.fn();
+    await expect(
+      readWorkspacePreviewSource({
+        designId: 'd1',
+        path: declared.source.path,
+        read,
+        getSourceEntry: async () => declared,
+      }),
+    ).resolves.toEqual({
+      path: declared.source.path,
+      content: declared.content,
+      source: declared.source,
+    });
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it('does not hide host lookup failures behind stale preview content', async () => {
+    await expect(
+      resolveDesignPreviewSource({
+        designId: 'd1',
+        snapshotSource: '<p>Stale</p>',
+        getSourceEntry: async () => {
+          throw new Error('IPC disconnected');
+        },
+      }),
+    ).rejects.toThrow('IPC disconnected');
+  });
   it('infers App.jsx for JSX modules and index.html for legacy HTML fragments', () => {
     expect(
       inferPreviewSourcePath(

@@ -53,6 +53,20 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`;
 });
 
 describe('DesignCardPreview source helpers', () => {
+  it('retains the native runtime identity when reloading cached thumbnails', () => {
+    const source = {
+      schemaVersion: 1,
+      path: 'pages/start.htm',
+      format: 'html',
+      runtimeMode: 'native-html',
+    };
+    const cached = {
+      content: '<main>Native</main><script>document.title="Native";</script>',
+      path: source.path,
+      source,
+    };
+    expect(parseCachedPreview(JSON.stringify({ schemaVersion: 1, ...cached }))).toEqual(cached);
+  });
   it('keeps the resolved source path when reading v3 cache entries', () => {
     expect(
       parseCachedPreview(

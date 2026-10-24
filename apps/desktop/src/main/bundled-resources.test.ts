@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { collectResourceManifest, composeSystemPrompt } from '@open-codesign/core';
+import { buildPreviewDocument, validateNativeGenerationSource } from '@open-codesign/runtime';
 import { validateDesignMd } from '@open-codesign/shared/design-md';
 import { describe, expect, it } from 'vitest';
 
@@ -40,6 +42,54 @@ function classifyTemplateSource(raw: string): 'html' | 'jsx' | 'css' | 'design-m
 }
 
 describe('bundled scaffold resources', () => {
+  it('ships all native resources with readable licensed overlays and static HTML starters', async () => {
+    const templatesRoot = join(repoRoot, 'apps/desktop/resources/templates');
+    const source = {
+      schemaVersion: 1,
+      path: 'pages/main.htm',
+      format: 'html',
+      runtimeMode: 'native-html',
+    } as const;
+    const manifest = await collectResourceManifest({
+      templatesRoot,
+      source,
+      providerId: 'test',
+      log: { info() {}, warn() {}, error() {} },
+    });
+    expect(manifest.warnings).toEqual([]);
+    const scaffolds = manifest.manifest.entries.filter((entry) => entry.category === 'scaffold');
+    expect(scaffolds).toHaveLength(11);
+    expect(scaffolds.filter((entry) => extname(entry.path) === '.html')).toHaveLength(3);
+    expect(scaffolds.filter((entry) => extname(entry.path) === '.css')).toHaveLength(7);
+    expect(scaffolds.filter((entry) => extname(entry.path) === '.md')).toHaveLength(1);
+    for (const entry of scaffolds) {
+      const raw = await readFile(join(scaffoldsRoot, entry.path), 'utf8');
+      expect(entry.license).toMatch(/MIT/);
+      expect(entry.source.length).toBeGreaterThan(0);
+      expect(raw).not.toMatch(
+        /<script[^>]+src=["']https?:|Deck title|Page content|Replace this|Point one/i,
+      );
+      if (extname(entry.path) === '.html') {
+        expect(() => validateNativeGenerationSource(raw)).not.toThrow();
+        const built = buildPreviewDocument(raw, { runtimeMode: 'native-html' });
+        expect(built).not.toMatch(/react\.production|babel\.min|ocd-tweak/);
+      }
+    }
+    for (const name of ['craft-polish', 'design-reference-to-html', 'chart-rendering']) {
+      const entry = manifest.manifest.entries.find((item) => item.name === name);
+      expect(entry).toBeDefined();
+      const raw = await readFile(join(templatesRoot, 'skills', entry?.path ?? ''), 'utf8');
+      expect(raw).toContain(`name: ${name}`);
+      expect(raw).toContain('license: MIT');
+      expect(raw).toContain('Source: Open CoDesign');
+    }
+    expect(composeSystemPrompt({ mode: 'tweak', source })).toContain('# Targeted native tweaks');
+    const builder = await readFile(join(repoRoot, 'apps/desktop/electron-builder.yml'), 'utf8');
+    expect(builder).toContain('resources/templates');
+    const vite = await readFile(join(repoRoot, 'apps/desktop/electron.vite.config.ts'), 'utf8');
+    expect(vite).toContain('prompts');
+    expect(vite).toContain('.md');
+  });
   it('keeps scaffold manifest paths aligned with source format', async () => {
     const manifest = JSON.parse(
       await readFile(join(scaffoldsRoot, 'manifest.json'), 'utf8'),

@@ -1,9 +1,9 @@
-import { mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Agent } from '@mariozechner/pi-agent-core';
 import { createAssistantMessageEventStream, getModel } from '@mariozechner/pi-ai';
-import type { Design } from '@open-codesign/shared';
+import { type Design, SourceIdentityV1 } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Handler = (event: unknown, raw: unknown) => unknown;
@@ -200,6 +200,8 @@ import {
   type AskResult,
   buildDesignContextPack,
   generateViaAgent,
+  loadDesignSkills,
+  loadFrameTemplates,
   makeAskTool,
   makeTextEditorTool,
   type RunPreviewOptions,
@@ -207,9 +209,11 @@ import {
 } from '@open-codesign/core';
 import { requestAsk } from '../ask-ipc';
 import { makeRuntimeVerifier } from '../done-verify';
+import * as generationSource from '../generation-source';
 import { runPreview } from '../preview-runtime';
 import { preparePromptContext } from '../prompt-context';
 import { resolveActiveModel } from '../provider-settings';
+import { RunJournal } from '../run-journal';
 import {
   appendSessionActiveMessage,
   appendSessionChatMessage,
@@ -221,11 +225,21 @@ import {
   createDesign,
   initInMemoryDb,
   listSnapshots,
+  updateDesignPreview,
   updateDesignWorkspace,
 } from '../snapshots-db';
 import { registerSnapshotsIpc } from '../snapshots-ipc';
 import { registerSourceEditsIpc } from '../source-edits-ipc';
+import {
+  changeSourceEntryWorkspace,
+  getSourceEntry,
+  initializeSourceEntry,
+  notifyAutoManagedSourceRename,
+  selectSourceEntry,
+} from '../source-entry';
 import { normalizeWorkspacePath } from '../workspace-path';
+import { runWithWorkspaceRenameQueue } from '../workspace-path-lock';
+import { readWorkspaceFilesAt } from '../workspace-reader';
 import { registerGenerateIpc } from './generate';
 
 function getHandler(channel: string): Handler {
@@ -266,6 +280,454 @@ describe('generate IPC workspace rename coordination', () => {
     } finally {
       await rm(documentsRoot, { recursive: true, force: true });
     }
+  });
+
+  describe('host source admission and settlement', () => {
+    async function setup() {
+      const db = initTestDb();
+      const design = createDesign(db, 'Native design');
+      updateDesignWorkspace(db, design.id, defaultWorkspaceRoot);
+      await initializeSourceEntry(db, design.id);
+      registerGenerateIpc({ db, getMainWindow: () => null });
+      const payload = {
+        schemaVersion: 1,
+        generationId: 'native-source',
+        designId: design.id,
+        prompt: 'Continue',
+        previousSource: '<p>Stale renderer</p>',
+        history: [],
+        attachments: [],
+        model: { provider: 'mock-provider', modelId: 'mock-model' },
+      };
+      return { db, design, payload };
+    }
+    const artifact = (content: string) => ({
+      id: 'native',
+      type: 'html' as const,
+      title: 'Native',
+      content,
+      designParams: [],
+      createdAt: new Date().toISOString(),
+    });
+
+    it('provides a literal native source reader without interpreting filename glob characters', async () => {
+      const f = await setup();
+      await mkdir(path.join(defaultWorkspaceRoot, 'pages'));
+      const file = 'pages/[z-a].htm';
+      const contents = '<main>Literal file</main>';
+      await writeFile(path.join(defaultWorkspaceRoot, file), contents);
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input) => {
+        expect(await input.readWorkspaceFile?.(file)).toEqual({ file, contents });
+        return { message: 'Read.', artifacts: [], inputTokens: 0, outputTokens: 0, costUsd: 0 };
+      });
+      await getHandler('codesign:v1:generate')(null, f.payload);
+    });
+    it('omits bundled JSX loaders but preserves actual workspace frames and skills', async () => {
+      const f = await setup();
+      await mkdir(path.join(defaultWorkspaceRoot, 'frames'));
+      await mkdir(path.join(defaultWorkspaceRoot, 'skills'));
+      await writeFile(path.join(defaultWorkspaceRoot, 'frames/iphone.jsx'), 'authored frame');
+      await writeFile(path.join(defaultWorkspaceRoot, 'skills/chart.jsx'), 'authored skill');
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (_input, deps) => {
+        expect(loadFrameTemplates).not.toHaveBeenCalled();
+        expect(loadDesignSkills).not.toHaveBeenCalled();
+        expect(deps?.fs?.view('frames/iphone.jsx')?.content).toBe('authored frame');
+        expect(deps?.fs?.view('skills/chart.jsx')?.content).toBe('authored skill');
+        return {
+          message: 'Discussed.',
+          artifacts: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      await getHandler('codesign:v1:generate')(null, f.payload);
+      expect(await readFile(path.join(defaultWorkspaceRoot, 'frames/iphone.jsx'), 'utf8')).toBe(
+        'authored frame',
+      );
+    });
+    it('ignores renderer source and admits missing planned index.html without App.jsx seeding', async () => {
+      const f = await setup();
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        expect(input.source).toMatchObject({ path: 'index.html', runtimeMode: 'native-html' });
+        expect(deps?.fs?.view('App.jsx')).toBeNull();
+        expect(deps?.fs?.view('index.html')).toBeNull();
+        return {
+          message: 'Discussed.',
+          artifacts: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      await getHandler('codesign:v1:generate')(null, f.payload);
+      expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'planned' });
+      expect(listSnapshots(f.db, f.design.id)).toEqual([]);
+    });
+    it('uses a selected nested disk entry even when bounded inventory omits it and App.jsx coexists', async () => {
+      const f = await setup();
+      const content = '<main>Authoritative disk</main>';
+      await mkdir(path.join(defaultWorkspaceRoot, 'zz-pages'));
+      await writeFile(path.join(defaultWorkspaceRoot, 'zz-pages/main.html'), content);
+      await writeFile(path.join(defaultWorkspaceRoot, 'App.jsx'), 'function App(){return null;}');
+      await Promise.all(
+        Array.from({ length: 201 }, (_, index) =>
+          writeFile(
+            path.join(defaultWorkspaceRoot, `a${index.toString().padStart(3, '0')}.txt`),
+            'inventory',
+          ),
+        ),
+      );
+      const entry = await getSourceEntry(f.db, f.design.id);
+      await selectSourceEntry(
+        f.db,
+        {
+          schemaVersion: 1,
+          designId: f.design.id,
+          expectedWorkspacePath: normalizeWorkspacePath(defaultWorkspaceRoot),
+          expectedRevision: entry.revision,
+          path: 'zz-pages/main.html',
+        },
+        () => {},
+      );
+      expect(
+        (await readWorkspaceFilesAt(defaultWorkspaceRoot)).some(
+          (file) => file.file === 'zz-pages/main.html',
+        ),
+      ).toBe(false);
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        expect(input.source).toMatchObject({
+          path: 'zz-pages/main.html',
+          runtimeMode: 'native-html',
+        });
+        expect(deps?.fs?.view('zz-pages/main.html')?.content).toBe(content);
+        expect(deps?.fs?.view('App.jsx')?.content).not.toBe(f.payload.previousSource);
+        await input.runPreview?.({
+          path: 'other.html',
+          vision: false,
+          ...{ runtimeMode: 'legacy-auto' },
+        });
+        expect(runPreview).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            path: 'other.html',
+            runtimeMode: 'native-html',
+            signal: input.signal,
+          }),
+        );
+        await input.runPreview?.({
+          path: 'other.tsx',
+          vision: false,
+          ...{ runtimeMode: 'native-html' },
+        });
+        expect(runPreview).toHaveBeenLastCalledWith(
+          expect.objectContaining({ path: 'other.tsx', runtimeMode: 'legacy-auto' }),
+        );
+        return {
+          message: 'Discussed.',
+          artifacts: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      await getHandler('codesign:v1:generate')(null, f.payload);
+      expect(listSnapshots(f.db, f.design.id)).toEqual([]);
+    });
+    it('preserves legacy renderer context only for a nonmanaged connected preview', async () => {
+      const f = await setup();
+      updateDesignPreview(f.db, f.design.id, 'connected-url', 'http://localhost:5173/');
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        expect(input.source).toBeUndefined();
+        expect(deps?.fs?.view('App.jsx')?.content).toBe(f.payload.previousSource);
+        return {
+          message: 'Discussed.',
+          artifacts: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      await getHandler('codesign:v1:generate')(null, f.payload);
+      expect(vi.mocked(routeRunPreferences).mock.calls[0]?.[0].workspaceState).toMatchObject({
+        sourcePath: 'App.jsx',
+        hasSource: true,
+      });
+      expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'not-applicable' });
+    });
+    it('uses the actual source filename and disk content for apply-comment', async () => {
+      const f = await setup();
+      const content = '<p>Current disk</p>';
+      await writeFile(path.join(defaultWorkspaceRoot, 'index.html'), content);
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        expect(input.prompt).toContain('`index.html`');
+        expect(input.mode).toBe('revise');
+        expect(input.systemPrompt).toBeUndefined();
+        expect(deps?.fs?.view('index.html')?.content).toBe(content);
+        expect(deps?.fs?.view('App.jsx')).toBeNull();
+        return {
+          message: 'Discussed.',
+          artifacts: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      await getHandler('codesign:apply-comment')(null, {
+        designId: f.design.id,
+        generationId: 'comment-source',
+        artifactSource: '<p>Stale renderer</p>',
+        comment: 'Review the copy',
+        model: f.payload.model,
+        selection: {
+          selector: 'p',
+          tag: 'p',
+          outerHTML: '<p>Stale renderer</p>',
+          rect: { top: 0, left: 0, width: 100, height: 20 },
+        },
+      });
+      expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'planned', content });
+    });
+    it('rejects forged core acceptance and never creates a successful snapshot', async () => {
+      const f = await setup();
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        const content = '<p>Unverified</p>';
+        await deps?.fs?.create('index.html', content);
+        await input.onSourceAccepted?.({
+          source: {
+            schemaVersion: 1,
+            path: 'index.html',
+            format: 'html',
+            runtimeMode: 'native-html',
+          },
+          content,
+        });
+        return {
+          message: 'Fake.',
+          artifacts: [artifact(content)],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      await expect(getHandler('codesign:v1:generate')(null, f.payload)).rejects.toThrow(/verif/i);
+      expect(listSnapshots(f.db, f.design.id)).toEqual([]);
+      expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'planned' });
+    });
+    it('retains new-path ownership after a title rename during paused terminal delivery', async () => {
+      const f = await setup();
+      const other = createDesign(f.db, 'Shared workspace');
+      const content = '<p>Committed native</p>';
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        await deps?.fs?.create('index.html', content);
+        await deps?.runtimeVerify?.(content, { path: 'index.html' });
+        await input.onSourceAccepted?.({ source: SourceIdentityV1.parse(input.source), content });
+        return {
+          message: 'Verified.',
+          artifacts: [artifact(content)],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      let release = () => {};
+      let entered = () => {};
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const original = RunJournal.prototype.append;
+      const append = vi.spyOn(RunJournal.prototype, 'append').mockImplementation(async function (
+        this: RunJournal,
+        event,
+      ) {
+        if (event.type === 'run_settled' && event.generationId === f.payload.generationId) {
+          entered();
+          await hold;
+        }
+        return original.call(this, event);
+      });
+      let attempted = () => {};
+      const admissionAttempted = new Promise<void>((resolve) => {
+        attempted = resolve;
+      });
+      const admit = generationSource.createGenerationSource;
+      const admission = vi
+        .spyOn(generationSource, 'createGenerationSource')
+        .mockImplementation(async (options) => {
+          try {
+            return await admit(options);
+          } finally {
+            if (options.generationId === 'blocked-other') attempted();
+          }
+        });
+      try {
+        pendingFixtureGeneration = Promise.resolve(
+          getHandler('codesign:v1:generate')(null, f.payload),
+        );
+        await started;
+        expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'ready', content });
+        const next = path.join(documentsRoot, 'renamed-during-delivery');
+        await runWithWorkspaceRenameQueue(f.design.id, () =>
+          changeSourceEntryWorkspace(
+            f.db,
+            f.design.id,
+            next,
+            true,
+            () => rename(defaultWorkspaceRoot, next),
+            'blank-canvas',
+            notifyAutoManagedSourceRename,
+          ),
+        );
+        updateDesignWorkspace(f.db, other.id, next);
+        await initializeSourceEntry(f.db, other.id);
+        const rejected = expect(
+          getHandler('codesign:v1:generate')(null, {
+            ...f.payload,
+            designId: other.id,
+            generationId: 'blocked-other',
+          }),
+        ).rejects.toThrow(/already|progress|running/i);
+        await admissionAttempted;
+        release();
+        await rejected;
+        await pendingFixtureGeneration;
+        expect(generateViaAgent).toHaveBeenCalledOnce();
+      } finally {
+        release();
+        admission.mockRestore();
+        append.mockRestore();
+      }
+    });
+    it('reports postcommit journal failure without implying that source confirmation was rolled back', async () => {
+      const f = await setup();
+      const content = '<p>Committed native</p>';
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        await deps?.fs?.create('index.html', content);
+        await deps?.runtimeVerify?.(content, { path: 'index.html' });
+        await input.onSourceAccepted?.({ source: SourceIdentityV1.parse(input.source), content });
+        return {
+          message: 'Verified.',
+          artifacts: [artifact(content)],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      const original = RunJournal.prototype.append;
+      const append = vi.spyOn(RunJournal.prototype, 'append').mockImplementation(async function (
+        this: RunJournal,
+        event,
+      ) {
+        if (event.type === 'run_settled') throw new Error('Synthetic journal failure');
+        return original.call(this, event);
+      });
+      try {
+        await expect(getHandler('codesign:v1:generate')(null, f.payload)).rejects.toThrow(
+          /source was confirmed.*journal failure/i,
+        );
+        expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'ready', content });
+        expect(listSnapshots(f.db, f.design.id)).toHaveLength(1);
+      } finally {
+        append.mockRestore();
+      }
+    });
+    it('rejects disk replacement after acceptance before creating a successful snapshot', async () => {
+      const f = await setup();
+      const content = '<p>Verified native</p>';
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        await deps?.fs?.create('index.html', content);
+        await deps?.runtimeVerify?.(content, { path: 'index.html' });
+        await input.onSourceAccepted?.({ source: SourceIdentityV1.parse(input.source), content });
+        await writeFile(
+          path.join(defaultWorkspaceRoot, 'index.html'),
+          '<p>External replacement</p>',
+        );
+        return {
+          message: 'Verified.',
+          artifacts: [artifact(content)],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      await expect(getHandler('codesign:v1:generate')(null, f.payload)).rejects.toThrow(/changed/i);
+      expect(listSnapshots(f.db, f.design.id)).toEqual([]);
+      expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'planned' });
+    });
+    it('confirms raw asset references rather than expanded display content', async () => {
+      const f = await setup();
+      const content = '<img src="assets/photo.png">';
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        await deps?.fs?.create(
+          'assets/photo.png',
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlLbsAAAAAASUVORK5CYII=',
+        );
+        await deps?.fs?.create('index.html', content);
+        await deps?.runtimeVerify?.(content, { path: 'index.html' });
+        await input.onSourceAccepted?.({ source: SourceIdentityV1.parse(input.source), content });
+        return {
+          message: 'Verified.',
+          artifacts: [artifact(content)],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      const response = (await getHandler('codesign:v1:generate')(null, f.payload)) as {
+        artifacts: Array<{ content: string }>;
+      };
+      expect(response.artifacts[0]?.content).toContain('data:image/png;base64,');
+      expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'ready', content });
+      expect(await readFile(path.join(defaultWorkspaceRoot, 'index.html'), 'utf8')).toBe(content);
+    });
+    it('keeps document-only completion planned and snapshot-free', async () => {
+      const f = await setup();
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (_input, deps) => {
+        await deps?.fs?.create('DESIGN.md', '# Design discussion');
+        return {
+          message: 'Documented.',
+          artifacts: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      await getHandler('codesign:v1:generate')(null, f.payload);
+      expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({
+        status: 'planned',
+        content: null,
+      });
+      expect(listSnapshots(f.db, f.design.id)).toEqual([]);
+    });
+    it('confirms host-verified raw bytes before completed settlement', async () => {
+      const f = await setup();
+      const content = '<p>Verified native</p>';
+      vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
+        await deps?.fs?.create('index.html', content);
+        await deps?.runtimeVerify?.(content, { path: 'index.html' });
+        await input.onSourceAccepted?.({
+          source: {
+            schemaVersion: 1,
+            path: 'index.html',
+            format: 'html',
+            runtimeMode: 'native-html',
+          },
+          content,
+        });
+        return {
+          message: 'Verified.',
+          artifacts: [artifact(content)],
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+        };
+      });
+      await getHandler('codesign:v1:generate')(null, f.payload);
+      expect(await getSourceEntry(f.db, f.design.id)).toMatchObject({ status: 'ready', content });
+      expect(listSnapshots(f.db, f.design.id)).toHaveLength(1);
+    });
   });
 
   it('gates source edits with the real generation maps, shared workspace aliases and registry lifecycle', async () => {
@@ -316,7 +778,7 @@ describe('generate IPC workspace rename coordination', () => {
     expect(await inspect(other.id)).toMatchObject({ status: 'rejected', reason: 'unavailable' });
   });
   it('journals headless runs and reattaches by sequence without duplicating chat', async () => {
-    vi.mocked(generateViaAgent).mockImplementationOnce(async (_input, deps) => {
+    vi.mocked(generateViaAgent).mockImplementationOnce(async (input, deps) => {
       deps?.onEvent?.({ type: 'turn_start' });
       deps?.onEvent?.({
         type: 'tool_execution_start',
@@ -334,6 +796,9 @@ describe('generate IPC workspace rename coordination', () => {
         result: { content: [{ type: 'text', text: 'Read source' }] },
       });
       deps?.onEvent?.({ type: 'agent_end', messages: [] });
+      await deps?.runtimeVerify?.('<main>Completed</main>', { path: 'index.html' });
+      if (!input.source || !input.onSourceAccepted) throw new Error('Missing source acceptance');
+      await input.onSourceAccepted({ source: input.source, content: '<main>Completed</main>' });
       return {
         message: 'Completed without a renderer',
         artifacts: [
@@ -353,7 +818,9 @@ describe('generate IPC workspace rename coordination', () => {
     });
     const db = initTestDb();
     const design = createDesign(db, 'Recover headless');
+    await writeFile(path.join(defaultWorkspaceRoot, 'index.html'), '<main>Completed</main>');
     updateDesignWorkspace(db, design.id, defaultWorkspaceRoot);
+    await initializeSourceEntry(db, design.id);
     registerGenerateIpc({ db, getMainWindow: () => null });
     const recover = getHandler('codesign:v1:recover-runs');
     pendingFixtureGeneration = Promise.resolve(
@@ -445,6 +912,7 @@ describe('generate IPC workspace rename coordination', () => {
     const db = initTestDb();
     const design = createDesign(db, 'Failed preflight');
     updateDesignWorkspace(db, design.id, defaultWorkspaceRoot);
+    await initializeSourceEntry(db, design.id);
     registerGenerateIpc({ db, getMainWindow: () => null });
     await expect(
       getHandler('codesign:v1:generate')(null, {
@@ -482,6 +950,7 @@ describe('generate IPC workspace rename coordination', () => {
     const db = initTestDb();
     const design = createDesign(db, 'Recovered requests');
     updateDesignWorkspace(db, design.id, defaultWorkspaceRoot);
+    await initializeSourceEntry(db, design.id);
     appendSessionActiveMessage(
       { db, sessionDir: db.sessionDir },
       {
@@ -560,6 +1029,7 @@ describe('generate IPC workspace rename coordination', () => {
     const workspace = path.join(defaultWorkspaceRoot, 'active-messages');
     await mkdir(workspace);
     updateDesignWorkspace(db, design.id, workspace);
+    await initializeSourceEntry(db, design.id);
     updateDesignWorkspace(db, other.id, workspace);
     registerGenerateIpc({ db, getMainWindow: () => null });
     const send = getHandler('codesign:v1:active-message');
@@ -601,7 +1071,10 @@ describe('generate IPC workspace rename coordination', () => {
         generationId: 'active-run',
       });
     generateControl.release();
-    await pendingFixtureGeneration;
+    if (outcome === 'cancel') {
+      await expect(pendingFixtureGeneration).rejects.toThrow();
+      pendingFixtureGeneration = null;
+    } else await pendingFixtureGeneration;
     const status = outcome === 'deliver' ? 'delivered' : 'not-delivered';
     expect(await list(null, { schemaVersion: 1, designId: design.id })).toMatchObject([
       { messageId: 'one', status },
@@ -632,6 +1105,7 @@ describe('generate IPC workspace rename coordination', () => {
     const workspace = path.join(defaultWorkspaceRoot, pack);
     await mkdir(workspace);
     updateDesignWorkspace(db, design.id, workspace);
+    await initializeSourceEntry(db, design.id);
     const names = await readdir(
       new URL(`../../../resources/demo-inputs/${pack}/`, import.meta.url),
     );
@@ -761,21 +1235,34 @@ describe('generate IPC workspace rename coordination', () => {
     );
     await generateControl.started;
 
-    let renameSettled = false;
     const renamePromise = Promise.resolve(
       renameDesign(null, {
         schemaVersion: 1,
         id: design.id,
         name: 'Hybrid Workshop Day Agenda',
       }) as Promise<Design>,
-    ).finally(() => {
-      renameSettled = true;
-    });
-
+    );
+    let generationSettled = false;
+    void generatePromise.then(
+      () => {
+        generationSettled = true;
+      },
+      () => {
+        generationSettled = true;
+      },
+    );
+    let renameDeadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(renameSettled).toBe(true);
-      const renamed = await renamePromise;
+      const renamed = await Promise.race([
+        renamePromise,
+        new Promise<never>((_resolve, reject) => {
+          renameDeadline = setTimeout(
+            () => reject(new Error('Workspace rename must complete before generation is released')),
+            5_000,
+          );
+        }),
+      ]);
+      expect(generationSettled).toBe(false);
       const preview = vi.mocked(generateViaAgent).mock.calls[0]?.[0].runPreview;
       expect(preview).toBeDefined();
       const options: RunPreviewOptions = {
@@ -788,14 +1275,17 @@ describe('generate IPC workspace rename coordination', () => {
       await preview?.(options);
       expect(runPreview).toHaveBeenCalledWith({
         ...options,
+        signal: vi.mocked(generateViaAgent).mock.calls[0]?.[0].signal,
+        runtimeMode: 'legacy-auto',
         workspaceRoot: renamed.workspacePath,
       });
       const verifier = vi.mocked(generateViaAgent).mock.calls[0]?.[1]?.runtimeVerify;
-      await verifier?.('function App(){return null;}', { path: 'screens/App.jsx' });
+      await verifier?.('function App() { return null; }', { path: 'App.jsx' });
       expect(makeRuntimeVerifier).toHaveBeenLastCalledWith({
         workspaceRoot: renamed.workspacePath,
       });
     } finally {
+      clearTimeout(renameDeadline);
       generateControl.release();
       await Promise.allSettled([generatePromise, renamePromise]);
     }
@@ -804,7 +1294,7 @@ describe('generate IPC workspace rename coordination', () => {
     expect(renamed.workspacePath).toBe(
       normalizeWorkspacePath(path.join(defaultWorkspaceRoot, 'Hybrid-Workshop-Day-Agenda')),
     );
-  });
+  }, 15_000);
 
   it.each([
     'Make a Todo app',
@@ -836,6 +1326,7 @@ describe('generate IPC workspace rename coordination', () => {
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
     await mkdir(workspace);
     updateDesignWorkspace(db, design.id, workspace);
+    await initializeSourceEntry(db, design.id);
 
     registerSnapshotsIpc(db);
     registerGenerateIpc({ db, getMainWindow: () => null });
@@ -884,6 +1375,8 @@ describe('generate IPC workspace rename coordination', () => {
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
     await mkdir(workspace, { recursive: true });
     updateDesignWorkspace(db, design.id, workspace);
+
+    await initializeSourceEntry(db, design.id);
 
     registerSnapshotsIpc(db);
     registerGenerateIpc({ db, getMainWindow: () => null });
@@ -939,6 +1432,7 @@ describe('generate IPC workspace rename coordination', () => {
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     );
     updateDesignWorkspace(db, design.id, workspace);
+    await initializeSourceEntry(db, design.id);
 
     registerSnapshotsIpc(db);
     registerGenerateIpc({ db, getMainWindow: () => null });
@@ -992,6 +1486,7 @@ describe('generate IPC workspace rename coordination', () => {
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
     await mkdir(workspace);
     updateDesignWorkspace(db, design.id, workspace);
+    await initializeSourceEntry(db, design.id);
 
     registerSnapshotsIpc(db);
     registerGenerateIpc({ db, getMainWindow: () => null });
@@ -1093,6 +1588,7 @@ describe('generate IPC workspace rename coordination', () => {
     const workspace = path.join(defaultWorkspaceRoot, 'Clarification-test');
     await mkdir(workspace);
     updateDesignWorkspace(db, design.id, workspace);
+    await initializeSourceEntry(db, design.id);
     registerGenerateIpc({ db, getMainWindow: () => null });
     pendingFixtureGeneration = Promise.resolve(
       getHandler('codesign:v1:generate')(null, {
@@ -1230,6 +1726,7 @@ describe('generate IPC workspace rename coordination', () => {
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
     await mkdir(workspace);
     updateDesignWorkspace(db, design.id, workspace);
+    await initializeSourceEntry(db, design.id);
     appendSessionChatMessage(
       { db, sessionDir: db.sessionDir },
       {

@@ -12,7 +12,11 @@
  * marks any still-pending row as 'done' so the WorkingCard never sticks.
  */
 
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import {
+  DEFAULT_SOURCE_ENTRY,
+  LEGACY_SOURCE_ENTRY,
+  type SourceIdentityV1,
+} from '@open-codesign/shared';
 import { useEffect, useRef } from 'react';
 import type { AgentStreamEvent } from '../../../preload/index';
 import { notifyDesignInBackground } from '../lib/system-notifications';
@@ -73,6 +77,7 @@ export function useAgentStream(): void {
         setPreviewSourceFromAgent({
           designId: update.designId,
           content: update.content,
+          ...(update.source ? { source: update.source } : {}),
         });
       },
     });
@@ -82,6 +87,7 @@ export function useAgentStream(): void {
       generationId: string;
       path: string;
       content: string;
+      source?: SourceIdentityV1;
     }) => {
       fsScheduler.schedule(next);
     };
@@ -271,6 +277,19 @@ export function useAgentStream(): void {
       // App.jsx is the default source file. Legacy workspaces may still use
       // index.html directly or as a small placeholder pointing at JSX/TSX.
       if (typeof event.path !== 'string' || typeof event.content !== 'string') return;
+      const identity =
+        event.source ?? useCodesignStore.getState().previewIdentityByDesign[event.designId];
+      if (identity) {
+        if (event.path === identity.path)
+          scheduleFs({
+            designId: event.designId,
+            generationId: event.generationId,
+            path: event.path,
+            content: event.content,
+            source: identity,
+          });
+        return;
+      }
       if (event.path === DEFAULT_SOURCE_ENTRY || event.path === LEGACY_SOURCE_ENTRY) {
         scheduleFs({
           designId: event.designId,
@@ -487,7 +506,14 @@ export function useAgentStream(): void {
         setPreviewSourceFromAgent({
           designId: event.designId,
           content: event.response.artifacts[0].content,
+          ...(event.response.artifacts[0].source
+            ? { source: event.response.artifacts[0].source }
+            : {}),
         });
+      void useCodesignStore
+        .getState()
+        .refreshSourceEntry(event.designId)
+        .catch((error: unknown) => console.warn('Source refresh failed:', error));
     };
     const consume = (event: AgentStreamEvent, replay = false) => {
       if (event.chatPersisted) {

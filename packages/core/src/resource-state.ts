@@ -6,6 +6,7 @@ import {
   LEGACY_SOURCE_ENTRY,
   normalizeResourceState,
   type ResourceStateV1,
+  type SourceIdentityV1,
 } from '@open-codesign/shared';
 import type { TextEditorFsCallbacks } from './tools/text-editor.js';
 
@@ -39,12 +40,78 @@ export function recordScaffold(
 export function recordDone(
   state: ResourceStateV1,
   input: Omit<LastDoneStateV1, 'mutationSeq' | 'checkedAt'>,
+  mutationSeq = state.mutationSeq,
 ): void {
   state.lastDone = {
     ...input,
-    mutationSeq: state.mutationSeq,
+    mutationSeq,
     checkedAt: new Date().toISOString(),
   };
+}
+
+export interface SourceVerification {
+  source: SourceIdentityV1;
+  content: string;
+  mutationSeq: number;
+  files: ReadonlyMap<string, string>;
+}
+
+export function snapshotSourceFiles(fs: TextEditorFsCallbacks): Map<string, string> {
+  return new Map(
+    fs.listDir('.').flatMap((path) => {
+      const file = fs.view(path);
+      return file ? [[path, file.content] as const] : [];
+    }),
+  );
+}
+
+function changedFiles(
+  before: ReadonlyMap<string, string>,
+  after: ReadonlyMap<string, string>,
+): string[] {
+  return [...new Set([...before.keys(), ...after.keys()])].filter(
+    (path) => before.get(path) !== after.get(path),
+  );
+}
+
+export function assertSourceFinalization(input: {
+  source: SourceIdentityV1;
+  fs: TextEditorFsCallbacks;
+  state: ResourceStateV1;
+  initialFiles: ReadonlyMap<string, string>;
+  mutatedPaths: ReadonlySet<string>;
+  verification: SourceVerification | undefined;
+}): boolean {
+  const files = snapshotSourceFiles(input.fs);
+  const changed = new Set([...input.mutatedPaths, ...changedFiles(input.initialFiles, files)]);
+  const proof = input.verification;
+  if (!proof && changed.size === 0) return false;
+  if (
+    !proof &&
+    [...changed].every((path) => path === 'DESIGN.md') &&
+    input.state.lastDone?.path === 'DESIGN.md' &&
+    input.state.lastDone.status === 'ok' &&
+    input.state.lastDone.mutationSeq === input.state.mutationSeq
+  )
+    return false;
+  if (
+    !proof ||
+    proof.source.path !== input.source.path ||
+    proof.source.format !== input.source.format ||
+    proof.source.runtimeMode !== input.source.runtimeMode ||
+    !proof.content.trim() ||
+    files.get(input.source.path) !== proof.content ||
+    proof.mutationSeq !== input.state.mutationSeq ||
+    changedFiles(proof.files, files).length > 0 ||
+    input.state.lastDone?.path !== input.source.path ||
+    input.state.lastDone.status !== 'ok'
+  ) {
+    throw new CodesignError(
+      `Generation incomplete: ${input.source.path} requires a successful, current-run done() verifying the exact final source and unchanged workspace.`,
+      ERROR_CODES.GENERATION_INCOMPLETE,
+    );
+  }
+  return true;
 }
 
 export interface FinalizationGateInput {

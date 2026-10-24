@@ -2,6 +2,8 @@
  * Full (pre-disclosure) composer. Returns the ordered list of section
  * bodies that make up the system prompt for a given mode.
  */
+import type { SourceIdentityV1 } from '@open-codesign/shared';
+import { authoringProfileFor } from '../authoring-profile.js';
 import {
   ANTI_SLOP_DIGEST,
   BRAND_ACQUISITION,
@@ -9,6 +11,10 @@ import {
   EDITMODE_PROTOCOL,
   IDENTITY,
   MULTI_SCREEN_BATON,
+  NATIVE_EDITMODE_PROTOCOL,
+  NATIVE_OUTPUT_RULES,
+  NATIVE_PRE_FLIGHT,
+  NATIVE_TWEAKS_PROTOCOL,
   OUTPUT_RULES,
   PRE_FLIGHT,
   SAFETY,
@@ -45,7 +51,10 @@ function describeSetting(name: string, value: PromptFeatureSetting): string {
   return `- ${name}: ${value.mode} (${value.provenance}, ${value.confidence})${reason}`;
 }
 
-function featureRoutingSection(profile: PromptFeatureProfile | undefined): string | null {
+function featureRoutingSection(
+  profile: PromptFeatureProfile | undefined,
+  native: boolean,
+): string | null {
   if (!profile) return null;
   const lines = ['# User-routed preferences', ''];
   const tweaks = setting(profile.tweaks);
@@ -65,7 +74,9 @@ function featureRoutingSection(profile: PromptFeatureProfile | undefined): strin
     );
   } else if (tweaks.mode === 'enabled') {
     lines.push(
-      'Expose useful source-backed EDITMODE decisions after the main behavior works, then call `tweaks()` when available.',
+      native
+        ? 'Expose useful source-backed EDITMODE declarations after the main behavior works. Implement authored bindings and CSS fallbacks; `tweaks()` discovers declarations without promising host-panel synchronization.'
+        : 'Expose useful source-backed EDITMODE decisions after the main behavior works, then call `tweaks()` when available.',
     );
   } else {
     lines.push('Use tweak controls only when they materially improve iteration.');
@@ -90,24 +101,33 @@ function featureRoutingSection(profile: PromptFeatureProfile | undefined): strin
   return lines.join('\n');
 }
 
-export function composeFull(mode: PromptMode, featureProfile?: PromptFeatureProfile): string[] {
+export function composeFull(
+  mode: PromptMode,
+  featureProfile?: PromptFeatureProfile,
+  source?: SourceIdentityV1,
+): string[] {
+  const native = authoringProfileFor(source) === 'native-html';
   const sections: string[] = [
     IDENTITY,
     WORKFLOW,
-    OUTPUT_RULES,
+    native ? NATIVE_OUTPUT_RULES : OUTPUT_RULES,
     DESIGN_METHODOLOGY,
-    PRE_FLIGHT,
-    EDITMODE_PROTOCOL,
+    native ? NATIVE_PRE_FLIGHT : PRE_FLIGHT,
+    native ? NATIVE_EDITMODE_PROTOCOL : EDITMODE_PROTOCOL,
   ];
+  if (native && source)
+    sections.push(
+      `Primary native HTML source: ${JSON.stringify(source.path)}. Read, edit, preview, and finish this exact path; resources cannot change this identity.`,
+    );
 
   if (mode === 'tweak') {
-    sections.push(TWEAKS_PROTOCOL);
+    sections.push(native ? NATIVE_TWEAKS_PROTOCOL : TWEAKS_PROTOCOL);
   }
 
   sections.push(ANTI_SLOP_DIGEST);
   sections.push(BRAND_ACQUISITION);
   sections.push(MULTI_SCREEN_BATON);
-  const routing = featureRoutingSection(featureProfile);
+  const routing = featureRoutingSection(featureProfile, native);
   if (routing) sections.push(routing);
   sections.push(SAFETY);
   return sections;

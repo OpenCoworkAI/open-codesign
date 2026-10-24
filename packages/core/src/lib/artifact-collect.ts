@@ -1,4 +1,4 @@
-import { type Artifact, DEFAULT_SOURCE_ENTRY } from '@open-codesign/shared';
+import { type Artifact, DEFAULT_SOURCE_ENTRY, type SourceIdentityV1 } from '@open-codesign/shared';
 
 export interface Collected {
   text: string;
@@ -9,6 +9,7 @@ export function createDesignSourceArtifact(
   content: string,
   index: number,
   entryPath: string = DEFAULT_SOURCE_ENTRY,
+  source?: SourceIdentityV1,
 ): Artifact {
   return {
     id: `design-${index + 1}`,
@@ -16,9 +17,10 @@ export function createDesignSourceArtifact(
     title: 'Design',
     content,
     designParams: [],
-    sourceFormat: 'jsx',
-    renderRuntime: 'react',
-    entryPath,
+    sourceFormat: source?.format ?? 'jsx',
+    renderRuntime: source?.runtimeMode === 'native-html' ? 'static-html' : 'react',
+    entryPath: source?.path ?? entryPath,
+    ...(source ? { source } : {}),
     createdAt: new Date().toISOString(),
   };
 }

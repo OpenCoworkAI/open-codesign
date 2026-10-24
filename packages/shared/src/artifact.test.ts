@@ -18,6 +18,18 @@ describe('Artifact', () => {
     expect(parsed.entryPath).toBeUndefined();
   });
 
+  it.each([
+    { schemaVersion: 1, path: 'pages/main.html', format: 'html', runtimeMode: 'native-html' },
+    { schemaVersion: 1, path: 'pages/App.tsx', format: 'tsx', runtimeMode: 'legacy-auto' },
+  ])('accepts optional versioned source identity: $path', (source) => {
+    const parsed = Artifact.parse({ ...BASE_ARTIFACT, source, sourceFormat: source.format });
+    expect(parsed.source).toEqual(source);
+    expect(parsed.sourceFormat).toBe(source.format);
+    expect(
+      Artifact.safeParse({ ...BASE_ARTIFACT, source: { ...source, schemaVersion: 2 } }).success,
+    ).toBe(false);
+  });
+
   it('parses design source metadata separately from export artifact type', () => {
     const parsed = Artifact.parse({
       ...BASE_ARTIFACT,

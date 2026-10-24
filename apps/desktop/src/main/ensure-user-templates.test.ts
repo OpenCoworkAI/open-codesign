@@ -17,6 +17,42 @@ describe('ensureUserTemplates', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  it('adds native overlays on fresh and existing installs without overwriting customized methods', async () => {
+    const source = path.resolve(import.meta.dirname, '../../resources/templates');
+    const userData = path.join(root, 'native-user');
+    mkdirSync(userData);
+    const overlays = ['craft-polish', 'design-reference-to-html', 'chart-rendering'];
+    expect((await ensureUserTemplates(userData, source)).action).toBe('seeded');
+    for (const name of overlays) {
+      const relative = `skills/native-html/${name}.md`;
+      expect(readFileSync(path.join(userData, 'templates', relative), 'utf8')).toBe(
+        readFileSync(path.join(source, relative), 'utf8'),
+      );
+    }
+    const installed = path.join(userData, 'templates');
+    writeFileSync(path.join(installed, 'skills/craft-polish.md'), 'custom legacy method');
+    writeFileSync(
+      path.join(installed, 'skills/native-html/craft-polish.md'),
+      'custom native method',
+    );
+    rmSync(path.join(installed, 'skills/native-html/chart-rendering.md'));
+    rmSync(path.join(installed, 'skills/native-html/design-reference-to-html.md'));
+    const manifest = readFileSync(path.join(installed, 'scaffolds/manifest.json'), 'utf8');
+    const merged = await ensureUserTemplates(userData, source);
+    expect(merged).toMatchObject({ action: 'merged', copiedFiles: 2 });
+    expect(readFileSync(path.join(installed, 'skills/craft-polish.md'), 'utf8')).toBe(
+      'custom legacy method',
+    );
+    expect(readFileSync(path.join(installed, 'skills/native-html/craft-polish.md'), 'utf8')).toBe(
+      'custom native method',
+    );
+    expect(readFileSync(path.join(installed, 'scaffolds/manifest.json'), 'utf8')).toBe(manifest);
+    expect(await ensureUserTemplates(userData, source)).toMatchObject({
+      action: 'skipped',
+      copiedFiles: 0,
+      updatedFiles: 0,
+    });
+  });
   it('seeds templates into userData when destination is missing', async () => {
     const source = path.join(root, 'bundle', 'templates');
     mkdirSync(path.join(source, 'scaffolds'), { recursive: true });

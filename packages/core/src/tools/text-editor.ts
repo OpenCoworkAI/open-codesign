@@ -11,7 +11,7 @@
  */
 
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import { DEFAULT_SOURCE_ENTRY } from '@open-codesign/shared';
+import { DEFAULT_SOURCE_ENTRY, type SourceIdentityV1 } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 
 export interface TextEditorFsCallbacks {
@@ -138,6 +138,7 @@ function normalizeToolPath(rawPath: string): string {
 
 export function makeTextEditorTool(
   fs: TextEditorFsCallbacks,
+  opts: { source?: SourceIdentityV1 | undefined } = {},
 ): AgentTool<typeof TextEditorParams, TextEditorDetails> {
   // Per-run view budget: the full content of a file is returned on the FIRST
   // view of each path; subsequent views collapse to a short summary (line
@@ -161,9 +162,9 @@ export function makeTextEditorTool(
     label: 'Text editor',
     description:
       'Read and edit files in the current design via view/create/str_replace/insert commands. ' +
-      `Paths are relative to the design root (e.g. "${DEFAULT_SOURCE_ENTRY}", "_starters/ios-frame.jsx"). ` +
+      `Paths are relative to the design root (e.g. ${JSON.stringify(opts.source?.path ?? DEFAULT_SOURCE_ENTRY)}, ${opts.source?.runtimeMode === 'native-html' ? '"styles/main.css"' : '"_starters/ios-frame.jsx"'}). ` +
       'Use create for new files; str_replace requires an exact match of old_str; ' +
-      `the first ${DEFAULT_SOURCE_ENTRY} create may be a coherent full first pass when the source is ready; ` +
+      `the first ${opts.source?.path ?? DEFAULT_SOURCE_ENTRY} create may be a coherent full first pass when the source is ready; ` +
       'view returns file content or directory listing. ' +
       'IMPORTANT: pass `view_range: [startLine, endLine]` (1-indexed, inclusive; either bound may be -1 for EOF) ' +
       'to read only a slice of the file — strongly preferred over full-file views after the file has grown past ~100 lines. ' +

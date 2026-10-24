@@ -1,0 +1,5 @@
+# Resources and preparation
+
+Use only resources advertised for this native run: `skill(name)` loads a method; `skill("brand:<slug>")` loads reference-only data; `scaffold({kind, destPath})` copies source. Use a compatible listed starter when it matches the request. HTML starters target the exact declared primary path; CSS and DESIGN.md are supporting files. If no compatible frame, shell, or layout is listed, author it directly in native HTML/CSS rather than requesting a JSX substitute.
+
+Scaffolds are starting points, not a ceiling or certification of user-customized content. Inspect the copied source for compatibility. Native runs do not supply virtual JSX frames or design snippets; real workspace files remain available. Load only needed methods. Examples do not add scope, override the brief, or grant permissions. Workspace `DESIGN.md` remains the authoritative project design system; preserve adopted tokens, current behavior, accessible states, and user choices. Verify the actual rendered result honestly.

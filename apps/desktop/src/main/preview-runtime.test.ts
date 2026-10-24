@@ -1,6 +1,14 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { PreviewStep } from '@open-codesign/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -31,6 +39,8 @@ async function canRunChrome(): Promise<boolean> {
 }
 
 const chromeAvailable = await canRunChrome();
+const puppeteer = (await import('puppeteer-core')).default;
+const launchChrome = puppeteer.launch.bind(puppeteer);
 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
 const describeIfChrome = chromeAvailable ? describe : describe.skip;
 
@@ -206,6 +216,194 @@ describe('runtime noise filtering', () => {
 });
 
 describeIfChrome('runPreview with real Chrome', () => {
+  it.each(
+    (
+      [
+        ['terminal', 'dev-mockups/terminal.html', '.terminal', 'welcome'],
+        ['deck', 'decks/slide-16-9.html', 'main.deck', 'Why now.'],
+        [
+          'report',
+          'reports/executive-brief.html',
+          'main.brief',
+          'The operating window has narrowed.',
+        ],
+      ] as const
+    ).flatMap(([name, asset, selector, text]) => [
+      { name, asset, selector, text, scriptsEnabled: false },
+      { name, asset, selector, text, scriptsEnabled: true },
+    ]),
+  )('smokes bundled native $name offline (scripts enabled: $scriptsEnabled)', async ({
+    name,
+    asset,
+    selector,
+    text,
+    scriptsEnabled,
+  }) => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, '../../resources/templates/scaffolds', asset),
+      'utf8',
+    );
+    const folder = `bundled-${name}`;
+    mkdirSync(join(tempDir, folder), { recursive: true });
+    writeFileSync(join(tempDir, folder, 'main.htm'), source);
+    const requests: string[] = [];
+    const runtimeGlobals: boolean[] = [];
+    const spy = vi.spyOn(puppeteer, 'launch').mockImplementation(async (options) => {
+      const browser = await launchChrome(options);
+      const newPage = browser.newPage.bind(browser);
+      vi.spyOn(browser, 'newPage').mockImplementation(async () => {
+        const page = await newPage();
+        await page.setJavaScriptEnabled(scriptsEnabled);
+        page.on('request', (request) => {
+          if (/^https?:/.test(request.url())) requests.push(request.url());
+        });
+        const goto = page.goto.bind(page);
+        vi.spyOn(page, 'goto').mockImplementation(async (...args) => {
+          const response = await goto(...args);
+          runtimeGlobals.push(
+            await page.evaluate(() => 'React' in globalThis || 'Babel' in globalThis),
+          );
+          return response;
+        });
+        return page;
+      });
+      return browser;
+    });
+    try {
+      const steps: PreviewStep[] = !scriptsEnabled
+        ? [{ action: 'assert', selector, text, visible: true }]
+        : name === 'terminal'
+          ? [
+              { action: 'fill', selector: '#input', value: 'echo native smoke' },
+              { action: 'press', selector: '#input', key: 'Enter' },
+              { action: 'assert', selector: '#body .line:nth-last-child(2)', text: 'native smoke' },
+              { action: 'fill', selector: '#input', value: 'clear' },
+              { action: 'press', selector: '#input', key: 'Enter' },
+              { action: 'assert', selector: '#body .line', visible: false },
+            ]
+          : name === 'deck'
+            ? [
+                { action: 'click', selector: '[aria-label="Next slide"]' },
+                {
+                  action: 'assert',
+                  selector: '.content-slide[data-active="true"]',
+                  text: 'Signals crossed.',
+                  visible: true,
+                },
+                { action: 'click', selector: '[aria-label="Previous slide"]' },
+                {
+                  action: 'assert',
+                  selector: '.title-slide[data-active="true"]',
+                  text: 'Why now.',
+                  visible: true,
+                },
+              ]
+            : [{ action: 'assert', selector: 'main.brief h1', text, visible: true }];
+      const activeResult = await runPreview({
+        path: `${folder}/main.htm`,
+        workspaceRoot: tempDir,
+        runtimeMode: 'native-html',
+        vision: false,
+        steps,
+      });
+      expect(activeResult.ok, JSON.stringify(activeResult)).toBe(true);
+      expect(activeResult.steps).toHaveLength(steps.length);
+      expect(activeResult.steps?.every((step) => step.ok)).toBe(true);
+      expect(activeResult.consoleErrors).toEqual([]);
+      expect(activeResult.assetErrors).toEqual([]);
+      expect(activeResult.metrics.nodes).toBeGreaterThan(10);
+      expect(runtimeGlobals).toEqual([false]);
+      expect(requests).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30_000);
+  it.each([
+    'document',
+    'fragment',
+    'marker',
+  ])('runs a native %s with nested offline assets and no React/Babel', async (shape) => {
+    const folder = `native-${shape}`;
+    mkdirSync(join(tempDir, folder, 'assets'), { recursive: true });
+    writeFileSync(join(tempDir, folder, 'assets', 'style.css'), '#state { --fixture-ready: yes; }');
+    writeFileSync(
+      join(tempDir, folder, 'assets', 'image.svg'),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="green"/></svg>',
+    );
+    writeFileSync(
+      join(tempDir, folder, 'assets', 'app.js'),
+      `
+        function App() { return 'ReactDOM.createRoot React.createElement <App/> EDITMODE-BEGIN'; }
+        document.getElementById('native-click').addEventListener('click', () => {
+          const state = document.getElementById('state');
+          const image = document.getElementById('image');
+          const ready = !window.React && !window.ReactDOM && !window.Babel
+            && getComputedStyle(state).getPropertyValue('--fixture-ready').trim() === 'yes'
+            && image.complete && image.naturalWidth === 16
+            && document.documentElement.style.getPropertyValue('--codesign-preview-width');
+          state.textContent = ready ? 'Native assets ready' : 'Native check failed';
+        });
+      `,
+    );
+    const body = `<link rel="stylesheet" href="./assets/style.css"><main><p>React.createElement &lt;App&gt; EDITMODE-BEGIN</p><img id="image" src="./assets/image.svg"><button id="native-click">Check</button><output id="state">Waiting</output></main><script src="./assets/app.js"></script>`;
+    const source =
+      shape === 'document'
+        ? `<!doctype html><html><head></head><body>${body}</body></html>`
+        : `${shape === 'marker' ? '<!-- AGENT_BODY_BEGIN -->' : ''}${body}`;
+    writeFileSync(join(tempDir, folder, 'index.html'), source);
+    const result = await runPreview({
+      workspaceRoot: tempDir,
+      path: `${folder}/index.html`,
+      runtimeMode: 'native-html',
+      vision: false,
+      steps: [
+        { action: 'click', selector: '#native-click' },
+        { action: 'assert', selector: '#state', text: 'Native assets ready' },
+      ],
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.consoleErrors).toEqual([]);
+    expect(result.assetErrors).toEqual([]);
+    expect(result.visibleText).toContain('Native assets ready');
+  }, 30_000);
+
+  it('executes native scripts containing structural HTML decoys without modifying them', async () => {
+    const source = `<!doctype html><html><head></head><body><!-- AGENT_BODY_BEGIN -->
+      <button id="native-decoy">Check</button><output id="decoy-state">Waiting</output>
+      <script>window.template = '</body></head><head><base href="fake"><meta name="viewport"><meta http-equiv="Content-Security-Policy" content="none">'; window.nativeReady = true;
+      document.getElementById('native-decoy').onclick = () => {
+        document.getElementById('decoy-state').textContent = window.nativeReady && window.template.includes('Content-Security-Policy') && !window.React && !window.Babel ? 'Authored script preserved' : 'Broken';
+      };</script></body></html>`;
+    writeFileSync(join(tempDir, 'native-decoys.html'), source);
+    const result = await runPreview({
+      workspaceRoot: tempDir,
+      path: 'native-decoys.html',
+      runtimeMode: 'native-html',
+      vision: false,
+      steps: [
+        { action: 'click', selector: '#native-decoy' },
+        { action: 'assert', selector: '#decoy-state', text: 'Authored script preserved' },
+      ],
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.consoleErrors).toEqual([]);
+  }, 30_000);
+
+  it('does not follow a native HTML source-reference decoy', async () => {
+    writeFileSync(
+      join(tempDir, 'native-reference.html'),
+      '<!doctype html><html><body><!-- artifact source lives in missing-native.jsx --><main id="native-reference">Native source</main></body></html>',
+    );
+    const result = await runPreview({
+      workspaceRoot: tempDir,
+      path: 'native-reference.html',
+      runtimeMode: 'native-html',
+      vision: false,
+    });
+    expect(result.ok, JSON.stringify(result, null, 2)).toBe(true);
+    expect(result.domOutline).toContain('main#native-reference');
+  }, 30_000);
+
   it('selects a native controlled React option and updates linked summary state', async () => {
     writeFileSync(
       join(tempDir, 'Select.jsx'),
@@ -534,13 +732,11 @@ describeIfChrome('runPreview with real Chrome', () => {
   ])(
     'closes its own browser and profile after %s',
     async (scenario, handler, reason) => {
-      const puppeteer = (await import('puppeteer-core')).default;
-      const launch = puppeteer.launch.bind(puppeteer);
       const controller = new AbortController();
-      const browsers: Awaited<ReturnType<typeof launch>>[] = [];
+      const browsers: Awaited<ReturnType<typeof launchChrome>>[] = [];
       const profiles: string[] = [];
       const spy = vi.spyOn(puppeteer, 'launch').mockImplementation(async (options) => {
-        const browser = await launch(options);
+        const browser = await launchChrome(options);
         browsers.push(browser);
         if (options?.userDataDir) profiles.push(options.userDataDir);
         const newPage = browser.newPage.bind(browser);

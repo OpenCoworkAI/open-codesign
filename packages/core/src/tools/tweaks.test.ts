@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   aggregateTweaks,
   makeTweaksTool,
@@ -45,6 +45,78 @@ describe('aggregateTweaks', () => {
 });
 
 describe('tweaks tool', () => {
+  it('never falls back to glob scanning when native literal reader is unavailable', async () => {
+    const scan = vi.fn(async () => []);
+    const tool = makeTweaksTool(scan, {
+      source: {
+        schemaVersion: 1,
+        path: 'pages/[z-a].htm',
+        format: 'html',
+        runtimeMode: 'native-html',
+      },
+    });
+    await expect(tool.execute('no-reader', {})).rejects.toThrow(/literal workspace file reader/);
+    expect(scan).not.toHaveBeenCalled();
+    const missing = makeTweaksTool(scan, {
+      source: {
+        schemaVersion: 1,
+        path: 'pages/missing.htm',
+        format: 'html',
+        runtimeMode: 'native-html',
+      },
+      readWorkspaceFile: async () => null,
+    });
+    expect((await missing.execute('missing', {})).details.scannedFileCount).toBe(0);
+    expect(scan).not.toHaveBeenCalled();
+  });
+  it('does not treat glob-like primary filenames as requests for other files', async () => {
+    const files = [
+      blockFile('pages/[main].htm', '{"density":1}'),
+      blockFile('pages/m.htm', '{"density":2}'),
+    ];
+    const tool = makeTweaksTool(async () => files, {
+      readWorkspaceFile: async (file) => files.find((entry) => entry.file === file) ?? null,
+      source: {
+        schemaVersion: 1,
+        path: 'pages/[main].htm',
+        format: 'html',
+        runtimeMode: 'native-html',
+      },
+    });
+    expect((await tool.execute('exact', {})).details.blocks).toEqual([
+      { file: 'pages/[main].htm', tokens: { density: 1 } },
+    ]);
+    expect((await tool.execute('explicit', { patterns: ['pages/*.htm'] })).details.fileCount).toBe(
+      2,
+    );
+  });
+  it('discovers the exact native .htm entry by default and preserves explicit auxiliary patterns', async () => {
+    let captured: string[] | undefined;
+    const tool = makeTweaksTool(
+      async (patterns) => {
+        captured = patterns;
+        return patterns?.includes('pages/main.htm')
+          ? [blockFile('pages/main.htm', '{"density":1}')]
+          : [];
+      },
+      {
+        readWorkspaceFile: async (file) => blockFile(file, '{"density":1}'),
+        source: {
+          schemaVersion: 1,
+          path: 'pages/main.htm',
+          format: 'html',
+          runtimeMode: 'native-html',
+        },
+      },
+    );
+    expect((await tool.execute('native', {})).details.blocks).toEqual([
+      { file: 'pages/main.htm', tokens: { density: 1 } },
+    ]);
+    expect(captured).toBeUndefined();
+    expect(tool.description).toContain('authored bindings');
+    await tool.execute('aux', { patterns: ['styles/*.css'] });
+    expect(captured).toEqual(['styles/*.css']);
+  });
   it('returns empty details when reader yields no files', async () => {
     const tool = makeTweaksTool(async () => []);
     const res = await tool.execute('id', {});

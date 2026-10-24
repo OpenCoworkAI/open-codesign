@@ -209,11 +209,11 @@ describe('source edit preview instrumentation', () => {
     undefined,
     'index.html',
     'App.js',
-  ])('requires an explicit JSX/TSX file path, not %s', (path) => {
+  ])('requires an explicit supported file path and rejects JSX masquerading as %s', (path) => {
     const source = 'function App(){return <button>Save</button>}';
     expect(() =>
       buildInteractivePreviewDocument(source, { path, sourceEdit: planFor(source, ['button']) }),
-    ).toThrow('original JSX or TSX');
+    ).toThrow(/original JSX or TSX|original HTML markup/);
   });
   it.each([
     `function App(){return <header>${SOURCE_EDIT_ATTRIBUTE}</header>}`,
@@ -255,6 +255,66 @@ describe('source edit preview instrumentation', () => {
       plan.targets.map((target) => target.id),
     );
   });
+  it.each([
+    'App.jsx',
+    'App.tsx',
+    'index.html',
+  ])('rejects JSX input in explicit native editing mode even for %s', (path) => {
+    const source = 'function App(){return <button>Save</button>}';
+    expect(() =>
+      buildInteractivePreviewDocument(source, {
+        path,
+        runtimeMode: 'native-html',
+        sourceEdit: planFor(source, ['button']),
+      }),
+    ).toThrow(/original JSX or TSX|original HTML markup/);
+  });
+
+  it('instruments original HTML including uppercase tags and places the host-only script policy before authored code', () => {
+    const source =
+      '<!doctype html><HTML><BODY><H1 title="a > b">Text</H1><script>document.querySelector("h1").remove();</script><script async src="./authored.js"></script></BODY></HTML>';
+    const start = source.indexOf('<H1'),
+      end = source.indexOf('</H1>') + 5;
+    const plan: SourceEditPreviewOptions = {
+      source,
+      sourceHash,
+      previewRevision: 'html-preview',
+      targets: [
+        {
+          id: `${start}:${end}`,
+          tagName: 'h1',
+          start,
+          end,
+          insertionOffset: source.indexOf('>Text'),
+        },
+      ],
+    };
+    const preview = buildInteractivePreviewDocument(source, {
+      path: 'pages/start.htm',
+      runtimeMode: 'native-html',
+      sourceEdit: plan,
+    });
+    expect(preview).toContain(`data-codesign-source-id="html-preview:${start}:${end}"`);
+    expect(preview).toContain("script-src 'nonce-codesign-html-preview'");
+    expect(preview).toContain('<script nonce="codesign-html-preview">');
+    expect(preview.indexOf('data-codesign-source-edit-policy')).toBeLessThan(
+      preview.indexOf('document.querySelector("h1").remove()'),
+    );
+    expect(preview).not.toContain('CODESIGN_JSX_RUNTIME');
+    expect(preview).not.toContain('CODESIGN_STANDALONE_RUNTIME');
+    expect(preview).toContain('type="application/x-codesign-source-edit"');
+    expect(preview).not.toContain('src="./authored.js"');
+    const normal = buildInteractivePreviewDocument(source, {
+      path: 'pages/start.htm',
+      runtimeMode: 'native-html',
+    });
+    expect(normal).not.toContain('data-codesign-source-edit-policy');
+    expect(normal).not.toContain('data-codesign-source-id=');
+    expect(normal).toContain('<script>document.querySelector("h1").remove();</script>');
+    expect(normal).toContain('src="./authored.js"');
+    expect(buildStandaloneDocument(source, { runtimeMode: 'native-html' })).toBe(source);
+  });
+
   it('rejects already-wrapped source', () => {
     const wrapped = buildInteractivePreviewDocument('function App(){return <button/>}', {
       path: 'App.jsx',

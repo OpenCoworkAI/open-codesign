@@ -68,6 +68,7 @@ export function buildHtmlDocument(artifactSource: string, opts: ExportHtmlOption
   let out = ensureDocumentShell(
     buildStandaloneDocument(artifactSource, {
       path: opts.sourcePath ?? inferLegacyHtmlPath(artifactSource),
+      runtimeMode: opts.runtimeMode,
     }),
   );
   if (injectTailwind && !hasTailwindScript(out)) {
@@ -205,16 +206,21 @@ function prettifyHtml(html: string): string {
     }
   }
 
-  return `${lines.join('\n')}\n`;
+  let formatted = lines.join('\n');
+  // Inline raw blocks can share a token with surrounding markup; restore those too.
+  for (const [key, block] of protectedHtml.blocks) formatted = formatted.replaceAll(key, block);
+  return `${formatted}\n`;
 }
 
 function protectRawTextBlocks(html: string): { html: string; blocks: Map<string, string> } {
   const blocks = new Map<string, string>();
+  let prefix = '__CODESIGN_RAW_BLOCK_';
+  while (html.includes(prefix)) prefix += '_';
   let index = 0;
   const protectedHtml = html.replace(
     /<(script|style|pre|textarea)\b[\s\S]*?<\/\1>/gi,
     (block: string) => {
-      const key = `__CODESIGN_RAW_BLOCK_${index}__`;
+      const key = `${prefix}${index}__`;
       index += 1;
       blocks.set(key, block);
       return key;

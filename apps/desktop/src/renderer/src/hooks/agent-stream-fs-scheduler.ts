@@ -1,8 +1,11 @@
+import type { SourceIdentityV1 } from '@open-codesign/shared';
+
 export interface AgentFsUpdate {
   designId: string;
   generationId: string;
   path: string;
   content: string;
+  source?: SourceIdentityV1;
 }
 
 export interface AgentFsUpdateScheduler {
