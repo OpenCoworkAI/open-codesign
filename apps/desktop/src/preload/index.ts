@@ -16,6 +16,8 @@ import type {
   DesignSnapshot,
   ExternalConfigsDetection,
   GeneratePayloadV1,
+  LibraryDesignSystem,
+  LibraryDesignSystemDetail,
   ListEventsInput,
   ListEventsResult,
   LocalInputFile,
@@ -821,15 +823,69 @@ const api = {
       return () => ipcRenderer.removeListener('codesign:files:v1:changed', listener);
     },
   },
+  designSystems: {
+    list: () =>
+      ipcRenderer.invoke('design-systems:v1:list', { schemaVersion: 1 }) as Promise<
+        LibraryDesignSystem[]
+      >,
+    get: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:get', {
+        schemaVersion: 1,
+        id,
+      }) as Promise<LibraryDesignSystemDetail>,
+    create: (name: string, description: string) =>
+      ipcRenderer.invoke('design-systems:v1:create', {
+        schemaVersion: 1,
+        name,
+        description,
+      }) as Promise<LibraryDesignSystemDetail>,
+    fork: (id: string, name?: string) =>
+      ipcRenderer.invoke('design-systems:v1:fork', {
+        schemaVersion: 1,
+        id,
+        name,
+      }) as Promise<LibraryDesignSystemDetail>,
+    edit: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:edit', { schemaVersion: 1, id }) as Promise<Design>,
+    validate: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:validate', {
+        schemaVersion: 1,
+        id,
+      }) as Promise<LibraryDesignSystemDetail>,
+    update: (id: string, name: string, description: string) =>
+      ipcRenderer.invoke('design-systems:v1:update', {
+        schemaVersion: 1,
+        id,
+        name,
+        description,
+      }) as Promise<LibraryDesignSystemDetail>,
+    import: (designId?: string) =>
+      ipcRenderer.invoke('design-systems:v1:import', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<LibraryDesignSystemDetail | null>,
+    remove: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:delete', { schemaVersion: 1, id }) as Promise<void>,
+    export: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:export', { schemaVersion: 1, id }) as Promise<
+        string | null
+      >,
+  },
   snapshots: {
     listDesigns: () =>
       ipcRenderer.invoke('snapshots:v1:list-designs', { schemaVersion: 1 }) as Promise<Design[]>,
-    createDesign: (name: string, workspacePath?: string | null, demoInputId?: string) =>
+    createDesign: (
+      name: string,
+      workspacePath?: string | null,
+      demoInputId?: string,
+      designSystemId?: string,
+    ) =>
       ipcRenderer.invoke('snapshots:v1:create-design', {
         schemaVersion: 1,
         name,
         ...(workspacePath !== undefined ? { workspacePath } : {}),
         ...(demoInputId !== undefined ? { demoInputId } : {}),
+        ...(designSystemId !== undefined ? { designSystemId } : {}),
       }) as Promise<Design>,
     getDesign: (id: string) =>
       ipcRenderer.invoke('snapshots:v1:get-design', {

@@ -17,13 +17,14 @@ type GetState = () => CodesignState;
 async function resolveDesignPreview(
   designId: string,
   snapshotSource: string | null,
+  isSystemEditor = false,
 ): Promise<WorkspacePreviewReadResult | null> {
   if (!window.codesign) return null;
   return resolveDesignPreviewSource({
     designId,
     snapshotSource,
     read: window.codesign.files?.read,
-    preferSnapshotSource: true,
+    preferSnapshotSource: !isSystemEditor,
   });
 }
 
@@ -120,7 +121,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
 
   async function initializeCurrentDesign(): Promise<void> {
     await get().loadDesigns();
-    const designs = get().designs;
+    const designs = get().designs.filter((d) => !d.designSystemId);
     if (get().currentDesignId !== null) return;
 
     if (designs.length > 0) {
@@ -160,21 +161,32 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
       await initializingDesign;
     },
 
-    openNewDesignDialog() {
-      set({ newDesignDialogOpen: true });
+    openNewDesignDialog(designSystemId) {
+      set({ newDesignDialogOpen: true, selectedLibrarySystemId: designSystemId ?? null });
     },
     closeNewDesignDialog() {
-      set({ newDesignDialogOpen: false });
+      set({ newDesignDialogOpen: false, selectedLibrarySystemId: null });
     },
 
-    async createNewDesign(workspacePath?: string | null, demoInputId?: string) {
+    async createNewDesign(
+      workspacePath?: string | null,
+      demoInputId?: string,
+      designSystemId?: string,
+    ) {
       if (!window.codesign) return null;
       const name = nextUntitledDesignName(get().designs);
       try {
         const design =
-          demoInputId === undefined
-            ? await window.codesign.snapshots.createDesign(name, workspacePath)
-            : await window.codesign.snapshots.createDesign(name, workspacePath, demoInputId);
+          designSystemId !== undefined
+            ? await window.codesign.snapshots.createDesign(
+                name,
+                workspacePath,
+                demoInputId,
+                designSystemId,
+              )
+            : demoInputId === undefined
+              ? await window.codesign.snapshots.createDesign(name, workspacePath)
+              : await window.codesign.snapshots.createDesign(name, workspacePath, demoInputId);
         set((state) => buildFreshDesignState(state, design.id));
         void get().syncActiveMessages(design.id);
         await get().loadDesigns();
@@ -203,7 +215,11 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
             const snapshots = await window.codesign?.snapshots.list(id);
             if (!snapshots || get().currentDesignId !== id) return;
             const latest = snapshots[0] ?? null;
-            const fresh = await resolveDesignPreview(id, latest ? latest.artifactSource : null);
+            const fresh = await resolveDesignPreview(
+              id,
+              latest ? latest.artifactSource : null,
+              Boolean(get().designs.find((d) => d.id === id)?.designSystemId),
+            );
             if (fresh !== null && fresh.content !== get().previewSource) {
               const refreshed = recordPreviewSourceInPool(
                 get().previewSourceByDesign,
@@ -267,7 +283,11 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
             const snapshots = await window.codesign?.snapshots.list(id);
             if (!snapshots || get().currentDesignId !== id) return;
             const latest = snapshots[0] ?? null;
-            const fresh = await resolveDesignPreview(id, latest ? latest.artifactSource : null);
+            const fresh = await resolveDesignPreview(
+              id,
+              latest ? latest.artifactSource : null,
+              Boolean(get().designs.find((d) => d.id === id)?.designSystemId),
+            );
             if (fresh !== null && fresh.content !== get().previewSource) {
               const refreshed = recordPreviewSourceInPool(
                 get().previewSourceByDesign,
@@ -311,7 +331,11 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
           const snapshots = await window.codesign?.snapshots.list(id);
           if (!snapshots || get().currentDesignId !== id) return;
           const latest = snapshots[0] ?? null;
-          const source = await resolveDesignPreview(id, latest ? latest.artifactSource : null);
+          const source = await resolveDesignPreview(
+            id,
+            latest ? latest.artifactSource : null,
+            Boolean(get().designs.find((d) => d.id === id)?.designSystemId),
+          );
           if (get().currentDesignId !== id) return;
           const refreshed = recordPreviewSourceInPool(
             get().previewSourceByDesign,

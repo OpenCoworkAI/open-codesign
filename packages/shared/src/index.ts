@@ -645,6 +645,7 @@ export interface RecordRendererErrorResult {
   fingerprint: string | null;
 }
 
+export * from './design-system-library';
 export type {
   EditmodeBlock,
   EditmodeTokens,
@@ -660,7 +661,6 @@ export {
   replaceEditmodeBlock,
   replaceTweakSchema,
 } from './editmode';
-
 export {
   formatUsageCost,
   formatUsageTokens,
@@ -670,5 +670,4 @@ export {
   type UsageRecord,
   type UsageTotals,
 } from './usage-budget';
-
 export * from './web-research';

@@ -180,6 +180,17 @@ export function getDesign(db: Database, id: string): Design | null {
   return readStore(db).designs.find((design) => design.id === id) ?? null;
 }
 
+export function markDesignSystemEditor(db: Database, id: string, designSystemId: string): Design {
+  return mutateStore(db, (data) => {
+    const idx = requireDesignIndex(data, id);
+    const current = data.designs[idx];
+    if (!current) throw new Error('Design not found');
+    const updated: Design = { ...current, designSystemId };
+    data.designs[idx] = updated;
+    return updated;
+  });
+}
+
 export function listDesigns(db: Database): Design[] {
   return readStore(db)
     .designs.filter((design) => design.deletedAt === null)

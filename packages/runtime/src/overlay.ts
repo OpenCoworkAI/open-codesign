@@ -331,6 +331,13 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     return '/' + parts.join('/');
   }
 
+  function selectionHtml(el) {
+    var mapped = el.closest && el.closest('[data-design-system]');
+    var key = mapped && mapped.getAttribute('data-design-system');
+    var hint = key && /^[a-zA-Z0-9_.-]{1,160}$/.test(key) ? '<!-- DESIGN.md: ' + key + ' -->' : '';
+    return hint + String(el.outerHTML || '').slice(0, 800 - hint.length);
+  }
+
   function sourceAncestors(el) {
     var result = [];
     var parent = el && el.parentElement;
@@ -354,7 +361,7 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
     pinnedSourceEditSignature = JSON.stringify(provenance);
     var selection = {
       __codesign: true, type: 'ELEMENT_SELECTED', selector: selector,
-      tag: String(el.tagName).toLowerCase(), outerHTML: String(el.outerHTML || '').slice(0, 800),
+      tag: String(el.tagName).toLowerCase(), outerHTML: selectionHtml(el),
       rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
       sourceEditAncestors: sourceAncestors(el),
       sourceEditRevision: { sourceHash: sourceEditContext.sourceHash, previewRevision: sourceEditContext.previewRevision }
@@ -446,7 +453,7 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
       // keep its rect live, without waiting for a parent→iframe round-trip.
       clearHover();
       clearPinned();
-      var selectedHtml = (el.outerHTML || '').slice(0, 800);
+      var selectedHtml = selectionHtml(el);
       var parentHtml = '';
       try {
         if (el.parentElement && el.parentElement.outerHTML) {
