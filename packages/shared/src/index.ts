@@ -11,6 +11,20 @@ export {
   CommentContentExpectations,
   commentContentFingerprint,
 } from './comment-content';
+export type {
+  WebSearchBackend,
+  WebSearchMode,
+  WebSearchRoute,
+  WebSearchService,
+  WebSearchUnavailableReason,
+} from './web-search-routing';
+export {
+  ANTHROPIC_NATIVE_WEB_SEARCH_MODELS,
+  OPENAI_NATIVE_WEB_SEARCH_MODELS,
+  resolveWebSearchRoute,
+  WebSearchBackendSchema,
+  WebSearchServiceSchema,
+} from './web-search-routing';
 export type { SaveWebSearchSettingsResult } from './web-search-settings';
 export {
   SaveWebSearchSettingsInput,

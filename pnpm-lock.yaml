@@ -12,6 +12,9 @@ overrides:
   esbuild@<0.25.0: '>=0.25.0'
 
 patchedDependencies:
+  '@mariozechner/pi-ai@0.72.1':
+    hash: aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84
+    path: patches/@mariozechner__pi-ai@0.72.1.patch
   pptxgenjs@4.0.1:
     hash: 404d3c108d40771d3932ee137efd5c72847a3a26c2e0f68c365045db9e6280f5
     path: patches/pptxgenjs@4.0.1.patch
@@ -105,7 +108,7 @@ importers:
         version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-ai':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
+        version: 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-coding-agent':
         specifier: ^0.72.1
         version: 0.72.1(ws@8.20.0)(zod@4.4.2)
@@ -235,7 +238,7 @@ importers:
         version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-ai':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
+        version: 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-coding-agent':
         specifier: ^0.72.1
         version: 0.72.1(ws@8.20.0)(zod@4.4.2)
@@ -316,7 +319,7 @@ importers:
     dependencies:
       '@mariozechner/pi-ai':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.20.0)(zod@4.4.2)
+        version: 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.20.0)(zod@4.4.2)
       '@open-codesign/shared':
         specifier: workspace:*
         version: link:../shared
@@ -6954,7 +6957,7 @@ snapshots:
 
   '@mariozechner/pi-agent-core@0.72.1(ws@8.20.0)(zod@4.4.2)':
     dependencies:
-      '@mariozechner/pi-ai': 0.72.1(ws@8.20.0)(zod@4.4.2)
+      '@mariozechner/pi-ai': 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.20.0)(zod@4.4.2)
       typebox: 1.1.37
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
@@ -6965,7 +6968,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-ai@0.72.1(ws@8.20.0)(zod@4.4.2)':
+  '@mariozechner/pi-ai@0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.20.0)(zod@4.4.2)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@4.4.2)
       '@aws-sdk/client-bedrock-runtime': 3.1041.0
@@ -6991,7 +6994,7 @@ snapshots:
     dependencies:
       '@mariozechner/jiti': 2.6.5
       '@mariozechner/pi-agent-core': 0.72.1(ws@8.20.0)(zod@4.4.2)
-      '@mariozechner/pi-ai': 0.72.1(ws@8.20.0)(zod@4.4.2)
+      '@mariozechner/pi-ai': 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.20.0)(zod@4.4.2)
       '@mariozechner/pi-tui': 0.72.1
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 5.6.2

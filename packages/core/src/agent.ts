@@ -37,10 +37,12 @@ import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
   classifyError,
   claudeCodeIdentityHeaders,
+  createNativeSearchStream,
   inferReasoning,
   isProviderAbortedTransportError,
   isTransportLevelError,
   looksLikeClaudeOAuthToken,
+  type NativeSearchOptions,
   normalizeGeminiModelId,
   shouldForceClaudeCodeIdentity,
   withBackoff,
@@ -907,6 +909,8 @@ function buildTurnPrompt(input: GenerateInput, fs: TextEditorFsCallbacks | undef
 export type { AgentEvent };
 
 export interface GenerateViaAgentDeps {
+  nativeSearch?: NativeSearchOptions;
+  nativeSearchHistory?: Array<import('@mariozechner/pi-ai').AssistantMessage>;
   research?: ResearchHost | undefined;
   activeMessages?: ActiveRunMessages | undefined;
   /** Optional subscriber for Agent lifecycle + streaming events. */
@@ -1236,7 +1240,11 @@ async function generateViaAgentInternal(
       makeAskTool(input.askBridge) as unknown as AgentTool<TSchema, unknown>,
     );
   }
-  const researchTools = deps.research ? makeWebResearchTools(deps.research) : [];
+  const researchTools = deps.research
+    ? makeWebResearchTools(deps.research).filter(
+        (tool) => !deps.nativeSearch || tool.name !== 'web_search',
+      )
+    : [];
   for (const tool of researchTools) defaultToolsByName.set(tool.name, tool);
   const defaultTools = availableToolNames({
     research: deps.research !== undefined,
@@ -1249,18 +1257,20 @@ async function generateViaAgentInternal(
   })
     .map((name) => defaultToolsByName.get(name))
     .filter((tool): tool is AgentTool<TSchema, unknown> => tool !== undefined);
-  const tools = (deps.tools ?? defaultTools).map((tool) => ({
-    ...tool,
-    async execute(...args: Parameters<typeof tool.execute>) {
-      assertNotCancelled(args[2]);
-      return tool.execute(...args);
-    },
-  }));
+  const tools = (deps.tools ?? defaultTools)
+    .filter((tool) => !deps.nativeSearch || tool.name !== 'web_search')
+    .map((tool) => ({
+      ...tool,
+      async execute(...args: Parameters<typeof tool.execute>) {
+        assertNotCancelled(args[2]);
+        return tool.execute(...args);
+      },
+    }));
   const encourageToolUse = deps.encourageToolUse ?? tools.length > 0;
   const researchGuidance =
     researchTools.length > 0 &&
     researchTools.every((researchTool) => tools.some((tool) => tool.name === researchTool.name))
-      ? `${WEB_RESEARCH_GUIDANCE}\n\n`
+      ? `${WEB_RESEARCH_GUIDANCE}\n\n${deps.nativeSearch ? 'Native web search is enabled on this model. Sources are archived automatically. Use research_records to obtain saved source IDs before recording evidence; use web_fetch for original text. Search request budget and actual search counts are separate.\n\n' : ''}`
       : '';
   const baseAgenticGuidance =
     researchGuidance +
@@ -1281,9 +1291,24 @@ async function generateViaAgentInternal(
   ].join('\n\n');
 
   // Seed the transcript with prior history (already in ChatMessage shape).
-  const historyAsAgentMessages: AgentMessage[] = input.history.map((m, idx) =>
-    chatMessageToAgentMessage(m, idx + 1, piModel),
-  );
+  const historyAsAgentMessages: AgentMessage[] = input.history.map((m, idx) => {
+    const translated = chatMessageToAgentMessage(m, idx + 1, piModel);
+    if (m.role !== 'assistant' || !deps.nativeSearch) return translated;
+    const saved = deps.nativeSearchHistory?.findLast(
+      (message) =>
+        message.provider === piModel.provider &&
+        message.api === piModel.api &&
+        message.model === piModel.id &&
+        message.content
+          .filter((block) => block.type === 'text')
+          .map((block) => block.text)
+          .join('') === m.content,
+    );
+    const hasClientCalls = saved?.content.some((block) => block.type === 'toolCall');
+    return saved?.nativeSearch && saved.stopReason === 'stop' && !hasClientCalls
+      ? { ...translated, nativeSearch: saved.nativeSearch }
+      : translated;
+  });
   log.info('[generate] step=build_request.ok', {
     ...ctx,
     ms: Date.now() - buildStart,
@@ -1335,6 +1360,7 @@ async function generateViaAgentInternal(
 
   // Factory for creating agents with a given message history. Used for both
   // the initial agent and retry agents that continue the interrupted transcript.
+  const nativeStream = deps.nativeSearch ? createNativeSearchStream(deps.nativeSearch) : undefined;
   const createRetryAgent = (
     messages: AgentMessage[],
     retryThinkingLevel = thinkingLevel,
@@ -1401,10 +1427,13 @@ async function generateViaAgentInternal(
             return initialApiKey || 'open-codesign-keyless';
           },
       ...(onPayload !== undefined ? { onPayload } : {}),
-      ...(requestTimeoutMs !== undefined
+      ...(requestTimeoutMs !== undefined || nativeStream !== undefined
         ? {
             streamFn: (model, context, options) =>
-              streamSimple(model, context, { ...options, timeoutMs: requestTimeoutMs }),
+              (nativeStream ?? streamSimple)(model, context, {
+                ...options,
+                ...(requestTimeoutMs !== undefined ? { timeoutMs: requestTimeoutMs } : {}),
+              }),
           }
         : {}),
     });

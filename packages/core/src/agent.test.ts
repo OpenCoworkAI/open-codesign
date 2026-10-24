@@ -2823,6 +2823,107 @@ it('exposes research tools to the actual model-visible Agent list and preserves 
   expect(research.search).toHaveBeenCalledWith('recent industry', 1, controller.signal);
 });
 
+it('uses native search without exposing duplicate local search, retaining evidence tools', async () => {
+  scriptedAgent = { assistantText: 'Ready' };
+  const research: import('@open-codesign/shared').ResearchHost = {
+    search: vi.fn(),
+    fetch: vi.fn(),
+    recordEvidence: vi.fn(),
+    linkSlide: vi.fn(),
+    exportSources: vi.fn(),
+    readRecords: vi.fn(),
+  };
+  await generateViaAgent(
+    { prompt: 'Research slides', history: [], model: MODEL, apiKey: 'test' },
+    {
+      research,
+      nativeSearch: {
+        provider: 'openai',
+        maxRequests: 1,
+        authorize: vi.fn(),
+        saveSources: vi.fn(),
+      },
+    },
+  );
+  const options = agentCalls[0]?.options;
+  const names = options?.initialState?.tools?.map((tool) => tool.name);
+  expect(names).not.toContain('web_search');
+  expect(names).toEqual(
+    expect.arrayContaining([
+      'web_fetch',
+      'research_records',
+      'research_evidence',
+      'research_export',
+    ]),
+  );
+  expect(options?.initialState?.systemPrompt).toContain('Sources are archived automatically');
+  expect(options?.streamFn).toBeTypeOf('function');
+});
+
+it.each([
+  true,
+  false,
+])('restores native history only when no local tool results are needed (%s)', async (hasClientCall) => {
+  scriptedAgent = { assistantText: 'Ready' };
+  const saved: import('@mariozechner/pi-ai').AssistantMessage = {
+    role: 'assistant',
+    provider: MODEL.provider,
+    model: MODEL.modelId,
+    api: 'anthropic-messages',
+    timestamp: 1,
+    content: [
+      { type: 'text', text: 'Historical answer' },
+      ...(hasClientCall
+        ? [{ type: 'toolCall' as const, id: 'local1', name: 'set_todos', arguments: {} }]
+        : []),
+    ],
+    nativeSearch: {
+      provider: 'anthropic',
+      model: MODEL.modelId,
+      output: [
+        { type: 'text', text: 'Historical answer' },
+        ...(hasClientCall
+          ? [{ type: 'tool_use', id: 'local1', name: 'set_todos', input: {} }]
+          : []),
+      ],
+    },
+    stopReason: hasClientCall ? 'toolUse' : 'stop',
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+  };
+  await generateViaAgent(
+    {
+      prompt: 'Continue',
+      history: [
+        { role: 'user', content: 'Old prompt' },
+        { role: 'assistant', content: 'Historical answer' },
+      ],
+      wire: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      model: MODEL,
+      apiKey: 'test',
+    },
+    {
+      nativeSearch: {
+        provider: 'anthropic',
+        maxRequests: 1,
+        authorize: vi.fn(),
+        saveSources: vi.fn(),
+      },
+      nativeSearchHistory: [saved],
+    },
+  );
+  const historical = agentCalls[0]?.options.initialState?.messages?.[1];
+  if (hasClientCall) expect(historical).not.toHaveProperty('nativeSearch');
+  else expect(historical).toHaveProperty('nativeSearch', saved.nativeSearch);
+});
+
 it('omits research-only guidance and tools when no research host is provided', async () => {
   scriptedAgent = { assistantText: 'Ready' };
   await generateViaAgent({

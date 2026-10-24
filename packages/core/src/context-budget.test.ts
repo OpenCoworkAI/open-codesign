@@ -23,6 +23,19 @@ const base = {
 };
 
 describe('planContextBudget', () => {
+  it('accounts for opaque native replay bytes rather than just visible text', () => {
+    const native = {
+      ...assistant(20),
+      nativeSearch: {
+        provider: 'openai' as const,
+        model: 'gpt-4.1',
+        output: [{ type: 'message', text: 'x'.repeat(100000) }],
+      },
+    };
+    const budget = planContextBudget({ ...base, contextWindow: 8192, history: [user(20), native] });
+    expect(budget.history).toEqual([]);
+    expect(budget.droppedHistory).toBe(2);
+  });
   it('keeps all history and reserves the requested output in a large window', () => {
     const history = [user(400), assistant(400)];
     const budget = planContextBudget({ ...base, contextWindow: 200_000, history });

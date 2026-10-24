@@ -125,6 +125,15 @@ export function saveSources(store: ResearchStore, sources: WebSource[]): void {
         ...new Set([old.excerpt, source.excerpt].filter((s): s is string => Boolean(s))),
       ];
       const excerpt = excerpts.join('\n\n');
+      const citations = [
+        ...new Map(
+          [...(old.citations ?? []), ...(source.citations ?? [])].map((citation) => [
+            JSON.stringify(citation),
+            citation,
+          ]),
+        ).values(),
+      ];
+      if (citations.length > 1000) throw new Error('Source citation history is full.');
       if (excerpt.length > 24000)
         throw new Error('Source excerpt history is full; reuse saved evidence instead.');
       Object.assign(old, source, {
@@ -133,6 +142,7 @@ export function saveSources(store: ResearchStore, sources: WebSource[]): void {
         publishedAt: source.publishedAt ?? old.publishedAt,
         originalRead: old.originalRead || source.originalRead,
         excerpt: excerpt || null,
+        ...(citations.length ? { citations } : {}),
       });
     }
   }

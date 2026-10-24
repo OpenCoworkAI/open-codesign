@@ -44,7 +44,8 @@
       "esbuild@<0.25.0": ">=0.25.0"
     },
     "patchedDependencies": {
-      "pptxgenjs@4.0.1": "patches/pptxgenjs@4.0.1.patch"
+      "pptxgenjs@4.0.1": "patches/pptxgenjs@4.0.1.patch",
+      "@mariozechner/pi-ai@0.72.1": "patches/@mariozechner__pi-ai@0.72.1.patch"
     }
   },
   "devDependencies": {

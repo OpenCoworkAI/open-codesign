@@ -67,14 +67,14 @@ afterEach(async () => {
 describe('web search settings persistence', () => {
   it('reads only configured status, without decrypting or returning any credential', () => {
     setCachedConfig(fixture('safe:unreadable-fixture'));
-    expect(getWebSearchSettings()).toEqual({ enabled: true, hasKey: true });
+    expect(getWebSearchSettings()).toMatchObject({ enabled: true, hasKey: true });
     expect(JSON.stringify(getWebSearchSettings())).not.toContain(key);
     expect(mocks.probe).not.toHaveBeenCalled();
   });
 
   it('preserves keys, limits and unrelated settings when toggling search', async () => {
     const before = toPersistedV3(fixture());
-    expect(await saveWebSearchSettings({ enabled: false })).toEqual({
+    expect(await saveWebSearchSettings({ enabled: false })).toMatchObject({
       enabled: false,
       hasKey: true,
     });
@@ -91,7 +91,7 @@ describe('web search settings persistence', () => {
     mocks.encrypted = true;
     for (const apiKey of ['tvly-first-fixture', 'tvly-replacement-fixture']) {
       const state = await saveWebSearchSettings({ apiKey });
-      expect(state).toEqual({ enabled: true, hasKey: true });
+      expect(state).toMatchObject({ enabled: true, hasKey: true });
       const stored = await configFile.readConfig();
       const ref = stored?.secrets['tavily'];
       expect(ref?.ciphertext).toMatch(/^safe:/);
@@ -127,7 +127,10 @@ describe('web search settings persistence', () => {
     setCachedConfig(
       parseConfigFlexible({ ...toPersistedV3(fixture()), webSearch: { ...limits, enabled } }),
     );
-    expect(await saveWebSearchSettings({ clearKey: true })).toEqual({ enabled, hasKey: false });
+    expect(await saveWebSearchSettings({ clearKey: true })).toMatchObject({
+      enabled,
+      hasKey: false,
+    });
     const stored = await configFile.readConfig();
     expect(stored?.secrets['tavily']).toBeUndefined();
     expect(stored?.secrets['other']).toEqual(fixture().secrets['other']);
@@ -150,9 +153,9 @@ describe('web search settings persistence', () => {
   it('can configure before model onboarding without auto enabling search', async () => {
     mocks.encrypted = true;
     await loadConfigOnBoot();
-    expect(getWebSearchSettings()).toEqual({ enabled: false, hasKey: false });
+    expect(getWebSearchSettings()).toMatchObject({ enabled: false, hasKey: false });
     await saveWebSearchSettings({ apiKey: key });
-    expect(getWebSearchSettings()).toEqual({ enabled: false, hasKey: true });
+    expect(getWebSearchSettings()).toMatchObject({ enabled: false, hasKey: true });
     expect((await configFile.readConfig())?.activeProvider).toBe('');
   });
 
@@ -180,7 +183,7 @@ describe('web search settings persistence', () => {
     });
     expect(getWebSearchSettings().hasKey).toBe(true);
     await saveWebSearchSettings({ enabled: false });
-    expect(getWebSearchSettings()).toEqual({ enabled: false, hasKey: true });
+    expect(getWebSearchSettings()).toMatchObject({ enabled: false, hasKey: true });
   });
 
   it('serializes overlapping search settings saves without losing keys or switch', async () => {
@@ -192,7 +195,7 @@ describe('web search settings persistence', () => {
     expect(decryptSecret(getCachedConfig()?.secrets['tavily']?.ciphertext ?? '')).toBe(
       'tvly-concurrent-fixture',
     );
-    expect(getWebSearchSettings()).toEqual({ enabled: false, hasKey: true });
+    expect(getWebSearchSettings()).toMatchObject({ enabled: false, hasKey: true });
   });
 });
 

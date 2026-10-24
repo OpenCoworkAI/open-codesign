@@ -3,6 +3,16 @@ import { z } from 'zod';
 const text = z.string().min(1).max(12000);
 const id = z.string().min(1).max(160);
 const nullableText = z.string().max(24000).nullable();
+export const WebCitationSchema = z.object({
+  type: z.string().min(1).max(100),
+  title: z.string().max(500).optional(),
+  citedText: z.string().max(12000).optional(),
+  startIndex: z.number().int().nonnegative().optional(),
+  endIndex: z.number().int().nonnegative().optional(),
+  encryptedIndex: z.string().max(24000).optional(),
+  callId: z.string().max(200).optional(),
+});
+export type WebCitation = z.infer<typeof WebCitationSchema>;
 export const WebSourceSchema = z.object({
   id,
   url: z.string().url().max(4096),
@@ -14,6 +24,10 @@ export const WebSourceSchema = z.object({
   locator: nullableText,
   originalRead: z.boolean(),
   originalText: z.string().max(24000).optional(),
+  provider: z.string().max(100).optional(),
+  retrieval: z.enum(['search-api', 'native-tool']).optional(),
+  callId: z.string().max(200).optional(),
+  citations: z.array(WebCitationSchema).max(1000).optional(),
 });
 export type WebSource = z.infer<typeof WebSourceSchema>;
 export interface WebFetchResult {
@@ -69,6 +83,7 @@ export const ResearchStoreSchema = z.object({
 });
 export type ResearchStore = z.infer<typeof ResearchStoreSchema>;
 export interface ResearchHost extends WebResearchNetwork {
+  saveNativeSources?(sources: WebSource[], signal?: AbortSignal): Promise<void>;
   recordEvidence(input: EvidenceInput, signal?: AbortSignal): Promise<Evidence>;
   linkSlide(
     path: string,

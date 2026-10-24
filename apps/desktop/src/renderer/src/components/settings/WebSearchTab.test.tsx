@@ -45,11 +45,12 @@ function render() {
   return WebSearchTab();
 }
 type Props = {
+  'aria-label'?: string;
   children?: ReactNode;
   type?: string;
   role?: string;
   onClick?: () => Promise<void> | void;
-  onChange?: (event: { target: { checked: boolean } }) => void;
+  onChange?: (event: { target: { checked: boolean; value?: string } }) => void;
   onSubmit?: (event: { preventDefault: () => void; currentTarget: HTMLFormElement }) => void;
   disabled?: boolean;
 };
@@ -91,6 +92,43 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Tavily Settings UI', () => {
+  it('saves backend and native opt-in without sending a duplicate key', async () => {
+    await mount();
+    api.save.mockResolvedValueOnce({
+      ok: true,
+      settings: { enabled: false, hasKey: true, backend: 'provider' },
+    });
+    find(render(), (props) => props['aria-label'] === 'settings.webSearch.backend').onChange?.({
+      target: { value: 'provider', checked: false },
+    });
+    await vi.waitFor(() => expect(api.save).toHaveBeenCalledWith({ backend: 'provider' }));
+    expect(renderToStaticMarkup(render())).not.toContain('type="password"');
+    find(
+      render(),
+      (props) => props['aria-label'] === 'settings.webSearch.nativeEnabled',
+    ).onChange?.({ target: { checked: true } });
+    await vi.waitFor(() => expect(api.save).toHaveBeenCalledWith({ nativeEnabled: true }));
+    expect(api.test).not.toHaveBeenCalled();
+  });
+  it('shows inherited supplier access without asking for a duplicate key', async () => {
+    api.get.mockResolvedValue({
+      enabled: true,
+      hasKey: false,
+      backend: 'provider',
+      service: 'deepseek',
+      mode: 'search-api',
+      inheritsCredential: true,
+      nativeEnabled: false,
+      maxNativeRequests: 12,
+    });
+    await mount();
+    const html = renderToStaticMarkup(render());
+    expect(html).toContain('settings.webSearch.backend');
+    expect(html).toContain('settings.webSearch.inherited');
+    expect(html).toContain('deepseek');
+    expect(html).not.toContain('type="password"');
+    expect(api.test).not.toHaveBeenCalled();
+  });
   it('loads only state and never automatically tests on mount or after saving', async () => {
     await mount();
     expect(api.get).toHaveBeenCalledExactlyOnceWith();

@@ -1,9 +1,19 @@
 import type { AgentMessage } from '@mariozechner/pi-agent-core';
-import { estimateTokens } from '@mariozechner/pi-coding-agent';
+import type { AssistantMessage } from '@mariozechner/pi-ai';
+import { estimateTokens as estimatePiTokens } from '@mariozechner/pi-coding-agent';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 /** pi's estimate for one image (`estimateTokens` counts images in tool results as 1,200 tokens). */
 const IMAGE_TOKENS = 1_200;
+
+function estimateTokens(message: AgentMessage): number {
+  const native =
+    message.role === 'assistant' ? (message as AssistantMessage).nativeSearch : undefined;
+  return Math.max(
+    estimatePiTokens(message),
+    native ? Math.ceil(JSON.stringify(native.output).length / 4) : 0,
+  );
+}
 
 export interface ContextBudgetInput {
   contextWindow: number;

@@ -1,8 +1,13 @@
-import type { Config } from '@open-codesign/shared';
+import { type Config, hydrateConfig, resolveWebSearchRoute } from '@open-codesign/shared';
+import { resolveActiveApiKey } from './resolve-api-key';
 import { createWebResearchNetwork, type NetworkDependencies } from './web-research-network';
 
 export function createWebResearchRun(
-  config: Pick<Config, 'webSearch' | 'secrets'> | null | undefined,
+  config:
+    | (Pick<Config, 'webSearch' | 'secrets'> &
+        Partial<Pick<Config, 'activeProvider' | 'activeModel' | 'providers'>>)
+    | null
+    | undefined,
   decrypt: (ciphertext: string) => string,
   deps: NetworkDependencies = {},
 ) {
@@ -13,30 +18,51 @@ export function createWebResearchRun(
     timeoutMs: config?.webSearch?.timeoutMs ?? 15000,
     maxChars: config?.webSearch?.maxChars ?? 10000,
   };
-  const ciphertext = config?.secrets['tavily']?.ciphertext;
-  let resolved = false;
-  let unreadable = false;
-  let apiKey: string | undefined;
+  const route = resolveWebSearchRoute(
+    hydrateConfig({
+      version: 3,
+      activeProvider: config?.activeProvider ?? '',
+      activeModel: config?.activeModel ?? '',
+      providers: config?.providers ?? {},
+      secrets: config?.secrets ?? {},
+      ...(config?.webSearch ? { webSearch: config.webSearch } : {}),
+    }),
+  );
+  const credentialId = route.providerId ?? 'tavily';
+  const ciphertext = config?.secrets[credentialId]?.ciphertext;
+  let credential: Promise<string | undefined> | undefined;
   const network = createWebResearchNetwork(
     {
       ...settings,
+      service: route.service,
       getApiKey: () => {
-        if (!resolved) {
-          resolved = true;
+        credential ??= (async () => {
           try {
-            apiKey = ciphertext ? decrypt(ciphertext) : undefined;
+            return ciphertext
+              ? await resolveActiveApiKey(credentialId, {
+                  getApiKeyForProvider: () => decrypt(ciphertext),
+                  getCodexAccessToken: async () => {
+                    throw new Error('Subscription credentials cannot be used for web search.');
+                  },
+                })
+              : undefined;
           } catch {
-            unreadable = true;
+            throw new Error(
+              route.service === 'tavily'
+                ? 'Tavily credentials could not be read. Replace the key in Settings > Web Search, then start a new turn; no app restart is needed. Never paste keys into chat.'
+                : 'Search credentials could not be read. Check Settings > Web Search, then start a new turn; no app restart is needed. Never paste keys into chat.',
+            );
           }
-        }
-        if (unreadable)
-          throw new Error(
-            'Tavily credentials could not be read. Replace the key in Settings > Web Search, then start a new turn; no app restart is needed. Never paste keys into chat.',
-          );
-        return apiKey;
+        })();
+        return credential;
       },
     },
     deps,
   );
-  return { settings, network };
+  return {
+    settings,
+    network,
+    route,
+    maxNativeRequests: config?.webSearch?.maxNativeRequests ?? 12,
+  };
 }
