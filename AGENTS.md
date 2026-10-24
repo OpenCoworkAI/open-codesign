@@ -162,6 +162,19 @@ prefer the continuous background session to verify the affected flow before deli
 Read [Background UI debugging](apps/desktop/BACKGROUND_DEBUG.md) for the supported protocol
 and boundaries. Documentation-only changes do not require a UI session.
 
+**Windows verification limitation (2026-10-22):** a user reported persistent pointer
+movement during overlapping background/model and browser tests; it stopped after the
+owned test processes were terminated. The observer's injected-input counters remained
+zero, so they do not establish that the physical cursor was unaffected. The cause is
+unresolved. Do not run Electron/Chrome UI or browser tests on that interactive desktop
+again until the cause is corrected or the processes use verified OS-level isolation.
+In this checkout, `pnpm test` now excludes real browser/Electron suites and rejects accidental
+Puppeteer launches. It and the existing Git hooks can run alongside lint and typecheck.
+Older checkouts may still launch Chrome from `pnpm test`; inspect their scripts/config first.
+The restriction still applies to `test:browser`, `test:debug-ui` and background sessions.
+Record excluded/skipped/interrupted checks without claiming
+they passed. A disposable profile or `headless: true` alone does not resolve this limitation.
+
 From the repository root, build the current code and start an isolated instance:
 
 ```powershell
@@ -188,6 +201,12 @@ and start a new session after further source edits; do not validate stale build 
   require completed observation, a positive sample count, no overflow, and zero visible-window,
   foreground/focus, and injected-input counters. Live frames are not final proof. The user's
   own cursor movement and switching other applications are allowed, not test failures.
+- Treat a user report of unexpected cursor movement or focus takeover as a failed
+  non-interference acceptance, even if the automated report says `ok: true`. Close owned
+  sessions, terminate their remaining test processes, preserve reports and the user's
+  observation, and stop UI/browser retries on that desktop. Never restore the cursor or
+  foreground window to conceal the interference. Resume only after correcting the cause
+  or providing verified OS-level isolation; do not switch the user's active desktop.
 - Do not launch visible Electron windows, focus/restore the app, simulate system mouse or
   keyboard input, or attach to the user's normal app/profile to complete verification.
   Do not silently fall back to foreground computer use. If startup, monitoring, or a required
@@ -198,6 +217,24 @@ and start a new session after further source edits; do not validate stale build 
   complements the relevant unit/integration tests and repository checks; it does not replace
   them. Run `pnpm --filter @open-codesign/desktop test:debug-ui` when changing the debug host
   or its protocol; ordinary `pnpm test` skips those real Electron integration cases.
+- Run real Chrome coverage explicitly with `pnpm test:browser` on an eligible test host.
+  Browser suites and background sessions share a lease across worktrees. Do not bypass it,
+  run raw browser Vitest configs, or automatically remove a stale lease. Read the recovery
+  instructions in `BACKGROUND_DEBUG.md`. The Windows test runner owns descendants in a
+  Job Object and writes cleanup evidence; that is process ownership, not desktop isolation.
+  `pnpm test:browser --list` and `test:debug-ui --list` list files without executing them;
+  do not report their successful exit as a passed UI test.
+- For generation, streaming, questions, cancellation or model-driven UI changes, start with
+  `debug session --model-mode fixture --output NEW_DIR`. This exercises the real runtime
+  and tools with a controlled pi model; see the documented failure/wait/question markers.
+  Use `--model-mode live --config FILE` only when real provider calls are authorized. Reuse
+  only the selected stored configuration; do not print credentials or open a login flow.
+  A current Codex ChatGPT login can be selected with `--codex-auth FILE`; token refresh is
+  deliberately disabled. Windows encrypted BYOK keys may need `--credential-state FILE`.
+  Save generated artifacts, screenshots and the final report. Require terminal `runs`,
+  `model.active: 0`, successful cleanup and the same Windows observation checks. Verify the
+  source config bytes/mtime remain unchanged. An opt-in model mode does not authorize bypassing
+  its remaining permission, native-dialog, OAuth or external-app restrictions.
 
 ## Permission Model
 

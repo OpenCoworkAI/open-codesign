@@ -1,5 +1,26 @@
 import type { PreviewResult, PreviewStep } from '@open-codesign/core';
 
+export interface DebugModelOptions {
+  mode: 'fixture' | 'live';
+  config?: string;
+  provider?: string;
+  model?: string;
+  credentialState?: string;
+  codexAuth?: string;
+}
+
+export interface DebugModelEvidence {
+  mode: 'fixture' | 'live';
+  calls: number;
+  active: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  maxCalls: number;
+  maxOutputTokens: number;
+  events: { call: number; status: string; historyMessages: number; tools: boolean }[];
+}
+
 export interface WindowsObservation {
   platform: string;
   available: boolean;
@@ -28,6 +49,9 @@ export interface UiDebugReport {
   persistedDesigns: number;
   workspacesContained: boolean;
   cleanup: boolean;
+  model?: DebugModelEvidence;
+  artifacts?: { path: string; bytes: number; sha256: string }[];
+  runs?: { generationId: string; status: string }[];
 }
 
 export interface UiDebugElement {
@@ -49,6 +73,8 @@ export interface UiDebugFrame {
   errorCount: number;
   errorsTruncated: boolean;
   windows: WindowsObservation;
+  model?: DebugModelEvidence;
+  runs?: UiDebugReport['runs'];
 }
 
 export interface UiDebugSession {
@@ -66,5 +92,6 @@ export interface UiDebugHost {
     signal: AbortSignal;
     defaultJourney: boolean;
     interact?: (session: UiDebugSession) => Promise<void>;
+    model?: DebugModelOptions;
   }): Promise<UiDebugReport>;
 }

@@ -3,7 +3,7 @@ import { StringDecoder } from 'node:string_decoder';
 import type { UiDebugFrame, UiDebugHost } from '../../desktop/src/debug/contract';
 import type { Arguments } from './arguments';
 import { CliError, EXIT_CODES, envelope, type Result, safeError } from './protocol';
-import { loadUiDebugHost } from './ui-debug';
+import { loadUiDebugHost, modelSetupError, uiLeaseError } from './ui-debug';
 
 /** Bounded, sequential JSONL transport. It owns neither application state nor a network port. */
 export class SessionInput {
@@ -187,6 +187,18 @@ export async function runUiSession(
       steps: [],
       defaultJourney: false,
       signal: controller.signal,
+      ...(args.modelMode
+        ? {
+            model: {
+              mode: args.modelMode,
+              ...(args.config ? { config: args.config } : {}),
+              ...(args.provider ? { provider: args.provider } : {}),
+              ...(args.model ? { model: args.model } : {}),
+              ...(args.credentialState ? { credentialState: args.credentialState } : {}),
+              ...(args.codexAuth ? { codexAuth: args.codexAuth } : {}),
+            },
+          }
+        : {}),
       interact: async (session) => {
         try {
           const initial = await session.snapshot();
@@ -273,11 +285,13 @@ export async function runUiSession(
       ...(report.ok
         ? {}
         : {
-            error: new CliError(
-              unsupported ? 'unsupported' : 'task',
-              'UI_SESSION_FAILED',
-              'Session evidence includes failures; inspect report.json.',
-            ),
+            error:
+              modelSetupError(report.errors) ??
+              new CliError(
+                unsupported ? 'unsupported' : 'task',
+                'UI_SESSION_FAILED',
+                'Session evidence includes failures; inspect report.json.',
+              ),
           }),
     };
   } catch (error) {
@@ -286,11 +300,12 @@ export async function runUiSession(
       error:
         error instanceof CliError
           ? error
-          : new CliError(
+          : (uiLeaseError(error) ??
+            new CliError(
               'runtime',
               'UI_SESSION_SETUP_FAILED',
               'Use a new output directory with an accessible parent and rebuild desktop with --mode background-debug.',
-            ),
+            )),
     };
   } finally {
     clearTimeout(lifetime);

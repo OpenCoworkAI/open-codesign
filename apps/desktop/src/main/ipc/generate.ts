@@ -37,6 +37,7 @@ import { computeFingerprint } from '@open-codesign/shared/fingerprint';
 import type { BrowserWindow as ElectronBrowserWindow, WebContents } from 'electron';
 import type { AgentStreamEvent, GenerateResponse } from '../../preload/index';
 import { requestAsk } from '../ask-ipc';
+import { recordBackgroundRun } from '../background-debug';
 import { CHATGPT_CODEX_PROVIDER_ID, getCodexTokenStore } from '../codex-oauth-ipc';
 import { designSystemEditingContext } from '../design-system-editing';
 import { registerDesignSystemLibraryBusyCheck } from '../design-system-library-ipc';
@@ -414,10 +415,19 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         outcome: controller.signal.aborted ? 'cancelled' : 'completed',
         response: response as GenerateResponse,
       });
+      recordBackgroundRun(id, controller.signal.aborted ? 'cancelled' : 'completed');
       await eventDelivery;
       if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
       return { ...response, ...(journal ? { chatPersisted: true } : {}) };
     } catch (error) {
+      recordBackgroundRun(
+        id,
+        controller.signal.aborted &&
+          !extractGenerationTimeoutError(controller.signal) &&
+          !deliveryFailures.has(id)
+          ? 'cancelled'
+          : 'failed',
+      );
       publishEvent({
         designId,
         generationId: id,
