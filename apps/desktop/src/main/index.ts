@@ -10,6 +10,7 @@ import { showBootDialog, writeBootErrorSync } from './boot-fallback';
 import { migrateStaleCodexEntryIfNeeded, registerCodexOAuthIpc } from './codex-oauth-ipc';
 import { configDir } from './config';
 import { registerConnectionIpc } from './connection-ipc';
+import { registerDesignSystemLibraryIpc } from './design-system-library-ipc';
 import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { app, BACKGROUND_DEBUG, BrowserWindow, clipboard, dialog, shell } from './electron-runtime';
 import { ensureUserTemplates, resolveBundledTemplatesDir } from './ensure-user-templates';
@@ -290,6 +291,7 @@ if (!IS_VITEST) {
       const diagnosticsDb: Database | null = dbResult.ok ? dbResult.db : null;
       if (dbResult.ok) {
         registerSnapshotsIpc(dbResult.db);
+        registerDesignSystemLibraryIpc(dbResult.db);
         registerWorkspaceIpc(dbResult.db, getMainWindow);
         registerWorkspaceProtocolHandler({
           db: dbResult.db,

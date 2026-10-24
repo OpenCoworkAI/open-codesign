@@ -3,6 +3,7 @@ import { Download, Maximize2, MessageSquare, Minimize2 } from 'lucide-react';
 import { type ReactElement, useEffect, useRef } from 'react';
 import type { ExportFormat } from '../../../preload/index';
 import { useCodesignStore } from '../store';
+import { DesignSystemWorkspaceActions } from './DesignSystemWorkspaceActions';
 import { PreviewToolbarMenu } from './PreviewToolbarMenu';
 import './PreviewToolbar.css';
 
@@ -57,6 +58,7 @@ export function PreviewToolbar({
 
   return (
     <div className="codesign-preview-toolbar">
+      <DesignSystemWorkspaceActions />
       <button
         ref={fullscreenButton}
         type="button"

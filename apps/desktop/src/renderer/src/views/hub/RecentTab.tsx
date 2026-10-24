@@ -11,10 +11,15 @@ interface DesignRun {
 }
 
 export function buildRecentDesigns<
-  T extends { id: string; updatedAt: string; deletedAt: string | null },
+  T extends {
+    id: string;
+    updatedAt: string;
+    deletedAt: string | null;
+    designSystemId?: string | undefined;
+  },
 >(designs: T[], generationByDesign: Record<string, DesignRun>, limit = RECENT_LIMIT): T[] {
   const sorted = [...designs]
-    .filter((d) => d.deletedAt === null)
+    .filter((d) => d.deletedAt === null && !d.designSystemId)
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   const activeIds = new Set([...Object.keys(generationByDesign)]);
   const active = sorted.filter((d) => activeIds.has(d.id));

@@ -38,6 +38,8 @@ import type { BrowserWindow as ElectronBrowserWindow, WebContents } from 'electr
 import type { AgentStreamEvent, GenerateResponse } from '../../preload/index';
 import { requestAsk } from '../ask-ipc';
 import { CHATGPT_CODEX_PROVIDER_ID, getCodexTokenStore } from '../codex-oauth-ipc';
+import { designSystemEditingContext } from '../design-system-editing';
+import { registerDesignSystemLibraryBusyCheck } from '../design-system-library-ipc';
 import { makeRuntimeVerifier } from '../done-verify';
 import { app, ipcMain } from '../electron-runtime';
 import {
@@ -1043,6 +1045,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   const inFlight = new Map<string, AbortController>();
   const inFlightByDesign = new Map<string, { generationId: string; startedAt: number }>();
   const inFlightByWorkspace = new Map<string, { generationId: string; startedAt: number }>();
+  const unregisterDesignSystemBusyCheck = registerDesignSystemLibraryBusyCheck((id) =>
+    inFlightByDesign.has(id),
+  );
   const unregisterSourceEditBusyCheck = registerSourceEditBusyCheck(
     async (designId, workspacePath) => {
       if (inFlightByDesign.has(designId)) return true;
@@ -1344,7 +1349,12 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   attachments: promptContext.attachments,
                   referenceUrl: promptContext.referenceUrl,
                   designSystem: promptContext.designSystem ?? null,
-                  sessionContext: contextPack.contextSections,
+                  sessionContext: [
+                    ...contextPack.contextSections,
+                    ...designSystemEditingContext(
+                      db ? getDesign(db, designId)?.designSystemId : undefined,
+                    ),
+                  ],
                   ...(memoryContext !== undefined ? { memoryContext: memoryContext.sections } : {}),
                   projectContext: promptContext.projectContext,
                   currentDesignName,
@@ -1699,6 +1709,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 {
                   prompt: userPrompt,
                   systemPrompt,
+                  sessionContext: designSystemEditingContext(
+                    db ? getDesign(db, payload.designId)?.designSystemId : undefined,
+                  ),
                   history: [],
                   model: active.model,
                   apiKey,
@@ -1828,6 +1841,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   });
 
   return () => {
+    unregisterDesignSystemBusyCheck();
     unregisterSourceEditBusyCheck();
     for (const controller of inFlight.values()) {
       try {
