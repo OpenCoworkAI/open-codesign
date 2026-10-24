@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["../../node_modules/@types"],
+    "paths": {
+      "@open-codesign/shared": ["../../packages/shared/src/source-edits.ts"],
+      "@babel/parser": ["../../apps/desktop/node_modules/@babel/parser/typings/babel-parser.d.ts"],
+      "vitest": ["../../apps/desktop/node_modules/vitest/dist/index.d.ts"],
+      "zod": ["../../packages/shared/node_modules/zod/index.d.ts"]
+    }
+  },
+  "include": ["./*.ts"]
+}
