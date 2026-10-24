@@ -162,7 +162,7 @@ describe.skipIf(!chrome)('design system library UI with production IPC', () => {
               ?.getAttribute('data-measured-height'),
           ) > 0,
       );
-      const evidence = path.resolve('../../docs/validation/design-systems');
+      const evidence = path.join(root, 'evidence');
       await mkdir(evidence, { recursive: true });
       await page.screenshot({ path: path.join(evidence, `system-detail-${viewport.width}.png`) });
       const layout = await page.evaluate(() => {
@@ -377,7 +377,7 @@ describe.skipIf(!chrome)('design system library UI with production IPC', () => {
     expect(listSnapshots(db, editor?.id ?? '')).toHaveLength(1);
     await clickText('返回设计系统');
     await page.waitForFunction(() => document.querySelectorAll('.system-card').length === 4);
-    const evidence = path.resolve('../../docs/validation/design-systems');
+    const evidence = path.join(root, 'evidence');
     await mkdir(evidence, { recursive: true });
     await page.screenshot({ path: path.join(evidence, 'library-ui.png') });
     expect(errors).toEqual([]);

@@ -8,3 +8,5 @@
 Add a local design system library with built-in previews, personal forks, DESIGN.md imports, session-backed editing and optional system selection when creating designs. Preserve independent workspace copies and connect component annotations to canonical design rules.
 
 Present system details as a full content view with sidebar actions, a fitted interactive overview and an expandable specification reader. Resolve built-ins from the current app bundle so legacy user-owned references cannot disable shipped systems.
+
+Initialize the optional library only when handling a request, so unavailable bundled references do not prevent the desktop application from starting.

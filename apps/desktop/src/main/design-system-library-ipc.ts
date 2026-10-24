@@ -190,29 +190,33 @@ function text(input: Record<string, unknown>, key: string): string {
 
 export function registerDesignSystemLibraryIpc(
   db: Database,
-  library = getDesignSystemLibrary(),
+  providedLibrary?: DesignSystemLibrary,
   runner: PreviewRunner = runPreview,
 ): void {
-  const handle = (action: string, callback: (input: Record<string, unknown>) => unknown) => {
-    ipcMain.handle(`design-systems:v1:${action}`, (_event: unknown, raw: unknown) =>
-      callback(payload(raw)),
-    );
+  const handle = (
+    action: string,
+    callback: (input: Record<string, unknown>, library: DesignSystemLibrary) => unknown,
+  ) => {
+    ipcMain.handle(`design-systems:v1:${action}`, (_event: unknown, raw: unknown) => {
+      const input = payload(raw);
+      return callback(input, providedLibrary ?? getDesignSystemLibrary());
+    });
   };
-  handle('list', () => library.list());
-  handle('get', (p) => library.get(text(p, 'id')));
-  handle('create', (p) =>
+  handle('list', (_p, library) => library.list());
+  handle('get', (p, library) => library.get(text(p, 'id')));
+  handle('create', (p, library) =>
     library.create({
       name: text(p, 'name'),
       ...(typeof p['description'] === 'string' ? { description: p['description'] } : {}),
     }),
   );
-  handle('fork', async (p) => {
+  handle('fork', async (p, library) => {
     assertEditorIdle(await library.get(text(p, 'id')));
     return library.fork(text(p, 'id'), typeof p['name'] === 'string' ? p['name'] : undefined);
   });
-  handle('edit', (p) => openDesignSystemEditor(db, library, text(p, 'id')));
-  handle('validate', (p) => validateLibrarySystem(library, text(p, 'id'), runner));
-  handle('update', async (p) => {
+  handle('edit', (p, library) => openDesignSystemEditor(db, library, text(p, 'id')));
+  handle('validate', (p, library) => validateLibrarySystem(library, text(p, 'id'), runner));
+  handle('update', async (p, library) => {
     assertEditorIdle(await library.get(text(p, 'id')));
     const detail = await library.update(text(p, 'id'), {
       name: text(p, 'name'),
@@ -222,7 +226,7 @@ export function registerDesignSystemLibraryIpc(
       renameDesign(db, detail.system.sessionDesignId, detail.system.name);
     return detail;
   });
-  handle('import', async (p) => {
+  handle('import', async (p, library) => {
     if (p['designId'] !== undefined) {
       const source = getDesign(db, text(p, 'designId'));
       if (!source?.workspacePath || source.deletedAt) throw new Error('Design workspace not found');
@@ -243,13 +247,13 @@ export function registerDesignSystemLibraryIpc(
     if (selected.canceled || !selected.filePaths[0]) return null;
     return library.importFile(selected.filePaths[0]);
   });
-  handle('delete', async (p) => {
+  handle('delete', async (p, library) => {
     const detail = await library.get(text(p, 'id'));
     assertEditorIdle(detail);
     await library.remove(detail.system.id);
     if (detail.system.sessionDesignId) softDeleteDesign(db, detail.system.sessionDesignId);
   });
-  handle('export', async (p) => {
+  handle('export', async (p, library) => {
     const detail = await library.get(text(p, 'id'));
     const selected = await dialog.showSaveDialog({
       defaultPath: 'DESIGN.md',

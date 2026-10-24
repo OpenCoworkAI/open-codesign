@@ -10,6 +10,7 @@ import {
 } from './design-system-library-ipc';
 import { defaultDesignMd } from './design-system-sample';
 import { app } from './electron-runtime';
+import { resolveBundledTemplatesDir } from './ensure-user-templates';
 import { getDesign, initInMemoryDb, listSnapshots } from './snapshots-db';
 
 type Handler = (event: unknown, raw: unknown) => Promise<unknown>;
@@ -22,6 +23,10 @@ vi.mock('./electron-runtime', () => ({
 vi.mock('./logger', () => ({
   getLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
+vi.mock('./ensure-user-templates', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./ensure-user-templates')>();
+  return { ...original, resolveBundledTemplatesDir: vi.fn(original.resolveBundledTemplatesDir) };
+});
 
 describe('design system IPC', () => {
   let root: string;
@@ -30,6 +35,8 @@ describe('design system IPC', () => {
   const db = initInMemoryDb();
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'system-ipc-'));
+    vi.mocked(app.getPath).mockReturnValue(root);
+    vi.mocked(resolveBundledTemplatesDir).mockClear();
     for (const slug of ['ibm', 'vercel', 'stripe']) {
       await mkdir(path.join(root, 'brands', slug), { recursive: true });
       await writeFile(path.join(root, 'brands', slug, 'DESIGN.md'), defaultDesignMd(slug));
@@ -49,6 +56,7 @@ describe('design system IPC', () => {
     registerDesignSystemLibraryIpc(db, library, preview);
   });
   afterEach(async () => {
+    vi.mocked(resolveBundledTemplatesDir).mockReset();
     await rm(root, { recursive: true, force: true });
   });
   async function call(action: string, payload: Record<string, unknown> = {}): Promise<unknown> {
@@ -69,6 +77,33 @@ describe('design system IPC', () => {
   });
   it('never edits built-in references', async () => {
     await expect(call('edit', { id: 'builtin:ibm' })).rejects.toThrow();
+  });
+  it('registers handlers without resolving optional template resources at startup', () => {
+    handlers.clear();
+    expect(() => registerDesignSystemLibraryIpc(db)).not.toThrow();
+    expect(resolveBundledTemplatesDir).not.toHaveBeenCalled();
+    expect(handlers.size).toBe(10);
+    expect(handlers.has('design-systems:v1:list')).toBe(true);
+  });
+  it('limits missing-template failures to library requests and can recover on the next request', async () => {
+    handlers.clear();
+    vi.mocked(resolveBundledTemplatesDir).mockReturnValue(null);
+    let continuedStartup = false;
+    expect(() => {
+      registerDesignSystemLibraryIpc(db);
+      continuedStartup = true;
+    }).not.toThrow();
+    expect(continuedStartup).toBe(true);
+    expect(resolveBundledTemplatesDir).not.toHaveBeenCalled();
+    await expect(call('list')).rejects.toMatchObject({ code: 'IPC_NOT_FOUND' });
+    expect(handlers.size).toBe(10);
+    vi.mocked(resolveBundledTemplatesDir).mockReturnValue(path.resolve('resources/templates'));
+    const systems = (await call('list')) as Array<{ id: string }>;
+    expect(systems.map((system) => system.id)).toEqual([
+      'builtin:ibm',
+      'builtin:vercel',
+      'builtin:stripe',
+    ]);
   });
   it('uses current bundled built-ins without replacing an existing user-owned reference', async () => {
     vi.mocked(app.getPath).mockReturnValue(root);

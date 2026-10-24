@@ -56,7 +56,7 @@ describe.skipIf(!chromeAvailable)('built-in design systems in the real preview r
     expect(report.assetErrors).toEqual([]);
     expect(report.steps?.every((step) => step.ok)).toBe(true);
     expect(report.screenshot).toContain('data:image/png;base64,');
-    const evidence = path.resolve('../../docs/validation/design-systems');
+    const evidence = path.join(root, 'evidence');
     await mkdir(evidence, { recursive: true });
     await writeFile(
       path.join(evidence, `${slug}.png`),
