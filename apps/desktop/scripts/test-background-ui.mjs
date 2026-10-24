@@ -1,25 +1,9 @@
-import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { parseUiTestArgs, runUiTests } from '../../../scripts/test-ui.mjs';
 
-const require = createRequire(import.meta.url);
-const child = spawn(
-  process.execPath,
-  [
-    join(dirname(require.resolve('vitest/package.json')), 'vitest.mjs'),
-    'run',
-    'src/debug/ui-debug.integration.test.ts',
-    'src/debug/ui-session.integration.test.ts',
-  ],
-  {
-    stdio: 'inherit',
-    windowsHide: true,
-    env: { ...process.env, CODESIGN_UI_DEBUG_INTEGRATION: '1' },
-  },
-);
-child.on('error', () => {
+try {
+  const args = parseUiTestArgs(['debug', ...process.argv.slice(2)]);
+  process.exitCode = await runUiTests(args.mode, args.list);
+} catch (error) {
+  process.stderr.write(`${error.message}\n`);
   process.exitCode = 1;
-});
-child.on('exit', (code) => {
-  process.exitCode = code ?? 1;
-});
+}

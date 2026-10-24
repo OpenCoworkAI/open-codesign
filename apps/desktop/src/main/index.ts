@@ -258,6 +258,9 @@ if (!IS_VITEST) {
       const aborted = await maybeAbortIfRunningFromDmg();
       if (aborted) return;
       await loadConfigOnBoot();
+      const connectBackgroundModel = BACKGROUND_DEBUG
+        ? await (await import('./background-model')).initializeBackgroundModel()
+        : undefined;
       // Apply any user-configured outbound proxy to Chromium + Node before
       // anything reaches out to provider endpoints or the update feed.
       try {
@@ -318,6 +321,7 @@ if (!IS_VITEST) {
         );
       }
       const teardownIpc = registerIpcHandlers(diagnosticsDb, getMainWindow);
+      connectBackgroundModel?.(teardownIpc);
       app.on('before-quit', teardownIpc);
       registerLocaleIpc();
       registerConnectionIpc();

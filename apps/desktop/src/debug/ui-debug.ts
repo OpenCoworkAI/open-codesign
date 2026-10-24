@@ -1,15 +1,34 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { type PreviewStep, validatePreviewInput } from '@open-codesign/core';
+import { findSystemChrome } from '@open-codesign/exporters';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { runPreviewSteps } from '../main/preview-interactions';
 import { uiSourceFingerprint } from './build-fingerprint';
-import type { UiDebugFrame, UiDebugReport, UiDebugSession, WindowsObservation } from './contract';
+import type {
+  DebugModelOptions,
+  UiDebugFrame,
+  UiDebugReport,
+  UiDebugSession,
+  WindowsObservation,
+} from './contract';
+import { acquireUiLease } from './ui-lease.mjs';
 import { collectUiElements } from './ui-outline';
 
 const desktopRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -64,14 +83,16 @@ export function isolatedEnvironment(root: string): NodeJS.ProcessEnv {
     const entry = Object.entries(process.env).find(
       ([name]) => name.toLowerCase() === key.toLowerCase(),
     );
-    if (entry) env[entry[0]] = entry[1];
+    if (entry) env[key] = entry[1];
   }
   return {
     ...env,
     HOME: join(root, 'home'),
     USERPROFILE: join(root, 'home'),
-    APPDATA: join(root, 'appdata'),
-    LOCALAPPDATA: join(root, 'localappdata'),
+    APPDATA: join(root, 'home/AppData/Roaming'),
+    LOCALAPPDATA: join(root, 'home/AppData/Local'),
+    TEMP: join(root, 'temp'),
+    TMP: join(root, 'temp'),
     XDG_CONFIG_HOME: join(root, 'config'),
     CODESIGN_BACKGROUND_DEBUG_ROOT: root,
     CODESIGN_BACKGROUND_DEBUG_PARENT: String(process.pid),
@@ -263,7 +284,20 @@ export async function runUiDebug(options: {
   signal: AbortSignal;
   defaultJourney: boolean;
   interact?: (session: UiDebugSession) => Promise<void>;
+  model?: DebugModelOptions;
 }): Promise<UiDebugReport> {
+  const lease = acquireUiLease('session');
+  let cleanup = true;
+  try {
+    const report = await runOwnedUiDebug(options);
+    cleanup = report.cleanup;
+    return report;
+  } finally {
+    if (cleanup) lease.release();
+  }
+}
+
+async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promise<UiDebugReport> {
   const watchdog = new AbortController();
   const signal = AbortSignal.any([options.signal, watchdog.signal]);
   const entry = join(desktopRoot, 'out/main/index.js');
@@ -309,6 +343,42 @@ export async function runUiDebug(options: {
   let monitoring: ReturnType<typeof setInterval> | undefined;
   let hostLines = 0;
   let logLines = 0;
+  const modelEvidence = async () =>
+    options.model
+      ? {
+          model: JSON.parse(
+            await readFile(join(root, 'model-evidence.json'), 'utf8'),
+          ) as NonNullable<UiDebugReport['model']>,
+          runs: JSON.parse(
+            await readFile(join(root, 'model-runs.json'), 'utf8').catch(() => '[]'),
+          ) as NonNullable<UiDebugReport['runs']>,
+        }
+      : {};
+  let stopping: Promise<boolean> | undefined;
+  const stopModel = () =>
+    (stopping ??= new Promise<boolean>((resolveStop) => {
+      if (!child?.connected) {
+        resolveStop(false);
+        return;
+      }
+      const timer = setTimeout(() => resolveStop(false), 10_000);
+      child.on('message', (message: unknown) => {
+        if (
+          message &&
+          typeof message === 'object' &&
+          (message as { type?: unknown }).type === 'background-model-stopped'
+        ) {
+          clearTimeout(timer);
+          resolveStop(true);
+        }
+      });
+      child.send({ type: 'background-model-stop' }, (error) => {
+        if (error) {
+          clearTimeout(timer);
+          resolveStop(false);
+        }
+      });
+    }));
   const collectHostErrors = async (final = false) => {
     const hostEvents = await readFile(join(root, 'host-events.jsonl'), 'utf8').catch(() => '');
     // Only consume complete lines while the host can still append to the log.
@@ -333,7 +403,8 @@ export async function runUiDebug(options: {
     logLines = entries.length;
   };
   const cancel = () => {
-    void browser?.close().catch(() => undefined);
+    if (options.model) void stopModel();
+    else void browser?.close().catch(() => undefined);
   };
   signal.addEventListener('abort', cancel, { once: true });
   const capture = async (name: string) => {
@@ -345,6 +416,7 @@ export async function runUiDebug(options: {
   };
   try {
     observer = await startObserver(join(temp, 'observer'), signal);
+    const chrome = options.model ? await findSystemChrome() : undefined;
     child = spawn(
       require('electron') as string,
       [
@@ -356,9 +428,26 @@ export async function runUiDebug(options: {
       ],
       {
         cwd: desktopRoot,
-        env: isolatedEnvironment(root),
+        env: {
+          ...isolatedEnvironment(root),
+          ...(chrome ? { CODESIGN_CHROME_PATH: chrome } : {}),
+          ...(options.model
+            ? {
+                CODESIGN_BACKGROUND_MODEL: JSON.stringify({
+                  ...options.model,
+                  ...(options.model.config ? { config: resolve(options.model.config) } : {}),
+                  ...(options.model.credentialState
+                    ? { credentialState: resolve(options.model.credentialState) }
+                    : {}),
+                  ...(options.model.codexAuth
+                    ? { codexAuth: resolve(options.model.codexAuth) }
+                    : {}),
+                }),
+              }
+            : {}),
+        },
         windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       },
     );
     child.on('error', () => {
@@ -463,6 +552,7 @@ export async function runUiDebug(options: {
           errorCount: report.errors.length,
           errorsTruncated: report.errorsTruncated,
           windows: observer?.current() ?? report.windows,
+          ...(await modelEvidence()),
         };
       };
       await options.interact({ signal, snapshot: () => frame(), act: (steps) => frame(steps) });
@@ -488,15 +578,27 @@ export async function runUiDebug(options: {
       );
     }
   } catch (issue) {
+    const modelSetupCode =
+      /BACKGROUND_MODEL_(?:CONFIG_INVALID|CONFIG_REQUIRED|CONFIG_UNREADABLE|SELECTION_MISSING|CREDENTIAL_MISSING|CREDENTIAL_UNREADABLE|CREDENTIAL_STATE_INVALID|CREDENTIAL_STATE_UNREADABLE|CREDENTIAL_STATE_UNSUPPORTED|AUTH_INVALID|AUTH_EXPIRED|AUTH_UNREADABLE|OAUTH_ENDPOINT_UNSUPPORTED|OAUTH_UNSUPPORTED|KEYCHAIN_INTERACTION_UNSUPPORTED|ENDPOINT_UNSUPPORTED)/.exec(
+        stderr,
+      )?.[0];
+    if (modelSetupCode) error('model-setup', modelSetupCode);
     error(
       options.signal.aborted ? 'cancelled' : watchdog.signal.aborted ? 'observer' : 'runtime',
       issue instanceof Error ? issue.message : String(issue),
     );
     await capture('failure').catch(() => undefined);
   } finally {
-    clearInterval(monitoring);
     signal.removeEventListener('abort', cancel);
-    if (browser) await Promise.race([browser.close().catch(() => undefined), delay(3000)]);
+    if (options.model && child?.connected) {
+      if (!(await stopModel())) error('cleanup', 'Model generation did not settle before shutdown');
+      browser?.disconnect();
+      await until(
+        async () => (child?.exitCode !== null ? true : undefined),
+        AbortSignal.timeout(3000),
+      ).catch(() => undefined);
+    } else if (browser) await Promise.race([browser.close().catch(() => undefined), delay(3000)]);
+    clearInterval(monitoring);
     let processStopped = true;
     if (child) {
       try {
@@ -517,6 +619,43 @@ export async function runUiDebug(options: {
       }
     }
     await collectHostErrors(true);
+    if (options.model) {
+      try {
+        Object.assign(report, await modelEvidence());
+        report.artifacts = [];
+        const store = JSON.parse(
+          await readFile(join(root, 'userData/design-store.json'), 'utf8'),
+        ) as { designs: { workspacePath?: string }[] };
+        for (const [index, design] of store.designs.entries()) {
+          if (!design.workspacePath) continue;
+          for (const name of ['App.jsx', 'DESIGN.md', 'index.html']) {
+            const source = await realpath(join(design.workspacePath, name)).catch(() => undefined);
+            if (!source) continue;
+            const local = relative(await realpath(join(root, 'documents')), source);
+            if (local === '..' || local.startsWith(`..${sep}`) || local.includes(':')) {
+              error('evidence', 'Artifact escaped workspace');
+              continue;
+            }
+            if ((await stat(source)).size > 1024 * 1024) {
+              error('evidence', 'Artifact evidence exceeds 1 MiB');
+              continue;
+            }
+            const content = await readFile(source);
+            const directory = join(output, 'artifacts', String(index + 1));
+            await mkdir(directory, { recursive: true });
+            const path = join(directory, name);
+            await writeFile(path, content, { flag: 'wx' });
+            report.artifacts.push({
+              path,
+              bytes: content.length,
+              sha256: createHash('sha256').update(content).digest('hex'),
+            });
+          }
+        }
+      } catch {
+        error('evidence', 'Model/artifact evidence could not be collected');
+      }
+    }
     try {
       await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
       report.cleanup = processStopped;

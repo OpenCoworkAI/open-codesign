@@ -12,7 +12,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["CODESIGN_CHROME_PATH"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/testing/**"],
       "outputs": []
     },
     "typecheck": {
