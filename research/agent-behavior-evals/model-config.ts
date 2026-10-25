@@ -5,10 +5,11 @@ import {
   type WireApi,
   WireApiSchema,
 } from '../../packages/shared/src/index';
-import { blindTasks } from './fixtures.mjs';
+import { exportTasks } from './datasets.mjs';
 
 export interface ModelRunConfig {
   schemaVersion: 1;
+  dataset: 'synthetic-v1' | 'design-sessions-v1';
   model: ModelRef;
   credentialEnv: string;
   promptVariant: 'baseline' | 'constraint-check';
@@ -36,6 +37,7 @@ export function parseConfig(value: unknown): ModelRunConfig {
   if (!record(value)) throw new Error('Config must be a JSON object');
   const allowed = new Set([
     'schemaVersion',
+    'dataset',
     'model',
     'credentialEnv',
     'promptVariant',
@@ -60,7 +62,10 @@ export function parseConfig(value: unknown): ModelRunConfig {
   const promptVariant = value['promptVariant'] ?? 'baseline';
   if (promptVariant !== 'baseline' && promptVariant !== 'constraint-check')
     throw new Error('Unknown prompt variant');
-  const available = new Set(blindTasks().tasks.map((task) => task.id));
+  const dataset = value['dataset'] ?? 'synthetic-v1';
+  if (dataset !== 'synthetic-v1' && dataset !== 'design-sessions-v1')
+    throw new Error('Unknown dataset');
+  const available = new Set(exportTasks(dataset).tasks.map((task) => task.id));
   const caseIds = value['caseIds'] ?? [...available];
   if (
     !Array.isArray(caseIds) ||
@@ -71,6 +76,7 @@ export function parseConfig(value: unknown): ModelRunConfig {
     throw new Error('caseIds must be distinct known fixture IDs');
   const config: ModelRunConfig = {
     schemaVersion: 1,
+    dataset,
     model: model.data,
     credentialEnv,
     promptVariant,

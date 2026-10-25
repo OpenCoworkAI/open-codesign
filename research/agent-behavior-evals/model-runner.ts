@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type { complete, GenerateResult } from '../../packages/providers/src/index';
 import { type ChatMessage, ERROR_CODES } from '../../packages/shared/src/index';
+import { exportTasks, getFixtures } from './datasets.mjs';
 import { scoreDecision } from './evaluate.mjs';
-import { blindTasks, fixtures, responseContract } from './fixtures.mjs';
+import { responseContract } from './fixtures.mjs';
 import { parseConfig, record } from './model-config';
 
 export type Completion = typeof complete;
@@ -38,7 +39,7 @@ export const hash = (value: unknown): string =>
 
 export function buildPlan(input: unknown) {
   const config = parseConfig(input);
-  const exported = blindTasks();
+  const exported = exportTasks(config.dataset);
   const system = [
     'Choose exactly one next decision for an Open CoDesign design agent.',
     'Return only a JSON object matching this response contract; no Markdown or extra fields.',
@@ -214,7 +215,7 @@ export async function runModelEvaluation(
   let calls = 0;
   let timedOut = false;
   for (const request of plan.requests) {
-    const fixture = fixtures.find((f) => f.id === request.id);
+    const fixture = getFixtures(plan.config.dataset).find((f) => f.id === request.id);
     if (!fixture) throw new Error('Unknown evaluator fixture');
     const row: Observation = {
       id: request.id,

@@ -1,6 +1,12 @@
 import { fixtures, responseContract } from './fixtures.mjs';
 
 export function scoreDecision(fixture, response) {
+  if (fixture.alternativePolicies?.length) {
+    const results = [fixture.policy, ...fixture.alternativePolicies].map((policy) =>
+      scoreDecision({ ...fixture, policy, alternativePolicies: [] }, response),
+    );
+    return results.find((result) => result.pass) ?? results[0];
+  }
   const errors = [];
   if (!response || typeof response !== 'object' || Array.isArray(response)) {
     return { pass: false, errors: ['missing-or-malformed-response'] };

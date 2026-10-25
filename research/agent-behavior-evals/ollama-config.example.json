@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "dataset": "design-sessions-v1",
+  "model": { "provider": "ollama-local", "modelId": "qwen3:4b-q4_K_M" },
+  "credentialEnv": "OLLAMA_LOCAL_TOKEN",
+  "baseUrl": "http://127.0.0.1:11434/v1",
+  "wire": "openai-chat",
+  "promptVariant": "baseline",
+  "trials": 1,
+  "maxCalls": 8,
+  "maxOutputTokens": 4096,
+  "timeoutMs": 180000
+}

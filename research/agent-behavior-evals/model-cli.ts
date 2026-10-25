@@ -14,6 +14,8 @@ const sourceFiles = [
   'model-runner.ts',
   'evaluate.mjs',
   'fixtures.mjs',
+  'datasets.mjs',
+  'session-fixtures.mjs',
   '../../packages/providers/src/index.ts',
   '../../pnpm-lock.yaml',
 ];

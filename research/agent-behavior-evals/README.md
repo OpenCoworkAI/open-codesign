@@ -99,6 +99,7 @@ Omitting `--output` creates a unique local run directory. Explicit output direct
 Use the repository-pinned pnpm 10.33.4; `corepack pnpm` can select it if another pnpm version is injected into PATH.
 
 Configuration:
+- `dataset`: `synthetic-v1` (default, original 20 cases) or `design-sessions-v1` (8 controlled reconstructions from one real design conversation). Case IDs must belong to the selected dataset; the corpora are not silently mixed.
 - `model`: exact `provider` and `modelId`; no runner fallback or automatic model selection.
 - `credentialEnv`: environment variable name, never a literal key.
 - `promptVariant`: `baseline` or `constraint-check`; the latter adds general constraint/evidence checks, not reference answers.
@@ -131,8 +132,25 @@ Runner validation on 2026-10-25: 56 focused Vitest checks, strict TypeScript and
 The scorer checks declared structured decisions, not whether tools actually execute the declaration. It intentionally uses a narrow single-step contract and may reject other reasonable strategies.
 The 20 cases use template variations, so they are not 20 independent real-world observations. Positive/negative controls are handcrafted, not held-out validation.
 
-Next: collect consented, redacted decision points from real design sessions, split by design/session rather than by template, manually adjudicate multiple acceptable continuations, and add a held-out set.
-Compare current versus revised agent instructions using identical model settings and three trials per case. Report category-level behavior failures and missing/invalid output separately from artifact success. Verify a subset against actual tool events to detect claims that disagree with execution. No provider credentials are read by this branch.
+The first conversation-derived pilot is documented in [SESSION_CASES.md](./SESSION_CASES.md). These are controlled reconstructions, not raw trace replay. Next: collect additional redacted design sessions, split by design/session rather than by template, manually adjudicate multiple acceptable continuations, and add a held-out set.
+
+The [three-model live comparison](./SESSION_PILOT_RESULTS.md) records 48 calls using the current Codex model and two installed Ollama models. It separates strict format failures from rubric failures and documents the local context-limit confound. This is a development pilot, not a model leaderboard.
+Compare current versus revised agent instructions using identical model settings and three trials per case. Report category-level behavior failures and missing/invalid output separately from artifact success. Verify a subset against actual tool events to detect claims that disagree with execution. Dry runs do not read provider credentials; explicitly executed runs read only the selected credential variable.
+
+## Installed Ollama models
+
+Use an already running local Ollama server through the existing provider's `openai-chat` wire. No runtime, model weights or additional SDK is bundled. The [example configuration](./ollama-config.example.json) selects a model installed on the pilot machine; replace `modelId` with an exact name from your own `ollama list`.
+
+```bash
+OLLAMA_LOCAL_TOKEN=local-ollama-placeholder-token corepack pnpm exec tsx \
+  research/agent-behavior-evals/model-cli.ts \
+  --config research/agent-behavior-evals/ollama-config.example.json \
+  --output .Codex/workspace/agent-behavior-evals/ollama-run-001 --execute
+```
+
+The local placeholder is nonsecret: the existing provider requires a nonempty token and local Ollama ignores it. This does not apply to authenticated remote gateways. Make a local copy of the configuration and change `promptVariant` to `constraint-check` for the comparison; use a new output directory. Leave reasoning unset to use the installed model's default. Ollama thinking controls and sampling defaults differ by model; this is not an equal-compute comparison. Avoid comparing timings without accounting for model loading, cache and hardware.
+
+Protocol references: [Ollama OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility), [thinking controls](https://docs.ollama.com/capabilities/thinking).
 
 ## Research provenance
 
