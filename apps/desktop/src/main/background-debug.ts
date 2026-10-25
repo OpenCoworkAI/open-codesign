@@ -1,14 +1,26 @@
 import {
   appendFileSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { DebugModelOptions } from '../debug/contract';
 import { projectCredentialState } from '../debug/credential-state';
+import { DEBUG_OPERATIONS } from '../debug/operations';
+import {
+  installBackgroundOperations,
+  isAbsoluteBackgroundPathAllowed,
+  isBackgroundPathAllowed,
+  isExistingBackgroundFileAllowed,
+  isKnownBackgroundTestOperation,
+} from './background-operations';
+
+declare const __CODESIGN_BACKGROUND_DEBUG__: boolean;
 
 // A development host restriction, additional to the normal IPC validation and permissions.
 const ALLOWED_CHANNELS = new Set([
@@ -58,7 +70,16 @@ const MODEL_CHANNELS = new Set([
   'codesign:files:v1:preview',
   'codesign:files:v1:thumbnail',
 ]);
+
+const CALL_MODES_BY_CHANNEL = new Map<string, Set<string>>();
+for (const operation of DEBUG_OPERATIONS) {
+  if (operation.kind !== 'call') continue;
+  const modes = CALL_MODES_BY_CHANNEL.get(operation.channel) ?? new Set<string>();
+  modes.add(operation.mode);
+  CALL_MODES_BY_CHANNEL.set(operation.channel, modes);
+}
 let modelEnabled = false;
+let liveEnabled = false;
 let credentialStateError: unknown;
 export function assertBackgroundCredentialState(): void {
   if (credentialStateError) throw credentialStateError;
@@ -85,32 +106,110 @@ export function isBackgroundChannelAllowed(
   channel: string,
   payload: unknown,
   models = false,
+  live = false,
+  root?: string,
 ): boolean {
-  if (!ALLOWED_CHANNELS.has(channel) && !(models && MODEL_CHANNELS.has(channel))) return false;
+  if (channel === 'codesign:debug:operation') {
+    return (
+      !!payload &&
+      typeof payload === 'object' &&
+      isKnownBackgroundTestOperation((payload as { operation?: unknown }).operation)
+    );
+  }
+  const modes = CALL_MODES_BY_CHANNEL.get(channel);
+  // Preserve the original renderer bootstrap and generation IPC surface.
+  if (!modes?.size) return ALLOWED_CHANNELS.has(channel) || (models && MODEL_CHANNELS.has(channel));
+  if (
+    [...modes].some(
+      (mode) =>
+        mode === 'unsupported' || (mode === 'model' && !models) || (mode === 'live' && !live),
+    )
+  )
+    return false;
   if (channel === 'codesign:v1:generate' && payload && typeof payload === 'object') {
     const input = payload as Record<string, unknown>;
-    if (
-      input['referenceUrl'] ||
-      (Array.isArray(input['attachments']) && input['attachments'].length)
-    )
-      return false;
+    if (input['referenceUrl'] && !live) return false;
   }
   if (channel === 'snapshots:v1:create-design' && payload && typeof payload === 'object') {
-    // Only the normal auto-allocated workspace, inside the disposable Documents directory.
-    const input = payload as Record<string, unknown>;
-    if (input['workspacePath'] != null || input['demoInputId'] != null) return false;
+    const workspacePath = (payload as Record<string, unknown>)['workspacePath'];
+    if (workspacePath != null && (!root || !isAbsoluteBackgroundPathAllowed(root, workspacePath)))
+      return false;
   }
   return true;
 }
 
+const ROOT_PATH_PROPERTIES = new Set([
+  'workspacepath',
+  'storagepath',
+  'storagedirectory',
+  'datadir',
+  'datadirectory',
+  'cachedir',
+  'cachedirectory',
+  'logsdir',
+  'logsdirectory',
+  'userdatapath',
+  'outputpath',
+  'outputdir',
+  'destinationpath',
+  'directory',
+  'dir',
+  'folder',
+  'root',
+]);
+const PATH_PROPERTIES = new Set([
+  'path',
+  'paths',
+  'filepath',
+  'filepaths',
+  'storagepath',
+  'datadir',
+  'cachedir',
+  'logsdir',
+  'sourcepath',
+  'targetpath',
+]);
+export function isBackgroundPayloadPathsAllowed(root: string, value: unknown, key = ''): boolean {
+  if (typeof value === 'string')
+    return ROOT_PATH_PROPERTIES.has(key.toLowerCase())
+      ? isAbsoluteBackgroundPathAllowed(root, value)
+      : !PATH_PROPERTIES.has(key.toLowerCase()) || isBackgroundPathAllowed(root, value);
+  if (key.toLowerCase() === 'attachments') {
+    return (
+      Array.isArray(value) &&
+      value.every(
+        (item) =>
+          !!item &&
+          typeof item === 'object' &&
+          isExistingBackgroundFileAllowed(root, (item as Record<string, unknown>)['path']),
+      )
+    );
+  }
+  if (Array.isArray(value))
+    return value.every((item) => isBackgroundPayloadPathsAllowed(root, item, key));
+  if (value && typeof value === 'object')
+    return Object.entries(value).every(([childKey, child]) =>
+      isBackgroundPayloadPathsAllowed(root, child, childKey),
+    );
+  return true;
+}
+
 export function initializeBackgroundDebug(electron: typeof import('electron')): boolean {
-  const root = process.env['CODESIGN_BACKGROUND_DEBUG_ROOT'];
-  if (root === undefined) return false;
+  if (typeof __CODESIGN_BACKGROUND_DEBUG__ === 'undefined' || !__CODESIGN_BACKGROUND_DEBUG__)
+    return false;
+  const requestedRoot = process.env['CODESIGN_BACKGROUND_DEBUG_ROOT'];
+  if (requestedRoot === undefined) return false;
   const { app, ipcMain, dialog, shell, clipboard } = electron;
   // Refuse existing profiles: this path must be a new empty directory created by the runner.
-  if (app.isPackaged || !isAbsolute(root) || readdirSync(root).length !== 0) {
+  if (
+    app.isPackaged ||
+    !isAbsolute(requestedRoot) ||
+    lstatSync(requestedRoot).isSymbolicLink() ||
+    readdirSync(requestedRoot).length !== 0
+  ) {
     throw new Error('Background debug requires an unpackaged app and a fresh empty absolute root');
   }
+  const root = realpathSync(requestedRoot);
   // Chromium's Windows profile checks require these redirected known folders to exist.
   for (const name of ['Roaming', 'Local', 'LocalLow'])
     mkdirSync(join(root, 'home/AppData', name), { recursive: true });
@@ -129,6 +228,7 @@ export function initializeBackgroundDebug(electron: typeof import('electron')): 
     app.setPath(name, directory);
   }
   const model = JSON.parse(process.env['CODESIGN_BACKGROUND_MODEL'] ?? '{}') as DebugModelOptions;
+  liveEnabled = model.mode === 'live';
   if (model.credentialState) {
     try {
       if (model.mode !== 'live' || process.platform !== 'win32')
@@ -196,47 +296,16 @@ export function initializeBackgroundDebug(electron: typeof import('electron')): 
   const handle = ipcMain.handle.bind(ipcMain);
   ipcMain.handle = (channel, listener) =>
     handle(channel, (event, ...args: unknown[]) => {
-      if (!isBackgroundChannelAllowed(channel, args[0], modelEnabled)) return blocked(channel);
+      if (
+        !isBackgroundChannelAllowed(channel, args[0], modelEnabled, liveEnabled, root) ||
+        !isBackgroundPayloadPathsAllowed(root, args[0])
+      )
+        return blocked(channel);
       if (channel === 'codesign:v1:generate' && generationHook)
         return generationHook(args[0], async () => listener(event, ...args));
       return listener(event, ...args);
     });
-  for (const name of [
-    'showOpenDialog',
-    'showOpenDialogSync',
-    'showSaveDialog',
-    'showSaveDialogSync',
-    'showMessageBox',
-    'showMessageBoxSync',
-    'showErrorBox',
-  ] as const) {
-    Object.defineProperty(dialog, name, { value: () => blocked(`dialog.${name}`) });
-  }
-  for (const name of [
-    'openExternal',
-    'openPath',
-    'showItemInFolder',
-    'trashItem',
-    'beep',
-  ] as const) {
-    Object.defineProperty(shell, name, { value: () => blocked(`shell.${name}`) });
-  }
-  for (const name of [
-    'write',
-    'writeText',
-    'writeHTML',
-    'writeImage',
-    'writeRTF',
-    'writeBuffer',
-    'writeBookmark',
-    'clear',
-    'readText',
-    'readImage',
-    'readHTML',
-    'readBuffer',
-  ] as const) {
-    Object.defineProperty(clipboard, name, { value: () => blocked(`clipboard.${name}`) });
-  }
+  installBackgroundOperations({ root, ipcMain, dialog, shell, clipboard, record });
   app.on('browser-window-created', (_event, window) => {
     for (const name of ['show', 'showInactive', 'focus', 'restore'] as const) {
       Object.defineProperty(window, name, { value: () => blocked(`window.${name}`) });

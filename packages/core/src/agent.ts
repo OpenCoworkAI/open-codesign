@@ -54,6 +54,7 @@ import {
   type DesignRunPreferencesV1,
   ERROR_CODES,
   formatDesignMdForPrompt,
+  isUserCancellation,
   LEGACY_SOURCE_ENTRY,
   type ModelRef,
   type ResourceStateV1,
@@ -1524,11 +1525,15 @@ async function generateViaAgentInternal(
       await sendOnce();
     }
   } catch (err) {
-    log.error('[generate] step=send_request.fail', {
-      ...ctx,
-      ms: Date.now() - sendStart,
-      errorClass: err instanceof Error ? err.constructor.name : typeof err,
-    });
+    const cancelled = isUserCancellation(err, input.signal);
+    log[cancelled ? 'info' : 'error'](
+      cancelled ? '[generate] step=send_request.cancelled' : '[generate] step=send_request.fail',
+      {
+        ...ctx,
+        ms: Date.now() - sendStart,
+        errorClass: err instanceof Error ? err.constructor.name : typeof err,
+      },
+    );
     throw remapProviderError(err, input.model.provider, input.wire);
   }
 
@@ -1569,11 +1574,17 @@ async function generateViaAgentInternal(
       try {
         await admitRun(() => agent.continue());
       } catch (err) {
-        log.error('[generate] step=reasoning_retry.fail', {
-          ...ctx,
-          ms: Date.now() - retryStart,
-          errorClass: err instanceof Error ? err.constructor.name : typeof err,
-        });
+        const cancelled = isUserCancellation(err, input.signal);
+        log[cancelled ? 'info' : 'error'](
+          cancelled
+            ? '[generate] step=reasoning_retry.cancelled'
+            : '[generate] step=reasoning_retry.fail',
+          {
+            ...ctx,
+            ms: Date.now() - retryStart,
+            errorClass: err instanceof Error ? err.constructor.name : typeof err,
+          },
+        );
         throw remapProviderError(err, input.model.provider, input.wire);
       }
       continue;
@@ -1611,12 +1622,18 @@ async function generateViaAgentInternal(
     try {
       await admitRun(() => agent.continue());
     } catch (err) {
-      log.error('[generate] step=transport_retry.fail', {
-        ...ctx,
-        attempt: transportRetryCount,
-        ms: Date.now() - retryStart,
-        errorClass: err instanceof Error ? err.constructor.name : typeof err,
-      });
+      const cancelled = isUserCancellation(err, input.signal);
+      log[cancelled ? 'info' : 'error'](
+        cancelled
+          ? '[generate] step=transport_retry.cancelled'
+          : '[generate] step=transport_retry.fail',
+        {
+          ...ctx,
+          attempt: transportRetryCount,
+          ms: Date.now() - retryStart,
+          errorClass: err instanceof Error ? err.constructor.name : typeof err,
+        },
+      );
       throw remapProviderError(err, input.model.provider, input.wire);
     }
   }

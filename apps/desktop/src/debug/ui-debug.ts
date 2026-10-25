@@ -13,7 +13,7 @@ import {
 } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { type PreviewStep, validatePreviewInput } from '@open-codesign/core';
@@ -23,11 +23,19 @@ import { runPreviewSteps } from '../main/preview-interactions';
 import { uiSourceFingerprint } from './build-fingerprint';
 import type {
   DebugModelOptions,
+  DebugOperationSummary,
   UiDebugFrame,
   UiDebugReport,
   UiDebugSession,
   WindowsObservation,
 } from './contract';
+import {
+  cleanupCodesignEventsInPage,
+  DebugOperationClient,
+  invokeCodesignOperationInPage,
+  subscribeCodesignEventsInPage,
+} from './operation-client';
+import { DEBUG_OPERATIONS } from './operations';
 import { acquireUiLease } from './ui-lease.mjs';
 import { collectUiElements } from './ui-outline';
 
@@ -48,6 +56,26 @@ export const DEFAULT_UI_STEPS: PreviewStep[] = [
   { action: 'assert', selector: '[data-codesign-hub-scroll-root]', text: 'Untitled design 1' },
 ];
 
+export function hostEventError(line: string): UiDebugReport['errors'][number] | undefined {
+  try {
+    const event: unknown = JSON.parse(line);
+    if (
+      event &&
+      typeof event === 'object' &&
+      'kind' in event &&
+      typeof event.kind === 'string' &&
+      'detail' in event &&
+      typeof event.detail === 'string'
+    ) {
+      if (event.kind === 'adapter' && event.detail === 'export.destination') return;
+      return { source: `host:${event.kind}`, message: event.detail };
+    }
+  } catch {
+    // Malformed records remain visible as failures in the final report.
+  }
+  return { source: 'host-log', message: 'Invalid host event' };
+}
+
 export function observationPassed(observation: WindowsObservation, completed = true): boolean {
   return (
     observation.available &&
@@ -61,6 +89,11 @@ export function observationPassed(observation: WindowsObservation, completed = t
     observation.injectedMouse === 0 &&
     observation.injectedKeyboard === 0
   );
+}
+
+function isPathWithin(root: string, candidate: string): boolean {
+  const path = relative(root, candidate);
+  return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
 export function isolatedEnvironment(root: string): NodeJS.ProcessEnv {
@@ -101,7 +134,7 @@ export function isolatedEnvironment(root: string): NodeJS.ProcessEnv {
 
 export function scrubDebugText(text: string): string {
   return text
-    .replace(/(sk-[\w-]{12,}|Bearer\s+[^\s"']+|AIzaSy[\w-]+)/gi, '[REDACTED]')
+    .replace(/(\bsk-[\w-]{12,}|Bearer\s+[^\s"']+|AIzaSy[\w-]+)/gi, '[REDACTED]')
     .replace(
       /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret|ciphertext|authorization)["']?\s*[:=]\s*)[^\s,;]+/gi,
       '$1[REDACTED]',
@@ -343,6 +376,7 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
   let monitoring: ReturnType<typeof setInterval> | undefined;
   let hostLines = 0;
   let logLines = 0;
+  let operationClient: DebugOperationClient | undefined;
   const modelEvidence = async () =>
     options.model
       ? {
@@ -385,14 +419,8 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
     const lines = hostEvents.split('\n');
     if (!final || lines.at(-1) === '') lines.pop();
     for (const line of lines.slice(hostLines)) {
-      try {
-        const event = JSON.parse(line) as { kind: string; detail: string };
-        if (typeof event.kind === 'string' && typeof event.detail === 'string')
-          error(`host:${event.kind}`, event.detail);
-        else error('host-log', 'Invalid host event');
-      } catch {
-        error('host-log', 'Invalid host event');
-      }
+      const issue = hostEventError(line);
+      if (issue) error(issue.source, issue.message);
     }
     hostLines = lines.length;
     const mainLog = await readFile(join(root, 'logs/main.log'), 'utf8').catch(() => '');
@@ -480,7 +508,8 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
     browser = await puppeteer.connect({
       browserWSEndpoint: ws,
       defaultViewport: null,
-      protocolTimeout: 10_000,
+      // Model-backed IPC outlasts UI actions; model and session watchdogs still bound it.
+      protocolTimeout: options.model ? 180_000 : 10_000,
     });
     const target = await browser.waitForTarget(
       (target) =>
@@ -505,6 +534,28 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
     await page.waitForSelector('header[data-view="hub"]', { timeout: 20_000, signal });
     await capture('00-initial');
     const activePage = page;
+    operationClient = new DebugOperationClient(options.model?.mode, (operation, args) =>
+      activePage.evaluate(invokeCodesignOperationInPage, {
+        name: operation.name,
+        args,
+        allowedNames: DEBUG_OPERATIONS.filter((entry) => entry.kind === 'call').map(
+          (entry) => entry.name,
+        ),
+      }),
+    );
+    await activePage.exposeFunction('__codesignDebugEventV1', (event: unknown) => {
+      if (!event || typeof event !== 'object') return;
+      const value = event as { operation?: unknown; data?: unknown };
+      if (typeof value.operation === 'string')
+        operationClient?.recordApplicationEvent(value.operation, value.data);
+    });
+    const eventNames = operationClient.eventNames();
+    const failedSubscriptions = await activePage.evaluate(subscribeCodesignEventsInPage, {
+      names: eventNames,
+      allowedNames: eventNames,
+    });
+    for (const failed of failedSubscriptions)
+      error('event-subscription', `Could not subscribe to ${failed}`);
     const perform = async (steps: PreviewStep[]) => {
       for (const step of steps) {
         signal.throwIfAborted();
@@ -555,7 +606,29 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
           ...(await modelEvidence()),
         };
       };
-      await options.interact({ signal, snapshot: () => frame(), act: (steps) => frame(steps) });
+      await options.interact({
+        signal,
+        snapshot: () => frame(),
+        act: (steps) => frame(steps),
+        capabilities: () => operationClient?.capabilities() ?? [],
+        call: (name, args) => {
+          if (!operationClient) throw new Error('Debug operation host is unavailable.');
+          const task = operationClient.call(name, args);
+          return task;
+        },
+        task: (taskId) => {
+          if (!operationClient) throw new Error('Debug operation host is unavailable.');
+          return operationClient.task(taskId);
+        },
+        cancel: async (taskId) => {
+          if (!operationClient) throw new Error('Debug operation host is unavailable.');
+          return operationClient.cancel(taskId);
+        },
+        events: (after, limit) => {
+          if (!operationClient) throw new Error('Debug operation host is unavailable.');
+          return operationClient.events(after, limit);
+        },
+      });
       signal.throwIfAborted();
     } else await perform(options.steps);
     const store = JSON.parse(
@@ -566,15 +639,27 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
       designs: { workspacePath?: string | null }[];
     };
     report.persistedDesigns = store.designs.length;
-    report.workspacesContained = store.designs.every((design) => {
-      if (!design.workspacePath) return false;
-      const path = relative(join(root, 'documents'), design.workspacePath);
-      return path !== '..' && !path.startsWith(`..${sep}`) && !path.includes(':');
-    });
+    const canonicalRoot = await realpath(root);
+    const canonicalWorkspaces = await Promise.all(
+      store.designs.map(async (design) => {
+        if (!design.workspacePath) return undefined;
+        try {
+          const candidate = isAbsolute(design.workspacePath)
+            ? design.workspacePath
+            : resolve(root, design.workspacePath);
+          return await realpath(candidate);
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+    report.workspacesContained = canonicalWorkspaces.every(
+      (workspace) => workspace !== undefined && isPathWithin(canonicalRoot, workspace),
+    );
     if (options.defaultJourney && (report.persistedDesigns !== 1 || !report.workspacesContained)) {
       error(
         'persistence',
-        'Expected one design persisted through real IPC inside the isolated Documents directory',
+        'Expected one design persisted through real IPC inside the isolated debug root',
       );
     }
   } catch (issue) {
@@ -590,6 +675,7 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
     await capture('failure').catch(() => undefined);
   } finally {
     signal.removeEventListener('abort', cancel);
+    await page?.evaluate(cleanupCodesignEventsInPage).catch(() => undefined);
     if (options.model && child?.connected) {
       if (!(await stopModel())) error('cleanup', 'Model generation did not settle before shutdown');
       browser?.disconnect();
@@ -631,8 +717,8 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
           for (const name of ['App.jsx', 'DESIGN.md', 'index.html']) {
             const source = await realpath(join(design.workspacePath, name)).catch(() => undefined);
             if (!source) continue;
-            const local = relative(await realpath(join(root, 'documents')), source);
-            if (local === '..' || local.startsWith(`..${sep}`) || local.includes(':')) {
+            const canonicalRoot = await realpath(root);
+            if (!isPathWithin(canonicalRoot, source)) {
               error('evidence', 'Artifact escaped workspace');
               continue;
             }
@@ -662,12 +748,21 @@ async function runOwnedUiDebug(options: Parameters<typeof runUiDebug>[0]): Promi
     } catch {
       error('cleanup', 'Temporary application data could not be removed');
     }
+    const operationSummary = operationClient?.summary();
+    if (operationSummary?.active)
+      error(
+        'operations',
+        `${operationSummary.active} operation task(s) remained active at shutdown`,
+      );
+    if (operationSummary?.failed)
+      error('operations', `${operationSummary.failed} operation call(s) failed`);
     report.ok =
       report.errors.length === 0 &&
       (options.interact !== undefined || report.steps.length === options.steps.length) &&
       report.steps.every((step) => step.ok) &&
       report.cleanup &&
       (process.platform !== 'win32' || observationPassed(report.windows));
+    if (operationSummary) report.operations = operationSummary satisfies DebugOperationSummary;
     await writeFile(join(output, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, {
       flag: 'wx',
     });

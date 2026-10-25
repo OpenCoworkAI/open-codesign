@@ -9,6 +9,7 @@ Usage:
   node --import tsx apps/cli/src/main.ts workspace inspect --workspace PATH [--json]
   node --import tsx apps/cli/src/main.ts export html --workspace PATH --source FILE --output FILE [--json]
   node --import tsx apps/cli/src/main.ts debug ui --output NEW_DIR [--steps FILE] [--json]
+  node --import tsx apps/cli/src/main.ts debug capabilities [--json]
   node --import tsx apps/cli/src/main.ts debug session --output NEW_DIR [--idle-timeout-ms N] [--model-mode fixture|live]
 
 Options:
@@ -29,11 +30,13 @@ Options:
   --codex-auth FILE   live mode: read-only snapshot of a current Codex ChatGPT auth.json; no refresh/login
 
 Read-only: doctor, workspace inspect. Export writes only the explicit output.
+debug capabilities reads the static operation catalogue; it starts no application.
 debug ui uses offscreen Electron, temporary data, screenshot/report output; build first:
   pnpm --filter @open-codesign/desktop build --mode background-debug
-It uses real desktop IPC with a restricted development allowlist; native dialogs,
-external opening and OAuth login/refresh are unsupported. No physical input.
-debug session keeps one isolated instance; JSONL stdin methods: snapshot, act, close.
+It uses real desktop IPC with a restricted development allowlist. Dialogs and clipboard
+use isolated adapters; external opening is recorded only. OAuth login/refresh and other
+host OS integrations are unsupported. No physical input.
+debug session keeps one isolated instance; JSONL stdin methods: snapshot, act, capabilities, call, task, cancel, events, close.
 Each request: {schemaVersion:1,id:"unique-id",method:"snapshot"}.
 act adds steps:[...]; ready/response/closed JSONL messages go to stdout. EOF closes.
 SIGINT/SIGTERM cancel. Default sessions make no model calls or credential access.
@@ -55,6 +58,7 @@ export type Command =
   | 'workspace inspect'
   | 'export html'
   | 'debug ui'
+  | 'debug capabilities'
   | 'debug session'
   | 'unsupported';
 
@@ -116,6 +120,11 @@ export function parseArguments(argv: string[]): Arguments {
   }
   const { values, positionals } = parsed;
   const name = positionals.join(' ');
+  if (
+    name === 'debug capabilities' &&
+    [...seen].some((option) => option !== 'json' && option !== 'help')
+  )
+    usage('debug capabilities only accepts --json.');
   let command: Command;
   if (values['help'] || name === 'help' || argv.length === 0) command = 'help';
   else if (values['mcp-server']) command = 'unsupported';
@@ -124,6 +133,7 @@ export function parseArguments(argv: string[]): Arguments {
     name === 'workspace inspect' ||
     name === 'export html' ||
     name === 'debug ui' ||
+    name === 'debug capabilities' ||
     name === 'debug session'
   )
     command = name;
@@ -176,6 +186,7 @@ export function parseArguments(argv: string[]): Arguments {
       usage('Path options must have non-empty values.');
     out[key] = value;
   }
+  if (command === 'debug capabilities') return out;
   if (command === 'help' || command === 'unsupported') return out;
   const modelMode = values['model-mode'];
   if (modelMode !== undefined) {

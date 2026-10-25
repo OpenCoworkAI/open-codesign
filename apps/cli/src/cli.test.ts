@@ -34,6 +34,30 @@ it('debug ui has a bounded timeout and requires an explicit new output directory
   expect(() => parseArguments(['doctor', '--steps', 'x'])).toThrow('--steps');
 });
 
+it('debug capabilities is a static command that accepts only JSON and help flags', () => {
+  expect(parseArguments(['debug', 'capabilities'])).toMatchObject({
+    command: 'debug capabilities',
+    json: false,
+  });
+  expect(parseArguments(['debug', 'capabilities', '--json'])).toMatchObject({
+    command: 'debug capabilities',
+    json: true,
+  });
+  for (const args of [
+    ['--workspace', 'work'],
+    ['--config', 'config.toml'],
+    ['--source', 'App.jsx'],
+    ['--output', 'report'],
+    ['--steps', 'steps.json'],
+    ['--timeout-ms', '1000'],
+    ['--model-mode', 'live'],
+    ['--mcp-server'],
+  ])
+    expect(() => parseArguments(['debug', 'capabilities', ...args])).toThrow(
+      'debug capabilities only accepts --json',
+    );
+});
+
 it('keeps the UI evidence when a deadline expires during cleanup', async () => {
   const result = await invoke(
     ['debug', 'ui', '--output', 'unused', '--timeout-ms', '1', '--json'],
@@ -148,6 +172,51 @@ describe('CLI contracts', () => {
       expect(result.stdout).toContain(text);
     const json = await invoke(['--help', '--json']);
     expect(JSON.parse(json.stdout)).toMatchObject({ schemaVersion: 1, command: 'help', ok: true });
+  });
+
+  it('lists the static operation catalogue without starting Electron or reading a config', async () => {
+    const result = await subprocess(['debug', 'capabilities', '--json']);
+    expect(result.code, result.stderr + result.stdout).toBe(0);
+    expect(result.stderr).toBe('');
+    const document = JSON.parse(result.stdout);
+    expect(document).toMatchObject({
+      schemaVersion: 1,
+      command: 'debug capabilities',
+      ok: true,
+    });
+    const operations = document.data.operations as {
+      name: string;
+      mode: string;
+      available: boolean;
+      parameters: { definition?: string }[];
+    }[];
+    const names = operations.map(({ name }) => name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(operations.every(({ mode, available }) => available === (mode === 'local'))).toBe(true);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'snapshots.createDesign',
+        'files.write',
+        'generate',
+        'cancelGeneration',
+        'ask.resolve',
+        'files.read',
+        'export',
+        'test.exportDestination',
+      ]),
+    );
+    expect(names).not.toEqual(expect.arrayContaining(['config.importCodexConfig']));
+    expect(names).not.toContain('test.clipboard.write');
+    expect(operations.find(({ name }) => name === 'generate')?.mode).toBe('model');
+    for (const removed of [
+      'doneVerify',
+      'files.preview',
+      'files.list',
+      'snapshots.getDesign',
+      'chat.list',
+      'generationStatus',
+    ])
+      expect(names).not.toContain(removed);
   });
 
   it('diagnoses fixtures and inspects using guarded Node subprocesses without changing any state', async () => {

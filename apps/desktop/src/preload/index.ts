@@ -39,6 +39,9 @@ import type {
   WireApi,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
+
+declare const __CODESIGN_BACKGROUND_DEBUG__: boolean;
+
 import type { CodexModelOptions } from '../main/codex-models';
 import type { CodexOAuthStatus } from '../main/codex-oauth-ipc';
 import type {
@@ -459,6 +462,11 @@ export interface UsageBudgetResult {
 }
 
 const api = {
+  debugOperation: (input: { operation: string; args: unknown[] }) => {
+    if (typeof __CODESIGN_BACKGROUND_DEBUG__ !== 'undefined' && __CODESIGN_BACKGROUND_DEBUG__)
+      return ipcRenderer.invoke('codesign:debug:operation', input);
+    return Promise.reject(new Error('BACKGROUND_DEBUG_UNAVAILABLE'));
+  },
   detectProvider: (key: string) =>
     ipcRenderer.invoke('codesign:detect-provider', key) as Promise<string | null>,
   doneVerify: (artifact: string) =>

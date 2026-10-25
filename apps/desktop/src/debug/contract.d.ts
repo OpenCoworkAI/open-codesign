@@ -52,6 +52,7 @@ export interface UiDebugReport {
   model?: DebugModelEvidence;
   artifacts?: { path: string; bytes: number; sha256: string }[];
   runs?: { generationId: string; status: string }[];
+  operations?: DebugOperationSummary;
 }
 
 export interface UiDebugElement {
@@ -77,10 +78,61 @@ export interface UiDebugFrame {
   runs?: UiDebugReport['runs'];
 }
 
+export interface DebugOperationCapability {
+  name: string;
+  channel: string;
+  kind: 'call' | 'event';
+  domain: string;
+  mode: 'local' | 'model' | 'live' | 'unsupported';
+  available: boolean;
+  reason?: string;
+  parameters: { name: string; type: string; required: boolean; definition?: string }[];
+}
+
+export interface DebugOperationTask {
+  taskId: string;
+  operation: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  startedAt: string;
+  finishedAt?: string;
+  result?: unknown;
+  error?: { code: string; message: string };
+  cancellationRequested?: boolean;
+}
+
+export interface DebugOperationEvent {
+  cursor: number;
+  type: string;
+  operation: string;
+  at: string;
+  data?: unknown;
+}
+
+export interface DebugOperationEventPage {
+  after: number;
+  cursor: number;
+  dropped: number;
+  events: DebugOperationEvent[];
+}
+
+export interface DebugOperationSummary {
+  calls: number;
+  active: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  eventsDropped: number;
+}
+
 export interface UiDebugSession {
   signal: AbortSignal;
   snapshot(): Promise<UiDebugFrame>;
   act(steps: PreviewStep[]): Promise<UiDebugFrame>;
+  capabilities?(): DebugOperationCapability[];
+  call?(operation: string, args: unknown[]): DebugOperationTask;
+  task?(taskId: string): DebugOperationTask;
+  cancel?(taskId: string): Promise<DebugOperationTask>;
+  events?(after: number, limit?: number): DebugOperationEventPage;
 }
 
 export interface UiDebugHost {

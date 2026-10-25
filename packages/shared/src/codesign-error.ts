@@ -1,4 +1,4 @@
-import type { CodesignErrorCode } from './error-codes';
+import { type CodesignErrorCode, ERROR_CODES } from './error-codes';
 
 export class CodesignError extends Error {
   constructor(
@@ -10,4 +10,15 @@ export class CodesignError extends Error {
     super(message, options);
     this.name = 'CodesignError';
   }
+}
+
+export function isUserCancellation(error: unknown, signal?: AbortSignal): boolean {
+  return (
+    signal?.aborted === true &&
+    error instanceof CodesignError &&
+    error.code === ERROR_CODES.PROVIDER_ABORTED &&
+    ((signal.reason instanceof DOMException && signal.reason.name === 'AbortError') ||
+      (signal.reason instanceof CodesignError &&
+        signal.reason.code === ERROR_CODES.PROVIDER_ABORTED))
+  );
 }

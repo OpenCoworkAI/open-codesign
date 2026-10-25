@@ -56,7 +56,10 @@ function copyPromptSections() {
 
 export default defineConfig(({ mode }) => ({
   main: {
-    define: { __APP_VERSION__: APP_VERSION },
+    define: {
+      __APP_VERSION__: APP_VERSION,
+      __CODESIGN_BACKGROUND_DEBUG__: JSON.stringify(mode === 'background-debug'),
+    },
     build: {
       externalizeDeps: { exclude: [...WORKSPACE_PACKAGES, ...BUNDLED_RUNTIME_PACKAGES] },
       outDir: 'out/main',
@@ -79,6 +82,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   preload: {
+    define: { __CODESIGN_BACKGROUND_DEBUG__: JSON.stringify(mode === 'background-debug') },
     build: {
       outDir: 'out/preload',
       rollupOptions: {

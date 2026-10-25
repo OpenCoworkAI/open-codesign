@@ -1,12 +1,18 @@
 import { execFile, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { appendFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { UiDebugFrame, UiDebugReport } from './contract';
+import type {
+  DebugOperationEventPage,
+  DebugOperationTask,
+  UiDebugFrame,
+  UiDebugReport,
+} from './contract';
 import { findPowerShell, observationPassed } from './ui-debug';
 
 const repository = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -21,14 +27,16 @@ interface Message {
 
 describe.skipIf(!enabled)('continuous real Electron session', () => {
   let root: string;
+  const retainedOutput = process.env['CODESIGN_UI_DEBUG_TEST_OUTPUT'];
   beforeAll(async () => {
-    root = await mkdtemp(join(tmpdir(), 'codesign-ui-session-test-'));
+    root = retainedOutput ?? (await mkdtemp(join(tmpdir(), 'codesign-ui-session-test-')));
+    if (retainedOutput) await mkdir(root, { recursive: true });
   });
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    if (!retainedOutput) await rm(root, { recursive: true, force: true });
   });
 
-  function client(name: string, extra: string[] = []) {
+  function client(name: string, extra: string[] = [], timeoutMs = 120000) {
     const output = join(root, name);
     const child = spawn(
       process.execPath,
@@ -41,7 +49,7 @@ describe.skipIf(!enabled)('continuous real Electron session', () => {
         '--output',
         output,
         '--timeout-ms',
-        '120000',
+        String(timeoutMs),
         ...extra,
       ],
       {
@@ -70,9 +78,11 @@ describe.skipIf(!enabled)('continuous real Electron session', () => {
     );
     child.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
+      if (retainedOutput) appendFileSync(join(root, `${name}-stderr.log`), chunk);
     });
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
+      if (retainedOutput) appendFileSync(join(root, `${name}-responses.jsonl`), chunk);
       buffer += chunk.toString();
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
@@ -96,18 +106,30 @@ describe.skipIf(!enabled)('continuous real Electron session', () => {
       }
       return queue.shift() as Message;
     }
+    let commandId = 0;
+    async function exchange(id: string, method: string, fields: Record<string, unknown> = {}) {
+      if (retainedOutput)
+        appendFileSync(
+          join(root, `${name}-requests.jsonl`),
+          `${JSON.stringify({ id, method, ...fields })}\n`,
+        );
+      child.stdin.write(`${JSON.stringify({ schemaVersion: 1, id, method, ...fields })}\n`);
+      const message = await next();
+      expect(message.id, JSON.stringify(message)).toBe(id);
+      return message;
+    }
     return {
       child,
       output,
       next,
       closed,
-      async request(id: string, method: string, steps?: unknown) {
-        child.stdin.write(
-          `${JSON.stringify({ schemaVersion: 1, id, method, ...(steps === undefined ? {} : { steps }) })}\n`,
-        );
-        const message = await next();
-        expect(message.id, JSON.stringify(message)).toBe(id);
-        return message;
+      request(id: string, method: string, steps?: unknown) {
+        return exchange(id, method, steps === undefined ? {} : { steps });
+      },
+      async command<T>(method: string, fields: Record<string, unknown> = {}): Promise<T> {
+        const message = await exchange(`api-${++commandId}`, method, fields);
+        expect(message.ok, JSON.stringify(message)).toBe(true);
+        return message.data as unknown as T;
       },
       async finish(code: number) {
         const message = await next();
@@ -152,6 +174,308 @@ describe.skipIf(!enabled)('continuous real Electron session', () => {
     }
     throw new Error('Generation did not settle');
   }
+
+  async function waitTask(
+    run: ReturnType<typeof client>,
+    task: DebugOperationTask,
+    timeoutMs = 30000,
+  ) {
+    const deadline = Date.now() + timeoutMs;
+    while (task.status === 'running' && Date.now() < deadline) {
+      await delay(500);
+      task = await run.command<DebugOperationTask>('task', { taskId: task.taskId });
+    }
+    expect(task.status, JSON.stringify(task)).not.toBe('running');
+    return task;
+  }
+
+  async function invoke<T>(
+    run: ReturnType<typeof client>,
+    operation: string,
+    args: unknown[] = [],
+  ) {
+    const task = await waitTask(
+      run,
+      await run.command<DebugOperationTask>('call', { operation, args }),
+    );
+    expect(task.status, JSON.stringify(task)).toBe('completed');
+    return task.result as T;
+  }
+
+  function generate(
+    run: ReturnType<typeof client>,
+    designId: string,
+    prompt: string,
+    model = { provider: 'background-fixture', modelId: 'fixture' },
+  ) {
+    return run.command<DebugOperationTask>('call', {
+      operation: 'generate',
+      args: [
+        {
+          designId,
+          prompt,
+          generationId: randomUUID(),
+          history: [],
+          attachments: [],
+          model,
+        },
+      ],
+    });
+  }
+
+  it('core fixture: creates, edits and exports through JSONL business operations without UI actions', async () => {
+    const run = client('api-export', ['--model-mode', 'fixture']);
+    try {
+      expect(await run.next()).toMatchObject({ type: 'ready', ok: true });
+      const design = await invoke<{ id: string; workspacePath: string }>(
+        run,
+        'snapshots.createDesign',
+        ['API export'],
+      );
+      const source = 'export default function App() { return <main>API export verified</main>; }';
+      await invoke(run, 'files.write', [design.id, 'App.jsx', source]);
+      expect(await invoke(run, 'files.read', [design.id, 'App.jsx'])).toMatchObject({
+        content: source,
+      });
+      const destination = join(design.workspacePath, 'verified.html');
+      await invoke(run, 'test.exportDestination', [destination]);
+      const payload = {
+        format: 'html',
+        designId: design.id,
+        sourcePath: 'App.jsx',
+        artifactSource: source,
+      };
+      expect(await invoke(run, 'export', [payload])).toMatchObject({
+        status: 'saved',
+        path: destination,
+      });
+      const html = await readFile(destination, 'utf8');
+      expect(html.toLowerCase()).toContain('<!doctype html>');
+      expect(html).toContain('API export verified');
+      expect(await invoke(run, 'export', [payload])).toEqual({ status: 'cancelled' });
+      await run.request('close', 'close');
+      const final = await run.finish(0);
+      expect(final.data.operations).toMatchObject({ active: 0, failed: 0 });
+      expect(final.data.errors).toEqual([]);
+    } finally {
+      run.child.stdin.end();
+      await run.closed;
+    }
+  }, 90000);
+
+  it('core fixture: answers a real pending question through API operations', async () => {
+    const run = client('api-question-cancel', ['--model-mode', 'fixture']);
+    try {
+      expect(await run.next()).toMatchObject({ type: 'ready', ok: true });
+      const design = await invoke<{ id: string }>(run, 'snapshots.createDesign', ['API question']);
+      const asking = await generate(
+        run,
+        design.id,
+        '[fixture:ask] Build the test page after the answer.',
+      );
+      let questions: { requestId: string; designId?: string }[] = [];
+      for (let attempt = 0; attempt < 30; attempt++) {
+        questions = await invoke(run, 'ask.pending');
+        if (questions.length) break;
+        await delay(200);
+      }
+      expect(questions).toHaveLength(1);
+      expect(questions[0]?.designId).toBe(design.id);
+      await invoke(run, 'ask.resolve', [
+        questions[0]?.requestId,
+        {
+          status: 'answered',
+          answers: [{ questionId: 'fact', value: 'API answer verified' }],
+        },
+      ]);
+      expect((await waitTask(run, asking)).status).toBe('completed');
+      expect(await invoke(run, 'files.read', [design.id, 'App.jsx'])).toMatchObject({
+        content: expect.stringContaining('Background model verified'),
+      });
+      expect(await invoke(run, 'ask.pending')).toEqual([]);
+      await run.request('close', 'close');
+      const final = await run.finish(0);
+      expect(final.data.operations).toMatchObject({ active: 0, failed: 0 });
+      expect(final.data.runs).toMatchObject([{ status: 'completed' }]);
+    } finally {
+      run.child.stdin.end();
+      await run.closed;
+    }
+  }, 150000);
+
+  it('core fixture: cancels an active API generation through task control', async () => {
+    const run = client('api-cancel', ['--model-mode', 'fixture']);
+    try {
+      expect(await run.next()).toMatchObject({ type: 'ready', ok: true });
+      const design = await invoke<{ id: string }>(run, 'snapshots.createDesign', ['API cancel']);
+      const waiting = await generate(run, design.id, '[fixture:wait] Wait for API cancellation.');
+      let activeModelCall = false;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const frame = await run.request(`waiting-${attempt}`, 'snapshot');
+        activeModelCall =
+          frame.data.model?.events.some((event) => event.tools && event.status === 'running') ??
+          false;
+        if (activeModelCall) break;
+        await delay(200);
+      }
+      expect(activeModelCall).toBe(true);
+      await run.command('cancel', { taskId: waiting.taskId });
+      expect(await waitTask(run, waiting)).toMatchObject({
+        status: 'cancelled',
+        cancellationRequested: true,
+      });
+      const cancelled = await run.request('cancelled-state', 'snapshot');
+      expect(cancelled.data.runs).toMatchObject([{ status: 'cancelled' }]);
+      expect(cancelled.data.model?.active).toBe(0);
+      expect(await invoke(run, 'ask.pending')).toEqual([]);
+      const events: DebugOperationEventPage['events'] = [];
+      let after = 0;
+      for (let page = 0; page < 3; page++) {
+        const batch = await run.command<DebugOperationEventPage>('events', { after, limit: 100 });
+        events.push(...batch.events);
+        after = batch.cursor;
+        if (batch.events.length < 100) break;
+      }
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'application.event', operation: 'chat.onAgentEvent' }),
+          expect.objectContaining({ type: 'operation.cancelled', operation: 'generate' }),
+        ]),
+      );
+      await run.request('close', 'close');
+      const final = await run.finish(0);
+      expect(final.data.operations).toMatchObject({ active: 0, failed: 0, cancelled: 1 });
+      expect(final.data.model).toMatchObject({ active: 0 });
+      expect(final.data.runs).toMatchObject([{ status: 'cancelled' }]);
+    } finally {
+      run.child.stdin.end();
+      await run.closed;
+    }
+  }, 150000);
+
+  it('core fixture: retries a failed API generation while keeping the original failure in the report', async () => {
+    const run = client('api-failure-retry', ['--model-mode', 'fixture']);
+    try {
+      expect(await run.next()).toMatchObject({ type: 'ready', ok: true });
+      const design = await invoke<{ id: string }>(run, 'snapshots.createDesign', ['API retry']);
+      expect(
+        await waitTask(run, await generate(run, design.id, '[fixture:error] Fail this request.')),
+      ).toMatchObject({
+        status: 'failed',
+        error: { message: expect.stringContaining('Controlled model failure') },
+      });
+      expect(
+        (await waitTask(run, await generate(run, design.id, 'Build the test page.'))).status,
+      ).toBe('completed');
+      expect(await invoke(run, 'files.read', [design.id, 'App.jsx'])).toMatchObject({
+        content: expect.stringContaining('Background model verified'),
+      });
+      await run.request('close', 'close');
+      const final = await run.finish(5);
+      expect(final.data.operations).toMatchObject({ active: 0, failed: 1 });
+      expect(final.data.runs).toMatchObject([{ status: 'failed' }, { status: 'completed' }]);
+      expect(final.data.model?.active).toBe(0);
+      expect(final.data.errors).toEqual(
+        expect.arrayContaining([expect.objectContaining({ source: 'operations' })]),
+      );
+    } finally {
+      run.child.stdin.end();
+      await run.closed;
+    }
+  }, 150000);
+
+  it.skipIf(process.env['CODESIGN_UI_DEBUG_LIVE_CONFIG'] === undefined)(
+    'core live: generates and exports with the explicitly selected real model',
+    async () => {
+      const config = process.env['CODESIGN_UI_DEBUG_LIVE_CONFIG'];
+      if (!config?.trim()) throw new Error('Live core test requires an explicit config file.');
+      const sourcePaths = [config];
+      const extra = ['--model-mode', 'live', '--config', config];
+      for (const [variable, flag] of [
+        ['CODESIGN_UI_DEBUG_LIVE_PROVIDER', '--provider'],
+        ['CODESIGN_UI_DEBUG_LIVE_MODEL', '--model'],
+        ['CODESIGN_UI_DEBUG_LIVE_CREDENTIAL_STATE', '--credential-state'],
+        ['CODESIGN_UI_DEBUG_LIVE_CODEX_AUTH', '--codex-auth'],
+      ] as const) {
+        const value = process.env[variable];
+        if (value !== undefined) {
+          extra.push(flag, value);
+          if (flag === '--credential-state' || flag === '--codex-auth') sourcePaths.push(value);
+        }
+      }
+      const before = await Promise.all(
+        sourcePaths.map(async (path) => ({
+          path,
+          bytes: await readFile(path),
+          mtime: (await stat(path)).mtimeMs,
+        })),
+      );
+      const run = client('api-live', extra, 180000);
+      try {
+        const ready = await run.next();
+        expect(ready, JSON.stringify(ready)).toMatchObject({ type: 'ready', ok: true });
+        expect(ready.data.model).toMatchObject({ mode: 'live', calls: 0 });
+        const providers = await invoke<
+          { provider: string; defaultModel: string; isActive: boolean }[]
+        >(run, 'settings.listProviders');
+        const selected = providers.find((provider) => provider.isActive);
+        if (!selected?.defaultModel) throw new Error('Selected live model is unavailable.');
+        const design = await invoke<{ id: string; workspacePath: string }>(
+          run,
+          'snapshots.createDesign',
+          ['Live core workflow'],
+        );
+        const generation = await generate(
+          run,
+          design.id,
+          'Create a minimal self-contained page in App.jsx titled "Core workflow verified" ' +
+            'with one short paragraph and one button. Write a concise DESIGN.md. ' +
+            'Use local inline styles, no network assets, installs, shell commands or images. ' +
+            'All requirements are specified; do not ask questions. Preview App.jsx and finish ' +
+            'with done("App.jsx").',
+          { provider: selected.provider, modelId: selected.defaultModel },
+        );
+        expect((await waitTask(run, generation, 150000)).status).toBe('completed');
+        const source = await invoke<{ content: string }>(run, 'files.read', [design.id, 'App.jsx']);
+        expect(source.content).toContain('Core workflow verified');
+        const designMd = await invoke<{ content: string }>(run, 'files.read', [
+          design.id,
+          'DESIGN.md',
+        ]);
+        expect(designMd.content.trim().length).toBeGreaterThan(0);
+        const destination = join(design.workspacePath, 'live-verified.html');
+        await invoke(run, 'test.exportDestination', [destination]);
+        expect(
+          await invoke(run, 'export', [
+            {
+              format: 'html',
+              designId: design.id,
+              sourcePath: 'App.jsx',
+              artifactSource: source.content,
+            },
+          ]),
+        ).toMatchObject({ status: 'saved', path: destination });
+        const html = await readFile(destination, 'utf8');
+        expect(html.toLowerCase()).toContain('<!doctype html>');
+        expect(html).toContain('Core workflow verified');
+        await run.request('close', 'close');
+        const final = await run.finish(0);
+        expect(final.data.model).toMatchObject({ mode: 'live', active: 0, failed: 0 });
+        expect(final.data.model?.completed).toBeGreaterThan(0);
+        expect(final.data.operations).toMatchObject({ active: 0, failed: 0 });
+        expect(final.data.runs).toMatchObject([{ status: 'completed' }]);
+        expect(final.data.errors).toEqual([]);
+      } finally {
+        run.child.stdin.end();
+        await run.closed;
+        for (const source of before) {
+          expect((await readFile(source.path)).equals(source.bytes)).toBe(true);
+          expect((await stat(source.path)).mtimeMs).toBe(source.mtime);
+        }
+      }
+    },
+    210000,
+  );
 
   it('runs controlled model tools through real UI and persists artifacts across two turns', async () => {
     const run = client('model-success', ['--model-mode', 'fixture']);

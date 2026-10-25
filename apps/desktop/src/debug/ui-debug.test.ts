@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiSourceFingerprint } from './build-fingerprint';
 import {
   DEFAULT_UI_STEPS,
+  hostEventError,
   isolatedEnvironment,
   loadUiSteps,
   observationPassed,
@@ -18,6 +19,21 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.unstubAllEnvs();
   await rm(root, { recursive: true, force: true });
+});
+
+it('accepts a successful export adapter event while retaining host failures', () => {
+  expect(
+    hostEventError(JSON.stringify({ kind: 'adapter', detail: 'export.destination' })),
+  ).toBeUndefined();
+  for (const kind of ['unsupported', 'crash', 'violation', 'adapter', 'unknown']) {
+    expect(hostEventError(JSON.stringify({ kind, detail: 'unexpected operation' }))).toEqual({
+      source: `host:${kind}`,
+      message: 'unexpected operation',
+    });
+  }
+  for (const line of ['{', 'null', '{}', '{"kind":"adapter","detail":42}']) {
+    expect(hostEventError(line)).toEqual({ source: 'host-log', message: 'Invalid host event' });
+  }
 });
 
 it('does not inherit credentials or Node/Electron injection settings', () => {
@@ -98,6 +114,8 @@ it('validates bounded steps before a browser is started', async () => {
 });
 
 it('redacts token-shaped strings and credential fields from errors', () => {
+  const requestId = 'ask-2b03d65f-f07d-4800-874f-5eaf233b0431';
+  expect(scrubDebugText(`Unknown requestId "${requestId}"`)).toContain(requestId);
   const result = scrubDebugText(
     'apiKey=sentinel token Bearer sentinel-token sk-12345678901234567890',
   );
