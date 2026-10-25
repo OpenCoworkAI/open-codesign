@@ -219,7 +219,7 @@ describeIfChrome('runPreview with real Chrome', () => {
     const path = join(tempDir, name);
     writeFileSync(
       path,
-      '<!doctype html><style>body{margin:0}#pricing{width:240px;height:100px;background:#fff;color:#111}</style><div style="height:1200px"></div><section id="pricing">Basic plan</section><footer>Keep this sibling</footer>',
+      '<!doctype html><style>body{margin:0}#pricing{width:240px;height:100px;background:#fff;color:#111;visibility:visible}</style><div style="height:1200px"></div><div style="visibility:hidden"><section id="pricing">Basic plan</section></div><footer>Keep this sibling</footer>',
     );
     const options = {
       path: name,

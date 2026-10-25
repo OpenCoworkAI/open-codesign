@@ -41,9 +41,11 @@ export function measurePreviewFocus(selector: string): FocusMeasurement {
   const element = matches[0];
   if (!element || element.getClientRects().length === 0)
     throw new Error('Focus element is not visible');
+  if (document.defaultView.getComputedStyle(element).visibility !== 'visible')
+    throw new Error('Focus element is not visible');
   for (let ancestor: FocusElement | null = element; ancestor; ancestor = ancestor.parentElement) {
     const style = document.defaultView.getComputedStyle(ancestor);
-    if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0)
+    if (style.display === 'none' || Number(style.opacity) === 0)
       throw new Error('Focus element is not visible');
   }
   // Reveal below-fold blocks and nested scroll containers before measuring document coordinates.

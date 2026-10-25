@@ -117,7 +117,6 @@ describe('focused preview', () => {
 
   it.each([
     { display: 'none' },
-    { visibility: 'hidden' },
     { opacity: '0' },
   ])('rejects hidden ancestors (%j)', async (style) => {
     pageDocument.defaultView.getComputedStyle.mockImplementation((target) => ({
@@ -126,6 +125,34 @@ describe('focused preview', () => {
       opacity: '1',
       ...(target === element.parentElement ? style : {}),
     }));
+    const { page, screenshot } = browserBoundary();
+    await expect(
+      capturePreviewFocus(page, { selector: '#pricing' }, 'App.jsx', true),
+    ).rejects.toThrow('not visible');
+    expect(screenshot).not.toHaveBeenCalled();
+  });
+
+  it('captures a visible descendant inside a visibility-hidden ancestor', async () => {
+    pageDocument.defaultView.getComputedStyle.mockImplementation((target) => ({
+      display: 'block',
+      visibility: target === element.parentElement ? 'hidden' : 'visible',
+      opacity: '1',
+    }));
+    const { page, screenshot } = browserBoundary();
+    const result = await capturePreviewFocus(page, { selector: '#pricing' }, 'App.jsx', true);
+    expect(result.focus?.text).toBe('Basic plan');
+    expect(screenshot).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    'hidden',
+    'collapse',
+  ])('rejects target computed visibility %s, including inherited visibility', async (visibility) => {
+    pageDocument.defaultView.getComputedStyle.mockReturnValue({
+      display: 'block',
+      visibility,
+      opacity: '1',
+    });
     const { page, screenshot } = browserBoundary();
     await expect(
       capturePreviewFocus(page, { selector: '#pricing' }, 'App.jsx', true),
