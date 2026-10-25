@@ -1,8 +1,16 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { PreviewStep } from '@open-codesign/core';
+import { makeTextEditorTool, type PreviewStep } from '@open-codesign/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   isPreviewFileUrlAllowed,
@@ -206,6 +214,76 @@ describe('runtime noise filtering', () => {
 });
 
 describeIfChrome('runPreview with real Chrome', () => {
+  it('magnifies a selected block, edits its source, and checks the same block again without changing siblings', async () => {
+    const name = 'focused.html';
+    const path = join(tempDir, name);
+    writeFileSync(
+      path,
+      '<!doctype html><style>body{margin:0}#pricing{width:240px;height:100px;background:#fff;color:#111}</style><div style="height:1200px"></div><section id="pricing">Basic plan</section><footer>Keep this sibling</footer>',
+    );
+    const options = {
+      path: name,
+      workspaceRoot: tempDir,
+      vision: true,
+      viewport: { width: 800, height: 600 },
+      focus: { selector: '#pricing', scale: 2, padding: 0 },
+    };
+    const first = await runPreview(options);
+    const output = process.env['CODESIGN_FOCUSED_PREVIEW_TEST_OUTPUT'];
+    function retain(label: string, result: Awaited<ReturnType<typeof runPreview>>) {
+      if (!output) return;
+      mkdirSync(output, { recursive: true });
+      const { screenshot, ...metadata } = result;
+      writeFileSync(join(output, `${label}.json`), JSON.stringify(metadata, null, 2));
+      writeFileSync(join(output, `${label}.html`), readFileSync(path));
+      if (screenshot)
+        writeFileSync(
+          join(output, `${label}.png`),
+          Buffer.from(screenshot.split(',')[1] ?? '', 'base64'),
+        );
+    }
+    retain('before', first);
+    expect(first.ok, JSON.stringify(first)).toBe(true);
+    expect(first.focus?.text).toBe('Basic plan');
+    expect(first.focus?.bounds.width).toBe(240);
+    const image = Buffer.from(first.screenshot?.split(',')[1] ?? '', 'base64');
+    expect(image.subarray(1, 4).toString()).toBe('PNG');
+    expect([image.readUInt32BE(16), image.readUInt32BE(20)]).toEqual([480, 200]);
+
+    const editor = makeTextEditorTool({
+      view: () => {
+        const content = readFileSync(path, 'utf8');
+        return { content, numLines: content.split('\n').length };
+      },
+      listDir: () => [name],
+      strReplace: (_path, oldText, newText) => {
+        const source = readFileSync(path, 'utf8');
+        if (!source.includes(oldText)) throw new Error('Target source changed');
+        writeFileSync(path, source.replace(oldText, newText));
+        return { path: name };
+      },
+      create: () => {
+        throw new Error('Unexpected full-file rewrite');
+      },
+      insert: () => {
+        throw new Error('Unexpected insertion');
+      },
+    });
+    await editor.execute('view-focus-source', { command: 'view', path: name });
+    await editor.execute('edit-focus-source', {
+      command: 'str_replace',
+      path: name,
+      old_str: 'Basic plan',
+      new_str: 'Pro plan',
+    });
+    const second = await runPreview(options);
+    retain('after', second);
+    expect(second.ok, JSON.stringify(second)).toBe(true);
+    expect(second.focus?.text).toBe('Pro plan');
+    expect(second.focus?.bounds).toEqual(first.focus?.bounds);
+    expect(readFileSync(path, 'utf8')).toContain('<footer>Keep this sibling</footer>');
+  }, 30_000);
+
   it('selects a native controlled React option and updates linked summary state', async () => {
     writeFileSync(
       join(tempDir, 'Select.jsx'),
