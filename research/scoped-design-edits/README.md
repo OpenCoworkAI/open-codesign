@@ -2,6 +2,8 @@
 
 Branch: `research/scoped-design-edits`. Research-only; not exposed to the application or its agent.
 
+Next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
+
 ## Hypothesis
 
 The existing source-edit engine can supply deterministic literal patches, while a small host-owned selection grant can additionally enforce the selected file, source revision, target definitions and permitted fields.
