@@ -99,6 +99,8 @@ Omitting `--output` creates a unique local run directory. Explicit output direct
 Use the repository-pinned pnpm 10.33.4; `corepack pnpm` can select it if another pnpm version is injected into PATH.
 
 Configuration:
+- `responseProtocol`: `legacy-v1` (default, original prompt) or `typed-v2` (explicit JSON Schema and field semantics).
+- `responseFormat`: `prompt-only` (default) or `json-schema` (backend enforcement; requires `typed-v2` and `openai-chat`). See [protocol v2 and local budgets](./PROTOCOL_V2.md).
 - `dataset`: `synthetic-v1` (default, original 20 cases) or `design-sessions-v1` (8 controlled reconstructions from one real design conversation). Case IDs must belong to the selected dataset; the corpora are not silently mixed.
 - `model`: exact `provider` and `modelId`; no runner fallback or automatic model selection.
 - `credentialEnv`: environment variable name, never a literal key.
@@ -135,9 +137,13 @@ The 20 cases use template variations, so they are not 20 independent real-world 
 The first conversation-derived pilot is documented in [SESSION_CASES.md](./SESSION_CASES.md). These are controlled reconstructions, not raw trace replay. Next: collect additional redacted design sessions, split by design/session rather than by template, manually adjudicate multiple acceptable continuations, and add a held-out set.
 
 The [three-model live comparison](./SESSION_PILOT_RESULTS.md) records 48 calls using the current Codex model and two installed Ollama models. It separates strict format failures from rubric failures and documents the local context-limit confound. This is a development pilot, not a model leaderboard.
+
+The [typed-JSON / 16K follow-up](./SESSION_V2_RESULTS.md) records another 48 calls on the unchanged cases: all responses were schema-valid with no truncation. Remaining failures are analyzed separately as action/scope errors, operational field semantics and annotation limitations.
 Compare current versus revised agent instructions using identical model settings and three trials per case. Report category-level behavior failures and missing/invalid output separately from artifact success. Verify a subset against actual tool events to detect claims that disagree with execution. Dry runs do not read provider credentials; explicitly executed runs read only the selected credential variable.
 
 ## Installed Ollama models
+
+For the follow-up experiment, use the [typed-protocol configuration](./ollama-v2-config.example.json) and the [16K alias setup](./PROTOCOL_V2.md). The original configuration below remains available for reproducing v1.
 
 Use an already running local Ollama server through the existing provider's `openai-chat` wire. No runtime, model weights or additional SDK is bundled. The [example configuration](./ollama-config.example.json) selects a model installed on the pilot machine; replace `modelId` with an exact name from your own `ollama list`.
 

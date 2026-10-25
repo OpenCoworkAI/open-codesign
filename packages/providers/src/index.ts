@@ -58,6 +58,9 @@ export interface GenerateOptions {
   allowKeyless?: boolean;
   /** Per-HTTP-request timeout forwarded to pi-ai; SDKs default to 10 minutes. */
   timeoutMs?: number;
+  /** Opt-in server-side JSON Schema for OpenAI chat-compatible endpoints.
+   * Unsupported wires fail before generation; callers still validate results. */
+  jsonSchema?: { name: string; schema: Record<string, unknown> };
 }
 
 export interface GenerateResult {
@@ -410,6 +413,24 @@ export async function complete(
     }
   }
 
+  if (opts.jsonSchema !== undefined) {
+    if (piModel.api !== 'openai-completions') {
+      throw new CodesignError(
+        'JSON Schema output requires an OpenAI chat-compatible wire',
+        ERROR_CODES.PROVIDER_ERROR,
+      );
+    }
+    if (
+      !/^[A-Za-z0-9_-]{1,64}$/.test(opts.jsonSchema.name) ||
+      opts.jsonSchema.schema['type'] !== 'object'
+    ) {
+      throw new CodesignError(
+        'JSON Schema output requires a valid name and an object schema',
+        ERROR_CODES.PROVIDER_ERROR,
+      );
+    }
+  }
+
   const piContext = toPiContext(messages, piModel, opts);
 
   const piOpts: {
@@ -431,6 +452,13 @@ export async function complete(
   const reasoning = opts.reasoning ?? requiredReasoningDefault(effectiveModelId);
   if (reasoning !== undefined && reasoning !== 'off') piOpts.reasoning = reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };
+  if (opts.jsonSchema !== undefined) {
+    const { name, schema } = opts.jsonSchema;
+    piOpts.onPayload = (payload) => ({
+      ...(payload as Record<string, unknown>),
+      response_format: { type: 'json_schema', json_schema: { name, strict: true, schema } },
+    });
+  }
 
   // Strict OpenAI-Responses gateways (e.g. sub2api-style routers) 400 when
   // they see BOTH a system/developer item in `input[]` AND no top-level

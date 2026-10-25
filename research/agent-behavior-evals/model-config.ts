@@ -10,6 +10,8 @@ import { exportTasks } from './datasets.mjs';
 export interface ModelRunConfig {
   schemaVersion: 1;
   dataset: 'synthetic-v1' | 'design-sessions-v1';
+  responseProtocol: 'legacy-v1' | 'typed-v2';
+  responseFormat: 'prompt-only' | 'json-schema';
   model: ModelRef;
   credentialEnv: string;
   promptVariant: 'baseline' | 'constraint-check';
@@ -38,6 +40,8 @@ export function parseConfig(value: unknown): ModelRunConfig {
   const allowed = new Set([
     'schemaVersion',
     'dataset',
+    'responseProtocol',
+    'responseFormat',
     'model',
     'credentialEnv',
     'promptVariant',
@@ -66,6 +70,17 @@ export function parseConfig(value: unknown): ModelRunConfig {
   if (dataset !== 'synthetic-v1' && dataset !== 'design-sessions-v1')
     throw new Error('Unknown dataset');
   const available = new Set(exportTasks(dataset).tasks.map((task) => task.id));
+  const responseProtocol = value['responseProtocol'] ?? 'legacy-v1';
+  const responseFormat = value['responseFormat'] ?? 'prompt-only';
+  if (responseProtocol !== 'legacy-v1' && responseProtocol !== 'typed-v2')
+    throw new Error('Unknown response protocol');
+  if (responseFormat !== 'prompt-only' && responseFormat !== 'json-schema')
+    throw new Error('Unknown response format');
+  if (
+    responseFormat === 'json-schema' &&
+    (responseProtocol !== 'typed-v2' || value['wire'] !== 'openai-chat')
+  )
+    throw new Error('json-schema requires typed-v2 and the openai-chat wire');
   const caseIds = value['caseIds'] ?? [...available];
   if (
     !Array.isArray(caseIds) ||
@@ -77,6 +92,8 @@ export function parseConfig(value: unknown): ModelRunConfig {
   const config: ModelRunConfig = {
     schemaVersion: 1,
     dataset,
+    responseProtocol,
+    responseFormat,
     model: model.data,
     credentialEnv,
     promptVariant,

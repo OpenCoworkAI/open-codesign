@@ -16,6 +16,7 @@ const sourceFiles = [
   'fixtures.mjs',
   'datasets.mjs',
   'session-fixtures.mjs',
+  'response-schema.ts',
   '../../packages/providers/src/index.ts',
   '../../pnpm-lock.yaml',
 ];

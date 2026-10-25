@@ -1,0 +1,2 @@
+FROM qwen3:4b-q4_K_M
+PARAMETER num_ctx 16384

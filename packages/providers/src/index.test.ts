@@ -25,6 +25,71 @@ describe('detectProviderFromKey', () => {
 });
 
 describe('complete', () => {
+  it('forwards opt-in JSON Schema through pi without changing the rest of the chat payload', async () => {
+    const schema = {
+      type: 'object',
+      properties: { answer: { type: 'string' } },
+      required: ['answer'],
+      additionalProperties: false,
+    };
+    completeSimpleMock.mockImplementationOnce(async (_model, _context, options) => {
+      const payload = {
+        model: 'local',
+        messages: [{ role: 'user', content: 'A task' }],
+        stream: true,
+        max_tokens: 8192,
+      };
+      expect(options.onPayload(payload)).toEqual({
+        ...payload,
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: 'answer', strict: true, schema },
+        },
+      });
+      expect(payload).not.toHaveProperty('response_format');
+      return {
+        content: [{ type: 'text', text: '{"answer":"ok"}' }],
+        stopReason: 'stop',
+        usage: { input: 2, output: 3, cost: { total: 0 } },
+      };
+    });
+    const result = await complete(
+      { provider: 'local', modelId: 'local' },
+      [{ role: 'user', content: 'A task' }],
+      {
+        apiKey: 'local-placeholder',
+        wire: 'openai-chat',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        maxTokens: 8192,
+        jsonSchema: { name: 'answer', schema },
+      },
+    );
+    expect(result.content).toBe('{"answer":"ok"}');
+  });
+  it.each([
+    'openai-responses',
+    'openai-codex-responses',
+    'anthropic',
+  ] as const)('rejects structured output on unsupported %s before generation', async (wire) => {
+    await expect(
+      complete({ provider: 'custom', modelId: 'test' }, [{ role: 'user', content: 'Task' }], {
+        apiKey: 'test',
+        wire,
+        jsonSchema: { name: 'decision', schema: { type: 'object' } },
+      }),
+    ).rejects.toThrow('chat-compatible');
+    expect(completeSimpleMock).not.toHaveBeenCalled();
+  });
+  it('rejects a malformed schema option before generation', async () => {
+    await expect(
+      complete({ provider: 'local', modelId: 'test' }, [], {
+        apiKey: 'test',
+        wire: 'openai-chat',
+        jsonSchema: { name: 'invalid name', schema: { type: 'array' } },
+      }),
+    ).rejects.toThrow('valid name');
+    expect(completeSimpleMock).not.toHaveBeenCalled();
+  });
   it.each([
     [undefined, 'low'],
     ['high', 'high'],

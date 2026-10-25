@@ -5,7 +5,9 @@ export function scoreDecision(fixture, response) {
     const results = [fixture.policy, ...fixture.alternativePolicies].map((policy) =>
       scoreDecision({ ...fixture, policy, alternativePolicies: [] }, response),
     );
-    return results.find((result) => result.pass) ?? results[0];
+    return results.reduce((closest, result) =>
+      result.errors.length < closest.errors.length ? result : closest,
+    );
   }
   const errors = [];
   if (!response || typeof response !== 'object' || Array.isArray(response)) {
