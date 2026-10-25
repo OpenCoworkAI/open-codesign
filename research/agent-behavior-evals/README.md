@@ -99,6 +99,7 @@ Omitting `--output` creates a unique local run directory. Explicit output direct
 Use the repository-pinned pnpm 10.33.4; `corepack pnpm` can select it if another pnpm version is injected into PATH.
 
 Configuration:
+- `executionGuard`: `off` (default) or `enforce-v1` (scope/completion validation before isolated object-store execution; requires `design-sessions-v1`). See [execution guard](./EXECUTION_GUARD.md) for its host-state assumptions and production-integration limits.
 - `responseProtocol`: `legacy-v1` (default, original prompt) or `typed-v2` (explicit JSON Schema and field semantics).
 - `responseFormat`: `prompt-only` (default) or `json-schema` (backend enforcement; requires `typed-v2` and `openai-chat`). See [protocol v2 and local budgets](./PROTOCOL_V2.md).
 - `dataset`: `synthetic-v1` (default, original 20 cases) or `design-sessions-v1` (8 controlled reconstructions from one real design conversation). Case IDs must belong to the selected dataset; the corpora are not silently mixed.
@@ -139,6 +140,8 @@ The first conversation-derived pilot is documented in [SESSION_CASES.md](./SESSI
 The [three-model live comparison](./SESSION_PILOT_RESULTS.md) records 48 calls using the current Codex model and two installed Ollama models. It separates strict format failures from rubric failures and documents the local context-limit confound. This is a development pilot, not a model leaderboard.
 
 The [typed-JSON / 16K follow-up](./SESSION_V2_RESULTS.md) records another 48 calls on the unchanged cases: all responses were schema-valid with no truncation. Remaining failures are analyzed separately as action/scope errors, operational field semantics and annotation limitations.
+
+The [execution-guard pilot](./GUARD_RESULTS.md) adds host-owned object authorization and completion evidence checks before isolated execution. It measures blocked failing proposals, false blocks and residual failures separately from raw model success; this research executor is not yet connected to the desktop tools.
 Compare current versus revised agent instructions using identical model settings and three trials per case. Report category-level behavior failures and missing/invalid output separately from artifact success. Verify a subset against actual tool events to detect claims that disagree with execution. Dry runs do not read provider credentials; explicitly executed runs read only the selected credential variable.
 
 ## Installed Ollama models

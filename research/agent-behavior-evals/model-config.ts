@@ -12,6 +12,7 @@ export interface ModelRunConfig {
   dataset: 'synthetic-v1' | 'design-sessions-v1';
   responseProtocol: 'legacy-v1' | 'typed-v2';
   responseFormat: 'prompt-only' | 'json-schema';
+  executionGuard: 'off' | 'enforce-v1';
   model: ModelRef;
   credentialEnv: string;
   promptVariant: 'baseline' | 'constraint-check';
@@ -42,6 +43,7 @@ export function parseConfig(value: unknown): ModelRunConfig {
     'dataset',
     'responseProtocol',
     'responseFormat',
+    'executionGuard',
     'model',
     'credentialEnv',
     'promptVariant',
@@ -72,6 +74,11 @@ export function parseConfig(value: unknown): ModelRunConfig {
   const available = new Set(exportTasks(dataset).tasks.map((task) => task.id));
   const responseProtocol = value['responseProtocol'] ?? 'legacy-v1';
   const responseFormat = value['responseFormat'] ?? 'prompt-only';
+  const executionGuard = value['executionGuard'] ?? 'off';
+  if (executionGuard !== 'off' && executionGuard !== 'enforce-v1')
+    throw new Error('Unknown execution guard');
+  if (executionGuard === 'enforce-v1' && dataset !== 'design-sessions-v1')
+    throw new Error('Execution guard requires design-sessions-v1 host scenarios');
   if (responseProtocol !== 'legacy-v1' && responseProtocol !== 'typed-v2')
     throw new Error('Unknown response protocol');
   if (responseFormat !== 'prompt-only' && responseFormat !== 'json-schema')
@@ -94,6 +101,7 @@ export function parseConfig(value: unknown): ModelRunConfig {
     dataset,
     responseProtocol,
     responseFormat,
+    executionGuard,
     model: model.data,
     credentialEnv,
     promptVariant,

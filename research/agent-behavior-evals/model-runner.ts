@@ -3,8 +3,11 @@ import { performance } from 'node:perf_hooks';
 import type { complete, GenerateResult } from '../../packages/providers/src/index';
 import { type ChatMessage, ERROR_CODES } from '../../packages/shared/src/index';
 import { exportTasks, getFixtures } from './datasets.mjs';
+import { validDecision } from './decision-shape';
 import { scoreDecision } from './evaluate.mjs';
+import { createGuardedWorkspace, type ExecutionReceipt } from './execution-guard';
 import { responseContract } from './fixtures.mjs';
+import { guardStateForCase } from './guard-scenarios';
 import { parseConfig, record } from './model-config';
 import { decisionSchema, typedProtocolInstructions } from './response-schema';
 
@@ -33,6 +36,7 @@ export interface Observation {
   usage: Usage | null;
   passed: boolean;
   errors: string[];
+  guard?: ExecutionReceipt;
 }
 
 export const hash = (value: unknown): string =>
@@ -78,6 +82,14 @@ export function buildPlan(input: unknown) {
     selectedTasksHash: hash(tasks),
     promptHash: hash(system),
     configHash: hash(config),
+    ...(config.executionGuard === 'enforce-v1'
+      ? {
+          guardSnapshots: config.caseIds.map((id) => ({ id, state: guardStateForCase(id) })),
+          guardContextHash: hash(
+            config.caseIds.map((id) => ({ id, state: guardStateForCase(id) })),
+          ),
+        }
+      : {}),
     ...(config.responseProtocol === 'typed-v2'
       ? { responseSchema: decisionSchema, responseSchemaHash: hash(decisionSchema) }
       : {}),
@@ -87,33 +99,6 @@ export function buildPlan(input: unknown) {
   };
 }
 export type RunPlan = ReturnType<typeof buildPlan>;
-
-function validDecision(value: unknown): boolean {
-  if (
-    !record(value) ||
-    Object.keys(value).sort().join(',') !== Object.keys(responseContract).sort().join(',')
-  )
-    return false;
-  return (
-    typeof value['action'] === 'string' &&
-    responseContract.action.includes(value['action']) &&
-    typeof value['status'] === 'string' &&
-    responseContract.status.includes(value['status']) &&
-    Array.isArray(value['targetIds']) &&
-    value['targetIds'].every((id: unknown) => typeof id === 'string') &&
-    Array.isArray(value['changes']) &&
-    value['changes'].every(
-      (change: unknown) =>
-        record(change) &&
-        Object.keys(change).sort().join(',') === 'field,value' &&
-        typeof change['field'] === 'string' &&
-        typeof change['value'] === 'string',
-    ) &&
-    (value['expectedSourceHash'] === null ||
-      (typeof value['expectedSourceHash'] === 'string' &&
-        /^[a-f0-9]{64}$/.test(value['expectedSourceHash'])))
-  );
-}
 
 function usageOf(value: unknown): Usage | null {
   if (!record(value)) return null;
@@ -175,11 +160,29 @@ export function summarize(rows: readonly Observation[]) {
   const attempted = rows.filter((r) => r.attempted);
   const observedUsage = attempted.flatMap((r) => (r.usage ? [r.usage] : []));
   const passed = rows.filter((r) => r.passed).length;
+  const guarded = rows.filter((r) => r.guard !== undefined);
   return {
     scheduled: rows.length,
     attempted: attempted.length,
     passed,
     passRate: rows.length ? passed / rows.length : 0,
+    ...(guarded.length
+      ? {
+          executionGuard: {
+            assessed: guarded.length,
+            blocked: guarded.filter((r) => !r.guard?.allowed).length,
+            blockedRubricFailures: guarded.filter((r) => !r.guard?.allowed && !r.passed).length,
+            blockedRubricPasses: guarded.filter((r) => !r.guard?.allowed && r.passed).length,
+            allowedRubricFailures: guarded.filter((r) => r.guard?.allowed && !r.passed).length,
+            allowedRubricPasses: guarded.filter((r) => r.guard?.allowed && r.passed).length,
+            blockedWithSideEffects: guarded.filter(
+              (r) =>
+                !r.guard?.allowed &&
+                (r.guard?.effect !== 'none' || r.guard.beforeStateHash !== r.guard.afterStateHash),
+            ).length,
+          },
+        }
+      : {}),
     responseQuality: {
       schemaValid: rows.filter((r) => r.status === 'ok').length,
       formatFailures: rows.filter(
@@ -294,6 +297,10 @@ export async function runModelEvaluation(
               row.errors = ['response-contract-mismatch'];
             } else {
               row.status = 'ok';
+              if (plan.config.executionGuard === 'enforce-v1')
+                row.guard = createGuardedWorkspace(guardStateForCase(request.id)).execute(
+                  row.decision,
+                );
               const scored = scoreDecision(fixture, row.decision);
               row.passed = scored.pass;
               row.errors = scored.errors;

@@ -17,6 +17,9 @@ const sourceFiles = [
   'datasets.mjs',
   'session-fixtures.mjs',
   'response-schema.ts',
+  'decision-shape.ts',
+  'execution-guard.ts',
+  'guard-scenarios.ts',
   '../../packages/providers/src/index.ts',
   '../../pnpm-lock.yaml',
 ];
