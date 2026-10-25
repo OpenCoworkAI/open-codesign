@@ -2,6 +2,8 @@
 
 Branch: `research/agent-behavior-evals`. Offline research; not an application evaluator.
 
+Next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
+
 ## Hypothesis
 
 Short continuations at critical design-agent decision points can expose intent violations that final artifact screenshots miss.
