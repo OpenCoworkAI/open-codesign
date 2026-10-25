@@ -18,13 +18,19 @@ const suites = {
 };
 
 export function parseUiTestArgs(args) {
+  if (args.length === 3 && args[1] === '--test-name-pattern' && args[2]?.trim()) {
+    new RegExp(args[2]);
+    return { mode: args[0], list: false, testNamePattern: args[2] };
+  }
   if (args.length > 2 || (args[1] !== undefined && args[1] !== '--list')) {
-    throw new Error('UI_TEST_USAGE: expected a suite and optional --list');
+    throw new Error(
+      'UI_TEST_USAGE: expected a suite and optional --list or --test-name-pattern REGEX',
+    );
   }
   return { mode: args[0], list: args[1] === '--list' };
 }
 
-export async function runUiTests(mode, list = false) {
+export async function runUiTests(mode, list = false, testNamePattern) {
   if (!Object.hasOwn(suites, mode)) throw new Error('UI_TEST_USAGE: expected browser or debug');
   const lease = acquireUiLease('suite');
   const abort = new AbortController();
@@ -32,7 +38,14 @@ export async function runUiTests(mode, list = false) {
   process.once('SIGINT', cancel);
   process.once('SIGTERM', cancel);
   const output = join(root, '.Codex/workspace', `ui-tests-${Date.now()}-${randomUUID()}`);
-  const report = { schemaVersion: 1, mode, listOnly: list, cleanup: true, suites: [] };
+  const report = {
+    schemaVersion: 1,
+    mode,
+    listOnly: list,
+    testNamePattern,
+    cleanup: true,
+    suites: [],
+  };
   try {
     await mkdir(output, { recursive: true });
     await writeFile(
@@ -56,6 +69,7 @@ export async function runUiTests(mode, list = false) {
           ...(list ? ['list', '--filesOnly'] : ['run']),
           '--config',
           mode === 'debug' ? 'vitest.debug.config.ts' : 'vitest.browser.config.ts',
+          ...(testNamePattern ? ['--testNamePattern', testNamePattern, '--bail', '1'] : []),
         ],
         env: { ...process.env, ...lease.env },
         signal: abort.signal,
@@ -93,7 +107,7 @@ export async function runUiTests(mode, list = false) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
     const args = parseUiTestArgs(process.argv.slice(2));
-    process.exitCode = await runUiTests(args.mode, args.list);
+    process.exitCode = await runUiTests(args.mode, args.list, args.testNamePattern);
   } catch (error) {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

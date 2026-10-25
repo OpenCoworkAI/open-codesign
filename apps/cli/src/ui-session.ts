@@ -5,6 +5,8 @@ import type { Arguments } from './arguments';
 import { CliError, EXIT_CODES, envelope, type Result, safeError } from './protocol';
 import { loadUiDebugHost, modelSetupError, uiLeaseError } from './ui-debug';
 
+export const MAX_SESSION_MESSAGE_BYTES = 32 * 1024 * 1024;
+
 /** Bounded, sequential JSONL transport. It owns neither application state nor a network port. */
 export class SessionInput {
   private buffer = '';
@@ -28,7 +30,7 @@ export class SessionInput {
     this.failure = new CliError(
       'usage',
       'SESSION_INPUT_LIMIT',
-      'JSONL input exceeds 64 KiB per message or eight queued messages.',
+      'JSONL input exceeds 32 MiB per message or eight queued messages.',
     );
     this.input.pause();
     this.fail(this.failure);
@@ -36,17 +38,23 @@ export class SessionInput {
   }
   private data = (chunk: Buffer | string) => {
     if (this.failure) return;
-    this.buffer += typeof chunk === 'string' ? chunk : this.decoder.write(chunk);
-    if (Buffer.byteLength(this.buffer) > 512 * 1024) return this.rejectInput();
-    let newline = this.buffer.indexOf('\n');
-    while (newline >= 0) {
-      const line = this.buffer.slice(0, newline);
-      this.buffer = this.buffer.slice(newline + 1);
-      if (Buffer.byteLength(line) > 64 * 1024 || this.queue.length >= 8) return this.rejectInput();
+    const text = typeof chunk === 'string' ? chunk : this.decoder.write(chunk);
+    let offset = 0;
+    while (offset < text.length) {
+      const newline = text.indexOf('\n', offset);
+      if (newline < 0) {
+        this.buffer += text.slice(offset);
+        if (Buffer.byteLength(this.buffer, 'utf8') > MAX_SESSION_MESSAGE_BYTES)
+          return this.rejectInput();
+        break;
+      }
+      const line = this.buffer + text.slice(offset, newline);
+      this.buffer = '';
+      if (Buffer.byteLength(line, 'utf8') > MAX_SESSION_MESSAGE_BYTES || this.queue.length >= 8)
+        return this.rejectInput();
       this.queue.push(line);
-      newline = this.buffer.indexOf('\n');
+      offset = newline + 1;
     }
-    if (Buffer.byteLength(this.buffer) > 64 * 1024) return this.rejectInput();
     this.wake?.();
   };
   private end = () => {
@@ -110,31 +118,104 @@ export class SessionInput {
 
 interface Request {
   id: string;
-  method: 'snapshot' | 'act' | 'close';
+  method: 'snapshot' | 'act' | 'close' | 'capabilities' | 'call' | 'task' | 'cancel' | 'events';
   steps?: unknown;
+  operation?: string;
+  args?: unknown[];
+  taskId?: string;
+  after?: number;
+  limit?: number;
 }
 export function parseSessionRequest(line: string): Request {
   const value: unknown = JSON.parse(line);
   if (!value || typeof value !== 'object') throw new Error('Invalid request');
   const record = value as Record<string, unknown>;
+  const method = record['method'];
+  const allowedKeys: Record<string, string[]> = {
+    snapshot: [],
+    act: ['steps'],
+    close: [],
+    capabilities: [],
+    call: ['operation', 'args'],
+    task: ['taskId'],
+    cancel: ['taskId'],
+    events: ['after', 'limit'],
+  };
   if (
     record['schemaVersion'] !== 1 ||
     typeof record['id'] !== 'string' ||
     !/^[\w-]{1,64}$/.test(record['id']) ||
-    !['snapshot', 'act', 'close'].includes(String(record['method'])) ||
+    typeof method !== 'string' ||
+    !Object.hasOwn(allowedKeys, method) ||
     Object.keys(record).some(
-      (key) =>
-        ![
-          'schemaVersion',
-          'id',
-          'method',
-          ...(record['method'] === 'act' ? ['steps'] : []),
-        ].includes(key),
+      (key) => !['schemaVersion', 'id', 'method', ...(allowedKeys[method] ?? [])].includes(key),
     ) ||
-    (record['method'] === 'act' && !Array.isArray(record['steps']))
+    (method === 'act' && !Array.isArray(record['steps'])) ||
+    (method === 'call' &&
+      (typeof record['operation'] !== 'string' ||
+        record['operation'].length > 160 ||
+        (record['args'] !== undefined && !Array.isArray(record['args'])))) ||
+    (['task', 'cancel'].includes(method) &&
+      (typeof record['taskId'] !== 'string' || !/^[\w-]{1,64}$/.test(record['taskId']))) ||
+    (method === 'events' &&
+      ((record['after'] !== undefined &&
+        (!Number.isSafeInteger(record['after']) || (record['after'] as number) < 0)) ||
+        (record['limit'] !== undefined &&
+          (!Number.isSafeInteger(record['limit']) ||
+            (record['limit'] as number) < 1 ||
+            (record['limit'] as number) > 100))))
   )
     throw new Error('Invalid request');
   return record as unknown as Request;
+}
+
+const MAX_SESSION_RESPONSE_BYTES = MAX_SESSION_MESSAGE_BYTES;
+
+function operationFailure(error: unknown): CliError {
+  const known = new Map<string, { category: 'task' | 'unsupported'; message: string }>([
+    ['OPERATION_UNKNOWN', { category: 'task', message: 'Unknown debug operation.' }],
+    ['OPERATION_KIND', { category: 'task', message: 'This operation is an event subscription.' }],
+    ['OPERATION_UNSUPPORTED', { category: 'unsupported', message: 'Operation is unavailable.' }],
+    [
+      'MODEL_MODE_REQUIRED',
+      { category: 'unsupported', message: 'Select fixture or live model mode for this operation.' },
+    ],
+    [
+      'LIVE_MODE_REQUIRED',
+      { category: 'unsupported', message: 'This operation requires explicit live model mode.' },
+    ],
+    ['INVALID_ARGUMENTS', { category: 'task', message: 'Operation arguments are invalid.' }],
+    ['ARGUMENTS_TOO_LARGE', { category: 'task', message: 'Operation arguments exceed 28 MiB.' }],
+    [
+      'TASK_LIMIT',
+      { category: 'task', message: 'The session already has eight active operations.' },
+    ],
+    ['TASK_UNKNOWN', { category: 'task', message: 'Unknown or expired operation task.' }],
+    [
+      'TASK_NOT_CANCELLABLE',
+      {
+        category: 'unsupported',
+        message: 'This operation cannot be cancelled through the protocol.',
+      },
+    ],
+    [
+      'CANCEL_UNAVAILABLE',
+      { category: 'unsupported', message: 'Generation cancellation is unavailable.' },
+    ],
+    [
+      'INVALID_EVENT_CURSOR',
+      { category: 'task', message: 'Event cursor is outside this session.' },
+    ],
+    ['INVALID_EVENT_LIMIT', { category: 'task', message: 'Event limit must be from 1 to 100.' }],
+  ]);
+  if (error && typeof error === 'object') {
+    const code = (error as Record<string, unknown>)['code'];
+    if (typeof code === 'string') {
+      const detail = known.get(code);
+      if (detail) return new CliError(detail.category, code, detail.message);
+    }
+  }
+  return new CliError('task', 'OPERATION_FAILED', 'Debug operation failed.');
 }
 
 function frameResult(frame: UiDebugFrame): Result {
@@ -175,8 +256,25 @@ export async function runUiSession(
     args.timeoutMs,
   );
   const inbox = new SessionInput(input, (error) => controller.abort(error));
-  const emit = (type: 'ready' | 'response' | 'closed', id: string | null, result: Result) =>
-    write(`${JSON.stringify({ ...envelope('debug session', result), type, id })}\n`);
+  const emit = (type: 'ready' | 'response' | 'closed', id: string | null, result: Result) => {
+    const response = { ...envelope('debug session', result), type, id };
+    let serialized = JSON.stringify(response);
+    if (Buffer.byteLength(serialized, 'utf8') > MAX_SESSION_RESPONSE_BYTES) {
+      serialized = JSON.stringify({
+        ...envelope('debug session', {
+          data: undefined,
+          error: new CliError(
+            'task',
+            'SESSION_RESPONSE_TOO_LARGE',
+            'Session response exceeded the 32 MiB limit.',
+          ),
+        }),
+        type,
+        id,
+      });
+    }
+    write(`${serialized}\n`);
+  };
   let result: Result;
   let terminalError: CliError | undefined;
   try {
@@ -207,7 +305,14 @@ export async function runUiSession(
             data: {
               ...initial,
               protocol: {
-                methods: ['snapshot', 'act', 'close'],
+                methods: [
+                  'snapshot',
+                  'act',
+                  'close',
+                  ...(session.capabilities
+                    ? ['capabilities', 'call', 'task', 'cancel', 'events']
+                    : []),
+                ],
                 maxRequests: 200,
                 maxSteps: 200,
                 idleTimeoutMs: args.idleTimeoutMs ?? 300_000,
@@ -238,7 +343,7 @@ export async function runUiSession(
                 error: new CliError(
                   'usage',
                   'INVALID_SESSION_REQUEST',
-                  'Use schemaVersion 1, a unique id and snapshot/act/close; act requires 1–16 valid steps (200 per session).',
+                  'Use schemaVersion 1, a unique id and a supported session method; act requires 1–16 valid steps (200 per session).',
                 ),
               });
               continue;
@@ -246,6 +351,69 @@ export async function runUiSession(
             if (request.method === 'close') {
               emit('response', request.id, { data: { closing: true } });
               return;
+            }
+            const operationMethod =
+              request.method === 'capabilities' ||
+              request.method === 'call' ||
+              request.method === 'task' ||
+              request.method === 'cancel' ||
+              request.method === 'events';
+            if (operationMethod) {
+              try {
+                if (request.method === 'capabilities') {
+                  if (!session.capabilities)
+                    throw new CliError(
+                      'unsupported',
+                      'SESSION_METHOD_UNSUPPORTED',
+                      'This host does not support operation capabilities.',
+                    );
+                  emit('response', request.id, { data: { operations: session.capabilities() } });
+                } else if (request.method === 'call') {
+                  if (!session.call)
+                    throw new CliError(
+                      'unsupported',
+                      'SESSION_METHOD_UNSUPPORTED',
+                      'This host does not support operation calls.',
+                    );
+                  emit('response', request.id, {
+                    data: session.call(request.operation ?? '', request.args ?? []),
+                  });
+                } else if (request.method === 'task') {
+                  if (!session.task)
+                    throw new CliError(
+                      'unsupported',
+                      'SESSION_METHOD_UNSUPPORTED',
+                      'This host does not support operation tasks.',
+                    );
+                  emit('response', request.id, { data: session.task(request.taskId ?? '') });
+                } else if (request.method === 'cancel') {
+                  if (!session.cancel)
+                    throw new CliError(
+                      'unsupported',
+                      'SESSION_METHOD_UNSUPPORTED',
+                      'This host does not support task cancellation.',
+                    );
+                  emit('response', request.id, {
+                    data: await session.cancel(request.taskId ?? ''),
+                  });
+                } else {
+                  if (!session.events)
+                    throw new CliError(
+                      'unsupported',
+                      'SESSION_METHOD_UNSUPPORTED',
+                      'This host does not support operation events.',
+                    );
+                  emit('response', request.id, {
+                    data: session.events(request.after ?? 0, request.limit ?? 100),
+                  });
+                }
+              } catch (error) {
+                emit('response', request.id, {
+                  data: undefined,
+                  error: error instanceof CliError ? error : operationFailure(error),
+                });
+              }
+              continue;
             }
             const timer = setTimeout(
               () =>

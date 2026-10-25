@@ -29,6 +29,7 @@ import {
   type Config,
   deriveResourceStateFromChatRows,
   GeneratePayloadV1,
+  isUserCancellation,
   ListActiveMessagesInputV1,
   summarizeUsageBudget,
   type UsageTotals,
@@ -1595,17 +1596,21 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               wire: active.wire,
             });
             const rethrow = failure.error;
-            logIpc.error('generate.fail', {
-              generationId: id,
-              ms: Date.now() - t0,
-              provider: active.model.provider,
-              modelId: active.model.modelId,
-              baseUrl: baseUrl ?? '<default>',
-              status: failure.upstreamStatus,
-              message: rethrow instanceof Error ? rethrow.message : String(rethrow),
-              code: rethrow instanceof CodesignError ? rethrow.code : undefined,
-            });
-            recordFinalError('generate', id, rethrow);
+            const cancelled = isUserCancellation(rethrow, controller.signal);
+            logIpc[cancelled ? 'info' : 'error'](
+              cancelled ? 'generate.cancelled' : 'generate.fail',
+              {
+                generationId: id,
+                ms: Date.now() - t0,
+                provider: active.model.provider,
+                modelId: active.model.modelId,
+                baseUrl: baseUrl ?? '<default>',
+                status: failure.upstreamStatus,
+                message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+                code: rethrow instanceof CodesignError ? rethrow.code : undefined,
+              },
+            );
+            if (!cancelled) recordFinalError('generate', id, rethrow);
             throw rethrow;
           } finally {
             clearTimeoutGuard();
@@ -1760,18 +1765,22 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               wire: active.wire,
             });
             const rethrow = failure.error;
-            logIpc.error('applyComment.fail', {
-              generationId: id,
-              ms: Date.now() - t0,
-              provider: active.model.provider,
-              modelId: active.model.modelId,
-              baseUrl: baseUrl ?? '<default>',
-              status: failure.upstreamStatus,
-              selector: payload.selection.selector,
-              message: rethrow instanceof Error ? rethrow.message : String(rethrow),
-              code: rethrow instanceof CodesignError ? rethrow.code : undefined,
-            });
-            recordFinalError('apply-comment', id, rethrow);
+            const cancelled = isUserCancellation(rethrow, controller.signal);
+            logIpc[cancelled ? 'info' : 'error'](
+              cancelled ? 'applyComment.cancelled' : 'applyComment.fail',
+              {
+                generationId: id,
+                ms: Date.now() - t0,
+                provider: active.model.provider,
+                modelId: active.model.modelId,
+                baseUrl: baseUrl ?? '<default>',
+                status: failure.upstreamStatus,
+                selector: payload.selection.selector,
+                message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+                code: rethrow instanceof CodesignError ? rethrow.code : undefined,
+              },
+            );
+            if (!cancelled) recordFinalError('apply-comment', id, rethrow);
             throw rethrow;
           } finally {
             clearTimeoutGuard();

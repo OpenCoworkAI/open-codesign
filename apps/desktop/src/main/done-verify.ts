@@ -265,7 +265,19 @@ async function verifyWithSystemChrome(
   } finally {
     await closePage(page);
     await closeBrowser(browser);
-    await rm(userDataDir, { recursive: true, force: true });
+    try {
+      await rm(userDataDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+    } catch (err) {
+      warnings.push({
+        message: `Could not remove temporary browser profile: ${toErrorMessage(err)}`,
+        source: 'cleanup',
+      });
+    }
   }
 
   return { errors, warnings };

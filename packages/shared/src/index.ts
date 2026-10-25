@@ -308,7 +308,7 @@ export {
   modelsEndpointUrl,
   stripInferenceEndpointSuffix,
 } from './base-url';
-export { CodesignError } from './codesign-error';
+export { CodesignError, isUserCancellation } from './codesign-error';
 export type {
   Config,
   ConfigV3,

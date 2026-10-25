@@ -113,7 +113,7 @@ Every stdout line is a protocol object, without progress logs:
 | `type` | Meaning |
 | --- | --- |
 | `ready` | App initialized; `id: null`; `data` has the initial screenshot/elements and limits. |
-| `response` | Echoes the request `id`; contains a screenshot, steps, new errors since the previous frame, total error count and current Windows observation. |
+| `response` | Echoes the request `id`; observation/action responses contain a screenshot, steps and errors; product API responses contain capabilities, task state or events. |
 | `closed` | Cleanup has finished; `id: null`; `data` contains the final report and completed Windows observation. Setup failures may omit `data`. |
 
 Messages retain the CLI's `schemaVersion`, `command`, `ok`, `data` and safe `error` envelope.
@@ -127,7 +127,7 @@ and the agent may inspect/recover the UI. Final `report.json` retains all failed
 so the final process exits 5/6 even if later operations succeeded. Protocol-only validation
 errors do not mark UI verification as failed. The report never silently discards failures.
 
-Limits: 64 KiB per JSONL message, eight queued messages, 200 requests including malformed
+Limits: 32 MiB per JSONL message, eight queued messages, 200 requests including malformed
 ones, and 200 submitted steps. IDs are unique, 1–64 ASCII letters/digits/underscore/hyphen.
 Default lifetime is 30 minutes (`--timeout-ms`), default input idle timeout is five minutes
 (`--idle-timeout-ms`); both accept 1–3600000 ms. Each action/observation request has a
@@ -231,12 +231,18 @@ custom headers/endpoints, and cannot combine with `--credential-state`. Stored t
 included in redaction, excluded from evidence and removed during cleanup. Use only a login
 whose model access you have authorized; this consumes that account's model allowance.
 
+See [Background product API](BACKGROUND_API.md) for structured product calls, capability
+discovery, asynchronous tasks, event observation, and an isolated export destination.
+
 This mode reuses `codesign:v1:generate`, the production core agent, pi provider streams,
 durable run/session lifecycle, tools and preview verifier. The controlled model replaces
 only the pi stream; it does not fake IPC responses or renderer state. New commands requiring
-permission remain gated; permission approvals, reference-URL capture, attachments, image
-generation configuration, native dialogs, config changes and external app opening are not
-enabled. A blocked operation is recorded; do not try to approve it through a foreground UI.
+permission remain gated. Attachments must come from the temporary instance; reference-URL
+acquisition requires live mode. The API covers the core design workflow. Export saves use
+a single disposable destination; other native dialogs, clipboard and shell effects are
+blocked. Permission approvals that could execute arbitrary system commands remain blocked.
+A blocked operation is recorded;
+do not try to approve it through a foreground UI.
 There is no standalone `run` command or second MCP/tool implementation.
 
 Limits apply across title/router/generation calls: 24 calls per session, 4,096 output tokens
@@ -297,11 +303,13 @@ or cursor position; doing so would interfere with the user's own activity.
 
 - This is an unpackaged development host. The normal desktop launch remains unchanged.
 - Each run gets new config, home, Electron user/session data, logs and Documents paths.
-  Credentials and Node injection settings are not inherited. Except for the explicit selected
-  model configuration above, model/OAuth/config-import,
-  native dialogs, external opening, clipboard operations, updates and unsupported IPC
-  calls are blocked. The supported IPC calls still execute their original validation and
-  business logic. Only automatically allocated temporary workspaces may be created.
+  Credentials and Node injection settings are not inherited. Except for explicitly selected
+  live credentials, configuration imports use only the temporary home. Structured operations
+  execute the original preload wrappers, IPC validation and business logic. Workspaces and
+  selected paths must remain inside the temporary root. File dialogs and clipboard use
+  isolated fixture adapters; external opening records an effect without launching an app.
+  Model and provider-network operations require their advertised mode. Interactive OAuth,
+  foreground focus, developer tools, updates and unknown IPC operations remain blocked.
 - Network page requests are blocked. The debug protocol listens on a temporary loopback
   port for the lifetime of this disposable instance; it is not a remote service or MCP
   endpoint. Do not expose or forward that port.

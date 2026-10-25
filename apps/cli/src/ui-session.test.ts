@@ -3,7 +3,7 @@ import { validatePreviewInput } from '@open-codesign/core';
 import { describe, expect, it } from 'vitest';
 import type { UiDebugFrame, UiDebugHost, UiDebugReport } from '../../desktop/src/debug/contract';
 import { parseArguments } from './arguments';
-import { parseSessionRequest, runUiSession } from './ui-session';
+import { MAX_SESSION_MESSAGE_BYTES, parseSessionRequest, runUiSession } from './ui-session';
 
 const frame = (): UiDebugFrame => ({
   screenshot: 'test.png',
@@ -15,7 +15,12 @@ const frame = (): UiDebugFrame => ({
   errorsTruncated: false,
   windows: { platform: 'test', available: false },
 });
-function harness(extraArgs: string[] = []) {
+function harness(
+  extraArgs: string[] = [],
+  includeOperations = true,
+  capabilityCount = 1,
+  capabilityReasonLength = 128,
+) {
   const input = new PassThrough();
   const controller = new AbortController();
   const messages: Record<string, unknown>[] = [];
@@ -52,6 +57,74 @@ function harness(extraArgs: string[] = []) {
             actions++;
             return frame();
           },
+          ...(includeOperations
+            ? {
+                capabilities: () =>
+                  Array.from({ length: capabilityCount }, (_, index) => ({
+                    name: capabilityCount === 1 ? 'files.read' : `files.read.${index}`,
+                    channel: 'files:read',
+                    kind: 'call' as const,
+                    domain: 'files',
+                    mode: 'local' as const,
+                    available: true,
+                    reason: 'x'.repeat(capabilityReasonLength),
+                    parameters: [],
+                  })),
+                call: (operation: string, args: unknown[]) => {
+                  if (operation !== 'files.read')
+                    throw Object.assign(new Error('do not expose arbitrary messages'), {
+                      code: 'OPERATION_UNKNOWN',
+                    });
+                  return {
+                    taskId: 'task-1',
+                    operation,
+                    status: 'running' as const,
+                    startedAt: new Date(0).toISOString(),
+                    args,
+                  };
+                },
+                task: (taskId: string) => {
+                  if (taskId !== 'task-1')
+                    throw Object.assign(new Error('do not expose arbitrary messages'), {
+                      code: 'TASK_UNKNOWN',
+                    });
+                  return {
+                    taskId,
+                    operation: 'files.read',
+                    status: 'completed' as const,
+                    startedAt: new Date(0).toISOString(),
+                    finishedAt: new Date(1).toISOString(),
+                    result: 'content',
+                  };
+                },
+                cancel: async (taskId: string) => {
+                  if (taskId !== 'task-1')
+                    throw Object.assign(new Error('do not expose arbitrary messages'), {
+                      code: 'TASK_UNKNOWN',
+                    });
+                  return {
+                    taskId,
+                    operation: 'files.read',
+                    status: 'running' as const,
+                    startedAt: new Date(0).toISOString(),
+                    cancellationRequested: true,
+                  };
+                },
+                events: (after: number, limit = 100) => ({
+                  after,
+                  cursor: after + 1,
+                  dropped: 0,
+                  events: [
+                    {
+                      cursor: after + 1,
+                      type: 'operation.started',
+                      operation: 'files.read',
+                      at: new Date(0).toISOString(),
+                    },
+                  ].slice(0, limit),
+                }),
+              }
+            : {}),
         });
       } catch {
         report.ok = false;
@@ -88,6 +161,7 @@ function harness(extraArgs: string[] = []) {
       input.write(
         `${JSON.stringify({ schemaVersion: 1, id, method, ...(steps === undefined ? {} : { steps }) })}\n`,
       ),
+    sendRequest: (request: Record<string, unknown>) => input.write(`${JSON.stringify(request)}\n`),
     async until(count: number) {
       while (messages.length < count)
         await new Promise<void>((resolve) => {
@@ -121,6 +195,9 @@ it.each([
   'null',
   '{"schemaVersion":1,"id":"x","method":"eval"}',
   '{"schemaVersion":1,"id":"x","method":"snapshot","code":"secret"}',
+  '{"schemaVersion":1,"id":"x","method":"call","operation":"files.read","code":"secret"}',
+  '{"schemaVersion":1,"id":"x","method":"events","after":-1}',
+  '{"schemaVersion":1,"id":"x","method":"task","taskId":"bad id"}',
 ])('rejects invalid protocol requests without executing them: %s', (line) =>
   expect(() => parseSessionRequest(line)).toThrow());
 
@@ -154,6 +231,109 @@ it('preserves multi-byte input, rejects duplicate IDs and invalid steps, and con
   expect(run.cleaned).toBe(true);
 });
 
+it('exposes operation capabilities, async calls, task state, cancellation, and events over JSONL', async () => {
+  const run = harness();
+  await run.until(1);
+  run.sendRequest({ schemaVersion: 1, id: 'caps', method: 'capabilities' });
+  run.sendRequest({
+    schemaVersion: 1,
+    id: 'call',
+    method: 'call',
+    operation: 'files.read',
+    args: ['App.jsx'],
+  });
+  run.sendRequest({ schemaVersion: 1, id: 'task', method: 'task', taskId: 'task-1' });
+  run.sendRequest({ schemaVersion: 1, id: 'cancel', method: 'cancel', taskId: 'task-1' });
+  run.sendRequest({ schemaVersion: 1, id: 'events', method: 'events', after: 0, limit: 10 });
+  await run.until(6);
+  run.sendRequest({ schemaVersion: 1, id: 'bad-op', method: 'call', operation: 'constructor' });
+  await run.until(7);
+  run.send('close', 'close');
+  expect(await run.done).toBe(0);
+  expect(run.messages[1]).toMatchObject({
+    type: 'response',
+    id: 'caps',
+    data: { operations: [{ name: 'files.read', kind: 'call' }] },
+  });
+  expect(run.messages[2]).toMatchObject({
+    type: 'response',
+    id: 'call',
+    data: { status: 'running' },
+  });
+  expect(run.messages[3]).toMatchObject({
+    type: 'response',
+    id: 'task',
+    data: { result: 'content' },
+  });
+  expect(run.messages[4]).toMatchObject({
+    type: 'response',
+    id: 'cancel',
+    data: { cancellationRequested: true },
+  });
+  expect(run.messages[5]).toMatchObject({ type: 'response', id: 'events', data: { cursor: 1 } });
+  expect(run.messages[6]).toMatchObject({
+    type: 'response',
+    id: 'bad-op',
+    error: { code: 'OPERATION_UNKNOWN', message: 'Unknown debug operation.' },
+  });
+});
+
+it('keeps compatibility with hosts that implement only snapshot/act/close', async () => {
+  const run = harness([], false);
+  await run.until(1);
+  expect(
+    (run.messages[0]?.['data'] as { protocol: { methods: string[] } }).protocol.methods,
+  ).toEqual(['snapshot', 'act', 'close']);
+  run.sendRequest({ schemaVersion: 1, id: 'caps', method: 'capabilities' });
+  await run.until(2);
+  expect(run.messages[1]).toMatchObject({
+    type: 'response',
+    id: 'caps',
+    error: { code: 'SESSION_METHOD_UNSUPPORTED' },
+  });
+  run.send('close', 'close');
+  expect(await run.done).toBe(0);
+});
+
+it('accepts large JSONL calls and responses above the former 64 KiB and 1 MiB limits', async () => {
+  const run = harness();
+  await run.until(1);
+  const content = 'x'.repeat(2 * 1024 * 1024);
+  run.sendRequest({
+    schemaVersion: 1,
+    id: 'large',
+    method: 'call',
+    operation: 'files.read',
+    args: [content],
+  });
+  await run.until(2);
+  const response = run.messages[1];
+  expect(response).toMatchObject({
+    type: 'response',
+    id: 'large',
+    ok: true,
+  });
+  expect((response?.['data'] as { args: unknown[] }).args[0]).toBe(content);
+  expect(Buffer.byteLength(JSON.stringify(response), 'utf8')).toBeGreaterThan(1024 * 1024);
+  run.send('close', 'close');
+  await run.done;
+});
+
+it('caps JSONL responses above 32 MiB with a fixed safe error', async () => {
+  const run = harness([], true, 1, MAX_SESSION_MESSAGE_BYTES);
+  await run.until(1);
+  run.sendRequest({ schemaVersion: 1, id: 'large', method: 'capabilities' });
+  await run.until(2);
+  expect(run.messages[1]).toMatchObject({
+    type: 'response',
+    id: 'large',
+    error: { code: 'SESSION_RESPONSE_TOO_LARGE' },
+  });
+  run.send('close', 'close');
+  await run.done;
+  expect(Buffer.byteLength(JSON.stringify(run.messages[1]), 'utf8')).toBeLessThan(1024 * 1024);
+});
+
 it('drains queued commands on EOF then cleans up', async () => {
   const run = harness();
   run.send('one', 'snapshot');
@@ -181,7 +361,7 @@ describe('terminal conditions preserve cleanup and stable codes', () => {
     );
     await run.until(1);
     if (reason === 'cancel') run.controller.abort();
-    if (reason === 'overlarge') run.input.write('x'.repeat(65537));
+    if (reason === 'overlarge') run.input.write('x'.repeat(MAX_SESSION_MESSAGE_BYTES + 1));
     if (reason === 'queue')
       run.input.write(
         `${Array.from({ length: 10 }, (_, index) =>

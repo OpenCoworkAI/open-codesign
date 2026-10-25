@@ -70,12 +70,26 @@ export async function runCli(
         );
       return await (await import('./ui-session')).runUiSession(args, io.stdin, io.stdout, signal);
     }
-    if (command === 'help') result = { data: { help: HELP } };
+    if (args.command === 'debug capabilities') {
+      const catalogueUrl = new URL('../../desktop/src/debug/operations.ts', import.meta.url);
+      const { DEBUG_OPERATIONS } = await import(catalogueUrl.href);
+      const operations = DEBUG_OPERATIONS as ReadonlyArray<{
+        mode: 'local' | 'model' | 'live' | 'unsupported';
+      }>;
+      result = {
+        data: {
+          operations: operations.map((operation) => ({
+            ...operation,
+            available: operation.mode === 'local',
+          })),
+        },
+      };
+    } else if (command === 'help') result = { data: { help: HELP } };
     else if (command === 'unsupported')
       throw new CliError(
         'unsupported',
         'UNSUPPORTED',
-        'Only doctor, workspace inspect, export html, debug ui and debug session are available. Design execution and session status require the Electron permission, credential and session lifecycle; MCP transport and other export formats are not implemented. No GUI fallback was attempted.',
+        'Only doctor, workspace inspect, export html, debug capabilities, debug ui and debug session are available. Design execution and session status require the Electron permission, credential and session lifecycle; MCP transport and other export formats are not implemented. No GUI fallback was attempted.',
       );
     else result = await execute(args, signal, dispatch);
   } catch (error) {
