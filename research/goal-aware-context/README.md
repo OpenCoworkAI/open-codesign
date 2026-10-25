@@ -2,6 +2,8 @@
 
 Branch: `research/goal-aware-context`. Research-only, with no changes to pi compaction or persisted application memory.
 
+Next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
+
 ## Hypothesis
 
 Explicitly preserving accepted design decisions for the active goal may retain constraints better than selecting recent history alone under a fixed context budget.
