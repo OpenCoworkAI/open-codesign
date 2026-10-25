@@ -1,13 +1,13 @@
 # Implementation plan: agent behavior evaluation
 
-Status: proposed next work, not implemented by this document.
+Status: first slice implemented; runtime tool-event evaluation and a held-out corpus remain proposed work.
 Code inspection baseline: `4cf33932edc5f687e3cf7190261ebbb02c898d08`.
-The current branch contains a runnable offline experiment; its synthetic results are calibration evidence, not measured model gains.
+The current branch contains offline controls plus an explicit live-model runner; synthetic results remain calibration evidence, not measured model gains.
 Before a production change, refresh against main and re-check these entry points.
 
 ## First implementation slice: run real continuations
 
-Add a research-only `model-runner.ts` and run manifest alongside the current scorer.
+Implemented in `model-runner.ts`, `model-config.ts` and `model-cli.ts`, alongside the current scorer. See the [run instructions](./README.md#run-a-model-evaluation).
 Use the existing `@open-codesign/providers` completion interface for the structured next-decision experiment; it already wraps pi-ai.
 Only exported blind tasks go into prompts. Keep policies, positive/negative controls and evaluator questions out of model context.
 
@@ -22,6 +22,9 @@ Acceptance:
 - Cancellation and call limits prevent further requests.
 - Same fixture/prompt hashes can be compared across runs.
 - Tests mock the core/provider boundary, not a provider SDK.
+
+Validation: 56 focused Vitest checks plus strict TypeScript and lint. The CLI dry run was exercised. Live endpoint execution still requires an explicit model configuration and its credential; no real-model score has been recorded.
+The first pilot should select a small case subset, use one trial, and keep the call cap equal to its case count. Then freeze a full run before comparing prompt variants.
 
 ## Second slice: connect decisions to actual tool events
 

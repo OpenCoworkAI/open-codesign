@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "allowJs": true,
+    "checkJs": false,
+    "types": ["node"],
+    "paths": { "vitest": ["../../packages/providers/node_modules/vitest/dist/index.d.ts"] }
+  },
+  "include": ["./*.ts", "./fixtures.mjs", "./evaluate.mjs"]
+}

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "model": { "provider": "openai", "modelId": "REPLACE_WITH_EXACT_MODEL_ID" },
+  "credentialEnv": "OPENAI_API_KEY",
+  "promptVariant": "baseline",
+  "trials": 1,
+  "maxCalls": 20,
+  "maxOutputTokens": 1024,
+  "timeoutMs": 60000
+}
