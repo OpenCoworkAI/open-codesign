@@ -23,7 +23,7 @@ Acceptance:
 - Same fixture/prompt hashes can be compared across runs.
 - Tests mock the core/provider boundary, not a provider SDK.
 
-Validation: 56 focused Vitest checks plus strict TypeScript and lint. The CLI dry run was exercised. Live endpoint execution still requires an explicit model configuration and its credential; no real-model score has been recorded.
+Validation: 56 focused Vitest checks plus strict TypeScript and lint. The CLI dry run was exercised. A subsequent [live-model pilot](./PILOT_RESULTS.md) completed 12 requests with the locally configured Codex model, with both variants passing 6/6 synthetic cases. A harder held-out set is needed before comparing prompt quality.
 The first pilot should select a small case subset, use one trial, and keep the call cap equal to its case count. Then freeze a full run before comparing prompt variants.
 
 ## Second slice: connect decisions to actual tool events

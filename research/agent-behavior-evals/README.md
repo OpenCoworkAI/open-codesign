@@ -4,6 +4,8 @@ Branch: `research/agent-behavior-evals`. Research runner with offline controls a
 
 Progress and next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
 
+First live-model comparison: [gpt-6.1-sol pilot results](./PILOT_RESULTS.md). Both prompt variants passed 6/6 synthetic cases; no accuracy gain was observed.
+
 ## Hypothesis
 
 Short continuations at critical design-agent decision points can expose intent violations that final artifact screenshots miss.
@@ -20,7 +22,7 @@ A deterministic scorer checks action, status, exact target set, changes and sour
 ## First observations
 
 24 Vitest checks passed. All 20 positive controls were accepted and all 20 negative controls were rejected.
-These figures measure scorer calibration against authored expectations. No model has been evaluated; there is no measured model pass rate or improvement.
+These initial figures measure scorer calibration against authored expectations, not model performance. The later live-model pilot is reported separately above.
 This is inspired by decision-point continuation, not a reproduction of TraceDance's retrieval, LLM confirmation or benchmark.
 
 ## Reproduce
@@ -106,7 +108,7 @@ Configuration:
 - `caseIds`: optional distinct subset for a small pilot; omitted means all 20 cases.
 - Optional `baseUrl`, `wire` and `reasoning` use the existing provider interface. URLs cannot contain user/password, query or fragment. No custom header or keyless auth support is added in this slice. Omitted reasoning uses the provider's existing default behavior.
 
-The cap counts provider-completion invocations, not hidden transport retries inside upstream libraries or dollars. The runner itself does not retry, repair JSON, strip code fences or substitute a model. A timeout requests abort and stops scheduling further calls because the remote request may still be running. Ctrl+C requests cancellation and flushes remaining rows as skipped.
+The cap counts provider-completion invocations, not hidden transport retries inside upstream libraries or dollars. `maxOutputTokens` is a requested provider option: the installed `openai-codex-responses` adapter does not forward a server-side output-token cap. The runner itself does not retry, repair JSON, strip code fences or substitute a model. A timeout requests abort and stops scheduling further calls because the remote request may still be running. Ctrl+C requests cancellation and flushes remaining rows as skipped.
 
 ## Evidence and score interpretation
 
@@ -122,7 +124,7 @@ Raw responses are retained except credential echoes. Provider exception text is 
 
 Exit codes: `0` = successful dry run or every scheduled case passed; `1` = behavior/response-format failures; `2` = configuration, provider, truncation, timeout or call-limit failure; `130` = cancellation.
 
-Runner validation on 2026-10-25: 56 focused Vitest checks, strict TypeScript and full-repository Biome checks; command-line dry-run exercised. Provider execution is tested at the existing completion boundary. An additional CLI smoke run used the real provider module with a deliberately unknown model ID: it produced a failed row with `PROVIDER_MODEL_UNKNOWN` and unknown usage, before any generation request. No live model endpoint was invoked and no model-quality result is claimed.
+Runner validation on 2026-10-25: 56 focused Vitest checks, strict TypeScript and full-repository Biome checks; command-line dry-run exercised. Provider execution is tested at the existing completion boundary. An additional CLI smoke run used the real provider module with a deliberately unknown model ID: it produced a failed row with `PROVIDER_MODEL_UNKNOWN` and unknown usage, before any generation request. A subsequent explicitly requested run completed 12 real model calls; see [pilot results](./PILOT_RESULTS.md) for the observed scores and limitations.
 
 ## Limits and next experiment
 
