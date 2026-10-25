@@ -11,6 +11,7 @@ export {
   CommentContentExpectations,
   commentContentFingerprint,
 } from './comment-content';
+export * from './debug-operations';
 export {
   SaveWebSearchSettingsInput,
   WEB_SEARCH_SETTINGS_CHANNELS,

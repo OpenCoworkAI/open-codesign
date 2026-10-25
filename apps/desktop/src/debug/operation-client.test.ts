@@ -231,13 +231,16 @@ describe('debug operation task execution', () => {
     expect(short.truncated).toBe(false);
   });
 
-  it('keeps redacted provider results pollable without wrapping the task as truncated', async () => {
+  it.each([
+    true,
+    false,
+  ])('preserves requiresApiKey=%s while redacting provider credentials', async (requiresApiKey) => {
     const client = new DebugOperationClient(
       undefined,
       async () => [
         {
           provider: 'selected',
-          requiresApiKey: true,
+          requiresApiKey,
           apiKey: 'private-sentinel',
           defaultModel: 'model',
         },
@@ -253,7 +256,7 @@ describe('debug operation task execution', () => {
       result: [
         {
           provider: 'selected',
-          requiresApiKey: '[REDACTED]',
+          requiresApiKey,
           apiKey: '[REDACTED]',
           defaultModel: 'model',
         },
@@ -262,6 +265,35 @@ describe('debug operation task execution', () => {
     expect(task).not.toHaveProperty('truncated');
     expect(JSON.stringify(task)).not.toContain('private-sentinel');
     expect(client.task(started.taskId)).toEqual(task);
+  });
+
+  it.each([
+    'files.read',
+    'files.write',
+  ])('preserves raw source in %s results through repeated task polling', async (name) => {
+    const content =
+      '<style>:root{--color-token: #123456;}</style><script>const token = "label"; const authorization = "Bearer example-label";</script>';
+    const client = new DebugOperationClient(undefined, async () => ({
+      content,
+      apiKey: 'private-sentinel',
+      metadata: { authorization: 'Bearer private-sentinel' },
+    }));
+    const args = name === 'files.read' ? ['design', 'App.jsx'] : ['design', 'App.jsx', content];
+    const started = client.call(name, args);
+    await flush();
+    const task = client.task(started.taskId);
+    expect(task).toMatchObject({
+      status: 'completed',
+      result: {
+        content,
+        apiKey: '[REDACTED]',
+        metadata: { authorization: '[REDACTED]' },
+      },
+    });
+    expect(client.task(started.taskId)).toEqual(task);
+    expect(safeDebugValueDetailed({ content: 'Bearer private-sentinel' }).value).toEqual({
+      content: '[REDACTED]',
+    });
   });
 
   it('preserves a 2 MiB file result and represents void results using JSON null semantics', async () => {

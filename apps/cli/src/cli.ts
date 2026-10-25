@@ -1,4 +1,5 @@
 import type { Readable } from 'node:stream';
+import { DEBUG_OPERATIONS } from '@open-codesign/shared';
 import { type Arguments, HELP, parseArguments } from './arguments';
 import { CliError, checkCancelled, EXIT_CODES, envelope, type Result, safeError } from './protocol';
 
@@ -71,14 +72,9 @@ export async function runCli(
       return await (await import('./ui-session')).runUiSession(args, io.stdin, io.stdout, signal);
     }
     if (args.command === 'debug capabilities') {
-      const catalogueUrl = new URL('../../desktop/src/debug/operations.ts', import.meta.url);
-      const { DEBUG_OPERATIONS } = await import(catalogueUrl.href);
-      const operations = DEBUG_OPERATIONS as ReadonlyArray<{
-        mode: 'local' | 'model' | 'live' | 'unsupported';
-      }>;
       result = {
         data: {
-          operations: operations.map((operation) => ({
+          operations: DEBUG_OPERATIONS.map((operation) => ({
             ...operation,
             available: operation.mode === 'local',
           })),

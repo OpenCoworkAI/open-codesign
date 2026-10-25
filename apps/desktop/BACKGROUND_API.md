@@ -75,7 +75,10 @@ JSONL messages are limited to 32 MiB, individual argument strings to 2 MiB UTF-8
 to 28 MiB and task results to 31 MiB. Clipped results carry an explicit truncation envelope.
 There are at most eight active tasks and 32 completed results within a 64 MiB total budget.
 Events retain up to 256 entries within 512 KiB; inspect dropped-event metadata.
-Sensitive fields are redacted; use synthetic content for screenshots and files.
+Sensitive metadata fields, errors and events are redacted. `requiresApiKey` keeps its boolean
+type. File read/write result `content` is returned verbatim within the existing byte limits,
+so it can be reused for `expectedContent` and source edits. Use synthetic workspace content
+for tests; file content and screenshots can contain whatever the workspace contains.
 
 The Node workflow test exercises the real preload, business handlers, workspace and store,
 replacing Electron transport at its boundary. It verifies creation, file round trips,

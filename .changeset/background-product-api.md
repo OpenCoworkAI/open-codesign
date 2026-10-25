@@ -14,6 +14,8 @@ Run the core regressions through the original fixture mode and provide an explic
 opted-in live generation-to-HTML-export acceptance case using the selected stored config.
 Keep credential redaction from marking otherwise complete operation results as truncated,
 so provider discovery retains a pollable task status.
+Preserve raw file content for conditional edits while keeping provider metadata types
+and credential redaction intact. Share the static capability catalog between CLI and desktop.
 Allow long-running model operations to finish through the debug connection while preserving
 the model and session watchdogs.
 

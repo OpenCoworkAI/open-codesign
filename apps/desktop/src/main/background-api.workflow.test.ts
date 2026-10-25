@@ -104,7 +104,8 @@ async function callOperation(
 }
 
 function makeLargeJsxSource(targetBytes: number): string {
-  const header = 'export default function App() {\n  return <main>完整文件 中文工作流</main>;\n}\n';
+  const header =
+    'const labels = { authorization: "sample-label", token: "Bearer example-label" };\nconst css = ":root{--color-token: #123456;}";\nexport default function App() {\n  return <main>完整文件 中文工作流</main>;\n}\n';
   const line = '// 用真实 preload 与业务 IPC 往返验证中文和换行。\n';
   const lineBytes = Buffer.byteLength(line, 'utf8');
   let repetitions = Math.floor((targetBytes - Buffer.byteLength(header, 'utf8')) / lineBytes);
@@ -193,7 +194,8 @@ describe('background debug API business workflow', () => {
     ])) as { id: string; name: string; workspacePath: string };
     expect(created.workspacePath).toBe(normalizeWorkspacePath(workspacePath));
 
-    const source = 'export default function App() { return <main>Workflow</main>; }';
+    const source =
+      'const labels = { authorization: "sample-label" }; const css = ":root{--color-token: #123456;}"; export default function App() { return <main>Workflow</main>; }';
     await callOperation(client, 'files.write', [created.id, 'App.jsx', source]);
     await expect(readFile(path.join(workspacePath, 'App.jsx'), 'utf8')).resolves.toBe(source);
     await expect(

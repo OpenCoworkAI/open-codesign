@@ -20,7 +20,7 @@ export const DEBUG_MAX_EVENT_PAGE = 100;
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const SENSITIVE_KEY =
-  /(?:api.?key|authorization|headers?|http.?headers?|query.?params?|refresh.?token|access.?token|client.?secret|password|credential|ciphertext|secret)/i;
+  /^(?:api[_-]?key|authorization|headers?|http[_-]?headers?|query[_-]?params?|refresh[_-]?token|access[_-]?token|client[_-]?secret|password|credentials?|ciphertext|secret|token)$/i;
 const MAX_DEPTH = 16;
 const MAX_COLLECTION_ITEMS = 256;
 const MAX_STRING_LENGTH = DEBUG_MAX_STRING_BYTES;
@@ -75,6 +75,7 @@ function utf8Prefix(text: string, budget: number): string {
 export function safeDebugValueDetailed(
   value: unknown,
   maxBytes = DEBUG_MAX_TASK_RESULT_BYTES,
+  operationName?: string,
 ): SafeDebugValueResult {
   if (value === undefined) return { value: null, truncated: false, bytes: 0, limitBytes: maxBytes };
   const seen = new WeakSet<object>();
@@ -93,8 +94,9 @@ export function safeDebugValueDetailed(
     remainingBytes -= cost;
     return true;
   };
-  const clipString = (text: string): string => {
-    const clean = scrubDebugValueText(text);
+  const fileOperation = operationName === 'files.read' || operationName === 'files.write';
+  const clipString = (text: string, preserveSource = false): string => {
+    const clean = preserveSource ? text : scrubDebugValueText(text);
     const source = Buffer.from(clean, 'utf8');
     if (
       source.byteLength <= MAX_STRING_LENGTH &&
@@ -124,7 +126,7 @@ export function safeDebugValueDetailed(
   const visit = (current: unknown, depth: number, key = ''): unknown => {
     if (current === undefined) return null;
     if (SENSITIVE_KEY.test(key)) return clipString('[REDACTED]');
-    if (typeof current === 'string') return clipString(current);
+    if (typeof current === 'string') return clipString(current, fileOperation && key === 'content');
     if (current === null || typeof current === 'boolean') {
       if (consumeJson(current)) return current;
       truncated = true;
@@ -205,8 +207,12 @@ export function safeDebugValueDetailed(
   return { value: wrapped, truncated, bytes: inputBytes, limitBytes: maxBytes };
 }
 
-export function safeDebugValue(value: unknown, maxBytes = DEBUG_MAX_TASK_RESULT_BYTES): unknown {
-  return safeDebugValueDetailed(value, maxBytes).value;
+export function safeDebugValue(
+  value: unknown,
+  maxBytes = DEBUG_MAX_TASK_RESULT_BYTES,
+  operationName?: string,
+): unknown {
+  return safeDebugValueDetailed(value, maxBytes, operationName).value;
 }
 
 function encodedBytes(value: unknown): number {
@@ -500,7 +506,7 @@ export class DebugOperationClient {
         let finishedAt: string;
         let resultBytes: number;
         try {
-          safe = safeDebugValueDetailed(result, DEBUG_MAX_TASK_RESULT_BYTES);
+          safe = safeDebugValueDetailed(result, DEBUG_MAX_TASK_RESULT_BYTES, name);
           resultBytes = encodedBytes(safe.value);
           finishedAt = this.now().toISOString();
         } catch (issue) {
@@ -525,7 +531,11 @@ export class DebugOperationClient {
   task(taskId: string): DebugOperationTask {
     const task = this.tasks.get(taskId)?.public;
     if (!task) throw new DebugOperationError('TASK_UNKNOWN', 'Unknown or expired operation task.');
-    return safeDebugValue(task, DEBUG_MAX_TASK_RESULT_BYTES + 4096) as DebugOperationTask;
+    return safeDebugValue(
+      task,
+      DEBUG_MAX_TASK_RESULT_BYTES + 4096,
+      task.operation,
+    ) as DebugOperationTask;
   }
 
   async cancel(taskId: string): Promise<DebugOperationTask> {

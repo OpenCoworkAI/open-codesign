@@ -17,9 +17,8 @@ export function isUserCancellation(error: unknown, signal?: AbortSignal): boolea
     signal?.aborted === true &&
     error instanceof CodesignError &&
     error.code === ERROR_CODES.PROVIDER_ABORTED &&
-    !(
-      signal.reason instanceof CodesignError &&
-      signal.reason.code === ERROR_CODES.GENERATION_TIMEOUT
-    )
+    ((signal.reason instanceof DOMException && signal.reason.name === 'AbortError') ||
+      (signal.reason instanceof CodesignError &&
+        signal.reason.code === ERROR_CODES.PROVIDER_ABORTED))
   );
 }

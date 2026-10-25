@@ -21,4 +21,22 @@ describe('user generation cancellation', () => {
     timeout.abort(new CodesignError('Timed out', ERROR_CODES.GENERATION_TIMEOUT));
     expect(isUserCancellation(error, timeout.signal)).toBe(false);
   });
+
+  it.each([
+    new Error('Journal write failed'),
+    new Error('Generation timed out'),
+    new DOMException('Deadline exceeded', 'TimeoutError'),
+  ])('does not acknowledge an abort caused by %s as a user cancellation', (reason) => {
+    const controller = new AbortController();
+    controller.abort(reason);
+    const error = new CodesignError('Provider aborted', ERROR_CODES.PROVIDER_ABORTED);
+    expect(isUserCancellation(error, controller.signal)).toBe(false);
+  });
+
+  it('acknowledges an explicit caller cancellation reason', () => {
+    const error = new CodesignError('Caller cancelled', ERROR_CODES.PROVIDER_ABORTED);
+    const controller = new AbortController();
+    controller.abort(error);
+    expect(isUserCancellation(error, controller.signal)).toBe(true);
+  });
 });
