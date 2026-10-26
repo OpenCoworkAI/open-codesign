@@ -4,6 +4,8 @@ Branch: `research/scoped-design-edits`. Research-only; not exposed to the applic
 
 Next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
 
+The follow-up [host-bound edit API](./BOUND_EDIT.md) now removes paths, AST identities and source hashes from model-authored arguments. Its real-file controls verify that captured selections cannot silently move to a new revision. This API is still research-only and does not alter the earlier live-model scores.
+
 ## Real-model file pilot (2026-10-26)
 
 The new [pilot](./LIVE_PROTOCOL.md) executes proposals against isolated on-disk JSX files using the existing engine, compares identical proposals with and without a host selection grant, and allows one repair after refusal. [Results and limitations](./LIVE_RESULTS.md): Codex 6/6, Qwen 6/6, Gemma 5/6; the one Gemma source-hash error was also rejected by the base engine, and repair did not recover it. No incremental scope advantage was observed in this small, explicit-task sample. Application runtime integration remains unimplemented.
