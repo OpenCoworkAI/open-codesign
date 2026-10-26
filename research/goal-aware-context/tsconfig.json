@@ -11,5 +11,6 @@
       "zod": ["../../packages/shared/node_modules/zod"]
     }
   },
-  "include": ["./*.ts"]
+  "include": ["./*.ts"],
+  "exclude": ["./host*.ts"]
 }

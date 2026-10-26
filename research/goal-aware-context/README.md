@@ -2,7 +2,7 @@
 
 Branch: `research/goal-aware-context`. Research-only, with no changes to pi compaction or persisted application memory.
 
-Progress: production adapter and [corpus/comparison protocol](./CORPUS_PROTOCOL.md) are implemented. An evidence-aware draft oracle selector is now available; natural-language extraction and model/downstream experiments remain next in the [implementation plan](./IMPLEMENTATION_PLAN.md).
+Progress: production adapter and [corpus/comparison protocol](./CORPUS_PROTOCOL.md) are implemented. An evidence-aware draft oracle selector is now available; the planned frozen-corpus extraction and model/downstream experiments remain next in the [implementation plan](./IMPLEMENTATION_PLAN.md).
 
 ## Evidence-aware draft selector
 
@@ -22,7 +22,7 @@ The research adapter now calls the real [buildDesignContextPack](../../packages/
 - `production-fixtures.ts`: a deterministic synthetic conversation in the real `ChatMessageRow` format, with a fixed brief, preferences and workspace/resource state. Each call returns fresh input objects.
 - `run-production-baseline.ts`: exports the exact input and context pack, including the existing trace. Importing the module does not execute the CLI.
 
-The sample is synthetic calibration input, not a real session or a model-quality result. It does not import withheld questions or reference answers. The report's trace counts characters, not model tokens; it is not a measurement of the complete provider request. The complete-request budget interface and comparison rules are defined in the corpus protocol; actual model-token measurements and candidate compression remain future work.
+The sample is synthetic calibration input, not a real session or a model-quality result. It does not import withheld questions or reference answers. The report's trace counts characters, not model tokens; it is not a measurement of the complete provider request. The complete-request budget interface and comparison rules are defined in the corpus protocol; actual model-token measurements on the frozen corpus and natural-language candidate compression remain future work.
 
 From the repository root with Node 22 and pnpm 10.33.4:
 
@@ -37,7 +37,19 @@ pnpm exec biome check research/goal-aware-context
 
 Choose a new output file for every run. Existing output files are refused rather than overwritten. The runner performs no model calls and reads no provider credentials.
 
-The research Vitest config resolves workspace packages to this checkout's real source entry points. `RESEARCH_DEPENDENCY_ROOT` can still supply installed runtime dependencies; it does not select another checkout's production source. The full research test suite, strict TypeScript and the CLI commands above require the local frozen install.
+The research Vitest config resolves workspace packages to this checkout's real source entry points. `RESEARCH_DEPENDENCY_ROOT` can still supply installed runtime dependencies; it does not select another checkout's production source. The full research test suite, strict TypeScript and the CLI commands above require the local frozen install. The oracle/corpus experiment uses tsconfig.json; the separate host-state pilot retains its own strict host.tsconfig.json. Run both checks (pnpm exec tsc -p research/goal-aware-context/tsconfig.json and pnpm exec tsc -p research/goal-aware-context/host.tsconfig.json). The host pilot is excluded from the oracle configuration so its existing compiler settings remain explicit.
+
+The next [host-owned facts pilot](./HOST_PROTOCOL.md) separates model-compressed goals/preferences from program-maintained identities, observed source revisions and verification state. It exercises two multi-step scenarios at six checkpoints and a host gate that rejects stale callbacks and premature completion. See [results](./HOST_RESULTS.md); the v1 results below remain unchanged.
+
+The v2 run completed 70 real calls. Raw all-fields-correct scores (model-record → host-facts) were Codex 6/6 → 6/6, Qwen 3/6 → 6/6, Gemma 5/6 → 6/6. Qwen's two over-budget summaries count as failures, so this difference is partly budget compliance. No live premature completion or gate refusal occurred; independent controls test enforcement. These are checkpoint replays, not an autonomous end-to-end desktop run.
+
+## Real-model pilot (2026-10-26)
+
+A separate [live protocol](./LIVE_PROTOCOL.md) compares full histories, model-generated ordinary summaries and model-generated current-goal records across the same Codex, Qwen and Gemma models. Four original synthetic conversations cover superseded requirements, revocation, stale verification and design switching. Both compressed conditions have a 1,800-byte cap; the reader prompt stays identical and compression does not receive evaluator questions or labels. See [live results](./LIVE_RESULTS.md) for observed outcomes and limitations. This does not change application compaction or persisted memory.
+
+All models passed 4/4 full-history cases. Strict ordinary-summary / goal-record scores were Codex 4/4 / 3/4, Qwen 2/4 / 3/4, and Gemma 1/4 / 1/4. Several failures were naming/translation differences; others were actual omissions or cross-design confusion. The report reviews these separately without changing frozen scores. Goal records did not consistently outperform ordinary summaries, and generating a summary increased total work for a single resumption. Host-owned revision/verification fields are the next integration candidate.
+
+The deterministic observations below are the original structured-event experiment, not live-model results.
 
 ## Hypothesis
 
