@@ -2,8 +2,10 @@
 
 Status: proposed next work, not implemented by this document.
 Code inspection baseline: `4cf33932edc5f687e3cf7190261ebbb02c898d08`.
-The current branch contains a runnable offline experiment; its synthetic results are calibration evidence, not measured model gains.
+The branch now contains offline controls, a live-model disk-edit pilot and a captured-selection proposal API. These are synthetic research experiments, not production integration.
 Before a production change, refresh against main and re-check these entry points.
+
+Research progress (2026-10-27): [the disk pilot](./LIVE_RESULTS.md) completed 19 calls; [bound-edit](./BOUND_EDIT.md) subsequently removed model-supplied paths, AST IDs and hashes, with seven additional real-file controls. No fresh live-model benefit is claimed for the bound-edit API. The active-run host writer, real selection lifecycle, cancellation and alternate-tool bypass work below remain outstanding.
 
 ## First implementation slice: proposal-only agent experiment
 
