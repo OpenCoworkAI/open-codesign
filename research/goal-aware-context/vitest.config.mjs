@@ -4,16 +4,29 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const dependencies = process.env.RESEARCH_DEPENDENCY_ROOT || root;
-const desktop = createRequire(path.join(dependencies, 'apps/desktop/package.json'));
+const core = createRequire(path.join(dependencies, 'packages/core/package.json'));
 const shared = createRequire(path.join(dependencies, 'packages/shared/package.json'));
+
 export default {
   resolve: {
-    alias: {
-      vitest: path.join(path.dirname(desktop.resolve('vitest/package.json')), 'dist/index.js'),
-      '@babel/parser': desktop.resolve('@babel/parser'),
-      '@open-codesign/shared': path.join(root, 'packages/shared/src/source-edits.ts'),
-      zod: shared.resolve('zod'),
-    },
+    alias: [
+      {
+        find: /^@open-codesign\/shared$/,
+        replacement: path.join(root, 'packages/shared/src/index.ts'),
+      },
+      {
+        find: /^@open-codesign\/providers$/,
+        replacement: path.join(root, 'packages/providers/src/index.ts'),
+      },
+      {
+        find: /^vitest$/,
+        replacement: path.join(path.dirname(core.resolve('vitest/package.json')), 'dist/index.js'),
+      },
+      { find: /^zod$/, replacement: shared.resolve('zod') },
+      { find: /^yaml$/, replacement: shared.resolve('yaml') },
+      { find: /^@sinclair\/typebox\/value$/, replacement: core.resolve('@sinclair/typebox/value') },
+      { find: /^@sinclair\/typebox$/, replacement: core.resolve('@sinclair/typebox') },
+    ],
   },
   test: {
     include: ['research/goal-aware-context/*.test.*'],

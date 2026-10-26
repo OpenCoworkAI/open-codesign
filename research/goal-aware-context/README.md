@@ -4,6 +4,31 @@ Branch: `research/goal-aware-context`. Research-only, with no changes to pi comp
 
 Next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
 
+## Production baseline adapter
+
+The research adapter now calls the real [buildDesignContextPack](../../packages/core/src/design-context.ts) without changing its selection, clarification handling, or character-budget rules. Tests compare the complete output with direct production calls.
+
+- `production-baseline.ts`: typed, synchronous adapter using the existing input/output contracts.
+- `production-fixtures.ts`: a deterministic synthetic conversation in the real `ChatMessageRow` format, with a fixed brief, preferences and workspace/resource state. Each call returns fresh input objects.
+- `run-production-baseline.ts`: exports the exact input and context pack, including the existing trace. Importing the module does not execute the CLI.
+
+The sample is synthetic calibration input, not a real session or a model-quality result. It does not import withheld questions or reference answers. The report's trace counts characters, not model tokens; it is not a measurement of the complete provider request. Equal total-token budgets and candidate compression remain future work.
+
+From the repository root with Node 22 and pnpm 10.33.4:
+
+```bash
+pnpm --filter @open-codesign/core... install --frozen-lockfile --ignore-scripts
+pnpm exec tsx --tsconfig research/goal-aware-context/tsconfig.json \
+  research/goal-aware-context/run-production-baseline.ts \
+  .Codex/workspace/goal-aware-context/production-run-001/report.json
+pnpm exec tsc -p research/goal-aware-context/tsconfig.json
+pnpm exec biome check research/goal-aware-context
+```
+
+Choose a new output file for every run. Existing output files are refused rather than overwritten. The runner performs no model calls and reads no provider credentials.
+
+The research Vitest config resolves workspace packages to this checkout's real source entry points. `RESEARCH_DEPENDENCY_ROOT` can still supply installed runtime dependencies; it does not select another checkout's production source. The full research test suite, strict TypeScript and the CLI commands above require the local frozen install.
+
 ## Hypothesis
 
 Explicitly preserving accepted design decisions for the active goal may retain constraints better than selecting recent history alone under a fixed context budget.
@@ -48,16 +73,17 @@ Additional controls cover tiny budgets, non-ASCII byte accounting, latest accept
 From the repository root after the normal `pnpm install --frozen-lockfile`:
 
 ```bash
-node apps/desktop/node_modules/vitest/vitest.mjs run --config research/goal-aware-context/vitest.config.mjs
+node packages/core/node_modules/vitest/vitest.mjs run --config research/goal-aware-context/vitest.config.mjs
 ```
 
 No new packages were added, and application code does not import this experiment. Tests run in Node and do not launch Electron, a browser, or a model.
-To reuse an existing checkout's installed dependencies without changing either lockfile:
+To run only the original byte-budget calibration with an existing checkout's installed dependencies, without changing either lockfile:
 
 ```bash
 RESEARCH_DEPENDENCY_ROOT="/absolute/path/to/installed-checkout" \
-  node "/absolute/path/to/installed-checkout/apps/desktop/node_modules/vitest/vitest.mjs" \
-  run --config research/goal-aware-context/vitest.config.mjs
+  node "/absolute/path/to/installed-checkout/packages/core/node_modules/vitest/vitest.mjs" \
+  run --config research/goal-aware-context/vitest.config.mjs \
+  research/goal-aware-context/experiment.test.mjs
 ```
 
 This run used Windows, Git Bash, Node 24.19.0, Vitest 4.1.12 and Biome 2.4.15.

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "types": ["node"],
+    "paths": {
+      "@open-codesign/shared": ["../../packages/shared/src/index.ts"],
+      "@open-codesign/providers": ["../../packages/providers/src/index.ts"],
+      "vitest": ["../../packages/core/node_modules/vitest"]
+    }
+  },
+  "include": ["./*.ts"]
+}
