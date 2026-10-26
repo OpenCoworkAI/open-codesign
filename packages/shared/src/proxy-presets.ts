@@ -46,6 +46,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay',
   },
   {
+    id: 'opper',
+    label: 'Opper',
+    provider: 'openai',
+    baseUrl: 'https://api.opper.ai/v3/compat',
+    notes: 'Multi-model relay, EU-hosted',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
