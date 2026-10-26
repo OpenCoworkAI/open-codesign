@@ -37,4 +37,6 @@ Use this branch for the engine and experiment, and a separate checkout of `resea
 
 Before the first generation, the runner saves the plan, source hashes, provider commit, config and call budget. It journals requests and responses incrementally to `calls.jsonl`, writes each actual fixture directory, and records per-case results under `experiment/results.json`. `complete.json` confirms the run finished. No overwrite, implicit retry, or model substitution.
 
+The reused behavior config supplies model connection, wire and reasoning settings. Its legacy dataset, case IDs, prompt variant and `maxCalls` do not control this different experiment: the top-level manifest and pilot protocol specify the fixed 12-call scope budget (20 for context), 240-second timeout and 8,192-token request. This is an explicitly invoked research embedding API, not the behavior CLI's budget interface.
+
 For local models, verify `/api/tags` digests and `/api/ps` context length against the previous behavior pilot before starting. The authoring run saves those observations alongside the manifests. Private auth and local paths are excluded from the public report.
