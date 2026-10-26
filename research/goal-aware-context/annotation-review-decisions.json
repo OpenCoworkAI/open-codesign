@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "kind": "human-priority-annotation-review",
+  "reviewedOn": "2026-10-27",
+  "reviewer": "conversation-user",
+  "sourceResponse": "均同意",
+  "scope": "R1-R5-as-written-only",
+  "annotationCommit": "3985322d6ba0715a5bbc1bad1477ffc471fe98e3",
+  "annotationHash": "4056f83a1f69b95336de0aab0cb450c70e49433821c4ad0e6769b489a5d9c161",
+  "items": [
+    {
+      "id": "R1",
+      "caseId": "s01-c49",
+      "inputHash": "845e95cfe85cb421644e79acb493501bcdcdf81bc62cc68b43fdab8819f53832",
+      "recordIds": ["color-blue", "color-green", "layout", "font", "no-motion"],
+      "decision": "confirmed-as-written",
+      "interpretation": "仅替换颜色，其他已确认限制继续有效"
+    },
+    {
+      "id": "R2",
+      "caseId": "s04-c49",
+      "inputHash": "33c0b7fc7e0c58302c34e8311d8c710ffa026286686b9ac58fca0ab75c816aab",
+      "recordIds": [
+        "goal",
+        "empty-state-delivery",
+        "retry",
+        "old-success",
+        "header",
+        "preview-required"
+      ],
+      "decision": "confirmed-as-written",
+      "interpretation": "恢复预览是当前重点，原交付验证未完成，旧预览不能证明当前版本通过"
+    },
+    {
+      "id": "R3",
+      "caseId": "s05-c49",
+      "inputHash": "7c1291142b89eda9483e0c87f8f0a8e0c73e1351558ab25e70337bcdeac6d8a9",
+      "recordIds": [
+        "color-intent",
+        "no-inferred-approval",
+        "current-file",
+        "old-file",
+        "old-preview",
+        "scope",
+        "report-difference"
+      ],
+      "decision": "confirmed-as-written",
+      "interpretation": "用户意图与磁盘事实区分，本轮只改标题并报告颜色差异"
+    },
+    {
+      "id": "R4",
+      "caseId": "s06-c49",
+      "inputHash": "b12ebb629bd5ea5d0bf05695c36d37a090bf9998aa75cee48210c328901c14d8",
+      "recordIds": ["nav-keep", "nav-delete", "ask-before-nav", "scope"],
+      "decision": "confirmed-as-written",
+      "interpretation": "导航要求保持冲突待澄清，当前只改页脚说明"
+    },
+    {
+      "id": "R5",
+      "caseId": "s02-c49",
+      "inputHash": "af1e268612500c4e4fcaef755f2e4e2b32abb30409228568127a6644c9664a07",
+      "recordIds": ["color", "font", "layout"],
+      "decision": "confirmed-as-written",
+      "interpretation": "保留对新周报适用性的 unresolved 状态，不新增继承设计规则的批准"
+    }
+  ],
+  "otherRecords": "not individually certified by this response",
+  "researchStatus": "synthetic source-grounded review; not independent real-session gold"
+}
