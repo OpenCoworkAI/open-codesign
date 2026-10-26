@@ -4,6 +4,12 @@ Branch: `research/scoped-design-edits`. Research-only; not exposed to the applic
 
 Next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
 
+## Real-model file pilot (2026-10-26)
+
+The new [pilot](./LIVE_PROTOCOL.md) executes proposals against isolated on-disk JSX files using the existing engine, compares identical proposals with and without a host selection grant, and allows one repair after refusal. [Results and limitations](./LIVE_RESULTS.md): Codex 6/6, Qwen 6/6, Gemma 5/6; the one Gemma source-hash error was also rejected by the base engine, and repair did not recover it. No incremental scope advantage was observed in this small, explicit-task sample. Application runtime integration remains unimplemented.
+
+The earlier observations below describe the original in-memory deterministic controls, not this live-model pilot.
+
 ## Hypothesis
 
 The existing source-edit engine can supply deterministic literal patches, while a small host-owned selection grant can additionally enforce the selected file, source revision, target definitions and permitted fields.

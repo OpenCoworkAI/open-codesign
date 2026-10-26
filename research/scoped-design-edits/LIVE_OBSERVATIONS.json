@@ -1,0 +1,1655 @@
+{
+  "schemaVersion": 1,
+  "phase": "scope",
+  "protocol": {
+    "phase": "scope",
+    "cases": 6,
+    "models": ["codex", "qwen", "gemma"],
+    "maxTotalCalls": 36,
+    "trials": 1,
+    "localMetadata": [
+      {
+        "slug": "qwen",
+        "from": "qwen3:4b-q4_K_M",
+        "name": "qwen3:codesign-eval-4b-16k-v2",
+        "sourceDigest": "2bfd38a7daaf4b1037efe517ccb73d1a3bbd4822cf89f1a82be1569050a114e0",
+        "aliasDigest": "e08949a12540d3b325de494b8529f1e5928b1bc2a21f861c2de65442dd92a4e3",
+        "details": {
+          "parent_model": "qwen3:4b-q4_K_M",
+          "format": "gguf",
+          "family": "qwen3",
+          "families": ["qwen3"],
+          "parameter_size": "4.0B",
+          "quantization_level": "Q4_K_M",
+          "runner": "llamacpp"
+        },
+        "thinking": {
+          "values": [false, true],
+          "default": true
+        },
+        "parameters": "temperature                    0.6\ntop_k                          20\ntop_p                          0.95\nnum_ctx                        16384\nrepeat_penalty                 1\nstop                           \"<|im_start|>\"\nstop                           \"<|im_end|>\"",
+        "templateHash": "7d324826d81029e9cc04696166b97b66637ec0178f32f85c8c56ab61dc4141a1"
+      },
+      {
+        "slug": "gemma",
+        "from": "gemma4:12b",
+        "name": "gemma4:codesign-eval-12b-16k-v2",
+        "sourceDigest": "4eb23ef187e2c5462566d6a1d3bbbc2f1346d0b4327cbb66d58fffbcc9b2b05c",
+        "aliasDigest": "9b05675e5427214f3fcb4ce195d1532120b8494c1336afb8e3f702aebf8b19af",
+        "details": {
+          "parent_model": "gemma4:12b",
+          "format": "gguf",
+          "family": "gemma4",
+          "families": ["gemma4"],
+          "parameter_size": "11.9B",
+          "quantization_level": "Q4_K_M",
+          "runner": "llamacpp"
+        },
+        "thinking": {
+          "values": [false, true],
+          "default": true
+        },
+        "parameters": "num_ctx                        16384\ntemperature                    1\ntop_k                          64\ntop_p                          0.95",
+        "templateHash": "39302355407942b6b0b50e1a78741740fc8a31926a4febea429526497e0e6008"
+      }
+    ],
+    "scopeComparison": "same first proposal; two separate file copies; one repair only after refusal",
+    "contextComparison": "full history / ordinary model summary / structured model goal record; 1800 UTF-8 bytes summary cap; no labels to compressor",
+    "limitations": [
+      "synthetic development sample",
+      "no visual evaluation",
+      "no application integration",
+      "no independent human labels",
+      "no causal claim from single trial"
+    ]
+  },
+  "runs": [
+    {
+      "model": "codex",
+      "config": {
+        "schemaVersion": 1,
+        "dataset": "design-sessions-v1",
+        "responseProtocol": "typed-v2",
+        "responseFormat": "prompt-only",
+        "executionGuard": "off",
+        "model": {
+          "provider": "chatgpt-codex",
+          "modelId": "gpt-6.1-sol"
+        },
+        "credentialEnv": "CODESIGN_RESEARCH_SESSION_TOKEN",
+        "promptVariant": "baseline",
+        "trials": 1,
+        "maxCalls": 8,
+        "maxOutputTokens": 8192,
+        "timeoutMs": 240000,
+        "caseIds": [
+          "session-name",
+          "session-attribution",
+          "session-exact-copy",
+          "session-local-preview",
+          "session-release-pending",
+          "session-history-empty",
+          "session-partial-verification",
+          "session-verified-release"
+        ],
+        "baseUrl": "https://chatgpt.com/backend-api",
+        "wire": "openai-codex-responses",
+        "reasoning": "high"
+      },
+      "sourceFiles": [
+        ["experiment.test.ts", "b353cb45f6c38fe157820918d06c0afd2b9b8a2d1d2c4d5a17a82328d0811a21"],
+        [
+          "file-executor.test.ts",
+          "4a0b23c7d4720152ed4684e0531d611cb7004448cd326bb24eb58705404960aa"
+        ],
+        ["file-executor.ts", "dcef2d8f0399130a457fc9f4c72b33028da5ceb3624bf6d36d6644fbb9f1d607"],
+        ["live-cases.ts", "6147a75fbb8fd59d7abb71f77ccb5f5a84a7725266c526ad620d0b08ee31efbb"],
+        ["live-experiment.ts", "80a6233ff983bceb9ca6b29630100870bc9e684b278e8ba2f7f81ac802dd0c1a"],
+        ["model-session.mjs", "447788b193aef06174612b5588ff068f317f87cda664bbc176bb7c799e7ea055"],
+        [
+          "model-session.test.mjs",
+          "de1ba82b3d097baea5e2615ee611c35fe8c5c2919d659c9d3925f67a34cccae6"
+        ],
+        ["run-live.mjs", "42323b03f6f27ed71997a1bb749fef243d9436fb34df75ec41fe05af973582d0"],
+        ["scoped-edit.ts", "3d6f5f07cab21ca6cd6bba212ff4ec672311098b2cee2610ac00519b94c3a4e6"],
+        ["vitest.config.mjs", "14bb9a123e05cdc72d32c198c182e69184f3554c63cad5bef430dba9fa8420f7"]
+      ],
+      "engineFiles": [
+        [
+          "apps/desktop/src/main/source-edit-engine.ts",
+          "3e64c9a9f4b89311076947d0bfb584b502823717e1510c7304d6b508f8445210"
+        ],
+        [
+          "apps/desktop/src/main/source-edit-provenance.ts",
+          "60d39bc3bc273959d77b95dcfd900a423ddbfee5f1671593213c1b2ba49e4bc6"
+        ],
+        [
+          "packages/shared/src/source-edits.ts",
+          "03226008938057f0f6d3c3461d42a51f146a2fbf08e772045665fe3f64f73662"
+        ]
+      ],
+      "providerFiles": [
+        [
+          "packages/providers/src/index.ts",
+          "0e0b6b57970425f3a45755f4c9d2ee256ac64cbd1f484ce03959a3dfc23c021d"
+        ],
+        ["pnpm-lock.yaml", "03269cf20683103bd1c764d78a242f2502385ed9df1858ad2c0911e5df118b6f"],
+        [
+          "research/agent-behavior-evals/model-config.ts",
+          "4eae8da4bf235bb751d54cdf6f3a8c4f10af5a188cbfd2b3d16cb75b5919134a"
+        ]
+      ],
+      "providerCommit": "1ea646e07c57e4777870acf896e5f8b3e8d87179",
+      "parentCommit": "78997f229859ad4beb8d047cfbc2ef8ccfa2d275",
+      "rows": [
+        {
+          "id": "duplicate-label",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3",
+            "afterHash": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "开始",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3",
+            "afterHash": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "开始",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "Archive.jsx": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "Archive.jsx": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3"
+          }
+        },
+        {
+          "id": "text-not-style",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79",
+            "afterHash": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "patch": {
+              "start": 58,
+              "end": 60,
+              "expectedText": "提交",
+              "replacement": "{\"发布随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79",
+            "afterHash": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "patch": {
+              "start": 58,
+              "end": 60,
+              "expectedText": "提交",
+              "replacement": "{\"发布随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "Archive.jsx": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "Archive.jsx": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79"
+          }
+        },
+        {
+          "id": "style-not-copy",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6",
+            "afterHash": "0220fb58802f54f0d5d987e0d81c4d8c6dde882dfff854e2bcf3e840f6bc7018",
+            "patch": {
+              "start": 46,
+              "end": 51,
+              "expectedText": "\"red\"",
+              "replacement": "\"#123456\""
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6",
+            "afterHash": "0220fb58802f54f0d5d987e0d81c4d8c6dde882dfff854e2bcf3e840f6bc7018",
+            "patch": {
+              "start": 46,
+              "end": 51,
+              "expectedText": "\"red\"",
+              "replacement": "\"#123456\""
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "0220fb58802f54f0d5d987e0d81c4d8c6dde882dfff854e2bcf3e840f6bc7018",
+            "Archive.jsx": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "0220fb58802f54f0d5d987e0d81c4d8c6dde882dfff854e2bcf3e840f6bc7018",
+            "Archive.jsx": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6"
+          }
+        },
+        {
+          "id": "literal-copy",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da",
+            "afterHash": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "patch": {
+              "start": 47,
+              "end": 50,
+              "expectedText": "旧文案",
+              "replacement": "{\"先写 \\u003c草稿\\u003e，再发布 \\u0026 分享。\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da",
+            "afterHash": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "patch": {
+              "start": 47,
+              "end": 50,
+              "expectedText": "旧文案",
+              "replacement": "{\"先写 \\u003c草稿\\u003e，再发布 \\u0026 分享。\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "Archive.jsx": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "Archive.jsx": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da"
+          }
+        },
+        {
+          "id": "attribute-only",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c",
+            "afterHash": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "patch": {
+              "start": 47,
+              "end": 52,
+              "expectedText": "\"请输入\"",
+              "replacement": "{\"搜索随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c",
+            "afterHash": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "patch": {
+              "start": 47,
+              "end": 52,
+              "expectedText": "\"请输入\"",
+              "replacement": "{\"搜索随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "Archive.jsx": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "Archive.jsx": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c"
+          }
+        },
+        {
+          "id": "other-file-decoy",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0",
+            "afterHash": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "文章",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0",
+            "afterHash": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "文章",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "Archive.jsx": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "Archive.jsx": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0"
+          }
+        }
+      ],
+      "calls": [
+        {
+          "id": "duplicate-label/first",
+          "requestHash": "7244d1597c7120f2f438f28c9f5b18cb5f89c05227a78df241e25a8fcf793d44",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"把主标题“开始”改为“随记”，页脚的同名文字保持不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:39\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h1>开始</h1><footer>开始</footer></main>}\",\"sourceHash\":\"115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3\",\"targets\":[{\"id\":\"22:65\",\"tagName\":\"main\",\"start\":22,\"end\":65,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:58\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:58\",\"tagName\":\"footer\",\"start\":39,\"end\":58,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":47,\"end\":49,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h1>开始</h1><footer>开始</footer></main>}\",\"sourceHash\":\"115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3\",\"targets\":[{\"id\":\"22:65\",\"tagName\":\"main\",\"start\":22,\"end\":65,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:58\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:58\",\"tagName\":\"footer\",\"start\":39,\"end\":58,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":47,\"end\":49,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3",
+            "targetId": "28:39",
+            "kind": "set-text",
+            "field": "text",
+            "value": "随记"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3\",\"targetId\":\"28:39\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"随记\"}",
+          "usage": {
+            "inputTokens": 1253,
+            "outputTokens": 77,
+            "costUsd": 0
+          },
+          "elapsedMs": 14816
+        },
+        {
+          "id": "text-not-style/first",
+          "requestHash": "b42d6a62ee86eb4558458076fa63bc091ecddf1145a90f297c891b0d506b16dd",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把按钮文字改成“发布随记”，保留红色样式。早先提到的蓝色方案已经取消。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:69\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><button style={{color:\\\"red\\\"}}>提交</button><p>品牌红色保留</p></main>}\",\"sourceHash\":\"20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79\",\"targets\":[{\"id\":\"22:89\",\"tagName\":\"main\",\"start\":22,\"end\":89,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:69\"},{\"kind\":\"element\",\"targetId\":\"69:82\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:69\",\"tagName\":\"button\",\"start\":28,\"end\":69,\"insertionOffset\":57,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"提交\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"提交\",\"textSources\":[{\"start\":58,\"end\":60,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"提交\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"69:82\",\"tagName\":\"p\",\"start\":69,\"end\":82,\"insertionOffset\":71,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"品牌红色保留\"}],\"directText\":\"品牌红色保留\",\"textSources\":[{\"start\":72,\"end\":78,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"品牌红色保留\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><button style={{color:\\\"red\\\"}}>提交</button><p>品牌红色保留</p></main>}\",\"sourceHash\":\"20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79\",\"targets\":[{\"id\":\"22:89\",\"tagName\":\"main\",\"start\":22,\"end\":89,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:69\"},{\"kind\":\"element\",\"targetId\":\"69:82\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:69\",\"tagName\":\"button\",\"start\":28,\"end\":69,\"insertionOffset\":57,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"提交\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"提交\",\"textSources\":[{\"start\":58,\"end\":60,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"提交\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"69:82\",\"tagName\":\"p\",\"start\":69,\"end\":82,\"insertionOffset\":71,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"品牌红色保留\"}],\"directText\":\"品牌红色保留\",\"textSources\":[{\"start\":72,\"end\":78,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"品牌红色保留\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79",
+            "targetId": "28:69",
+            "kind": "set-text",
+            "field": "text",
+            "value": "发布随记"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79\",\"targetId\":\"28:69\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"发布随记\"}",
+          "usage": {
+            "inputTokens": 1264,
+            "outputTokens": 73,
+            "costUsd": 0
+          },
+          "elapsedMs": 7852
+        },
+        {
+          "id": "style-not-copy/first",
+          "requestHash": "fc3e170c31a2324452483203d3f1d8a175bc184f42e794903ef99b8f682ac40c",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把 h2 标题颜色改成 #123456，文案和页脚保持不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:61\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h2 style={{color:\\\"red\\\"}}>随记</h2><footer style={{color:\\\"red\\\"}}>随记</footer></main>}\",\"sourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targets\":[{\"id\":\"22:109\",\"tagName\":\"main\",\"start\":22,\"end\":109,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:61\"},{\"kind\":\"element\",\"targetId\":\"61:102\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:61\",\"tagName\":\"h2\",\"start\":28,\"end\":61,\"insertionOffset\":53,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":54,\"end\":56,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"61:102\",\"tagName\":\"footer\",\"start\":61,\"end\":102,\"insertionOffset\":90,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":91,\"end\":93,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h2 style={{color:\\\"red\\\"}}>随记</h2><footer style={{color:\\\"red\\\"}}>随记</footer></main>}\",\"sourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targets\":[{\"id\":\"22:109\",\"tagName\":\"main\",\"start\":22,\"end\":109,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:61\"},{\"kind\":\"element\",\"targetId\":\"61:102\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:61\",\"tagName\":\"h2\",\"start\":28,\"end\":61,\"insertionOffset\":53,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":54,\"end\":56,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"61:102\",\"tagName\":\"footer\",\"start\":61,\"end\":102,\"insertionOffset\":90,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":91,\"end\":93,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6",
+            "targetId": "28:61",
+            "kind": "set-style",
+            "field": "color",
+            "value": "#123456"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targetId\":\"28:61\",\"kind\":\"set-style\",\"field\":\"color\",\"value\":\"#123456\"}",
+          "usage": {
+            "inputTokens": 1237,
+            "outputTokens": 74,
+            "costUsd": 0
+          },
+          "elapsedMs": 8465
+        },
+        {
+          "id": "literal-copy/first",
+          "requestHash": "d7a995e0cd8f6a84e764b5fe1e3f3a2046511ee71650a59557ec129c75eb8790",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"把正文 p 原样改成“先写 <草稿>，再发布 & 分享。”，不要改写这句话，也不要改页脚。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"44:54\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"﻿// 保留换行和注释 😀\\r\\nfunction App(){return <main><p>旧文案</p><footer>备案信息</footer></main>}\\r\\n\",\"sourceHash\":\"6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da\",\"targets\":[{\"id\":\"38:82\",\"tagName\":\"main\",\"start\":38,\"end\":82,\"insertionOffset\":43,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"44:54\"},{\"kind\":\"element\",\"targetId\":\"54:75\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"44:54\",\"tagName\":\"p\",\"start\":44,\"end\":54,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"旧文案\"}],\"directText\":\"旧文案\",\"textSources\":[{\"start\":47,\"end\":50,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"旧文案\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"54:75\",\"tagName\":\"footer\",\"start\":54,\"end\":75,\"insertionOffset\":61,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"备案信息\"}],\"directText\":\"备案信息\",\"textSources\":[{\"start\":62,\"end\":66,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"备案信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"﻿// 保留换行和注释 😀\\r\\nfunction App(){return <main><p>旧文案</p><footer>备案信息</footer></main>}\\r\\n\",\"sourceHash\":\"6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da\",\"targets\":[{\"id\":\"38:82\",\"tagName\":\"main\",\"start\":38,\"end\":82,\"insertionOffset\":43,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"44:54\"},{\"kind\":\"element\",\"targetId\":\"54:75\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"44:54\",\"tagName\":\"p\",\"start\":44,\"end\":54,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"旧文案\"}],\"directText\":\"旧文案\",\"textSources\":[{\"start\":47,\"end\":50,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"旧文案\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"54:75\",\"tagName\":\"footer\",\"start\":54,\"end\":75,\"insertionOffset\":61,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"备案信息\"}],\"directText\":\"备案信息\",\"textSources\":[{\"start\":62,\"end\":66,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"备案信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da",
+            "targetId": "44:54",
+            "kind": "set-text",
+            "field": "text",
+            "value": "先写 <草稿>，再发布 & 分享。"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da\",\"targetId\":\"44:54\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"先写 <草稿>，再发布 & 分享。\"}",
+          "usage": {
+            "inputTokens": 1313,
+            "outputTokens": 88,
+            "costUsd": 0
+          },
+          "elapsedMs": 4717
+        },
+        {
+          "id": "attribute-only/first",
+          "requestHash": "8f5b0019071cf038e617f4e41a166a8f457ed561f681b2b8d99db9de475a0b1e",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把输入框 placeholder 改成“搜索随记”，title 和按钮文字不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:65\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><input placeholder=\\\"请输入\\\" title=\\\"搜索\\\"/><button>搜索</button></main>}\",\"sourceHash\":\"915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c\",\"targets\":[{\"id\":\"22:91\",\"tagName\":\"main\",\"start\":22,\"end\":91,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:65\"},{\"kind\":\"element\",\"targetId\":\"65:84\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:65\",\"tagName\":\"input\",\"start\":28,\"end\":65,\"insertionOffset\":63,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-attribute\",\"name\":\"placeholder\",\"value\":\"请输入\"},{\"kind\":\"set-attribute\",\"name\":\"title\",\"value\":\"搜索\"}],\"directText\":\"\",\"textSources\":[],\"textLayout\":[],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"65:84\",\"tagName\":\"button\",\"start\":65,\"end\":84,\"insertionOffset\":72,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"搜索\"}],\"directText\":\"搜索\",\"textSources\":[{\"start\":73,\"end\":75,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"搜索\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><input placeholder=\\\"请输入\\\" title=\\\"搜索\\\"/><button>搜索</button></main>}\",\"sourceHash\":\"915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c\",\"targets\":[{\"id\":\"22:91\",\"tagName\":\"main\",\"start\":22,\"end\":91,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:65\"},{\"kind\":\"element\",\"targetId\":\"65:84\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:65\",\"tagName\":\"input\",\"start\":28,\"end\":65,\"insertionOffset\":63,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-attribute\",\"name\":\"placeholder\",\"value\":\"请输入\"},{\"kind\":\"set-attribute\",\"name\":\"title\",\"value\":\"搜索\"}],\"directText\":\"\",\"textSources\":[],\"textLayout\":[],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"65:84\",\"tagName\":\"button\",\"start\":65,\"end\":84,\"insertionOffset\":72,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"搜索\"}],\"directText\":\"搜索\",\"textSources\":[{\"start\":73,\"end\":75,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"搜索\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c",
+            "targetId": "28:65",
+            "kind": "set-attribute",
+            "field": "placeholder",
+            "value": "搜索随记"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c\",\"targetId\":\"28:65\",\"kind\":\"set-attribute\",\"field\":\"placeholder\",\"value\":\"搜索随记\"}",
+          "usage": {
+            "inputTokens": 1213,
+            "outputTokens": 73,
+            "costUsd": 0
+          },
+          "elapsedMs": 4689
+        },
+        {
+          "id": "other-file-decoy/first",
+          "requestHash": "b3af256395d21c0b0dff04de68fa11ad6843e5a3e0f17b4160fee1bfe8ffde3c",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"当前选择是 App.jsx 的 h1，把它改成“随记”。Archive.jsx 中即使有相同标题也必须保留。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:39\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h1>文章</h1><footer>作者信息</footer></main>}\",\"sourceHash\":\"89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0\",\"targets\":[{\"id\":\"22:67\",\"tagName\":\"main\",\"start\":22,\"end\":67,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:60\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"文章\"}],\"directText\":\"文章\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"文章\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:60\",\"tagName\":\"footer\",\"start\":39,\"end\":60,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"作者信息\"}],\"directText\":\"作者信息\",\"textSources\":[{\"start\":47,\"end\":51,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"作者信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h1>文章</h1><footer>作者信息</footer></main>}\",\"sourceHash\":\"89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0\",\"targets\":[{\"id\":\"22:67\",\"tagName\":\"main\",\"start\":22,\"end\":67,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:60\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"文章\"}],\"directText\":\"文章\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"文章\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:60\",\"tagName\":\"footer\",\"start\":39,\"end\":60,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"作者信息\"}],\"directText\":\"作者信息\",\"textSources\":[{\"start\":47,\"end\":51,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"作者信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0",
+            "targetId": "28:39",
+            "kind": "set-text",
+            "field": "text",
+            "value": "随记"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0\",\"targetId\":\"28:39\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"随记\"}",
+          "usage": {
+            "inputTokens": 1265,
+            "outputTokens": 75,
+            "costUsd": 0
+          },
+          "elapsedMs": 5928
+        }
+      ]
+    },
+    {
+      "model": "qwen",
+      "config": {
+        "schemaVersion": 1,
+        "dataset": "design-sessions-v1",
+        "responseProtocol": "typed-v2",
+        "responseFormat": "json-schema",
+        "executionGuard": "off",
+        "model": {
+          "provider": "ollama-local",
+          "modelId": "qwen3:codesign-eval-4b-16k-v2"
+        },
+        "credentialEnv": "OLLAMA_LOCAL_TOKEN",
+        "promptVariant": "baseline",
+        "trials": 1,
+        "maxCalls": 8,
+        "maxOutputTokens": 8192,
+        "timeoutMs": 240000,
+        "caseIds": [
+          "session-name",
+          "session-attribution",
+          "session-exact-copy",
+          "session-local-preview",
+          "session-release-pending",
+          "session-history-empty",
+          "session-partial-verification",
+          "session-verified-release"
+        ],
+        "baseUrl": "http://127.0.0.1:11434/v1",
+        "wire": "openai-chat"
+      },
+      "sourceFiles": [
+        ["experiment.test.ts", "b353cb45f6c38fe157820918d06c0afd2b9b8a2d1d2c4d5a17a82328d0811a21"],
+        [
+          "file-executor.test.ts",
+          "4a0b23c7d4720152ed4684e0531d611cb7004448cd326bb24eb58705404960aa"
+        ],
+        ["file-executor.ts", "dcef2d8f0399130a457fc9f4c72b33028da5ceb3624bf6d36d6644fbb9f1d607"],
+        ["live-cases.ts", "6147a75fbb8fd59d7abb71f77ccb5f5a84a7725266c526ad620d0b08ee31efbb"],
+        ["live-experiment.ts", "80a6233ff983bceb9ca6b29630100870bc9e684b278e8ba2f7f81ac802dd0c1a"],
+        ["model-session.mjs", "447788b193aef06174612b5588ff068f317f87cda664bbc176bb7c799e7ea055"],
+        [
+          "model-session.test.mjs",
+          "de1ba82b3d097baea5e2615ee611c35fe8c5c2919d659c9d3925f67a34cccae6"
+        ],
+        ["run-live.mjs", "42323b03f6f27ed71997a1bb749fef243d9436fb34df75ec41fe05af973582d0"],
+        ["scoped-edit.ts", "3d6f5f07cab21ca6cd6bba212ff4ec672311098b2cee2610ac00519b94c3a4e6"],
+        ["vitest.config.mjs", "14bb9a123e05cdc72d32c198c182e69184f3554c63cad5bef430dba9fa8420f7"]
+      ],
+      "engineFiles": [
+        [
+          "apps/desktop/src/main/source-edit-engine.ts",
+          "3e64c9a9f4b89311076947d0bfb584b502823717e1510c7304d6b508f8445210"
+        ],
+        [
+          "apps/desktop/src/main/source-edit-provenance.ts",
+          "60d39bc3bc273959d77b95dcfd900a423ddbfee5f1671593213c1b2ba49e4bc6"
+        ],
+        [
+          "packages/shared/src/source-edits.ts",
+          "03226008938057f0f6d3c3461d42a51f146a2fbf08e772045665fe3f64f73662"
+        ]
+      ],
+      "providerFiles": [
+        [
+          "packages/providers/src/index.ts",
+          "0e0b6b57970425f3a45755f4c9d2ee256ac64cbd1f484ce03959a3dfc23c021d"
+        ],
+        ["pnpm-lock.yaml", "03269cf20683103bd1c764d78a242f2502385ed9df1858ad2c0911e5df118b6f"],
+        [
+          "research/agent-behavior-evals/model-config.ts",
+          "4eae8da4bf235bb751d54cdf6f3a8c4f10af5a188cbfd2b3d16cb75b5919134a"
+        ]
+      ],
+      "providerCommit": "1ea646e07c57e4777870acf896e5f8b3e8d87179",
+      "parentCommit": "78997f229859ad4beb8d047cfbc2ef8ccfa2d275",
+      "rows": [
+        {
+          "id": "duplicate-label",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3",
+            "afterHash": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "开始",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3",
+            "afterHash": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "开始",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "Archive.jsx": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "Archive.jsx": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3"
+          }
+        },
+        {
+          "id": "text-not-style",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79",
+            "afterHash": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "patch": {
+              "start": 58,
+              "end": 60,
+              "expectedText": "提交",
+              "replacement": "{\"发布随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79",
+            "afterHash": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "patch": {
+              "start": 58,
+              "end": 60,
+              "expectedText": "提交",
+              "replacement": "{\"发布随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "Archive.jsx": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "Archive.jsx": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79"
+          }
+        },
+        {
+          "id": "style-not-copy",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6",
+            "afterHash": "0220fb58802f54f0d5d987e0d81c4d8c6dde882dfff854e2bcf3e840f6bc7018",
+            "patch": {
+              "start": 46,
+              "end": 51,
+              "expectedText": "\"red\"",
+              "replacement": "\"#123456\""
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6",
+            "afterHash": "0220fb58802f54f0d5d987e0d81c4d8c6dde882dfff854e2bcf3e840f6bc7018",
+            "patch": {
+              "start": 46,
+              "end": 51,
+              "expectedText": "\"red\"",
+              "replacement": "\"#123456\""
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "0220fb58802f54f0d5d987e0d81c4d8c6dde882dfff854e2bcf3e840f6bc7018",
+            "Archive.jsx": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "0220fb58802f54f0d5d987e0d81c4d8c6dde882dfff854e2bcf3e840f6bc7018",
+            "Archive.jsx": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6"
+          }
+        },
+        {
+          "id": "literal-copy",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da",
+            "afterHash": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "patch": {
+              "start": 47,
+              "end": 50,
+              "expectedText": "旧文案",
+              "replacement": "{\"先写 \\u003c草稿\\u003e，再发布 \\u0026 分享。\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da",
+            "afterHash": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "patch": {
+              "start": 47,
+              "end": 50,
+              "expectedText": "旧文案",
+              "replacement": "{\"先写 \\u003c草稿\\u003e，再发布 \\u0026 分享。\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "Archive.jsx": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "Archive.jsx": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da"
+          }
+        },
+        {
+          "id": "attribute-only",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c",
+            "afterHash": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "patch": {
+              "start": 47,
+              "end": 52,
+              "expectedText": "\"请输入\"",
+              "replacement": "{\"搜索随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c",
+            "afterHash": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "patch": {
+              "start": 47,
+              "end": 52,
+              "expectedText": "\"请输入\"",
+              "replacement": "{\"搜索随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "Archive.jsx": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "Archive.jsx": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c"
+          }
+        },
+        {
+          "id": "other-file-decoy",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0",
+            "afterHash": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "文章",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0",
+            "afterHash": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "文章",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "Archive.jsx": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "Archive.jsx": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0"
+          }
+        }
+      ],
+      "calls": [
+        {
+          "id": "duplicate-label/first",
+          "requestHash": "7244d1597c7120f2f438f28c9f5b18cb5f89c05227a78df241e25a8fcf793d44",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"把主标题“开始”改为“随记”，页脚的同名文字保持不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:39\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h1>开始</h1><footer>开始</footer></main>}\",\"sourceHash\":\"115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3\",\"targets\":[{\"id\":\"22:65\",\"tagName\":\"main\",\"start\":22,\"end\":65,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:58\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:58\",\"tagName\":\"footer\",\"start\":39,\"end\":58,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":47,\"end\":49,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h1>开始</h1><footer>开始</footer></main>}\",\"sourceHash\":\"115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3\",\"targets\":[{\"id\":\"22:65\",\"tagName\":\"main\",\"start\":22,\"end\":65,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:58\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:58\",\"tagName\":\"footer\",\"start\":39,\"end\":58,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":47,\"end\":49,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3",
+            "targetId": "28:39",
+            "kind": "set-text",
+            "field": "text",
+            "value": "随记"
+          },
+          "raw": "{\n\n\"path\": \"App.jsx\",\n\"expectedSourceHash\": \"115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3\",\n\"targetId\": \"28:39\",\n\"kind\": \"set-text\",\n\"field\": \"text\",\n\"value\": \"随记\" }",
+          "usage": {
+            "inputTokens": 1305,
+            "outputTokens": 588,
+            "costUsd": 0
+          },
+          "elapsedMs": 6112
+        },
+        {
+          "id": "text-not-style/first",
+          "requestHash": "b42d6a62ee86eb4558458076fa63bc091ecddf1145a90f297c891b0d506b16dd",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把按钮文字改成“发布随记”，保留红色样式。早先提到的蓝色方案已经取消。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:69\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><button style={{color:\\\"red\\\"}}>提交</button><p>品牌红色保留</p></main>}\",\"sourceHash\":\"20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79\",\"targets\":[{\"id\":\"22:89\",\"tagName\":\"main\",\"start\":22,\"end\":89,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:69\"},{\"kind\":\"element\",\"targetId\":\"69:82\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:69\",\"tagName\":\"button\",\"start\":28,\"end\":69,\"insertionOffset\":57,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"提交\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"提交\",\"textSources\":[{\"start\":58,\"end\":60,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"提交\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"69:82\",\"tagName\":\"p\",\"start\":69,\"end\":82,\"insertionOffset\":71,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"品牌红色保留\"}],\"directText\":\"品牌红色保留\",\"textSources\":[{\"start\":72,\"end\":78,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"品牌红色保留\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><button style={{color:\\\"red\\\"}}>提交</button><p>品牌红色保留</p></main>}\",\"sourceHash\":\"20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79\",\"targets\":[{\"id\":\"22:89\",\"tagName\":\"main\",\"start\":22,\"end\":89,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:69\"},{\"kind\":\"element\",\"targetId\":\"69:82\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:69\",\"tagName\":\"button\",\"start\":28,\"end\":69,\"insertionOffset\":57,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"提交\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"提交\",\"textSources\":[{\"start\":58,\"end\":60,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"提交\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"69:82\",\"tagName\":\"p\",\"start\":69,\"end\":82,\"insertionOffset\":71,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"品牌红色保留\"}],\"directText\":\"品牌红色保留\",\"textSources\":[{\"start\":72,\"end\":78,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"品牌红色保留\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79",
+            "targetId": "28:69",
+            "kind": "set-text",
+            "field": "text",
+            "value": "发布随记"
+          },
+          "raw": "{\n\n\"path\": \"App.jsx\",\n\"expectedSourceHash\": \"20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79\",\n\"targetId\": \"28:69\",\n\"kind\": \"set-text\",\n\"field\": \"text\",\n\"value\": \"发布随记\"}",
+          "usage": {
+            "inputTokens": 1139,
+            "outputTokens": 501,
+            "costUsd": 0
+          },
+          "elapsedMs": 4823
+        },
+        {
+          "id": "style-not-copy/first",
+          "requestHash": "fc3e170c31a2324452483203d3f1d8a175bc184f42e794903ef99b8f682ac40c",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把 h2 标题颜色改成 #123456，文案和页脚保持不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:61\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h2 style={{color:\\\"red\\\"}}>随记</h2><footer style={{color:\\\"red\\\"}}>随记</footer></main>}\",\"sourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targets\":[{\"id\":\"22:109\",\"tagName\":\"main\",\"start\":22,\"end\":109,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:61\"},{\"kind\":\"element\",\"targetId\":\"61:102\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:61\",\"tagName\":\"h2\",\"start\":28,\"end\":61,\"insertionOffset\":53,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":54,\"end\":56,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"61:102\",\"tagName\":\"footer\",\"start\":61,\"end\":102,\"insertionOffset\":90,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":91,\"end\":93,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h2 style={{color:\\\"red\\\"}}>随记</h2><footer style={{color:\\\"red\\\"}}>随记</footer></main>}\",\"sourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targets\":[{\"id\":\"22:109\",\"tagName\":\"main\",\"start\":22,\"end\":109,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:61\"},{\"kind\":\"element\",\"targetId\":\"61:102\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:61\",\"tagName\":\"h2\",\"start\":28,\"end\":61,\"insertionOffset\":53,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":54,\"end\":56,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"61:102\",\"tagName\":\"footer\",\"start\":61,\"end\":102,\"insertionOffset\":90,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":91,\"end\":93,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6",
+            "targetId": "28:61",
+            "kind": "set-style",
+            "field": "color",
+            "value": "#123456"
+          },
+          "raw": "{\n\n\"path\":\"App.jsx\",\"expectedSourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targetId\":\"28:61\",\"kind\":\"set-style\",\"field\":\"color\",\"value\":\"#123456\"}",
+          "usage": {
+            "inputTokens": 1132,
+            "outputTokens": 613,
+            "costUsd": 0
+          },
+          "elapsedMs": 5588
+        },
+        {
+          "id": "literal-copy/first",
+          "requestHash": "d7a995e0cd8f6a84e764b5fe1e3f3a2046511ee71650a59557ec129c75eb8790",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"把正文 p 原样改成“先写 <草稿>，再发布 & 分享。”，不要改写这句话，也不要改页脚。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"44:54\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"﻿// 保留换行和注释 😀\\r\\nfunction App(){return <main><p>旧文案</p><footer>备案信息</footer></main>}\\r\\n\",\"sourceHash\":\"6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da\",\"targets\":[{\"id\":\"38:82\",\"tagName\":\"main\",\"start\":38,\"end\":82,\"insertionOffset\":43,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"44:54\"},{\"kind\":\"element\",\"targetId\":\"54:75\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"44:54\",\"tagName\":\"p\",\"start\":44,\"end\":54,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"旧文案\"}],\"directText\":\"旧文案\",\"textSources\":[{\"start\":47,\"end\":50,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"旧文案\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"54:75\",\"tagName\":\"footer\",\"start\":54,\"end\":75,\"insertionOffset\":61,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"备案信息\"}],\"directText\":\"备案信息\",\"textSources\":[{\"start\":62,\"end\":66,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"备案信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"﻿// 保留换行和注释 😀\\r\\nfunction App(){return <main><p>旧文案</p><footer>备案信息</footer></main>}\\r\\n\",\"sourceHash\":\"6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da\",\"targets\":[{\"id\":\"38:82\",\"tagName\":\"main\",\"start\":38,\"end\":82,\"insertionOffset\":43,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"44:54\"},{\"kind\":\"element\",\"targetId\":\"54:75\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"44:54\",\"tagName\":\"p\",\"start\":44,\"end\":54,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"旧文案\"}],\"directText\":\"旧文案\",\"textSources\":[{\"start\":47,\"end\":50,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"旧文案\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"54:75\",\"tagName\":\"footer\",\"start\":54,\"end\":75,\"insertionOffset\":61,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"备案信息\"}],\"directText\":\"备案信息\",\"textSources\":[{\"start\":62,\"end\":66,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"备案信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da",
+            "targetId": "44:54",
+            "kind": "set-text",
+            "field": "text",
+            "value": "先写 <草稿>，再发布 & 分享。"
+          },
+          "raw": "{\n\n\"path\":\"App.jsx\",\"expectedSourceHash\":\"6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da\",\"targetId\":\"44:54\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"先写 <草稿>，再发布 & 分享。\"}",
+          "usage": {
+            "inputTokens": 1189,
+            "outputTokens": 818,
+            "costUsd": 0
+          },
+          "elapsedMs": 7885
+        },
+        {
+          "id": "attribute-only/first",
+          "requestHash": "8f5b0019071cf038e617f4e41a166a8f457ed561f681b2b8d99db9de475a0b1e",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把输入框 placeholder 改成“搜索随记”，title 和按钮文字不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:65\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><input placeholder=\\\"请输入\\\" title=\\\"搜索\\\"/><button>搜索</button></main>}\",\"sourceHash\":\"915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c\",\"targets\":[{\"id\":\"22:91\",\"tagName\":\"main\",\"start\":22,\"end\":91,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:65\"},{\"kind\":\"element\",\"targetId\":\"65:84\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:65\",\"tagName\":\"input\",\"start\":28,\"end\":65,\"insertionOffset\":63,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-attribute\",\"name\":\"placeholder\",\"value\":\"请输入\"},{\"kind\":\"set-attribute\",\"name\":\"title\",\"value\":\"搜索\"}],\"directText\":\"\",\"textSources\":[],\"textLayout\":[],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"65:84\",\"tagName\":\"button\",\"start\":65,\"end\":84,\"insertionOffset\":72,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"搜索\"}],\"directText\":\"搜索\",\"textSources\":[{\"start\":73,\"end\":75,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"搜索\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><input placeholder=\\\"请输入\\\" title=\\\"搜索\\\"/><button>搜索</button></main>}\",\"sourceHash\":\"915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c\",\"targets\":[{\"id\":\"22:91\",\"tagName\":\"main\",\"start\":22,\"end\":91,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:65\"},{\"kind\":\"element\",\"targetId\":\"65:84\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:65\",\"tagName\":\"input\",\"start\":28,\"end\":65,\"insertionOffset\":63,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-attribute\",\"name\":\"placeholder\",\"value\":\"请输入\"},{\"kind\":\"set-attribute\",\"name\":\"title\",\"value\":\"搜索\"}],\"directText\":\"\",\"textSources\":[],\"textLayout\":[],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"65:84\",\"tagName\":\"button\",\"start\":65,\"end\":84,\"insertionOffset\":72,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"搜索\"}],\"directText\":\"搜索\",\"textSources\":[{\"start\":73,\"end\":75,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"搜索\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c",
+            "targetId": "28:65",
+            "kind": "set-attribute",
+            "field": "placeholder",
+            "value": "搜索随记"
+          },
+          "raw": "{\n\n\"path\":\"App.jsx\",\n\"expectedSourceHash\":\"915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c\",\n\"targetId\":\"28:65\",\n\"kind\":\"set-attribute\",\n\"field\":\"placeholder\",\n\"value\":\"搜索随记\"}",
+          "usage": {
+            "inputTokens": 1107,
+            "outputTokens": 498,
+            "costUsd": 0
+          },
+          "elapsedMs": 5155
+        },
+        {
+          "id": "other-file-decoy/first",
+          "requestHash": "b3af256395d21c0b0dff04de68fa11ad6843e5a3e0f17b4160fee1bfe8ffde3c",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"当前选择是 App.jsx 的 h1，把它改成“随记”。Archive.jsx 中即使有相同标题也必须保留。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:39\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h1>文章</h1><footer>作者信息</footer></main>}\",\"sourceHash\":\"89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0\",\"targets\":[{\"id\":\"22:67\",\"tagName\":\"main\",\"start\":22,\"end\":67,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:60\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"文章\"}],\"directText\":\"文章\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"文章\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:60\",\"tagName\":\"footer\",\"start\":39,\"end\":60,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"作者信息\"}],\"directText\":\"作者信息\",\"textSources\":[{\"start\":47,\"end\":51,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"作者信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h1>文章</h1><footer>作者信息</footer></main>}\",\"sourceHash\":\"89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0\",\"targets\":[{\"id\":\"22:67\",\"tagName\":\"main\",\"start\":22,\"end\":67,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:60\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"文章\"}],\"directText\":\"文章\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"文章\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:60\",\"tagName\":\"footer\",\"start\":39,\"end\":60,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"作者信息\"}],\"directText\":\"作者信息\",\"textSources\":[{\"start\":47,\"end\":51,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"作者信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0",
+            "targetId": "28:39",
+            "kind": "set-text",
+            "field": "text",
+            "value": "随记"
+          },
+          "raw": "{\n\n\"path\":\"App.jsx\",\"expectedSourceHash\":\"89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0\",\"targetId\":\"28:39\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"随记\"}",
+          "usage": {
+            "inputTokens": 1154,
+            "outputTokens": 710,
+            "costUsd": 0
+          },
+          "elapsedMs": 7147
+        }
+      ]
+    },
+    {
+      "model": "gemma",
+      "config": {
+        "schemaVersion": 1,
+        "dataset": "design-sessions-v1",
+        "responseProtocol": "typed-v2",
+        "responseFormat": "json-schema",
+        "executionGuard": "off",
+        "model": {
+          "provider": "ollama-local",
+          "modelId": "gemma4:codesign-eval-12b-16k-v2"
+        },
+        "credentialEnv": "OLLAMA_LOCAL_TOKEN",
+        "promptVariant": "baseline",
+        "trials": 1,
+        "maxCalls": 8,
+        "maxOutputTokens": 8192,
+        "timeoutMs": 240000,
+        "caseIds": [
+          "session-name",
+          "session-attribution",
+          "session-exact-copy",
+          "session-local-preview",
+          "session-release-pending",
+          "session-history-empty",
+          "session-partial-verification",
+          "session-verified-release"
+        ],
+        "baseUrl": "http://127.0.0.1:11434/v1",
+        "wire": "openai-chat"
+      },
+      "sourceFiles": [
+        ["experiment.test.ts", "b353cb45f6c38fe157820918d06c0afd2b9b8a2d1d2c4d5a17a82328d0811a21"],
+        [
+          "file-executor.test.ts",
+          "4a0b23c7d4720152ed4684e0531d611cb7004448cd326bb24eb58705404960aa"
+        ],
+        ["file-executor.ts", "dcef2d8f0399130a457fc9f4c72b33028da5ceb3624bf6d36d6644fbb9f1d607"],
+        ["live-cases.ts", "6147a75fbb8fd59d7abb71f77ccb5f5a84a7725266c526ad620d0b08ee31efbb"],
+        ["live-experiment.ts", "80a6233ff983bceb9ca6b29630100870bc9e684b278e8ba2f7f81ac802dd0c1a"],
+        ["model-session.mjs", "447788b193aef06174612b5588ff068f317f87cda664bbc176bb7c799e7ea055"],
+        [
+          "model-session.test.mjs",
+          "de1ba82b3d097baea5e2615ee611c35fe8c5c2919d659c9d3925f67a34cccae6"
+        ],
+        ["run-live.mjs", "42323b03f6f27ed71997a1bb749fef243d9436fb34df75ec41fe05af973582d0"],
+        ["scoped-edit.ts", "3d6f5f07cab21ca6cd6bba212ff4ec672311098b2cee2610ac00519b94c3a4e6"],
+        ["vitest.config.mjs", "14bb9a123e05cdc72d32c198c182e69184f3554c63cad5bef430dba9fa8420f7"]
+      ],
+      "engineFiles": [
+        [
+          "apps/desktop/src/main/source-edit-engine.ts",
+          "3e64c9a9f4b89311076947d0bfb584b502823717e1510c7304d6b508f8445210"
+        ],
+        [
+          "apps/desktop/src/main/source-edit-provenance.ts",
+          "60d39bc3bc273959d77b95dcfd900a423ddbfee5f1671593213c1b2ba49e4bc6"
+        ],
+        [
+          "packages/shared/src/source-edits.ts",
+          "03226008938057f0f6d3c3461d42a51f146a2fbf08e772045665fe3f64f73662"
+        ]
+      ],
+      "providerFiles": [
+        [
+          "packages/providers/src/index.ts",
+          "0e0b6b57970425f3a45755f4c9d2ee256ac64cbd1f484ce03959a3dfc23c021d"
+        ],
+        ["pnpm-lock.yaml", "03269cf20683103bd1c764d78a242f2502385ed9df1858ad2c0911e5df118b6f"],
+        [
+          "research/agent-behavior-evals/model-config.ts",
+          "4eae8da4bf235bb751d54cdf6f3a8c4f10af5a188cbfd2b3d16cb75b5919134a"
+        ]
+      ],
+      "providerCommit": "1ea646e07c57e4777870acf896e5f8b3e8d87179",
+      "parentCommit": "78997f229859ad4beb8d047cfbc2ef8ccfa2d275",
+      "rows": [
+        {
+          "id": "duplicate-label",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3",
+            "afterHash": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "开始",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3",
+            "afterHash": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "开始",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "Archive.jsx": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "da3891461102d6594962854599f2fd00717ae3194c033ceaa95063cddb036947",
+            "Archive.jsx": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3"
+          }
+        },
+        {
+          "id": "text-not-style",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79",
+            "afterHash": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "patch": {
+              "start": 58,
+              "end": 60,
+              "expectedText": "提交",
+              "replacement": "{\"发布随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79",
+            "afterHash": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "patch": {
+              "start": 58,
+              "end": 60,
+              "expectedText": "提交",
+              "replacement": "{\"发布随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "Archive.jsx": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "87b78b368153402d50dba9cbe631303cd2a7763524641f47e409a651cb432691",
+            "Archive.jsx": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79"
+          }
+        },
+        {
+          "id": "style-not-copy",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "rejected",
+            "reason": "stale-source",
+            "wrote": false
+          },
+          "guarded": {
+            "status": "rejected",
+            "reason": "stale-selection",
+            "wrote": false
+          },
+          "baselineSuccess": false,
+          "guardedFirstSuccess": false,
+          "blockedWithoutWrites": true,
+          "repair": {
+            "status": "ok",
+            "execution": {
+              "status": "rejected",
+              "reason": "stale-selection",
+              "wrote": false
+            }
+          },
+          "finalSuccess": false,
+          "baselineSnapshot": {
+            "App.jsx": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6",
+            "Archive.jsx": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6",
+            "Archive.jsx": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6"
+          }
+        },
+        {
+          "id": "literal-copy",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da",
+            "afterHash": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "patch": {
+              "start": 47,
+              "end": 50,
+              "expectedText": "旧文案",
+              "replacement": "{\"先写 \\u003c草稿\\u003e，再发布 \\u0026 分享。\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da",
+            "afterHash": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "patch": {
+              "start": 47,
+              "end": 50,
+              "expectedText": "旧文案",
+              "replacement": "{\"先写 \\u003c草稿\\u003e，再发布 \\u0026 分享。\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "Archive.jsx": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "e3dc5aab12b262305ca5ce62157d82a6f6b2b69108304a0f21760b58e9f61f3c",
+            "Archive.jsx": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da"
+          }
+        },
+        {
+          "id": "attribute-only",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c",
+            "afterHash": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "patch": {
+              "start": 47,
+              "end": 52,
+              "expectedText": "\"请输入\"",
+              "replacement": "{\"搜索随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c",
+            "afterHash": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "patch": {
+              "start": 47,
+              "end": 52,
+              "expectedText": "\"请输入\"",
+              "replacement": "{\"搜索随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "Archive.jsx": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "90ff47ba5d3bde18b98aa1a047901ba49705fe33a6b59265cc2e85d15663eeec",
+            "Archive.jsx": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c"
+          }
+        },
+        {
+          "id": "other-file-decoy",
+          "modelStatus": "ok",
+          "baseline": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0",
+            "afterHash": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "文章",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "guarded": {
+            "status": "applied",
+            "reason": null,
+            "wrote": true,
+            "beforeHash": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0",
+            "afterHash": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "patch": {
+              "start": 32,
+              "end": 34,
+              "expectedText": "文章",
+              "replacement": "{\"随记\"}"
+            }
+          },
+          "baselineSuccess": true,
+          "guardedFirstSuccess": true,
+          "blockedWithoutWrites": null,
+          "repair": null,
+          "finalSuccess": true,
+          "baselineSnapshot": {
+            "App.jsx": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "Archive.jsx": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0"
+          },
+          "guardedSnapshot": {
+            "App.jsx": "ce86a48f945b0b47cfc8f92b1a29116b0d2b3068e44dffb76ec12d4aa52bef2b",
+            "Archive.jsx": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0"
+          }
+        }
+      ],
+      "calls": [
+        {
+          "id": "duplicate-label/first",
+          "requestHash": "7244d1597c7120f2f438f28c9f5b18cb5f89c05227a78df241e25a8fcf793d44",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"把主标题“开始”改为“随记”，页脚的同名文字保持不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:39\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h1>开始</h1><footer>开始</footer></main>}\",\"sourceHash\":\"115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3\",\"targets\":[{\"id\":\"22:65\",\"tagName\":\"main\",\"start\":22,\"end\":65,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:58\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:58\",\"tagName\":\"footer\",\"start\":39,\"end\":58,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":47,\"end\":49,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h1>开始</h1><footer>开始</footer></main>}\",\"sourceHash\":\"115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3\",\"targets\":[{\"id\":\"22:65\",\"tagName\":\"main\",\"start\":22,\"end\":65,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:58\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:58\",\"tagName\":\"footer\",\"start\":39,\"end\":58,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"开始\"}],\"directText\":\"开始\",\"textSources\":[{\"start\":47,\"end\":49,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"开始\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3",
+            "targetId": "28:39",
+            "kind": "set-text",
+            "field": "text",
+            "value": "随记"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"115252908bd1e6905fe4c8c9e6f75a811f1eaa42097b318d3bc25dbd7c5f92d3\",\"targetId\":\"28:39\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"随记\"}",
+          "usage": {
+            "inputTokens": 1346,
+            "outputTokens": 1221,
+            "costUsd": 0
+          },
+          "elapsedMs": 26693
+        },
+        {
+          "id": "text-not-style/first",
+          "requestHash": "b42d6a62ee86eb4558458076fa63bc091ecddf1145a90f297c891b0d506b16dd",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把按钮文字改成“发布随记”，保留红色样式。早先提到的蓝色方案已经取消。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:69\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><button style={{color:\\\"red\\\"}}>提交</button><p>品牌红色保留</p></main>}\",\"sourceHash\":\"20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79\",\"targets\":[{\"id\":\"22:89\",\"tagName\":\"main\",\"start\":22,\"end\":89,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:69\"},{\"kind\":\"element\",\"targetId\":\"69:82\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:69\",\"tagName\":\"button\",\"start\":28,\"end\":69,\"insertionOffset\":57,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"提交\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"提交\",\"textSources\":[{\"start\":58,\"end\":60,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"提交\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"69:82\",\"tagName\":\"p\",\"start\":69,\"end\":82,\"insertionOffset\":71,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"品牌红色保留\"}],\"directText\":\"品牌红色保留\",\"textSources\":[{\"start\":72,\"end\":78,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"品牌红色保留\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><button style={{color:\\\"red\\\"}}>提交</button><p>品牌红色保留</p></main>}\",\"sourceHash\":\"20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79\",\"targets\":[{\"id\":\"22:89\",\"tagName\":\"main\",\"start\":22,\"end\":89,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:69\"},{\"kind\":\"element\",\"targetId\":\"69:82\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:69\",\"tagName\":\"button\",\"start\":28,\"end\":69,\"insertionOffset\":57,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"提交\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"提交\",\"textSources\":[{\"start\":58,\"end\":60,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"提交\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"69:82\",\"tagName\":\"p\",\"start\":69,\"end\":82,\"insertionOffset\":71,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"品牌红色保留\"}],\"directText\":\"品牌红色保留\",\"textSources\":[{\"start\":72,\"end\":78,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"品牌红色保留\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79",
+            "targetId": "28:69",
+            "kind": "set-text",
+            "field": "text",
+            "value": "发布随记"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"20d929044833b23f666e6e8169201b2db6c5ba61f7cdb30d732689afdb236b79\",\"targetId\":\"28:69\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"发布随记\"}",
+          "usage": {
+            "inputTokens": 1348,
+            "outputTokens": 641,
+            "costUsd": 0
+          },
+          "elapsedMs": 15013
+        },
+        {
+          "id": "style-not-copy/first",
+          "requestHash": "fc3e170c31a2324452483203d3f1d8a175bc184f42e794903ef99b8f682ac40c",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把 h2 标题颜色改成 #123456，文案和页脚保持不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:61\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h2 style={{color:\\\"red\\\"}}>随记</h2><footer style={{color:\\\"red\\\"}}>随记</footer></main>}\",\"sourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targets\":[{\"id\":\"22:109\",\"tagName\":\"main\",\"start\":22,\"end\":109,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:61\"},{\"kind\":\"element\",\"targetId\":\"61:102\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:61\",\"tagName\":\"h2\",\"start\":28,\"end\":61,\"insertionOffset\":53,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":54,\"end\":56,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"61:102\",\"tagName\":\"footer\",\"start\":61,\"end\":102,\"insertionOffset\":90,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":91,\"end\":93,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h2 style={{color:\\\"red\\\"}}>随记</h2><footer style={{color:\\\"red\\\"}}>随记</footer></main>}\",\"sourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targets\":[{\"id\":\"22:109\",\"tagName\":\"main\",\"start\":22,\"end\":109,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:61\"},{\"kind\":\"element\",\"targetId\":\"61:102\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:61\",\"tagName\":\"h2\",\"start\":28,\"end\":61,\"insertionOffset\":53,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":54,\"end\":56,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"61:102\",\"tagName\":\"footer\",\"start\":61,\"end\":102,\"insertionOffset\":90,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":91,\"end\":93,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdf1fab8b6",
+            "targetId": "28:61",
+            "kind": "set-style",
+            "field": "color",
+            "value": "#123456"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdf1fab8b6\",\"targetId\":\"28:61\",\"kind\":\"set-style\",\"field\":\"color\",\"value\":\"#123456\"}",
+          "usage": {
+            "inputTokens": 1344,
+            "outputTokens": 977,
+            "costUsd": 0
+          },
+          "elapsedMs": 22643
+        },
+        {
+          "id": "style-not-copy/repair",
+          "requestHash": "0d04b7b8d7f837df7d80e2af2799f737a5392a040bb8edd15751a05ca7a67bc2",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把 h2 标题颜色改成 #123456，文案和页脚保持不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:61\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h2 style={{color:\\\"red\\\"}}>随记</h2><footer style={{color:\\\"red\\\"}}>随记</footer></main>}\",\"sourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targets\":[{\"id\":\"22:109\",\"tagName\":\"main\",\"start\":22,\"end\":109,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:61\"},{\"kind\":\"element\",\"targetId\":\"61:102\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:61\",\"tagName\":\"h2\",\"start\":28,\"end\":61,\"insertionOffset\":53,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":54,\"end\":56,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"61:102\",\"tagName\":\"footer\",\"start\":61,\"end\":102,\"insertionOffset\":90,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":91,\"end\":93,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h2 style={{color:\\\"red\\\"}}>随记</h2><footer style={{color:\\\"red\\\"}}>随记</footer></main>}\",\"sourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"targets\":[{\"id\":\"22:109\",\"tagName\":\"main\",\"start\":22,\"end\":109,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:61\"},{\"kind\":\"element\",\"targetId\":\"61:102\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:61\",\"tagName\":\"h2\",\"start\":28,\"end\":61,\"insertionOffset\":53,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":54,\"end\":56,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]},{\"id\":\"61:102\",\"tagName\":\"footer\",\"start\":61,\"end\":102,\"insertionOffset\":90,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"随记\"},{\"kind\":\"set-style\",\"property\":\"color\",\"value\":\"red\"}],\"directText\":\"随记\",\"textSources\":[{\"start\":91,\"end\":93,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"随记\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"}]}]}]}"
+            },
+            {
+              "role": "assistant",
+              "content": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdf1fab8b6\",\"targetId\":\"28:61\",\"kind\":\"set-style\",\"field\":\"color\",\"value\":\"#123456\"}"
+            },
+            {
+              "role": "user",
+              "content": "{\"toolResult\":{\"status\":\"rejected\",\"reason\":\"stale-selection\",\"wrote\":false},\"currentSelection\":{\"path\":\"App.jsx\",\"targetId\":\"28:61\"},\"sourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdfa60d3bf1fab8b6\",\"request\":\"The file was not modified. Correct the proposal once, preserving the original request and selection.\"}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdf1fab8b6",
+            "targetId": "28:61",
+            "kind": "set-style",
+            "field": "color",
+            "value": "#123456"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"9cf9453721c13a3041a0ced37feb92c9cb77152983d09b3bdf1fab8b6\",\"targetId\":\"28:61\",\"kind\":\"set-style\",\"field\":\"color\",\"value\":\"#123456\"}",
+          "usage": {
+            "inputTokens": 216,
+            "outputTokens": 612,
+            "costUsd": 0
+          },
+          "elapsedMs": 13190
+        },
+        {
+          "id": "literal-copy/first",
+          "requestHash": "d7a995e0cd8f6a84e764b5fe1e3f3a2046511ee71650a59557ec129c75eb8790",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"把正文 p 原样改成“先写 <草稿>，再发布 & 分享。”，不要改写这句话，也不要改页脚。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"44:54\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"﻿// 保留换行和注释 😀\\r\\nfunction App(){return <main><p>旧文案</p><footer>备案信息</footer></main>}\\r\\n\",\"sourceHash\":\"6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da\",\"targets\":[{\"id\":\"38:82\",\"tagName\":\"main\",\"start\":38,\"end\":82,\"insertionOffset\":43,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"44:54\"},{\"kind\":\"element\",\"targetId\":\"54:75\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"44:54\",\"tagName\":\"p\",\"start\":44,\"end\":54,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"旧文案\"}],\"directText\":\"旧文案\",\"textSources\":[{\"start\":47,\"end\":50,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"旧文案\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"54:75\",\"tagName\":\"footer\",\"start\":54,\"end\":75,\"insertionOffset\":61,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"备案信息\"}],\"directText\":\"备案信息\",\"textSources\":[{\"start\":62,\"end\":66,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"备案信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"﻿// 保留换行和注释 😀\\r\\nfunction App(){return <main><p>旧文案</p><footer>备案信息</footer></main>}\\r\\n\",\"sourceHash\":\"6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da\",\"targets\":[{\"id\":\"38:82\",\"tagName\":\"main\",\"start\":38,\"end\":82,\"insertionOffset\":43,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"44:54\"},{\"kind\":\"element\",\"targetId\":\"54:75\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"44:54\",\"tagName\":\"p\",\"start\":44,\"end\":54,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"旧文案\"}],\"directText\":\"旧文案\",\"textSources\":[{\"start\":47,\"end\":50,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"旧文案\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"54:75\",\"tagName\":\"footer\",\"start\":54,\"end\":75,\"insertionOffset\":61,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"备案信息\"}],\"directText\":\"备案信息\",\"textSources\":[{\"start\":62,\"end\":66,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"备案信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da",
+            "targetId": "44:54",
+            "kind": "set-text",
+            "field": "text",
+            "value": "先写 <草稿>，再发布 & 分享。"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"6648c4d523535d96b08ecce7b96718a2bbdf8c1e0dce4db4e1666a2076f7d0da\",\"targetId\":\"44:54\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"先写 <草稿>，再发布 & 分享。\"}",
+          "usage": {
+            "inputTokens": 1407,
+            "outputTokens": 1380,
+            "costUsd": 0
+          },
+          "elapsedMs": 32429
+        },
+        {
+          "id": "attribute-only/first",
+          "requestHash": "8f5b0019071cf038e617f4e41a166a8f457ed561f681b2b8d99db9de475a0b1e",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"只把输入框 placeholder 改成“搜索随记”，title 和按钮文字不变。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:65\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><input placeholder=\\\"请输入\\\" title=\\\"搜索\\\"/><button>搜索</button></main>}\",\"sourceHash\":\"915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c\",\"targets\":[{\"id\":\"22:91\",\"tagName\":\"main\",\"start\":22,\"end\":91,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:65\"},{\"kind\":\"element\",\"targetId\":\"65:84\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:65\",\"tagName\":\"input\",\"start\":28,\"end\":65,\"insertionOffset\":63,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-attribute\",\"name\":\"placeholder\",\"value\":\"请输入\"},{\"kind\":\"set-attribute\",\"name\":\"title\",\"value\":\"搜索\"}],\"directText\":\"\",\"textSources\":[],\"textLayout\":[],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"65:84\",\"tagName\":\"button\",\"start\":65,\"end\":84,\"insertionOffset\":72,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"搜索\"}],\"directText\":\"搜索\",\"textSources\":[{\"start\":73,\"end\":75,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"搜索\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><input placeholder=\\\"请输入\\\" title=\\\"搜索\\\"/><button>搜索</button></main>}\",\"sourceHash\":\"915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c\",\"targets\":[{\"id\":\"22:91\",\"tagName\":\"main\",\"start\":22,\"end\":91,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:65\"},{\"kind\":\"element\",\"targetId\":\"65:84\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:65\",\"tagName\":\"input\",\"start\":28,\"end\":65,\"insertionOffset\":63,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-attribute\",\"name\":\"placeholder\",\"value\":\"请输入\"},{\"kind\":\"set-attribute\",\"name\":\"title\",\"value\":\"搜索\"}],\"directText\":\"\",\"textSources\":[],\"textLayout\":[],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"65:84\",\"tagName\":\"button\",\"start\":65,\"end\":84,\"insertionOffset\":72,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"搜索\"}],\"directText\":\"搜索\",\"textSources\":[{\"start\":73,\"end\":75,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"搜索\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c",
+            "targetId": "28:65",
+            "kind": "set-attribute",
+            "field": "placeholder",
+            "value": "搜索随记"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"915bb8ed2496fa238a16c473f29c600f269835acc06e7bf40f1e18bc6be6497c\",\"targetId\":\"28:65\",\"kind\":\"set-attribute\",\"field\":\"placeholder\",\"value\":\"搜索随记\"}",
+          "usage": {
+            "inputTokens": 1318,
+            "outputTokens": 818,
+            "costUsd": 0
+          },
+          "elapsedMs": 18368
+        },
+        {
+          "id": "other-file-decoy/first",
+          "requestHash": "b3af256395d21c0b0dff04de68fa11ad6843e5a3e0f17b4160fee1bfe8ffde3c",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Propose exactly one literal source-definition edit. Follow the latest user request and preserve everything else. Return only JSON matching {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"path\",\"expectedSourceHash\",\"targetId\",\"kind\",\"field\",\"value\"],\"properties\":{\"path\":{\"type\":\"string\"},\"expectedSourceHash\":{\"type\":\"string\"},\"targetId\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\",\"enum\":[\"set-text\",\"set-style\",\"set-attribute\"]},\"field\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}}}. All fields are strings. kind is set-text, set-style or set-attribute. For set-text field must be text; otherwise field is the actual property or attribute name. Copy the current sourceHash and AST targetId exactly. No Markdown."
+            },
+            {
+              "role": "user",
+              "content": "{\"task\":\"当前选择是 App.jsx 的 h1，把它改成“随记”。Archive.jsx 中即使有相同标题也必须保留。\",\"selection\":{\"path\":\"App.jsx\",\"targetId\":\"28:39\"},\"files\":[{\"path\":\"App.jsx\",\"source\":\"function App(){return <main><h1>文章</h1><footer>作者信息</footer></main>}\",\"sourceHash\":\"89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0\",\"targets\":[{\"id\":\"22:67\",\"tagName\":\"main\",\"start\":22,\"end\":67,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:60\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"文章\"}],\"directText\":\"文章\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"文章\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:60\",\"tagName\":\"footer\",\"start\":39,\"end\":60,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"作者信息\"}],\"directText\":\"作者信息\",\"textSources\":[{\"start\":47,\"end\":51,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"作者信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]},{\"path\":\"Archive.jsx\",\"source\":\"function App(){return <main><h1>文章</h1><footer>作者信息</footer></main>}\",\"sourceHash\":\"89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0\",\"targets\":[{\"id\":\"22:67\",\"tagName\":\"main\",\"start\":22,\"end\":67,\"insertionOffset\":27,\"scope\":\"source-definition\",\"editableFields\":[],\"directText\":\"\",\"textSources\":[],\"textLayout\":[{\"kind\":\"element\",\"targetId\":\"28:39\"},{\"kind\":\"element\",\"targetId\":\"39:60\"}],\"unsupported\":[{\"field\":\"text\",\"reason\":\"non-static-text\",\"message\":\"This element has no directly owned text. Select its text-bearing child.\"},{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"28:39\",\"tagName\":\"h1\",\"start\":28,\"end\":39,\"insertionOffset\":31,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"文章\"}],\"directText\":\"文章\",\"textSources\":[{\"start\":32,\"end\":34,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"文章\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]},{\"id\":\"39:60\",\"tagName\":\"footer\",\"start\":39,\"end\":60,\"insertionOffset\":46,\"scope\":\"source-definition\",\"editableFields\":[{\"kind\":\"set-text\",\"value\":\"作者信息\"}],\"directText\":\"作者信息\",\"textSources\":[{\"start\":47,\"end\":51,\"origin\":\"JSX text definition (all uses of this definition)\"}],\"textLayout\":[{\"kind\":\"text\",\"value\":\"作者信息\"}],\"unsupported\":[{\"field\":\"attributes\",\"reason\":\"no-static-attribute\",\"message\":\"Only existing static title, placeholder and alt attributes are supported.\"},{\"field\":\"style\",\"reason\":\"no-inline-style\",\"message\":\"Only existing properties of a direct inline style object are supported.\"}]}]}]}"
+            }
+          ],
+          "status": "ok",
+          "value": {
+            "path": "App.jsx",
+            "expectedSourceHash": "89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0",
+            "targetId": "28:39",
+            "kind": "set-text",
+            "field": "text",
+            "value": "随记"
+          },
+          "raw": "{\"path\":\"App.jsx\",\"expectedSourceHash\":\"89e1903e5749964d43a3885e2ca656ae029700b6e9d5ea28d18a0e3075ae4ae0\",\"targetId\":\"28:39\",\"kind\":\"set-text\",\"field\":\"text\",\"value\":\"随记\"}",
+          "usage": {
+            "inputTokens": 1364,
+            "outputTokens": 1311,
+            "costUsd": 0
+          },
+          "elapsedMs": 30941
+        }
+      ]
+    }
+  ]
+}
