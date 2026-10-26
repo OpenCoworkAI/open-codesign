@@ -4,6 +4,10 @@ Branch: `research/goal-aware-context`. Research-only, with no changes to pi comp
 
 Next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
 
+The next [host-owned facts pilot](./HOST_PROTOCOL.md) separates model-compressed goals/preferences from program-maintained identities, observed source revisions and verification state. It exercises two multi-step scenarios at six checkpoints and a host gate that rejects stale callbacks and premature completion. See [results](./HOST_RESULTS.md); the v1 results below remain unchanged.
+
+The v2 run completed 70 real calls. Raw all-fields-correct scores (model-record → host-facts) were Codex 6/6 → 6/6, Qwen 3/6 → 6/6, Gemma 5/6 → 6/6. Qwen's two over-budget summaries count as failures, so this difference is partly budget compliance. No live premature completion or gate refusal occurred; independent controls test enforcement. These are checkpoint replays, not an autonomous end-to-end desktop run.
+
 ## Real-model pilot (2026-10-26)
 
 A separate [live protocol](./LIVE_PROTOCOL.md) compares full histories, model-generated ordinary summaries and model-generated current-goal records across the same Codex, Qwen and Gemma models. Four original synthetic conversations cover superseded requirements, revocation, stale verification and design switching. Both compressed conditions have a 1,800-byte cap; the reader prompt stays identical and compression does not receive evaluator questions or labels. See [live results](./LIVE_RESULTS.md) for observed outcomes and limitations. This does not change application compaction or persisted memory.

@@ -2,8 +2,23 @@
 
 Status: proposed next work, not implemented by this document.
 Code inspection baseline: `4cf33932edc5f687e3cf7190261ebbb02c898d08`.
-The current branch contains a runnable offline experiment; its synthetic results are calibration evidence, not measured model gains.
+The branch now contains offline controls, two live-model pilots and a research host-state API. These are controlled synthetic experiments, not production integration or held-out evidence.
 Before a production change, refresh against main and re-check these entry points.
+
+## Research progress and next integration boundary (2026-10-27)
+
+[Host facts v2](./HOST_RESULTS.md) completed 70 model calls. The hybrid preserved authoritative file/verification facts while the model summarized user goals/preferences. Canonical-ID output removed the earlier free-form naming ambiguity; two Qwen over-budget summaries are still counted as failures. These scores do not compare directly with the earlier datasets.
+
+`host-context.ts` implements captured decision frames, observed file revisions, host-confirmed protection policy, pending work and single-use verification tickets. It rejects stale or superseded callbacks and gates completion. It does not resolve real preview selections or invoke actual preview/export tools. The independent scoped branch supplies a captured-selection edit API tested on real JSX files.
+
+The next implementation slice should be an opt-in adapter to the existing host/context pack, not another persisted model-written memory system:
+
+1. Read current host selection, workspace identity and source revision through existing provenance code; unresolved objects must trigger reinspection rather than speculative ID reuse.
+2. Attach preview results to the originating run/document/revision and only expose current evidence in context. Persisted old summaries must never resurrect verification.
+3. Correlate model proposals to captured frames and execute edits through the actual writer lock. Verify cancellation, run ownership, selection changes, external writes and alternate mutation-tool paths.
+4. Compare the existing production context pack against this adapter on independently annotated sessions with matched total input budgets and repeated trials. Run the supported background UI verification before any desktop integration is considered complete.
+
+The remaining sections describe the original production-oriented roadmap; these integration acceptance criteria have not been claimed as completed by the research pilots.
 
 ## First implementation slice: establish a production baseline offline
 
