@@ -1,6 +1,6 @@
 # Implementation plan: goal-aware context using the existing design brief
 
-Status: the production-baseline adapter and offline corpus/budget protocol are implemented. Real-session collection, candidate compression, real-model experiments and production integration remain proposed work.
+Status: the production-baseline adapter and offline corpus/budget protocol are implemented. A draft oracle evidence-aware selector is implemented; its human semantic review is pending. Real-session collection, natural-language extraction, real-model experiments and production integration remain proposed work.
 Code inspection baseline: `4cf33932edc5f687e3cf7190261ebbb02c898d08`.
 The current branch contains a runnable offline experiment; its synthetic results are calibration evidence, not measured model gains.
 Before a production change, refresh against main and re-check these entry points.
@@ -28,6 +28,9 @@ Acceptance:
 - Budget overflow, unavailable token counts and full-context overflow are explicit outcomes.
 
 ## Second slice: evolve the existing brief, not a separate memory system
+
+Research-only Task3 is implemented in goal-state.ts and candidate-pack.ts, with [draft annotation review](./ANNOTATION_REVIEW.md) and a [state-only oracle audit](./CANDIDATE_SELECTOR.md). Source evidence and lifecycle are checked, but annotation semantics await human review. This does not implement natural-language extraction or change a persisted brief schema.
+
 
 Current integration points:
 - [design-context.ts](../../packages/core/src/design-context.ts): `DesignSessionBriefV1`, `updateDesignSessionBrief`, prompt and pack builder.

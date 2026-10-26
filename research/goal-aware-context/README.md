@@ -2,7 +2,11 @@
 
 Branch: `research/goal-aware-context`. Research-only, with no changes to pi compaction or persisted application memory.
 
-Progress: production adapter and [corpus/comparison protocol](./CORPUS_PROTOCOL.md) are implemented. Candidate compression and model/downstream experiments remain next in the [implementation plan](./IMPLEMENTATION_PLAN.md).
+Progress: production adapter and [corpus/comparison protocol](./CORPUS_PROTOCOL.md) are implemented. An evidence-aware draft oracle selector is now available; natural-language extraction and model/downstream experiments remain next in the [implementation plan](./IMPLEMENTATION_PLAN.md).
+
+## Evidence-aware draft selector
+
+Task3 adds [evidence-aware lifecycle/selection](./CANDIDATE_SELECTOR.md) and 52 source-linked AI draft records for 8 development checkpoints. All remain pending human review; see [the review checklist](./ANNOTATION_REVIEW.md). The state-only oracle condition handles replacement, revocation, unresolved conflicts and stale revisions, with explicit budget/fallback metadata. It is not model extraction or measured quality improvement. The frozen Task2 corpus/references/manifest and heldout annotations are unchanged.
 
 ## Frozen corpus and comparison rules
 
