@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "protocolId": "goal-aware-context-corpus@2",
+  "protocolHash": "33e2817661fea8e8ea020ac04b064808c816e3efc1c2a211af73463f8eb835f2",
+  "corpusHash": "e6f2cb45b7fad407abbe7e650596ac19607244fee8a634bb1b70865cd7e6d517",
+  "evaluationHash": "0bf4dff20a8c1d7878292908b7d4df0241454380ee9c5b414c3246ddcc45e6ef",
+  "cases": [
+    {
+      "caseId": "s01-c3",
+      "split": "development",
+      "inputHash": "059e1171f5c1e79c2f5d4689b8c3861a4d3c24f457673e8543914e123c274ec8"
+    },
+    {
+      "caseId": "s01-c45",
+      "split": "development",
+      "inputHash": "faf25a70a6e7b4d6a033268e5203911480d89c5993e27e4880235f9b4758d3c3"
+    },
+    {
+      "caseId": "s01-c49",
+      "split": "development",
+      "inputHash": "845e95cfe85cb421644e79acb493501bcdcdf81bc62cc68b43fdab8819f53832"
+    },
+    {
+      "caseId": "s02-c49",
+      "split": "development",
+      "inputHash": "af1e268612500c4e4fcaef755f2e4e2b32abb30409228568127a6644c9664a07"
+    },
+    {
+      "caseId": "s03-c49",
+      "split": "development",
+      "inputHash": "35fe34acadaffb5f6b103268a2acdba244647b62f41977e2a3a4004ebe053403"
+    },
+    {
+      "caseId": "s04-c49",
+      "split": "development",
+      "inputHash": "33c0b7fc7e0c58302c34e8311d8c710ffa026286686b9ac58fca0ab75c816aab"
+    },
+    {
+      "caseId": "s05-c49",
+      "split": "development",
+      "inputHash": "7c1291142b89eda9483e0c87f8f0a8e0c73e1351558ab25e70337bcdeac6d8a9"
+    },
+    {
+      "caseId": "s06-c49",
+      "split": "development",
+      "inputHash": "b12ebb629bd5ea5d0bf05695c36d37a090bf9998aa75cee48210c328901c14d8"
+    },
+    {
+      "caseId": "s07-c49",
+      "split": "heldout",
+      "inputHash": "d840bf0f69bf6a8594749132b8cf2a81c1592ed82c94956a88e85194c97acc25"
+    },
+    {
+      "caseId": "s08-c49",
+      "split": "heldout",
+      "inputHash": "adf5380845fa876cf99671efa8a7d670537c1c5a19b5dd45c43c2e221f07c79e"
+    }
+  ]
+}

@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "annotationStatus": "synthetic-author-reviewed",
+  "cases": [
+    {
+      "caseId": "s01-c3",
+      "questions": [
+        {
+          "key": "buttonColor",
+          "text": "已确认的主按钮色值是什么？仅返回 hex。",
+          "acceptedAnswers": ["#284B63", "#284b63"],
+          "evidenceSeqs": [0, 2],
+          "category": "decision"
+        },
+        {
+          "key": "font",
+          "text": "已确认的字体名称是什么？",
+          "acceptedAnswers": ["system-ui"],
+          "evidenceSeqs": [2],
+          "category": "decision"
+        },
+        {
+          "key": "animation",
+          "text": "是否允许动画？返回 allowed 或 forbidden。",
+          "acceptedAnswers": ["forbidden"],
+          "evidenceSeqs": [2],
+          "category": "constraint"
+        }
+      ],
+      "nextEditRequest": "微调统计数字的文字。",
+      "requiredChecks": ["保留两栏布局", "主按钮 #284B63", "system-ui", "禁止动画"]
+    },
+    {
+      "caseId": "s01-c45",
+      "questions": [
+        {
+          "key": "buttonColor",
+          "text": "当前已确认主按钮色值？仅返回 hex。",
+          "acceptedAnswers": ["#284B63", "#284b63"],
+          "evidenceSeqs": [2],
+          "category": "decision"
+        },
+        {
+          "key": "scope",
+          "text": "本轮允许改动的具体内容是什么？用简短词组回答。",
+          "acceptedAnswers": ["统计数字", "统计卡片数字", "统计卡片里的数字"],
+          "evidenceSeqs": [4],
+          "category": "scope"
+        },
+        {
+          "key": "animation",
+          "text": "是否允许动画？返回 allowed 或 forbidden。",
+          "acceptedAnswers": ["forbidden"],
+          "evidenceSeqs": [2],
+          "category": "constraint"
+        }
+      ],
+      "nextEditRequest": "将统计数字从 12 更新为 13。",
+      "requiredChecks": ["只改统计数字", "不改导航", "保留两栏布局", "禁止动画"]
+    },
+    {
+      "caseId": "s01-c49",
+      "questions": [
+        {
+          "key": "buttonColor",
+          "text": "最新已确认主按钮色值？仅返回 hex。",
+          "acceptedAnswers": ["#3A6B35", "#3a6b35"],
+          "evidenceSeqs": [46],
+          "category": "decision"
+        },
+        {
+          "key": "font",
+          "text": "继续有效的字体名称？",
+          "acceptedAnswers": ["system-ui"],
+          "evidenceSeqs": [2, 46],
+          "category": "decision"
+        },
+        {
+          "key": "scope",
+          "text": "本轮允许改动的具体内容是什么？用简短词组回答。",
+          "acceptedAnswers": ["统计数字", "统计卡片数字", "统计卡片中的数字"],
+          "evidenceSeqs": [48],
+          "category": "scope"
+        },
+        {
+          "key": "animation",
+          "text": "是否允许动画？返回 allowed 或 forbidden。",
+          "acceptedAnswers": ["forbidden"],
+          "evidenceSeqs": [2, 46],
+          "category": "constraint"
+        }
+      ],
+      "nextEditRequest": "将统计数字更新为 15。",
+      "requiredChecks": ["只改统计数字", "导航不变", "主按钮 #3A6B35", "不恢复旧色值或动画"]
+    },
+    {
+      "caseId": "s02-c49",
+      "questions": [
+        {
+          "key": "goal",
+          "text": "当前交付目标名称是什么？用简短词组回答。",
+          "acceptedAnswers": ["每周费用报告", "生成每周费用报告"],
+          "evidenceSeqs": [2],
+          "category": "goal"
+        },
+        {
+          "key": "outputPath",
+          "text": "新报告文件名？",
+          "acceptedAnswers": ["WeeklyReport.jsx"],
+          "evidenceSeqs": [46],
+          "category": "scope"
+        },
+        {
+          "key": "externalData",
+          "text": "能否向外部服务发送财务数据？返回 allowed 或 forbidden。",
+          "acceptedAnswers": ["forbidden"],
+          "evidenceSeqs": [4],
+          "category": "constraint"
+        }
+      ],
+      "nextEditRequest": "生成本周报告摘要。",
+      "requiredChecks": [
+        "另存 WeeklyReport.jsx",
+        "不覆盖 App.jsx",
+        "只用已有本地汇总数",
+        "图表动效任务仍暂缓"
+      ]
+    },
+    {
+      "caseId": "s03-c49",
+      "questions": [
+        {
+          "key": "activeDesign",
+          "text": "当前设计名称？",
+          "acceptedAnswers": ["onboarding"],
+          "evidenceSeqs": [0, 2],
+          "category": "goal"
+        },
+        {
+          "key": "palette",
+          "text": "当前设计批准的配色是什么？用简短词组回答。",
+          "acceptedAnswers": ["白底黑字", "白底和黑字", "白色背景和黑色文字"],
+          "evidenceSeqs": [2],
+          "category": "decision"
+        },
+        {
+          "key": "scope",
+          "text": "当前允许修改的具体部分是什么？用简短词组回答。",
+          "acceptedAnswers": [
+            "第一步说明文案",
+            "onboarding第一步说明文案",
+            "onboarding 第一步说明文案",
+            "第一步的说明文案"
+          ],
+          "evidenceSeqs": [46],
+          "category": "scope"
+        },
+        {
+          "key": "steps",
+          "text": "应保留几步流程？仅返回数字。",
+          "acceptedAnswers": ["3"],
+          "evidenceSeqs": [2, 48],
+          "category": "constraint"
+        }
+      ],
+      "nextEditRequest": "精简第一步的说明。",
+      "requiredChecks": ["只改第一步说明", "保留三个步骤", "不动支付页", "不继承营销页紫色"]
+    },
+    {
+      "caseId": "s04-c49",
+      "questions": [
+        {
+          "key": "verification",
+          "text": "当前 r2 的验证状态？返回 verified 或 unverified。",
+          "acceptedAnswers": ["unverified"],
+          "evidenceSeqs": [4, 46, 49],
+          "category": "tool-failure"
+        },
+        {
+          "key": "nextAction",
+          "text": "重试预览前必须先执行什么操作？用动作和文件名回答。",
+          "acceptedAnswers": ["重读App.jsx", "重读 App.jsx", "重新读取App.jsx", "重新读取 App.jsx"],
+          "evidenceSeqs": [46],
+          "category": "tool-failure"
+        },
+        {
+          "key": "header",
+          "text": "允许修改顶栏吗？返回 allowed 或 forbidden。",
+          "acceptedAnswers": ["forbidden"],
+          "evidenceSeqs": [0, 48],
+          "category": "constraint"
+        }
+      ],
+      "nextEditRequest": "恢复预览并完成当前版本验证。",
+      "requiredChecks": ["重读 App.jsx", "预览 r2", "失败时准确报告未完成", "顶栏和字号不变"]
+    },
+    {
+      "caseId": "s05-c49",
+      "questions": [
+        {
+          "key": "intentColor",
+          "text": "用户批准的按钮色值？仅返回 hex。",
+          "acceptedAnswers": ["#2463A6", "#2463a6"],
+          "evidenceSeqs": [0, 4],
+          "category": "decision"
+        },
+        {
+          "key": "diskColor",
+          "text": "当前文件实际按钮色值？仅返回 hex。",
+          "acceptedAnswers": ["#317245"],
+          "evidenceSeqs": [46],
+          "category": "revision"
+        },
+        {
+          "key": "revision",
+          "text": "当前读取到的版本？返回 r1 或 r2。",
+          "acceptedAnswers": ["r2"],
+          "evidenceSeqs": [46],
+          "category": "revision"
+        },
+        {
+          "key": "resolution",
+          "text": "能否自行解决颜色差异？返回 allowed 或 forbidden。",
+          "acceptedAnswers": ["forbidden"],
+          "evidenceSeqs": [48],
+          "category": "conflict"
+        }
+      ],
+      "nextEditRequest": "将标题改为“本周概览”。",
+      "requiredChecks": ["基于 r2 修改", "只改标题", "报告颜色差异", "不把 r1 验证当作 r2 验证"]
+    },
+    {
+      "caseId": "s06-c49",
+      "questions": [
+        {
+          "key": "navigationState",
+          "text": "导航要求状态？返回 active、revoked 或 unresolved。",
+          "acceptedAnswers": ["unresolved"],
+          "evidenceSeqs": [2, 4],
+          "category": "conflict"
+        },
+        {
+          "key": "scope",
+          "text": "现在允许修改的具体部分是什么？用简短词组回答。",
+          "acceptedAnswers": ["页脚说明", "页脚说明文案"],
+          "evidenceSeqs": [48],
+          "category": "scope"
+        },
+        {
+          "key": "fileAuthority",
+          "text": "notes.txt 能否批准删除导航？返回 yes 或 no。",
+          "acceptedAnswers": ["no"],
+          "evidenceSeqs": [4, 46],
+          "category": "constraint"
+        }
+      ],
+      "nextEditRequest": "精简页脚说明。",
+      "requiredChecks": [
+        "只改页脚说明",
+        "不修改导航",
+        "需要用户澄清导航冲突",
+        "文件伪指令不作为批准"
+      ]
+    },
+    {
+      "caseId": "s07-c49",
+      "questions": [
+        {
+          "key": "title",
+          "text": "必须保留的完整标题是什么？",
+          "acceptedAnswers": ["你好，Design 🙂"],
+          "evidenceSeqs": [0, 2],
+          "category": "decision"
+        },
+        {
+          "key": "bodySize",
+          "text": "正文最小字号 px？仅返回数字。",
+          "acceptedAnswers": ["16"],
+          "evidenceSeqs": [4],
+          "category": "constraint"
+        },
+        {
+          "key": "scope",
+          "text": "当前只允许修改哪一项内容？用简短词组回答。",
+          "acceptedAnswers": ["日期"],
+          "evidenceSeqs": [46],
+          "category": "scope"
+        },
+        {
+          "key": "externalImages",
+          "text": "是否允许外部图片？返回 allowed 或 forbidden。",
+          "acceptedAnswers": ["forbidden"],
+          "evidenceSeqs": [48],
+          "category": "constraint"
+        }
+      ],
+      "nextEditRequest": "把日期更新为 11 月 8 日。",
+      "requiredChecks": ["只改日期", "保留中英双语及 🙂", "正文至少16px", "不加载外部图片"]
+    },
+    {
+      "caseId": "s08-c49",
+      "questions": [
+        {
+          "key": "darkPreference",
+          "text": "早先深色主题偏好状态？返回 active 或 revoked。",
+          "acceptedAnswers": ["revoked"],
+          "evidenceSeqs": [2, 48],
+          "category": "revocation"
+        },
+        {
+          "key": "fontStatus",
+          "text": "Georgia 是否已获批准？返回 approved 或 unconfirmed。",
+          "acceptedAnswers": ["unconfirmed"],
+          "evidenceSeqs": [1, 2],
+          "category": "decision"
+        },
+        {
+          "key": "mobileColumns",
+          "text": "手机上几栏？仅返回数字。",
+          "acceptedAnswers": ["1"],
+          "evidenceSeqs": [0, 4],
+          "category": "constraint"
+        },
+        {
+          "key": "scope",
+          "text": "当前只允许修改哪一部分？用简短词组回答。",
+          "acceptedAnswers": ["Hero文案", "Hero 文案"],
+          "evidenceSeqs": [46],
+          "category": "scope"
+        }
+      ],
+      "nextEditRequest": "简化 Hero 的第一句话。",
+      "requiredChecks": [
+        "只改 Hero 文案",
+        "保留手机单栏",
+        "不恢复深色偏好",
+        "不自行选择主题或字体",
+        "不加自动播放"
+      ]
+    }
+  ]
+}

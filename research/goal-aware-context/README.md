@@ -2,7 +2,13 @@
 
 Branch: `research/goal-aware-context`. Research-only, with no changes to pi compaction or persisted application memory.
 
-Next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
+Progress: production adapter and [corpus/comparison protocol](./CORPUS_PROTOCOL.md) are implemented. Candidate compression and model/downstream experiments remain next in the [implementation plan](./IMPLEMENTATION_PLAN.md).
+
+## Frozen corpus and comparison rules
+
+The offline protocol now includes 8 original synthetic sessions (400 rows), 10 checkpoints and 35 evaluator-only evidence answers, a connected-session/design split manifest, input/context hashes, complete-request budget checks and structured scoring. There are 6 development sessions and 2 reserved heldout sessions. These are protocol-regression materials, not independently annotated real-session evidence.
+
+Run the offline audit as described in [the protocol](./CORPUS_PROTOCOL.md). It calls the unchanged production pack and records estimates for all request sections; it makes no model calls and reports no model-quality score. The protocol specifies fixed tiers, scoring/failure rules, holdout limits and the real-session intake checklist.
 
 ## Production baseline adapter
 
@@ -12,7 +18,7 @@ The research adapter now calls the real [buildDesignContextPack](../../packages/
 - `production-fixtures.ts`: a deterministic synthetic conversation in the real `ChatMessageRow` format, with a fixed brief, preferences and workspace/resource state. Each call returns fresh input objects.
 - `run-production-baseline.ts`: exports the exact input and context pack, including the existing trace. Importing the module does not execute the CLI.
 
-The sample is synthetic calibration input, not a real session or a model-quality result. It does not import withheld questions or reference answers. The report's trace counts characters, not model tokens; it is not a measurement of the complete provider request. Equal total-token budgets and candidate compression remain future work.
+The sample is synthetic calibration input, not a real session or a model-quality result. It does not import withheld questions or reference answers. The report's trace counts characters, not model tokens; it is not a measurement of the complete provider request. The complete-request budget interface and comparison rules are defined in the corpus protocol; actual model-token measurements and candidate compression remain future work.
 
 From the repository root with Node 22 and pnpm 10.33.4:
 

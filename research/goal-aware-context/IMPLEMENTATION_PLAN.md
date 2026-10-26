@@ -1,13 +1,13 @@
 # Implementation plan: goal-aware context using the existing design brief
 
-Status: the production-baseline adapter is implemented. Corpus/budget protocol, candidate compression, real-model experiments and production integration remain proposed work.
+Status: the production-baseline adapter and offline corpus/budget protocol are implemented. Real-session collection, candidate compression, real-model experiments and production integration remain proposed work.
 Code inspection baseline: `4cf33932edc5f687e3cf7190261ebbb02c898d08`.
 The current branch contains a runnable offline experiment; its synthetic results are calibration evidence, not measured model gains.
 Before a production change, refresh against main and re-check these entry points.
 
 ## First implementation slice: establish a production baseline offline
 
-Implemented: production-baseline.ts directly calls [buildDesignContextPack](../../packages/core/src/design-context.ts), with frozen synthetic production-shaped input, exact-output comparison tests and an exclusive-write JSON report CLI. No model calls are made. The experiment below remains next work.
+Implemented: production-baseline.ts directly calls [buildDesignContextPack](../../packages/core/src/design-context.ts), with frozen synthetic production-shaped input, exact-output comparison tests and an exclusive-write JSON report CLI. No model calls are made. [Corpus/comparison protocol](./CORPUS_PROTOCOL.md) now supplies frozen synthetic materials, evaluator references, family splits, input/context binding and complete-request budget validation. Real-session intake and the model experiment below remain next work.
 Convert frozen session fixtures to its real `ChatMessageRow` input and provide fixed briefs, preferences and workspace state.
 Compare three conditions:
 1. Full context, subject to the selected model's actual context limit.
