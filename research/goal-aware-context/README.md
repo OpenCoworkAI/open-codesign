@@ -4,6 +4,14 @@ Branch: `research/goal-aware-context`. Research-only, with no changes to pi comp
 
 Next work: [implementation plan](./IMPLEMENTATION_PLAN.md).
 
+## Real-model pilot (2026-10-26)
+
+A separate [live protocol](./LIVE_PROTOCOL.md) compares full histories, model-generated ordinary summaries and model-generated current-goal records across the same Codex, Qwen and Gemma models. Four original synthetic conversations cover superseded requirements, revocation, stale verification and design switching. Both compressed conditions have a 1,800-byte cap; the reader prompt stays identical and compression does not receive evaluator questions or labels. See [live results](./LIVE_RESULTS.md) for observed outcomes and limitations. This does not change application compaction or persisted memory.
+
+All models passed 4/4 full-history cases. Strict ordinary-summary / goal-record scores were Codex 4/4 / 3/4, Qwen 2/4 / 3/4, and Gemma 1/4 / 1/4. Several failures were naming/translation differences; others were actual omissions or cross-design confusion. The report reviews these separately without changing frozen scores. Goal records did not consistently outperform ordinary summaries, and generating a summary increased total work for a single resumption. Host-owned revision/verification fields are the next integration candidate.
+
+The deterministic observations below are the original structured-event experiment, not live-model results.
+
 ## Hypothesis
 
 Explicitly preserving accepted design decisions for the active goal may retain constraints better than selecting recent history alone under a fixed context budget.
