@@ -70,6 +70,9 @@ Acceptance:
 
 ## Third slice: paired model and downstream-edit experiments
 
+The [unified entry](./UNIFIED_EVALUATION.md) implements frozen request plans, bounded injected pi calls, per-condition budgets, shared-summary host pairs, journals and default zero-call dry-runs. No new real-model run is claimed by that integration; endpoint configuration/authorization, reliable model counters, independent labels and downstream file edits remain required for stronger conclusions.
+
+
 Use 20 redacted multi-turn sessions with independently annotated constraints and later edit requests; split by session/design.
 Freeze questions and evaluation rules before tuning compression.
 Run the same fixed reader/model against current pack, candidate pack and full-context reference at equal measured/estimated budgets, with three trials.

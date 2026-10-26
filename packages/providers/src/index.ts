@@ -58,6 +58,8 @@ export interface GenerateOptions {
   allowKeyless?: boolean;
   /** Per-HTTP-request timeout forwarded to pi-ai; SDKs default to 10 minutes. */
   timeoutMs?: number;
+  /** Explicit SDK retry cap; rejected for adapters that cannot enforce it. */
+  maxRetries?: number;
 }
 
 export interface GenerateResult {
@@ -367,6 +369,11 @@ export async function complete(
   messages: ChatMessage[],
   opts: GenerateOptions,
 ): Promise<GenerateResult> {
+  if (
+    opts.maxRetries !== undefined &&
+    (!Number.isSafeInteger(opts.maxRetries) || opts.maxRetries < 0)
+  )
+    throw new CodesignError('Invalid retry limit', ERROR_CODES.PROVIDER_ERROR);
   const trimmedApiKey = opts.apiKey.trim();
   if (trimmedApiKey.length === 0 && opts.allowKeyless !== true) {
     throw new CodesignError('Missing API key', ERROR_CODES.PROVIDER_AUTH_MISSING);
@@ -392,6 +399,7 @@ export async function complete(
         headers?: Record<string, string>;
         onPayload?: (payload: unknown) => unknown;
         timeoutMs?: number;
+        maxRetries?: number;
       },
     ) => Promise<PiAssistantMessage>;
   };
@@ -410,6 +418,15 @@ export async function complete(
     }
   }
 
+  if (
+    opts.maxRetries !== undefined &&
+    !['openai-completions', 'openai-responses', 'anthropic-messages'].includes(piModel.api)
+  )
+    throw new CodesignError(
+      'Resolved adapter cannot enforce an explicit retry limit',
+      ERROR_CODES.PROVIDER_ERROR,
+    );
+
   const piContext = toPiContext(messages, piModel, opts);
 
   const piOpts: {
@@ -421,6 +438,7 @@ export async function complete(
     headers?: Record<string, string>;
     onPayload?: (payload: unknown) => unknown;
     timeoutMs?: number;
+    maxRetries?: number;
   } = {
     apiKey,
   };
@@ -428,6 +446,7 @@ export async function complete(
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.timeoutMs !== undefined) piOpts.timeoutMs = opts.timeoutMs;
+  if (opts.maxRetries !== undefined) piOpts.maxRetries = opts.maxRetries;
   const reasoning = opts.reasoning ?? requiredReasoningDefault(effectiveModelId);
   if (reasoning !== undefined && reasoning !== 'off') piOpts.reasoning = reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };

@@ -48,12 +48,12 @@ export function validHostDecision(value: unknown): value is HostDecision {
   const v = value as Record<string, unknown>;
   return (
     Object.keys(v).length === 5 &&
-    typeof v.action === 'string' &&
-    ['inspect', 'done', 'report-blocked'].includes(v.action) &&
+    typeof v['action'] === 'string' &&
+    ['inspect', 'done', 'report-blocked'].includes(v['action']) &&
     ['objectId', 'color', 'font'].every((key) => typeof v[key] === 'string') &&
-    Array.isArray(v.checks) &&
-    v.checks.every((item) => checks.includes(item as Check)) &&
-    unique(v.checks as string[])
+    Array.isArray(v['checks']) &&
+    v['checks'].every((item) => checks.includes(item as Check)) &&
+    unique(v['checks'] as string[])
   );
 }
 
@@ -94,7 +94,9 @@ export function createHostContext(root: string, documents: DocumentSpec[]) {
       } satisfies DocumentState as DocumentState,
     ]),
   );
-  let active = documents[0].id;
+  const [first] = documents;
+  if (!first) throw new Error('Duplicate or empty documents');
+  let active = first.id;
   let activation = 0;
   const frames = new Map<string, string>();
   const requests = new Map<string, { documentId: string; fingerprint: string; check: Check }>();

@@ -960,3 +960,55 @@ describe('inferReasoning', () => {
     );
   });
 });
+
+describe('bounded caller retry policy at the pi boundary', () => {
+  it.each([0, 2, undefined])('forwards only explicit retry limit %s', async (maxRetries) => {
+    completeSimpleMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'OK' }],
+      stopReason: 'stop',
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    });
+    await complete(
+      { provider: 'custom-fixture', modelId: 'fixture' },
+      [{ role: 'user', content: 'hello' }],
+      {
+        apiKey: 'fixture-key',
+        wire: 'openai-chat',
+        ...(maxRetries === undefined ? {} : { maxRetries }),
+      },
+    );
+    const options = completeSimpleMock.mock.calls[0]?.[2];
+    expect(options.maxRetries).toBe(maxRetries);
+    expect(Object.hasOwn(options, 'maxRetries')).toBe(maxRetries !== undefined);
+  });
+  it('rejects a resolved adapter with internal retries even if the requested wire is supported', async () => {
+    getModelMock.mockReturnValue({
+      id: 'fixture',
+      api: 'openai-codex-responses',
+      provider: 'fixture',
+      input: ['text'],
+    });
+    await expect(
+      complete(MODEL, [{ role: 'user', content: 'hello' }], {
+        apiKey: 'fixture-key',
+        wire: 'openai-chat',
+        maxRetries: 0,
+      }),
+    ).rejects.toThrow(/retry|retries/i);
+    expect(completeSimpleMock).not.toHaveBeenCalled();
+  });
+  it.each([
+    -1,
+    0.5,
+    Infinity,
+  ])('rejects invalid retry limit %s before provider work', async (maxRetries) => {
+    await expect(
+      complete(MODEL, [{ role: 'user', content: 'hello' }], {
+        apiKey: 'fixture-key',
+        wire: 'openai-chat',
+        maxRetries,
+      }),
+    ).rejects.toThrow(/retry|retries/i);
+    expect(completeSimpleMock).not.toHaveBeenCalled();
+  });
+});

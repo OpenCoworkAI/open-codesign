@@ -4,6 +4,10 @@ Branch: `research/goal-aware-context`. Research-only, with no changes to pi comp
 
 Progress: production adapter and [corpus/comparison protocol](./CORPUS_PROTOCOL.md) are implemented. An evidence-aware draft oracle selector is now available; the planned frozen-corpus extraction and model/downstream experiments remain next in the [implementation plan](./IMPLEMENTATION_PLAN.md).
 
+## Unified evaluation entry
+
+The [unified offline-first entry](./UNIFIED_EVALUATION.md) now connects the production baseline/frozen development corpus with the existing ordinary/goal summary prompts and the host-state API. Default dry-run reads no credentials and sends no requests. Compression-strategy and fixed-summary host-fact comparisons remain separate. The [pilot config](./unified-pilot.example.json) plans at most 47 calls with an explicit 60-call ceiling after model configuration; it is not executed automatically. Provider calls use this checkout's existing pi-backed complete function, without other research worktrees.
+
 ## Evidence-aware draft selector
 
 Task3 adds [evidence-aware lifecycle/selection](./CANDIDATE_SELECTOR.md) and 52 source-linked AI draft records for 8 development checkpoints. The five priority judgments R1–R5 were confirmed by the user on 2026-10-27; remaining records are not individually certified. The frozen draft snapshot retains its original pending flags; see [the review checklist and decisions](./ANNOTATION_REVIEW.md). The state-only oracle condition handles replacement, revocation, unresolved conflicts and stale revisions, with explicit budget/fallback metadata. It is not model extraction or measured quality improvement. The frozen Task2 corpus/references/manifest and heldout annotations are unchanged.

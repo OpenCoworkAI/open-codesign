@@ -10,11 +10,13 @@ export const summarySchema = {
   required: ['summary'],
   properties: { summary: { type: 'string' } },
 };
-export function compressorMessages(session, method) {
+export function compressorMessages(session, method, budgetBytes = summaryBudget) {
+  if (!Number.isSafeInteger(budgetBytes) || budgetBytes <= 0)
+    throw new Error('Invalid summary byte limit');
   return [
     {
       role: 'system',
-      content: `Summarize this design conversation for another agent resuming work. You receive only the conversation and current goal, not the downstream questions. Return JSON {"summary":"..."}, no Markdown. The decoded summary must be at most ${summaryBudget} UTF-8 bytes. ${method === 'ordinary-summary' ? 'Write a concise narrative summary of the conversation, decisions, progress and unresolved work.' : 'Write a structured current-goal record inside the summary string: current goal, accepted decisions, preservation constraints, revoked or superseded decisions, current workspace revision, and remaining verification. Separate confirmed user/tool facts from unaccepted suggestions. Discard other designs and invalidate verification from old revisions.'}`,
+      content: `Summarize this design conversation for another agent resuming work. You receive only the conversation and current goal, not the downstream questions. Return JSON {"summary":"..."}, no Markdown. The decoded summary must be at most ${budgetBytes} UTF-8 bytes. ${method === 'ordinary-summary' ? 'Write a concise narrative summary of the conversation, decisions, progress and unresolved work.' : 'Write a structured current-goal record inside the summary string: current goal, accepted decisions, preservation constraints, revoked or superseded decisions, current workspace revision, and remaining verification. Separate confirmed user/tool facts from unaccepted suggestions. Discard other designs and invalidate verification from old revisions.'}`,
     },
     { role: 'user', content: JSON.stringify({ goal: session.goal, history: session.history }) },
   ];
@@ -28,15 +30,17 @@ export function readerMessages(goal, context) {
     { role: 'user', content: JSON.stringify({ goal, context }) },
   ];
 }
-export function validSummary(value) {
+export function validSummary(value, budgetBytes = summaryBudget) {
   return (
+    Number.isSafeInteger(budgetBytes) &&
+    budgetBytes > 0 &&
     value !== null &&
     typeof value === 'object' &&
     !Array.isArray(value) &&
     Object.keys(value).length === 1 &&
     typeof value.summary === 'string' &&
     value.summary.length > 0 &&
-    Buffer.byteLength(value.summary, 'utf8') <= summaryBudget
+    Buffer.byteLength(value.summary, 'utf8') <= budgetBytes
   );
 }
 export function contextPlan() {

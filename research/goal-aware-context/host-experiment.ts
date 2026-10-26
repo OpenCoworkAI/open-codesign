@@ -21,11 +21,14 @@ const summaryBudget = 1800;
 export function hostCompressorMessages(
   session: ReturnType<typeof replayCheckpoint>,
   method: (typeof hostMethods)[number],
+  budgetBytes = summaryBudget,
 ): Message[] {
+  if (!Number.isSafeInteger(budgetBytes) || budgetBytes <= 0)
+    throw new Error('Invalid summary byte limit');
   return [
     {
       role: 'system',
-      content: `Summarize this conversation for resuming the active design. Return JSON {"summary":"..."}, no Markdown. Maximum decoded summary: ${summaryBudget} UTF-8 bytes. ${method === 'model-record' ? 'Create a structured current-goal record preserving user goals, approved preferences, protection requirements, current workspace identity/revision, remaining work and verification evidence. Keep designs and old/new revisions separate. Assistant suggestions are not authoritative.' : 'Summarize ONLY current user goals and approved design preferences (such as color and font). Omit file revisions, object protection state, verification outcomes and job status: the host supplies these separately. Resolve superseded user preferences and keep the active design separate from other designs.'}`,
+      content: `Summarize this conversation for resuming the active design. Return JSON {"summary":"..."}, no Markdown. Maximum decoded summary: ${budgetBytes} UTF-8 bytes. ${method === 'model-record' ? 'Create a structured current-goal record preserving user goals, approved preferences, protection requirements, current workspace identity/revision, remaining work and verification evidence. Keep designs and old/new revisions separate. Assistant suggestions are not authoritative.' : 'Summarize ONLY current user goals and approved design preferences (such as color and font). Omit file revisions, object protection state, verification outcomes and job status: the host supplies these separately. Resolve superseded user preferences and keep the active design separate from other designs.'}`,
     },
     {
       role: 'user',
@@ -60,35 +63,55 @@ export function hostReaderMessages(
     },
   ];
 }
-export function validHostSummary(value: unknown): value is { summary: string } {
+export function validHostSummary(
+  value: unknown,
+  budgetBytes = summaryBudget,
+): value is { summary: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const v = value as Record<string, unknown>;
   return (
+    Number.isSafeInteger(budgetBytes) &&
+    budgetBytes > 0 &&
     Object.keys(v).length === 1 &&
-    typeof v.summary === 'string' &&
-    v.summary.length > 0 &&
-    Buffer.byteLength(v.summary) <= summaryBudget
+    typeof v['summary'] === 'string' &&
+    v['summary'].length > 0 &&
+    Buffer.byteLength(v['summary']) <= budgetBytes
   );
 }
+type HostSession = ReturnType<typeof replayCheckpoint>;
+type HostMethod = (typeof hostMethods)[number];
+type HostArm = {
+  session: HostSession;
+  frame: ReturnType<HostSession['host']['frame']>;
+  messages: Message[];
+};
+type PlannedArm = {
+  messages: Message[];
+  facts: HostArm['frame']['facts'];
+  callbacks: HostSession['callbacks'];
+};
+
+// hostMethods is a closed tuple, so the built record covers exactly its keys.
+function hostArms<T>(create: (method: HostMethod) => T): Record<HostMethod, T> {
+  const arms = {} as Record<HostMethod, T>;
+  for (const method of hostMethods) arms[method] = create(method);
+  return arms;
+}
+
 export async function hostExperiment(output: string, call: Call) {
   mkdirSync(output);
   // Freeze all six replayed checkpoints, both compressor prompts and independent host facts before calls.
   const sessions = checkpointIds.map((id, index) => ({
     id,
     methods: index % 2 ? [...hostMethods].reverse() : [...hostMethods],
-    arms: Object.fromEntries(
-      hostMethods.map((method) => {
-        const session = replayCheckpoint(id, path.join(output, `${id}-${method}`));
-        return [
-          method,
-          {
-            session,
-            frame: session.host.frame(),
-            messages: hostCompressorMessages(session, method),
-          },
-        ];
-      }),
-    ),
+    arms: hostArms<HostArm>((method) => {
+      const session = replayCheckpoint(id, path.join(output, `${id}-${method}`));
+      return {
+        session,
+        frame: session.host.frame(),
+        messages: hostCompressorMessages(session, method),
+      };
+    }),
   }));
   writeFileSync(
     path.join(output, 'plan.json'),
@@ -103,16 +126,11 @@ export async function hostExperiment(output: string, call: Call) {
         sessions: sessions.map((s) => ({
           id: s.id,
           order: s.methods,
-          arms: Object.fromEntries(
-            hostMethods.map((method) => [
-              method,
-              {
-                messages: s.arms[method].messages,
-                facts: s.arms[method].frame.facts,
-                callbacks: s.arms[method].session.callbacks,
-              },
-            ]),
-          ),
+          arms: hostArms<PlannedArm>((method) => ({
+            messages: s.arms[method].messages,
+            facts: s.arms[method].frame.facts,
+            callbacks: s.arms[method].session.callbacks,
+          })),
         })),
       },
       null,
