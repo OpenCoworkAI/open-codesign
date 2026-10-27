@@ -29,6 +29,7 @@ import {
 import type { Browser, ConsoleMessage, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
 import { inspectLayout, layoutFailureWarning } from './layout-probe';
 import { getLogger } from './logger';
+import { capturePreviewFocus } from './preview-focus';
 import { boundedPreview, collectVisibleEvidence, runPreviewSteps } from './preview-interactions';
 import { resolveSafeWorkspaceChildPath } from './workspace-reader';
 
@@ -263,14 +264,21 @@ export async function runPreview(opts: RunPreviewOptions): Promise<PreviewResult
       result.warnings = [layoutFailureWarning(err).message];
     }
 
-    if (opts.vision) {
+    if (opts.focus) {
+      Object.assign(
+        result,
+        await capturePreviewFocus(page, opts.focus, sourcePath, opts.vision, opts.signal),
+      );
+    }
+    if (opts.vision && !opts.focus) {
       const png = await boundedPreview(
         page.screenshot({ type: 'png', encoding: 'base64' }),
         2000,
         opts.signal,
       );
       result.screenshot = `data:image/png;base64,${png}`;
-    } else {
+    }
+    if (!opts.vision) {
       result.domOutline = await boundedPreview(
         page.evaluate(() => {
           // Runs in the browser. Re-declare the minimal DOM surface we need

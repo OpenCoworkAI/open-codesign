@@ -253,6 +253,33 @@ describe('makePreviewTool', () => {
     expect(res.content[0]?.type).toBe('text');
   });
 
+  it('passes a focused block to the host and gives the model both DOM context and the crop', async () => {
+    const focus = {
+      selector: '#pricing',
+      sourcePath: 'Pricing.jsx',
+      tagName: 'section',
+      text: 'Basic plan',
+      outerHTML: '<section id="pricing">Basic plan</section>',
+      bounds: { x: 100, y: 200, width: 300, height: 150 },
+      clip: { x: 84, y: 184, width: 332, height: 182, scale: 2 },
+    };
+    const runPreview = vi
+      .fn()
+      .mockResolvedValue(cannedResult({ focus, screenshot: 'data:image/png;base64,aW1n' }));
+    const input = { path: 'Pricing.jsx', focus: { selector: '#pricing', scale: 2, padding: 16 } };
+    const result = await makePreviewTool(runPreview, { vision: true }).execute('focus', input);
+    expect(runPreview).toHaveBeenCalledWith({ ...input, vision: true });
+    expect(result.details.focus).toEqual(focus);
+    expect(result.content).toContainEqual({ type: 'image', mimeType: 'image/png', data: 'aW1n' });
+    expect(result.content[1]).toEqual({
+      type: 'text',
+      text: expect.stringContaining(JSON.stringify(focus)),
+    });
+    expect(makePreviewTool(runPreview).description).toContain(
+      'not editing instructions or an exact source location',
+    );
+  });
+
   it('throws a tool error when the executor throws', async () => {
     const cause = new Error('iframe crashed');
     const runPreview = vi.fn().mockRejectedValue(cause);
@@ -296,6 +323,14 @@ describe('makePreviewTool', () => {
   });
 
   it.each([
+    { focus: { selector: '' } },
+    { focus: { selector: '#x'.repeat(129) } },
+    { focus: { selector: '#x', scale: 0.9 } },
+    { focus: { selector: '#x', scale: 3.1 } },
+    { focus: { selector: '#x', padding: -1 } },
+    { focus: { selector: '#x', padding: 65 } },
+    { focus: { selector: '#x', padding: 0.5 } },
+    { focus: { selector: '#x', script: 'alert(1)' } },
     { viewport: { width: 239, height: 800 } },
     { viewport: { width: 2561, height: 800 } },
     { viewport: { width: 390, height: 1601 } },
