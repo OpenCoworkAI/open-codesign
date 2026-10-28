@@ -84,3 +84,13 @@ pnpm exec tsx --tsconfig research/goal-aware-context/tsconfig.json \
 本工作树先前依赖不完整，曾出现测试入口缺失、Electron依赖元数据缺失及一次遗漏研究tsconfig的命令错误；已修复并重跑。完整日志、失败记录及 verification.json 保存在本地忽略目录 .Codex/workspace/goal-aware-context/unified-runner/。正式模型质量、实际账单与完整等token比较均未验证。
 
 复核命令：node packages/core/node_modules/vitest/vitest.mjs run --config research/goal-aware-context/vitest.config.mjs；pnpm --filter @open-codesign/providers test；pnpm test；pnpm typecheck；pnpm lint。研究类型检查分别使用 pnpm exec tsc -p research/goal-aware-context/tsconfig.json 和 pnpm exec tsc -p research/goal-aware-context/host.tsconfig.json。
+
+## 评分协议 v2（2026-10-28）
+
+新运行采用 [评分协议v2](./SCORING_PROTOCOL_V2.md) 和独立人工裁决覆盖层；旧语料与运行结果保留。压缩组逐题报告内容、格式和综合成功，未知格式异常进入复核队列。新增 [完整开发集模板](./unified-development.example.json)：8个开发检查点、6个宿主案例，2K一轮最多169次调用；输出额度4096、摘要上限1800字节。模型身份可通过目标配置中的modelIdentity记录用户确认，和实际请求modelId分别保留。
+
+离线复算：pnpm exec tsx --tsconfig research/goal-aware-context/tsconfig.json research/goal-aware-context/unified-rescore.ts .Codex/workspace/goal-aware-context <全新派生输出目录>。要求原始两轮日志与冻结哈希一致；不读取API密钥。
+
+## 开发集实跑结果（2026-10-28）
+
+[第003轮结果与校准汇总](./DEVELOPMENT_003_RESULTS.md)记录169次计划、156次实际调用及各类失败。当前严格压缩组101/135；[18项待复核清单](./DEVELOPMENT_003_REVIEW.md)中的14项同义/翻译、1项范围争议及3项格式内容判断尚未获得本轮人工确认，不改写原分数。宿主事实组独立统计。
