@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "protocol": "unified-scoring@2",
+  "confirmedAt": "2026-10-27",
+  "confirmation": "A—D全部接受，E按建议",
+  "reviewStatus": "post-hoc user adjudication of development outputs; not independent dual annotation",
+  "aliasExtensions": [
+    {
+      "caseId": "s01-c49",
+      "key": "scope",
+      "answers": [
+        "调整统计卡片中的数字",
+        "调整统计卡片数字",
+        "统计卡片里的数字",
+        "仅调整统计卡片中的数字"
+      ],
+      "evidenceSeqs": [48],
+      "reviewId": "A-D"
+    }
+  ],
+  "questionOverrides": [
+    {
+      "caseId": "s05-c49",
+      "key": "diskColor",
+      "text": "当前文件实际按钮色值？JSON 中该字段的值仅填写 hex。"
+    }
+  ],
+  "humanReviews": [
+    {
+      "id": "E1",
+      "runId": "pilot-live-002",
+      "caseId": "s01-c49",
+      "key": "scope",
+      "evidenceSeqs": [48],
+      "decision": "content-correct; format-fail; overall-fail",
+      "response": {
+        "id": "3796d934dbef69f094a8733b36539da8668cf82276d52de818bedf158a5ef631/read/scope",
+        "requestHash": "b8fcd43710aba6024bb394782f0294d08e2d0ca69c32c060c7ef3eb464ef816d",
+        "status": "ok",
+        "value": {
+          "answer": "统计数字"
+        },
+        "raw": "{\"answer\":\"统计数字\"}"
+      }
+    },
+    {
+      "id": "E2",
+      "runId": "pilot-live-002",
+      "caseId": "s05-c49",
+      "key": "revision",
+      "evidenceSeqs": [46],
+      "decision": "content-correct; format-fail; overall-fail",
+      "response": {
+        "id": "d691be675cb4ae6671f61bfabf57b65ffd812deafa43e7afbe73ee3552e2b13e/read/revision",
+        "requestHash": "b37dfcf9685ca5b65fde343ad4c82d3bf85c8dd8e3985e5e392ecaf314f656ea",
+        "status": "ok",
+        "value": {
+          "key": "revision",
+          "text": "r2"
+        },
+        "raw": "{\"key\":\"revision\",\"text\":\"r2\"}"
+      }
+    },
+    {
+      "id": "E3",
+      "runId": "pilot-live-001",
+      "caseId": "s05-c49",
+      "key": "diskColor",
+      "evidenceSeqs": [46],
+      "decision": "content-correct; format-fail; overall-fail",
+      "response": {
+        "id": "cb2f37293a24709dbfff3279066f2fa73cb70373209256697eb81cbccfeb5eb3/read/diskColor",
+        "requestHash": "88fd04a33dded3819fe6200f7bd59c91eef78e1bed2fe62711f0874d6f298381",
+        "status": "invalid-json",
+        "value": null,
+        "raw": "#317245"
+      }
+    }
+  ],
+  "historicalSha256": {
+    "pilot-live-001": {
+      "manifest.json": "592b98c910d6c0c3c9f1bc253189e64b57a8c6161c742fb6101b10b7dc4d8b49",
+      "plan.json": "34ff0d1b49641bf1d4e2762256fb7d78e30d66281982d993630bd365a7a663a9",
+      "report.json": "827b8ec4f28dfde721a8fa64e923ab7a3f64c2ad0a49dd8c4b4b3219ba1fb7a9",
+      "calls.jsonl": "79f88346e7aab36a517bb5a9d0516b5e593fb1895f02df2228499fd89a6fd899",
+      "contexts.jsonl": "823a1f73622c6cb454bdbca1e3ec9fb92b154d297fa2e3c0889cebe9f0939518",
+      "observations.jsonl": "24c408d01b904346ce28534289bcba50d38bc0f251cfdcd10da603f534f8ad0e"
+    },
+    "pilot-live-002": {
+      "manifest.json": "d7025654d5aa6bd15022d06eead5456efd94ab49753537711cc7a9400521e7fb",
+      "plan.json": "b3d9e4441a568cf34e59a185a58e2a8d10d77386f424ffbbad409a27c5a001b3",
+      "report.json": "e8159f81b6529d0aff45bd7c93d04a5c1c64f6b17261faac645bf4d13b27bf58",
+      "calls.jsonl": "bce3c86be2a3df90310d4f67a1d7da8e6bdb8d44da83a4e65a2c4484b1f35fbc",
+      "contexts.jsonl": "9482f67d428bc34378cf79c434e02dfc3325177909078aba280c9a7901a8786d",
+      "observations.jsonl": "48ee52021a9923ac62df8a18a0aeea306bd82a529dd64322cf7f9728435cf1ab"
+    }
+  }
+}

@@ -416,3 +416,58 @@ it('preserves compressor protocol failures in terminal observations', async () =
       .every((r) => r.status === 'invalid-json'),
   ).toBe(true);
 });
+
+it('scores approved aliases, exposes unknown shape review queue and preserves all planned questions', async () => {
+  const f = fixture();
+  const result = await runUnified(
+    f.prepared,
+    { execute: true, workspace: f.workspace },
+    {
+      getCredential: () => 'fixture-key',
+      complete: async (model, messages, options) => {
+        if (messages[0]?.content.includes('Answer the single requested')) {
+          const q = JSON.parse(JSON.parse(messages.at(-1)?.content ?? '{}').question);
+          return {
+            content: JSON.stringify(
+              q.key === 'scope' ? { scope: '仅调整统计卡片中的数字' } : { answer: 'unknown' },
+            ),
+            inputTokens: 1,
+            outputTokens: 1,
+            costUsd: 0,
+          };
+        }
+        return fake(model, messages, options);
+      },
+    },
+  );
+  const rows = result.observations.filter((o) => o.group === 'compression');
+  expect(rows.every((o) => o.questions?.length === 4)).toBe(true);
+  expect(rows.flatMap((o) => o.questions ?? []).filter((q) => q.success)).toHaveLength(5);
+  expect(result.report.groups.compression.correct).toBe(5);
+  expect(result.report.groups.compression.questionMetrics).toMatchObject({
+    total: 20,
+    contentCorrect: 5,
+    pendingReview: 15,
+    successful: 5,
+  });
+  expect(result.report.reviewQueue).toHaveLength(15);
+});
+it('rejects changes to prepared scoring before reading keys', async () => {
+  const f = fixture();
+  f.prepared.scoring.aliasExtensions[0]?.answers.push('forbidden-new-alias');
+  await expect(runUnified(f.prepared)).rejects.toThrow(/scoring|Frozen/i);
+});
+
+it('rejects a policy changed after freezing even when the new plan has a consistent hash', async () => {
+  const f = fixture();
+  const data = loadUnifiedData();
+  const changed = structuredClone(f.prepared.scoring);
+  changed.aliasExtensions[0]?.answers.push('unapproved');
+  const prepared = prepareUnifiedPlan(
+    { ...data, scoring: changed },
+    f.prepared.plan.config,
+    `${f.workspace}/other`,
+  );
+  expect(prepared.plan.planHash).not.toBe(f.prepared.plan.planHash);
+  await expect(runUnified(prepared)).rejects.toThrow(/Current scoring/i);
+});

@@ -64,3 +64,62 @@ it('pins original manifests, reference file, implementation and lock fingerprint
   );
   expect(reference.cases.length).toBe(10);
 });
+
+it('pins scoring policy independently and never exposes adjudication metadata to models', () => {
+  const data = loadUnifiedData();
+  const prepared = prepareUnifiedPlan(data, pilot(), root());
+  expect(prepared.plan.protocol).toBe('unified-context@2');
+  expect(prepared.plan.sourceHashes.scoring).toMatch(/^[a-f0-9]{64}$/u);
+  const requests = JSON.stringify(
+    prepared.plan.compression.map((c) => ({
+      questions: c.questions,
+      prompt: c.readerSystemPrompt,
+      compressor: c.compressorMessages,
+    })),
+  );
+  expect(requests).not.toContain('aliasExtensions');
+  expect(requests).not.toContain('humanReviews');
+  expect(requests).not.toContain('A—D全部接受');
+  expect(requests).not.toContain('acceptedAnswers');
+});
+
+it('binds model identity, clarified questions and the 169-call development configuration', () => {
+  const config = parseUnifiedConfig(
+    JSON.parse(
+      readFileSync(new URL('./unified-development.example.json', import.meta.url), 'utf8'),
+    ),
+  );
+  const prepared = prepareUnifiedPlan(loadUnifiedData(), config, root());
+  expect(prepared.plan.plannedCalls).toEqual({ compressor: 22, reader: 147, total: 169 });
+  expect(prepared.plan.inputs).toHaveLength(8);
+  expect(prepared.plan.hostPairs).toHaveLength(6);
+  expect(prepared.plan.inputs.some((input) => ['s07-c49', 's08-c49'].includes(input.caseId))).toBe(
+    false,
+  );
+  const color = prepared.plan.compression
+    .find((c) => c.caseId === 's05-c49')
+    ?.questions.find((q) => q.key === 'diskColor');
+  expect(color?.text).toContain('JSON 中该字段的值仅填写 hex');
+  expect(config.maxOutputTokens).toBe(4096);
+  const withIdentity = parseUnifiedConfig({
+    ...config,
+    models: {
+      ...config.models,
+      reader: {
+        ...config.models.reader,
+        modelIdentity: {
+          displayName: 'Doubao-Seed-2.0-mini',
+          source: 'user-confirmed',
+          selection: 'manual-fixed',
+          confirmedAt: '2026-10-27',
+          backendVersion: null,
+        },
+      },
+    },
+  });
+  const identified = prepareUnifiedPlan(loadUnifiedData(), withIdentity, root());
+  expect(identified.plan.config.models.reader.modelIdentity?.displayName).toBe(
+    'Doubao-Seed-2.0-mini',
+  );
+  expect(identified.plan.planHash).not.toBe(prepared.plan.planHash);
+});

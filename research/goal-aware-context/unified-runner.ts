@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import type { ChatMessage } from '@open-codesign/shared';
 import { formatUntrustedContext } from '../../packages/core/src/lib/context-format.js';
 import { freezeContext, getCompressorInput, hashJson, reuseContext } from './corpus.js';
-import { scoreAnswers } from './evaluation.js';
 import { hostReaderMessages, validHostSummary } from './host-experiment.js';
 import { scoreHostAnswer } from './host-rubric.js';
 import { replayCheckpoint } from './host-scenarios.js';
@@ -24,6 +23,7 @@ import {
   type PreparedUnified,
   readerEnvelope,
 } from './unified-plan.js';
+import { type QuestionJudgment, scoreQuestion, summarizeJudgments } from './unified-scoring.js';
 import {
   createUnifiedSession,
   type SessionDependencies,
@@ -60,6 +60,7 @@ export interface UnifiedObservation {
   guard: unknown;
   callIds: string[];
   historyBudgetChars: number | null;
+  questions: QuestionJudgment[] | null;
 }
 export interface RunDependencies extends SessionDependencies {
   counters?: UnifiedCounters;
@@ -75,7 +76,7 @@ export interface RunOptions {
 export interface UnifiedRunResult {
   report: {
     schemaVersion: 1;
-    protocol: 'unified-context@1';
+    protocol: 'unified-context@2';
     mode: 'dry-run' | 'execute';
     planHash: string;
     plannedCalls: PreparedUnified['plan']['plannedCalls'];
@@ -83,9 +84,21 @@ export interface UnifiedRunResult {
     executionHash: string;
     counterIds: { compressor: string; reader: string };
     groups: {
-      compression: { correct: number | null; total: number; byCondition: unknown[] };
+      compression: {
+        correct: number | null;
+        total: number;
+        byCondition: unknown[];
+        questionMetrics: ReturnType<typeof summarizeJudgments> | null;
+      };
       hostFacts: { correct: number | null; total: number; byCondition: unknown[] };
     };
+    reviewQueue: {
+      caseId: string;
+      method: string;
+      conditionId: string;
+      key: string;
+      callId: string | null;
+    }[];
     usage: {
       callsWithReportedUsage: number;
       reportedInputTokensSubtotal: number | null;
@@ -127,6 +140,7 @@ function missingObservation(condition: CompressionCondition): UnifiedObservation
     guard: null,
     callIds: [],
     historyBudgetChars: null,
+    questions: [],
   };
 }
 function oneString(value: unknown, key: string): string | null {
@@ -147,6 +161,7 @@ function aggregate(rows: UnifiedObservation[], group: UnifiedObservation['group'
       allCorrect: number;
       conditions: number;
       failures: number;
+      questionMetrics: ReturnType<typeof summarizeJudgments> | null;
     }
   >();
   for (const row of rows.filter((r) => r.group === group)) {
@@ -159,7 +174,13 @@ function aggregate(rows: UnifiedObservation[], group: UnifiedObservation['group'
       allCorrect: 0,
       conditions: 0,
       failures: 0,
+      questionMetrics: group === 'compression' ? summarizeJudgments([]) : null,
     };
+    if (bucket.questionMetrics && row.questions) {
+      const metrics = summarizeJudgments(row.questions);
+      for (const key of Object.keys(metrics) as (keyof typeof metrics)[])
+        bucket.questionMetrics[key] += metrics[key];
+    }
     bucket.correct += row.score.correct;
     bucket.total += row.score.total;
     bucket.conditions++;
@@ -178,7 +199,7 @@ export async function runUnified(
 ): Promise<UnifiedRunResult> {
   const frozen = structuredClone(prepared);
   assertPlanIntegrity(frozen);
-  const { plan, evaluation } = frozen,
+  const { plan, evaluation, scoring } = frozen,
     config = plan.config;
   const contexts: UnifiedContext[] = [],
     calls: UnifiedCallResult[] = [],
@@ -204,9 +225,15 @@ export async function runUnified(
     executionHash,
     counterIds,
     groups: {
-      compression: { correct: null, total: compressionTotal, byCondition: [] },
+      compression: {
+        correct: null,
+        total: compressionTotal,
+        byCondition: [],
+        questionMetrics: null,
+      },
       hostFacts: { correct: null, total: hostTotal, byCondition: [] },
     },
+    reviewQueue: [],
     usage: {
       callsWithReportedUsage: 0,
       reportedInputTokensSubtotal: null,
@@ -235,11 +262,12 @@ export async function runUnified(
   };
 
   for (const condition of plan.compression) {
+    const reference = evaluation.cases.find((item) => item.caseId === condition.caseId);
+    if (!reference) throw new Error('Missing scoring reference');
     const observation = missingObservation(condition);
     observations.push(observation);
     try {
       const input = plan.inputs.find((item) => item.caseId === condition.caseId);
-      const reference = evaluation.cases.find((item) => item.caseId === condition.caseId);
       if (!input || !reference || hashJson(input) !== condition.inputHash)
         throw new Error('Input binding changed');
       const source = getCompressorInput(input);
@@ -332,7 +360,7 @@ export async function runUnified(
         observation.status = checked.status;
         continue;
       }
-      const predictions: Record<string, string> = {};
+
       let status = 'ok';
       for (const [index, question] of condition.questions.entries()) {
         const request = requests[index];
@@ -348,16 +376,22 @@ export async function runUnified(
         const answer = row.status === 'ok' ? oneString(row.value, question.key) : null;
         if (answer === null) {
           if (status === 'ok') status = row.status === 'ok' ? 'invalid-answer' : row.status;
-        } else predictions[question.key] = answer;
+        }
       }
-      const score = scoreAnswers(reference, predictions);
-      observation.score = {
-        correct: status === 'provider-overflow' ? 0 : score.correct,
-        total: score.total,
-        allCorrect: status !== 'provider-overflow' && score.allCorrect,
-      };
       observation.status = status;
     } finally {
+      observation.questions = reference.questions.map((question) => {
+        const call = calls.find((row) => row.id === `${condition.id}/read/${question.key}`) ?? null;
+        const failure =
+          observation.status === 'provider-overflow' || !call ? observation.status : 'ok';
+        return scoreQuestion(scoring, condition.caseId, question, call, failure);
+      });
+      const correct = observation.questions.filter((question) => question.success).length;
+      observation.score = {
+        correct,
+        total: reference.questions.length,
+        allCorrect: correct === reference.questions.length,
+      };
       options.onObservation?.(structuredClone(observation));
     }
   }
@@ -365,6 +399,7 @@ export async function runUnified(
   for (const pair of plan.hostPairs) {
     const shared = {
       group: 'host-facts' as const,
+      questions: null,
       caseId: pair.caseId,
       inputBudgetTokens: pair.inputBudgetTokens,
       trial: pair.trial,
@@ -518,6 +553,23 @@ export async function runUnified(
   report.groups.hostFacts.correct = observations
     .filter((row) => row.group === 'host-facts')
     .reduce((n, row) => n + row.score.correct, 0);
+  const judgments = observations
+    .filter((row) => row.group === 'compression')
+    .flatMap((row) => row.questions ?? []);
+  report.groups.compression.questionMetrics = summarizeJudgments(judgments);
+  report.reviewQueue = observations
+    .filter((row) => row.group === 'compression')
+    .flatMap((row) =>
+      (row.questions ?? [])
+        .filter((question) => question.content === 'pending-review')
+        .map((question) => ({
+          caseId: row.caseId,
+          method: row.method,
+          conditionId: row.conditionId,
+          key: question.key,
+          callId: question.callId,
+        })),
+    );
   report.groups.compression.byCondition = aggregate(observations, 'compression');
   report.groups.hostFacts.byCondition = aggregate(observations, 'host-facts');
   return { report, contexts, calls, observations };

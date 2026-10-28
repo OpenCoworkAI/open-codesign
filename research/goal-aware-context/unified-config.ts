@@ -6,6 +6,15 @@ const target = z.strictObject({
   model: ModelRef.refine(
     (value) => value.provider.trim().length > 0 && value.modelId.trim().length > 0,
   ),
+  modelIdentity: z
+    .strictObject({
+      displayName: z.string().min(1),
+      source: z.literal('user-confirmed'),
+      selection: z.literal('manual-fixed'),
+      confirmedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+      backendVersion: z.null(),
+    })
+    .optional(),
   credentialEnv: z.string().regex(/^[A-Z_][A-Z0-9_]*$/u),
   contextWindowTokens: positive.max(2097152),
   baseUrl: z
