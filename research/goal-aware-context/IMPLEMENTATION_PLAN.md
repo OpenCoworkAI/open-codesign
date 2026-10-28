@@ -5,6 +5,12 @@ Code inspection baseline: `4cf33932edc5f687e3cf7190261ebbb02c898d08`.
 The branch now contains offline controls, two live-model pilots and a research host-state API. These are controlled synthetic experiments, not production integration or held-out evidence.
 Before a production change, refresh against main and re-check these entry points.
 
+## Research extensions added on 2026-10-28
+
+The [extension assessment](./RESEARCH_EXTENSIONS.md) adds three proposed workstreams: goal-conditioned recall and stable-constraints/handoff methods; separate scoring of value, scope, provenance and invalidation; and sequential-compaction, correction-transfer and cross-design stress materials. Establish the state rubric and small controlled fixtures first, then add the two methods and run bounded paired experiments. These remain unimplemented and do not replace the frozen production baseline or authorize product integration. Later real-model runs need new call-count plans; the current 169-call configuration does not cover these additions.
+
+The production-oriented integration boundary below remains conditional on research evidence; these extensions are the next research work, ahead of desktop integration.
+
 ## Research progress and next integration boundary (2026-10-27)
 
 [Host facts v2](./HOST_RESULTS.md) completed 70 model calls. The hybrid preserved authoritative file/verification facts while the model summarized user goals/preferences. Canonical-ID output removed the earlier free-form naming ambiguity; two Qwen over-budget summaries are still counted as failures. These scores do not compare directly with the earlier datasets.

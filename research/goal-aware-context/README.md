@@ -4,6 +4,10 @@ Branch: `research/goal-aware-context`. Research-only, with no changes to pi comp
 
 Progress: production adapter and [corpus/comparison protocol](./CORPUS_PROTOCOL.md) are implemented. An evidence-aware draft oracle selector is now available; the planned frozen-corpus extraction and model/downstream experiments remain next in the [implementation plan](./IMPLEMENTATION_PLAN.md).
 
+## Proposed research extensions (2026-10-28)
+
+The [research extension assessment](./RESEARCH_EXTENSIONS.md) adds goal-conditioned recall, stable constraints plus short-term handoff, four-part traceable-state evaluation, and continuous-compaction/correction-transfer/cross-design stress tests to this branch's roadmap. These are proposed research conditions and materials, not implemented runtime features. State evaluation and controlled stress fixtures precede larger model experiments.
+
 ## Unified evaluation entry
 
 The [unified offline-first entry](./UNIFIED_EVALUATION.md) now connects the production baseline/frozen development corpus with the existing ordinary/goal summary prompts and the host-state API. Default dry-run reads no credentials and sends no requests. Compression-strategy and fixed-summary host-fact comparisons remain separate. The [pilot config](./unified-pilot.example.json) plans at most 47 calls with an explicit 60-call ceiling after model configuration; it is not executed automatically. Provider calls use this checkout's existing pi-backed complete function, without other research worktrees.
@@ -138,3 +142,7 @@ No model or paid endpoint was invoked. A production integration should reuse pi/
 
 Protocol inspiration: [GACC-Bench](https://github.com/weiting24/GACC-Bench), [paper](https://arxiv.org/abs/2610.21893).
 No benchmark data or upstream implementation was copied.
+
+## Human-approved scoring v2
+
+[Scoring protocol v2](./SCORING_PROTOCOL_V2.md) adds source-bound user adjudications, per-question content/format/overall judgments, and offline derived pilot reports while retaining original corpus and strict results. The [development template](./unified-development.example.json) covers all eight development checkpoints and six host scenarios, with an explicit 169-call maximum, 4096 output tokens and a 1800-byte summary cap. Run it without --execute for zero-call preparation.
