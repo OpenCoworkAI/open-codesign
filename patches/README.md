@@ -1,4 +1,12 @@
-# PptxGenJS 4.0.1 XML validity patch
+# Dependency compatibility patches
+
+## pi-ai 0.72.1 hosted web search
+
+`@mariozechner__pi-ai@0.72.1.patch` adds an awaited raw-event hook to the existing OpenAI Responses and Anthropic providers, forwards it through simple options, and preserves same-provider/model native tool output during message conversion. It does not add a provider SDK or HTTP implementation. The MIT-licensed pi dependency and its pinned version remain unchanged.
+
+The Open CoDesign pi adapter owns search authorization, request accounting, citation normalization, and bounded Claude pause continuation. Provider-specific output stays in local JSONL sessions for replay; it is never replayed to a different model or provider. Synthetic protocol tests are in the providers package. Re-evaluate this patch against upstream when updating pi; do not edit installed dependency files.
+
+## PptxGenJS 4.0.1 XML validity
 
 `pptxgenjs@4.0.1.patch` repairs the two published entry points used by this workspace (`dist/pptxgen.cjs.js` and `dist/pptxgen.es.js`):
 

@@ -34,6 +34,53 @@ export const COMMENT_CUSTOM_TYPE = 'open-codesign.comment.v1';
 export const CONTEXT_BRIEF_CUSTOM_TYPE = 'open-codesign.context.brief.v1';
 export const RUN_PREFERENCES_CUSTOM_TYPE = 'open-codesign.context.run_preferences.v1';
 export const ACTIVE_MESSAGE_CUSTOM_TYPE = 'open-codesign.active-message.v1';
+const NATIVE_SEARCH_CUSTOM_TYPE = 'open-codesign.native-search.v1';
+
+export function appendSessionNativeSearchMessage(
+  opts: SessionChatStoreOptions,
+  designId: string,
+  message: import('@mariozechner/pi-ai').AssistantMessage,
+): void {
+  const manager = openSession(opts, designId);
+  manager.appendCustomEntry(NATIVE_SEARCH_CUSTOM_TYPE, { schemaVersion: 1, message });
+  flushSession(manager);
+}
+
+export function readSessionNativeSearchMessages(
+  opts: SessionChatStoreOptions,
+  designId: string,
+): import('@mariozechner/pi-ai').AssistantMessage[] {
+  const file = sessionFileForDesign(opts.sessionDir, designId);
+  if (!existsSync(file)) return [];
+  const manager = SessionManager.open(file, opts.sessionDir, resolveSessionCwd(opts, designId));
+  return manager
+    .getEntries()
+    .flatMap((entry) => {
+      const custom = entry as CustomEntryLike;
+      if (
+        custom.type !== 'custom' ||
+        custom.customType !== NATIVE_SEARCH_CUSTOM_TYPE ||
+        !custom.data ||
+        typeof custom.data !== 'object'
+      )
+        return [];
+      const value = custom.data as {
+        schemaVersion?: number;
+        message?: import('@mariozechner/pi-ai').AssistantMessage;
+      };
+      const message = value.message;
+      if (
+        value.schemaVersion !== 1 ||
+        message?.role !== 'assistant' ||
+        !Array.isArray(message.content) ||
+        !Array.isArray(message.nativeSearch?.output) ||
+        !['openai', 'anthropic'].includes(message.nativeSearch.provider)
+      )
+        return [];
+      return [message];
+    })
+    .slice(-100);
+}
 
 export interface SessionChatStoreOptions {
   db: Database;

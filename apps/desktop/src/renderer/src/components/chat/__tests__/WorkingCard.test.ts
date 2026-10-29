@@ -15,6 +15,28 @@ function call(
 }
 
 describe('WorkingCard.buildActivityRows', () => {
+  it('keeps native request budget distinct from unavailable search counts and costs', () => {
+    const rows = buildActivityRows([
+      call({
+        toolName: 'native_web_search',
+        result: {
+          provider: 'openai',
+          requests: 2,
+          maxRequests: 12,
+          actualSearches: null,
+          searchCostUsd: null,
+        },
+      }),
+    ]);
+    expect(rows[0]?.labelKey).toBe('sidebar.chat.activity.nativeSearch');
+    expect(rows[0]?.nativeUsage).toEqual({
+      provider: 'openai',
+      requests: 2,
+      maxRequests: 12,
+      actualSearches: null,
+      searchCostUsd: null,
+    });
+  });
   it('merges consecutive str_replace edits to the same path into one row', () => {
     const calls = [
       call({

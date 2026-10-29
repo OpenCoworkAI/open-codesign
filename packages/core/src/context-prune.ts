@@ -120,6 +120,7 @@ function compactAssistant(
   const original = m as unknown as {
     role: 'assistant';
     content?: Array<Record<string, unknown>>;
+    nativeSearch?: unknown;
   };
   if (!Array.isArray(original.content)) return m;
   let changed = false;
@@ -161,8 +162,14 @@ function compactAssistant(
     }
     return block;
   });
-  if (!changed) return m;
-  return { ...(original as object), content: nextContent } as unknown as AgentMessage;
+  const dropNative =
+    original.nativeSearch !== undefined &&
+    (changed || JSON.stringify(original.nativeSearch).length > textLimit);
+  if (!changed && !dropNative) return m;
+  const next = { ...original, content: nextContent };
+  // Opaque provider blocks cannot be truncated. Fall back to the compact text/tool representation.
+  if (dropNative) delete next.nativeSearch;
+  return next as unknown as AgentMessage;
 }
 
 function compactToolResult(

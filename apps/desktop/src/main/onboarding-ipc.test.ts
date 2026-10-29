@@ -162,23 +162,29 @@ describe('registerOnboardingIpc — channel versioning', () => {
       expect(get).toBeDefined();
       expect(save).toBeDefined();
       expect(test).toBeDefined();
-      expect(await get?.({})).toEqual({ enabled: false, hasKey: false });
-      expect(await save?.({}, { apiKey: 'tvly-ipc-fixture' })).toEqual({
+      expect(await get?.({})).toMatchObject({
+        enabled: false,
+        hasKey: false,
+        backend: 'auto',
+        nativeEnabled: false,
+        maxNativeRequests: 12,
+      });
+      expect(await save?.({}, { apiKey: 'tvly-ipc-fixture' })).toMatchObject({
         ok: true,
         settings: { enabled: false, hasKey: true },
       });
-      expect(await save?.({}, { enabled: true })).toEqual({
+      expect(await save?.({}, { enabled: true })).toMatchObject({
         ok: true,
         settings: { enabled: true, hasKey: true },
       });
       const listProviders = handlers.get('settings:v1:list-providers');
       expect(listProviders).toBeDefined();
       expect(await listProviders?.({})).toEqual([]);
-      expect(await get?.({})).toEqual({ enabled: true, hasKey: true });
+      expect(await get?.({})).toMatchObject({ enabled: true, hasKey: true });
       expect(probe).not.toHaveBeenCalled();
       expect(await test?.({})).toEqual({ status: 'ok' });
       expect(probe).toHaveBeenCalledExactlyOnceWith('tvly-ipc-fixture', 15000);
-      expect(await save?.({}, { clearKey: true })).toEqual({
+      expect(await save?.({}, { clearKey: true })).toMatchObject({
         ok: true,
         settings: { enabled: true, hasKey: false },
       });
@@ -228,7 +234,7 @@ describe('registerOnboardingIpc — channel versioning', () => {
         throw new Error(err instanceof Error ? err.message : String(err));
       }
     };
-    expect(await rendererSave({ enabled: false })).toEqual({
+    expect(await rendererSave({ enabled: false })).toMatchObject({
       ok: true,
       settings: { enabled: false, hasKey: false },
     });

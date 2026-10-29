@@ -1,7 +1,30 @@
 import { z } from 'zod';
+import { WebSearchBackendSchema, WebSearchServiceSchema } from './web-search-routing';
 
+/**
+ * Renderer-facing view of the web-search settings. Strict, and deliberately
+ * free of any credential material: only boolean "has a key" summaries cross
+ * the IPC boundary.
+ *
+ * Every routing field is OPTIONAL so that older callers/tests that assert an
+ * exact `{ enabled, hasKey }` shape keep passing, and so an old main process
+ * talking to a new renderer (or vice versa) degrades instead of failing.
+ */
 export const WebSearchSettingsState = z
-  .object({ enabled: z.boolean(), hasKey: z.boolean() })
+  .object({
+    enabled: z.boolean(),
+    hasKey: z.boolean(),
+    backend: WebSearchBackendSchema.optional(),
+    nativeEnabled: z.boolean().optional(),
+    maxNativeRequests: z.number().int().min(1).max(50).optional(),
+    service: WebSearchServiceSchema.optional(),
+    mode: z.enum(['search-api', 'native-tool']).optional(),
+    unavailableReason: z
+      .enum(['missing-key', 'unsupported-provider', 'native-disabled', 'unsupported-model'])
+      .optional(),
+    /** True when the active provider's own credential is reused for search. */
+    inheritsCredential: z.boolean().optional(),
+  })
   .strict();
 export type WebSearchSettingsState = z.infer<typeof WebSearchSettingsState>;
 
@@ -16,6 +39,9 @@ export const SaveWebSearchSettingsInput = z
       .regex(/^[\x21-\x7e]+$/)
       .optional(),
     clearKey: z.boolean().optional(),
+    backend: WebSearchBackendSchema.optional(),
+    nativeEnabled: z.boolean().optional(),
+    maxNativeRequests: z.number().int().min(1).max(50).optional(),
   })
   .strict()
   .refine((input) => !(input.clearKey && input.apiKey !== undefined), {
@@ -41,6 +67,14 @@ export const WebSearchTestResult = z
       'network-error',
       'service-error',
       'unexpected-response',
+      // Routing-level outcomes: no request was attempted because the
+      // configuration cannot reach a search capability.
+      'unsupported-provider',
+      'unsupported-model',
+      'native-disabled',
+      // A request was attempted but proves nothing either way (e.g. the
+      // provider's search API has no cheap health probe).
+      'not-verified',
     ]),
     httpStatus: z.number().int().min(100).max(599).optional(),
   })

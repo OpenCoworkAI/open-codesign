@@ -9,6 +9,7 @@ import {
   appendSessionChatMessage,
   appendSessionComment,
   appendSessionDesignBrief,
+  appendSessionNativeSearchMessage,
   appendSessionRunPreferences,
   appendSessionToolStatus,
   CHAT_TOOL_STATUS_CUSTOM_TYPE,
@@ -18,6 +19,7 @@ import {
   listSessionComments,
   markSessionCommentsApplied,
   readSessionDesignBrief,
+  readSessionNativeSearchMessages,
   readSessionRunPreferences,
   removeSessionComment,
   seedSessionChatFromSnapshots,
@@ -52,6 +54,52 @@ function brief(goal: string): DesignSessionBriefV1 {
 }
 
 describe('session design brief storage', () => {
+  it('preserves native provider tool output across session reopen', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-native-search-'));
+    try {
+      const db = initSnapshotsDb(path.join(root, 'design-store.json'));
+      const design = createDesign(db, 'Native sources');
+      updateDesignWorkspace(db, design.id, root);
+      const message: import('@mariozechner/pi-ai').AssistantMessage = {
+        role: 'assistant',
+        api: 'anthropic-messages',
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        content: [{ type: 'text', text: 'Answer' }],
+        nativeSearch: {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-6',
+          output: [
+            {
+              type: 'web_search_tool_result',
+              tool_use_id: 'search1',
+              content: [{ type: 'web_search_result', encrypted_content: 'opaque-provider-data' }],
+            },
+          ],
+        },
+        stopReason: 'stop',
+        timestamp: 1,
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      };
+      appendSessionNativeSearchMessage({ db, sessionDir: db.sessionDir }, design.id, message);
+      const reopened = initSnapshotsDb(path.join(root, 'design-store.json'));
+      expect(
+        readSessionNativeSearchMessages(
+          { db: reopened, sessionDir: reopened.sessionDir },
+          design.id,
+        ),
+      ).toEqual([message]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it('persists pending receipts without sending them as context and replays delivered chat exactly once', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codesign-active-message-'));
     try {

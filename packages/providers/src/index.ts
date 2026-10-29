@@ -624,6 +624,8 @@ export type {
   ImageSize,
 } from './images';
 export { defaultImageBaseUrl, defaultImageModel, generateImage } from './images';
+export type { NativeSearchOptions, NativeSearchSource, NativeSearchUpdate } from './native-search';
+export { createNativeSearchStream } from './native-search';
 export type {
   BackoffOptions,
   CompleteWithRetryOptions,

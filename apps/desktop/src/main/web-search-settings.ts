@@ -3,6 +3,7 @@ import {
   type Config,
   ERROR_CODES,
   hydrateConfig,
+  resolveWebSearchRoute,
   SaveWebSearchSettingsInput,
   type SaveWebSearchSettingsResult,
   toPersistedV3,
@@ -11,17 +12,25 @@ import {
 } from '@open-codesign/shared';
 import { writeConfig } from './config';
 import { buildSecretRef, decryptSecret } from './keychain';
-import { getCachedConfig, setCachedConfig } from './onboarding/config-cache';
-import { testTavilyConnection } from './web-research-network';
+import { getApiKeyForProvider, getCachedConfig, setCachedConfig } from './onboarding/config-cache';
+import { testSearchConnection, testTavilyConnection } from './web-research-network';
 
 export function getWebSearchSettings(): WebSearchSettingsState {
   return settingsState(getCachedConfig());
 }
 
 function settingsState(config: Config | null): WebSearchSettingsState {
+  const route = resolveWebSearchRoute(config);
   return {
     enabled: config?.webSearch?.enabled ?? false,
     hasKey: config?.secrets['tavily'] !== undefined,
+    backend: config?.webSearch ? (config.webSearch.backend ?? 'tavily') : 'auto',
+    nativeEnabled: config?.webSearch?.nativeEnabled ?? false,
+    maxNativeRequests: config?.webSearch?.maxNativeRequests ?? 12,
+    ...(route.service ? { service: route.service } : {}),
+    ...(route.mode ? { mode: route.mode } : {}),
+    ...(route.reason ? { unavailableReason: route.reason } : {}),
+    inheritsCredential: route.reason === null && route.providerId !== null,
   };
 }
 
@@ -48,14 +57,28 @@ export function saveWebSearchSettings(raw: unknown): Promise<WebSearchSettingsSt
       const next = hydrateConfig({
         ...config,
         secrets,
-        ...(input.enabled !== undefined
+        ...(input.enabled !== undefined ||
+        input.backend !== undefined ||
+        input.nativeEnabled !== undefined ||
+        input.maxNativeRequests !== undefined
           ? {
               webSearch: {
                 maxCalls: 12,
                 timeoutMs: 15000,
                 maxChars: 10000,
                 ...config.webSearch,
-                enabled: input.enabled,
+                enabled: input.enabled ?? config.webSearch?.enabled ?? false,
+                ...(input.backend !== undefined
+                  ? { backend: input.backend }
+                  : !config.webSearch
+                    ? { backend: 'auto' as const }
+                    : {}),
+                ...(input.nativeEnabled !== undefined
+                  ? { nativeEnabled: input.nativeEnabled }
+                  : {}),
+                ...(input.maxNativeRequests !== undefined
+                  ? { maxNativeRequests: input.maxNativeRequests }
+                  : {}),
               },
             }
           : {}),
@@ -94,6 +117,23 @@ export async function saveWebSearchSettingsForIpc(
 
 export async function testWebSearchSettings(): Promise<WebSearchTestResult> {
   const config = getCachedConfig();
+  const route = resolveWebSearchRoute(config);
+  if (route.reason) return { status: route.reason };
+  if (route.mode === 'native-tool') return { status: 'not-verified' };
+  if (
+    route.service &&
+    route.service !== 'tavily' &&
+    route.service !== 'openai' &&
+    route.service !== 'anthropic'
+  ) {
+    let key: string;
+    try {
+      key = getApiKeyForProvider(route.providerId ?? '');
+    } catch {
+      return { status: 'unreadable-key' };
+    }
+    return testSearchConnection(route.service, key, config?.webSearch?.timeoutMs ?? 15000);
+  }
   const stored = config?.secrets['tavily'];
   if (!stored) return { status: 'missing-key' };
   let apiKey: string;

@@ -42,6 +42,18 @@ function config(): Pick<Config, 'webSearch' | 'secrets'> {
 }
 
 describe('per-generation web research snapshot', () => {
+  it('shares first credential resolution between concurrent searches', async () => {
+    const fake = transport();
+    const decrypt = vi.fn((value: string) => value);
+    const run = createWebResearchRun(config(), decrypt, fake);
+    const results = await Promise.allSettled([
+      run.network.search('first', 1),
+      run.network.search('second', 1),
+    ]);
+    expect(results.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
+    expect(decrypt).toHaveBeenCalledOnce();
+    expect(fake.seen).toHaveLength(2);
+  });
   it('copies enabled, limits and encrypted key before first use; later runs use the latest config', async () => {
     const cached = config();
     const getCachedConfig = vi.fn(() => cached);

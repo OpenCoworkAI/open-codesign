@@ -2,6 +2,7 @@ import { useT } from '@open-codesign/i18n';
 import {
   ERROR_CODES,
   SaveWebSearchSettingsInput,
+  WebSearchBackendSchema,
   WebSearchSettingsState,
   WebSearchTestResult,
 } from '@open-codesign/shared';
@@ -20,6 +21,10 @@ export const WEB_SEARCH_TEST_MESSAGES = {
   'network-error': 'settings.webSearch.result.networkError',
   'service-error': 'settings.webSearch.result.serviceError',
   'unexpected-response': 'settings.webSearch.result.unexpectedResponse',
+  'unsupported-provider': 'settings.webSearch.result.unsupportedProvider',
+  'unsupported-model': 'settings.webSearch.result.unsupportedModel',
+  'native-disabled': 'settings.webSearch.result.nativeDisabled',
+  'not-verified': 'settings.webSearch.result.notVerified',
 } as const satisfies Record<WebSearchTestResult['status'], string>;
 
 type Notice = { key: string; error?: boolean; httpStatus?: number };
@@ -96,7 +101,7 @@ export function WebSearchTab() {
   }
 
   async function testSavedKey() {
-    if (busyRef.current || !settings?.hasKey) return;
+    if (busyRef.current || !(settings?.service || settings?.hasKey)) return;
     busyRef.current = true;
     setBusy(true);
     setNotice(null);
@@ -155,75 +160,131 @@ export function WebSearchTab() {
         />
       </Row>
 
+      <Row label={t('settings.webSearch.backend')} hint={t('settings.webSearch.backendHint')}>
+        <select
+          aria-label={t('settings.webSearch.backend')}
+          value={settings?.backend ?? 'tavily'}
+          disabled={!settings || busy}
+          className={buttonClass}
+          onChange={(event) =>
+            void save({ backend: WebSearchBackendSchema.parse(event.target.value) })
+          }
+        >
+          <option value="auto">{t('settings.webSearch.backendAuto')}</option>
+          <option value="provider">{t('settings.webSearch.backendProvider')}</option>
+          <option value="tavily">Tavily</option>
+        </select>
+      </Row>
+      <p className={hintClass} role="status">
+        {settings?.service
+          ? `${t('settings.webSearch.selectedService')}: ${settings.service}`
+          : t('settings.webSearch.unavailable')}
+        {settings?.inheritsCredential ? ` · ${t('settings.webSearch.inherited')}` : ''}
+        {settings?.unavailableReason
+          ? ` · ${t(WEB_SEARCH_TEST_MESSAGES[settings.unavailableReason])}`
+          : ''}
+      </p>
+      <Row label={t('settings.webSearch.nativeEnabled')} hint={t('settings.webSearch.nativeHint')}>
+        <input
+          type="checkbox"
+          aria-label={t('settings.webSearch.nativeEnabled')}
+          checked={settings?.nativeEnabled ?? false}
+          disabled={!settings || busy}
+          onChange={(event) => void save({ nativeEnabled: event.target.checked })}
+        />
+      </Row>
+      <Row
+        label={t('settings.webSearch.nativeRequests')}
+        hint={t('settings.webSearch.nativeRequestsHint')}
+      >
+        <select
+          aria-label={t('settings.webSearch.nativeRequests')}
+          value={settings?.maxNativeRequests ?? 12}
+          disabled={!settings || busy}
+          className={buttonClass}
+          onChange={(event) => void save({ maxNativeRequests: Number(event.target.value) })}
+        >
+          {Array.from({ length: 50 }, (_, i) => i + 1).map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </Row>
+
       <Row label={t('settings.webSearch.keyStatus')}>
         <span className="text-[var(--text-sm)] text-[var(--color-text-secondary)]">
           {t(
             !settings
               ? 'settings.common.loading'
-              : settings.hasKey
-                ? 'settings.webSearch.configured'
-                : 'settings.webSearch.notConfigured',
+              : settings.inheritsCredential
+                ? 'settings.webSearch.inherited'
+                : settings.hasKey
+                  ? 'settings.webSearch.configured'
+                  : 'settings.webSearch.notConfigured',
           )}
         </span>
       </Row>
 
-      <form
-        className="space-y-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          void save({ apiKey: String(data.get('apiKey') ?? '') });
-        }}
-      >
-        <label
-          htmlFor="tavily-api-key"
-          className="block text-[var(--text-sm)] font-medium text-[var(--color-text-secondary)]"
+      {(settings?.backend ?? 'tavily') !== 'provider' ? (
+        <form
+          className="space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            void save({ apiKey: String(data.get('apiKey') ?? '') });
+          }}
         >
-          {t(settings?.hasKey ? 'settings.webSearch.replaceKey' : 'settings.webSearch.newKey')}
-        </label>
-        <input
-          id="tavily-api-key"
-          name="apiKey"
-          type="password"
-          value={apiKey}
-          onChange={(event) => setApiKey(event.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-          maxLength={4096}
-          disabled={!settings || busy}
-          aria-describedby="tavily-key-hint"
-          placeholder={t('settings.webSearch.keyPlaceholder')}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
-        />
-        <p id="tavily-key-hint" className={hintClass}>
-          {t('settings.webSearch.keyHint')}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="submit"
-            disabled={!settings || busy || !apiKey.trim()}
-            className={buttonClass}
+          <label
+            htmlFor="tavily-api-key"
+            className="block text-[var(--text-sm)] font-medium text-[var(--color-text-secondary)]"
           >
-            {t(
-              settings?.hasKey
-                ? 'settings.webSearch.saveReplacement'
-                : 'settings.webSearch.saveKey',
-            )}
-          </button>
-          <button type="button" onClick={() => void openKeyPage()} className={buttonClass}>
-            <ExternalLink className="h-3.5 w-3.5" />
-            {t('settings.webSearch.getKey')}
-          </button>
-          <button
-            type="button"
-            disabled={!settings?.hasKey || busy}
-            onClick={() => setConfirmClear(true)}
-            className={buttonClass}
-          >
-            {t('settings.webSearch.clearKey')}
-          </button>
-        </div>
-      </form>
+            {t(settings?.hasKey ? 'settings.webSearch.replaceKey' : 'settings.webSearch.newKey')}
+          </label>
+          <input
+            id="tavily-api-key"
+            name="apiKey"
+            type="password"
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={4096}
+            disabled={!settings || busy}
+            aria-describedby="tavily-key-hint"
+            placeholder={t('settings.webSearch.keyPlaceholder')}
+            className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
+          />
+          <p id="tavily-key-hint" className={hintClass}>
+            {t('settings.webSearch.keyHint')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={!settings || busy || !apiKey.trim()}
+              className={buttonClass}
+            >
+              {t(
+                settings?.hasKey
+                  ? 'settings.webSearch.saveReplacement'
+                  : 'settings.webSearch.saveKey',
+              )}
+            </button>
+            <button type="button" onClick={() => void openKeyPage()} className={buttonClass}>
+              <ExternalLink className="h-3.5 w-3.5" />
+              {t('settings.webSearch.getKey')}
+            </button>
+            <button
+              type="button"
+              disabled={!settings?.hasKey || busy}
+              onClick={() => setConfirmClear(true)}
+              className={buttonClass}
+            >
+              {t('settings.webSearch.clearKey')}
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {confirmClear ? (
         <div className="space-y-2">
@@ -247,7 +308,7 @@ export function WebSearchTab() {
       <div className="space-y-2 border-t border-[var(--color-border-subtle)] pt-4">
         <button
           type="button"
-          disabled={!settings?.hasKey || busy}
+          disabled={!(settings?.service || settings?.hasKey) || busy}
           onClick={() => void testSavedKey()}
           className={buttonClass}
         >

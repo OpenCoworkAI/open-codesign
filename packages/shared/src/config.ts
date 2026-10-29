@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WebSearchBackendSchema } from './web-search-routing';
 
 // ── Legacy enum (v1/v2) — kept for backward compat & UI shortlist ─────────────
 
@@ -393,6 +394,17 @@ export const ConfigV3Schema = z
         maxCalls: z.number().int().min(1).max(50).default(12),
         timeoutMs: z.number().int().min(1000).max(60000).default(15000),
         maxChars: z.number().int().min(1000).max(12000).default(10000),
+        /**
+         * Which backend to use. Optional and default-free on purpose: an
+         * absent value must round-trip as absent so configs written before
+         * routing existed keep parsing to their exact old shape. Routing
+         * treats absent-on-existing-webSearch as `tavily`.
+         */
+        backend: WebSearchBackendSchema.optional(),
+        /** Opt-in to provider-native web search tools. Absent means off. */
+        nativeEnabled: z.boolean().optional(),
+        /** Per-turn cap on native tool requests; absent means caller default. */
+        maxNativeRequests: z.number().int().min(1).max(50).optional(),
       })
       .strict()
       .optional(),
