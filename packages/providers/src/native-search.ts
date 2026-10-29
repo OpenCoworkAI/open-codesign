@@ -66,6 +66,25 @@ function citationFor(value: RecordValue, callId?: string): WebCitation | undefin
   return result;
 }
 
+/** True when raw Claude output holds a server web search with no matching result block. */
+function pendingWebSearch(output: unknown[]): boolean {
+  const started = new Set<string>();
+  const resolved = new Set<string>();
+  for (const item of output) {
+    const block = record(item);
+    if (block['type'] === 'server_tool_use' && block['name'] === 'web_search')
+      started.add(String(block['id'] ?? ''));
+    if (block['type'] === 'web_search_tool_result')
+      resolved.add(String(block['tool_use_id'] ?? ''));
+  }
+  return [...started].some((id) => !resolved.has(id));
+}
+function payloadHasPendingWebSearch(params: RecordValue): boolean {
+  return pendingWebSearch(
+    array(params['messages']).flatMap((message) => array(record(message)['content'])),
+  );
+}
+
 function publicUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 4096) return null;
   try {
@@ -191,6 +210,12 @@ export function createNativeSearchStream(
       let previous =
         pendingContinuation?.boundary === boundary ? pendingContinuation.message : undefined;
       pendingContinuation = undefined;
+      const blockedSearch = () =>
+        new Error(
+          permissionDenied
+            ? 'Native search cannot continue: web access was denied, but a pending web_search server tool has no result.'
+            : `Native search request budget exhausted (${requests}/${config.maxRequests}); a pending web_search server tool cannot be continued without enabling web_search.`,
+        );
       try {
         for (let continuation = 0; continuation <= 50; continuation++) {
           options.signal?.throwIfAborted();
@@ -282,6 +307,16 @@ export function createNativeSearchStream(
                     : { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
                 );
                 notify();
+              }
+              if (
+                config.provider === 'anthropic' &&
+                !tools.some((tool) =>
+                  String(record(tool)['type'] ?? '').startsWith('web_search'),
+                ) &&
+                payloadHasPendingWebSearch(params)
+              ) {
+                // A server tool without its result is only valid alongside web_search.
+                throw blockedSearch();
               }
               if (permissionDenied) {
                 const notice =
@@ -419,6 +454,13 @@ export function createNativeSearchStream(
           if (paused) {
             await config.persistMessage?.(result);
             previous = result;
+            // Persist paid progress, then fail instead of resuming without the server tool.
+            if (
+              config.provider === 'anthropic' &&
+              requests >= config.maxRequests &&
+              pendingWebSearch(result.nativeSearch?.output ?? [])
+            )
+              throw blockedSearch();
             continue;
           }
           const final = withCitations(result);

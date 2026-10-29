@@ -1291,21 +1291,49 @@ async function generateViaAgentInternal(
   ].join('\n\n');
 
   // Seed the transcript with prior history (already in ChatMessage shape).
+  // Persisted native search blocks only make sense attached to the exact
+  // assistant turn that produced them. Chat history carries no stable message
+  // IDs to link the two, so any visible text that appears more than once (on
+  // either the history or the native side) is ambiguous and must fall back to
+  // the ordinary translated history rather than replaying a wrong search.
+  const savedNativeByText = new Map<
+    string,
+    Array<import('@mariozechner/pi-ai').AssistantMessage>
+  >();
+  for (const message of deps.nativeSearch ? (deps.nativeSearchHistory ?? []) : []) {
+    if (
+      message.provider !== piModel.provider ||
+      message.api !== piModel.api ||
+      message.model !== piModel.id
+    ) {
+      continue;
+    }
+    const text = assistantTextOf(message.content);
+    if (text === undefined) continue;
+    const entries = savedNativeByText.get(text);
+    if (entries) entries.push(message);
+    else savedNativeByText.set(text, [message]);
+  }
+  const historyAssistantTextCounts = new Map<string, number>();
+  for (const message of input.history) {
+    if (message.role !== 'assistant') continue;
+    historyAssistantTextCounts.set(
+      message.content,
+      (historyAssistantTextCounts.get(message.content) ?? 0) + 1,
+    );
+  }
   const historyAsAgentMessages: AgentMessage[] = input.history.map((m, idx) => {
     const translated = chatMessageToAgentMessage(m, idx + 1, piModel);
     if (m.role !== 'assistant' || !deps.nativeSearch) return translated;
-    const saved = deps.nativeSearchHistory?.findLast(
-      (message) =>
-        message.provider === piModel.provider &&
-        message.api === piModel.api &&
-        message.model === piModel.id &&
-        message.content
-          .filter((block) => block.type === 'text')
-          .map((block) => block.text)
-          .join('') === m.content,
-    );
-    const hasClientCalls = saved?.content.some((block) => block.type === 'toolCall');
-    return saved?.nativeSearch && saved.stopReason === 'stop' && !hasClientCalls
+    if (historyAssistantTextCounts.get(m.content) !== 1) return translated;
+    const candidates = savedNativeByText.get(m.content);
+    const saved = candidates?.length === 1 ? candidates[0] : undefined;
+    if (!saved) return translated;
+    const hasClientCalls = saved.content.some((block) => block.type === 'toolCall');
+    return saved.nativeSearch &&
+      !saved.nativeSearch.paused &&
+      saved.stopReason === 'stop' &&
+      !hasClientCalls
       ? { ...translated, nativeSearch: saved.nativeSearch }
       : translated;
   });
@@ -1785,6 +1813,14 @@ function messageForIncompleteStop(stopReason: 'length' | 'toolUse' | 'error' | '
   }
   if (stopReason === 'aborted') return 'Generation aborted by provider';
   return 'Provider returned an error';
+}
+
+function assistantTextOf(content: PiAssistantMessage['content']): string | undefined {
+  const text = content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
+  return text.length > 0 ? text : undefined;
 }
 
 function chatMessageToAgentMessage(
