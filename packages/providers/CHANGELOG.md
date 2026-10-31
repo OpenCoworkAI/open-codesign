@@ -1,5 +1,41 @@
 # @open-codesign/providers
 
+## 0.3.0
+
+### Minor Changes
+
+- c9757a0: Add opt-in OpenAI Responses and Claude hosted web search through pi, preserving citations, sources and continuation data while accounting for native requests separately from local search and fetch calls.
+
+### Patch Changes
+
+- c3d2ff3: Add Atlas Cloud as a built-in OpenAI-compatible provider for onboarding, validation, model discovery, and provider selection.
+- 0d3d63e: Add an opt-in base64 response setting for OpenAI-compatible image gateways so generated assets can be saved locally. Keep existing and strict GPT image requests unchanged by default, and reset the compatibility setting when switching image providers.
+- f35b854: Apply Settings → Advanced → Generation timeout to each model HTTP request as well as the overall run, so long turns against local LM Studio / Ollama / vLLM endpoints are no longer cut off by the provider SDK's 10-minute default.
+- c9757a0: Stop pending Claude search continuations at the authorized request budget and avoid replaying ambiguous native search history when assistant replies repeat.
+- Updated dependencies [c3d2ff3]
+- Updated dependencies [029128d]
+- Updated dependencies [0d3d63e]
+- Updated dependencies [a63feb5]
+- Updated dependencies [761b3b8]
+- Updated dependencies [3b03e7a]
+- Updated dependencies [e24d1f1]
+- Updated dependencies [24815f3]
+- Updated dependencies [6799d55]
+- Updated dependencies [c9757a0]
+- Updated dependencies [9574745]
+- Updated dependencies [e331e69]
+- Updated dependencies [856dba8]
+- Updated dependencies [ec7f76d]
+- Updated dependencies [b7a0090]
+- Updated dependencies [c9757a0]
+- Updated dependencies [719d089]
+- Updated dependencies [143cf96]
+- Updated dependencies [4cf3393]
+- Updated dependencies [787a8e4]
+- Updated dependencies [09f21c3]
+- Updated dependencies [5f6036b]
+  - @open-codesign/shared@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes
