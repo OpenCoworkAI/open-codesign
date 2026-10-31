@@ -1,5 +1,48 @@
 # @open-codesign/shared
 
+## 0.3.0
+
+### Minor Changes
+
+- 3b03e7a: Add deterministic, local source-definition editing for supported workspace JSX/TSX previews. Select a native element in the Files tab and save an existing static text, allowlisted attribute, or inline-style literal without an LLM call. Keep comments and tweaks separate, and explicitly refuse unsupported or ambiguous targets.
+
+  Bind edits to exact source hashes and preview revisions, validate and reparse a single AST-derived patch in the main process, preserve JSX/TSX BOM bytes, and stage atomic single-file writes with conflict checks. Surface saved-but-refresh-failed warnings without rolling back later external changes. Add preview-only provenance, typed IPC contracts, localized editing controls, and focused safety and lifecycle tests; do not add undo/version UI or session history state.
+
+- c9757a0: Add opt-in OpenAI Responses and Claude hosted web search through pi, preserving citations, sources and continuation data while accounting for native requests separately from local search and fetch calls.
+- c9757a0: Allow web research to inherit existing official DeepSeek, Kimi and BigModel credentials, with explicit backend selection, per-run authorization and compatible Tavily settings.
+- 719d089: Keep the source editing toolbar and panel outside the artifact's mouse hit area. When effects or imperative execution prevent reliable preview selection, offer explicit selection of direct static source fields by line, tag and value. This mode never instruments the preview or trusts its selection messages; saves retain literal validation, exact source hashes and atomic conflict checks. Dynamic, repeated and indirect definitions remain unsupported.
+- 4cf3393: Add a local design system library with built-in previews, personal forks, DESIGN.md imports, session-backed editing and optional system selection when creating designs. Preserve independent workspace copies and connect component annotations to canonical design rules.
+
+  Present system details as a full content view with sidebar actions, a fitted interactive overview and an expandable specification reader. Resolve built-ins from the current app bundle so legacy user-owned references cannot disable shipped systems.
+
+  Initialize the optional library only when handling a request, so unavailable bundled references do not prevent the desktop application from starting.
+
+- 5f6036b: Add opt-in Tavily web search and bounded public-page reading through native agent tools. Persist workspace sources, evidence and stable slide usage, and generate independent Markdown companions in ordinary exports without adding citations to slides by default.
+
+### Patch Changes
+
+- c3d2ff3: Add Atlas Cloud as a built-in OpenAI-compatible provider for onboarding, validation, model discovery, and provider selection.
+- 029128d: Fit each generation run into the model's context window. Before the request, the system prompt, tool definitions and the prompt are measured in tokens, and a quarter of the window (at most the 32,000 tokens a run requests) stays free for the reply; the request asks for no more output than that, so models with a window under 128k tokens request less than 32,000. If those parts do not fit, the run stops with an error that names the window and points to the context window setting in Settings → Models, instead of sending a request the model would truncate. Chat history keeps its newest messages that fit what remains.
+- 0d3d63e: Add an opt-in base64 response setting for OpenAI-compatible image gateways so generated assets can be saved locally. Keep existing and strict GPT image requests unchanged by default, and reset the compatibility setting when switching image providers.
+- a63feb5: Accept zero and leading-dot CSS dimensions in DESIGN.md, and preserve unknown top-level metadata with non-blocking warnings. Improve repair guidance for misplaced font families while keeping malformed token structures, nonzero unitless dimensions, and runtime failures blocking.
+- 761b3b8: Prepare the design-token import. Core exports `mapTokensToDesignFields`, which turns scanned tokens into DESIGN.md colors, typography, rounded and spacing fields, with font sizes, line heights and shadows as Markdown sections. It converts `rgb()`, `hsl()` and `oklch()` colors to sRGB hex (a clamped out-of-gamut color is reported with its original value), replaces `var()` with the scanned token it names, leaves other `[data-theme]` values out, and returns what it could not map instead of logging it. Shared exports `serializeDesignMd`. Tailwind v4 `--font-*` variables are now read as font families, and a CSS variable declared in a `[data-theme]` block records that block.
+- e24d1f1: Refuse to save new API keys when OS secure storage is unavailable or uses the insecure Linux basic_text backend. Preserve existing keys during migration and show the secure-storage error when saving web search settings.
+- 24815f3: Show LiteLLM-specific hints when a LiteLLM Gateway connection test or model discovery fails. A 401 says to set the master or virtual key or turn off keyless mode, a 404 says to check that the base URL ends with /v1, and only a localhost URL also mentions port 4000. A connection refusal says to start the LiteLLM proxy.
+- 6799d55: Add a LiteLLM Gateway preset to Settings → Add provider. It pre-fills an OpenAI-compatible endpoint at `http://localhost:4000/v1`, starts in keyless mode for proxies without a master key, and explains how to switch to a master/virtual key. LiteLLM is not bundled.
+- 9574745: Plumb connection-test `attemptedUrl` into Settings diagnostics so infer-only / manual 404s are not mis-attributed as listing failures.
+- e331e69: Add PNG to the Export menu. It renders the active design with the installed Chrome, like PDF export, and saves a full-page screenshot at 2x. Decks that show one slide at a time are expanded so every slide appears in order.
+- 856dba8: Use each model's real context window. A generation run takes the window from a new per-provider "Context window" setting in Settings → Models, then from pi-ai's model catalog, and falls back to 200k tokens only when neither knows the model. Set it for local runtimes such as Ollama or LM Studio and for relays the catalog does not know. The chat history sent with each run follows the resolved window.
+- ec7f76d: Formalize provider `modelDiscoveryMode` (`models`, `static-hint`, `manual`, `infer-only`) so listing, Settings pickers, imports, and diagnostics no longer treat GET `/models` as universal.
+- b7a0090: Add Requesty as an OpenAI-compatible proxy preset in provider settings.
+- 143cf96: Add bilingual Tavily web-search settings with safe key save/replace/clear operations and explicit bounded connection testing. Apply settings to new runs without restarting while retaining per-run networking consent and active-run snapshots. Keep direct webpage reading independent of Tavily credentials, and exclude search-only credentials from the model API service list without deleting them.
+- 787a8e4: Improve deterministic text editing for generated JSX/TSX: edit independent mixed-child segments, shared local component literals, and lexically traced const/object/static-array string definitions. Display exact source origins and shared-definition scope, bind individual preview fields, and refuse unresolved instance data rather than guessing. Preserve hash conflicts, path safety, and atomic span writes without a model call.
+
+  Unify editing into preview selection and one field panel, removing the separate source picker. Support static segments beside dynamic content, disabled control selection, explicit containing-element navigation, and fresh field validation before saving. Retired source-mode IPC requests are explicitly rejected rather than acting as a bypass. Localize editability reasons, source-definition explanations and inspect/save/refresh messages for Chinese and English interfaces, keeping backend reason codes in collapsed diagnostics.
+
+  Bind resolved HTML-to-JSX previews to the requested file/design/workspace and refresh sources outside the expanded file tree. Add data-driven browser persistence, shared-reference, mutation/escape, mixed-text, ambiguous-mapping and source-conflict regressions.
+
+- 09f21c3: Show recorded token and USD totals for the current design, including today and the local week, beside the existing per-run token count.
+
 ## 0.2.2
 
 ### Patch Changes

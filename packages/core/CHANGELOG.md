@@ -1,5 +1,65 @@
 # @open-codesign/core
 
+## 0.3.0
+
+### Minor Changes
+
+- c9757a0: Add opt-in OpenAI Responses and Claude hosted web search through pi, preserving citations, sources and continuation data while accounting for native requests separately from local search and fetch calls.
+- 5f6036b: Add opt-in Tavily web search and bounded public-page reading through native agent tools. Persist workspace sources, evidence and stable slide usage, and generate independent Markdown companions in ordinary exports without adding citations to slides by default.
+
+### Patch Changes
+
+- 1d33526: Add a Node CLI for safe diagnostics, read-only workspace inspection and HTML export without
+  Electron. Share desktop workspace readers and design classification through core subpaths,
+  and prevent HTML asset inlining from following symlinks outside the workspace.
+- c3d2ff3: Add Atlas Cloud as a built-in OpenAI-compatible provider for onboarding, validation, model discovery, and provider selection.
+- 89fe5cd: Preserve ChatGPT subscription model selections on upgrade and re-login. Suggest models from local Codex configuration and pi's maintained catalog, require an editable initial selection, and keep upstream model-access errors with recovery guidance.
+- 029128d: Fit each generation run into the model's context window. Before the request, the system prompt, tool definitions and the prompt are measured in tokens, and a quarter of the window (at most the 32,000 tokens a run requests) stays free for the reply; the request asks for no more output than that, so models with a window under 128k tokens request less than 32,000. If those parts do not fit, the run stops with an error that names the window and points to the context window setting in Settings → Models, instead of sending a request the model would truncate. Chat history keeps its newest messages that fit what remains.
+- a63feb5: Accept zero and leading-dot CSS dimensions in DESIGN.md, and preserve unknown top-level metadata with non-blocking warnings. Improve repair guidance for misplaced font families while keeping malformed token structures, nonzero unitless dimensions, and runtime failures blocking.
+- 761b3b8: Prepare the design-token import. Core exports `mapTokensToDesignFields`, which turns scanned tokens into DESIGN.md colors, typography, rounded and spacing fields, with font sizes, line heights and shadows as Markdown sections. It converts `rgb()`, `hsl()` and `oklch()` colors to sRGB hex (a clamped out-of-gamut color is reported with its original value), replaces `var()` with the scanned token it names, leaves other `[data-theme]` values out, and returns what it could not map instead of logging it. Shared exports `serializeDesignMd`. Tailwind v4 `--font-*` variables are now read as font families, and a CSS variable declared in a `[data-theme]` block records that block.
+- e94c3c1: Export all pages of decks that mount one slide at a time behind numbered navigation, and keep ordinary table borders editable on each side of a cell. Preserve explicit chart colors, legend visibility, value labels and doughnut holes, retain horizontal category order, and respect suppressed CSS list markers.
+
+  Ask generated slide charts to retain the matching style metadata by default.
+
+- e94c3c1: Keep basic SVG slide charts editable as native shapes, lines, and text instead
+  of rasterizing every unmarked SVG. Preserve viewBox scale, label colors, bar
+  corners, and threshold lines; warn when chart data series are unavailable.
+  Support horizontal native bar chart metadata and request chart data in the
+  general slide and research generation guidance.
+- f35b854: Apply Settings → Advanced → Generation timeout to each model HTTP request as well as the overall run, so long turns against local LM Studio / Ollama / vLLM endpoints are no longer cut off by the provider SDK's 10-minute default.
+- b0a9ee1: Check layout and accessibility in `preview` and `done`. After a page loads, a deterministic measurement looks for a page that scrolls sideways, text that its box clips, text with too little contrast (WCAG AA, 4.5:1, or 3:1 for large text), tap targets under 24 by 24 px that have another target next to them, and controls with no accessible name. It measures at the current width and again at a 390 px phone width. `preview` lists up to 20 findings in `layoutIssues`; `done` shows them under "Non-blocking warnings", and when one is present it lets the agent fix it and check it with `preview` instead of telling it to stop. Findings never change `ok` or the `done` status, so a false positive cannot cost a repair round. `done:verify:v1` now returns `warnings` and a `schemaVersion` next to `errors`.
+- c9757a0: Stop pending Claude search continuations at the authorized request budget and avoid replaying ambiguous native search history when assistant replies repeat.
+- 03dea98: Switch multi-page prototypes inside one preview document. Matching `id` and `data-oc-screen` values identify each screen, `#id` links select one screen, and shared chrome stays visible. Inactive screens use the `hidden` attribute so their own layout remains intact.
+- 856dba8: Use each model's real context window. A generation run takes the window from a new per-provider "Context window" setting in Settings → Models, then from pi-ai's model catalog, and falls back to 200k tokens only when neither knows the model. Set it for local runtimes such as Ollama or LM Studio and for relays the catalog does not know. The chat history sent with each run follows the resolved window.
+- 5f6036b: Only inject research workflow guidance when its tools are available to the model. Keep ordinary primary exports successful when optional source companions fail, surfacing warnings instead; explicit source exports still report errors. Make research record reads side-effect-free without creating directories/files or rewriting saved metadata.
+- 466e64d: Stop a run that keeps repeating the same tool call. When the model makes the same call with identical arguments three times in a row, or repeats the same short sequence of calls three times, the call is blocked and the model reads a reason telling it to change approach. At five repeats the run ends with the incomplete-generation error, no further tool or model request runs, and the workspace files are kept. A call with different arguments starts the count again, `done` keeps its own repair limit, and there is no cap on how many times a tool is called in total.
+- Updated dependencies [c3d2ff3]
+- Updated dependencies [029128d]
+- Updated dependencies [0d3d63e]
+- Updated dependencies [a63feb5]
+- Updated dependencies [761b3b8]
+- Updated dependencies [3b03e7a]
+- Updated dependencies [f35b854]
+- Updated dependencies [e24d1f1]
+- Updated dependencies [24815f3]
+- Updated dependencies [6799d55]
+- Updated dependencies [c9757a0]
+- Updated dependencies [c9757a0]
+- Updated dependencies [9574745]
+- Updated dependencies [e331e69]
+- Updated dependencies [856dba8]
+- Updated dependencies [ec7f76d]
+- Updated dependencies [b7a0090]
+- Updated dependencies [c9757a0]
+- Updated dependencies [719d089]
+- Updated dependencies [143cf96]
+- Updated dependencies [4cf3393]
+- Updated dependencies [787a8e4]
+- Updated dependencies [09f21c3]
+- Updated dependencies [5f6036b]
+  - @open-codesign/shared@0.3.0
+  - @open-codesign/providers@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes
