@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classifyRenderableSource } from '@open-codesign/runtime';
+import type { Page } from 'puppeteer-core';
 import type { LocalAssetOptions } from './assets';
 import { buildInlineHtmlDocument } from './html';
 
@@ -18,6 +19,30 @@ export interface BrowserRenderOptions extends LocalAssetOptions {
 }
 
 const DEFAULT_VIEWPORT = { width: 1280, height: 800 } as const;
+
+export async function setExportPageContent(
+  page: Pick<Page, 'setContent' | 'waitForNetworkIdle'>,
+  html: string,
+  opts: Pick<BrowserRenderOptions, 'waitUntil' | 'renderTimeoutMs'> = {},
+): Promise<void> {
+  const waitUntil = opts.waitUntil ?? 'load';
+  const timeout = opts.renderTimeoutMs ?? 45_000;
+  const started = Date.now();
+  const networkIdle = waitUntil === 'networkidle0' || waitUntil === 'networkidle2';
+  await page.setContent(html, {
+    waitUntil: networkIdle ? 'domcontentloaded' : waitUntil,
+    timeout,
+  });
+  if (networkIdle) {
+    // Puppeteer 24.43 removed network-idle modes from setContent. Keep the
+    // existing export option and one timeout budget across both waits.
+    await page.waitForNetworkIdle({
+      concurrency: waitUntil === 'networkidle0' ? 0 : 2,
+      idleTime: 500,
+      timeout: timeout === 0 ? 0 : Math.max(1, timeout - (Date.now() - started)),
+    });
+  }
+}
 
 export async function buildExportHtmlDocument(
   artifactSource: string,
@@ -73,10 +98,7 @@ export async function renderArtifactBodyHtml(
     });
     const page = await browser.newPage();
     await page.setViewport(opts.viewport ?? DEFAULT_VIEWPORT);
-    await page.setContent(await buildExportHtmlDocument(artifactSource, opts), {
-      waitUntil: opts.waitUntil ?? 'load',
-      timeout: opts.renderTimeoutMs ?? 45_000,
-    });
+    await setExportPageContent(page, await buildExportHtmlDocument(artifactSource, opts), opts);
     await page.evaluate('document.fonts?.ready ?? Promise.resolve()');
     if (opts.settleMs && opts.settleMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, opts.settleMs));
