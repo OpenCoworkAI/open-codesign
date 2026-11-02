@@ -61,6 +61,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Browser tests (serialized, owned processes)
+        run: pnpm test:browser
+
       # Build smoke — bundle the Electron main + renderer so broken imports,
       # missing assets, or bad vite config fail here instead of only during a
       # tag release. Skip electron-builder packaging (that's release.yml's job).

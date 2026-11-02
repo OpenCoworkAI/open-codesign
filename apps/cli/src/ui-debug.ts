@@ -3,6 +3,26 @@ import type { UiDebugHost, UiDebugReport } from '../../desktop/src/debug/contrac
 import type { Arguments } from './arguments';
 import { CliError, type Result } from './protocol';
 
+export function uiLeaseError(error: unknown): CliError | undefined {
+  if (!(error instanceof Error)) return undefined;
+  if (!/^UI_DEBUG_(BUSY|INVALID_LEASE|LEASE_CHANGED)/.test(error.message)) return undefined;
+  return new CliError(
+    'runtime',
+    'UI_DEBUG_BUSY',
+    'Another UI run owns the shared lease, or its cleanup is unconfirmed. Close it first; see BACKGROUND_DEBUG.md for stale-lease recovery.',
+  );
+}
+
+export function modelSetupError(errors: UiDebugReport['errors']): CliError | undefined {
+  const code = errors.find((error) => error.source === 'model-setup')?.message;
+  if (!code) return undefined;
+  return new CliError(
+    code.endsWith('_UNSUPPORTED') ? 'unsupported' : 'configuration',
+    'UI_MODEL_SETUP_FAILED',
+    'Selected model configuration is unavailable or unsupported. Inspect the model-setup reason in report.json. No personal configuration was changed.',
+  );
+}
+
 /** Developer-only adapter. UI automation dependencies stay in the desktop workspace. */
 export async function loadUiDebugHost(): Promise<UiDebugHost> {
   try {
@@ -37,7 +57,9 @@ export async function debugUi(args: Arguments, signal: AbortSignal): Promise<Res
       signal,
       defaultJourney: args.steps === undefined,
     });
-  } catch {
+  } catch (error) {
+    const busy = uiLeaseError(error);
+    if (busy) throw busy;
     throw new CliError(
       'runtime',
       'UI_DEBUG_SETUP_FAILED',

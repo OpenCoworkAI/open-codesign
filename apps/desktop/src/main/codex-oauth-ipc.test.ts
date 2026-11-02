@@ -4,15 +4,19 @@
  * cachedConfig setter so we can observe provider mutation.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ConfigV3Schema, toPersistedV3 } from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const handlers = new Map<string, (...args: unknown[]) => unknown>();
+const debugRuntime = vi.hoisted(() => ({ enabled: false }));
 
 vi.mock('./electron-runtime', () => ({
+  get BACKGROUND_DEBUG() {
+    return debugRuntime.enabled;
+  },
   ipcMain: {
     handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
       handlers.set(channel, fn);
@@ -97,6 +101,7 @@ beforeAll(async () => {
 }, 30_000);
 
 beforeEach(() => {
+  debugRuntime.enabled = false;
   tmpConfigDir = mkdtempSync(join(tmpdir(), 'codex-oauth-ipc-'));
   fakeCachedConfig = null;
   modelOptionsMock.mockResolvedValue({
@@ -109,6 +114,32 @@ beforeEach(() => {
   closeMock.mockReset();
   startCallbackServerMock.mockClear();
   exchangeCodeMock.mockReset();
+});
+
+it('uses an existing background login but refuses every refresh without altering its snapshot', async () => {
+  debugRuntime.enabled = true;
+  const { getCodexTokenStore } = await import('./codex-oauth-ipc');
+  const store = getCodexTokenStore();
+  const auth = {
+    schemaVersion: 1 as const,
+    accessToken: 'private-access',
+    refreshToken: 'private-refresh',
+    idToken: 'private-id',
+    expiresAt: Date.now() + 3600000,
+    updatedAt: Date.now(),
+    accountId: null,
+    email: null,
+  };
+  await store.write(auth);
+  const file = join(tmpConfigDir, 'codex-auth.json');
+  const before = readFileSync(file);
+  expect(await store.getValidAccessToken()).toBe('private-access');
+  await expect(store.forceRefresh()).rejects.toThrow('BACKGROUND_MODEL_OAUTH_REFRESH_UNSUPPORTED');
+  expect(readFileSync(file)).toEqual(before);
+  await store.write({ ...auth, expiresAt: 1 });
+  await expect(store.getValidAccessToken()).rejects.toThrow(
+    'BACKGROUND_MODEL_OAUTH_REFRESH_UNSUPPORTED',
+  );
 });
 
 afterEach(async () => {

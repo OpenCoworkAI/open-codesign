@@ -79,6 +79,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Browser tests (serialized, owned processes)
+        run: pnpm test:browser
+
   # ------------------------------------------------------------------
   # Changelog: build release notes from conventional commits.
   # Runs in parallel with the gate; the build matrix waits for both.

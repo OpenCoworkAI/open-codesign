@@ -16,7 +16,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:browser": "node ../../scripts/test-ui.mjs exporters-browser"
   },
   "dependencies": {
     "@open-codesign/runtime": "workspace:*",

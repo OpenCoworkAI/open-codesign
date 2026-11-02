@@ -9,29 +9,37 @@ Usage:
   node --import tsx apps/cli/src/main.ts workspace inspect --workspace PATH [--json]
   node --import tsx apps/cli/src/main.ts export html --workspace PATH --source FILE --output FILE [--json]
   node --import tsx apps/cli/src/main.ts debug ui --output NEW_DIR [--steps FILE] [--json]
-  node --import tsx apps/cli/src/main.ts debug session --output NEW_DIR [--idle-timeout-ms N]
+  node --import tsx apps/cli/src/main.ts debug session --output NEW_DIR [--idle-timeout-ms N] [--model-mode fixture|live]
 
 Options:
   --help, -h          Show this help (also supports --json)
   --json             One versioned JSON result (debug session always uses JSONL)
   --workspace PATH   Workspace directory; doctor defaults to current directory
-  --config FILE      doctor only: config.toml (default: XDG_CONFIG_HOME/open-codesign/
+  --config FILE      doctor, or required by live model mode: config.toml (doctor default: XDG_CONFIG_HOME/open-codesign/
                      config.toml or ~/.config/open-codesign/config.toml)
   --source FILE      Workspace-relative .html, .htm, .jsx or .tsx source
   --output PATH      New .html file, or new debug report directory; parent must exist
   --steps FILE       debug ui only: {schemaVersion:1,steps:[...]} (1-16 preview steps)
   --timeout-ms N     Timeout (default 30000; debug ui 120000; session 1800000; max 3600000)
   --idle-timeout-ms N  debug session only: input idle timeout (default 300000; max 3600000)
+  --model-mode MODE  debug session only: fixture (controlled pi model) or live (selected credentials)
+  --provider ID      live mode: stored provider ID (default: config activeProvider)
+  --model ID         live mode: model ID (default: selected provider's configured model)
+  --credential-state FILE  live mode, Windows only: original app's Local State for encrypted keys
+  --codex-auth FILE   live mode: read-only snapshot of a current Codex ChatGPT auth.json; no refresh/login
 
 Read-only: doctor, workspace inspect. Export writes only the explicit output.
 debug ui uses offscreen Electron, temporary data, screenshot/report output; build first:
   pnpm --filter @open-codesign/desktop build --mode background-debug
 It uses real desktop IPC with a restricted development allowlist; native dialogs,
-model calls, credentials and external opening are unsupported. No physical input.
+external opening and OAuth login/refresh are unsupported. No physical input.
 debug session keeps one isolated instance; JSONL stdin methods: snapshot, act, close.
 Each request: {schemaVersion:1,id:"unique-id",method:"snapshot"}.
 act adds steps:[...]; ready/response/closed JSONL messages go to stdout. EOF closes.
-SIGINT/SIGTERM cancel. No model calls, credential refresh or GUI fallback.
+SIGINT/SIGTERM cancel. Default sessions make no model calls or credential access.
+Model modes run real generation in the disposable workspace. Live requires --config;
+only the selected credential is used in the disposable profile. Limits: 24 calls/session, 4096 output tokens/call,
+60s/call and 180s/generation. Model output may incur charges. No GUI fallback.
 Unsupported: run, session status, --mcp-server and non-HTML exports.
 pnpm --silent cli is a convenience alias; pnpm run can normalize failure exits to 1.
 Use the direct Node entry above when consuming exit codes.
@@ -60,6 +68,11 @@ export interface Arguments {
   output?: string;
   steps?: string;
   idleTimeoutMs?: number;
+  modelMode?: 'fixture' | 'live';
+  codexAuth?: string;
+  provider?: string;
+  model?: string;
+  credentialState?: string;
 }
 
 function usage(message: string): never {
@@ -84,6 +97,11 @@ export function parseArguments(argv: string[]): Arguments {
         steps: { type: 'string' },
         'timeout-ms': { type: 'string' },
         'idle-timeout-ms': { type: 'string' },
+        'model-mode': { type: 'string' },
+        provider: { type: 'string' },
+        model: { type: 'string' },
+        'credential-state': { type: 'string' },
+        'codex-auth': { type: 'string' },
         'mcp-server': { type: 'boolean' },
       },
     });
@@ -159,7 +177,41 @@ export function parseArguments(argv: string[]): Arguments {
     out[key] = value;
   }
   if (command === 'help' || command === 'unsupported') return out;
-  if (command !== 'doctor' && out.config) usage('--config is only supported by doctor.');
+  const modelMode = values['model-mode'];
+  if (modelMode !== undefined) {
+    if (command !== 'debug session' || !['fixture', 'live'].includes(String(modelMode)))
+      usage('--model-mode fixture|live is only supported by debug session.');
+    out.modelMode = modelMode as 'fixture' | 'live';
+  }
+  for (const key of ['provider', 'model'] as const) {
+    const value = values[key];
+    if (value === undefined) continue;
+    if (out.modelMode !== 'live' || typeof value !== 'string' || !/^[\w./:-]{1,160}$/.test(value))
+      usage('--provider and --model require live mode and a non-empty identifier.');
+    out[key] = value;
+  }
+  if (out.modelMode === 'live' && !out.config) usage('Live mode requires --config FILE.');
+  const credentialState = values['credential-state'];
+  if (credentialState !== undefined) {
+    if (out.modelMode !== 'live' || typeof credentialState !== 'string' || !credentialState.trim())
+      usage('--credential-state requires live mode and a non-empty file path.');
+    out.credentialState = credentialState;
+  }
+  const codexAuth = values['codex-auth'];
+  if (codexAuth !== undefined) {
+    if (
+      out.modelMode !== 'live' ||
+      typeof codexAuth !== 'string' ||
+      !codexAuth.trim() ||
+      out.credentialState
+    )
+      usage(
+        '--codex-auth requires live mode and a file path; it cannot combine with --credential-state.',
+      );
+    out.codexAuth = codexAuth;
+  }
+  if (command !== 'doctor' && out.config && out.modelMode !== 'live')
+    usage('--config is supported by doctor or debug session --model-mode live.');
   if (command !== 'debug ui' && out.steps) usage('--steps is only supported by debug ui.');
   if (command === 'debug ui' || command === 'debug session') {
     if (!out.output || out.workspace || out.source || (command === 'debug session' && out.steps))

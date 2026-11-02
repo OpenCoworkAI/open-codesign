@@ -21,7 +21,7 @@ import {
 } from '@open-codesign/shared';
 import { getCodexModelOptions } from './codex-models';
 import { configDir, writeConfig } from './config';
-import { ipcMain, shell } from './electron-runtime';
+import { BACKGROUND_DEBUG, ipcMain, shell } from './electron-runtime';
 import { getLogger } from './logger';
 import { getCachedConfig, setCachedConfig } from './onboarding-ipc';
 
@@ -70,6 +70,13 @@ export function getCodexTokenStore(): CodexTokenStore {
   if (tokenStoreSingleton === null) {
     tokenStoreSingleton = new CodexTokenStore({
       filePath: join(configDir(), 'codex-auth.json'),
+      ...(BACKGROUND_DEBUG
+        ? {
+            refreshFn: async () => {
+              throw new Error('BACKGROUND_MODEL_OAUTH_REFRESH_UNSUPPORTED');
+            },
+          }
+        : {}),
     });
   }
   return tokenStoreSingleton;

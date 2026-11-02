@@ -4,6 +4,9 @@ The following describes the offline phase 1 slice. The subsequent `debug ui` and
 host and its executable acceptance are documented in
 [BACKGROUND_DEBUG.md](../desktop/BACKGROUND_DEBUG.md); it uses real isolated Electron IPC
 and does not claim standalone model execution.
+It now supports explicitly selected fixture/live models through the existing desktop
+generation IPC, using isolated sessions and the original permission/tool lifecycle. This
+tests the production UI/runtime boundary without implementing the future standalone run host.
 
 ## Scope and architecture
 
@@ -64,9 +67,9 @@ execution. Add an explicitly read-only projection for persisted session/run stat
 does not claim an unterminated persisted run is currently alive. Use the same host from
 desktop, CLI and future MCP. Test mocked pi/model events, permission denials, cancellation,
 durable recovery and terminal state before enabling any CLI model call.
-An optional hidden Electron verifier still needs an explicit host lifecycle; a login or
+The background debugging host now provides an explicit offscreen Electron lifecycle; a login or
 permission flow needing visible interaction must be reported to the caller, not opened
-implicitly. The phase 1 CLI returns `UNSUPPORTED` for these paths.
+implicitly. Standalone generation and live session-status commands still return `UNSUPPORTED`.
 
 ## Executable acceptance
 

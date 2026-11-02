@@ -40,4 +40,28 @@ describe('background development host policy', () => {
   ])('rejects unsupported operation %s', (channel) => {
     expect(isBackgroundChannelAllowed(channel, {})).toBe(false);
   });
+
+  it('allows only local generation and question resolution in explicit model mode', () => {
+    expect(isBackgroundChannelAllowed('codesign:v1:generate', {}, true)).toBe(true);
+    expect(isBackgroundChannelAllowed('ask:resolve', {}, true)).toBe(true);
+    expect(isBackgroundChannelAllowed('codesign:v1:cancel-generation', {}, true)).toBe(true);
+    for (const channel of [
+      'permission:resolve',
+      'codex-oauth:v1:login',
+      'config:v1:set-provider-and-models',
+      'codesign:v1:focus-window',
+      'unknown',
+    ])
+      expect(isBackgroundChannelAllowed(channel, {}, true)).toBe(false);
+    expect(
+      isBackgroundChannelAllowed(
+        'codesign:v1:generate',
+        { referenceUrl: 'https://example.com' },
+        true,
+      ),
+    ).toBe(false);
+    expect(isBackgroundChannelAllowed('codesign:v1:generate', { attachments: [{}] }, true)).toBe(
+      false,
+    );
+  });
 });

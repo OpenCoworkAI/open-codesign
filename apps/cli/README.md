@@ -4,9 +4,15 @@ A source-checkout CLI for agents, developers and CI. It inspects existing worksp
 exports HTML directly through Open CoDesign's core and exporter packages. The desktop app
 does not need to be running. Inspection and export use no model, browser or Electron.
 The development-only `debug ui` command separately starts an isolated offscreen Electron
-instance to verify Open CoDesign's own interface without physical desktop input.
+instance to verify Open CoDesign's own interface using browser protocol input.
 `debug session` keeps that same isolated instance alive for an agent's repeated
 screenshot/decision/action loop over JSONL stdin/stdout.
+
+Windows non-interference acceptance **failed after a reported pointer-movement
+incident**. Zero injected-input counters did not rule it out. Do not retry UI/browser tests
+on the affected interactive desktop until corrected or isolated at the OS level; see
+[the incident and verification limits](../desktop/BACKGROUND_DEBUG.md#windows-non-interference-verification).
+Offline inspection/export commands do not launch browsers and are unaffected by this restriction.
 
 ## Run
 
@@ -50,6 +56,8 @@ symlinks/junctions. It is selected explicitly; the CLI does not guess which desi
 | `export html --workspace PATH --source FILE --output FILE` | Reuses the existing standalone runtime and HTML exporter; creates one new output file. |
 | `debug ui --output NEW_DIR [--steps FILE]` | Real desktop UI in offscreen Electron; screenshots, interactions, errors and Windows non-interference observations. Requires a fresh debug build. |
 | `debug session --output NEW_DIR` | Continuous isolated UI session; JSONL `snapshot`, `act`, `close` requests. Same debug build and host restrictions. |
+| `debug session --model-mode fixture --output NEW_DIR` | Controlled pi model with the real UI, generation tools, preview and session lifecycle. No API credentials. |
+| `debug session --model-mode live --config FILE --output NEW_DIR` | Explicit model use through the same background UI; optional `--provider ID --model ID`. BYOK, or a current login selected with `--codex-auth FILE`. |
 
 Inspection skips hidden/internal/build directories and symbolic links using the desktop's
 same filesystem reader. It scans up to 2,001 files, reports at most 2,000 files, up to 24
@@ -102,13 +110,14 @@ On failure, `error` contains `category`, `code`, a safe `message` and `exitCode`
 Doctor retains its individual checks in `data` on failure. Background UI run failures
 retain their report in `data`; setup failures and other operations omit it.
 An invalid invocation uses command `unknown`; recognized unavailable commands use
-command `unsupported`. No model event stream is exposed; sessions return UI frames only.
+command `unsupported`. No raw model event stream is exposed; model-enabled sessions add
+call counters and generation states to UI frames, and preserve selected generated files.
 
 | Exit | Category | Examples |
 | --- | --- | --- |
 | 0 | success | Warnings in doctor do not fail supported offline capabilities. |
 | 2 | usage | Unknown/repeated flags, missing required paths, invalid timeout/source. |
-| 3 | configuration | Doctor finds missing, unreadable, malformed or invalid config. |
+| 3 | configuration | Doctor or live model setup finds missing, unreadable, malformed or invalid config. |
 | 4 | runtime | Workspace/source unreadable, dependency unavailable, unexpected failure. |
 | 5 | task | Empty source, export generation/write failure, output exists. |
 | 6 | unsupported | `run`, `session status`, `--mcp-server`, non-HTML export formats. |
@@ -137,7 +146,19 @@ or OAuth tokens. It does not read `auth.json` or the OS credential store.
 It prints neither arbitrary config values nor parser errors, headers, URLs or stack traces.
 Inventory filenames are user data and appear in inventory output.
 
-Model execution, live session status, MCP transport, PDF/PNG/PPTX/ZIP/Markdown exports
+Background model sessions are an explicit development-only exception: see the
+[model modes, limits and credential boundaries](../desktop/BACKGROUND_DEBUG.md#model-generation-in-a-background-session).
+They use the existing Electron generation path, read only the selected credential and
+keep source configuration unchanged. Default sessions still disable model calls. Login
+and token refresh are unsupported; live UI submissions can incur provider charges.
+Windows profile-bound encrypted keys additionally need `--credential-state FILE`, pointing
+to the original app's `Local State`; only its wrapped encryption key enters the disposable
+profile. See the linked PowerShell example. The original file is read-only.
+Alternatively, `--codex-auth FILE` explicitly snapshots a current Codex ChatGPT login for
+the configured `chatgpt-codex` provider. Expired tokens fail; the host never refreshes or
+changes the original login. Requests are restricted to the official subscription endpoint.
+
+Standalone `run`, live session status, MCP transport, PDF/PNG/PPTX/ZIP/Markdown exports
 are not implemented. Recognized unavailable operations return exit 6 with a reason.
 There is no fallback that opens the desktop or takes over foreground input.
 See [design and executable acceptance](DESIGN.md) for the runtime blockers and next phase.

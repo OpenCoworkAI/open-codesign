@@ -30,6 +30,11 @@ it('does not inherit credentials or Node/Electron injection settings', () => {
   expect(env['NODE_OPTIONS']).toBeUndefined();
   expect(env['ELECTRON_RUN_AS_NODE']).toBeUndefined();
   expect(env['HOME']).toBe(join(root, 'home'));
+  expect(env['USERPROFILE']).toBe(env['HOME']);
+  expect(env['APPDATA']).toBe(join(root, 'home/AppData/Roaming'));
+  expect(env['LOCALAPPDATA']).toBe(join(root, 'home/AppData/Local'));
+  expect(env['TEMP']).toBe(join(root, 'temp'));
+  expect(env['TMP']).toBe(env['TEMP']);
   expect(env['XDG_CONFIG_HOME']).toBe(join(root, 'config'));
 });
 

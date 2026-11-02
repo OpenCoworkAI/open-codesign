@@ -1,5 +1,14 @@
-import { appendFileSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { isAbsolute, join } from 'node:path';
+import type { DebugModelOptions } from '../debug/contract';
+import { projectCredentialState } from '../debug/credential-state';
 
 // A development host restriction, additional to the normal IPC validation and permissions.
 const ALLOWED_CHANNELS = new Set([
@@ -35,8 +44,57 @@ const ALLOWED_CHANNELS = new Set([
   'codesign:files:v1:unsubscribe',
 ]);
 
-export function isBackgroundChannelAllowed(channel: string, payload: unknown): boolean {
-  if (!ALLOWED_CHANNELS.has(channel)) return false;
+const MODEL_CHANNELS = new Set([
+  'codesign:v1:generate',
+  'codesign:v1:cancel-generation',
+  'codesign:v1:generate-title',
+  'codesign:v1:active-message',
+  'ask:resolve',
+  'chat:v1:append',
+  'snapshots:v1:create',
+  'snapshots:v1:set-thumbnail',
+  'snapshots:v1:preview:update',
+  'chat:v1:update-tool-status',
+  'codesign:files:v1:preview',
+  'codesign:files:v1:thumbnail',
+]);
+let modelEnabled = false;
+let credentialStateError: unknown;
+export function assertBackgroundCredentialState(): void {
+  if (credentialStateError) throw credentialStateError;
+}
+let generationHook:
+  | ((payload: unknown, invoke: () => Promise<unknown>) => Promise<unknown>)
+  | undefined;
+let runObserver: ((id: string, status: string) => void) | undefined;
+
+export function enableBackgroundModels(
+  hook: NonNullable<typeof generationHook>,
+  observe: NonNullable<typeof runObserver>,
+): void {
+  modelEnabled = true;
+  generationHook = hook;
+  runObserver = observe;
+}
+
+export function recordBackgroundRun(id: string, status: string): void {
+  runObserver?.(id, status);
+}
+
+export function isBackgroundChannelAllowed(
+  channel: string,
+  payload: unknown,
+  models = false,
+): boolean {
+  if (!ALLOWED_CHANNELS.has(channel) && !(models && MODEL_CHANNELS.has(channel))) return false;
+  if (channel === 'codesign:v1:generate' && payload && typeof payload === 'object') {
+    const input = payload as Record<string, unknown>;
+    if (
+      input['referenceUrl'] ||
+      (Array.isArray(input['attachments']) && input['attachments'].length)
+    )
+      return false;
+  }
   if (channel === 'snapshots:v1:create-design' && payload && typeof payload === 'object') {
     // Only the normal auto-allocated workspace, inside the disposable Documents directory.
     const input = payload as Record<string, unknown>;
@@ -53,6 +111,9 @@ export function initializeBackgroundDebug(electron: typeof import('electron')): 
   if (app.isPackaged || !isAbsolute(root) || readdirSync(root).length !== 0) {
     throw new Error('Background debug requires an unpackaged app and a fresh empty absolute root');
   }
+  // Chromium's Windows profile checks require these redirected known folders to exist.
+  for (const name of ['Roaming', 'Local', 'LocalLow'])
+    mkdirSync(join(root, 'home/AppData', name), { recursive: true });
   for (const name of [
     'userData',
     'sessionData',
@@ -67,11 +128,47 @@ export function initializeBackgroundDebug(electron: typeof import('electron')): 
     mkdirSync(directory, { recursive: true });
     app.setPath(name, directory);
   }
+  const model = JSON.parse(process.env['CODESIGN_BACKGROUND_MODEL'] ?? '{}') as DebugModelOptions;
+  if (model.credentialState) {
+    try {
+      if (model.mode !== 'live' || process.platform !== 'win32')
+        throw new Error('BACKGROUND_MODEL_CREDENTIAL_STATE_UNSUPPORTED');
+      let state: string;
+      try {
+        if (statSync(model.credentialState).size > 1024 * 1024) throw new Error();
+        state = readFileSync(model.credentialState, 'utf8');
+      } catch {
+        throw new Error('BACKGROUND_MODEL_CREDENTIAL_STATE_UNREADABLE');
+      }
+      // safeStorage loads Local State at app ready. Seed only the disposable copy before then.
+      const projected = projectCredentialState(state);
+      try {
+        writeFileSync(join(root, 'sessionData/Local State'), projected, { flag: 'wx' });
+      } catch {
+        throw new Error('BACKGROUND_MODEL_CREDENTIAL_STATE_UNREADABLE');
+      }
+    } catch (error) {
+      // Report at the guarded ready boundary, avoiding Electron's module-load error dialog.
+      credentialStateError = error;
+    }
+  }
   process.env['XDG_CONFIG_HOME'] = join(root, 'config');
   mkdirSync(join(root, 'config/open-codesign'), { recursive: true });
   writeFileSync(
     join(root, 'config/open-codesign/locale.json'),
     JSON.stringify({ schemaVersion: 1, locale: 'en' }),
+  );
+  writeFileSync(
+    join(root, 'config/open-codesign/preferences.json'),
+    JSON.stringify({
+      schemaVersion: 10,
+      generationTimeoutSec: 180,
+      memoryEnabled: false,
+      workspaceMemoryAutoUpdate: false,
+      userMemoryAutoUpdate: false,
+      systemNotifications: false,
+      checkForUpdatesOnStartup: false,
+    }),
   );
   process.env['HOME'] = join(root, 'home');
   process.env['USERPROFILE'] = join(root, 'home');
@@ -99,7 +196,9 @@ export function initializeBackgroundDebug(electron: typeof import('electron')): 
   const handle = ipcMain.handle.bind(ipcMain);
   ipcMain.handle = (channel, listener) =>
     handle(channel, (event, ...args: unknown[]) => {
-      if (!isBackgroundChannelAllowed(channel, args[0])) return blocked(channel);
+      if (!isBackgroundChannelAllowed(channel, args[0], modelEnabled)) return blocked(channel);
+      if (channel === 'codesign:v1:generate' && generationHook)
+        return generationHook(args[0], async () => listener(event, ...args));
       return listener(event, ...args);
     });
   for (const name of [
