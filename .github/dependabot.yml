@@ -1,13 +1,13 @@
 version: 2
+# Batch routine version updates monthly; security updates keep their own cadence.
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: "06:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     labels:
       - chore
       - area:build
@@ -15,36 +15,35 @@ updates:
       prefix: chore
       include: scope
     groups:
-      typescript:
-        patterns:
-          - typescript
-          - "@types/*"
-      vitest:
-        patterns:
-          - vitest
-          - "@vitest/*"
-      playwright:
-        patterns:
-          - "@playwright/*"
-          - playwright
-      biome:
-        patterns:
-          - "@biomejs/biome"
       electron:
+        applies-to: version-updates
         patterns:
           - electron
           - electron-builder
           - "@electron/*"
+      pi:
+        applies-to: version-updates
+        patterns:
+          - "@mariozechner/pi-*"
+          - "@earendil-works/pi-*"
       react:
+        applies-to: version-updates
         patterns:
           - react
           - react-dom
           - "@types/react"
           - "@types/react-dom"
+      development-tools:
+        applies-to: version-updates
+        dependency-type: development
+        patterns:
+          - "*"
       radix:
+        applies-to: version-updates
         patterns:
           - "@radix-ui/*"
       tailwind:
+        applies-to: version-updates
         patterns:
           - tailwindcss
           - "@tailwindcss/*"
@@ -56,11 +55,10 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: "06:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     labels:
       - chore
       - area:build
@@ -68,9 +66,10 @@ updates:
       prefix: chore
       include: scope
     groups:
-      codeql:
+      actions:
+        applies-to: version-updates
         patterns:
-          - "github/codeql-action/*"
+          - "*"
     ignore:
       - dependency-name: "*"
         update-types:
