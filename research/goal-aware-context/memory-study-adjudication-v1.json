@@ -1,0 +1,1047 @@
+{
+  "schemaVersion": 1,
+  "protocol": "memory-study-adjudication@1",
+  "runId": "memory-short-001",
+  "status": "confirmed",
+  "confirmedAt": "2026-11-01",
+  "confirmation": "R1、R2同意；R3接受意图；R4按建议",
+  "postHoc": true,
+  "confirmationScope": "Only these exact reviewed expressions for matching reference meaning/checkpoints in the frozen short run; no future aliases or live-scoring changes. R1–R3 reviewed value credit; R4 understood-sequence diagnostic only, retaining strict value/joint failure and valid JSON.",
+  "originalPlanHash": "e198d3c53597059bc8150e2e55ef3f68a796e05c290450a6674eb4f3cba5e107",
+  "referenceHash": "27f33fa0f19ba5990f5286f608ef6cca7b41ed8c5bcfc56a7a4b5e9c93814772",
+  "readerContractId": "trace-state-reader@3",
+  "sourceSha256": {
+    "manifest.json": "bf90fb61b044079f99e38f68beb150575b049a786605e5ac294537ecc882789f",
+    "plan.json": "d4b1f8c6433f10688287477fb1258b2fc8e2c684f4621cf0238c4ca214f6a7e2",
+    "report.json": "52aaa9c6aed4df32398827d3fff10298c262972c62615ace8ae6153f2abbcae7",
+    "calls.jsonl": "5d5382a807786d265ec6ac528a5a302e00240db271442b142acf9444affd035a",
+    "observations.jsonl": "4f9a3179cbf5bf84741849ad58b1e7ee3ccf9f9ebccc899fee198fad1cf0af43"
+  },
+  "definitions": [
+    {
+      "id": "R1",
+      "key": "fontSize",
+      "canonical": "preserve",
+      "cutoffs": [1, 3, 5],
+      "values": ["retain"],
+      "valueCredit": true,
+      "issue": "synonymous-preservation"
+    },
+    {
+      "id": "R2",
+      "key": "nextAction",
+      "canonical": "修复空状态",
+      "cutoffs": [1],
+      "values": ["Fix App.jsx empty state", "fix App.jsx empty state", "fix empty state"],
+      "valueCredit": true,
+      "issue": "equivalent-initial-action"
+    },
+    {
+      "id": "R3",
+      "key": "fontSize",
+      "canonical": "preserve",
+      "cutoffs": [1, 3, 5],
+      "values": ["保留fontSize元素"],
+      "valueCredit": true,
+      "issue": "intent-accepted-imprecise-property-term"
+    },
+    {
+      "id": "R4",
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "cutoffs": [3, 5],
+      "values": [
+        "re-read App.jsx and retry preview for empty-state fix",
+        "重读App.jsx后重试预览",
+        "重读App.jsx再重试预览",
+        "re-read App.jsx then retry preview",
+        "Re-read App.jsx to retry preview",
+        "read App.jsx and retry preview",
+        "先重读 App.jsx，再重试预览",
+        "re-read App.jsx and retry preview"
+      ],
+      "valueCredit": false,
+      "issue": "sequence-understood-non-atomic-value"
+    }
+  ],
+  "reviewedExpressions": 13,
+  "matchedClaims": 16,
+  "decisions": [
+    {
+      "reviewId": "R4",
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "round": 1,
+      "method": "ordinary-summary",
+      "compactions": 1,
+      "final": true,
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "responseId": "recovery-action/trial-1/1/ordinary-summary/round-1/probe",
+      "requestHash": "7576d1d29c363c1d590d222368dec7baf5b9df5c1c45165a8a47587ab160f394",
+      "responseHash": "b9b77e6df8a4cde9920259fa0034840f82c8485460cc4e4778f361a9464b54da",
+      "claimHash": "ed4bee73d82806f953aadb3db9c97682b514dba151a73599c95b71dbf378cb27",
+      "referenceClaimHash": "01c8f25ab87783a727a4a2293ce29e7262c7e1d498aa92b5bf13643a7b7d12c6",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "re-read App.jsx and retry preview for empty-state fix",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "nextAction",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "user-clarification",
+            "seq": 1,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": true,
+        "provenance": false,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": false,
+        "issue": "sequence-understood-non-atomic-value",
+        "sequenceUnderstood": true,
+        "atomicValueCompliant": false,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R4",
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "round": 1,
+      "method": "goal-record",
+      "compactions": 1,
+      "final": true,
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "responseId": "recovery-action/trial-1/1/goal-record/round-1/probe",
+      "requestHash": "4cde64be8cae4069816b7c1d1324aacfeaea4ac4da329763df4e2dc0416064db",
+      "responseHash": "f890b37faa4b6d4e29669c51748d69eb66262da7695e36ecd0bf025b92633254",
+      "claimHash": "f21f75a1a903d22c5f96572c338238cbd35dc3604e5a9f06a3c514d336761c89",
+      "referenceClaimHash": "01c8f25ab87783a727a4a2293ce29e7262c7e1d498aa92b5bf13643a7b7d12c6",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "重读App.jsx后重试预览",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "设计A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "nextAction",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "user-next-action-requirement",
+            "seq": 1,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": false,
+        "provenance": false,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": false,
+        "issue": "sequence-understood-non-atomic-value",
+        "sequenceUnderstood": true,
+        "atomicValueCompliant": false,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R2",
+      "trajectoryId": "recovery-action",
+      "cutoff": 1,
+      "round": 1,
+      "method": "goal-record",
+      "compactions": 3,
+      "final": false,
+      "key": "nextAction",
+      "canonical": "修复空状态",
+      "responseId": "recovery-action/trial-1/3/goal-record/round-1/probe",
+      "requestHash": "5dd6bc1a2e6980ecf790084786c387192d181c8dad2b65d1ae8e6f7402dd9d09",
+      "responseHash": "9ff7e0931bfa6ff483646cdad932638ff90a82c672b138c306ed2e4633fc0766",
+      "claimHash": "48cf47fe1eb435692572b319af5ff5d9c15e4a93cb5181d613b25cb1188d35a9",
+      "referenceClaimHash": "5054e5b83c38e97c222b9653a38d9f2a7fbfcb71145c1c0faed3692e7f52557a",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "Fix App.jsx empty state",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": null,
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "evt-remaining-work",
+            "seq": 1,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": false,
+        "provenance": false,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": true,
+        "issue": "equivalent-initial-action",
+        "sequenceUnderstood": null,
+        "atomicValueCompliant": null,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R3",
+      "trajectoryId": "recovery-action",
+      "cutoff": 3,
+      "round": 2,
+      "method": "goal-record",
+      "compactions": 3,
+      "final": false,
+      "key": "fontSize",
+      "canonical": "preserve",
+      "responseId": "recovery-action/trial-1/3/goal-record/round-2/probe",
+      "requestHash": "eb4bfcae5cc79e3f1bfc90a1194661e2d06207f660ba6db7e212869ab63686a2",
+      "responseHash": "dc5aaed5daddda3d02f8884d6053c136a5bd8b73cc5ccfe963cdff52c408f5b4",
+      "claimHash": "0ae45bf5d6fc6b3fe261521a818edafe15880758ebf89e5934b27a18e8ee8963",
+      "referenceClaimHash": "6d59d678ce0d5688fa60e636ab57817b7dce14fbb94d9b87a695fb99d88c4a9d",
+      "actualClaim": {
+        "key": "fontSize",
+        "kind": "intent",
+        "value": "保留fontSize元素",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "设计A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "fontSize",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "accept-decision-1",
+            "seq": 0,
+            "authority": "用户",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["explicit-user-change", "scope-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "fontSize",
+        "present": true,
+        "value": false,
+        "scope": false,
+        "provenance": false,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": true,
+        "issue": "intent-accepted-imprecise-property-term",
+        "sequenceUnderstood": null,
+        "atomicValueCompliant": null,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R4",
+      "trajectoryId": "recovery-action",
+      "cutoff": 3,
+      "round": 2,
+      "method": "goal-record",
+      "compactions": 3,
+      "final": false,
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "responseId": "recovery-action/trial-1/3/goal-record/round-2/probe",
+      "requestHash": "eb4bfcae5cc79e3f1bfc90a1194661e2d06207f660ba6db7e212869ab63686a2",
+      "responseHash": "dc5aaed5daddda3d02f8884d6053c136a5bd8b73cc5ccfe963cdff52c408f5b4",
+      "claimHash": "73e4ddcad70ff46810b81c49f6b3c02595538a0338051dfd3a5a47dbd785cef8",
+      "referenceClaimHash": "77a13ed7c7300fb82b63536d98166e3ccf725332bf7ab4c71499a3e027eff370",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "重读App.jsx再重试预览",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "设计A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "nextAction",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "user-latest-instruction",
+            "seq": 0,
+            "authority": "用户",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": false,
+        "provenance": false,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": false,
+        "issue": "sequence-understood-non-atomic-value",
+        "sequenceUnderstood": true,
+        "atomicValueCompliant": false,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R3",
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "round": 3,
+      "method": "goal-record",
+      "compactions": 3,
+      "final": true,
+      "key": "fontSize",
+      "canonical": "preserve",
+      "responseId": "recovery-action/trial-1/3/goal-record/round-3/probe",
+      "requestHash": "b358de48d696aaa799e6365d549bbf3eff38df15a75e9a5c7ff74a5da72ff006",
+      "responseHash": "0b4cbaee6b73e01f220342e4d183410cfa0143280b9d1a67990fdf8e07e2e9e5",
+      "claimHash": "1eecb391c4c28709b33d8278cac285b0b5cb4603ce8b134bb0cd8a953a54e879",
+      "referenceClaimHash": "8a41bb4e241e1594c6857744b924a183d7fda6f5bdd6cd29307e8801096b7273",
+      "actualClaim": {
+        "key": "fontSize",
+        "kind": "intent",
+        "value": "保留fontSize元素",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "设计A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "fontSize",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "evt-accept-fontSize",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["explicit-user-change", "scope-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "fontSize",
+        "present": true,
+        "value": false,
+        "scope": false,
+        "provenance": false,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": true,
+        "issue": "intent-accepted-imprecise-property-term",
+        "sequenceUnderstood": null,
+        "atomicValueCompliant": null,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R4",
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "round": 3,
+      "method": "goal-record",
+      "compactions": 3,
+      "final": true,
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "responseId": "recovery-action/trial-1/3/goal-record/round-3/probe",
+      "requestHash": "b358de48d696aaa799e6365d549bbf3eff38df15a75e9a5c7ff74a5da72ff006",
+      "responseHash": "0b4cbaee6b73e01f220342e4d183410cfa0143280b9d1a67990fdf8e07e2e9e5",
+      "claimHash": "e6680d09dce7490b61a117598c6658af7e3bb28f47eb280a7faa93a10e21b68a",
+      "referenceClaimHash": "01c8f25ab87783a727a4a2293ce29e7262c7e1d498aa92b5bf13643a7b7d12c6",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "重读App.jsx后重试预览",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "设计A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": null,
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "evt-next-action-instr",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": false,
+        "provenance": false,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": false,
+        "issue": "sequence-understood-non-atomic-value",
+        "sequenceUnderstood": true,
+        "atomicValueCompliant": false,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R1",
+      "trajectoryId": "recovery-action",
+      "cutoff": 1,
+      "round": 1,
+      "method": "stable-handoff",
+      "compactions": 3,
+      "final": false,
+      "key": "fontSize",
+      "canonical": "preserve",
+      "responseId": "recovery-action/trial-1/3/stable-handoff/round-1/probe",
+      "requestHash": "44f837cb4ca78cc4ce488581cb9375e0feb0f97a9c70cfc5236db19dacac5a22",
+      "responseHash": "ab59a2fbfe8d514cd4a4432c904d2fca695b39a22ad22ad8326690cf7e880726",
+      "claimHash": "314b07186cd061213bb407f059940c630a9bfad7da0e4a767b1904309e70f94c",
+      "referenceClaimHash": "6d59d678ce0d5688fa60e636ab57817b7dce14fbb94d9b87a695fb99d88c4a9d",
+      "actualClaim": {
+        "key": "fontSize",
+        "kind": "intent",
+        "value": "retain",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "fontSize",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "e0",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["explicit-user-change", "scope-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "fontSize",
+        "present": true,
+        "value": false,
+        "scope": true,
+        "provenance": true,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": true,
+        "issue": "synonymous-preservation",
+        "sequenceUnderstood": null,
+        "atomicValueCompliant": null,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R2",
+      "trajectoryId": "recovery-action",
+      "cutoff": 1,
+      "round": 1,
+      "method": "stable-handoff",
+      "compactions": 3,
+      "final": false,
+      "key": "nextAction",
+      "canonical": "修复空状态",
+      "responseId": "recovery-action/trial-1/3/stable-handoff/round-1/probe",
+      "requestHash": "44f837cb4ca78cc4ce488581cb9375e0feb0f97a9c70cfc5236db19dacac5a22",
+      "responseHash": "ab59a2fbfe8d514cd4a4432c904d2fca695b39a22ad22ad8326690cf7e880726",
+      "claimHash": "eefc322ad8b4951e9ad19a13100fa67df73a9c3a5b3d11a90b949484c4d7feba",
+      "referenceClaimHash": "5054e5b83c38e97c222b9653a38d9f2a7fbfcb71145c1c0faed3692e7f52557a",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "fix App.jsx empty state",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "nextAction",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "e0",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": true,
+        "provenance": true,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": true,
+        "issue": "equivalent-initial-action",
+        "sequenceUnderstood": null,
+        "atomicValueCompliant": null,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R4",
+      "trajectoryId": "recovery-action",
+      "cutoff": 3,
+      "round": 2,
+      "method": "stable-handoff",
+      "compactions": 3,
+      "final": false,
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "responseId": "recovery-action/trial-1/3/stable-handoff/round-2/probe",
+      "requestHash": "2a77d08ca58ba7af2ea1d4d68a20c4095f8f8756eaaad8545cc9ca3d760f7e5d",
+      "responseHash": "5303df49e89bd6e94f613d3e162616d2fa4899fb51ffd3dc8ac51b47977f115d",
+      "claimHash": "f4dd8a6d2271c5be367432914610d71dd9a6c94cff3b2d37c234fb39dc7eee8e",
+      "referenceClaimHash": "77a13ed7c7300fb82b63536d98166e3ccf725332bf7ab4c71499a3e027eff370",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "re-read App.jsx then retry preview",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "nextAction",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "e3",
+            "seq": 3,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": true,
+        "provenance": true,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": false,
+        "issue": "sequence-understood-non-atomic-value",
+        "sequenceUnderstood": true,
+        "atomicValueCompliant": false,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R4",
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "round": 3,
+      "method": "stable-handoff",
+      "compactions": 3,
+      "final": true,
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "responseId": "recovery-action/trial-1/3/stable-handoff/round-3/probe",
+      "requestHash": "78e522e831ee92971ce51cacee3678b029992acb0bb783d404fbfa6690e28789",
+      "responseHash": "c3f8ff6401298a222070f1ef1700a8a7c6bab2120b601f84e2f8ce54399697c3",
+      "claimHash": "b7ea1bbd38c3e99dfe258880bd2f063c31d7e086fd13a67b875d6614d488e166",
+      "referenceClaimHash": "01c8f25ab87783a727a4a2293ce29e7262c7e1d498aa92b5bf13643a7b7d12c6",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "Re-read App.jsx to retry preview",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "nextAction",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "e3",
+            "seq": 3,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": true,
+        "provenance": true,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": false,
+        "issue": "sequence-understood-non-atomic-value",
+        "sequenceUnderstood": true,
+        "atomicValueCompliant": false,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R4",
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "round": 1,
+      "method": "goal-recall",
+      "compactions": 1,
+      "final": true,
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "responseId": "recovery-action/trial-1/1/goal-recall/round-1/probe",
+      "requestHash": "9dcf6757454c073fc36b992db96487c828109c99804db6ef9a10b3599808f3ce",
+      "responseHash": "ed5994d51dc5219b0b9eeee17daa1432e8bdabb3a82abcd2a42a98a55319a668",
+      "claimHash": "440d69a8588571a4bea385b1b231da219b77d1ac1903bab3a77e28819855a2f2",
+      "referenceClaimHash": "01c8f25ab87783a727a4a2293ce29e7262c7e1d498aa92b5bf13643a7b7d12c6",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "read App.jsx and retry preview",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": null,
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "e3",
+            "seq": 3,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": false,
+        "provenance": true,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": false,
+        "issue": "sequence-understood-non-atomic-value",
+        "sequenceUnderstood": true,
+        "atomicValueCompliant": false,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R2",
+      "trajectoryId": "recovery-action",
+      "cutoff": 1,
+      "round": 1,
+      "method": "goal-recall",
+      "compactions": 3,
+      "final": false,
+      "key": "nextAction",
+      "canonical": "修复空状态",
+      "responseId": "recovery-action/trial-1/3/goal-recall/round-1/probe",
+      "requestHash": "e7ffed2637f638cb1f8741d036e4489c57f64f9dfa643e0ef1fa900e49c14a63",
+      "responseHash": "617e8229445db5936ad56286fb86d51d2beec1fca316b6f3ec0cfd4d5b9e0d46",
+      "claimHash": "99f25fd06a3413768b0ce622201e7670124d48e9a1d86e43d328af2d5aeb4ae4",
+      "referenceClaimHash": "5054e5b83c38e97c222b9653a38d9f2a7fbfcb71145c1c0faed3692e7f52557a",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "fix empty state",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "nextAction",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "e0",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": true,
+        "provenance": true,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": true,
+        "issue": "equivalent-initial-action",
+        "sequenceUnderstood": null,
+        "atomicValueCompliant": null,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R4",
+      "trajectoryId": "recovery-action",
+      "cutoff": 3,
+      "round": 2,
+      "method": "goal-recall",
+      "compactions": 3,
+      "final": false,
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "responseId": "recovery-action/trial-1/3/goal-recall/round-2/probe",
+      "requestHash": "018ee37e4cf5f31938d8fe0ff37918993f4bbb35dd6d4ee73c6a7b7b326d48b1",
+      "responseHash": "5e6c130107a7a257ee65138f2e05da89e0b08bd5b8ad9e037a034b84ca5b315a",
+      "claimHash": "082326d4bc131ef46df8c7241211d82c3cbf7bcef8d784af04037dcac356df4d",
+      "referenceClaimHash": "77a13ed7c7300fb82b63536d98166e3ccf725332bf7ab4c71499a3e027eff370",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "先重读 App.jsx，再重试预览",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "nextAction",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "e3",
+            "seq": 3,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": true,
+        "provenance": true,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": false,
+        "issue": "sequence-understood-non-atomic-value",
+        "sequenceUnderstood": true,
+        "atomicValueCompliant": false,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R1",
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "round": 3,
+      "method": "goal-recall",
+      "compactions": 3,
+      "final": true,
+      "key": "fontSize",
+      "canonical": "preserve",
+      "responseId": "recovery-action/trial-1/3/goal-recall/round-3/probe",
+      "requestHash": "9dcf6757454c073fc36b992db96487c828109c99804db6ef9a10b3599808f3ce",
+      "responseHash": "fe203cc25405f18fc82d1f2567c6046bcd2a399045a5c1bce60743b410fd2f92",
+      "claimHash": "314b07186cd061213bb407f059940c630a9bfad7da0e4a767b1904309e70f94c",
+      "referenceClaimHash": "8a41bb4e241e1594c6857744b924a183d7fda6f5bdd6cd29307e8801096b7273",
+      "actualClaim": {
+        "key": "fontSize",
+        "kind": "intent",
+        "value": "retain",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "fontSize",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "e0",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["explicit-user-change", "scope-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "fontSize",
+        "present": true,
+        "value": false,
+        "scope": true,
+        "provenance": true,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": true,
+        "issue": "synonymous-preservation",
+        "sequenceUnderstood": null,
+        "atomicValueCompliant": null,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    },
+    {
+      "reviewId": "R4",
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "round": 3,
+      "method": "goal-recall",
+      "compactions": 3,
+      "final": true,
+      "key": "nextAction",
+      "canonical": "read:App.jsx",
+      "responseId": "recovery-action/trial-1/3/goal-recall/round-3/probe",
+      "requestHash": "9dcf6757454c073fc36b992db96487c828109c99804db6ef9a10b3599808f3ce",
+      "responseHash": "fe203cc25405f18fc82d1f2567c6046bcd2a399045a5c1bce60743b410fd2f92",
+      "claimHash": "4fcddcfc0e4532d521e87b80784ae8c67693c04d904d6610fc9717ec59f98ce0",
+      "referenceClaimHash": "01c8f25ab87783a727a4a2293ce29e7262c7e1d498aa92b5bf13643a7b7d12c6",
+      "actualClaim": {
+        "key": "nextAction",
+        "kind": "obligation",
+        "value": "re-read App.jsx and retry preview",
+        "scope": {
+          "workspaceId": "w",
+          "designId": "A",
+          "file": "App.jsx",
+          "objectId": null,
+          "field": "nextAction",
+          "revision": null
+        },
+        "sources": [
+          {
+            "eventId": "e3",
+            "seq": 3,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        "invalidation": {
+          "status": "active",
+          "rules": ["until-completed", "explicit-user-change"]
+        }
+      },
+      "strictClaim": {
+        "key": "nextAction",
+        "present": true,
+        "value": false,
+        "scope": true,
+        "provenance": true,
+        "invalidation": true,
+        "allCorrect": false
+      },
+      "judgment": {
+        "intentCorrect": true,
+        "reviewedValueCredit": false,
+        "issue": "sequence-understood-non-atomic-value",
+        "sequenceUnderstood": true,
+        "atomicValueCompliant": false,
+        "jsonFormat": "retain-original",
+        "scope": "retain-original",
+        "provenance": "retain-original",
+        "invalidation": "retain-original"
+      }
+    }
+  ]
+}
