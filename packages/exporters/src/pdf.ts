@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type { ExportResult } from './index';
-import { type BrowserWaitUntil, buildExportHtmlDocument } from './rendered-html';
+import {
+  type BrowserWaitUntil,
+  buildExportHtmlDocument,
+  setExportPageContent,
+} from './rendered-html';
 
 export interface ExportPdfOptions {
   /** Workspace-relative source path used to classify JSX vs TSX and anchor relative assets. */
@@ -92,10 +96,7 @@ export async function exportPdf(
     const page = await browser.newPage();
     await page.setViewport(DEFAULT_VIEWPORT);
     const exportHtml = await buildExportHtmlDocument(artifactSource, opts);
-    await page.setContent(exportHtml, {
-      waitUntil: opts.waitUntil ?? 'load',
-      timeout: opts.renderTimeoutMs ?? 45_000,
-    });
+    await setExportPageContent(page, exportHtml, opts);
     await page.evaluate('document.fonts?.ready ?? Promise.resolve()');
     if (opts.settleMs && opts.settleMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, opts.settleMs));

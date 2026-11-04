@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import type { ExportResult } from './index';
-import { type BrowserRenderOptions, buildExportHtmlDocument } from './rendered-html';
+import {
+  type BrowserRenderOptions,
+  buildExportHtmlDocument,
+  setExportPageContent,
+} from './rendered-html';
 
 export type ExportPngOptions = BrowserRenderOptions;
 
@@ -40,10 +44,7 @@ export async function exportPng(
       ...(opts.viewport ?? DEFAULT_VIEWPORT),
       deviceScaleFactor: DEVICE_SCALE_FACTOR,
     });
-    await page.setContent(await buildExportHtmlDocument(artifactSource, opts), {
-      waitUntil: opts.waitUntil ?? 'load',
-      timeout: opts.renderTimeoutMs ?? 45_000,
-    });
+    await setExportPageContent(page, await buildExportHtmlDocument(artifactSource, opts), opts);
     await page.evaluate('document.fonts?.ready ?? Promise.resolve()');
     if (opts.settleMs && opts.settleMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, opts.settleMs));
