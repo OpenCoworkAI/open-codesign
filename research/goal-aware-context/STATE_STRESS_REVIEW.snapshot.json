@@ -1,0 +1,1534 @@
+{
+  "schemaVersion": 1,
+  "reviewId": "trace-state-stress-review@1",
+  "preparedOn": "2026-10-29",
+  "status": "pending-user-review",
+  "sourceFile": "research/goal-aware-context/state-stress-fixtures.ts",
+  "sourceFileSha256": "75ccb4e6281e411858a496ea641594cd6ebbfdab348ce5cff3a24288e7160d97",
+  "fixtureHash": "994cfb3f62e8685d963632718c55d84b2cf9d485af85e5a0531fdbe29ca325ca",
+  "referenceHash": "504768045f97dc3957fab5eb8dd3bc8dffee81e171bb9bb18b2c7e55670f2937",
+  "planHash": "9b4d2029bb3ea60d3500e0591527a5f0b20ae8a0e4c45c7e36c34e4e735e6b9c",
+  "reviewScope": "S1-S4 cover current fixture facts/value/scope/provenance/invalidation. G1/G2 are separate proposed scoring-policy choices; no implicit approval.",
+  "fixtures": [
+    {
+      "id": "version-facts",
+      "family": "external-version",
+      "goal": "接续当前设计，保留有效要求并如实描述当前文件与未完成工作。",
+      "annotationStatus": "synthetic-ai-draft-pending-human-review",
+      "events": [
+        {
+          "id": "e0",
+          "seq": 0,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "workspace w / design A / App.jsx / button：我批准按钮颜色 #2463A6。"
+        },
+        {
+          "id": "e1",
+          "seq": 1,
+          "authority": "tool",
+          "designId": "A",
+          "revision": "r1",
+          "text": "read App.jsx: revision r1, button color #2463A6; preview r1 passed."
+        },
+        {
+          "id": "e2",
+          "seq": 2,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "接下来只修改标题，用户批准色继续有效。"
+        },
+        {
+          "id": "e3",
+          "seq": 3,
+          "authority": "tool",
+          "designId": "A",
+          "revision": "r2",
+          "text": "external editor changed App.jsx; read: current revision r2, button color #317245. No preview of r2 exists."
+        },
+        {
+          "id": "e4",
+          "seq": 4,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "只改标题文案。磁盘颜色差异先报告，不要自行改回去。"
+        },
+        {
+          "id": "e5",
+          "seq": 5,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "我尚未批准改变按钮色，也尚未决定怎样处理磁盘差异。"
+        }
+      ],
+      "checkpoints": [
+        {
+          "cutoff": 1,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w / design A / App.jsx / button：我批准按钮颜色 #2463A6。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r1",
+              "text": "read App.jsx: revision r1, button color #2463A6; preview r1 passed."
+            }
+          ],
+          "claims": [
+            {
+              "key": "approvedColor",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": "button",
+                "field": "color",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "#2463A6"
+              ]
+            },
+            {
+              "key": "diskColor",
+              "kind": "artifact-fact",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": "button",
+                "field": "color",
+                "revision": "r1"
+              },
+              "sources": [
+                {
+                  "eventId": "e1",
+                  "seq": 1,
+                  "authority": "tool",
+                  "revision": "r1"
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "new-observation"
+                ]
+              },
+              "acceptedValues": [
+                "#2463A6"
+              ]
+            },
+            {
+              "key": "r1Preview",
+              "kind": "verification",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "preview",
+                "revision": "r1"
+              },
+              "sources": [
+                {
+                  "eventId": "e1",
+                  "seq": 1,
+                  "authority": "tool",
+                  "revision": "r1"
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "revision-change"
+                ]
+              },
+              "acceptedValues": [
+                "passed"
+              ]
+            }
+          ]
+        },
+        {
+          "cutoff": 3,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w / design A / App.jsx / button：我批准按钮颜色 #2463A6。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r1",
+              "text": "read App.jsx: revision r1, button color #2463A6; preview r1 passed."
+            },
+            {
+              "id": "e2",
+              "seq": 2,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "接下来只修改标题，用户批准色继续有效。"
+            },
+            {
+              "id": "e3",
+              "seq": 3,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r2",
+              "text": "external editor changed App.jsx; read: current revision r2, button color #317245. No preview of r2 exists."
+            }
+          ],
+          "claims": [
+            {
+              "key": "approvedColor",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": "button",
+                "field": "color",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "#2463A6"
+              ]
+            },
+            {
+              "key": "diskColor",
+              "kind": "artifact-fact",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": "button",
+                "field": "color",
+                "revision": "r2"
+              },
+              "sources": [
+                {
+                  "eventId": "e3",
+                  "seq": 3,
+                  "authority": "tool",
+                  "revision": "r2"
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "new-observation"
+                ]
+              },
+              "acceptedValues": [
+                "#317245"
+              ]
+            },
+            {
+              "key": "r1Preview",
+              "kind": "verification",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "preview",
+                "revision": "r1"
+              },
+              "sources": [
+                {
+                  "eventId": "e1",
+                  "seq": 1,
+                  "authority": "tool",
+                  "revision": "r1"
+                },
+                {
+                  "eventId": "e3",
+                  "seq": 3,
+                  "authority": "tool",
+                  "revision": "r2"
+                }
+              ],
+              "invalidation": {
+                "status": "stale",
+                "rules": [
+                  "revision-change"
+                ]
+              },
+              "acceptedValues": [
+                "passed"
+              ]
+            }
+          ]
+        },
+        {
+          "cutoff": 5,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w / design A / App.jsx / button：我批准按钮颜色 #2463A6。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r1",
+              "text": "read App.jsx: revision r1, button color #2463A6; preview r1 passed."
+            },
+            {
+              "id": "e2",
+              "seq": 2,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "接下来只修改标题，用户批准色继续有效。"
+            },
+            {
+              "id": "e3",
+              "seq": 3,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r2",
+              "text": "external editor changed App.jsx; read: current revision r2, button color #317245. No preview of r2 exists."
+            },
+            {
+              "id": "e4",
+              "seq": 4,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "只改标题文案。磁盘颜色差异先报告，不要自行改回去。"
+            },
+            {
+              "id": "e5",
+              "seq": 5,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "我尚未批准改变按钮色，也尚未决定怎样处理磁盘差异。"
+            }
+          ],
+          "claims": [
+            {
+              "key": "approvedColor",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": "button",
+                "field": "color",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "#2463A6"
+              ]
+            },
+            {
+              "key": "diskColor",
+              "kind": "artifact-fact",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": "button",
+                "field": "color",
+                "revision": "r2"
+              },
+              "sources": [
+                {
+                  "eventId": "e3",
+                  "seq": 3,
+                  "authority": "tool",
+                  "revision": "r2"
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "new-observation"
+                ]
+              },
+              "acceptedValues": [
+                "#317245"
+              ]
+            },
+            {
+              "key": "r1Preview",
+              "kind": "verification",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "preview",
+                "revision": "r1"
+              },
+              "sources": [
+                {
+                  "eventId": "e1",
+                  "seq": 1,
+                  "authority": "tool",
+                  "revision": "r1"
+                },
+                {
+                  "eventId": "e3",
+                  "seq": 3,
+                  "authority": "tool",
+                  "revision": "r2"
+                }
+              ],
+              "invalidation": {
+                "status": "stale",
+                "rules": [
+                  "revision-change"
+                ]
+              },
+              "acceptedValues": [
+                "passed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "recovery-action",
+      "family": "failed-preview",
+      "goal": "接续当前设计，保留有效要求并如实描述当前文件与未完成工作。",
+      "annotationStatus": "synthetic-ai-draft-pending-human-review",
+      "events": [
+        {
+          "id": "e0",
+          "seq": 0,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "workspace w / design A / App.jsx：保留顶栏和 fontSize，只修复空状态。"
+        },
+        {
+          "id": "e1",
+          "seq": 1,
+          "authority": "tool",
+          "designId": "A",
+          "revision": "r1",
+          "text": "preview App.jsx revision r1 passed."
+        },
+        {
+          "id": "e2",
+          "seq": 2,
+          "authority": "tool",
+          "designId": "A",
+          "revision": "r2",
+          "text": "write empty-state-copy created App.jsx r2; preview r2 timed out."
+        },
+        {
+          "id": "e3",
+          "seq": 3,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "预览失败不算通过。下一动作必须先重读 App.jsx，再重试预览；不能沿用 r1 成功。"
+        },
+        {
+          "id": "e4",
+          "seq": 4,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "先恢复预览，顶栏和字号限制继续有效。"
+        },
+        {
+          "id": "e5",
+          "seq": 5,
+          "authority": "tool",
+          "designId": "A",
+          "revision": "r2",
+          "text": "No further read or preview receipt has been produced."
+        }
+      ],
+      "checkpoints": [
+        {
+          "cutoff": 1,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w / design A / App.jsx：保留顶栏和 fontSize，只修复空状态。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r1",
+              "text": "preview App.jsx revision r1 passed."
+            }
+          ],
+          "claims": [
+            {
+              "key": "fontSize",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "fontSize",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "preserve"
+              ]
+            },
+            {
+              "key": "nextAction",
+              "kind": "obligation",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "nextAction",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "until-completed",
+                  "explicit-user-change"
+                ]
+              },
+              "acceptedValues": [
+                "修复空状态",
+                "只修复空状态",
+                "fix-empty-state"
+              ]
+            }
+          ]
+        },
+        {
+          "cutoff": 3,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w / design A / App.jsx：保留顶栏和 fontSize，只修复空状态。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r1",
+              "text": "preview App.jsx revision r1 passed."
+            },
+            {
+              "id": "e2",
+              "seq": 2,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r2",
+              "text": "write empty-state-copy created App.jsx r2; preview r2 timed out."
+            },
+            {
+              "id": "e3",
+              "seq": 3,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "预览失败不算通过。下一动作必须先重读 App.jsx，再重试预览；不能沿用 r1 成功。"
+            }
+          ],
+          "claims": [
+            {
+              "key": "fontSize",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "fontSize",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "preserve"
+              ]
+            },
+            {
+              "key": "nextAction",
+              "kind": "obligation",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "nextAction",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e3",
+                  "seq": 3,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "until-completed",
+                  "explicit-user-change"
+                ]
+              },
+              "acceptedValues": [
+                "read:App.jsx",
+                "重读 App.jsx",
+                "重读App.jsx",
+                "先重读 App.jsx",
+                "reread-App.jsx"
+              ]
+            }
+          ]
+        },
+        {
+          "cutoff": 5,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w / design A / App.jsx：保留顶栏和 fontSize，只修复空状态。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r1",
+              "text": "preview App.jsx revision r1 passed."
+            },
+            {
+              "id": "e2",
+              "seq": 2,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r2",
+              "text": "write empty-state-copy created App.jsx r2; preview r2 timed out."
+            },
+            {
+              "id": "e3",
+              "seq": 3,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "预览失败不算通过。下一动作必须先重读 App.jsx，再重试预览；不能沿用 r1 成功。"
+            },
+            {
+              "id": "e4",
+              "seq": 4,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "先恢复预览，顶栏和字号限制继续有效。"
+            },
+            {
+              "id": "e5",
+              "seq": 5,
+              "authority": "tool",
+              "designId": "A",
+              "revision": "r2",
+              "text": "No further read or preview receipt has been produced."
+            }
+          ],
+          "claims": [
+            {
+              "key": "fontSize",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "fontSize",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "preserve"
+              ]
+            },
+            {
+              "key": "nextAction",
+              "kind": "obligation",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "nextAction",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e3",
+                  "seq": 3,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "until-completed",
+                  "explicit-user-change"
+                ]
+              },
+              "acceptedValues": [
+                "read:App.jsx",
+                "重读 App.jsx",
+                "重读App.jsx",
+                "先重读 App.jsx",
+                "reread-App.jsx"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "correction-same-design",
+      "family": "font-correction-pair",
+      "goal": "接续当前设计，保留有效要求并如实描述当前文件与未完成工作。",
+      "annotationStatus": "synthetic-ai-draft-pending-human-review",
+      "events": [
+        {
+          "id": "e0",
+          "seq": 0,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "workspace w 全局限制：所有设计禁止动画，animations=disabled，切换设计后也继续有效。"
+        },
+        {
+          "id": "e1",
+          "seq": 1,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "design A / App.jsx 的 font 为 Inter；这是 A 的局部约定。"
+        },
+        {
+          "id": "e2",
+          "seq": 2,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "纠正 A 的字体为 Georgia，替代 Inter；作用域仍只有 A。"
+        },
+        {
+          "id": "e3",
+          "seq": 3,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "记录当前修正；下一步继续做文案工作。"
+        },
+        {
+          "id": "e4",
+          "seq": 4,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "继续 design A / App.jsx，同一设计内已确认的字体决定继续适用。"
+        },
+        {
+          "id": "e5",
+          "seq": 5,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "本轮只准备文案，没有新的字体批准。"
+        }
+      ],
+      "checkpoints": [
+        {
+          "cutoff": 1,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w 全局限制：所有设计禁止动画，animations=disabled，切换设计后也继续有效。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "design A / App.jsx 的 font 为 Inter；这是 A 的局部约定。"
+            }
+          ],
+          "claims": [
+            {
+              "key": "animations",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": null,
+                "file": null,
+                "objectId": null,
+                "field": "animations",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change"
+                ]
+              },
+              "acceptedValues": [
+                "disabled"
+              ]
+            },
+            {
+              "key": "font",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "font",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e1",
+                  "seq": 1,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "Inter"
+              ]
+            }
+          ]
+        },
+        {
+          "cutoff": 3,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w 全局限制：所有设计禁止动画，animations=disabled，切换设计后也继续有效。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "design A / App.jsx 的 font 为 Inter；这是 A 的局部约定。"
+            },
+            {
+              "id": "e2",
+              "seq": 2,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "纠正 A 的字体为 Georgia，替代 Inter；作用域仍只有 A。"
+            },
+            {
+              "id": "e3",
+              "seq": 3,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "记录当前修正；下一步继续做文案工作。"
+            }
+          ],
+          "claims": [
+            {
+              "key": "animations",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": null,
+                "file": null,
+                "objectId": null,
+                "field": "animations",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change"
+                ]
+              },
+              "acceptedValues": [
+                "disabled"
+              ]
+            },
+            {
+              "key": "font",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "font",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e2",
+                  "seq": 2,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "Georgia"
+              ]
+            }
+          ]
+        },
+        {
+          "cutoff": 5,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w 全局限制：所有设计禁止动画，animations=disabled，切换设计后也继续有效。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "design A / App.jsx 的 font 为 Inter；这是 A 的局部约定。"
+            },
+            {
+              "id": "e2",
+              "seq": 2,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "纠正 A 的字体为 Georgia，替代 Inter；作用域仍只有 A。"
+            },
+            {
+              "id": "e3",
+              "seq": 3,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "记录当前修正；下一步继续做文案工作。"
+            },
+            {
+              "id": "e4",
+              "seq": 4,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "继续 design A / App.jsx，同一设计内已确认的字体决定继续适用。"
+            },
+            {
+              "id": "e5",
+              "seq": 5,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "本轮只准备文案，没有新的字体批准。"
+            }
+          ],
+          "claims": [
+            {
+              "key": "animations",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": null,
+                "file": null,
+                "objectId": null,
+                "field": "animations",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change"
+                ]
+              },
+              "acceptedValues": [
+                "disabled"
+              ]
+            },
+            {
+              "key": "font",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "font",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e2",
+                  "seq": 2,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "Georgia"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "correction-new-design",
+      "family": "font-correction-pair",
+      "goal": "接续当前设计，保留有效要求并如实描述当前文件与未完成工作。",
+      "annotationStatus": "synthetic-ai-draft-pending-human-review",
+      "events": [
+        {
+          "id": "e0",
+          "seq": 0,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "workspace w 全局限制：所有设计禁止动画，animations=disabled，切换设计后也继续有效。"
+        },
+        {
+          "id": "e1",
+          "seq": 1,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "design A / App.jsx 的 font 为 Inter；这是 A 的局部约定。"
+        },
+        {
+          "id": "e2",
+          "seq": 2,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "纠正 A 的字体为 Georgia，替代 Inter；作用域仍只有 A。"
+        },
+        {
+          "id": "e3",
+          "seq": 3,
+          "authority": "user",
+          "designId": "A",
+          "revision": null,
+          "text": "记录当前修正；下一步继续做文案工作。"
+        },
+        {
+          "id": "e4",
+          "seq": 4,
+          "authority": "user",
+          "designId": "B",
+          "revision": null,
+          "text": "切换到 design B / App.jsx。B 字体尚未决定，先问我，不要复用 A 的字体。"
+        },
+        {
+          "id": "e5",
+          "seq": 5,
+          "authority": "user",
+          "designId": "B",
+          "revision": null,
+          "text": "本轮只准备文案，没有新的字体批准。"
+        }
+      ],
+      "checkpoints": [
+        {
+          "cutoff": 1,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w 全局限制：所有设计禁止动画，animations=disabled，切换设计后也继续有效。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "design A / App.jsx 的 font 为 Inter；这是 A 的局部约定。"
+            }
+          ],
+          "claims": [
+            {
+              "key": "animations",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": null,
+                "file": null,
+                "objectId": null,
+                "field": "animations",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change"
+                ]
+              },
+              "acceptedValues": [
+                "disabled"
+              ]
+            },
+            {
+              "key": "font",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "font",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e1",
+                  "seq": 1,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "Inter"
+              ]
+            }
+          ]
+        },
+        {
+          "cutoff": 3,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w 全局限制：所有设计禁止动画，animations=disabled，切换设计后也继续有效。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "design A / App.jsx 的 font 为 Inter；这是 A 的局部约定。"
+            },
+            {
+              "id": "e2",
+              "seq": 2,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "纠正 A 的字体为 Georgia，替代 Inter；作用域仍只有 A。"
+            },
+            {
+              "id": "e3",
+              "seq": 3,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "记录当前修正；下一步继续做文案工作。"
+            }
+          ],
+          "claims": [
+            {
+              "key": "animations",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": null,
+                "file": null,
+                "objectId": null,
+                "field": "animations",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change"
+                ]
+              },
+              "acceptedValues": [
+                "disabled"
+              ]
+            },
+            {
+              "key": "font",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "A",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "font",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e2",
+                  "seq": 2,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "Georgia"
+              ]
+            }
+          ]
+        },
+        {
+          "cutoff": 5,
+          "events": [
+            {
+              "id": "e0",
+              "seq": 0,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "workspace w 全局限制：所有设计禁止动画，animations=disabled，切换设计后也继续有效。"
+            },
+            {
+              "id": "e1",
+              "seq": 1,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "design A / App.jsx 的 font 为 Inter；这是 A 的局部约定。"
+            },
+            {
+              "id": "e2",
+              "seq": 2,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "纠正 A 的字体为 Georgia，替代 Inter；作用域仍只有 A。"
+            },
+            {
+              "id": "e3",
+              "seq": 3,
+              "authority": "user",
+              "designId": "A",
+              "revision": null,
+              "text": "记录当前修正；下一步继续做文案工作。"
+            },
+            {
+              "id": "e4",
+              "seq": 4,
+              "authority": "user",
+              "designId": "B",
+              "revision": null,
+              "text": "切换到 design B / App.jsx。B 字体尚未决定，先问我，不要复用 A 的字体。"
+            },
+            {
+              "id": "e5",
+              "seq": 5,
+              "authority": "user",
+              "designId": "B",
+              "revision": null,
+              "text": "本轮只准备文案，没有新的字体批准。"
+            }
+          ],
+          "claims": [
+            {
+              "key": "animations",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": null,
+                "file": null,
+                "objectId": null,
+                "field": "animations",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e0",
+                  "seq": 0,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "active",
+                "rules": [
+                  "explicit-user-change"
+                ]
+              },
+              "acceptedValues": [
+                "disabled"
+              ]
+            },
+            {
+              "key": "font",
+              "kind": "intent",
+              "scope": {
+                "workspaceId": "w",
+                "designId": "B",
+                "file": "App.jsx",
+                "objectId": null,
+                "field": "font",
+                "revision": null
+              },
+              "sources": [
+                {
+                  "eventId": "e4",
+                  "seq": 4,
+                  "authority": "user",
+                  "revision": null
+                }
+              ],
+              "invalidation": {
+                "status": "unresolved",
+                "rules": [
+                  "explicit-user-change",
+                  "scope-change"
+                ]
+              },
+              "acceptedValues": [
+                "unresolved"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

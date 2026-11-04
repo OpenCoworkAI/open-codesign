@@ -1,0 +1,622 @@
+{
+  "schemaVersion": 1,
+  "protocol": "state-stress-review@1",
+  "reviewId": "state-stress-review-20261029",
+  "confirmedAt": "2026-10-29",
+  "status": "confirmed",
+  "confirmation": "S1–S4同意；G1采用建议；G2采用建议",
+  "confirmationScope": "S1-S4 core facts and G1/G2 proposed policies. Single-user-reviewed synthetic references; not independent dual annotation or model performance.",
+  "approvedSnapshot": {
+    "path": "STATE_STRESS_REVIEW.snapshot.json",
+    "sha256": "9b2263a7fb97159856250f0019e0c5cb7821b52a5a5e741d8042804c9f398082",
+    "fixtureHash": "994cfb3f62e8685d963632718c55d84b2cf9d485af85e5a0531fdbe29ca325ca",
+    "referenceHash": "504768045f97dc3957fab5eb8dd3bc8dffee81e171bb9bb18b2c7e55670f2937"
+  },
+  "rules": {
+    "G1": "Each frozen evidence combination contains every mandatory source; only explicitly enumerated corroborating evidence may be added. Role/revision/sequence/cutoff remain exact. The concrete conservative allowlist is an implementation choice applying the approved policy.",
+    "G2": "Exact finite aliases approved in review; no fuzzy containment, translation judge or action expansion."
+  },
+  "applied": {
+    "fixtureHash": "aeb2d5ee1e8ec8142e6ff3ff7f62877c5a1a38bd1bd5ebcadd296bba3ff06423",
+    "referenceHash": "27f33fa0f19ba5990f5286f608ef6cca7b41ed8c5bcfc56a7a4b5e9c93814772",
+    "referenceClaims": 27,
+    "acceptedEvidenceCombinations": 37,
+    "scoringProtocol": "trace-state-stress@2"
+  },
+  "referenceRules": [
+    {
+      "trajectoryId": "version-facts",
+      "cutoff": 1,
+      "key": "approvedColor",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["#2463A6"]
+    },
+    {
+      "trajectoryId": "version-facts",
+      "cutoff": 1,
+      "key": "diskColor",
+      "mandatorySources": [
+        {
+          "eventId": "e1",
+          "seq": 1,
+          "authority": "tool",
+          "revision": "r1"
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["#2463A6"]
+    },
+    {
+      "trajectoryId": "version-facts",
+      "cutoff": 1,
+      "key": "r1Preview",
+      "mandatorySources": [
+        {
+          "eventId": "e1",
+          "seq": 1,
+          "authority": "tool",
+          "revision": "r1"
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["passed"]
+    },
+    {
+      "trajectoryId": "version-facts",
+      "cutoff": 3,
+      "key": "approvedColor",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [
+        [
+          {
+            "eventId": "e0",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e2",
+            "seq": 2,
+            "authority": "user",
+            "revision": null
+          }
+        ]
+      ],
+      "acceptedValues": ["#2463A6"]
+    },
+    {
+      "trajectoryId": "version-facts",
+      "cutoff": 3,
+      "key": "diskColor",
+      "mandatorySources": [
+        {
+          "eventId": "e3",
+          "seq": 3,
+          "authority": "tool",
+          "revision": "r2"
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["#317245"]
+    },
+    {
+      "trajectoryId": "version-facts",
+      "cutoff": 3,
+      "key": "r1Preview",
+      "mandatorySources": [
+        {
+          "eventId": "e1",
+          "seq": 1,
+          "authority": "tool",
+          "revision": "r1"
+        },
+        {
+          "eventId": "e3",
+          "seq": 3,
+          "authority": "tool",
+          "revision": "r2"
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["passed"]
+    },
+    {
+      "trajectoryId": "version-facts",
+      "cutoff": 5,
+      "key": "approvedColor",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [
+        [
+          {
+            "eventId": "e0",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e2",
+            "seq": 2,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        [
+          {
+            "eventId": "e0",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e5",
+            "seq": 5,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        [
+          {
+            "eventId": "e0",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e2",
+            "seq": 2,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e5",
+            "seq": 5,
+            "authority": "user",
+            "revision": null
+          }
+        ]
+      ],
+      "acceptedValues": ["#2463A6"]
+    },
+    {
+      "trajectoryId": "version-facts",
+      "cutoff": 5,
+      "key": "diskColor",
+      "mandatorySources": [
+        {
+          "eventId": "e3",
+          "seq": 3,
+          "authority": "tool",
+          "revision": "r2"
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["#317245"]
+    },
+    {
+      "trajectoryId": "version-facts",
+      "cutoff": 5,
+      "key": "r1Preview",
+      "mandatorySources": [
+        {
+          "eventId": "e1",
+          "seq": 1,
+          "authority": "tool",
+          "revision": "r1"
+        },
+        {
+          "eventId": "e3",
+          "seq": 3,
+          "authority": "tool",
+          "revision": "r2"
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["passed"]
+    },
+    {
+      "trajectoryId": "recovery-action",
+      "cutoff": 1,
+      "key": "fontSize",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["preserve", "保持不变", "保留字号"]
+    },
+    {
+      "trajectoryId": "recovery-action",
+      "cutoff": 1,
+      "key": "nextAction",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["修复空状态", "只修复空状态", "fix-empty-state"]
+    },
+    {
+      "trajectoryId": "recovery-action",
+      "cutoff": 3,
+      "key": "fontSize",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["preserve", "保持不变", "保留字号"]
+    },
+    {
+      "trajectoryId": "recovery-action",
+      "cutoff": 3,
+      "key": "nextAction",
+      "mandatorySources": [
+        {
+          "eventId": "e3",
+          "seq": 3,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": [
+        "read:App.jsx",
+        "重读 App.jsx",
+        "重读App.jsx",
+        "先重读 App.jsx",
+        "reread-App.jsx",
+        "先重读App.jsx"
+      ]
+    },
+    {
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "key": "fontSize",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [
+        [
+          {
+            "eventId": "e0",
+            "seq": 0,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e4",
+            "seq": 4,
+            "authority": "user",
+            "revision": null
+          }
+        ]
+      ],
+      "acceptedValues": ["preserve", "保持不变", "保留字号"]
+    },
+    {
+      "trajectoryId": "recovery-action",
+      "cutoff": 5,
+      "key": "nextAction",
+      "mandatorySources": [
+        {
+          "eventId": "e3",
+          "seq": 3,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [
+        [
+          {
+            "eventId": "e3",
+            "seq": 3,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e5",
+            "seq": 5,
+            "authority": "tool",
+            "revision": "r2"
+          }
+        ]
+      ],
+      "acceptedValues": [
+        "read:App.jsx",
+        "重读 App.jsx",
+        "重读App.jsx",
+        "先重读 App.jsx",
+        "reread-App.jsx",
+        "先重读App.jsx"
+      ]
+    },
+    {
+      "trajectoryId": "correction-same-design",
+      "cutoff": 1,
+      "key": "animations",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["disabled", "禁止动画", "禁用动画"]
+    },
+    {
+      "trajectoryId": "correction-same-design",
+      "cutoff": 1,
+      "key": "font",
+      "mandatorySources": [
+        {
+          "eventId": "e1",
+          "seq": 1,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["Inter"]
+    },
+    {
+      "trajectoryId": "correction-same-design",
+      "cutoff": 3,
+      "key": "animations",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["disabled", "禁止动画", "禁用动画"]
+    },
+    {
+      "trajectoryId": "correction-same-design",
+      "cutoff": 3,
+      "key": "font",
+      "mandatorySources": [
+        {
+          "eventId": "e2",
+          "seq": 2,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["Georgia"]
+    },
+    {
+      "trajectoryId": "correction-same-design",
+      "cutoff": 5,
+      "key": "animations",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["disabled", "禁止动画", "禁用动画"]
+    },
+    {
+      "trajectoryId": "correction-same-design",
+      "cutoff": 5,
+      "key": "font",
+      "mandatorySources": [
+        {
+          "eventId": "e2",
+          "seq": 2,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [
+        [
+          {
+            "eventId": "e2",
+            "seq": 2,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e4",
+            "seq": 4,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        [
+          {
+            "eventId": "e2",
+            "seq": 2,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e5",
+            "seq": 5,
+            "authority": "user",
+            "revision": null
+          }
+        ],
+        [
+          {
+            "eventId": "e2",
+            "seq": 2,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e4",
+            "seq": 4,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e5",
+            "seq": 5,
+            "authority": "user",
+            "revision": null
+          }
+        ]
+      ],
+      "acceptedValues": ["Georgia"]
+    },
+    {
+      "trajectoryId": "correction-new-design",
+      "cutoff": 1,
+      "key": "animations",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["disabled", "禁止动画", "禁用动画"]
+    },
+    {
+      "trajectoryId": "correction-new-design",
+      "cutoff": 1,
+      "key": "font",
+      "mandatorySources": [
+        {
+          "eventId": "e1",
+          "seq": 1,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["Inter"]
+    },
+    {
+      "trajectoryId": "correction-new-design",
+      "cutoff": 3,
+      "key": "animations",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["disabled", "禁止动画", "禁用动画"]
+    },
+    {
+      "trajectoryId": "correction-new-design",
+      "cutoff": 3,
+      "key": "font",
+      "mandatorySources": [
+        {
+          "eventId": "e2",
+          "seq": 2,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["Georgia"]
+    },
+    {
+      "trajectoryId": "correction-new-design",
+      "cutoff": 5,
+      "key": "animations",
+      "mandatorySources": [
+        {
+          "eventId": "e0",
+          "seq": 0,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [],
+      "acceptedValues": ["disabled", "禁止动画", "禁用动画"]
+    },
+    {
+      "trajectoryId": "correction-new-design",
+      "cutoff": 5,
+      "key": "font",
+      "mandatorySources": [
+        {
+          "eventId": "e4",
+          "seq": 4,
+          "authority": "user",
+          "revision": null
+        }
+      ],
+      "acceptedSourceSets": [
+        [
+          {
+            "eventId": "e4",
+            "seq": 4,
+            "authority": "user",
+            "revision": null
+          },
+          {
+            "eventId": "e5",
+            "seq": 5,
+            "authority": "user",
+            "revision": null
+          }
+        ]
+      ],
+      "acceptedValues": ["unresolved", "尚未决定", "待确认"]
+    }
+  ],
+  "notes": [
+    "Core values, scopes, mandatory sources, statuses, rules and source events match the approved pre-change snapshot.",
+    "Older snapshot/plan references remain historical; prepare a new version2 plan.",
+    "This approval does not start a provider call, change product memory or certify independent gold."
+  ]
+}

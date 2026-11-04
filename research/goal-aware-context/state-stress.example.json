@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "compressor": {
+      "model": {
+        "provider": "configure-provider",
+        "modelId": "configure-model"
+      },
+      "credentialEnv": "CODESIGN_COMPRESSOR_KEY",
+      "contextWindowTokens": 32768,
+      "wire": "openai-chat",
+      "baseUrl": "https://configure-provider.example/v1"
+    },
+    "reader": {
+      "model": {
+        "provider": "configure-provider",
+        "modelId": "configure-model"
+      },
+      "credentialEnv": "CODESIGN_READER_KEY",
+      "contextWindowTokens": 32768,
+      "wire": "openai-chat",
+      "baseUrl": "https://configure-provider.example/v1"
+    }
+  },
+  "caseIds": null,
+  "hostCaseIds": null,
+  "budgets": [2048],
+  "trials": 1,
+  "maxCalls": 64,
+  "timeoutMs": 60000,
+  "maxOutputTokens": 4096,
+  "summaryMaxBytes": 1800,
+  "allowEstimatedBudget": true
+}

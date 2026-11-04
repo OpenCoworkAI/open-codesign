@@ -91,6 +91,12 @@
   },
   "overrides": [
     {
+      "includes": ["research/goal-aware-context/STATE_STRESS_REVIEW.snapshot.json"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
       "includes": [
         "**/apps/desktop/src/main/**",
         "**/packages/core/src/**",
