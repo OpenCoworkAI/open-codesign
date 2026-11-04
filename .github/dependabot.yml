@@ -33,11 +33,6 @@ updates:
           - react-dom
           - "@types/react"
           - "@types/react-dom"
-      development-tools:
-        applies-to: version-updates
-        dependency-type: development
-        patterns:
-          - "*"
       radix:
         applies-to: version-updates
         patterns:
@@ -47,6 +42,11 @@ updates:
         patterns:
           - tailwindcss
           - "@tailwindcss/*"
+      development-tools:
+        applies-to: version-updates
+        dependency-type: development
+        patterns:
+          - "*"
     ignore:
       - dependency-name: "*"
         update-types:
