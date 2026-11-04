@@ -22,6 +22,10 @@ describe('detectProviderFromKey', () => {
   it('recognizes Atlas Cloud API keys', () => {
     expect(detectProviderFromKey(' apikey-test ')).toBe('atlascloud');
   });
+
+  it('recognizes LLMTR API keys', () => {
+    expect(detectProviderFromKey(' llmtr-test ')).toBe('llmtr');
+  });
 });
 
 describe('complete', () => {

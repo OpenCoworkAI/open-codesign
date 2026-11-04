@@ -141,6 +141,78 @@ describe('pingProvider', () => {
     expect(result).toEqual({ ok: true, modelCount: 1 });
   });
 
+  it('validates LLMTR with a one-token chat, not GET /models', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toBe('https://llmtr.com/v1/chat/completions');
+      expect(init?.method).toBe('POST');
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['authorization']).toBe('Bearer llmtr-test');
+      expect(headers['content-type']).toBe('application/json');
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body).toEqual({
+        model: 'qwen/qwen3.8-27b-free',
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1,
+      });
+      expect(body).not.toHaveProperty('reasoning');
+      return new Response('ok', { status: 200 });
+    });
+    const result = await pingProvider('llmtr', 'llmtr-test');
+    expect(result).toEqual({ ok: true, modelCount: 0 });
+  });
+
+  it('accepts any LLMTR 2xx chat response', async () => {
+    mockFetch(async () => new Response(null, { status: 204 }));
+    const result = await pingProvider('llmtr', 'llmtr-test');
+    expect(result).toEqual({ ok: true, modelCount: 0 });
+  });
+
+  it.each([401, 403])('rejects an LLMTR key on HTTP %s', async (status) => {
+    mockFetch(async () => new Response('no', { status }));
+    const result = await pingProvider('llmtr', 'llmtr-bad');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('401');
+      expect(result.message).toContain('llmtr');
+    }
+  });
+
+  it('treats other LLMTR HTTP failures as network errors', async () => {
+    mockFetch(async () => new Response('down', { status: 500 }));
+    const result = await pingProvider('llmtr', 'llmtr-test');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('network');
+      expect(result.message).toContain('500');
+    }
+  });
+
+  it('treats an LLMTR transport failure as a network error', async () => {
+    mockFetch(async () => {
+      throw new Error('ECONNREFUSED');
+    });
+    const result = await pingProvider('llmtr', 'llmtr-test');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('network');
+      expect(result.message).toContain('ECONNREFUSED');
+    }
+  });
+
+  it('posts the LLMTR chat probe to a custom base URL', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toBe('https://gateway.example/v1/chat/completions');
+      expect(init?.method).toBe('POST');
+      return new Response('ok', { status: 200 });
+    });
+    const result = await pingProvider(
+      'llmtr',
+      'llmtr-test',
+      'https://gateway.example/v1/chat/completions',
+    );
+    expect(result).toEqual({ ok: true, modelCount: 0 });
+  });
+
   it('respects custom baseUrl without /v1 suffix', async () => {
     mockFetch(async (url) => {
       expect(url).toBe('https://proxy.example/v1/models');

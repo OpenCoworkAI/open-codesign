@@ -14,7 +14,9 @@ export type ValidateResult =
 
 interface ProviderEndpoint {
   url: string;
+  method?: 'GET' | 'POST';
   headers: (apiKey: string) => Record<string, string>;
+  body?: string;
 }
 
 /**
@@ -55,6 +57,23 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
       return {
         url: `${root}/v1/models`,
         headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+      };
+    }
+    case 'llmtr': {
+      // GET /v1/models answers 200 for any key, so validation is a one-token chat.
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://llmtr.com';
+      return {
+        url: `${root}/v1/chat/completions`,
+        method: 'POST',
+        headers: (apiKey) => ({
+          authorization: `Bearer ${apiKey}`,
+          'content-type': 'application/json',
+        }),
+        body: JSON.stringify({
+          model: 'qwen/qwen3.8-27b-free',
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1,
+        }),
       };
     }
     case 'openrouter': {
@@ -104,7 +123,7 @@ export async function pingProvider(
 ): Promise<ValidateResult> {
   if (!isSupportedOnboardingProvider(provider)) {
     throw new CodesignError(
-      `Provider "${provider}" is not supported by the first-run provider shortcut. Supported: anthropic, openai, atlascloud, openrouter, ollama. Add custom providers in Settings, or use ChatGPT subscription sign-in for chatgpt-codex.`,
+      `Provider "${provider}" is not supported by the first-run provider shortcut. Supported: anthropic, openai, atlascloud, llmtr, openrouter, ollama. Add custom providers in Settings, or use ChatGPT subscription sign-in for chatgpt-codex.`,
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
@@ -120,7 +139,11 @@ export async function pingProvider(
   const ep = endpoint(provider, baseUrl);
   let res: Response;
   try {
-    res = await fetch(ep.url, { method: 'GET', headers: ep.headers(apiKey) });
+    res = await fetch(ep.url, {
+      method: ep.method ?? 'GET',
+      headers: ep.headers(apiKey),
+      ...(ep.body !== undefined ? { body: ep.body } : {}),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Network request failed';
     return { ok: false, code: 'network', message };
@@ -136,6 +159,10 @@ export async function pingProvider(
       code: 'network',
       message: `${provider} returned an unexpected HTTP ${res.status}.`,
     };
+  }
+
+  if (ep.method === 'POST') {
+    return { ok: true, modelCount: 0 };
   }
 
   let body: unknown;
