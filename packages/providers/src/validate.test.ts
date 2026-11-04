@@ -13,6 +13,45 @@ afterEach(() => {
 });
 
 describe('pingProvider', () => {
+  it.each([
+    undefined,
+    'https://relay.example/api/anthropic/v1/messages',
+  ])('validates Z.ai through inference rather than model discovery: %s', async (baseUrl) => {
+    mockFetch(async (url, init) => {
+      expect(url).toBe(
+        baseUrl === undefined
+          ? 'https://api.z.ai/api/anthropic/v1/messages'
+          : 'https://relay.example/api/anthropic/v1/messages',
+      );
+      expect(init?.method).toBe('POST');
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        model: 'glm-5.3',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'Hi' }],
+      });
+      const headers = init?.headers as Record<string, string>;
+      expect(headers['x-api-key']).toBe('zai-test');
+      expect(headers['content-type']).toBe('application/json');
+      expect(headers['user-agent']).toMatch(/^claude-cli\//);
+      return Response.json({ type: 'message', content: [{ type: 'text', text: 'Hi' }] });
+    });
+    expect(await pingProvider('zai', 'zai-test', baseUrl)).toEqual({ ok: true, modelCount: 0 });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not accept a model list as proof of working Z.ai inference', async () => {
+    mockFetch(async () => Response.json({ data: [{ id: 'glm-5.3' }] }));
+    expect(await pingProvider('zai', 'zai-test')).toMatchObject({ ok: false, code: 'parse' });
+  });
+
+  it.each([401, 402, 429])('preserves Z.ai inference HTTP failure %s', async (status) => {
+    mockFetch(async () => new Response('failure', { status }));
+    expect(await pingProvider('zai', 'zai-test')).toMatchObject({
+      ok: false,
+      code: String(status),
+    });
+  });
+
   it('throws CodesignError for unsupported providers', async () => {
     await expect(pingProvider('google', 'AIza-foo')).rejects.toBeInstanceOf(CodesignError);
   });

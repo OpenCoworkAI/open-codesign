@@ -14,6 +14,7 @@ export type ValidateResult =
 
 interface ProviderEndpoint {
   url: string;
+  body?: string;
   headers: (apiKey: string) => Record<string, string>;
 }
 
@@ -74,6 +75,25 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
         headers: () => ({}),
       };
     }
+    case 'zai': {
+      // Coding Plan uses static model hints; /models is not a validation endpoint.
+      const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://api.z.ai/api/anthropic';
+      return {
+        url: `${root}/v1/messages`,
+        body: JSON.stringify({
+          model: BUILTIN_PROVIDERS.zai.defaultModel,
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'Hi' }],
+        }),
+        headers: (apiKey) => {
+          const auth: Record<string, string> = {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          };
+          return withClaudeCodeIdentity('anthropic', root, auth);
+        },
+      };
+    }
   }
 }
 
@@ -120,7 +140,14 @@ export async function pingProvider(
   const ep = endpoint(provider, baseUrl);
   let res: Response;
   try {
-    res = await fetch(ep.url, { method: 'GET', headers: ep.headers(apiKey) });
+    res = await fetch(ep.url, {
+      method: ep.body === undefined ? 'GET' : 'POST',
+      headers: {
+        ...ep.headers(apiKey),
+        ...(ep.body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      ...(ep.body === undefined ? {} : { body: ep.body }),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Network request failed';
     return { ok: false, code: 'network', message };
@@ -144,6 +171,20 @@ export async function pingProvider(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Invalid JSON in response';
     return { ok: false, code: 'parse', message };
+  }
+
+  if (ep.body !== undefined) {
+    if (
+      typeof body === 'object' &&
+      body !== null &&
+      'type' in body &&
+      body.type === 'message' &&
+      'content' in body &&
+      Array.isArray(body.content)
+    ) {
+      return { ok: true, modelCount: 0 };
+    }
+    return { ok: false, code: 'parse', message: 'Unexpected inference response shape' };
   }
 
   const modelCount = countModels(body);

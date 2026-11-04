@@ -74,6 +74,13 @@ export const PROXY_PRESETS = [
     notes: '',
   },
   {
+    id: 'zai-glm',
+    label: 'Z.ai GLM Coding Plan',
+    provider: 'anthropic',
+    baseUrl: 'https://api.z.ai/api/anthropic',
+    notes: 'GLM-5.3, GLM-5.3-Flash',
+  },
+  {
     id: 'custom',
     label: 'Custom...',
     provider: 'openai',
