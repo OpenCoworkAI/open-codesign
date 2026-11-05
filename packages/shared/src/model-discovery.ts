@@ -128,6 +128,7 @@ const LISTING_CAPABLE_OFFICIAL_HOSTS: ReadonlySet<string> = new Set([
   'api.together.xyz',
   'api.x.ai',
   'generativelanguage.googleapis.com',
+  'llmtr.com',
   'openrouter.ai',
 ]);
 

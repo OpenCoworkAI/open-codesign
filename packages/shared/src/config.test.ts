@@ -154,6 +154,29 @@ describe('config v3 schema', () => {
     expect(PROVIDER_SHORTLIST.atlascloud.primary).toContain('deepseek-ai/deepseek-v4-pro');
   });
 
+  it('includes LLMTR as an OpenAI-compatible builtin provider', () => {
+    expect(SUPPORTED_ONBOARDING_PROVIDERS).toContain('llmtr');
+    expect(BUILTIN_PROVIDERS.llmtr).toMatchObject({
+      id: 'llmtr',
+      name: 'LLMTR',
+      wire: 'openai-chat',
+      baseUrl: 'https://llmtr.com/v1',
+      envKey: 'LLMTR_API_KEY',
+      defaultModel: 'qwen/qwen3.8-27b-free',
+      capabilities: {
+        supportsKeyless: false,
+        supportsModelsEndpoint: true,
+        modelDiscoveryMode: 'models',
+      },
+    });
+    expect(PROVIDER_SHORTLIST.llmtr).toMatchObject({
+      provider: 'llmtr',
+      label: 'LLMTR',
+      defaultPrimary: 'qwen/qwen3.8-27b-free',
+    });
+    expect(PROVIDER_SHORTLIST.llmtr.primary).toContain('llmtr/qwen3-8-27b');
+  });
+
   it('rejects unknown wire values', () => {
     const bad = {
       version: 3,
