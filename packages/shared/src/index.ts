@@ -37,6 +37,7 @@ export const ProviderId = z.enum([
   'anthropic',
   'openai',
   'atlascloud',
+  'llmtr',
   'google',
   'openrouter',
   'groq',

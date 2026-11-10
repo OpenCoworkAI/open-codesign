@@ -598,6 +598,7 @@ export function detectProviderFromKey(key: string): ModelRef['provider'] | null 
   if (trimmed.startsWith('sk-ant-')) return 'anthropic';
   if (trimmed.startsWith('sk-or-')) return 'openrouter';
   if (trimmed.startsWith('apikey-')) return 'atlascloud';
+  if (trimmed.startsWith('llmtr-')) return 'llmtr';
   if (trimmed.startsWith('sk-')) return 'openai';
   if (trimmed.startsWith('AIza')) return 'google';
   if (trimmed.startsWith('xai-')) return 'xai';

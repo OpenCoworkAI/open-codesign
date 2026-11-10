@@ -7,6 +7,7 @@ const ProviderIdEnum = z.enum([
   'anthropic',
   'openai',
   'atlascloud',
+  'llmtr',
   'google',
   'openrouter',
   'groq',
@@ -22,6 +23,7 @@ export const SUPPORTED_ONBOARDING_PROVIDERS = [
   'anthropic',
   'openai',
   'atlascloud',
+  'llmtr',
   'openrouter',
   'ollama',
 ] as const;
@@ -327,6 +329,22 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
       modelDiscoveryMode: 'models',
     },
   },
+  llmtr: {
+    id: 'llmtr',
+    name: 'LLMTR',
+    builtin: true,
+    wire: 'openai-chat',
+    baseUrl: 'https://llmtr.com/v1',
+    envKey: 'LLMTR_API_KEY',
+    defaultModel: 'qwen/qwen3.8-27b-free',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsReasoning: false,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
+  },
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -591,6 +609,13 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     keyHelpUrl: 'https://atlascloud.ai/',
     primary: ['qwen/qwen3.5-flash', 'deepseek-ai/deepseek-v4-pro'],
     defaultPrimary: 'qwen/qwen3.5-flash',
+  },
+  llmtr: {
+    provider: 'llmtr',
+    label: 'LLMTR',
+    keyHelpUrl: 'https://llmtr.com/docs/en/api-keys/',
+    primary: ['qwen/qwen3.8-27b-free', 'llmtr/qwen3-8-27b'],
+    defaultPrimary: 'qwen/qwen3.8-27b-free',
   },
   openrouter: {
     provider: 'openrouter',
