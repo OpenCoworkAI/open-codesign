@@ -19,7 +19,8 @@ const mocks = vi.hoisted(() => ({
   probe: vi.fn(),
   log: vi.fn(),
 }));
-vi.mock('./storage-settings', () => ({
+vi.mock('./storage-settings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./storage-settings')>()),
   getActiveStorageLocations: () => ({ configDir: mocks.configDir }),
 }));
 vi.mock('./electron-runtime', () => ({
