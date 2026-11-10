@@ -29,8 +29,8 @@
     "undici": "^7.30.1"
   },
   "devDependencies": {
-    "@mariozechner/pi-agent-core": "^0.72.1",
-    "@mariozechner/pi-ai": "^0.72.1",
+    "@mariozechner/pi-agent-core": "^0.73.1",
+    "@mariozechner/pi-ai": "^0.73.1",
     "@mariozechner/pi-coding-agent": "^0.72.1",
     "@open-codesign/artifacts": "workspace:*",
     "@open-codesign/core": "workspace:*",
