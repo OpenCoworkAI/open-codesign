@@ -8,6 +8,7 @@ overrides:
   '@xmldom/xmldom@<0.8.15': 0.8.15
   pptxgenjs@4.0.1>image-size: '-'
   undici@>=8.0.0 <8.12.4: 8.12.4
+  undici@>=7.0.0 <7.30.1: 7.30.1
   fast-xml-parser@<5.7.0: '>=5.7.0'
   vitepress>vite: 6.4.2
   esbuild@<0.25.0: '>=0.25.0'
@@ -4877,8 +4878,8 @@ packages:
     resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
     engines: {node: '>=18.17'}
 
-  undici@7.29.1:
-    resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
+  undici@7.30.1:
+    resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
     engines: {node: '>=20.18.1'}
 
   undici@8.12.4:
@@ -6074,7 +6075,7 @@ snapshots:
       semver: 7.8.5
       sumchecker: 3.0.1
     optionalDependencies:
-      undici: 7.29.1
+      undici: 7.30.1
     transitivePeerDependencies:
       - supports-color
 
@@ -10324,7 +10325,7 @@ snapshots:
 
   undici@6.29.1: {}
 
-  undici@7.29.1:
+  undici@7.30.1:
     optional: true
 
   undici@8.12.4: {}
