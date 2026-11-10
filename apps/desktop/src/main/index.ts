@@ -203,10 +203,11 @@ if (!IS_VITEST) {
     if (storageWarnings.length > 0 && !BACKGROUND_DEBUG) {
       dialog.showMessageBoxSync({
         type: 'warning',
-        title: 'Storage location needs attention',
-        message: 'Open CoDesign is using default storage folders for this session.',
+        title: 'Storage location needs attention / 请检查存储位置',
+        message:
+          'Open CoDesign is using default storage folders for this session. / Open CoDesign 本次启动将使用默认存储目录。',
         detail: storageWarnings.join('\n\n'),
-        buttons: ['Continue'],
+        buttons: ['Continue / 继续'],
       });
     }
     // Extracted so the outer try/catch AND post-init listeners (whose callbacks

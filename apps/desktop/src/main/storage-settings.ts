@@ -223,7 +223,7 @@ function normalizeOptionalDir(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.trim().length === 0) return undefined;
   const normalized = normalizeDir(value, true);
   if (isWindowsDriveRoot(normalized)) {
-    const warning = `Saved storage location ${value} is a Windows drive root. This session uses the default folder. Files at the saved location and storage-settings.json have not been moved or changed. Choose a writable folder in Settings > Storage before restarting.`;
+    const warning = `Saved storage location ${value} is a Windows drive root. This session uses the default folder. Files at the saved location and storage-settings.json have not been moved or changed. Choose a writable folder in Settings > Storage before restarting.\n保存的存储位置 ${value} 是 Windows 盘符根目录，本次启动将使用默认目录。原位置的文件和 storage-settings.json 均未移动或修改。请在重启前前往“设置 > 存储”选择可写文件夹。`;
     if (!recoveryWarnings.includes(warning)) recoveryWarnings.push(warning);
     return undefined;
   }
