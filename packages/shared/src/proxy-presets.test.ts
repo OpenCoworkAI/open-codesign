@@ -35,6 +35,7 @@ describe('PROXY_PRESETS', () => {
     expect(ids).toContain('openrouter');
     expect(ids).toContain('requesty');
     expect(ids).toContain('opper');
+    expect(ids).toContain('uberllm');
     expect(ids).toContain('siliconflow');
     expect(ids).toContain('one-api');
     expect(ids).toContain('litellm');
